@@ -2,7 +2,7 @@
 # Multi-stage build for minimal image size
 
 # ==================== Builder Stage ====================
-FROM rust:1.85-bookworm AS builder
+FROM rust:latest AS builder
 
 WORKDIR /app
 
@@ -16,6 +16,9 @@ COPY proto ./proto
 
 # Create dummy main.rs to build dependencies
 RUN mkdir -p src && echo "fn main() {}" > src/main.rs
+
+# Update dependencies to be compatible with container's Rust version
+RUN cargo update
 
 # Build dependencies (this layer will be cached)
 RUN cargo build --release && rm -rf src
