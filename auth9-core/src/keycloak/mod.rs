@@ -2,10 +2,13 @@
 
 use crate::config::KeycloakConfig;
 use crate::error::{AppError, Result};
+use anyhow::Context;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::env;
 use std::sync::Arc;
 use tokio::sync::RwLock;
+use tracing::{info, warn};
 
 /// Keycloak Admin API client
 #[derive(Clone)]
@@ -398,6 +401,262 @@ impl KeycloakClient {
         client
             .id
             .ok_or_else(|| AppError::Keycloak("Client id missing in Keycloak response".to_string()))
+    }
+}
+
+// ============================================================================
+// Keycloak Seeder - For initialization and default data seeding
+// ============================================================================
+
+/// Default admin user configuration
+const DEFAULT_ADMIN_EMAIL: &str = "admin@auth9.local";
+const DEFAULT_ADMIN_PASSWORD: &str = "Admin123!";
+const DEFAULT_ADMIN_FIRST_NAME: &str = "Admin";
+const DEFAULT_ADMIN_LAST_NAME: &str = "User";
+
+/// Keycloak realm representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakRealm {
+    pub realm: String,
+    pub enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub registration_allowed: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reset_password_allowed: Option<bool>,
+}
+
+/// Keycloak Seeder for initialization
+pub struct KeycloakSeeder {
+    config: KeycloakConfig,
+    http_client: Client,
+}
+
+impl KeycloakSeeder {
+    pub fn new(config: &KeycloakConfig) -> Self {
+        let http_client = Client::builder()
+            .timeout(std::time::Duration::from_secs(60))
+            .build()
+            .expect("Failed to create HTTP client");
+
+        Self {
+            config: config.clone(),
+            http_client,
+        }
+    }
+
+    /// Get admin token using master realm password grant
+    /// Uses KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASSWORD environment variables
+    async fn get_master_admin_token(&self) -> anyhow::Result<String> {
+        let admin_username = env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
+        let admin_password =
+            env::var("KEYCLOAK_ADMIN_PASSWORD").unwrap_or_else(|_| "admin".to_string());
+
+        let token_url = format!(
+            "{}/realms/master/protocol/openid-connect/token",
+            self.config.url
+        );
+
+        let params = [
+            ("grant_type", "password"),
+            ("client_id", "admin-cli"),
+            ("username", &admin_username),
+            ("password", &admin_password),
+        ];
+
+        let response = self
+            .http_client
+            .post(&token_url)
+            .form(&params)
+            .send()
+            .await
+            .context("Failed to connect to Keycloak")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Failed to get admin token from Keycloak: {} - {}",
+                status,
+                body
+            );
+        }
+
+        #[derive(Deserialize)]
+        struct TokenResponse {
+            access_token: String,
+        }
+
+        let token_response: TokenResponse = response
+            .json()
+            .await
+            .context("Failed to parse token response")?;
+
+        Ok(token_response.access_token)
+    }
+
+    /// Check if a realm exists
+    async fn realm_exists(&self, token: &str) -> anyhow::Result<bool> {
+        let url = format!(
+            "{}/admin/realms/{}",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to check realm")?;
+
+        Ok(response.status().is_success())
+    }
+
+    /// Create a new realm
+    async fn create_realm(&self, token: &str) -> anyhow::Result<()> {
+        let url = format!("{}/admin/realms", self.config.url);
+
+        let realm = KeycloakRealm {
+            realm: self.config.realm.clone(),
+            enabled: true,
+            display_name: Some("Auth9".to_string()),
+            registration_allowed: Some(true),
+            reset_password_allowed: Some(true),
+        };
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(token)
+            .json(&realm)
+            .send()
+            .await
+            .context("Failed to create realm")?;
+
+        if response.status() == StatusCode::CONFLICT {
+            info!("Realm '{}' already exists", self.config.realm);
+            return Ok(());
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to create realm: {} - {}", status, body);
+        }
+
+        info!("Created realm '{}'", self.config.realm);
+        Ok(())
+    }
+
+    /// Ensure realm exists (create if not)
+    pub async fn ensure_realm_exists(&self) -> anyhow::Result<()> {
+        let token = self.get_master_admin_token().await?;
+
+        if self.realm_exists(&token).await? {
+            info!("Realm '{}' already exists", self.config.realm);
+            return Ok(());
+        }
+
+        self.create_realm(&token).await?;
+        Ok(())
+    }
+
+    /// Check if admin user exists by email
+    async fn admin_user_exists(&self, token: &str) -> anyhow::Result<bool> {
+        let url = format!(
+            "{}/admin/realms/{}/users?email={}&exact=true",
+            self.config.url, self.config.realm, DEFAULT_ADMIN_EMAIL
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to check admin user")?;
+
+        if !response.status().is_success() {
+            return Ok(false);
+        }
+
+        let users: Vec<serde_json::Value> = response
+            .json()
+            .await
+            .unwrap_or_default();
+
+        Ok(!users.is_empty())
+    }
+
+    /// Create default admin user
+    async fn create_admin_user(&self, token: &str) -> anyhow::Result<()> {
+        let url = format!(
+            "{}/admin/realms/{}/users",
+            self.config.url, self.config.realm
+        );
+
+        let user = CreateKeycloakUserInput {
+            username: DEFAULT_ADMIN_EMAIL.to_string(),
+            email: DEFAULT_ADMIN_EMAIL.to_string(),
+            first_name: Some(DEFAULT_ADMIN_FIRST_NAME.to_string()),
+            last_name: Some(DEFAULT_ADMIN_LAST_NAME.to_string()),
+            enabled: true,
+            email_verified: true,
+            credentials: Some(vec![KeycloakCredential {
+                credential_type: "password".to_string(),
+                value: DEFAULT_ADMIN_PASSWORD.to_string(),
+                temporary: false,
+            }]),
+        };
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(token)
+            .json(&user)
+            .send()
+            .await
+            .context("Failed to create admin user")?;
+
+        if response.status() == StatusCode::CONFLICT {
+            info!("Admin user '{}' already exists", DEFAULT_ADMIN_EMAIL);
+            return Ok(());
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to create admin user: {} - {}", status, body);
+        }
+
+        info!(
+            "Created admin user '{}' with password '{}'",
+            DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD
+        );
+        Ok(())
+    }
+
+    /// Seed default admin user (idempotent)
+    pub async fn seed_admin_user(&self) -> anyhow::Result<()> {
+        let token = self.get_master_admin_token().await?;
+
+        if self.admin_user_exists(&token).await? {
+            info!("Admin user '{}' already exists, skipping", DEFAULT_ADMIN_EMAIL);
+            return Ok(());
+        }
+
+        self.create_admin_user(&token).await?;
+        
+        warn!(
+            "Default admin credentials - Email: {}, Password: {}",
+            DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD
+        );
+        warn!("Please change the default admin password after first login!");
+        
+        Ok(())
     }
 }
 
