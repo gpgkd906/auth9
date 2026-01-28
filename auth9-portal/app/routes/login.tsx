@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
+import { redirect } from "@remix-run/node";
+import { Form, Link, useNavigation } from "@remix-run/react";
 import { Button } from "~/components/ui/button";
-import { Input } from "~/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 
 export const meta: MetaFunction = () => {
@@ -9,21 +9,22 @@ export const meta: MetaFunction = () => {
 };
 
 export async function action({ request }: ActionFunctionArgs) {
-  const formData = await request.formData();
-  const email = formData.get("email");
-  const password = formData.get("password");
+  const url = new URL(request.url);
+  const coreUrl = process.env.AUTH9_CORE_URL || "http://localhost:8080";
+  const portalUrl = process.env.AUTH9_PORTAL_URL || url.origin;
+  const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+  const redirectUri = `${portalUrl}/dashboard`;
 
-  // TODO: Implement actual authentication
-  if (!email || !password) {
-    return { error: "Email and password are required" };
-  }
+  const authorizeUrl = new URL(`${coreUrl}/api/v1/auth/authorize`);
+  authorizeUrl.searchParams.set("response_type", "code");
+  authorizeUrl.searchParams.set("client_id", clientId);
+  authorizeUrl.searchParams.set("redirect_uri", redirectUri);
+  authorizeUrl.searchParams.set("scope", "openid email profile");
 
-  // Placeholder - redirect to dashboard after auth
-  return { error: "Authentication not implemented yet" };
+  return redirect(authorizeUrl.toString());
 }
 
 export default function Login() {
-  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -41,50 +42,8 @@ export default function Login() {
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-4">
-            {actionData?.error && (
-              <div className="p-3 rounded-apple bg-red-50 text-apple-red text-sm">
-                {actionData.error}
-              </div>
-            )}
-            
-            <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-gray-700">
-                Email
-              </label>
-              <Input
-                id="email"
-                name="email"
-                type="email"
-                placeholder="you@example.com"
-                required
-                autoComplete="email"
-              />
-            </div>
-            
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <label htmlFor="password" className="text-sm font-medium text-gray-700">
-                  Password
-                </label>
-                <Link
-                  to="/forgot-password"
-                  className="text-sm text-apple-blue hover:underline"
-                >
-                  Forgot password?
-                </Link>
-              </div>
-              <Input
-                id="password"
-                name="password"
-                type="password"
-                placeholder="••••••••"
-                required
-                autoComplete="current-password"
-              />
-            </div>
-
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Signing in..." : "Sign in"}
+              {isSubmitting ? "Redirecting..." : "Sign in with SSO"}
             </Button>
           </Form>
 

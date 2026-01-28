@@ -11,6 +11,7 @@ use uuid::Uuid;
 /// Cache key prefixes
 mod keys {
     pub const USER_ROLES: &str = "auth9:user_roles";
+    pub const USER_ROLES_SERVICE: &str = "auth9:user_roles_service";
     pub const SERVICE_CONFIG: &str = "auth9:service";
     pub const TENANT_CONFIG: &str = "auth9:tenant";
 }
@@ -18,6 +19,7 @@ mod keys {
 /// Default TTLs
 mod ttl {
     pub const USER_ROLES_SECS: u64 = 300; // 5 minutes
+    pub const USER_ROLES_SERVICE_SECS: u64 = 300;
     pub const SERVICE_CONFIG_SECS: u64 = 600; // 10 minutes
     pub const TENANT_CONFIG_SECS: u64 = 600; // 10 minutes
 }
@@ -40,6 +42,12 @@ impl CacheManager {
         })?;
 
         Ok(Self { conn })
+    }
+
+    pub async fn ping(&self) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let _: String = redis::cmd("PING").query_async(&mut conn).await?;
+        Ok(())
     }
 
     /// Get a value from cache
@@ -124,6 +132,34 @@ impl CacheManager {
                 self.delete_pattern(&pattern).await
             }
         }
+    }
+
+    pub async fn get_user_roles_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
+        let key = format!(
+            "{}:{}:{}:{}",
+            keys::USER_ROLES_SERVICE,
+            user_id,
+            tenant_id,
+            service_id
+        );
+        self.get(&key).await
+    }
+
+    pub async fn set_user_roles_for_service(&self, roles: &UserRolesInTenant, service_id: Uuid) -> Result<()> {
+        let key = format!(
+            "{}:{}:{}:{}",
+            keys::USER_ROLES_SERVICE,
+            roles.user_id,
+            roles.tenant_id,
+            service_id
+        );
+        self.set(&key, roles, Duration::from_secs(ttl::USER_ROLES_SERVICE_SECS))
+            .await
     }
 
     // ==================== Service Config Cache ====================

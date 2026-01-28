@@ -9,6 +9,7 @@ use crate::server::AppState;
 use axum::{
     extract::{Path, Query, State},
     http::StatusCode,
+    http::HeaderMap,
     response::IntoResponse,
     Json,
 };
@@ -41,11 +42,13 @@ pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<
 /// Create tenant
 pub async fn create(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<CreateTenantInput>,
 ) -> Result<impl IntoResponse> {
     let tenant = state.tenant_service.create(input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "tenant.create",
         "tenant",
         Some(tenant.id),
@@ -59,6 +62,7 @@ pub async fn create(
 /// Update tenant
 pub async fn update(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<impl IntoResponse> {
@@ -66,6 +70,7 @@ pub async fn update(
     let tenant = state.tenant_service.update(id, input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "tenant.update",
         "tenant",
         Some(tenant.id),
@@ -79,12 +84,14 @@ pub async fn update(
 /// Delete tenant
 pub async fn delete(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.tenant_service.get(id).await?;
     let tenant = state.tenant_service.disable(id).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "tenant.disable",
         "tenant",
         Some(id),

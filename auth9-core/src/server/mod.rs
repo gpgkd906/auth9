@@ -17,7 +17,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
-use sqlx::mysql::MySqlPoolOptions;
+use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 use std::sync::Arc;
 use tokio::net::TcpListener;
 use tonic::transport::Server as TonicServer;
@@ -31,6 +31,7 @@ use tracing::info;
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
+    pub db_pool: MySqlPool,
     pub tenant_service: Arc<TenantService<TenantRepositoryImpl>>,
     pub user_service: Arc<UserService<UserRepositoryImpl>>,
     pub client_service: Arc<ClientService<ServiceRepositoryImpl>>,
@@ -78,6 +79,7 @@ pub async fn run(config: Config) -> Result<()> {
     // Create app state
     let state = AppState {
         config: Arc::new(config.clone()),
+        db_pool: db_pool.clone(),
         tenant_service,
         user_service,
         client_service,
