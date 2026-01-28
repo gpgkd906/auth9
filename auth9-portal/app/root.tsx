@@ -1,0 +1,94 @@
+import {
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  useRouteError,
+  isRouteErrorResponse,
+} from "@remix-run/react";
+import type { LinksFunction, MetaFunction } from "@remix-run/node";
+import "./styles/tailwind.css";
+
+export const links: LinksFunction = () => [
+  { rel: "preconnect", href: "https://fonts.googleapis.com" },
+  {
+    rel: "preconnect",
+    href: "https://fonts.gstatic.com",
+    crossOrigin: "anonymous",
+  },
+  {
+    rel: "stylesheet",
+    href: "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap",
+  },
+];
+
+export const meta: MetaFunction = () => {
+  return [
+    { title: "Auth9 - Identity Management" },
+    { name: "description", content: "Modern identity and access management" },
+  ];
+};
+
+export function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="en" className="h-full">
+      <head>
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <Meta />
+        <Links />
+      </head>
+      <body className="h-full bg-gray-50 text-gray-900 antialiased">
+        {children}
+        <ScrollRestoration />
+        <Scripts />
+      </body>
+    </html>
+  );
+}
+
+export default function App() {
+  return <Outlet />;
+}
+
+export function ErrorBoundary() {
+  const error = useRouteError();
+
+  if (isRouteErrorResponse(error)) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <h1 className="text-6xl font-bold text-gray-900">{error.status}</h1>
+          <p className="mt-4 text-xl text-gray-600">{error.statusText}</p>
+          {error.data && (
+            <p className="mt-2 text-gray-500">{error.data}</p>
+          )}
+          <a
+            href="/"
+            className="mt-8 inline-block px-6 py-3 bg-apple-blue text-white rounded-apple font-medium hover:bg-blue-600 transition-colors"
+          >
+            Go back home
+          </a>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex items-center justify-center">
+      <div className="text-center">
+        <h1 className="text-6xl font-bold text-gray-900">Error</h1>
+        <p className="mt-4 text-xl text-gray-600">
+          Something went wrong. Please try again.
+        </p>
+        <a
+          href="/"
+          className="mt-8 inline-block px-6 py-3 bg-apple-blue text-white rounded-apple font-medium hover:bg-blue-600 transition-colors"
+        >
+          Go back home
+        </a>
+      </div>
+    </div>
+  );
+}

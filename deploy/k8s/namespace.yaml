@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: auth9
+  labels:
+    app.kubernetes.io/name: auth9
+    app.kubernetes.io/part-of: auth9
