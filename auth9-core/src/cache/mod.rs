@@ -62,14 +62,14 @@ impl CacheManager {
         let serialized = serde_json::to_string(value)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Cache serialize error: {}", e)))?;
         
-        conn.set_ex(key, serialized, ttl.as_secs()).await?;
+        let _: () = conn.set_ex(key, serialized, ttl.as_secs()).await?;
         Ok(())
     }
 
     /// Delete a key from cache
     async fn delete(&self, key: &str) -> Result<()> {
         let mut conn = self.conn.clone();
-        conn.del(key).await?;
+        let _: () = conn.del(key).await?;
         Ok(())
     }
 

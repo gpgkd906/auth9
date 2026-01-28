@@ -78,11 +78,20 @@ pub struct UserTenantRole {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreatePermissionInput {
     pub service_id: Uuid,
-    #[validate(length(min = 1, max = 100), regex(path = "crate::domain::PERMISSION_CODE_REGEX"))]
+    #[validate(length(min = 1, max = 100), custom(function = "validate_permission_code"))]
     pub code: String,
     #[validate(length(min = 1, max = 255))]
     pub name: String,
     pub description: Option<String>,
+}
+
+/// Validate permission code format (e.g., "user:read", "report:export:pdf")
+fn validate_permission_code(code: &str) -> Result<(), validator::ValidationError> {
+    if PERMISSION_CODE_REGEX.is_match(code) {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("invalid_permission_code"))
+    }
 }
 
 /// Input for creating a role
@@ -122,7 +131,7 @@ pub struct RoleWithPermissions {
 }
 
 /// User roles in a tenant (for token claims)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct UserRolesInTenant {
     pub user_id: Uuid,
     pub tenant_id: Uuid,

@@ -1,8 +1,9 @@
 //! Audit log API handlers
 
-use crate::api::{PaginatedResponse, SuccessResponse};
+use crate::api::PaginatedResponse;
 use crate::error::Result;
 use crate::repository::audit::AuditLogQuery;
+use crate::repository::AuditRepository;
 use crate::server::AppState;
 use axum::{
     extract::{Query, State},

@@ -84,10 +84,19 @@ impl Default for Tenant {
 pub struct CreateTenantInput {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
-    #[validate(length(min = 1, max = 63), regex(path = "crate::domain::SLUG_REGEX"))]
+    #[validate(length(min = 1, max = 63), custom(function = "validate_slug"))]
     pub slug: String,
     pub logo_url: Option<String>,
     pub settings: Option<TenantSettings>,
+}
+
+/// Validate slug format (lowercase alphanumeric with hyphens)
+fn validate_slug(slug: &str) -> Result<(), validator::ValidationError> {
+    if SLUG_REGEX.is_match(slug) {
+        Ok(())
+    } else {
+        Err(validator::ValidationError::new("invalid_slug"))
+    }
 }
 
 /// Input for updating a tenant
