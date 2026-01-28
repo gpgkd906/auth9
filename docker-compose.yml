@@ -4,12 +4,38 @@
 version: '3.8'
 
 services:
+  # ==================== Auth9 Init (Migration & Seed) ====================
+  auth9-init:
+    build:
+      context: ./auth9-core
+      dockerfile: Dockerfile
+    container_name: auth9-init
+    command: ["auth9-core", "init"]
+    environment:
+      RUST_LOG: info
+      DATABASE_URL: mysql://root:password@tidb:4000/auth9
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: auth9
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    depends_on:
+      tidb:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+    networks:
+      - auth9-network
+    restart: "no"
+
   # ==================== Auth9 Core (Rust Backend) ====================
   auth9-core:
     build:
       context: ./auth9-core
       dockerfile: Dockerfile
     container_name: auth9-core
+    command: ["auth9-core", "serve"]
     ports:
       - "8080:8080"   # HTTP API
       - "50051:50051" # gRPC
@@ -30,8 +56,8 @@ services:
       KEYCLOAK_ADMIN_CLIENT_ID: admin-cli
       KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_SECRET:-admin}
     depends_on:
-      tidb:
-        condition: service_healthy
+      auth9-init:
+        condition: service_completed_successfully
       redis:
         condition: service_started
     networks:

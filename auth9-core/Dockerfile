@@ -23,6 +23,9 @@ RUN cargo update
 # Build dependencies (this layer will be cached)
 RUN cargo build --release && rm -rf src
 
+# Copy migrations (needed by sqlx::migrate! macro at compile time)
+COPY migrations ./migrations
+
 # Copy actual source code
 COPY src ./src
 
