@@ -146,14 +146,17 @@ impl ServiceRepository for ServiceRepositoryImpl {
 
         let name = input.name.as_ref().unwrap_or(&existing.name);
         let base_url = input.base_url.as_ref().or(existing.base_url.as_ref());
-        let redirect_uris = input.redirect_uris.as_ref().unwrap_or(&existing.redirect_uris);
+        let redirect_uris = input
+            .redirect_uris
+            .as_ref()
+            .unwrap_or(&existing.redirect_uris);
         let logout_uris = input.logout_uris.as_ref().unwrap_or(&existing.logout_uris);
         let status = input.status.as_ref().unwrap_or(&existing.status);
 
-        let redirect_uris_json = serde_json::to_string(&redirect_uris)
-            .map_err(|e| AppError::Internal(e.into()))?;
-        let logout_uris_json = serde_json::to_string(&logout_uris)
-            .map_err(|e| AppError::Internal(e.into()))?;
+        let redirect_uris_json =
+            serde_json::to_string(&redirect_uris).map_err(|e| AppError::Internal(e.into()))?;
+        let logout_uris_json =
+            serde_json::to_string(&logout_uris).map_err(|e| AppError::Internal(e.into()))?;
 
         let status_str = match status {
             ServiceStatus::Active => "active",

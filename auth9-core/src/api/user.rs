@@ -1,8 +1,11 @@
 //! User API handlers
 
-use crate::api::{PaginatedResponse, PaginationQuery, SuccessResponse, MessageResponse};
-use crate::domain::{CreateUserInput, UpdateUserInput, AddUserToTenantInput};
+use crate::api::{
+    write_audit_log, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
+};
+use crate::domain::{AddUserToTenantInput, CreateUserInput, UpdateUserInput};
 use crate::error::Result;
+use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
 use crate::server::AppState;
 use axum::{
     extract::{Path, Query, State},
@@ -32,10 +35,7 @@ pub async fn list(
 }
 
 /// Get user by ID
-pub async fn get(
-    State(state): State<AppState>,
-    Path(id): Path<Uuid>,
-) -> Result<impl IntoResponse> {
+pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
     let user = state.user_service.get(id).await?;
     Ok(Json(SuccessResponse::new(user)))
 }
@@ -53,10 +53,38 @@ pub async fn create(
     State(state): State<AppState>,
     Json(input): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse> {
-    // TODO: Create user in Keycloak first, then in local DB
-    // For now, generate a placeholder keycloak_id
-    let keycloak_id = format!("kc-{}", uuid::Uuid::new_v4());
+    let credentials = input.password.map(|password| {
+        vec![KeycloakCredential {
+            credential_type: "password".to_string(),
+            value: password,
+            temporary: false,
+        }]
+    });
+
+    let keycloak_id = state
+        .keycloak_client
+        .create_user(&CreateKeycloakUserInput {
+            username: input.user.email.clone(),
+            email: input.user.email.clone(),
+            first_name: input.user.display_name.clone(),
+            last_name: None,
+            enabled: true,
+            email_verified: false,
+            credentials,
+        })
+        .await?;
+
     let user = state.user_service.create(&keycloak_id, input.user).await?;
+
+    let _ = write_audit_log(
+        &state,
+        "user.create",
+        "user",
+        Some(user.id),
+        None,
+        serde_json::to_value(&user).ok(),
+    )
+    .await;
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(user))))
 }
 
@@ -66,7 +94,17 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
+    let before = state.user_service.get(id).await?;
     let user = state.user_service.update(id, input).await?;
+    let _ = write_audit_log(
+        &state,
+        "user.update",
+        "user",
+        Some(user.id),
+        serde_json::to_value(&before).ok(),
+        serde_json::to_value(&user).ok(),
+    )
+    .await;
     Ok(Json(SuccessResponse::new(user)))
 }
 
@@ -75,7 +113,17 @@ pub async fn delete(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let before = state.user_service.get(id).await?;
     state.user_service.delete(id).await?;
+    let _ = write_audit_log(
+        &state,
+        "user.delete",
+        "user",
+        Some(id),
+        serde_json::to_value(&before).ok(),
+        None,
+    )
+    .await;
     Ok(Json(MessageResponse::new("User deleted successfully")))
 }
 
@@ -99,6 +147,15 @@ pub async fn add_to_tenant(
             role_in_tenant: input.role_in_tenant,
         })
         .await?;
+    let _ = write_audit_log(
+        &state,
+        "user.add_to_tenant",
+        "tenant_user",
+        Some(tenant_user.id),
+        None,
+        serde_json::to_value(&tenant_user).ok(),
+    )
+    .await;
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(tenant_user))))
 }
 
@@ -111,6 +168,15 @@ pub async fn remove_from_tenant(
         .user_service
         .remove_from_tenant(user_id, tenant_id)
         .await?;
+    let _ = write_audit_log(
+        &state,
+        "user.remove_from_tenant",
+        "tenant_user",
+        None,
+        None,
+        None,
+    )
+    .await;
     Ok(Json(MessageResponse::new("User removed from tenant")))
 }
 

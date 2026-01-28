@@ -1,6 +1,6 @@
 //! Tenant business logic
 
-use crate::domain::{CreateTenantInput, Tenant, UpdateTenantInput};
+use crate::domain::{CreateTenantInput, Tenant, TenantStatus, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::repository::TenantRepository;
 use std::sync::Arc;
@@ -67,6 +67,17 @@ impl<R: TenantRepository> TenantService<R> {
 
         self.repo.delete(id).await
     }
+
+    pub async fn disable(&self, id: Uuid) -> Result<Tenant> {
+        let _ = self.get(id).await?;
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: None,
+            status: Some(TenantStatus::Inactive),
+        };
+        self.repo.update(id, &input).await
+    }
 }
 
 #[cfg(test)]
@@ -78,32 +89,31 @@ mod tests {
     #[tokio::test]
     async fn test_create_tenant_success() {
         let mut mock = MockTenantRepository::new();
-        
+
         mock.expect_find_by_slug()
             .with(eq("test-tenant"))
             .returning(|_| Ok(None));
-        
-        mock.expect_create()
-            .returning(|input| {
-                Ok(Tenant {
-                    name: input.name.clone(),
-                    slug: input.slug.clone(),
-                    ..Default::default()
-                })
-            });
-        
+
+        mock.expect_create().returning(|input| {
+            Ok(Tenant {
+                name: input.name.clone(),
+                slug: input.slug.clone(),
+                ..Default::default()
+            })
+        });
+
         let service = TenantService::new(Arc::new(mock));
-        
+
         let input = CreateTenantInput {
             name: "Test Tenant".to_string(),
             slug: "test-tenant".to_string(),
             logo_url: None,
             settings: None,
         };
-        
+
         let result = service.create(input).await;
         assert!(result.is_ok());
-        
+
         let tenant = result.unwrap();
         assert_eq!(tenant.name, "Test Tenant");
         assert_eq!(tenant.slug, "test-tenant");
@@ -112,20 +122,20 @@ mod tests {
     #[tokio::test]
     async fn test_create_tenant_duplicate_slug() {
         let mut mock = MockTenantRepository::new();
-        
+
         mock.expect_find_by_slug()
             .with(eq("existing-tenant"))
             .returning(|_| Ok(Some(Tenant::default())));
-        
+
         let service = TenantService::new(Arc::new(mock));
-        
+
         let input = CreateTenantInput {
             name: "New Tenant".to_string(),
             slug: "existing-tenant".to_string(),
             logo_url: None,
             settings: None,
         };
-        
+
         let result = service.create(input).await;
         assert!(matches!(result, Err(AppError::Conflict(_))));
     }
@@ -134,13 +144,13 @@ mod tests {
     async fn test_get_tenant_not_found() {
         let mut mock = MockTenantRepository::new();
         let id = Uuid::new_v4();
-        
+
         mock.expect_find_by_id()
             .with(eq(id))
             .returning(|_| Ok(None));
-        
+
         let service = TenantService::new(Arc::new(mock));
-        
+
         let result = service.get(id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }

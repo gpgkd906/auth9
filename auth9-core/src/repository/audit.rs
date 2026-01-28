@@ -101,7 +101,7 @@ impl AuditRepository for AuditRepositoryImpl {
         let mut sql = String::from(
             "SELECT id, actor_id, action, resource_type, resource_id, old_value, new_value, ip_address, created_at FROM audit_logs WHERE 1=1",
         );
-        
+
         if query.actor_id.is_some() {
             sql.push_str(" AND actor_id = ?");
         }
@@ -120,11 +120,11 @@ impl AuditRepository for AuditRepositoryImpl {
         if query.to_date.is_some() {
             sql.push_str(" AND created_at <= ?");
         }
-        
+
         sql.push_str(" ORDER BY created_at DESC LIMIT ? OFFSET ?");
 
         let mut query_builder = sqlx::query_as::<_, AuditLog>(&sql);
-        
+
         if let Some(actor_id) = query.actor_id {
             query_builder = query_builder.bind(actor_id);
         }
@@ -143,7 +143,7 @@ impl AuditRepository for AuditRepositoryImpl {
         if let Some(to_date) = query.to_date {
             query_builder = query_builder.bind(to_date);
         }
-        
+
         let limit = query.limit.unwrap_or(50).min(100);
         let offset = query.offset.unwrap_or(0);
         query_builder = query_builder.bind(limit).bind(offset);
@@ -154,7 +154,7 @@ impl AuditRepository for AuditRepositoryImpl {
 
     async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
         let mut sql = String::from("SELECT COUNT(*) FROM audit_logs WHERE 1=1");
-        
+
         if query.actor_id.is_some() {
             sql.push_str(" AND actor_id = ?");
         }
@@ -175,7 +175,7 @@ impl AuditRepository for AuditRepositoryImpl {
         }
 
         let mut query_builder = sqlx::query_as::<_, (i64,)>(&sql);
-        
+
         if let Some(actor_id) = query.actor_id {
             query_builder = query_builder.bind(actor_id);
         }

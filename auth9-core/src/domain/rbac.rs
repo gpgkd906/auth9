@@ -78,7 +78,10 @@ pub struct UserTenantRole {
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreatePermissionInput {
     pub service_id: Uuid,
-    #[validate(length(min = 1, max = 100), custom(function = "validate_permission_code"))]
+    #[validate(
+        length(min = 1, max = 100),
+        custom(function = "validate_permission_code")
+    )]
     pub code: String,
     #[validate(length(min = 1, max = 255))]
     pub name: String,
@@ -141,7 +144,7 @@ pub struct UserRolesInTenant {
 
 // Regex for permission code validation
 lazy_static::lazy_static! {
-    pub static ref PERMISSION_CODE_REGEX: regex::Regex = 
+    pub static ref PERMISSION_CODE_REGEX: regex::Regex =
         regex::Regex::new(r"^[a-z][a-z0-9]*(?::[a-z][a-z0-9]*)+$").unwrap();
 }
 

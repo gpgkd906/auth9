@@ -1,20 +1,19 @@
 //! REST API handlers
 
+pub mod audit;
+pub mod auth;
+pub mod health;
+pub mod role;
+pub mod service;
 pub mod tenant;
 pub mod user;
-pub mod service;
-pub mod role;
-pub mod auth;
-pub mod audit;
-pub mod health;
 
-use axum::{
-    extract::{Query, State},
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use crate::error::Result;
+use crate::repository::audit::CreateAuditLogInput;
+use crate::repository::AuditRepository;
+use crate::server::AppState;
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 /// Pagination query parameters
 #[derive(Debug, Clone, Deserialize)]
@@ -87,4 +86,26 @@ impl MessageResponse {
             message: message.into(),
         }
     }
+}
+
+pub async fn write_audit_log(
+    state: &AppState,
+    action: &str,
+    resource_type: &str,
+    resource_id: Option<Uuid>,
+    old_value: Option<serde_json::Value>,
+    new_value: Option<serde_json::Value>,
+) -> Result<()> {
+    state
+        .audit_repo
+        .create(&CreateAuditLogInput {
+            actor_id: None,
+            action: action.to_string(),
+            resource_type: resource_type.to_string(),
+            resource_id,
+            old_value,
+            new_value,
+            ip_address: None,
+        })
+        .await
 }

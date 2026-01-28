@@ -1,6 +1,6 @@
 //! User business logic
 
-use crate::domain::{CreateUserInput, UpdateUserInput, User, AddUserToTenantInput, TenantUser};
+use crate::domain::{AddUserToTenantInput, CreateUserInput, TenantUser, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use crate::repository::UserRepository;
 use std::sync::Arc;
@@ -78,9 +78,16 @@ impl<R: UserRepository> UserService<R> {
         self.repo.remove_from_tenant(user_id, tenant_id).await
     }
 
-    pub async fn list_tenant_users(&self, tenant_id: Uuid, page: i64, per_page: i64) -> Result<Vec<User>> {
+    pub async fn list_tenant_users(
+        &self,
+        tenant_id: Uuid,
+        page: i64,
+        per_page: i64,
+    ) -> Result<Vec<User>> {
         let offset = (page - 1) * per_page;
-        self.repo.find_tenant_users(tenant_id, offset, per_page).await
+        self.repo
+            .find_tenant_users(tenant_id, offset, per_page)
+            .await
     }
 
     pub async fn get_user_tenants(&self, user_id: Uuid) -> Result<Vec<TenantUser>> {
@@ -97,28 +104,27 @@ mod tests {
     #[tokio::test]
     async fn test_create_user_success() {
         let mut mock = MockUserRepository::new();
-        
+
         mock.expect_find_by_email()
             .with(eq("test@example.com"))
             .returning(|_| Ok(None));
-        
-        mock.expect_create()
-            .returning(|keycloak_id, input| {
-                Ok(User {
-                    keycloak_id: keycloak_id.to_string(),
-                    email: input.email.clone(),
-                    ..Default::default()
-                })
-            });
-        
+
+        mock.expect_create().returning(|keycloak_id, input| {
+            Ok(User {
+                keycloak_id: keycloak_id.to_string(),
+                email: input.email.clone(),
+                ..Default::default()
+            })
+        });
+
         let service = UserService::new(Arc::new(mock));
-        
+
         let input = CreateUserInput {
             email: "test@example.com".to_string(),
             display_name: Some("Test User".to_string()),
             avatar_url: None,
         };
-        
+
         let result = service.create("kc-123", input).await;
         assert!(result.is_ok());
     }
@@ -127,13 +133,13 @@ mod tests {
     async fn test_create_user_invalid_email() {
         let mock = MockUserRepository::new();
         let service = UserService::new(Arc::new(mock));
-        
+
         let input = CreateUserInput {
             email: "invalid-email".to_string(),
             display_name: None,
             avatar_url: None,
         };
-        
+
         let result = service.create("kc-123", input).await;
         assert!(matches!(result, Err(AppError::Validation(_))));
     }

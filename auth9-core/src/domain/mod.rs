@@ -1,11 +1,11 @@
 //! Domain models for Auth9 Core
 
+pub mod rbac;
+pub mod service;
 pub mod tenant;
 pub mod user;
-pub mod service;
-pub mod rbac;
 
+pub use rbac::*;
+pub use service::*;
 pub use tenant::*;
 pub use user::*;
-pub use service::*;
-pub use rbac::*;

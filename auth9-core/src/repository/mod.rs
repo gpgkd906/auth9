@@ -1,16 +1,16 @@
 //! Data access layer (Repository pattern)
 
+pub mod audit;
+pub mod rbac;
+pub mod service;
 pub mod tenant;
 pub mod user;
-pub mod service;
-pub mod rbac;
-pub mod audit;
 
+pub use audit::AuditRepository;
+pub use rbac::RbacRepository;
+pub use service::ServiceRepository;
 pub use tenant::TenantRepository;
 pub use user::UserRepository;
-pub use service::ServiceRepository;
-pub use rbac::RbacRepository;
-pub use audit::AuditRepository;
 
 use sqlx::MySqlPool;
 

@@ -1,14 +1,13 @@
 //! Token Exchange gRPC service implementation
 
 use crate::cache::CacheManager;
-use crate::error::AppError;
 use crate::grpc::proto::{
     token_exchange_server::TokenExchange, ExchangeTokenRequest, ExchangeTokenResponse,
     GetUserRolesRequest, GetUserRolesResponse, IntrospectTokenRequest, IntrospectTokenResponse,
     Role as ProtoRole, ValidateTokenRequest, ValidateTokenResponse,
 };
 use crate::jwt::JwtManager;
-use crate::repository::{RbacRepository, UserRepository, ServiceRepository};
+use crate::repository::{RbacRepository, ServiceRepository, UserRepository};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
@@ -61,7 +60,7 @@ where
         request: Request<ExchangeTokenRequest>,
     ) -> Result<Response<ExchangeTokenResponse>, Status> {
         let req = request.into_inner();
-        
+
         // Verify identity token
         let claims = self
             .jwt_manager
@@ -72,6 +71,16 @@ where
             .map_err(|_| Status::internal("Invalid user ID in token"))?;
         let tenant_id = Uuid::parse_str(&req.tenant_id)
             .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
+
+        let user_exists = self
+            .user_repo
+            .find_by_id(user_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to lookup user: {}", e)))?
+            .is_some();
+        if !user_exists {
+            return Err(Status::not_found("User not found"));
+        }
 
         // Verify service exists
         let service = self
@@ -90,7 +99,7 @@ where
                     .find_user_roles_in_tenant(user_id, tenant_id)
                     .await
                     .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
-                
+
                 // Cache the result
                 let _ = self.cache_manager.set_user_roles(&roles).await;
                 roles
@@ -123,14 +132,17 @@ where
         request: Request<ValidateTokenRequest>,
     ) -> Result<Response<ValidateTokenResponse>, Status> {
         let req = request.into_inner();
-        
+
         let audience = if req.audience.is_empty() {
             None
         } else {
             Some(req.audience.as_str())
         };
 
-        match self.jwt_manager.verify_tenant_access_token(&req.access_token, audience) {
+        match self
+            .jwt_manager
+            .verify_tenant_access_token(&req.access_token, audience)
+        {
             Ok(claims) => Ok(Response::new(ValidateTokenResponse {
                 valid: true,
                 user_id: claims.sub,
@@ -151,7 +163,7 @@ where
         request: Request<GetUserRolesRequest>,
     ) -> Result<Response<GetUserRolesResponse>, Status> {
         let req = request.into_inner();
-        
+
         let user_id = Uuid::parse_str(&req.user_id)
             .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
         let tenant_id = Uuid::parse_str(&req.tenant_id)
@@ -166,7 +178,7 @@ where
                     .find_user_roles_in_tenant(user_id, tenant_id)
                     .await
                     .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
-                
+
                 let _ = self.cache_manager.set_user_roles(&roles).await;
                 roles
             }
@@ -174,18 +186,26 @@ where
 
         // Optionally filter by service
         let roles = if req.service_id.is_empty() {
-            user_roles.roles.iter().map(|r| ProtoRole {
-                id: String::new(),
-                name: r.clone(),
-                service_id: String::new(),
-            }).collect()
+            user_roles
+                .roles
+                .iter()
+                .map(|r| ProtoRole {
+                    id: String::new(),
+                    name: r.clone(),
+                    service_id: String::new(),
+                })
+                .collect()
         } else {
             // TODO: Filter roles by service
-            user_roles.roles.iter().map(|r| ProtoRole {
-                id: String::new(),
-                name: r.clone(),
-                service_id: req.service_id.clone(),
-            }).collect()
+            user_roles
+                .roles
+                .iter()
+                .map(|r| ProtoRole {
+                    id: String::new(),
+                    name: r.clone(),
+                    service_id: req.service_id.clone(),
+                })
+                .collect()
         };
 
         Ok(Response::new(GetUserRolesResponse {
@@ -199,9 +219,12 @@ where
         request: Request<IntrospectTokenRequest>,
     ) -> Result<Response<IntrospectTokenResponse>, Status> {
         let req = request.into_inner();
-        
+
         // Try as tenant access token first
-        match self.jwt_manager.verify_tenant_access_token(&req.token, None) {
+        match self
+            .jwt_manager
+            .verify_tenant_access_token(&req.token, None)
+        {
             Ok(claims) => Ok(Response::new(IntrospectTokenResponse {
                 active: true,
                 sub: claims.sub,

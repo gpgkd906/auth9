@@ -7,18 +7,13 @@ use uuid::Uuid;
 use validator::Validate;
 
 /// Service status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceStatus {
+    #[default]
     Active,
     Inactive,
-}
-
-impl Default for ServiceStatus {
-    fn default() -> Self {
-        Self::Active
-    }
 }
 
 /// Service/Client entity (OIDC client)
@@ -113,7 +108,7 @@ mod tests {
             client_secret_hash: "secret-hash".to_string(),
             ..Default::default()
         };
-        
+
         let json = serde_json::to_string(&service).unwrap();
         assert!(!json.contains("secret-hash"));
     }
