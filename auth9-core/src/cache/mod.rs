@@ -31,13 +31,14 @@ pub struct CacheManager {
 impl CacheManager {
     /// Create a new cache manager
     pub async fn new(config: &RedisConfig) -> Result<Self> {
-        let client = redis::Client::open(config.url.as_str())
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to create Redis client: {}", e)))?;
-        
-        let conn = ConnectionManager::new(client)
-            .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to connect to Redis: {}", e)))?;
-        
+        let client = redis::Client::open(config.url.as_str()).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to create Redis client: {}", e))
+        })?;
+
+        let conn = ConnectionManager::new(client).await.map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to connect to Redis: {}", e))
+        })?;
+
         Ok(Self { conn })
     }
 
@@ -45,11 +46,12 @@ impl CacheManager {
     async fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         let mut conn = self.conn.clone();
         let value: Option<String> = conn.get(key).await?;
-        
+
         match value {
             Some(v) => {
-                let parsed = serde_json::from_str(&v)
-                    .map_err(|e| AppError::Internal(anyhow::anyhow!("Cache deserialize error: {}", e)))?;
+                let parsed = serde_json::from_str(&v).map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("Cache deserialize error: {}", e))
+                })?;
                 Ok(Some(parsed))
             }
             None => Ok(None),
@@ -61,7 +63,7 @@ impl CacheManager {
         let mut conn = self.conn.clone();
         let serialized = serde_json::to_string(value)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Cache serialize error: {}", e)))?;
-        
+
         let _: () = conn.set_ex(key, serialized, ttl.as_secs()).await?;
         Ok(())
     }
@@ -80,7 +82,7 @@ impl CacheManager {
             .arg(pattern)
             .query_async(&mut conn)
             .await?;
-        
+
         if !keys.is_empty() {
             conn.del::<_, ()>(keys).await?;
         }
@@ -90,7 +92,11 @@ impl CacheManager {
     // ==================== User Roles Cache ====================
 
     /// Get cached user roles in tenant
-    pub async fn get_user_roles(&self, user_id: Uuid, tenant_id: Uuid) -> Result<Option<UserRolesInTenant>> {
+    pub async fn get_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
         let key = format!("{}:{}:{}", keys::USER_ROLES, user_id, tenant_id);
         self.get(&key).await
     }
@@ -98,11 +104,16 @@ impl CacheManager {
     /// Cache user roles in tenant
     pub async fn set_user_roles(&self, roles: &UserRolesInTenant) -> Result<()> {
         let key = format!("{}:{}:{}", keys::USER_ROLES, roles.user_id, roles.tenant_id);
-        self.set(&key, roles, Duration::from_secs(ttl::USER_ROLES_SECS)).await
+        self.set(&key, roles, Duration::from_secs(ttl::USER_ROLES_SECS))
+            .await
     }
 
     /// Invalidate user roles cache
-    pub async fn invalidate_user_roles(&self, user_id: Uuid, tenant_id: Option<Uuid>) -> Result<()> {
+    pub async fn invalidate_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Option<Uuid>,
+    ) -> Result<()> {
         match tenant_id {
             Some(tid) => {
                 let key = format!("{}:{}:{}", keys::USER_ROLES, user_id, tid);
@@ -118,15 +129,23 @@ impl CacheManager {
     // ==================== Service Config Cache ====================
 
     /// Get cached service config
-    pub async fn get_service_config<T: DeserializeOwned>(&self, service_id: Uuid) -> Result<Option<T>> {
+    pub async fn get_service_config<T: DeserializeOwned>(
+        &self,
+        service_id: Uuid,
+    ) -> Result<Option<T>> {
         let key = format!("{}:{}", keys::SERVICE_CONFIG, service_id);
         self.get(&key).await
     }
 
     /// Cache service config
-    pub async fn set_service_config<T: Serialize>(&self, service_id: Uuid, config: &T) -> Result<()> {
+    pub async fn set_service_config<T: Serialize>(
+        &self,
+        service_id: Uuid,
+        config: &T,
+    ) -> Result<()> {
         let key = format!("{}:{}", keys::SERVICE_CONFIG, service_id);
-        self.set(&key, config, Duration::from_secs(ttl::SERVICE_CONFIG_SECS)).await
+        self.set(&key, config, Duration::from_secs(ttl::SERVICE_CONFIG_SECS))
+            .await
     }
 
     /// Invalidate service config cache
@@ -138,7 +157,10 @@ impl CacheManager {
     // ==================== Tenant Config Cache ====================
 
     /// Get cached tenant config
-    pub async fn get_tenant_config<T: DeserializeOwned>(&self, tenant_id: Uuid) -> Result<Option<T>> {
+    pub async fn get_tenant_config<T: DeserializeOwned>(
+        &self,
+        tenant_id: Uuid,
+    ) -> Result<Option<T>> {
         let key = format!("{}:{}", keys::TENANT_CONFIG, tenant_id);
         self.get(&key).await
     }
@@ -146,7 +168,8 @@ impl CacheManager {
     /// Cache tenant config
     pub async fn set_tenant_config<T: Serialize>(&self, tenant_id: Uuid, config: &T) -> Result<()> {
         let key = format!("{}:{}", keys::TENANT_CONFIG, tenant_id);
-        self.set(&key, config, Duration::from_secs(ttl::TENANT_CONFIG_SECS)).await
+        self.set(&key, config, Duration::from_secs(ttl::TENANT_CONFIG_SECS))
+            .await
     }
 
     /// Invalidate tenant config cache
@@ -164,7 +187,7 @@ mod tests {
     fn test_cache_key_format() {
         let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let tenant_id = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
-        
+
         let key = format!("{}:{}:{}", keys::USER_ROLES, user_id, tenant_id);
         assert_eq!(
             key,

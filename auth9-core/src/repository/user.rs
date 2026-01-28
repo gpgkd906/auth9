@@ -1,6 +1,6 @@
 //! User repository
 
-use crate::domain::{CreateUserInput, TenantUser, UpdateUserInput, User, AddUserToTenantInput};
+use crate::domain::{AddUserToTenantInput, CreateUserInput, TenantUser, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
@@ -17,11 +17,16 @@ pub trait UserRepository: Send + Sync {
     async fn count(&self) -> Result<i64>;
     async fn update(&self, id: Uuid, input: &UpdateUserInput) -> Result<User>;
     async fn delete(&self, id: Uuid) -> Result<()>;
-    
+
     // Tenant-User relations
     async fn add_to_tenant(&self, input: &AddUserToTenantInput) -> Result<TenantUser>;
     async fn remove_from_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()>;
-    async fn find_tenant_users(&self, tenant_id: Uuid, offset: i64, limit: i64) -> Result<Vec<User>>;
+    async fn find_tenant_users(
+        &self,
+        tenant_id: Uuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<User>>;
     async fn find_user_tenants(&self, user_id: Uuid) -> Result<Vec<TenantUser>>;
 }
 
@@ -134,7 +139,10 @@ impl UserRepository for UserRepositoryImpl {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("User {} not found", id)))?;
 
-        let display_name = input.display_name.as_ref().or(existing.display_name.as_ref());
+        let display_name = input
+            .display_name
+            .as_ref()
+            .or(existing.display_name.as_ref());
         let avatar_url = input.avatar_url.as_ref().or(existing.avatar_url.as_ref());
 
         sqlx::query(
@@ -199,13 +207,11 @@ impl UserRepository for UserRepositoryImpl {
     }
 
     async fn remove_from_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()> {
-        let result = sqlx::query(
-            "DELETE FROM tenant_users WHERE user_id = ? AND tenant_id = ?"
-        )
-        .bind(user_id)
-        .bind(tenant_id)
-        .execute(&self.pool)
-        .await?;
+        let result = sqlx::query("DELETE FROM tenant_users WHERE user_id = ? AND tenant_id = ?")
+            .bind(user_id)
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound(
@@ -216,7 +222,12 @@ impl UserRepository for UserRepositoryImpl {
         Ok(())
     }
 
-    async fn find_tenant_users(&self, tenant_id: Uuid, offset: i64, limit: i64) -> Result<Vec<User>> {
+    async fn find_tenant_users(
+        &self,
+        tenant_id: Uuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
             SELECT u.id, u.keycloak_id, u.email, u.display_name, u.avatar_url, u.mfa_enabled, u.created_at, u.updated_at

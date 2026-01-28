@@ -1,8 +1,8 @@
 //! RBAC repository
 
 use crate::domain::{
-    CreatePermissionInput, CreateRoleInput, Permission, Role, RolePermission,
-    UpdateRoleInput, UserTenantRole, AssignRolesInput, UserRolesInTenant,
+    AssignRolesInput, CreatePermissionInput, CreateRoleInput, Permission, Role, UpdateRoleInput,
+    UserRolesInTenant,
 };
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
@@ -31,9 +31,17 @@ pub trait RbacRepository: Send + Sync {
     async fn find_role_permissions(&self, role_id: Uuid) -> Result<Vec<Permission>>;
 
     // User-Tenant-Role
-    async fn assign_roles_to_user(&self, input: &AssignRolesInput, granted_by: Option<Uuid>) -> Result<()>;
+    async fn assign_roles_to_user(
+        &self,
+        input: &AssignRolesInput,
+        granted_by: Option<Uuid>,
+    ) -> Result<()>;
     async fn remove_role_from_user(&self, tenant_user_id: Uuid, role_id: Uuid) -> Result<()>;
-    async fn find_user_roles_in_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<UserRolesInTenant>;
+    async fn find_user_roles_in_tenant(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<UserRolesInTenant>;
 }
 
 pub struct RbacRepositoryImpl {
@@ -197,7 +205,7 @@ impl RbacRepository for RbacRepositoryImpl {
             .bind(id)
             .execute(&self.pool)
             .await?;
-        
+
         sqlx::query("DELETE FROM user_tenant_roles WHERE role_id = ?")
             .bind(id)
             .execute(&self.pool)
@@ -216,13 +224,11 @@ impl RbacRepository for RbacRepositoryImpl {
     }
 
     async fn assign_permission_to_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()> {
-        sqlx::query(
-            "INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)",
-        )
-        .bind(role_id)
-        .bind(permission_id)
-        .execute(&self.pool)
-        .await?;
+        sqlx::query("INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
+            .bind(role_id)
+            .bind(permission_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(())
     }
@@ -253,15 +259,18 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(permissions)
     }
 
-    async fn assign_roles_to_user(&self, input: &AssignRolesInput, granted_by: Option<Uuid>) -> Result<()> {
+    async fn assign_roles_to_user(
+        &self,
+        input: &AssignRolesInput,
+        granted_by: Option<Uuid>,
+    ) -> Result<()> {
         // First find the tenant_user record
-        let tenant_user_id: Option<(Uuid,)> = sqlx::query_as(
-            "SELECT id FROM tenant_users WHERE user_id = ? AND tenant_id = ?",
-        )
-        .bind(input.user_id)
-        .bind(input.tenant_id)
-        .fetch_optional(&self.pool)
-        .await?;
+        let tenant_user_id: Option<(Uuid,)> =
+            sqlx::query_as("SELECT id FROM tenant_users WHERE user_id = ? AND tenant_id = ?")
+                .bind(input.user_id)
+                .bind(input.tenant_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         let tenant_user_id = tenant_user_id
             .ok_or_else(|| AppError::NotFound("User not in tenant".to_string()))?
@@ -296,7 +305,11 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn find_user_roles_in_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<UserRolesInTenant> {
+    async fn find_user_roles_in_tenant(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<UserRolesInTenant> {
         // Get roles
         let roles: Vec<(String,)> = sqlx::query_as(
             r#"

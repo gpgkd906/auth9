@@ -32,12 +32,9 @@ impl TenantRepositoryImpl {
 impl TenantRepository for TenantRepositoryImpl {
     async fn create(&self, input: &CreateTenantInput) -> Result<Tenant> {
         let id = Uuid::new_v4();
-        let settings = input
-            .settings
-            .clone()
-            .unwrap_or_default();
-        let settings_json = serde_json::to_string(&settings)
-            .map_err(|e| AppError::Internal(e.into()))?;
+        let settings = input.settings.clone().unwrap_or_default();
+        let settings_json =
+            serde_json::to_string(&settings).map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -123,8 +120,8 @@ impl TenantRepository for TenantRepositoryImpl {
         let settings = input.settings.as_ref().unwrap_or(&existing.settings);
         let status = input.status.as_ref().unwrap_or(&existing.status);
 
-        let settings_json = serde_json::to_string(&settings)
-            .map_err(|e| AppError::Internal(e.into()))?;
+        let settings_json =
+            serde_json::to_string(&settings).map_err(|e| AppError::Internal(e.into()))?;
 
         let status_str = match status {
             TenantStatus::Active => "active",
@@ -174,14 +171,14 @@ mod tests {
     #[tokio::test]
     async fn test_mock_tenant_repository() {
         let mut mock = MockTenantRepository::new();
-        
+
         let tenant = Tenant::default();
         let tenant_clone = tenant.clone();
-        
+
         mock.expect_find_by_id()
             .with(eq(tenant.id))
             .returning(move |_| Ok(Some(tenant_clone.clone())));
-        
+
         let result = mock.find_by_id(tenant.id).await.unwrap();
         assert!(result.is_some());
     }

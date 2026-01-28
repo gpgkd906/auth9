@@ -65,7 +65,9 @@ impl IntoResponse for AppError {
             AppError::Unauthorized(msg) => (StatusCode::UNAUTHORIZED, "unauthorized", msg.clone()),
             AppError::Forbidden(msg) => (StatusCode::FORBIDDEN, "forbidden", msg.clone()),
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
-            AppError::Validation(msg) => (StatusCode::UNPROCESSABLE_ENTITY, "validation", msg.clone()),
+            AppError::Validation(msg) => {
+                (StatusCode::UNPROCESSABLE_ENTITY, "validation", msg.clone())
+            }
             AppError::Database(e) => {
                 tracing::error!("Database error: {:?}", e);
                 (

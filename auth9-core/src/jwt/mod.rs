@@ -140,7 +140,7 @@ impl JwtManager {
     ) -> Result<TenantAccessClaims> {
         let mut validation = Validation::default();
         validation.set_issuer(&[&self.config.issuer]);
-        
+
         if let Some(aud) = expected_audience {
             validation.set_audience(&[aud]);
         } else {
@@ -174,13 +174,13 @@ mod tests {
     fn test_create_and_verify_identity_token() {
         let manager = JwtManager::new(test_config());
         let user_id = Uuid::new_v4();
-        
+
         let token = manager
             .create_identity_token(user_id, "test@example.com", Some("Test User"))
             .unwrap();
-        
+
         let claims = manager.verify_identity_token(&token).unwrap();
-        
+
         assert_eq!(claims.sub, user_id.to_string());
         assert_eq!(claims.email, "test@example.com");
         assert_eq!(claims.name, Some("Test User".to_string()));
@@ -192,7 +192,7 @@ mod tests {
         let manager = JwtManager::new(test_config());
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();
-        
+
         let token = manager
             .create_tenant_access_token(
                 user_id,
@@ -203,11 +203,11 @@ mod tests {
                 vec!["user:read".to_string(), "user:write".to_string()],
             )
             .unwrap();
-        
+
         let claims = manager
             .verify_tenant_access_token(&token, Some("my-service"))
             .unwrap();
-        
+
         assert_eq!(claims.sub, user_id.to_string());
         assert_eq!(claims.tenant_id, tenant_id.to_string());
         assert_eq!(claims.roles, vec!["admin"]);
@@ -217,7 +217,7 @@ mod tests {
     #[test]
     fn test_invalid_token() {
         let manager = JwtManager::new(test_config());
-        
+
         let result = manager.verify_identity_token("invalid-token");
         assert!(result.is_err());
     }
@@ -227,7 +227,7 @@ mod tests {
         let manager = JwtManager::new(test_config());
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();
-        
+
         let token = manager
             .create_tenant_access_token(
                 user_id,
@@ -238,7 +238,7 @@ mod tests {
                 vec![],
             )
             .unwrap();
-        
+
         let result = manager.verify_tenant_access_token(&token, Some("other-service"));
         assert!(result.is_err());
     }

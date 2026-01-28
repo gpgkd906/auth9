@@ -25,7 +25,12 @@ impl<R: ServiceRepository> ClientService<R> {
         input.validate()?;
 
         // Check for duplicate client_id
-        if self.repo.find_by_client_id(&input.client_id).await?.is_some() {
+        if self
+            .repo
+            .find_by_client_id(&input.client_id)
+            .await?
+            .is_some()
+        {
             return Err(AppError::Conflict(format!(
                 "Service with client_id '{}' already exists",
                 input.client_id
@@ -36,6 +41,34 @@ impl<R: ServiceRepository> ClientService<R> {
         let client_secret = generate_client_secret();
         let secret_hash = hash_secret(&client_secret)?;
 
+        let service = self.repo.create(&input, &secret_hash).await?;
+
+        Ok(ServiceWithSecret {
+            service,
+            client_secret: Some(client_secret),
+        })
+    }
+
+    pub async fn create_with_secret(
+        &self,
+        input: CreateServiceInput,
+        client_secret: String,
+    ) -> Result<ServiceWithSecret> {
+        input.validate()?;
+
+        if self
+            .repo
+            .find_by_client_id(&input.client_id)
+            .await?
+            .is_some()
+        {
+            return Err(AppError::Conflict(format!(
+                "Service with client_id '{}' already exists",
+                input.client_id
+            )));
+        }
+
+        let secret_hash = hash_secret(&client_secret)?;
         let service = self.repo.create(&input, &secret_hash).await?;
 
         Ok(ServiceWithSecret {
@@ -58,7 +91,12 @@ impl<R: ServiceRepository> ClientService<R> {
             .ok_or_else(|| AppError::NotFound(format!("Service '{}' not found", client_id)))
     }
 
-    pub async fn list(&self, tenant_id: Option<Uuid>, page: i64, per_page: i64) -> Result<(Vec<Service>, i64)> {
+    pub async fn list(
+        &self,
+        tenant_id: Option<Uuid>,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<Service>, i64)> {
         let offset = (page - 1) * per_page;
         let services = self.repo.list(tenant_id, offset, per_page).await?;
         let total = self.repo.count(tenant_id).await?;
@@ -89,11 +127,13 @@ impl<R: ServiceRepository> ClientService<R> {
 
     pub async fn verify_secret(&self, client_id: &str, secret: &str) -> Result<Service> {
         let service = self.get_by_client_id(client_id).await?;
-        
+
         if verify_secret(secret, &service.client_secret_hash)? {
             Ok(service)
         } else {
-            Err(AppError::Unauthorized("Invalid client credentials".to_string()))
+            Err(AppError::Unauthorized(
+                "Invalid client credentials".to_string(),
+            ))
         }
     }
 }
@@ -118,10 +158,10 @@ fn hash_secret(secret: &str) -> Result<String> {
 /// Verify a client secret against its hash
 fn verify_secret(secret: &str, hash: &str) -> Result<bool> {
     use argon2::{PasswordHash, PasswordVerifier};
-    
+
     let parsed_hash = PasswordHash::new(hash)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid hash: {}", e)))?;
-    
+
     Ok(Argon2::default()
         .verify_password(secret.as_bytes(), &parsed_hash)
         .is_ok())
@@ -135,7 +175,7 @@ mod tests {
     fn test_generate_client_secret() {
         let secret1 = generate_client_secret();
         let secret2 = generate_client_secret();
-        
+
         // Should be 43 characters (32 bytes base64 encoded without padding)
         assert_eq!(secret1.len(), 43);
         assert_ne!(secret1, secret2);
@@ -145,7 +185,7 @@ mod tests {
     fn test_hash_and_verify_secret() {
         let secret = "test-secret-123";
         let hash = hash_secret(secret).unwrap();
-        
+
         assert!(verify_secret(secret, &hash).unwrap());
         assert!(!verify_secret("wrong-secret", &hash).unwrap());
     }

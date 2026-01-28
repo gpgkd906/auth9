@@ -30,24 +30,24 @@ CardHeader.displayName = "CardHeader";
 const CardTitle = forwardRef<
   HTMLParagraphElement,
   HTMLAttributes<HTMLHeadingElement>
->(({ className, ...props }, ref) => (
+>(({ className, children, ...props }, ref) => (
   <h3
     ref={ref}
     className={cn("text-xl font-semibold leading-none tracking-tight", className)}
     {...props}
-  />
+  >
+    {children}
+  </h3>
 ));
 CardTitle.displayName = "CardTitle";
 
 const CardDescription = forwardRef<
   HTMLParagraphElement,
   HTMLAttributes<HTMLParagraphElement>
->(({ className, ...props }, ref) => (
-  <p
-    ref={ref}
-    className={cn("text-sm text-gray-500", className)}
-    {...props}
-  />
+>(({ className, children, ...props }, ref) => (
+  <p ref={ref} className={cn("text-sm text-gray-500", className)} {...props}>
+    {children}
+  </p>
 ));
 CardDescription.displayName = "CardDescription";
 

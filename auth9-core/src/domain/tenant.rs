@@ -7,23 +7,18 @@ use uuid::Uuid;
 use validator::Validate;
 
 /// Tenant status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
 #[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
 #[serde(rename_all = "lowercase")]
 pub enum TenantStatus {
+    #[default]
     Active,
     Inactive,
     Suspended,
 }
 
-impl Default for TenantStatus {
-    fn default() -> Self {
-        Self::Active
-    }
-}
-
 /// Tenant settings stored as JSON
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TenantSettings {
     /// Whether MFA is required for all users
     #[serde(default)]
@@ -41,6 +36,17 @@ pub struct TenantSettings {
 
 fn default_session_timeout() -> i64 {
     3600 // 1 hour
+}
+
+impl Default for TenantSettings {
+    fn default() -> Self {
+        Self {
+            require_mfa: false,
+            allowed_auth_methods: Vec::new(),
+            session_timeout_secs: default_session_timeout(),
+            branding: TenantBranding::default(),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]

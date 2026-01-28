@@ -79,25 +79,47 @@ impl<R: RbacRepository> RbacService<R> {
 
     // ==================== Role-Permission ====================
 
-    pub async fn assign_permission_to_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()> {
+    pub async fn assign_permission_to_role(
+        &self,
+        role_id: Uuid,
+        permission_id: Uuid,
+    ) -> Result<()> {
         let _ = self.get_role(role_id).await?;
         let _ = self.get_permission(permission_id).await?;
-        self.repo.assign_permission_to_role(role_id, permission_id).await
+        self.repo
+            .assign_permission_to_role(role_id, permission_id)
+            .await
     }
 
-    pub async fn remove_permission_from_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()> {
-        self.repo.remove_permission_from_role(role_id, permission_id).await
+    pub async fn remove_permission_from_role(
+        &self,
+        role_id: Uuid,
+        permission_id: Uuid,
+    ) -> Result<()> {
+        self.repo
+            .remove_permission_from_role(role_id, permission_id)
+            .await
     }
 
     // ==================== User-Tenant-Role ====================
 
-    pub async fn assign_roles(&self, input: AssignRolesInput, granted_by: Option<Uuid>) -> Result<()> {
+    pub async fn assign_roles(
+        &self,
+        input: AssignRolesInput,
+        granted_by: Option<Uuid>,
+    ) -> Result<()> {
         input.validate()?;
         self.repo.assign_roles_to_user(&input, granted_by).await
     }
 
-    pub async fn get_user_roles(&self, user_id: Uuid, tenant_id: Uuid) -> Result<UserRolesInTenant> {
-        self.repo.find_user_roles_in_tenant(user_id, tenant_id).await
+    pub async fn get_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<UserRolesInTenant> {
+        self.repo
+            .find_user_roles_in_tenant(user_id, tenant_id)
+            .await
     }
 }
 
@@ -112,7 +134,7 @@ mod tests {
         let mut mock = MockRbacRepository::new();
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();
-        
+
         mock.expect_find_user_roles_in_tenant()
             .with(eq(user_id), eq(tenant_id))
             .returning(|uid, tid| {
@@ -123,12 +145,12 @@ mod tests {
                     permissions: vec!["user:read".to_string(), "user:write".to_string()],
                 })
             });
-        
+
         let service = RbacService::new(Arc::new(mock));
-        
+
         let result = service.get_user_roles(user_id, tenant_id).await;
         assert!(result.is_ok());
-        
+
         let roles = result.unwrap();
         assert_eq!(roles.roles, vec!["admin"]);
         assert_eq!(roles.permissions.len(), 2);

@@ -84,7 +84,7 @@ impl KeycloakClient {
             .timeout(std::time::Duration::from_secs(30))
             .build()
             .expect("Failed to create HTTP client");
-        
+
         Self {
             config,
             http_client,
@@ -176,7 +176,9 @@ impl KeycloakClient {
             .map_err(|e| AppError::Keycloak(format!("Failed to create user: {}", e)))?;
 
         if response.status() == StatusCode::CONFLICT {
-            return Err(AppError::Conflict("User already exists in Keycloak".to_string()));
+            return Err(AppError::Conflict(
+                "User already exists in Keycloak".to_string(),
+            ));
         }
 
         if !response.status().is_success() {
@@ -197,7 +199,7 @@ impl KeycloakClient {
 
         let user_id = location
             .split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| AppError::Keycloak("Invalid location header".to_string()))?;
 
         Ok(user_id.to_string())
@@ -291,7 +293,9 @@ impl KeycloakClient {
             .map_err(|e| AppError::Keycloak(format!("Failed to create client: {}", e)))?;
 
         if response.status() == StatusCode::CONFLICT {
-            return Err(AppError::Conflict("Client already exists in Keycloak".to_string()));
+            return Err(AppError::Conflict(
+                "Client already exists in Keycloak".to_string(),
+            ));
         }
 
         if !response.status().is_success() {
@@ -312,7 +316,7 @@ impl KeycloakClient {
 
         let client_uuid = location
             .split('/')
-            .last()
+            .next_back()
             .ok_or_else(|| AppError::Keycloak("Invalid location header".to_string()))?;
 
         Ok(client_uuid.to_string())
@@ -354,6 +358,46 @@ impl KeycloakClient {
             .map_err(|e| AppError::Keycloak(format!("Failed to parse secret: {}", e)))?;
 
         Ok(secret.value)
+    }
+
+    /// Get client UUID by client_id
+    pub async fn get_client_uuid_by_client_id(&self, client_id: &str) -> Result<String> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients?clientId={}",
+            self.config.url, self.config.realm, client_id
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to query client: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to query client: {} - {}",
+                status, body
+            )));
+        }
+
+        let clients: Vec<KeycloakOidcClient> = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse client list: {}", e)))?;
+
+        let client = clients
+            .into_iter()
+            .next()
+            .ok_or_else(|| AppError::NotFound("Client not found in Keycloak".to_string()))?;
+
+        client
+            .id
+            .ok_or_else(|| AppError::Keycloak("Client id missing in Keycloak response".to_string()))
     }
 }
 
