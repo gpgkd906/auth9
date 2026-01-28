@@ -1,0 +1,139 @@
+# Auth9 - Local Development Environment
+# Usage: docker-compose up -d
+
+version: '3.8'
+
+services:
+  # ==================== Auth9 Core (Rust Backend) ====================
+  auth9-core:
+    build:
+      context: ./auth9-core
+      dockerfile: Dockerfile
+    container_name: auth9-core
+    ports:
+      - "8080:8080"   # HTTP API
+      - "50051:50051" # gRPC
+    environment:
+      RUST_LOG: debug
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8080
+      GRPC_HOST: 0.0.0.0
+      GRPC_PORT: 50051
+      DATABASE_URL: mysql://root:password@tidb:4000/auth9
+      DATABASE_MAX_CONNECTIONS: 10
+      DATABASE_MIN_CONNECTIONS: 2
+      REDIS_URL: redis://redis:6379
+      JWT_SECRET: dev-jwt-secret-change-in-production
+      JWT_ISSUER: http://localhost:8080
+      KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_REALM: auth9
+      KEYCLOAK_ADMIN_CLIENT_ID: admin-cli
+      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_SECRET:-admin}
+    depends_on:
+      tidb:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Auth9 Portal (Remix Frontend) ====================
+  auth9-portal:
+    build:
+      context: ./auth9-portal
+      dockerfile: Dockerfile
+    container_name: auth9-portal
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: development
+      AUTH9_CORE_URL: http://auth9-core:8080
+      SESSION_SECRET: dev-session-secret-change-in-production
+    depends_on:
+      - auth9-core
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== TiDB (Database) ====================
+  tidb:
+    image: pingcap/tidb:v7.5.0
+    container_name: auth9-tidb
+    ports:
+      - "4000:4000"   # MySQL protocol
+      - "10080:10080" # Status port
+    volumes:
+      - tidb-data:/var/lib/tidb
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-P", "4000", "-u", "root", "--password=password"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Redis (Cache) ====================
+  redis:
+    image: redis:7-alpine
+    container_name: auth9-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    command: redis-server --appendonly yes
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Keycloak (Auth Engine) ====================
+  keycloak:
+    image: quay.io/keycloak/keycloak:23.0
+    container_name: auth9-keycloak
+    command: start-dev
+    ports:
+      - "8081:8080"
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KC_DB: dev-mem
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== DB Admin (phpMyAdmin alternative) ====================
+  adminer:
+    image: adminer:4
+    container_name: auth9-adminer
+    ports:
+      - "8082:8080"
+    environment:
+      ADMINER_DEFAULT_SERVER: tidb:4000
+    depends_on:
+      - tidb
+    networks:
+      - auth9-network
+    restart: unless-stopped
+    profiles:
+      - tools
+
+networks:
+  auth9-network:
+    driver: bridge
+
+volumes:
+  tidb-data:
+  redis-data:

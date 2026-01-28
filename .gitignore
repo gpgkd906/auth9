@@ -1,0 +1,43 @@
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+deploy/k8s/secrets.yaml
+
+# Build artifacts
+target/
+build/
+dist/
+node_modules/
+
+# Logs
+*.log
+logs/
+
+# Test coverage
+coverage/
+.coverage
+htmlcov/
+
+# Rust
+**/*.rs.bk
+Cargo.lock
+!auth9-core/Cargo.lock
+
+# Node
+.cache/
+.npm/
+*.tsbuildinfo

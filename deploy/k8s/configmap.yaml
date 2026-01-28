@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth9-config
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: auth9
+data:
+  # Logging
+  RUST_LOG: "info"
+  
+  # Server configuration
+  HTTP_HOST: "0.0.0.0"
+  HTTP_PORT: "8080"
+  GRPC_HOST: "0.0.0.0"
+  GRPC_PORT: "50051"
+  
+  # Database configuration
+  DATABASE_MAX_CONNECTIONS: "10"
+  DATABASE_MIN_CONNECTIONS: "2"
+  
+  # JWT configuration
+  JWT_ISSUER: "https://auth9.example.com"
+  JWT_ACCESS_TOKEN_TTL_SECS: "3600"
+  JWT_REFRESH_TOKEN_TTL_SECS: "604800"
+  
+  # Keycloak configuration
+  KEYCLOAK_REALM: "auth9"
+  KEYCLOAK_ADMIN_CLIENT_ID: "admin-cli"
+  
+  # Portal configuration
+  AUTH9_CORE_URL: "http://auth9-core:8080"
+  NODE_ENV: "production"

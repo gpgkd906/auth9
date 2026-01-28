@@ -1,0 +1,169 @@
+# Auth9 CD Pipeline
+# Builds and pushes Docker images on push to main
+# Images are pushed to ghcr.io/gpgkd906/auth9-*
+
+name: CD
+
+on:
+  push:
+    branches: [main]
+
+env:
+  REGISTRY: ghcr.io
+  CORE_IMAGE_NAME: gpgkd906/auth9-core
+  PORTAL_IMAGE_NAME: gpgkd906/auth9-portal
+
+jobs:
+  # ==================== Build and Push auth9-core ====================
+  build-core:
+    name: Build auth9-core
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      full_image: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-core
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # ==================== Build and Push auth9-portal ====================
+  build-portal:
+    name: Build auth9-portal
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+      full_image: ${{ steps.meta.outputs.tags }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.PORTAL_IMAGE_NAME }}
+          tags: |
+            type=sha,prefix=
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=ref,event=branch
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-portal
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64,linux/arm64
+
+  # ==================== Generate Summary ====================
+  summary:
+    name: Deployment Summary
+    runs-on: ubuntu-latest
+    needs: [build-core, build-portal]
+    permissions:
+      contents: read
+
+    steps:
+      - name: Generate deployment summary
+        run: |
+          SHORT_SHA=$(echo "${{ github.sha }}" | cut -c1-7)
+          
+          cat >> $GITHUB_STEP_SUMMARY << 'EOF'
+          ## 🚀 Docker Images Built Successfully
+          
+          Commit: `${{ github.sha }}`
+          Branch: `${{ github.ref_name }}`
+          
+          ### auth9-core
+          
+          ```
+          ghcr.io/gpgkd906/auth9-core:${SHORT_SHA}
+          ghcr.io/gpgkd906/auth9-core:latest
+          ```
+          
+          ### auth9-portal
+          
+          ```
+          ghcr.io/gpgkd906/auth9-portal:${SHORT_SHA}
+          ghcr.io/gpgkd906/auth9-portal:latest
+          ```
+          
+          ### Quick Copy (with commit SHA)
+          
+          | Component | Image |
+          |-----------|-------|
+          | auth9-core | `ghcr.io/gpgkd906/auth9-core:${SHORT_SHA}` |
+          | auth9-portal | `ghcr.io/gpgkd906/auth9-portal:${SHORT_SHA}` |
+          
+          ### Quick Copy (latest)
+          
+          | Component | Image |
+          |-----------|-------|
+          | auth9-core | `ghcr.io/gpgkd906/auth9-core:latest` |
+          | auth9-portal | `ghcr.io/gpgkd906/auth9-portal:latest` |
+          
+          ---
+          
+          To deploy, run:
+          ```bash
+          ./deploy/deploy.sh
+          ```
+          EOF
+          
+          # Also substitute the SHORT_SHA in the summary
+          sed -i "s/\${SHORT_SHA}/${SHORT_SHA}/g" $GITHUB_STEP_SUMMARY

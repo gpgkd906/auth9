@@ -1,0 +1,155 @@
+# Auth9 CI Pipeline
+# Runs on every PR to main branch
+# Executes tests for both auth9-core and auth9-portal
+
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+
+env:
+  CARGO_TERM_COLOR: always
+  RUST_BACKTRACE: 1
+
+jobs:
+  # ==================== auth9-core Tests ====================
+  test-core:
+    name: Test auth9-core
+    runs-on: ubuntu-latest
+    
+    services:
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: password
+          MYSQL_DATABASE: auth9_test
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+          
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=10s
+          --health-timeout=5s
+          --health-retries=5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+        with:
+          components: clippy, rustfmt
+
+      - name: Install protoc
+        uses: arduino/setup-protoc@v2
+        with:
+          version: "25.x"
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            auth9-core/target
+          key: ${{ runner.os }}-cargo-${{ hashFiles('auth9-core/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-
+
+      - name: Check formatting
+        working-directory: auth9-core
+        run: cargo fmt --all -- --check
+
+      - name: Run clippy
+        working-directory: auth9-core
+        run: cargo clippy --all-targets --all-features -- -D warnings
+
+      - name: Run unit tests
+        working-directory: auth9-core
+        run: cargo test --lib --verbose
+
+      - name: Run integration tests
+        working-directory: auth9-core
+        env:
+          DATABASE_URL: mysql://root:password@localhost:3306/auth9_test
+          REDIS_URL: redis://localhost:6379
+          JWT_SECRET: test-jwt-secret
+        run: cargo test --test '*' --verbose
+
+  # ==================== auth9-portal Tests ====================
+  test-portal:
+    name: Test auth9-portal
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: auth9-portal/package-lock.json
+
+      - name: Install dependencies
+        working-directory: auth9-portal
+        run: npm ci
+
+      - name: Run linter
+        working-directory: auth9-portal
+        run: npm run lint
+
+      - name: Run type check
+        working-directory: auth9-portal
+        run: npm run typecheck
+
+      - name: Run unit tests
+        working-directory: auth9-portal
+        run: npm run test -- --run
+
+      - name: Build
+        working-directory: auth9-portal
+        run: npm run build
+
+  # ==================== Docker Build Test ====================
+  docker-build-test:
+    name: Docker Build Test
+    runs-on: ubuntu-latest
+    needs: [test-core, test-portal]
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build auth9-core image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-core
+          push: false
+          tags: auth9-core:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build auth9-portal image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-portal
+          push: false
+          tags: auth9-portal:test
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -1,0 +1,20 @@
+# Auth9 - Development Override
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
+# This file runs only the dependencies (no auth9-core/portal)
+
+version: '3.8'
+
+services:
+  # Disable auth9-core in dev mode (run locally with cargo run)
+  auth9-core:
+    profiles:
+      - full
+
+  # Disable auth9-portal in dev mode (run locally with npm run dev)
+  auth9-portal:
+    profiles:
+      - full
+
+  # Enable adminer by default in dev
+  adminer:
+    profiles: []
