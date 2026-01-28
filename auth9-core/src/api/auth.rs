@@ -1,12 +1,10 @@
 //! Authentication API handlers
 
-use crate::api::SuccessResponse;
 use crate::error::{AppError, Result};
 use crate::server::AppState;
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
-    response::{IntoResponse, Redirect},
+    response::{IntoResponse, Response},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -25,8 +23,8 @@ pub struct AuthorizeRequest {
 /// Login redirect (initiates OIDC flow)
 pub async fn authorize(
     State(_state): State<AppState>,
-    Query(params): Query<AuthorizeRequest>,
-) -> Result<impl IntoResponse> {
+    Query(_params): Query<AuthorizeRequest>,
+) -> Result<Response> {
     // TODO: Validate client_id and redirect_uri
     // TODO: Redirect to Keycloak authorization endpoint
     
@@ -52,8 +50,8 @@ pub struct TokenResponse {
 
 pub async fn callback(
     State(_state): State<AppState>,
-    Query(params): Query<CallbackRequest>,
-) -> Result<impl IntoResponse> {
+    Query(_params): Query<CallbackRequest>,
+) -> Result<Response> {
     // TODO: Exchange code for tokens with Keycloak
     // TODO: Create local session
     // TODO: Issue auth9 identity token
@@ -75,7 +73,7 @@ pub struct TokenRequest {
 pub async fn token(
     State(_state): State<AppState>,
     Json(params): Json<TokenRequest>,
-) -> Result<impl IntoResponse> {
+) -> Result<Response> {
     match params.grant_type.as_str() {
         "authorization_code" => {
             // TODO: Implement authorization code exchange
@@ -106,8 +104,8 @@ pub struct LogoutRequest {
 
 pub async fn logout(
     State(_state): State<AppState>,
-    Query(params): Query<LogoutRequest>,
-) -> Result<impl IntoResponse> {
+    Query(_params): Query<LogoutRequest>,
+) -> Result<Response> {
     // TODO: Invalidate session
     // TODO: Redirect to Keycloak logout endpoint
     
@@ -117,7 +115,7 @@ pub async fn logout(
 /// UserInfo endpoint
 pub async fn userinfo(
     State(_state): State<AppState>,
-) -> Result<impl IntoResponse> {
+) -> Result<Response> {
     // TODO: Validate access token from Authorization header
     // TODO: Return user info
     

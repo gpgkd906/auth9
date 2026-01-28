@@ -9,8 +9,7 @@ use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
     audit::AuditRepositoryImpl, rbac::RbacRepositoryImpl, service::ServiceRepositoryImpl,
-    tenant::TenantRepositoryImpl, user::UserRepositoryImpl, AuditRepository, RbacRepository,
-    ServiceRepository, TenantRepository, UserRepository,
+    tenant::TenantRepositoryImpl, user::UserRepositoryImpl,
 };
 use crate::service::{ClientService, RbacService, TenantService, UserService};
 use anyhow::Result;
