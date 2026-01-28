@@ -101,6 +101,12 @@ export interface User {
   updated_at: string;
 }
 
+export interface CreateUserInput {
+  email: string;
+  display_name?: string;
+  avatar_url?: string;
+}
+
 export const userApi = {
   list: async (page = 1, perPage = 20): Promise<PaginatedResponse<User>> => {
     const response = await fetch(
@@ -111,6 +117,16 @@ export const userApi = {
 
   get: async (id: string): Promise<{ data: User }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}`);
+    return handleResponse(response);
+  },
+
+  create: async (input: CreateUserInput & { password?: string }): Promise<{ data: User }> => {
+    const { password, ...user } = input;
+    const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ user, password }),
+    });
     return handleResponse(response);
   },
 };
@@ -139,6 +155,57 @@ export const serviceApi = {
 
   get: async (id: string): Promise<{ data: Service }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`);
+    return handleResponse(response);
+  },
+};
+
+export interface Role {
+  id: string;
+  service_id: string;
+  name: string;
+  description?: string;
+  parent_role_id?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Permission {
+  id: string;
+  service_id: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export const rbacApi = {
+  listRoles: async (serviceId: string): Promise<{ data: Role[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles`);
+    return handleResponse(response);
+  },
+  listPermissions: async (serviceId: string): Promise<{ data: Permission[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/permissions`);
+    return handleResponse(response);
+  },
+};
+
+export interface AuditLog {
+  id: number;
+  actor_id?: string;
+  action: string;
+  resource_type: string;
+  resource_id?: string;
+  old_value?: unknown;
+  new_value?: unknown;
+  ip_address?: string;
+  created_at: string;
+}
+
+export const auditApi = {
+  list: async (page = 1, perPage = 50): Promise<PaginatedResponse<AuditLog>> => {
+    const offset = (page - 1) * perPage;
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/audit-logs?limit=${perPage}&offset=${offset}`
+    );
     return handleResponse(response);
   },
 };

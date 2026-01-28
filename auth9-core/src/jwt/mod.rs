@@ -50,6 +50,16 @@ pub struct TenantAccessClaims {
     pub exp: i64,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RefreshClaims {
+    pub sub: String,
+    pub iss: String,
+    pub aud: String,
+    pub tenant_id: String,
+    pub iat: i64,
+    pub exp: i64,
+}
+
 /// JWT token manager
 #[derive(Clone)]
 pub struct JwtManager {
@@ -114,6 +124,28 @@ impl JwtManager {
             tenant_id: tenant_id.to_string(),
             roles,
             permissions,
+            iat: now.timestamp(),
+            exp: exp.timestamp(),
+        };
+
+        encode(&Header::default(), &claims, &self.encoding_key)
+            .map_err(|e| AppError::Internal(e.into()))
+    }
+
+    pub fn create_refresh_token(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_client_id: &str,
+    ) -> Result<String> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(self.config.refresh_token_ttl_secs);
+
+        let claims = RefreshClaims {
+            sub: user_id.to_string(),
+            iss: self.config.issuer.clone(),
+            aud: service_client_id.to_string(),
+            tenant_id: tenant_id.to_string(),
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };

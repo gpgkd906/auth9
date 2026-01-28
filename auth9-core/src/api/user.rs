@@ -9,6 +9,7 @@ use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
 use crate::server::AppState;
 use axum::{
     extract::{Path, Query, State},
+    http::HeaderMap,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -51,6 +52,7 @@ pub struct CreateUserRequest {
 /// Create user
 pub async fn create(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse> {
     let credentials = input.password.map(|password| {
@@ -78,6 +80,7 @@ pub async fn create(
 
     let _ = write_audit_log(
         &state,
+        &headers,
         "user.create",
         "user",
         Some(user.id),
@@ -91,6 +94,7 @@ pub async fn create(
 /// Update user
 pub async fn update(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
@@ -98,6 +102,7 @@ pub async fn update(
     let user = state.user_service.update(id, input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "user.update",
         "user",
         Some(user.id),
@@ -111,12 +116,14 @@ pub async fn update(
 /// Delete user
 pub async fn delete(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.user_service.get(id).await?;
     state.user_service.delete(id).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "user.delete",
         "user",
         Some(id),
@@ -136,6 +143,7 @@ pub struct AddToTenantRequest {
 
 pub async fn add_to_tenant(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(user_id): Path<Uuid>,
     Json(input): Json<AddToTenantRequest>,
 ) -> Result<impl IntoResponse> {
@@ -149,6 +157,7 @@ pub async fn add_to_tenant(
         .await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "user.add_to_tenant",
         "tenant_user",
         Some(tenant_user.id),
@@ -162,6 +171,7 @@ pub async fn add_to_tenant(
 /// Remove user from tenant
 pub async fn remove_from_tenant(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     state
@@ -170,6 +180,7 @@ pub async fn remove_from_tenant(
         .await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "user.remove_from_tenant",
         "tenant_user",
         None,

@@ -6,6 +6,7 @@ use crate::error::Result;
 use crate::server::AppState;
 use axum::{
     extract::{Path, State},
+    http::HeaderMap,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -27,11 +28,13 @@ pub async fn list_permissions(
 /// Create permission
 pub async fn create_permission(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<CreatePermissionInput>,
 ) -> Result<impl IntoResponse> {
     let permission = state.rbac_service.create_permission(input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "permission.create",
         "permission",
         Some(permission.id),
@@ -45,12 +48,14 @@ pub async fn create_permission(
 /// Delete permission
 pub async fn delete_permission(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.rbac_service.get_permission(id).await?;
     state.rbac_service.delete_permission(id).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "permission.delete",
         "permission",
         Some(id),
@@ -86,11 +91,13 @@ pub async fn get_role(
 /// Create role
 pub async fn create_role(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<CreateRoleInput>,
 ) -> Result<impl IntoResponse> {
     let role = state.rbac_service.create_role(input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "role.create",
         "role",
         Some(role.id),
@@ -104,6 +111,7 @@ pub async fn create_role(
 /// Update role
 pub async fn update_role(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateRoleInput>,
 ) -> Result<impl IntoResponse> {
@@ -111,6 +119,7 @@ pub async fn update_role(
     let role = state.rbac_service.update_role(id, input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "role.update",
         "role",
         Some(role.id),
@@ -124,12 +133,14 @@ pub async fn update_role(
 /// Delete role
 pub async fn delete_role(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.rbac_service.get_role(id).await?;
     state.rbac_service.delete_role(id).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "role.delete",
         "role",
         Some(id),
@@ -150,6 +161,7 @@ pub struct AssignPermissionInput {
 /// Assign permission to role
 pub async fn assign_permission(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(role_id): Path<Uuid>,
     Json(input): Json<AssignPermissionInput>,
 ) -> Result<impl IntoResponse> {
@@ -159,6 +171,7 @@ pub async fn assign_permission(
         .await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "role.assign_permission",
         "role_permission",
         Some(role_id),
@@ -172,6 +185,7 @@ pub async fn assign_permission(
 /// Remove permission from role
 pub async fn remove_permission(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path((role_id, permission_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     state
@@ -180,6 +194,7 @@ pub async fn remove_permission(
         .await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "role.remove_permission",
         "role_permission",
         Some(role_id),
@@ -195,12 +210,15 @@ pub async fn remove_permission(
 /// Assign roles to user in tenant
 pub async fn assign_roles(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<AssignRolesInput>,
 ) -> Result<impl IntoResponse> {
     // TODO: Get current user ID from auth context
     let granted_by = None;
     state.rbac_service.assign_roles(input, granted_by).await?;
-    let _ = write_audit_log(&state, "rbac.assign_roles", "user_roles", None, None, None).await;
+    let _ =
+        write_audit_log(&state, &headers, "rbac.assign_roles", "user_roles", None, None, None)
+            .await;
     Ok(Json(MessageResponse::new("Roles assigned successfully")))
 }
 

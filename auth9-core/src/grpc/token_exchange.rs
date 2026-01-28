@@ -90,18 +90,23 @@ where
             .map_err(|e| Status::internal(format!("Failed to lookup service: {}", e)))?
             .ok_or_else(|| Status::not_found("Service not found"))?;
 
-        // Get user roles (with caching)
-        let user_roles = match self.cache_manager.get_user_roles(user_id, tenant_id).await {
+        let user_roles = match self
+            .cache_manager
+            .get_user_roles_for_service(user_id, tenant_id, service.id)
+            .await
+        {
             Ok(Some(roles)) => roles,
             _ => {
                 let roles = self
                     .rbac_repo
-                    .find_user_roles_in_tenant(user_id, tenant_id)
+                    .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id)
                     .await
                     .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
 
-                // Cache the result
-                let _ = self.cache_manager.set_user_roles(&roles).await;
+                let _ = self
+                    .cache_manager
+                    .set_user_roles_for_service(&roles, service.id)
+                    .await;
                 roles
             }
         };
@@ -119,11 +124,16 @@ where
             )
             .map_err(|e| Status::internal(format!("Failed to create access token: {}", e)))?;
 
+        let refresh_token = self
+            .jwt_manager
+            .create_refresh_token(user_id, tenant_id, &service.client_id)
+            .map_err(|e| Status::internal(format!("Failed to create refresh token: {}", e)))?;
+
         Ok(Response::new(ExchangeTokenResponse {
             access_token,
             token_type: "Bearer".to_string(),
             expires_in: self.jwt_manager.access_token_ttl(),
-            refresh_token: String::new(), // TODO: Implement refresh tokens
+            refresh_token,
         }))
     }
 
@@ -169,44 +179,69 @@ where
         let tenant_id = Uuid::parse_str(&req.tenant_id)
             .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
 
-        // Try cache first
-        let user_roles = match self.cache_manager.get_user_roles(user_id, tenant_id).await {
-            Ok(Some(roles)) => roles,
-            _ => {
-                let roles = self
-                    .rbac_repo
-                    .find_user_roles_in_tenant(user_id, tenant_id)
-                    .await
-                    .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
+        let (user_roles, role_records) = if req.service_id.is_empty() {
+            let user_roles = match self.cache_manager.get_user_roles(user_id, tenant_id).await {
+                Ok(Some(roles)) => roles,
+                _ => {
+                    let roles = self
+                        .rbac_repo
+                        .find_user_roles_in_tenant(user_id, tenant_id)
+                        .await
+                        .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
 
-                let _ = self.cache_manager.set_user_roles(&roles).await;
-                roles
-            }
-        };
+                    let _ = self.cache_manager.set_user_roles(&roles).await;
+                    roles
+                }
+            };
 
-        // Optionally filter by service
-        let roles = if req.service_id.is_empty() {
-            user_roles
-                .roles
-                .iter()
-                .map(|r| ProtoRole {
-                    id: String::new(),
-                    name: r.clone(),
-                    service_id: String::new(),
-                })
-                .collect()
+            let role_records = self
+                .rbac_repo
+                .find_user_role_records_in_tenant(user_id, tenant_id, None)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
+            (user_roles, role_records)
         } else {
-            // TODO: Filter roles by service
-            user_roles
-                .roles
-                .iter()
-                .map(|r| ProtoRole {
-                    id: String::new(),
-                    name: r.clone(),
-                    service_id: req.service_id.clone(),
-                })
-                .collect()
+            let service_id = Uuid::parse_str(&req.service_id)
+                .map_err(|_| Status::invalid_argument("Invalid service ID"))?;
+
+            let user_roles = match self
+                .cache_manager
+                .get_user_roles_for_service(user_id, tenant_id, service_id)
+                .await
+            {
+                Ok(Some(roles)) => roles,
+                _ => {
+                    let roles = self
+                        .rbac_repo
+                        .find_user_roles_in_tenant_for_service(user_id, tenant_id, service_id)
+                        .await
+                        .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
+
+                    let _ = self
+                        .cache_manager
+                        .set_user_roles_for_service(&roles, service_id)
+                        .await;
+                    roles
+                }
+            };
+
+            let role_records = self
+                .rbac_repo
+                .find_user_role_records_in_tenant(user_id, tenant_id, Some(service_id))
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
+
+            (user_roles, role_records)
         };
+
+        let roles = role_records
+            .into_iter()
+            .map(|role| ProtoRole {
+                id: role.id.to_string(),
+                name: role.name,
+                service_id: role.service_id.to_string(),
+            })
+            .collect();
 
         Ok(Response::new(GetUserRolesResponse {
             roles,

@@ -42,6 +42,18 @@ pub trait RbacRepository: Send + Sync {
         user_id: Uuid,
         tenant_id: Uuid,
     ) -> Result<UserRolesInTenant>;
+    async fn find_user_roles_in_tenant_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> Result<UserRolesInTenant>;
+    async fn find_user_role_records_in_tenant(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Option<Uuid>,
+    ) -> Result<Vec<Role>>;
 }
 
 pub struct RbacRepositoryImpl {
@@ -347,5 +359,81 @@ impl RbacRepository for RbacRepositoryImpl {
             roles: roles.into_iter().map(|(r,)| r).collect(),
             permissions: permissions.into_iter().map(|(p,)| p).collect(),
         })
+    }
+
+    async fn find_user_roles_in_tenant_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> Result<UserRolesInTenant> {
+        let roles: Vec<(String,)> = sqlx::query_as(
+            r#"
+            SELECT r.name
+            FROM roles r
+            INNER JOIN user_tenant_roles utr ON r.id = utr.role_id
+            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
+            WHERE tu.user_id = ? AND tu.tenant_id = ? AND r.service_id = ?
+            "#,
+        )
+        .bind(user_id)
+        .bind(tenant_id)
+        .bind(service_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let permissions: Vec<(String,)> = sqlx::query_as(
+            r#"
+            SELECT DISTINCT p.code
+            FROM permissions p
+            INNER JOIN role_permissions rp ON p.id = rp.permission_id
+            INNER JOIN roles r ON rp.role_id = r.id
+            INNER JOIN user_tenant_roles utr ON r.id = utr.role_id
+            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
+            WHERE tu.user_id = ? AND tu.tenant_id = ? AND r.service_id = ?
+            "#,
+        )
+        .bind(user_id)
+        .bind(tenant_id)
+        .bind(service_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(UserRolesInTenant {
+            user_id,
+            tenant_id,
+            roles: roles.into_iter().map(|(r,)| r).collect(),
+            permissions: permissions.into_iter().map(|(p,)| p).collect(),
+        })
+    }
+
+    async fn find_user_role_records_in_tenant(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Option<Uuid>,
+    ) -> Result<Vec<Role>> {
+        let mut sql = String::from(
+            "SELECT r.id, r.service_id, r.name, r.description, r.parent_role_id, r.created_at, r.updated_at \
+             FROM roles r \
+             INNER JOIN user_tenant_roles utr ON r.id = utr.role_id \
+             INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id \
+             WHERE tu.user_id = ? AND tu.tenant_id = ?",
+        );
+
+        if service_id.is_some() {
+            sql.push_str(" AND r.service_id = ?");
+        }
+
+        let mut query = sqlx::query_as::<_, Role>(&sql)
+            .bind(user_id)
+            .bind(tenant_id);
+
+        if let Some(service_id) = service_id {
+            query = query.bind(service_id);
+        }
+
+        let roles = query.fetch_all(&self.pool).await?;
+        Ok(roles)
     }
 }

@@ -9,6 +9,7 @@ use crate::keycloak::KeycloakOidcClient;
 use crate::server::AppState;
 use axum::{
     extract::{Path, Query, State},
+    http::HeaderMap,
     http::StatusCode,
     response::IntoResponse,
     Json,
@@ -54,6 +55,7 @@ pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<
 /// Create service
 pub async fn create(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Json(input): Json<CreateServiceInput>,
 ) -> Result<impl IntoResponse> {
     let keycloak_client = KeycloakOidcClient {
@@ -88,6 +90,7 @@ pub async fn create(
 
     let _ = write_audit_log(
         &state,
+        &headers,
         "service.create",
         "service",
         Some(service_with_secret.service.id),
@@ -104,6 +107,7 @@ pub async fn create(
 /// Update service
 pub async fn update(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateServiceInput>,
 ) -> Result<impl IntoResponse> {
@@ -111,6 +115,7 @@ pub async fn update(
     let service = state.client_service.update(id, input).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "service.update",
         "service",
         Some(service.id),
@@ -129,11 +134,13 @@ pub struct SecretResponse {
 
 pub async fn regenerate_secret(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let secret = state.client_service.regenerate_secret(id).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "service.regenerate_secret",
         "service",
         Some(id),
@@ -149,12 +156,14 @@ pub async fn regenerate_secret(
 /// Delete service
 pub async fn delete(
     State(state): State<AppState>,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.client_service.get(id).await?;
     state.client_service.delete(id).await?;
     let _ = write_audit_log(
         &state,
+        &headers,
         "service.delete",
         "service",
         Some(id),
