@@ -414,6 +414,10 @@ const DEFAULT_ADMIN_PASSWORD: &str = "Admin123!";
 const DEFAULT_ADMIN_FIRST_NAME: &str = "Admin";
 const DEFAULT_ADMIN_LAST_NAME: &str = "User";
 
+/// Default portal client configuration
+const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
+const DEFAULT_PORTAL_CLIENT_NAME: &str = "Auth9 Admin Portal";
+
 /// Keycloak realm representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -656,6 +660,95 @@ impl KeycloakSeeder {
         );
         warn!("Please change the default admin password after first login!");
         
+        Ok(())
+    }
+
+    /// Check if portal client exists
+    async fn portal_client_exists(&self, token: &str) -> anyhow::Result<bool> {
+        let url = format!(
+            "{}/admin/realms/{}/clients?clientId={}",
+            self.config.url, self.config.realm, DEFAULT_PORTAL_CLIENT_ID
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to check portal client")?;
+
+        if !response.status().is_success() {
+            return Ok(false);
+        }
+
+        let clients: Vec<serde_json::Value> = response
+            .json()
+            .await
+            .unwrap_or_default();
+
+        Ok(!clients.is_empty())
+    }
+
+    /// Create portal client
+    async fn create_portal_client(&self, token: &str) -> anyhow::Result<()> {
+        let url = format!(
+            "{}/admin/realms/{}/clients",
+            self.config.url, self.config.realm
+        );
+
+        let client = KeycloakOidcClient {
+            id: None,
+            client_id: DEFAULT_PORTAL_CLIENT_ID.to_string(),
+            name: Some(DEFAULT_PORTAL_CLIENT_NAME.to_string()),
+            enabled: true,
+            protocol: "openid-connect".to_string(),
+            redirect_uris: vec![
+                "http://localhost:3000/*".to_string(),
+                "http://127.0.0.1:3000/*".to_string(),
+            ],
+            web_origins: vec![
+                "http://localhost:3000".to_string(),
+                "http://127.0.0.1:3000".to_string(),
+            ],
+            public_client: true,
+            secret: None,
+        };
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(token)
+            .json(&client)
+            .send()
+            .await
+            .context("Failed to create portal client")?;
+
+        if response.status() == StatusCode::CONFLICT {
+            info!("Portal client '{}' already exists", DEFAULT_PORTAL_CLIENT_ID);
+            return Ok(());
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to create portal client: {} - {}", status, body);
+        }
+
+        info!("Created portal client '{}'", DEFAULT_PORTAL_CLIENT_ID);
+        Ok(())
+    }
+
+    /// Seed portal client (idempotent)
+    pub async fn seed_portal_client(&self) -> anyhow::Result<()> {
+        let token = self.get_master_admin_token().await?;
+
+        if self.portal_client_exists(&token).await? {
+            info!("Portal client '{}' already exists, skipping", DEFAULT_PORTAL_CLIENT_ID);
+            return Ok(());
+        }
+
+        self.create_portal_client(&token).await?;
         Ok(())
     }
 }
