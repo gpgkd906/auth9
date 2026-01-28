@@ -10,12 +10,13 @@ export const meta: MetaFunction = () => {
 
 export async function action({ request }: ActionFunctionArgs) {
   const url = new URL(request.url);
-  const coreUrl = process.env.AUTH9_CORE_URL || "http://localhost:8080";
+  // Use public URL for browser redirects (defaults to localhost for local dev)
+  const corePublicUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const portalUrl = process.env.AUTH9_PORTAL_URL || url.origin;
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   const redirectUri = `${portalUrl}/dashboard`;
 
-  const authorizeUrl = new URL(`${coreUrl}/api/v1/auth/authorize`);
+  const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("client_id", clientId);
   authorizeUrl.searchParams.set("redirect_uri", redirectUri);

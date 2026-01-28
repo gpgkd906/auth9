@@ -13,7 +13,7 @@ services:
     command: ["auth9-core", "init"]
     environment:
       RUST_LOG: info
-      DATABASE_URL: mysql://root:password@tidb:4000/auth9
+      DATABASE_URL: mysql://root@tidb:4000/auth9
       REDIS_URL: redis://redis:6379
       JWT_SECRET: dev-jwt-secret-change-in-production
       KEYCLOAK_URL: http://keycloak:8080
@@ -45,7 +45,7 @@ services:
       HTTP_PORT: 8080
       GRPC_HOST: 0.0.0.0
       GRPC_PORT: 50051
-      DATABASE_URL: mysql://root:password@tidb:4000/auth9
+      DATABASE_URL: mysql://root@tidb:4000/auth9
       DATABASE_MAX_CONNECTIONS: 10
       DATABASE_MIN_CONNECTIONS: 2
       REDIS_URL: redis://redis:6379
@@ -75,6 +75,7 @@ services:
     environment:
       NODE_ENV: production
       AUTH9_CORE_URL: http://auth9-core:8080
+      AUTH9_CORE_PUBLIC_URL: http://localhost:8080
       SESSION_SECRET: dev-session-secret-change-in-production
     depends_on:
       - auth9-core
@@ -92,7 +93,7 @@ services:
     volumes:
       - tidb-data:/var/lib/tidb
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-P", "4000", "-u", "root", "--password=password"]
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:10080/status || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -123,18 +124,19 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
     container_name: auth9-keycloak
-    command: start-dev
+    command: start-dev --health-enabled=true
     ports:
       - "8081:8080"
     environment:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: dev-mem
+      KC_HEALTH_ENABLED: "true"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
-      interval: 15s
+      test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/localhost/8080"]
+      interval: 10s
       timeout: 5s
-      retries: 10
+      retries: 20
       start_period: 60s
     networks:
       - auth9-network
