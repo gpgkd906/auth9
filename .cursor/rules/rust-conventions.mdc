@@ -1,0 +1,98 @@
+---
+description: Rust coding conventions for auth9-core
+globs: auth9-core/**/*.rs
+alwaysApply: false
+---
+
+# Rust Conventions (auth9-core)
+
+## Tech Stack
+
+- **Web**: axum + Tower middleware
+- **gRPC**: tonic
+- **Database**: sqlx (compile-time SQL checking, MySQL/TiDB)
+- **Async**: tokio runtime
+- **Logging**: tracing (structured logs + distributed tracing)
+- **Serialization**: serde
+- **JWT**: jsonwebtoken
+- **Cache**: redis-rs
+
+## Code Organization
+
+```rust
+// Module structure follows domain-driven design:
+// domain/   → Pure domain models with validation
+// service/  → Business logic (depends on repository traits)
+// repository/ → Data access (implements traits)
+// api/      → HTTP handlers (thin layer)
+// grpc/     → gRPC handlers (thin layer)
+```
+
+## Error Handling
+
+```rust
+// ❌ BAD - swallowing errors
+let result = db.query().await.ok();
+
+// ✅ GOOD - use Result with context
+let result = db.query()
+    .await
+    .context("Failed to query tenant")?;
+
+// ✅ GOOD - use custom error types
+#[derive(thiserror::Error, Debug)]
+pub enum ServiceError {
+    #[error("Tenant not found: {0}")]
+    TenantNotFound(Uuid),
+    #[error("Database error: {0}")]
+    Database(#[from] sqlx::Error),
+}
+```
+
+## Async Patterns
+
+```rust
+// ✅ Use tokio::spawn for background tasks
+tokio::spawn(async move {
+    cache.invalidate(&key).await;
+});
+
+// ✅ Use ? for error propagation in async
+async fn get_user(&self, id: Uuid) -> Result<User> {
+    let user = self.repo.find_by_id(id).await?;
+    Ok(user)
+}
+```
+
+## Testing
+
+```rust
+// Unit tests: mock dependencies with mockall
+#[cfg(test)]
+mod tests {
+    use mockall::predicate::*;
+    
+    #[tokio::test]
+    async fn test_create_tenant() {
+        let mut mock_repo = MockTenantRepository::new();
+        mock_repo.expect_create()
+            .returning(|t| Ok(t));
+        // ...
+    }
+}
+
+// Integration tests: use testcontainers-rs
+```
+
+## SQL with sqlx
+
+```rust
+// ✅ Use query_as! for compile-time checking
+let tenant = sqlx::query_as!(
+    Tenant,
+    "SELECT * FROM tenants WHERE id = ?",
+    id
+)
+.fetch_one(&pool)
+.await?;
+```
