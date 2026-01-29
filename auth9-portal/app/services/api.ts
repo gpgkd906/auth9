@@ -129,6 +129,39 @@ export const userApi = {
     });
     return handleResponse(response);
   },
+
+  update: async (id: string, input: Partial<CreateUserInput>): Promise<{ data: User }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  getTenants: async (userId: string): Promise<{ data: { id: string; tenant_id: string; role_in_tenant: string; joined_at: string; tenant: Tenant }[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants`);
+    return handleResponse(response);
+  },
+
+  addToTenant: async (userId: string, tenantId: string, roleInTenant: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ tenant_id: tenantId, role_in_tenant: roleInTenant }),
+    });
+    return handleResponse(response);
+  },
+
+  removeFromTenant: async (userId: string, tenantId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
 };
 
 // Service API
@@ -184,6 +217,13 @@ export const serviceApi = {
       const error: ApiError = await response.json();
       throw new Error(error.message);
     }
+  },
+
+  regenerateSecret: async (id: string): Promise<{ data: { client_secret: string } }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}/secret`, {
+      method: "POST",
+    });
+    return handleResponse(response);
   },
 };
 
@@ -252,12 +292,54 @@ export const rbacApi = {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/permissions`);
     return handleResponse(response);
   },
+
+  assignRoles: async (input: AssignRolesInput): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/rbac/assign`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  getUserRoles: async (userId: string, tenantId: string): Promise<{ data: UserRolesInTenant }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/roles`);
+    return handleResponse(response);
+  },
+
+  getUserAssignedRoles: async (userId: string, tenantId: string): Promise<{ data: Role[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/assigned-roles`);
+    return handleResponse(response);
+  },
+
+  unassignRole: async (userId: string, tenantId: string, roleId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/roles/${roleId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
 };
 
 export interface CreateRoleInput {
   name: string;
   description?: string;
   parent_role_id?: string;
+}
+
+export interface AssignRolesInput {
+  user_id: string;
+  tenant_id: string;
+  roles: string[]; // Role IDs
+}
+
+export interface UserRolesInTenant {
+  user_id: string;
+  tenant_id: string;
+  roles: string[]; // Role names
+  permissions: string[];
 }
 
 export interface AuditLog {

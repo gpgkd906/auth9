@@ -159,6 +159,42 @@ impl<R: RbacRepository> RbacService<R> {
             .find_user_roles_in_tenant(user_id, tenant_id)
             .await
     }
+
+    pub async fn get_user_role_records(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<Vec<Role>> {
+        self.repo
+            .find_user_role_records_in_tenant(user_id, tenant_id, None)
+            .await
+    }
+
+    /// Remove role from user in tenant
+    pub async fn unassign_role(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        role_id: StringUuid,
+    ) -> Result<()> {
+        // The repository method needs tenant_user_id, so we need to look it up
+        let tenant_user_id = self
+            .repo
+            .find_tenant_user_id(user_id, tenant_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("User not in tenant".to_string()))?;
+
+        self.repo
+            .remove_role_from_user(tenant_user_id, role_id)
+            .await?;
+
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache
+                .invalidate_user_roles_for_tenant(*user_id, *tenant_id)
+                .await;
+        }
+        Ok(())
+    }
 }
 
 #[cfg(test)]

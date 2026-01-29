@@ -81,6 +81,12 @@ export async function action({ request }: ActionFunctionArgs) {
       await serviceApi.delete(id);
       return json({ success: true });
     }
+
+    if (intent === "regenerate_secret") {
+      const id = formData.get("id") as string;
+      const res = await serviceApi.regenerateSecret(id);
+      return json({ success: true, secret: res.data.client_secret, intent: "regenerate_secret" });
+    }
   } catch (error: any) {
     return json({ error: error.message }, { status: 400 });
   }
@@ -95,13 +101,19 @@ export default function ServicesPage() {
   const submit = useSubmit();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingService, setEditingService] = useState<any>(null);
+  const [newSecret, setNewSecret] = useState<string | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
 
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
-      setIsCreateOpen(false);
-      setEditingService(null);
+      if (actionData.intent !== "regenerate_secret") {
+        setIsCreateOpen(false);
+        setEditingService(null);
+      }
+      if (actionData.intent === "regenerate_secret" && actionData.secret) {
+        setNewSecret(actionData.secret);
+      }
     }
   }, [actionData]);
 
@@ -281,6 +293,23 @@ export default function ServicesPage() {
                 defaultValue={editingService?.logout_uris?.join(", ")}
               />
             </div>
+            <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900 border border-amber-200">
+              <div className="font-semibold mb-1">Client Credentials</div>
+              <p className="mb-2">Client ID: <span className="font-mono">{editingService?.client_id}</span></p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="w-full bg-white"
+                onClick={() => {
+                  if (confirm("This will invalidate the old secret. Generate new secret?")) {
+                    submit({ intent: "regenerate_secret", id: editingService.id }, { method: "post" });
+                  }
+                }}
+              >
+                Regenerate Client Secret
+              </Button>
+            </div>
             {actionData && "error" in actionData && (
               <p className="text-sm text-red-500">{actionData.error}</p>
             )}
@@ -293,6 +322,22 @@ export default function ServicesPage() {
               </Button>
             </DialogFooter>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Secret Display Dialog */}
+      <Dialog open={!!newSecret} onOpenChange={(open) => !open && setNewSecret(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Client Secret Generated</DialogTitle>
+            <DialogDescription>Please copy this secret now. It will not be shown again.</DialogDescription>
+          </DialogHeader>
+          <div className="p-4 bg-gray-100 rounded border font-mono text-center break-all select-all">
+            {newSecret}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setNewSecret(null)}>Close</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

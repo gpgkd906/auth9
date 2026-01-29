@@ -251,6 +251,14 @@ fn build_router(state: AppState) -> Router {
             "/api/v1/users/:user_id/tenants/:tenant_id/roles",
             get(api::role::get_user_roles),
         )
+        .route(
+            "/api/v1/users/:user_id/tenants/:tenant_id/assigned-roles",
+            get(api::role::get_user_assigned_roles),
+        )
+        .route(
+            "/api/v1/users/:user_id/tenants/:tenant_id/roles/:role_id",
+            delete(api::role::unassign_role),
+        )
         // Audit logs
         .route("/api/v1/audit-logs", get(api::audit::list))
         // Add middleware

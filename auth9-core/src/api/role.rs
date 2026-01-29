@@ -254,3 +254,43 @@ pub async fn get_user_roles(
         .await?;
     Ok(Json(SuccessResponse::new(roles)))
 }
+
+/// Get user assigned roles (raw records with IDs)
+pub async fn get_user_assigned_roles(
+    State(state): State<AppState>,
+    Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    let user_id = StringUuid::from(user_id);
+    let tenant_id = StringUuid::from(tenant_id);
+    let roles = state
+        .rbac_service
+        .get_user_role_records(user_id, tenant_id)
+        .await?;
+    Ok(Json(SuccessResponse::new(roles)))
+}
+
+/// Unassign role from user in tenant
+pub async fn unassign_role(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path((user_id, tenant_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
+) -> Result<impl IntoResponse> {
+    let user_id = StringUuid::from(user_id);
+    let tenant_id = StringUuid::from(tenant_id);
+    let role_id = StringUuid::from(role_id);
+    state
+        .rbac_service
+        .unassign_role(user_id, tenant_id, role_id)
+        .await?;
+    let _ = write_audit_log(
+        &state,
+        &headers,
+        "rbac.unassign_role",
+        "user_roles",
+        Some(*user_id),
+        None,
+        None,
+    )
+    .await;
+    Ok(Json(MessageResponse::new("Role unassigned successfully")))
+}
