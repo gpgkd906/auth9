@@ -7,14 +7,66 @@ use sqlx::FromRow;
 use validator::Validate;
 
 /// Tenant status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
-#[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum TenantStatus {
     #[default]
     Active,
     Inactive,
     Suspended,
+}
+
+impl std::str::FromStr for TenantStatus {
+    type Err = String;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "active" => Ok(TenantStatus::Active),
+            "inactive" => Ok(TenantStatus::Inactive),
+            "suspended" => Ok(TenantStatus::Suspended),
+            _ => Err(format!("Unknown tenant status: {}", s)),
+        }
+    }
+}
+
+impl std::fmt::Display for TenantStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            TenantStatus::Active => write!(f, "active"),
+            TenantStatus::Inactive => write!(f, "inactive"),
+            TenantStatus::Suspended => write!(f, "suspended"),
+        }
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::MySql> for TenantStatus {
+    fn decode(
+        value: sqlx::mysql::MySqlValueRef<'r>,
+    ) -> std::result::Result<Self, sqlx::error::BoxDynError> {
+        let s: String = sqlx::Decode::<'r, sqlx::MySql>::decode(value)?;
+        s.parse().map_err(|e: String| e.into())
+    }
+}
+
+impl sqlx::Type<sqlx::MySql> for TenantStatus {
+    fn type_info() -> sqlx::mysql::MySqlTypeInfo {
+        <String as sqlx::Type<sqlx::MySql>>::type_info()
+    }
+
+    fn compatible(ty: &sqlx::mysql::MySqlTypeInfo) -> bool {
+        <String as sqlx::Type<sqlx::MySql>>::compatible(ty)
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::MySql> for TenantStatus {
+    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
+        let s = match self {
+            TenantStatus::Active => "active",
+            TenantStatus::Inactive => "inactive",
+            TenantStatus::Suspended => "suspended",
+        };
+        <&str as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&s, buf)
+    }
 }
 
 /// Tenant settings stored as JSON

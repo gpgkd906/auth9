@@ -221,16 +221,16 @@ export const rbacApi = {
   },
 
   createRole: async (serviceId: string, input: CreateRoleInput): Promise<{ data: Role }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(input),
+      body: JSON.stringify({ ...input, service_id: serviceId }),
     });
     return handleResponse(response);
   },
 
   updateRole: async (serviceId: string, roleId: string, input: Partial<CreateRoleInput>): Promise<{ data: Role }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles/${roleId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(input),
@@ -239,7 +239,7 @@ export const rbacApi = {
   },
 
   deleteRole: async (serviceId: string, roleId: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles/${roleId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`, {
       method: "DELETE",
     });
     if (!response.ok) {
