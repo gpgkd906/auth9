@@ -28,12 +28,20 @@ cargo tarpaulin --ignore-config --run-types Tests --out Json --output-dir target
 ## Frontend (Auth9 Portal)
 
 The frontend uses `vitest` for testing and coverage.
+**Note**: Always use `--run` flag to avoid watch mode in CI/automation scenarios.
+
+### Run Unit Tests (without watch mode)
+```bash
+cd auth9-portal
+npx vitest --run
+```
 
 ### Run Tests and Coverage
 ```bash
 cd auth9-portal
 npm run test:coverage
 ```
+*The `test:coverage` script already includes `--run` flag to avoid watch mode.*
 *Coverage report will be displayed in the terminal and saved to `auth9-portal/coverage`.*
 
 ## Troubleshooting
