@@ -452,3 +452,138 @@ pub async fn regenerate_client_secret(
         "client_secret": new_secret
     }))))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{CreateServiceInput, UpdateServiceInput, ServiceStatus};
+
+    #[test]
+    fn test_list_services_query_defaults() {
+        let query: ListServicesQuery = serde_json::from_str("{}").unwrap();
+        assert_eq!(query.page, 1);
+        assert_eq!(query.per_page, 20);
+        assert!(query.tenant_id.is_none());
+    }
+
+    #[test]
+    fn test_list_services_query_with_tenant() {
+        let json = r#"{
+            "page": 2,
+            "per_page": 50,
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000"
+        }"#;
+        let query: ListServicesQuery = serde_json::from_str(json).unwrap();
+        assert_eq!(query.page, 2);
+        assert_eq!(query.per_page, 50);
+        assert!(query.tenant_id.is_some());
+    }
+
+    #[test]
+    fn test_create_service_input_deserialization() {
+        let json = r#"{
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+            "name": "My Service",
+            "client_id": "my-service",
+            "base_url": "https://myservice.example.com",
+            "redirect_uris": ["https://myservice.example.com/callback"]
+        }"#;
+        let input: CreateServiceInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, "My Service");
+        assert_eq!(input.client_id, "my-service");
+        assert_eq!(input.base_url, Some("https://myservice.example.com".to_string()));
+        assert_eq!(input.redirect_uris.len(), 1);
+    }
+
+    #[test]
+    fn test_create_service_input_with_logout_uris() {
+        let json = r#"{
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+            "name": "Service with Logout",
+            "client_id": "logout-service",
+            "redirect_uris": ["https://app.com/cb"],
+            "logout_uris": ["https://app.com/logout", "https://app.com/signout"]
+        }"#;
+        let input: CreateServiceInput = serde_json::from_str(json).unwrap();
+        assert!(input.logout_uris.is_some());
+        assert_eq!(input.logout_uris.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_create_service_input_minimal() {
+        let json = r#"{
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+            "name": "Minimal Service",
+            "client_id": "minimal",
+            "redirect_uris": []
+        }"#;
+        let input: CreateServiceInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, "Minimal Service");
+        assert!(input.base_url.is_none());
+        assert!(input.logout_uris.is_none());
+        assert!(input.redirect_uris.is_empty());
+    }
+
+    #[test]
+    fn test_update_service_input_partial() {
+        let json = r#"{"name": "Updated Service Name"}"#;
+        let input: UpdateServiceInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("Updated Service Name".to_string()));
+        assert!(input.base_url.is_none());
+        assert!(input.redirect_uris.is_none());
+        assert!(input.status.is_none());
+    }
+
+    #[test]
+    fn test_update_service_input_status_change() {
+        let json = r#"{"status": "inactive"}"#;
+        let input: UpdateServiceInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.status, Some(ServiceStatus::Inactive));
+    }
+
+    #[test]
+    fn test_update_service_input_full() {
+        let json = r#"{
+            "name": "Full Update",
+            "base_url": "https://new-url.example.com",
+            "redirect_uris": ["https://new-url.example.com/cb"],
+            "logout_uris": ["https://new-url.example.com/logout"],
+            "status": "active"
+        }"#;
+        let input: UpdateServiceInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("Full Update".to_string()));
+        assert_eq!(input.base_url, Some("https://new-url.example.com".to_string()));
+        assert_eq!(input.redirect_uris.as_ref().unwrap().len(), 1);
+        assert_eq!(input.logout_uris.as_ref().unwrap().len(), 1);
+        assert_eq!(input.status, Some(ServiceStatus::Active));
+    }
+
+    #[test]
+    fn test_service_status_serialization() {
+        assert_eq!(serde_json::to_string(&ServiceStatus::Active).unwrap(), "\"active\"");
+        assert_eq!(serde_json::to_string(&ServiceStatus::Inactive).unwrap(), "\"inactive\"");
+    }
+
+    #[test]
+    fn test_service_status_deserialization() {
+        let active: ServiceStatus = serde_json::from_str("\"active\"").unwrap();
+        let inactive: ServiceStatus = serde_json::from_str("\"inactive\"").unwrap();
+        
+        assert_eq!(active, ServiceStatus::Active);
+        assert_eq!(inactive, ServiceStatus::Inactive);
+    }
+
+    #[test]
+    fn test_create_client_input_deserialization() {
+        let json = r#"{"name": "My Client"}"#;
+        let input: CreateClientInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("My Client".to_string()));
+    }
+
+    #[test]
+    fn test_create_client_input_empty() {
+        let json = r#"{}"#;
+        let input: CreateClientInput = serde_json::from_str(json).unwrap();
+        assert!(input.name.is_none());
+    }
+}

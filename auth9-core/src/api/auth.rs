@@ -612,3 +612,196 @@ pub async fn jwks(State(state): State<AppState>) -> impl IntoResponse {
 
     Json(jwks).into_response()
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_state_success() {
+        let state_payload = CallbackState {
+            redirect_uri: "https://example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: Some("original".to_string()),
+        };
+        
+        let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_vec(&state_payload).unwrap());
+        
+        let result = decode_state(Some(&encoded));
+        assert!(result.is_ok());
+        
+        let decoded = result.unwrap();
+        assert_eq!(decoded.redirect_uri, "https://example.com/callback");
+        assert_eq!(decoded.client_id, "test-client");
+        assert_eq!(decoded.original_state, Some("original".to_string()));
+    }
+
+    #[test]
+    fn test_decode_state_missing() {
+        let result = decode_state(None);
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[test]
+    fn test_decode_state_invalid_base64() {
+        let result = decode_state(Some("not-valid-base64!!!"));
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[test]
+    fn test_decode_state_invalid_json() {
+        let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(b"not valid json");
+        
+        let result = decode_state(Some(&encoded));
+        assert!(matches!(result, Err(AppError::Internal(_))));
+    }
+
+    #[test]
+    fn test_decode_state_without_original_state() {
+        let state_payload = CallbackState {
+            redirect_uri: "https://example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        
+        let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
+            .encode(serde_json::to_vec(&state_payload).unwrap());
+        
+        let result = decode_state(Some(&encoded));
+        assert!(result.is_ok());
+        assert!(result.unwrap().original_state.is_none());
+    }
+
+    #[test]
+    fn test_authorize_request_deserialization() {
+        let json = r#"{
+            "response_type": "code",
+            "client_id": "my-app",
+            "redirect_uri": "https://app.example.com/callback",
+            "scope": "openid profile email",
+            "state": "abc123",
+            "nonce": "xyz789"
+        }"#;
+        
+        let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.response_type, "code");
+        assert_eq!(request.client_id, "my-app");
+        assert_eq!(request.redirect_uri, "https://app.example.com/callback");
+        assert_eq!(request.scope, "openid profile email");
+        assert_eq!(request.state, Some("abc123".to_string()));
+        assert_eq!(request.nonce, Some("xyz789".to_string()));
+    }
+
+    #[test]
+    fn test_authorize_request_minimal() {
+        let json = r#"{
+            "response_type": "code",
+            "client_id": "my-app",
+            "redirect_uri": "https://app.example.com/callback",
+            "scope": "openid"
+        }"#;
+        
+        let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
+        assert!(request.state.is_none());
+        assert!(request.nonce.is_none());
+    }
+
+    #[test]
+    fn test_token_request_authorization_code() {
+        let json = r#"{
+            "grant_type": "authorization_code",
+            "client_id": "my-app",
+            "code": "auth-code-123",
+            "redirect_uri": "https://app.example.com/callback"
+        }"#;
+        
+        let request: TokenRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.grant_type, "authorization_code");
+        assert_eq!(request.client_id, Some("my-app".to_string()));
+        assert_eq!(request.code, Some("auth-code-123".to_string()));
+    }
+
+    #[test]
+    fn test_token_request_client_credentials() {
+        let json = r#"{
+            "grant_type": "client_credentials",
+            "client_id": "service-app",
+            "client_secret": "secret123"
+        }"#;
+        
+        let request: TokenRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.grant_type, "client_credentials");
+        assert_eq!(request.client_secret, Some("secret123".to_string()));
+    }
+
+    #[test]
+    fn test_token_request_refresh_token() {
+        let json = r#"{
+            "grant_type": "refresh_token",
+            "client_id": "my-app",
+            "refresh_token": "refresh-token-abc"
+        }"#;
+        
+        let request: TokenRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.grant_type, "refresh_token");
+        assert_eq!(request.refresh_token, Some("refresh-token-abc".to_string()));
+    }
+
+    #[test]
+    fn test_logout_request_full() {
+        let json = r#"{
+            "id_token_hint": "token123",
+            "post_logout_redirect_uri": "https://app.example.com/logged-out",
+            "state": "logout-state"
+        }"#;
+        
+        let request: LogoutRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.id_token_hint, Some("token123".to_string()));
+        assert_eq!(request.post_logout_redirect_uri, Some("https://app.example.com/logged-out".to_string()));
+        assert_eq!(request.state, Some("logout-state".to_string()));
+    }
+
+    #[test]
+    fn test_logout_request_empty() {
+        let json = r#"{}"#;
+        
+        let request: LogoutRequest = serde_json::from_str(json).unwrap();
+        assert!(request.id_token_hint.is_none());
+        assert!(request.post_logout_redirect_uri.is_none());
+        assert!(request.state.is_none());
+    }
+
+    #[test]
+    fn test_token_response_serialization() {
+        let response = TokenResponse {
+            access_token: "access-token-xyz".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 3600,
+            refresh_token: Some("refresh-token-abc".to_string()),
+            id_token: Some("id-token-123".to_string()),
+        };
+        
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("access_token"));
+        assert!(json.contains("Bearer"));
+        assert!(json.contains("3600"));
+    }
+
+    #[test]
+    fn test_callback_state_roundtrip() {
+        let original = CallbackState {
+            redirect_uri: "https://example.com/cb".to_string(),
+            client_id: "my-client".to_string(),
+            original_state: Some("state123".to_string()),
+        };
+        
+        let json = serde_json::to_string(&original).unwrap();
+        let decoded: CallbackState = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(original.redirect_uri, decoded.redirect_uri);
+        assert_eq!(original.client_id, decoded.client_id);
+        assert_eq!(original.original_state, decoded.original_state);
+    }
+}

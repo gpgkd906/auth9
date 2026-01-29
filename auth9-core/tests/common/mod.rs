@@ -45,6 +45,7 @@ impl TestApp {
                 realm: "test".to_string(),
                 admin_client_id: "admin-cli".to_string(),
                 admin_client_secret: "secret".to_string(),
+                ssl_required: "none".to_string(),
             },
         }
     }

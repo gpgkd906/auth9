@@ -322,3 +322,188 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_exchange_token_request_structure() {
+        let request = ExchangeTokenRequest {
+            identity_token: "test-token".to_string(),
+            tenant_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            service_id: "my-service".to_string(),
+        };
+        
+        assert_eq!(request.identity_token, "test-token");
+        assert!(!request.tenant_id.is_empty());
+        assert_eq!(request.service_id, "my-service");
+    }
+
+    #[test]
+    fn test_exchange_token_response_structure() {
+        let response = ExchangeTokenResponse {
+            access_token: "access-token-xyz".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 3600,
+            refresh_token: "refresh-token-abc".to_string(),
+        };
+        
+        assert_eq!(response.token_type, "Bearer");
+        assert_eq!(response.expires_in, 3600);
+        assert!(!response.access_token.is_empty());
+    }
+
+    #[test]
+    fn test_validate_token_request_structure() {
+        let request = ValidateTokenRequest {
+            access_token: "test-access-token".to_string(),
+            audience: "my-service".to_string(),
+        };
+        
+        assert!(!request.access_token.is_empty());
+        assert_eq!(request.audience, "my-service");
+    }
+
+    #[test]
+    fn test_validate_token_request_empty_audience() {
+        let request = ValidateTokenRequest {
+            access_token: "test-token".to_string(),
+            audience: String::new(),
+        };
+        
+        assert!(request.audience.is_empty());
+    }
+
+    #[test]
+    fn test_validate_token_response_valid() {
+        let response = ValidateTokenResponse {
+            valid: true,
+            user_id: "user-123".to_string(),
+            tenant_id: "tenant-456".to_string(),
+            error: String::new(),
+        };
+        
+        assert!(response.valid);
+        assert!(response.error.is_empty());
+    }
+
+    #[test]
+    fn test_validate_token_response_invalid() {
+        let response = ValidateTokenResponse {
+            valid: false,
+            user_id: String::new(),
+            tenant_id: String::new(),
+            error: "Token expired".to_string(),
+        };
+        
+        assert!(!response.valid);
+        assert!(!response.error.is_empty());
+    }
+
+    #[test]
+    fn test_get_user_roles_request_with_service() {
+        let request = GetUserRolesRequest {
+            user_id: "user-123".to_string(),
+            tenant_id: "tenant-456".to_string(),
+            service_id: "service-789".to_string(),
+        };
+        
+        assert!(!request.service_id.is_empty());
+    }
+
+    #[test]
+    fn test_get_user_roles_request_without_service() {
+        let request = GetUserRolesRequest {
+            user_id: "user-123".to_string(),
+            tenant_id: "tenant-456".to_string(),
+            service_id: String::new(),
+        };
+        
+        assert!(request.service_id.is_empty());
+    }
+
+    #[test]
+    fn test_get_user_roles_response_structure() {
+        let response = GetUserRolesResponse {
+            roles: vec![
+                ProtoRole {
+                    id: "role-1".to_string(),
+                    name: "admin".to_string(),
+                    service_id: "service-1".to_string(),
+                },
+                ProtoRole {
+                    id: "role-2".to_string(),
+                    name: "viewer".to_string(),
+                    service_id: "service-1".to_string(),
+                },
+            ],
+            permissions: vec!["read".to_string(), "write".to_string()],
+        };
+        
+        assert_eq!(response.roles.len(), 2);
+        assert_eq!(response.permissions.len(), 2);
+    }
+
+    #[test]
+    fn test_introspect_token_request_structure() {
+        let request = IntrospectTokenRequest {
+            token: "some-jwt-token".to_string(),
+        };
+        
+        assert!(!request.token.is_empty());
+    }
+
+    #[test]
+    fn test_introspect_token_response_active() {
+        let response = IntrospectTokenResponse {
+            active: true,
+            sub: "user-123".to_string(),
+            email: "user@example.com".to_string(),
+            tenant_id: "tenant-456".to_string(),
+            roles: vec!["admin".to_string()],
+            permissions: vec!["read".to_string(), "write".to_string()],
+            exp: 1700000000,
+            iat: 1699996400,
+            iss: "https://auth9.example.com".to_string(),
+            aud: "my-service".to_string(),
+        };
+        
+        assert!(response.active);
+        assert_eq!(response.sub, "user-123");
+        assert!(!response.roles.is_empty());
+    }
+
+    #[test]
+    fn test_introspect_token_response_inactive() {
+        let response = IntrospectTokenResponse {
+            active: false,
+            sub: String::new(),
+            email: String::new(),
+            tenant_id: String::new(),
+            roles: vec![],
+            permissions: vec![],
+            exp: 0,
+            iat: 0,
+            iss: String::new(),
+            aud: String::new(),
+        };
+        
+        assert!(!response.active);
+        assert!(response.sub.is_empty());
+        assert!(response.roles.is_empty());
+    }
+
+    #[test]
+    fn test_proto_role_structure() {
+        let role = ProtoRole {
+            id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            name: "administrator".to_string(),
+            service_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
+        };
+        
+        assert_eq!(role.name, "administrator");
+        assert!(!role.id.is_empty());
+        assert!(!role.service_id.is_empty());
+    }
+}

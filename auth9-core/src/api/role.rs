@@ -294,3 +294,100 @@ pub async fn unassign_role(
     .await;
     Ok(Json(MessageResponse::new("Role unassigned successfully")))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::{CreatePermissionInput, CreateRoleInput, UpdateRoleInput, AssignRolesInput};
+
+    #[test]
+    fn test_assign_permission_input_deserialization() {
+        let json = r#"{"permission_id": "550e8400-e29b-41d4-a716-446655440000"}"#;
+        let input: AssignPermissionInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.permission_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn test_create_permission_input_deserialization() {
+        let json = r#"{
+            "service_id": "550e8400-e29b-41d4-a716-446655440000",
+            "code": "users:read",
+            "name": "Read Users",
+            "description": "Read access to users"
+        }"#;
+        let input: CreatePermissionInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.code, "users:read");
+        assert_eq!(input.name, "Read Users");
+        assert_eq!(input.description, Some("Read access to users".to_string()));
+    }
+
+    #[test]
+    fn test_create_permission_input_minimal() {
+        let json = r#"{
+            "service_id": "550e8400-e29b-41d4-a716-446655440000",
+            "code": "admin:all",
+            "name": "Full Admin"
+        }"#;
+        let input: CreatePermissionInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.code, "admin:all");
+        assert_eq!(input.name, "Full Admin");
+        assert!(input.description.is_none());
+    }
+
+    #[test]
+    fn test_create_role_input_deserialization() {
+        let json = r#"{
+            "service_id": "550e8400-e29b-41d4-a716-446655440000",
+            "name": "admin",
+            "description": "Administrator role"
+        }"#;
+        let input: CreateRoleInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, "admin");
+        assert_eq!(input.description, Some("Administrator role".to_string()));
+    }
+
+    #[test]
+    fn test_update_role_input_partial() {
+        let json = r#"{"name": "super-admin"}"#;
+        let input: UpdateRoleInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("super-admin".to_string()));
+        assert!(input.description.is_none());
+    }
+
+    #[test]
+    fn test_update_role_input_full() {
+        let json = r#"{
+            "name": "manager",
+            "description": "Manager role with limited access"
+        }"#;
+        let input: UpdateRoleInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("manager".to_string()));
+        assert_eq!(input.description, Some("Manager role with limited access".to_string()));
+    }
+
+    #[test]
+    fn test_assign_roles_input_single_role() {
+        let json = r#"{
+            "user_id": "550e8400-e29b-41d4-a716-446655440000",
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440001",
+            "role_ids": ["550e8400-e29b-41d4-a716-446655440002"]
+        }"#;
+        let input: AssignRolesInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.role_ids.len(), 1);
+    }
+
+    #[test]
+    fn test_assign_roles_input_multiple_roles() {
+        let json = r#"{
+            "user_id": "550e8400-e29b-41d4-a716-446655440000",
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440001",
+            "role_ids": [
+                "550e8400-e29b-41d4-a716-446655440002",
+                "550e8400-e29b-41d4-a716-446655440003",
+                "550e8400-e29b-41d4-a716-446655440004"
+            ]
+        }"#;
+        let input: AssignRolesInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.role_ids.len(), 3);
+    }
+}

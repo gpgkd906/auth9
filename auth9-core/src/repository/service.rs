@@ -8,8 +8,6 @@ use uuid::Uuid;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
-#[cfg_attr(test, mockall::automock)]
-#[async_trait]
 pub trait ServiceRepository: Send + Sync {
     async fn create(&self, input: &CreateServiceInput) -> Result<Service>;
     async fn create_client(&self, service_id: Uuid, client_id: &str, secret_hash: &str, name: Option<String>) -> Result<crate::domain::Client>;
