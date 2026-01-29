@@ -78,16 +78,19 @@ impl AuditRepository for AuditRepositoryImpl {
             .as_ref()
             .map(|v| serde_json::to_string(v).unwrap_or_default());
 
+        let actor_id = input.actor_id.map(|id| id.to_string());
+        let resource_id = input.resource_id.map(|id| id.to_string());
+
         sqlx::query(
             r#"
             INSERT INTO audit_logs (actor_id, action, resource_type, resource_id, old_value, new_value, ip_address, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, NOW())
             "#,
         )
-        .bind(input.actor_id)
+        .bind(actor_id)
         .bind(&input.action)
         .bind(&input.resource_type)
-        .bind(input.resource_id)
+        .bind(resource_id)
         .bind(old_value)
         .bind(new_value)
         .bind(&input.ip_address)
@@ -126,13 +129,13 @@ impl AuditRepository for AuditRepositoryImpl {
         let mut query_builder = sqlx::query_as::<_, AuditLog>(&sql);
 
         if let Some(actor_id) = query.actor_id {
-            query_builder = query_builder.bind(actor_id);
+            query_builder = query_builder.bind(actor_id.to_string());
         }
         if let Some(ref resource_type) = query.resource_type {
             query_builder = query_builder.bind(resource_type);
         }
         if let Some(resource_id) = query.resource_id {
-            query_builder = query_builder.bind(resource_id);
+            query_builder = query_builder.bind(resource_id.to_string());
         }
         if let Some(ref action) = query.action {
             query_builder = query_builder.bind(action);
@@ -177,13 +180,13 @@ impl AuditRepository for AuditRepositoryImpl {
         let mut query_builder = sqlx::query_as::<_, (i64,)>(&sql);
 
         if let Some(actor_id) = query.actor_id {
-            query_builder = query_builder.bind(actor_id);
+            query_builder = query_builder.bind(actor_id.to_string());
         }
         if let Some(ref resource_type) = query.resource_type {
             query_builder = query_builder.bind(resource_type);
         }
         if let Some(resource_id) = query.resource_id {
-            query_builder = query_builder.bind(resource_id);
+            query_builder = query_builder.bind(resource_id.to_string());
         }
         if let Some(ref action) = query.action {
             query_builder = query_builder.bind(action);

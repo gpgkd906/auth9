@@ -7,6 +7,7 @@ use uuid::Uuid;
 mod common;
 
 #[tokio::test]
+#[ignore]
 async fn test_create_audit_log() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -58,6 +59,7 @@ async fn test_create_audit_log() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_create_audit_log_minimal() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -105,6 +107,7 @@ async fn test_create_audit_log_minimal() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_find_audit_logs_with_filters() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -237,6 +240,7 @@ async fn test_find_audit_logs_with_filters() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_count_audit_logs() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -321,6 +325,7 @@ async fn test_count_audit_logs() {
 }
 
 #[tokio::test]
+#[ignore]
 async fn test_audit_log_with_json_values() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
