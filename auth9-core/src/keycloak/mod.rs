@@ -5,6 +5,7 @@ use crate::error::{AppError, Result};
 use anyhow::Context;
 use reqwest::{Client, StatusCode};
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::env;
 use std::sync::Arc;
 use tokio::sync::RwLock;
@@ -40,6 +41,25 @@ pub struct KeycloakUser {
     pub attributes: std::collections::HashMap<String, Vec<String>>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakUserUpdate {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub username: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub first_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub last_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub enabled: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub email_verified: Option<bool>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub required_actions: Option<Vec<String>>,
+}
+
 /// Input for creating a user in Keycloak
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -63,6 +83,14 @@ pub struct KeycloakCredential {
     pub temporary: bool,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakUserCredential {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub credential_type: String,
+}
+
 /// Keycloak client (OIDC) representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -72,10 +100,18 @@ pub struct KeycloakOidcClient {
     pub name: Option<String>,
     pub enabled: bool,
     pub protocol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub root_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub admin_url: Option<String>,
     #[serde(default)]
     pub redirect_uris: Vec<String>,
     #[serde(default)]
     pub web_origins: Vec<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub attributes: Option<HashMap<String, String>>,
     pub public_client: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub secret: Option<String>,
@@ -107,16 +143,23 @@ impl KeycloakClient {
             }
         }
 
-        // Fetch new token
+        // Fetch new token using password grant (admin-cli is a public client)
         let token_url = format!(
             "{}/realms/master/protocol/openid-connect/token",
             self.config.url
         );
 
+        // Get admin credentials from environment
+        let admin_username =
+            std::env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
+        let admin_password =
+            std::env::var("KEYCLOAK_ADMIN_PASSWORD").unwrap_or_else(|_| "admin".to_string());
+
         let params = [
-            ("grant_type", "client_credentials"),
+            ("grant_type", "password"),
             ("client_id", &self.config.admin_client_id),
-            ("client_secret", &self.config.admin_client_secret),
+            ("username", &admin_username),
+            ("password", &admin_password),
         ];
 
         let response = self
@@ -245,6 +288,152 @@ impl KeycloakClient {
         Ok(user)
     }
 
+    pub async fn list_user_credentials(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<KeycloakUserCredential>> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/credentials",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to list user credentials: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to list user credentials: {} - {}",
+                status, body
+            )));
+        }
+
+        let credentials: Vec<KeycloakUserCredential> = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse credentials: {}", e)))?;
+
+        Ok(credentials)
+    }
+
+    pub async fn delete_user_credential(&self, user_id: &str, credential_id: &str) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/credentials/{}",
+            self.config.url, self.config.realm, user_id, credential_id
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to delete credential: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(
+                "Credential not found in Keycloak".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to delete credential: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub async fn remove_totp_credentials(&self, user_id: &str) -> Result<()> {
+        let credentials = self.list_user_credentials(user_id).await?;
+        for credential in credentials {
+            let kind = credential.credential_type.to_lowercase();
+            if kind.contains("otp") || kind.contains("totp") {
+                self.delete_user_credential(user_id, &credential.id).await?;
+            }
+        }
+        Ok(())
+    }
+
+    pub async fn update_user(&self, user_id: &str, input: &KeycloakUserUpdate) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(&token)
+            .json(input)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to update user: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to update user: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_user(&self, user_id: &str) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to delete user: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to delete user: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
     /// Search users by email
     pub async fn search_users_by_email(&self, email: &str) -> Result<Vec<KeycloakUser>> {
         let token = self.get_admin_token().await?;
@@ -363,6 +552,45 @@ impl KeycloakClient {
         Ok(secret.value)
     }
 
+    pub async fn regenerate_client_secret(&self, client_uuid: &str) -> Result<String> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients/{}/client-secret",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::Keycloak(format!("Failed to regenerate client secret: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to regenerate client secret: {} - {}",
+                status, body
+            )));
+        }
+
+        #[derive(Deserialize)]
+        struct SecretResponse {
+            value: String,
+        }
+
+        let secret: SecretResponse = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse secret: {}", e)))?;
+
+        Ok(secret.value)
+    }
+
     /// Get client UUID by client_id
     pub async fn get_client_uuid_by_client_id(&self, client_id: &str) -> Result<String> {
         let token = self.get_admin_token().await?;
@@ -402,6 +630,77 @@ impl KeycloakClient {
             .id
             .ok_or_else(|| AppError::Keycloak("Client id missing in Keycloak response".to_string()))
     }
+
+    pub async fn update_oidc_client(
+        &self,
+        client_uuid: &str,
+        client: &KeycloakOidcClient,
+    ) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients/{}",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(&token)
+            .json(client)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to update client: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(
+                "Client not found in Keycloak".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to update client: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    pub async fn delete_oidc_client(&self, client_uuid: &str) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients/{}",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to delete client: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(
+                "Client not found in Keycloak".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to delete client: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
 }
 
 // ============================================================================
@@ -430,6 +729,9 @@ pub struct KeycloakRealm {
     pub registration_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub reset_password_allowed: Option<bool>,
+    /// SSL requirement: "none", "external", or "all"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssl_required: Option<String>,
 }
 
 /// Keycloak Seeder for initialization
@@ -503,10 +805,7 @@ impl KeycloakSeeder {
 
     /// Check if a realm exists
     async fn realm_exists(&self, token: &str) -> anyhow::Result<bool> {
-        let url = format!(
-            "{}/admin/realms/{}",
-            self.config.url, self.config.realm
-        );
+        let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
 
         let response = self
             .http_client
@@ -529,6 +828,7 @@ impl KeycloakSeeder {
             display_name: Some("Auth9".to_string()),
             registration_allowed: Some(true),
             reset_password_allowed: Some(true),
+            ssl_required: Some(self.config.ssl_required.clone()),
         };
 
         let response = self
@@ -555,12 +855,44 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Ensure realm exists (create if not)
+    /// Update realm SSL settings based on configuration
+    async fn update_realm_ssl(&self, token: &str) -> anyhow::Result<()> {
+        let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
+
+        let update = serde_json::json!({
+            "sslRequired": self.config.ssl_required
+        });
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(token)
+            .json(&update)
+            .send()
+            .await
+            .context("Failed to update realm SSL settings")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to update realm SSL: {} - {}", status, body);
+        }
+
+        info!(
+            "Updated realm '{}' SSL requirement to '{}'",
+            self.config.realm, self.config.ssl_required
+        );
+        Ok(())
+    }
+
+    /// Ensure realm exists (create if not) and configure SSL
     pub async fn ensure_realm_exists(&self) -> anyhow::Result<()> {
         let token = self.get_master_admin_token().await?;
 
         if self.realm_exists(&token).await? {
             info!("Realm '{}' already exists", self.config.realm);
+            // Update SSL settings for existing realm
+            self.update_realm_ssl(&token).await?;
             return Ok(());
         }
 
@@ -587,10 +919,7 @@ impl KeycloakSeeder {
             return Ok(false);
         }
 
-        let users: Vec<serde_json::Value> = response
-            .json()
-            .await
-            .unwrap_or_default();
+        let users: Vec<serde_json::Value> = response.json().await.unwrap_or_default();
 
         Ok(!users.is_empty())
     }
@@ -648,18 +977,21 @@ impl KeycloakSeeder {
         let token = self.get_master_admin_token().await?;
 
         if self.admin_user_exists(&token).await? {
-            info!("Admin user '{}' already exists, skipping", DEFAULT_ADMIN_EMAIL);
+            info!(
+                "Admin user '{}' already exists, skipping",
+                DEFAULT_ADMIN_EMAIL
+            );
             return Ok(());
         }
 
         self.create_admin_user(&token).await?;
-        
+
         warn!(
             "Default admin credentials - Email: {}, Password: {}",
             DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD
         );
         warn!("Please change the default admin password after first login!");
-        
+
         Ok(())
     }
 
@@ -682,10 +1014,7 @@ impl KeycloakSeeder {
             return Ok(false);
         }
 
-        let clients: Vec<serde_json::Value> = response
-            .json()
-            .await
-            .unwrap_or_default();
+        let clients: Vec<serde_json::Value> = response.json().await.unwrap_or_default();
 
         Ok(!clients.is_empty())
     }
@@ -703,15 +1032,25 @@ impl KeycloakSeeder {
             name: Some(DEFAULT_PORTAL_CLIENT_NAME.to_string()),
             enabled: true,
             protocol: "openid-connect".to_string(),
+            base_url: Some("http://localhost:3000".to_string()),
+            root_url: Some("http://localhost:3000".to_string()),
+            admin_url: Some("http://localhost:3000".to_string()),
             redirect_uris: vec![
+                // Auth9-core callback URL (Keycloak redirects here after login)
+                "http://localhost:8080/api/v1/auth/callback".to_string(),
+                "http://127.0.0.1:8080/api/v1/auth/callback".to_string(),
+                // Portal URLs for direct OIDC if needed
                 "http://localhost:3000/*".to_string(),
                 "http://127.0.0.1:3000/*".to_string(),
             ],
             web_origins: vec![
+                "http://localhost:8080".to_string(),
                 "http://localhost:3000".to_string(),
+                "http://127.0.0.1:8080".to_string(),
                 "http://127.0.0.1:3000".to_string(),
             ],
-            public_client: true,
+            attributes: None,
+            public_client: false,  // Confidential client - Keycloak will generate a secret
             secret: None,
         };
 
@@ -725,7 +1064,10 @@ impl KeycloakSeeder {
             .context("Failed to create portal client")?;
 
         if response.status() == StatusCode::CONFLICT {
-            info!("Portal client '{}' already exists", DEFAULT_PORTAL_CLIENT_ID);
+            info!(
+                "Portal client '{}' already exists",
+                DEFAULT_PORTAL_CLIENT_ID
+            );
             return Ok(());
         }
 
@@ -744,7 +1086,10 @@ impl KeycloakSeeder {
         let token = self.get_master_admin_token().await?;
 
         if self.portal_client_exists(&token).await? {
-            info!("Portal client '{}' already exists, skipping", DEFAULT_PORTAL_CLIENT_ID);
+            info!(
+                "Portal client '{}' already exists, skipping",
+                DEFAULT_PORTAL_CLIENT_ID
+            );
             return Ok(());
         }
 

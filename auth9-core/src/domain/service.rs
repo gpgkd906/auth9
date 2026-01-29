@@ -7,8 +7,7 @@ use uuid::Uuid;
 use validator::Validate;
 
 /// Service status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, sqlx::Type, Default)]
-#[sqlx(type_name = "VARCHAR", rename_all = "lowercase")]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceStatus {
     #[default]
@@ -16,11 +15,118 @@ pub enum ServiceStatus {
     Inactive,
 }
 
+impl sqlx::Type<sqlx::MySql> for ServiceStatus {
+    fn type_info() -> sqlx::mysql::MySqlTypeInfo {
+        <String as sqlx::Type<sqlx::MySql>>::type_info()
+    }
+
+    fn compatible(ty: &sqlx::mysql::MySqlTypeInfo) -> bool {
+        <String as sqlx::Type<sqlx::MySql>>::compatible(ty)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::MySql> for ServiceStatus {
+    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::MySql>>::decode(value)?;
+        match s.to_lowercase().as_str() {
+            "active" => Ok(ServiceStatus::Active),
+            "inactive" => Ok(ServiceStatus::Inactive),
+            _ => Err(format!("Unknown service status: {}", s).into()),
+        }
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::MySql> for ServiceStatus {
+    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
+        let s = match self {
+            ServiceStatus::Active => "active",
+            ServiceStatus::Inactive => "inactive",
+        };
+        <&str as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&s, buf)
+    }
+}
+
+/// Wrapper type for UUID stored as CHAR(36) in MySQL/TiDB
+/// sqlx's uuid feature expects BINARY(16), but we use CHAR(36)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(transparent)]
+pub struct StringUuid(pub Uuid);
+
+impl StringUuid {
+    pub fn new_v4() -> Self {
+        StringUuid(Uuid::new_v4())
+    }
+
+    pub fn nil() -> Self {
+        StringUuid(Uuid::nil())
+    }
+
+    pub fn is_nil(&self) -> bool {
+        self.0.is_nil()
+    }
+}
+
+impl From<Uuid> for StringUuid {
+    fn from(uuid: Uuid) -> Self {
+        StringUuid(uuid)
+    }
+}
+
+impl From<StringUuid> for Uuid {
+    fn from(s: StringUuid) -> Self {
+        s.0
+    }
+}
+
+impl std::ops::Deref for StringUuid {
+    type Target = Uuid;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl std::fmt::Display for StringUuid {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        self.0.fmt(f)
+    }
+}
+
+impl std::str::FromStr for StringUuid {
+    type Err = uuid::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Ok(StringUuid(Uuid::parse_str(s)?))
+    }
+}
+
+impl sqlx::Type<sqlx::MySql> for StringUuid {
+    fn type_info() -> sqlx::mysql::MySqlTypeInfo {
+        <String as sqlx::Type<sqlx::MySql>>::type_info()
+    }
+
+    fn compatible(ty: &sqlx::mysql::MySqlTypeInfo) -> bool {
+        <String as sqlx::Type<sqlx::MySql>>::compatible(ty)
+    }
+}
+
+impl<'r> sqlx::Decode<'r, sqlx::MySql> for StringUuid {
+    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
+        let s = <String as sqlx::Decode<sqlx::MySql>>::decode(value)?;
+        let uuid = Uuid::parse_str(&s)?;
+        Ok(StringUuid(uuid))
+    }
+}
+
+impl<'q> sqlx::Encode<'q, sqlx::MySql> for StringUuid {
+    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
+        <String as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&self.0.to_string(), buf)
+    }
+}
+
 /// Service/Client entity (OIDC client)
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Service {
-    pub id: Uuid,
-    pub tenant_id: Option<Uuid>,
+    pub id: StringUuid,
+    pub tenant_id: Option<StringUuid>,
     pub name: String,
     pub client_id: String,
     /// Hashed client secret (never expose raw secret)
@@ -40,7 +146,7 @@ impl Default for Service {
     fn default() -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
+            id: StringUuid::new_v4(),
             tenant_id: None,
             name: String::new(),
             client_id: String::new(),

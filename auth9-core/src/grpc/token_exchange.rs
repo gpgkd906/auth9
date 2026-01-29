@@ -92,20 +92,20 @@ where
 
         let user_roles = match self
             .cache_manager
-            .get_user_roles_for_service(user_id, tenant_id, service.id)
+            .get_user_roles_for_service(user_id, tenant_id, service.id.0)
             .await
         {
             Ok(Some(roles)) => roles,
             _ => {
                 let roles = self
                     .rbac_repo
-                    .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id)
+                    .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id.0)
                     .await
                     .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
 
                 let _ = self
                     .cache_manager
-                    .set_user_roles_for_service(&roles, service.id)
+                    .set_user_roles_for_service(&roles, service.id.0)
                     .await;
                 roles
             }
@@ -187,7 +187,9 @@ where
                         .rbac_repo
                         .find_user_roles_in_tenant(user_id, tenant_id)
                         .await
-                        .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
+                        .map_err(|e| {
+                            Status::internal(format!("Failed to get user roles: {}", e))
+                        })?;
 
                     let _ = self.cache_manager.set_user_roles(&roles).await;
                     roles
@@ -215,7 +217,9 @@ where
                         .rbac_repo
                         .find_user_roles_in_tenant_for_service(user_id, tenant_id, service_id)
                         .await
-                        .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
+                        .map_err(|e| {
+                            Status::internal(format!("Failed to get user roles: {}", e))
+                        })?;
 
                     let _ = self
                         .cache_manager

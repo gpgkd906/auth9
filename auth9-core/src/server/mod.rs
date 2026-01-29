@@ -65,10 +65,19 @@ pub async fn run(config: Config) -> Result<()> {
     let audit_repo = Arc::new(AuditRepositoryImpl::new(db_pool.clone()));
 
     // Create services
-    let tenant_service = Arc::new(TenantService::new(tenant_repo.clone()));
+    let tenant_service = Arc::new(TenantService::new(
+        tenant_repo.clone(),
+        Some(cache_manager.clone()),
+    ));
     let user_service = Arc::new(UserService::new(user_repo.clone()));
-    let client_service = Arc::new(ClientService::new(service_repo.clone()));
-    let rbac_service = Arc::new(RbacService::new(rbac_repo.clone()));
+    let client_service = Arc::new(ClientService::new(
+        service_repo.clone(),
+        Some(cache_manager.clone()),
+    ));
+    let rbac_service = Arc::new(RbacService::new(
+        rbac_repo.clone(),
+        Some(cache_manager.clone()),
+    ));
 
     // Create JWT manager
     let jwt_manager = JwtManager::new(config.jwt.clone());
@@ -146,6 +155,7 @@ fn build_router(state: AppState) -> Router {
             "/.well-known/openid-configuration",
             get(api::auth::openid_configuration),
         )
+        .route("/.well-known/jwks.json", get(api::auth::jwks))
         // Auth endpoints
         .route("/api/v1/auth/authorize", get(api::auth::authorize))
         .route("/api/v1/auth/callback", get(api::auth::callback))
@@ -173,6 +183,10 @@ fn build_router(state: AppState) -> Router {
             get(api::user::get)
                 .put(api::user::update)
                 .delete(api::user::delete),
+        )
+        .route(
+            "/api/v1/users/:id/mfa",
+            post(api::user::enable_mfa).delete(api::user::disable_mfa),
         )
         .route(
             "/api/v1/users/:id/tenants",

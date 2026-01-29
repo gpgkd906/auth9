@@ -1,5 +1,6 @@
 //! Service/Client business logic
 
+use crate::cache::CacheManager;
 use crate::domain::{CreateServiceInput, Service, ServiceWithSecret, UpdateServiceInput};
 use crate::error::{AppError, Result};
 use crate::repository::ServiceRepository;
@@ -14,11 +15,15 @@ use validator::Validate;
 
 pub struct ClientService<R: ServiceRepository> {
     repo: Arc<R>,
+    cache_manager: Option<CacheManager>,
 }
 
 impl<R: ServiceRepository> ClientService<R> {
-    pub fn new(repo: Arc<R>) -> Self {
-        Self { repo }
+    pub fn new(repo: Arc<R>, cache_manager: Option<CacheManager>) -> Self {
+        Self {
+            repo,
+            cache_manager,
+        }
     }
 
     pub async fn create(&self, input: CreateServiceInput) -> Result<ServiceWithSecret> {
@@ -42,6 +47,9 @@ impl<R: ServiceRepository> ClientService<R> {
         let secret_hash = hash_secret(&client_secret)?;
 
         let service = self.repo.create(&input, &secret_hash).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_service_config(service.id.0, &service).await;
+        }
 
         Ok(ServiceWithSecret {
             service,
@@ -70,6 +78,9 @@ impl<R: ServiceRepository> ClientService<R> {
 
         let secret_hash = hash_secret(&client_secret)?;
         let service = self.repo.create(&input, &secret_hash).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_service_config(service.id.0, &service).await;
+        }
 
         Ok(ServiceWithSecret {
             service,
@@ -78,17 +89,32 @@ impl<R: ServiceRepository> ClientService<R> {
     }
 
     pub async fn get(&self, id: Uuid) -> Result<Service> {
-        self.repo
+        if let Some(cache) = &self.cache_manager {
+            if let Ok(Some(service)) = cache.get_service_config(id).await {
+                return Ok(service);
+            }
+        }
+        let service = self
+            .repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Service {} not found", id)))
+            .ok_or_else(|| AppError::NotFound(format!("Service {} not found", id)))?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_service_config(service.id.0, &service).await;
+        }
+        Ok(service)
     }
 
     pub async fn get_by_client_id(&self, client_id: &str) -> Result<Service> {
-        self.repo
+        let service = self
+            .repo
             .find_by_client_id(client_id)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Service '{}' not found", client_id)))
+            .ok_or_else(|| AppError::NotFound(format!("Service '{}' not found", client_id)))?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_service_config(service.id.0, &service).await;
+        }
+        Ok(service)
     }
 
     pub async fn list(
@@ -106,23 +132,43 @@ impl<R: ServiceRepository> ClientService<R> {
     pub async fn update(&self, id: Uuid, input: UpdateServiceInput) -> Result<Service> {
         input.validate()?;
         let _ = self.get(id).await?;
-        self.repo.update(id, &input).await
+        let service = self.repo.update(id, &input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_service_config(id).await;
+        }
+        Ok(service)
     }
 
     pub async fn regenerate_secret(&self, id: Uuid) -> Result<String> {
         let _ = self.get(id).await?;
 
         let client_secret = generate_client_secret();
+        self.regenerate_secret_with_value(id, client_secret.clone())
+            .await?;
+        Ok(client_secret)
+    }
+
+    pub async fn regenerate_secret_with_value(
+        &self,
+        id: Uuid,
+        client_secret: String,
+    ) -> Result<String> {
+        let _ = self.get(id).await?;
         let secret_hash = hash_secret(&client_secret)?;
-
         self.repo.update_secret(id, &secret_hash).await?;
-
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_service_config(id).await;
+        }
         Ok(client_secret)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
         let _ = self.get(id).await?;
-        self.repo.delete(id).await
+        self.repo.delete(id).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_service_config(id).await;
+        }
+        Ok(())
     }
 
     pub async fn verify_secret(&self, client_id: &str, secret: &str) -> Result<Service> {

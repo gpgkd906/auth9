@@ -1,5 +1,6 @@
 //! Tenant business logic
 
+use crate::cache::CacheManager;
 use crate::domain::{CreateTenantInput, Tenant, TenantStatus, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::repository::TenantRepository;
@@ -9,11 +10,15 @@ use validator::Validate;
 
 pub struct TenantService<R: TenantRepository> {
     repo: Arc<R>,
+    cache_manager: Option<CacheManager>,
 }
 
 impl<R: TenantRepository> TenantService<R> {
-    pub fn new(repo: Arc<R>) -> Self {
-        Self { repo }
+    pub fn new(repo: Arc<R>, cache_manager: Option<CacheManager>) -> Self {
+        Self {
+            repo,
+            cache_manager,
+        }
     }
 
     pub async fn create(&self, input: CreateTenantInput) -> Result<Tenant> {
@@ -28,21 +33,40 @@ impl<R: TenantRepository> TenantService<R> {
             )));
         }
 
-        self.repo.create(&input).await
+        let tenant = self.repo.create(&input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_tenant_config(tenant.id, &tenant).await;
+        }
+        Ok(tenant)
     }
 
     pub async fn get(&self, id: Uuid) -> Result<Tenant> {
-        self.repo
+        if let Some(cache) = &self.cache_manager {
+            if let Ok(Some(tenant)) = cache.get_tenant_config(id).await {
+                return Ok(tenant);
+            }
+        }
+        let tenant = self
+            .repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))
+            .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_tenant_config(tenant.id, &tenant).await;
+        }
+        Ok(tenant)
     }
 
     pub async fn get_by_slug(&self, slug: &str) -> Result<Tenant> {
-        self.repo
+        let tenant = self
+            .repo
             .find_by_slug(slug)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Tenant '{}' not found", slug)))
+            .ok_or_else(|| AppError::NotFound(format!("Tenant '{}' not found", slug)))?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.set_tenant_config(tenant.id, &tenant).await;
+        }
+        Ok(tenant)
     }
 
     pub async fn list(&self, page: i64, per_page: i64) -> Result<(Vec<Tenant>, i64)> {
@@ -58,14 +82,21 @@ impl<R: TenantRepository> TenantService<R> {
         // Verify tenant exists
         let _ = self.get(id).await?;
 
-        self.repo.update(id, &input).await
+        let tenant = self.repo.update(id, &input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_tenant_config(id).await;
+        }
+        Ok(tenant)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
         // Verify tenant exists
         let _ = self.get(id).await?;
-
-        self.repo.delete(id).await
+        self.repo.delete(id).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_tenant_config(id).await;
+        }
+        Ok(())
     }
 
     pub async fn disable(&self, id: Uuid) -> Result<Tenant> {
@@ -76,7 +107,11 @@ impl<R: TenantRepository> TenantService<R> {
             settings: None,
             status: Some(TenantStatus::Inactive),
         };
-        self.repo.update(id, &input).await
+        let tenant = self.repo.update(id, &input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_tenant_config(id).await;
+        }
+        Ok(tenant)
     }
 }
 
@@ -102,7 +137,7 @@ mod tests {
             })
         });
 
-        let service = TenantService::new(Arc::new(mock));
+        let service = TenantService::new(Arc::new(mock), None);
 
         let input = CreateTenantInput {
             name: "Test Tenant".to_string(),
@@ -127,7 +162,7 @@ mod tests {
             .with(eq("existing-tenant"))
             .returning(|_| Ok(Some(Tenant::default())));
 
-        let service = TenantService::new(Arc::new(mock));
+        let service = TenantService::new(Arc::new(mock), None);
 
         let input = CreateTenantInput {
             name: "New Tenant".to_string(),
@@ -149,7 +184,7 @@ mod tests {
             .with(eq(id))
             .returning(|_| Ok(None));
 
-        let service = TenantService::new(Arc::new(mock));
+        let service = TenantService::new(Arc::new(mock), None);
 
         let result = service.get(id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));

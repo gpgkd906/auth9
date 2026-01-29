@@ -15,6 +15,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
@@ -58,18 +59,33 @@ pub async fn create(
     headers: HeaderMap,
     Json(input): Json<CreateServiceInput>,
 ) -> Result<impl IntoResponse> {
+    let logout_uris = input.logout_uris.clone().unwrap_or_default();
+    let attributes = if logout_uris.is_empty() {
+        None
+    } else {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "post.logout.redirect.uris".to_string(),
+            logout_uris.join(" "),
+        );
+        Some(attrs)
+    };
     let keycloak_client = KeycloakOidcClient {
         id: None,
         client_id: input.client_id.clone(),
         name: Some(input.name.clone()),
         enabled: true,
         protocol: "openid-connect".to_string(),
+        base_url: input.base_url.clone(),
+        root_url: input.base_url.clone(),
+        admin_url: input.base_url.clone(),
         redirect_uris: input.redirect_uris.clone(),
         web_origins: input
             .base_url
             .as_ref()
             .map(|url| vec![url.clone()])
             .unwrap_or_default(),
+        attributes,
         public_client: false,
         secret: None,
     };
@@ -93,7 +109,7 @@ pub async fn create(
         &headers,
         "service.create",
         "service",
-        Some(service_with_secret.service.id),
+        Some(service_with_secret.service.id.0),
         None,
         serde_json::to_value(&service_with_secret.service).ok(),
     )
@@ -112,13 +128,62 @@ pub async fn update(
     Json(input): Json<UpdateServiceInput>,
 ) -> Result<impl IntoResponse> {
     let before = state.client_service.get(id).await?;
+    let updated_name = input.name.clone().unwrap_or_else(|| before.name.clone());
+    let updated_base_url = input.base_url.clone().or(before.base_url.clone());
+    let updated_redirect_uris = input
+        .redirect_uris
+        .clone()
+        .unwrap_or_else(|| before.redirect_uris.clone());
+    let updated_logout_uris = input
+        .logout_uris
+        .clone()
+        .unwrap_or_else(|| before.logout_uris.clone());
+    let updated_status = input.status.clone().unwrap_or(before.status.clone());
+    let attributes = if updated_logout_uris.is_empty() {
+        None
+    } else {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "post.logout.redirect.uris".to_string(),
+            updated_logout_uris.join(" "),
+        );
+        Some(attrs)
+    };
+
+    let keycloak_client = KeycloakOidcClient {
+        id: None,
+        client_id: before.client_id.clone(),
+        name: Some(updated_name.clone()),
+        enabled: updated_status == crate::domain::ServiceStatus::Active,
+        protocol: "openid-connect".to_string(),
+        base_url: updated_base_url.clone(),
+        root_url: updated_base_url.clone(),
+        admin_url: updated_base_url.clone(),
+        redirect_uris: updated_redirect_uris.clone(),
+        web_origins: updated_base_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default(),
+        attributes,
+        public_client: false,
+        secret: None,
+    };
+    let client_uuid = state
+        .keycloak_client
+        .get_client_uuid_by_client_id(&before.client_id)
+        .await?;
+    state
+        .keycloak_client
+        .update_oidc_client(&client_uuid, &keycloak_client)
+        .await?;
+
     let service = state.client_service.update(id, input).await?;
     let _ = write_audit_log(
         &state,
         &headers,
         "service.update",
         "service",
-        Some(service.id),
+        Some(service.id.0),
         serde_json::to_value(&before).ok(),
         serde_json::to_value(&service).ok(),
     )
@@ -137,7 +202,19 @@ pub async fn regenerate_secret(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let secret = state.client_service.regenerate_secret(id).await?;
+    let service = state.client_service.get(id).await?;
+    let client_uuid = state
+        .keycloak_client
+        .get_client_uuid_by_client_id(&service.client_id)
+        .await?;
+    let secret = state
+        .keycloak_client
+        .regenerate_client_secret(&client_uuid)
+        .await?;
+    state
+        .client_service
+        .regenerate_secret_with_value(id, secret.clone())
+        .await?;
     let _ = write_audit_log(
         &state,
         &headers,
@@ -160,6 +237,13 @@ pub async fn delete(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.client_service.get(id).await?;
+    if let Ok(client_uuid) = state
+        .keycloak_client
+        .get_client_uuid_by_client_id(&before.client_id)
+        .await
+    {
+        let _ = state.keycloak_client.delete_oidc_client(&client_uuid).await;
+    }
     state.client_service.delete(id).await?;
     let _ = write_audit_log(
         &state,
