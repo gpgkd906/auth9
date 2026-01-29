@@ -145,12 +145,37 @@ pub struct ClientWithSecret {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use validator::Validate;
 
     #[test]
     fn test_service_default() {
         let service = Service::default();
         assert!(!service.id.is_nil());
         assert_eq!(service.status, ServiceStatus::Active);
+        assert!(service.tenant_id.is_none());
+        assert!(service.name.is_empty());
+        assert!(service.base_url.is_none());
+        assert!(service.redirect_uris.is_empty());
+        assert!(service.logout_uris.is_empty());
+    }
+
+    #[test]
+    fn test_service_with_values() {
+        let tenant_id = StringUuid::new_v4();
+        let service = Service {
+            tenant_id: Some(tenant_id),
+            name: "My Service".to_string(),
+            base_url: Some("https://example.com".to_string()),
+            redirect_uris: vec!["https://example.com/callback".to_string()],
+            logout_uris: vec!["https://example.com/logout".to_string()],
+            ..Default::default()
+        };
+        
+        assert_eq!(service.tenant_id, Some(tenant_id));
+        assert_eq!(service.name, "My Service");
+        assert!(service.base_url.is_some());
+        assert_eq!(service.redirect_uris.len(), 1);
+        assert_eq!(service.logout_uris.len(), 1);
     }
 
     #[test]
@@ -163,6 +188,20 @@ mod tests {
         let json = serde_json::to_string(&service).unwrap();
         assert!(json.contains("Test Service"));
         assert!(json.contains("active"));
+    }
+
+    #[test]
+    fn test_service_deserialization() {
+        let service = Service {
+            name: "Test Service".to_string(),
+            ..Default::default()
+        };
+        
+        let json = serde_json::to_string(&service).unwrap();
+        let deserialized: Service = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(deserialized.name, "Test Service");
+        assert_eq!(deserialized.status, ServiceStatus::Active);
     }
 
     #[test]
@@ -183,6 +222,26 @@ mod tests {
     }
 
     #[test]
+    fn test_client_without_name() {
+        let client = Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::new_v4(),
+            client_id: "test-client".to_string(),
+            client_secret_hash: "secret-hash".to_string(),
+            name: None,
+            created_at: Utc::now(),
+        };
+        
+        assert!(client.name.is_none());
+    }
+
+    #[test]
+    fn test_service_status_default() {
+        let status = ServiceStatus::default();
+        assert_eq!(status, ServiceStatus::Active);
+    }
+
+    #[test]
     fn test_service_status_serialization() {
         assert_eq!(serde_json::to_string(&ServiceStatus::Active).unwrap(), "\"active\"");
         assert_eq!(serde_json::to_string(&ServiceStatus::Inactive).unwrap(), "\"inactive\"");
@@ -195,5 +254,239 @@ mod tests {
         
         assert_eq!(active, ServiceStatus::Active);
         assert_eq!(inactive, ServiceStatus::Inactive);
+    }
+
+    #[test]
+    fn test_create_service_input_valid() {
+        let input = CreateServiceInput {
+            tenant_id: Some(Uuid::new_v4()),
+            name: "My Service".to_string(),
+            client_id: "my-client-id".to_string(),
+            base_url: Some("https://example.com".to_string()),
+            redirect_uris: vec!["https://example.com/callback".to_string()],
+            logout_uris: Some(vec!["https://example.com/logout".to_string()]),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_service_input_minimal() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "S".to_string(),
+            client_id: "c".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_service_input_empty_name() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "".to_string(),
+            client_id: "valid-client".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_service_input_empty_client_id() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Valid Name".to_string(),
+            client_id: "".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_service_input_invalid_base_url() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Valid Name".to_string(),
+            client_id: "valid-client".to_string(),
+            base_url: Some("not-a-url".to_string()),
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_client_input_valid() {
+        let input = CreateClientInput {
+            name: Some("My Client".to_string()),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_client_input_no_name() {
+        let input = CreateClientInput {
+            name: None,
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_client_input_empty_name() {
+        let input = CreateClientInput {
+            name: Some("".to_string()),
+        };
+        
+        // Empty string is within length bounds (0 is not < 1 for Some values)
+        // Actually, the validation is min = 1, so empty string should fail
+        // But since name is Option<String>, the validation only applies when Some
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_update_service_input_valid() {
+        let input = UpdateServiceInput {
+            name: Some("Updated Name".to_string()),
+            base_url: Some("https://updated.example.com".to_string()),
+            redirect_uris: Some(vec!["https://new-callback.com".to_string()]),
+            logout_uris: Some(vec!["https://new-logout.com".to_string()]),
+            status: Some(ServiceStatus::Inactive),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_update_service_input_partial() {
+        let input = UpdateServiceInput {
+            name: None,
+            base_url: None,
+            redirect_uris: None,
+            logout_uris: None,
+            status: Some(ServiceStatus::Inactive),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_update_service_input_empty_name() {
+        let input = UpdateServiceInput {
+            name: Some("".to_string()),
+            base_url: None,
+            redirect_uris: None,
+            logout_uris: None,
+            status: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_update_service_input_invalid_base_url() {
+        let input = UpdateServiceInput {
+            name: None,
+            base_url: Some("invalid-url".to_string()),
+            redirect_uris: None,
+            logout_uris: None,
+            status: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_service_with_client_structure() {
+        let service = Service::default();
+        let client = Client {
+            id: StringUuid::new_v4(),
+            service_id: service.id,
+            client_id: "test-client".to_string(),
+            client_secret_hash: "hash".to_string(),
+            name: None,
+            created_at: Utc::now(),
+        };
+        let client_secret = "secret123".to_string();
+        
+        let swc = ServiceWithClient {
+            service: service.clone(),
+            client: ClientWithSecret {
+                client,
+                client_secret: client_secret.clone(),
+            },
+        };
+        
+        assert_eq!(swc.service.id, service.id);
+        assert_eq!(swc.client.client_secret, client_secret);
+    }
+
+    #[test]
+    fn test_service_with_client_serialization() {
+        let service = Service {
+            name: "Test".to_string(),
+            ..Default::default()
+        };
+        let client = Client {
+            id: StringUuid::new_v4(),
+            service_id: service.id,
+            client_id: "test-client".to_string(),
+            client_secret_hash: "hash".to_string(),
+            name: None,
+            created_at: Utc::now(),
+        };
+        
+        let swc = ServiceWithClient {
+            service,
+            client: ClientWithSecret {
+                client,
+                client_secret: "secret123".to_string(),
+            },
+        };
+        
+        let json = serde_json::to_string(&swc).unwrap();
+        // Secret should be visible in ClientWithSecret
+        assert!(json.contains("secret123"));
+        // But hash should not be visible
+        assert!(!json.contains("hash"));
+    }
+
+    #[test]
+    fn test_client_with_secret_structure() {
+        let client = Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::new_v4(),
+            client_id: "my-client".to_string(),
+            client_secret_hash: "hashed".to_string(),
+            name: Some("My Client".to_string()),
+            created_at: Utc::now(),
+        };
+        
+        let cws = ClientWithSecret {
+            client: client.clone(),
+            client_secret: "plain-secret".to_string(),
+        };
+        
+        assert_eq!(cws.client.client_id, "my-client");
+        assert_eq!(cws.client_secret, "plain-secret");
+    }
+
+    #[test]
+    fn test_service_status_equality() {
+        assert_eq!(ServiceStatus::Active, ServiceStatus::Active);
+        assert_eq!(ServiceStatus::Inactive, ServiceStatus::Inactive);
+        assert_ne!(ServiceStatus::Active, ServiceStatus::Inactive);
     }
 }

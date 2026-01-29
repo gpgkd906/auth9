@@ -317,6 +317,11 @@ fn verify_secret(secret: &str, hash: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::StringUuid;
+    use crate::repository::service::MockServiceRepository;
+    use mockall::predicate::*;
+
+    // ==================== Helper Function Tests ====================
 
     #[test]
     fn test_generate_client_secret() {
@@ -329,6 +334,14 @@ mod tests {
     }
 
     #[test]
+    fn test_generate_client_secret_multiple() {
+        // Generate multiple secrets and ensure they're all unique
+        let secrets: Vec<String> = (0..10).map(|_| generate_client_secret()).collect();
+        let unique: std::collections::HashSet<_> = secrets.iter().collect();
+        assert_eq!(unique.len(), secrets.len());
+    }
+
+    #[test]
     fn test_hash_and_verify_secret() {
         let secret = "test-secret-123";
         let hash = hash_secret(secret).unwrap();
@@ -337,17 +350,183 @@ mod tests {
         assert!(!verify_secret("wrong-secret", &hash).unwrap());
     }
 
+    #[test]
+    fn test_hash_secret_different_hashes() {
+        // Same secret should produce different hashes (due to random salt)
+        let secret = "my-secret";
+        let hash1 = hash_secret(secret).unwrap();
+        let hash2 = hash_secret(secret).unwrap();
+        
+        assert_ne!(hash1, hash2);
+        // But both should verify correctly
+        assert!(verify_secret(secret, &hash1).unwrap());
+        assert!(verify_secret(secret, &hash2).unwrap());
+    }
+
+    #[test]
+    fn test_verify_secret_invalid_hash() {
+        let result = verify_secret("secret", "invalid-hash-format");
+        assert!(result.is_err());
+    }
+
+    // ==================== Create Service Tests ====================
+
+    #[tokio::test]
+    async fn test_create_service_success() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("new-client-id"))
+            .returning(|_| Ok(None));
+
+        mock.expect_create()
+            .returning(move |input| {
+                Ok(Service {
+                    id: StringUuid(service_id),
+                    tenant_id: input.tenant_id.map(StringUuid::from),
+                    name: input.name.clone(),
+                    base_url: input.base_url.clone(),
+                    redirect_uris: input.redirect_uris.clone(),
+                    logout_uris: input.logout_uris.clone().unwrap_or_default(),
+                    status: crate::domain::ServiceStatus::Active,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                })
+            });
+
+        mock.expect_create_client()
+            .returning(move |sid, cid, _hash, name| {
+                Ok(crate::domain::Client {
+                    id: StringUuid(Uuid::new_v4()),
+                    service_id: StringUuid(sid),
+                    client_id: cid.to_string(),
+                    client_secret_hash: "hashed".to_string(),
+                    name,
+                    created_at: chrono::Utc::now(),
+                })
+            });
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let input = CreateServiceInput {
+            tenant_id: Some(Uuid::new_v4()),
+            name: "My Service".to_string(),
+            client_id: "new-client-id".to_string(),
+            base_url: Some("https://example.com".to_string()),
+            redirect_uris: vec!["https://example.com/callback".to_string()],
+            logout_uris: None,
+        };
+
+        let result = service.create(input).await;
+        assert!(result.is_ok());
+        let swc = result.unwrap();
+        assert_eq!(swc.service.name, "My Service");
+        assert!(!swc.client.client_secret.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_create_service_duplicate_client_id() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("existing-client"))
+            .returning(|_| Ok(Some(crate::domain::Client {
+                id: StringUuid::new_v4(),
+                service_id: StringUuid::new_v4(),
+                client_id: "existing-client".to_string(),
+                client_secret_hash: "hash".to_string(),
+                name: None,
+                created_at: chrono::Utc::now(),
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "New Service".to_string(),
+            client_id: "existing-client".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+
+        let result = service.create(input).await;
+        assert!(matches!(result, Err(AppError::Conflict(_))));
+    }
+
+    #[tokio::test]
+    async fn test_create_service_invalid_input() {
+        let mock = MockServiceRepository::new();
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "".to_string(), // Empty name is invalid
+            client_id: "client".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+
+        let result = service.create(input).await;
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn test_create_with_secret() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_client_by_client_id()
+            .returning(|_| Ok(None));
+
+        mock.expect_create()
+            .returning(move |_| {
+                Ok(Service {
+                    id: StringUuid(service_id),
+                    ..Default::default()
+                })
+            });
+
+        mock.expect_create_client()
+            .returning(move |sid, cid, _hash, _| {
+                Ok(crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid(sid),
+                    client_id: cid.to_string(),
+                    client_secret_hash: "hash".to_string(),
+                    name: None,
+                    created_at: chrono::Utc::now(),
+                })
+            });
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Test".to_string(),
+            client_id: "my-client".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+
+        let result = service.create_with_secret(input, "my-custom-secret".to_string()).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().client.client_secret, "my-custom-secret");
+    }
+
+    // ==================== Create Client Tests ====================
+
     #[tokio::test]
     async fn test_create_client() {
-        use crate::repository::service::MockServiceRepository;
-        use crate::domain::StringUuid;
-        
         let mut mock_repo = MockServiceRepository::new();
         let service_id = Uuid::new_v4();
         
         mock_repo
             .expect_find_by_id()
-            .with(mockall::predicate::eq(service_id))
+            .with(eq(service_id))
             .times(1)
             .returning(move |_| Ok(Some(Service {
                 id: StringUuid(service_id),
@@ -386,16 +565,323 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_client_service_not_found() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.create_client(service_id, None).await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_create_client_with_secret() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                status: crate::domain::ServiceStatus::Active,
+                ..Default::default()
+            })));
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("custom-client-id"))
+            .returning(|_| Ok(None));
+
+        mock.expect_create_client()
+            .returning(|sid, cid, _, name| {
+                Ok(crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid(sid),
+                    client_id: cid.to_string(),
+                    client_secret_hash: "hash".to_string(),
+                    name,
+                    created_at: chrono::Utc::now(),
+                })
+            });
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.create_client_with_secret(
+            service_id,
+            "custom-client-id".to_string(),
+            "custom-secret".to_string(),
+            Some("Custom Client".to_string()),
+        ).await;
+
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().client_secret, "custom-secret");
+    }
+
+    #[tokio::test]
+    async fn test_create_client_with_secret_duplicate_id() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                status: crate::domain::ServiceStatus::Active,
+                ..Default::default()
+            })));
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("existing-id"))
+            .returning(|_| Ok(Some(crate::domain::Client {
+                id: StringUuid::new_v4(),
+                service_id: StringUuid::new_v4(),
+                client_id: "existing-id".to_string(),
+                client_secret_hash: "hash".to_string(),
+                name: None,
+                created_at: chrono::Utc::now(),
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.create_client_with_secret(
+            service_id,
+            "existing-id".to_string(),
+            "secret".to_string(),
+            None,
+        ).await;
+
+        assert!(matches!(result, Err(AppError::Conflict(_))));
+    }
+
+    // ==================== Get Service Tests ====================
+
+    #[tokio::test]
+    async fn test_get_service_success() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                name: "My Service".to_string(),
+                status: crate::domain::ServiceStatus::Active,
+                ..Default::default()
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.get(service_id).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "My Service");
+    }
+
+    #[tokio::test]
+    async fn test_get_service_not_found() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.get(service_id).await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_get_by_client_id_success() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_client_id()
+            .with(eq("my-client"))
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                name: "Found Service".to_string(),
+                ..Default::default()
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.get_by_client_id("my-client").await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "Found Service");
+    }
+
+    #[tokio::test]
+    async fn test_get_by_client_id_not_found() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_find_by_client_id()
+            .with(eq("nonexistent"))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.get_by_client_id("nonexistent").await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ==================== List Tests ====================
+
+    #[tokio::test]
+    async fn test_list_services() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_list()
+            .with(eq(None), eq(0), eq(10))
+            .returning(|_, _, _| {
+                Ok(vec![
+                    Service { name: "Service 1".to_string(), ..Default::default() },
+                    Service { name: "Service 2".to_string(), ..Default::default() },
+                ])
+            });
+
+        mock.expect_count()
+            .with(eq(None))
+            .returning(|_| Ok(2));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.list(None, 1, 10).await;
+        assert!(result.is_ok());
+        let (services, total) = result.unwrap();
+        assert_eq!(services.len(), 2);
+        assert_eq!(total, 2);
+    }
+
+    #[tokio::test]
+    async fn test_list_services_with_tenant() {
+        let mut mock = MockServiceRepository::new();
+        let tenant_id = Uuid::new_v4();
+
+        mock.expect_list()
+            .with(eq(Some(tenant_id)), eq(10), eq(10))
+            .returning(|_, _, _| {
+                Ok(vec![
+                    Service { name: "Tenant Service".to_string(), ..Default::default() },
+                ])
+            });
+
+        mock.expect_count()
+            .with(eq(Some(tenant_id)))
+            .returning(|_| Ok(11));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.list(Some(tenant_id), 2, 10).await;
+        assert!(result.is_ok());
+        let (services, total) = result.unwrap();
+        assert_eq!(services.len(), 1);
+        assert_eq!(total, 11);
+    }
+
+    #[tokio::test]
+    async fn test_list_clients() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_list_clients()
+            .with(eq(service_id))
+            .returning(|_| {
+                Ok(vec![
+                    crate::domain::Client {
+                        id: StringUuid::new_v4(),
+                        service_id: StringUuid::new_v4(),
+                        client_id: "client-1".to_string(),
+                        client_secret_hash: "hash".to_string(),
+                        name: Some("Client 1".to_string()),
+                        created_at: chrono::Utc::now(),
+                    },
+                ])
+            });
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.list_clients(service_id).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().len(), 1);
+    }
+
+    // ==================== Update Tests ====================
+
+    #[tokio::test]
+    async fn test_update_service_success() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                name: "Old Name".to_string(),
+                status: crate::domain::ServiceStatus::Active,
+                ..Default::default()
+            })));
+
+        mock.expect_update()
+            .returning(|_, input| {
+                Ok(Service {
+                    name: input.name.clone().unwrap_or_default(),
+                    status: input.status.clone().unwrap_or(crate::domain::ServiceStatus::Active),
+                    ..Default::default()
+                })
+            });
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let input = UpdateServiceInput {
+            name: Some("New Name".to_string()),
+            base_url: None,
+            redirect_uris: None,
+            logout_uris: None,
+            status: None,
+        };
+
+        let result = service.update(service_id, input).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "New Name");
+    }
+
+    #[tokio::test]
+    async fn test_update_service_not_found() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let input = UpdateServiceInput {
+            name: Some("New".to_string()),
+            base_url: None,
+            redirect_uris: None,
+            logout_uris: None,
+            status: None,
+        };
+
+        let result = service.update(service_id, input).await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ==================== Regenerate Secret Tests ====================
+
+    #[tokio::test]
     async fn test_regenerate_client_secret() {
-        use crate::repository::service::MockServiceRepository;
-        use crate::domain::StringUuid;
-        
         let mut mock_repo = MockServiceRepository::new();
         let client_id = "test-client-id";
         
         mock_repo
             .expect_find_client_by_client_id()
-            .with(mockall::predicate::eq(client_id))
+            .with(eq(client_id))
             .times(1)
             .returning(move |_| Ok(Some(crate::domain::Client {
                 id: StringUuid(Uuid::new_v4()),
@@ -408,10 +894,7 @@ mod tests {
 
         mock_repo
             .expect_update_client_secret_hash()
-            .with(
-                mockall::predicate::eq(client_id),
-                mockall::predicate::always(), // We can't easily predict the new hash
-            )
+            .with(eq(client_id), always())
             .times(1)
             .returning(|_, _| Ok(()));
             
@@ -422,6 +905,191 @@ mod tests {
         assert!(result.is_ok());
         let new_secret = result.unwrap();
         assert!(!new_secret.is_empty());
+        assert_eq!(new_secret.len(), 43); // Base64 encoded 32 bytes
     }
 
+    #[tokio::test]
+    async fn test_regenerate_client_secret_not_found() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("nonexistent"))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.regenerate_client_secret("nonexistent").await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ==================== Delete Tests ====================
+
+    #[tokio::test]
+    async fn test_delete_service_success() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                status: crate::domain::ServiceStatus::Active,
+                ..Default::default()
+            })));
+
+        mock.expect_delete()
+            .with(eq(service_id))
+            .returning(|_| Ok(()));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.delete(service_id).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_delete_service_not_found() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.delete(service_id).await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_delete_client() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_delete_client()
+            .with(eq(service_id), eq("client-to-delete"))
+            .returning(|_, _| Ok(()));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.delete_client(service_id, "client-to-delete").await;
+        assert!(result.is_ok());
+    }
+
+    // ==================== Verify Secret Tests ====================
+
+    #[tokio::test]
+    async fn test_verify_secret_success() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+        let client_secret = "test-secret";
+        let secret_hash = hash_secret(client_secret).unwrap();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("valid-client"))
+            .returning(move |_| Ok(Some(crate::domain::Client {
+                id: StringUuid::new_v4(),
+                service_id: StringUuid(service_id),
+                client_id: "valid-client".to_string(),
+                client_secret_hash: secret_hash.clone(),
+                name: None,
+                created_at: chrono::Utc::now(),
+            })));
+
+        mock.expect_find_by_id()
+            .with(eq(service_id))
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                status: crate::domain::ServiceStatus::Active,
+                ..Default::default()
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.verify_secret("valid-client", client_secret).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_verify_secret_invalid_client() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("invalid-client"))
+            .returning(|_| Ok(None));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.verify_secret("invalid-client", "secret").await;
+        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+    }
+
+    #[tokio::test]
+    async fn test_verify_secret_wrong_secret() {
+        let mut mock = MockServiceRepository::new();
+        let secret_hash = hash_secret("correct-secret").unwrap();
+
+        mock.expect_find_client_by_client_id()
+            .with(eq("my-client"))
+            .returning(move |_| Ok(Some(crate::domain::Client {
+                id: StringUuid::new_v4(),
+                service_id: StringUuid::new_v4(),
+                client_id: "my-client".to_string(),
+                client_secret_hash: secret_hash.clone(),
+                name: None,
+                created_at: chrono::Utc::now(),
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.verify_secret("my-client", "wrong-secret").await;
+        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+    }
+
+    #[tokio::test]
+    async fn test_verify_secret_inactive_service() {
+        let mut mock = MockServiceRepository::new();
+        let service_id = Uuid::new_v4();
+        let client_secret = "test-secret";
+        let secret_hash = hash_secret(client_secret).unwrap();
+
+        mock.expect_find_client_by_client_id()
+            .returning(move |_| Ok(Some(crate::domain::Client {
+                id: StringUuid::new_v4(),
+                service_id: StringUuid(service_id),
+                client_id: "client".to_string(),
+                client_secret_hash: secret_hash.clone(),
+                name: None,
+                created_at: chrono::Utc::now(),
+            })));
+
+        mock.expect_find_by_id()
+            .returning(move |_| Ok(Some(Service {
+                id: StringUuid(service_id),
+                status: crate::domain::ServiceStatus::Inactive, // Inactive service
+                ..Default::default()
+            })));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.verify_secret("client", client_secret).await;
+        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+    }
+
+    // ==================== Update Client Secret Hash Test ====================
+
+    #[tokio::test]
+    async fn test_update_client_secret_hash() {
+        let mut mock = MockServiceRepository::new();
+
+        mock.expect_update_client_secret_hash()
+            .with(eq("my-client"), eq("new-hash"))
+            .returning(|_, _| Ok(()));
+
+        let service = ClientService::new(Arc::new(mock), None);
+
+        let result = service.update_client_secret_hash("my-client", "new-hash").await;
+        assert!(result.is_ok());
+    }
 }

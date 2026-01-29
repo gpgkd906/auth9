@@ -1,8 +1,69 @@
 //! Common test utilities
 
 use auth9_core::config::{Config, DatabaseConfig, JwtConfig, KeycloakConfig, RedisConfig};
+use sqlx::mysql::MySqlPoolOptions;
 use sqlx::MySqlPool;
 use std::net::SocketAddr;
+use std::sync::Once;
+use testcontainers::clients;
+use testcontainers_modules::mysql::Mysql;
+use tokio::sync::OnceCell;
+
+/// Ensure .env file is loaded once
+static ENV_INIT: Once = Once::new();
+
+fn init_env() {
+    ENV_INIT.call_once(|| {
+        // Load .env file if it exists (for local development)
+        let _ = dotenvy::dotenv();
+    });
+}
+
+/// Global test container port
+static MYSQL_PORT: OnceCell<u16> = OnceCell::const_new();
+
+/// Get port of the shared MySQL test container (starts it if needed)
+async fn get_mysql_port() -> u16 {
+    // Ensure environment is initialized
+    init_env();
+    
+    *MYSQL_PORT
+        .get_or_init(|| async {
+            // Check if DATABASE_URL is already set
+            if let Ok(url) = std::env::var("DATABASE_URL") {
+                eprintln!("Using existing DATABASE_URL: {}", url);
+                // Try to extract port from URL or just verify connection
+                // Here we assume if DATABASE_URL is set, we don't need the container port
+                // But for this logic, we return 0 to indicate "use env var"
+                return 0;
+            }
+
+            eprintln!("Starting MySQL test container...");
+
+            // Use spawn_blocking to run synchronous testcontainers code
+            let port = tokio::task::spawn_blocking(|| {
+                let docker = clients::Cli::default();
+                // Leak the docker client to keep it alive for the duration of tests
+                let docker = Box::leak(Box::new(docker));
+                
+                let container = docker.run(Mysql::default());
+                let port = container.get_host_port_ipv4(3306);
+                
+                eprintln!("MySQL container started on port {}", port);
+                
+                // Leak the container to prevent it from being dropped (and killing the container)
+                // This keeps the DB alive for all tests
+                Box::leak(Box::new(container));
+                
+                port
+            })
+            .await
+            .expect("Failed to start MySQL container");
+
+            port
+        })
+        .await
+}
 
 #[allow(dead_code)]
 pub struct TestApp {
@@ -64,6 +125,33 @@ impl TestApp {
     }
 }
 
+/// Get a database pool connected to the testcontainer MySQL
+/// This will automatically start a MySQL container if needed
+pub async fn get_test_pool() -> Result<MySqlPool, sqlx::Error> {
+    // Ensure environment is initialized
+    init_env();
+    
+    // First check if DATABASE_URL is set
+    if let Ok(url) = std::env::var("DATABASE_URL") {
+        return MySqlPoolOptions::new()
+            .max_connections(5)
+            .connect(&url)
+            .await;
+    }
+
+    // Otherwise, use testcontainers
+    let port = get_mysql_port().await;
+    
+    // If port is 0, it means we somehow fell back to env var logic inside init
+    // but here we know env var wasn't set. This shouldn't happen with current logic.
+    let url = format!("mysql://root@127.0.0.1:{}/test", port);
+
+    MySqlPoolOptions::new()
+        .max_connections(5)
+        .connect(&url)
+        .await
+}
+
 /// Setup test database (run migrations)
 pub async fn setup_database(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     // Run migrations
@@ -80,6 +168,7 @@ pub async fn cleanup_database(pool: &MySqlPool) -> Result<(), sqlx::Error> {
     sqlx::query("DELETE FROM role_permissions")
         .execute(pool)
         .await?;
+    sqlx::query("DELETE FROM clients").execute(pool).await?;
     sqlx::query("DELETE FROM roles").execute(pool).await?;
     sqlx::query("DELETE FROM permissions").execute(pool).await?;
     sqlx::query("DELETE FROM tenant_users")

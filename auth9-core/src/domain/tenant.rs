@@ -175,12 +175,30 @@ lazy_static::lazy_static! {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use validator::Validate;
 
     #[test]
     fn test_tenant_default() {
         let tenant = Tenant::default();
         assert!(!tenant.id.is_nil());
         assert_eq!(tenant.status, TenantStatus::Active);
+        assert!(tenant.name.is_empty());
+        assert!(tenant.slug.is_empty());
+        assert!(tenant.logo_url.is_none());
+    }
+
+    #[test]
+    fn test_tenant_with_values() {
+        let tenant = Tenant {
+            name: "My Tenant".to_string(),
+            slug: "my-tenant".to_string(),
+            logo_url: Some("https://example.com/logo.png".to_string()),
+            ..Default::default()
+        };
+        
+        assert_eq!(tenant.name, "My Tenant");
+        assert_eq!(tenant.slug, "my-tenant");
+        assert!(tenant.logo_url.is_some());
     }
 
     #[test]
@@ -188,13 +206,245 @@ mod tests {
         let settings = TenantSettings::default();
         assert!(!settings.require_mfa);
         assert_eq!(settings.session_timeout_secs, 3600);
+        assert!(settings.allowed_auth_methods.is_empty());
+        assert!(settings.branding.primary_color.is_none());
+        assert!(settings.branding.logo_url.is_none());
+    }
+
+    #[test]
+    fn test_tenant_settings_with_values() {
+        let settings = TenantSettings {
+            require_mfa: true,
+            allowed_auth_methods: vec!["password".to_string(), "oidc".to_string()],
+            session_timeout_secs: 7200,
+            branding: TenantBranding {
+                primary_color: Some("#FF5733".to_string()),
+                logo_url: Some("https://example.com/logo.png".to_string()),
+            },
+        };
+        
+        assert!(settings.require_mfa);
+        assert_eq!(settings.session_timeout_secs, 7200);
+        assert_eq!(settings.allowed_auth_methods.len(), 2);
+        assert!(settings.branding.primary_color.is_some());
+    }
+
+    #[test]
+    fn test_tenant_branding_default() {
+        let branding = TenantBranding::default();
+        assert!(branding.primary_color.is_none());
+        assert!(branding.logo_url.is_none());
     }
 
     #[test]
     fn test_slug_regex() {
+        // Valid slugs
         assert!(SLUG_REGEX.is_match("my-tenant"));
         assert!(SLUG_REGEX.is_match("tenant123"));
+        assert!(SLUG_REGEX.is_match("a"));
+        assert!(SLUG_REGEX.is_match("abc-def-ghi"));
+        assert!(SLUG_REGEX.is_match("tenant1-test2"));
+        
+        // Invalid slugs
         assert!(!SLUG_REGEX.is_match("My Tenant"));
         assert!(!SLUG_REGEX.is_match("tenant_name"));
+        assert!(!SLUG_REGEX.is_match("UPPERCASE"));
+        assert!(!SLUG_REGEX.is_match("-start-with-dash"));
+        assert!(!SLUG_REGEX.is_match("end-with-dash-"));
+        assert!(!SLUG_REGEX.is_match("double--dash"));
+        assert!(!SLUG_REGEX.is_match(""));
+    }
+
+    #[test]
+    fn test_validate_slug_valid() {
+        let result = validate_slug("my-tenant");
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_slug_invalid() {
+        let result = validate_slug("Invalid Slug");
+        assert!(result.is_err());
+        
+        let err = result.unwrap_err();
+        assert_eq!(err.code.as_ref(), "invalid_slug");
+    }
+
+    #[test]
+    fn test_tenant_status_from_str() {
+        assert_eq!("active".parse::<TenantStatus>().unwrap(), TenantStatus::Active);
+        assert_eq!("inactive".parse::<TenantStatus>().unwrap(), TenantStatus::Inactive);
+        assert_eq!("suspended".parse::<TenantStatus>().unwrap(), TenantStatus::Suspended);
+        
+        // Case insensitive
+        assert_eq!("ACTIVE".parse::<TenantStatus>().unwrap(), TenantStatus::Active);
+        assert_eq!("Active".parse::<TenantStatus>().unwrap(), TenantStatus::Active);
+    }
+
+    #[test]
+    fn test_tenant_status_from_str_invalid() {
+        let result = "invalid".parse::<TenantStatus>();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("Unknown tenant status"));
+    }
+
+    #[test]
+    fn test_tenant_status_display() {
+        assert_eq!(format!("{}", TenantStatus::Active), "active");
+        assert_eq!(format!("{}", TenantStatus::Inactive), "inactive");
+        assert_eq!(format!("{}", TenantStatus::Suspended), "suspended");
+    }
+
+    #[test]
+    fn test_tenant_status_default() {
+        let status = TenantStatus::default();
+        assert_eq!(status, TenantStatus::Active);
+    }
+
+    #[test]
+    fn test_tenant_status_serialization() {
+        assert_eq!(serde_json::to_string(&TenantStatus::Active).unwrap(), "\"active\"");
+        assert_eq!(serde_json::to_string(&TenantStatus::Inactive).unwrap(), "\"inactive\"");
+        assert_eq!(serde_json::to_string(&TenantStatus::Suspended).unwrap(), "\"suspended\"");
+    }
+
+    #[test]
+    fn test_tenant_status_deserialization() {
+        let active: TenantStatus = serde_json::from_str("\"active\"").unwrap();
+        let inactive: TenantStatus = serde_json::from_str("\"inactive\"").unwrap();
+        let suspended: TenantStatus = serde_json::from_str("\"suspended\"").unwrap();
+        
+        assert_eq!(active, TenantStatus::Active);
+        assert_eq!(inactive, TenantStatus::Inactive);
+        assert_eq!(suspended, TenantStatus::Suspended);
+    }
+
+    #[test]
+    fn test_create_tenant_input_valid() {
+        let input = CreateTenantInput {
+            name: "My Tenant".to_string(),
+            slug: "my-tenant".to_string(),
+            logo_url: Some("https://example.com/logo.png".to_string()),
+            settings: Some(TenantSettings::default()),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_tenant_input_minimal() {
+        let input = CreateTenantInput {
+            name: "T".to_string(),
+            slug: "t".to_string(),
+            logo_url: None,
+            settings: None,
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_tenant_input_empty_name() {
+        let input = CreateTenantInput {
+            name: "".to_string(),
+            slug: "valid-slug".to_string(),
+            logo_url: None,
+            settings: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_tenant_input_empty_slug() {
+        let input = CreateTenantInput {
+            name: "Valid Name".to_string(),
+            slug: "".to_string(),
+            logo_url: None,
+            settings: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_tenant_input_invalid_slug() {
+        let input = CreateTenantInput {
+            name: "Valid Name".to_string(),
+            slug: "Invalid Slug".to_string(),
+            logo_url: None,
+            settings: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_update_tenant_input_valid() {
+        let input = UpdateTenantInput {
+            name: Some("Updated Name".to_string()),
+            logo_url: Some("https://example.com/new-logo.png".to_string()),
+            settings: Some(TenantSettings::default()),
+            status: Some(TenantStatus::Inactive),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_update_tenant_input_partial() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: None,
+            status: Some(TenantStatus::Suspended),
+        };
+        
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_update_tenant_input_empty_name() {
+        let input = UpdateTenantInput {
+            name: Some("".to_string()),
+            logo_url: None,
+            settings: None,
+            status: None,
+        };
+        
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_tenant_settings_serialization() {
+        let settings = TenantSettings {
+            require_mfa: true,
+            allowed_auth_methods: vec!["password".to_string()],
+            session_timeout_secs: 3600,
+            branding: TenantBranding::default(),
+        };
+        
+        let json = serde_json::to_string(&settings).unwrap();
+        let deserialized: TenantSettings = serde_json::from_str(&json).unwrap();
+        
+        assert_eq!(deserialized.require_mfa, settings.require_mfa);
+        assert_eq!(deserialized.session_timeout_secs, settings.session_timeout_secs);
+    }
+
+    #[test]
+    fn test_default_session_timeout() {
+        assert_eq!(default_session_timeout(), 3600);
+    }
+
+    #[test]
+    fn test_tenant_equality() {
+        let tenant1 = Tenant::default();
+        let tenant2 = Tenant {
+            id: tenant1.id,
+            ..Default::default()
+        };
+        
+        // Same ID should have same identity
+        assert_eq!(tenant1.id, tenant2.id);
     }
 }
