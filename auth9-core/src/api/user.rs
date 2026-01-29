@@ -5,7 +5,7 @@ use crate::api::{
 };
 use crate::domain::{AddUserToTenantInput, CreateUserInput, UpdateUserInput};
 use crate::error::Result;
-use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
+use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
 use crate::server::AppState;
 use axum::{
     extract::{Path, Query, State},
@@ -99,6 +99,21 @@ pub async fn update(
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
     let before = state.user_service.get(id).await?;
+    if input.display_name.is_some() {
+        let update = KeycloakUserUpdate {
+            username: None,
+            email: None,
+            first_name: input.display_name.clone(),
+            last_name: None,
+            enabled: None,
+            email_verified: None,
+            required_actions: None,
+        };
+        state
+            .keycloak_client
+            .update_user(&before.keycloak_id, &update)
+            .await?;
+    }
     let user = state.user_service.update(id, input).await?;
     let _ = write_audit_log(
         &state,
@@ -120,6 +135,11 @@ pub async fn delete(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let before = state.user_service.get(id).await?;
+    if let Err(err) = state.keycloak_client.delete_user(&before.keycloak_id).await {
+        if !matches!(err, crate::error::AppError::NotFound(_)) {
+            return Err(err);
+        }
+    }
     state.user_service.delete(id).await?;
     let _ = write_audit_log(
         &state,
@@ -198,6 +218,76 @@ pub async fn get_tenants(
 ) -> Result<impl IntoResponse> {
     let tenants = state.user_service.get_user_tenants(user_id).await?;
     Ok(Json(SuccessResponse::new(tenants)))
+}
+
+pub async fn enable_mfa(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let user = state.user_service.get(id).await?;
+    let update = KeycloakUserUpdate {
+        username: None,
+        email: None,
+        first_name: None,
+        last_name: None,
+        enabled: None,
+        email_verified: None,
+        required_actions: Some(vec!["CONFIGURE_TOTP".to_string()]),
+    };
+    state
+        .keycloak_client
+        .update_user(&user.keycloak_id, &update)
+        .await?;
+    let updated = state.user_service.set_mfa_enabled(id, true).await?;
+    let _ = write_audit_log(
+        &state,
+        &headers,
+        "user.mfa.enable",
+        "user",
+        Some(updated.id),
+        None,
+        serde_json::to_value(&updated).ok(),
+    )
+    .await;
+    Ok(Json(SuccessResponse::new(updated)))
+}
+
+pub async fn disable_mfa(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let user = state.user_service.get(id).await?;
+    state
+        .keycloak_client
+        .remove_totp_credentials(&user.keycloak_id)
+        .await?;
+    let update = KeycloakUserUpdate {
+        username: None,
+        email: None,
+        first_name: None,
+        last_name: None,
+        enabled: None,
+        email_verified: None,
+        required_actions: Some(vec![]),
+    };
+    state
+        .keycloak_client
+        .update_user(&user.keycloak_id, &update)
+        .await?;
+    let updated = state.user_service.set_mfa_enabled(id, false).await?;
+    let _ = write_audit_log(
+        &state,
+        &headers,
+        "user.mfa.disable",
+        "user",
+        Some(updated.id),
+        None,
+        serde_json::to_value(&updated).ok(),
+    )
+    .await;
+    Ok(Json(SuccessResponse::new(updated)))
 }
 
 /// List users in a tenant

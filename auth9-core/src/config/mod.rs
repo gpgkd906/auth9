@@ -42,14 +42,24 @@ pub struct JwtConfig {
     pub issuer: String,
     pub access_token_ttl_secs: i64,
     pub refresh_token_ttl_secs: i64,
+    pub private_key_pem: Option<String>,
+    pub public_key_pem: Option<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct KeycloakConfig {
+    /// Internal URL for server-to-server communication (e.g., http://keycloak:8080)
     pub url: String,
+    /// Public URL for browser redirects (e.g., http://localhost:8081)
+    pub public_url: String,
     pub realm: String,
     pub admin_client_id: String,
     pub admin_client_secret: String,
+    /// SSL requirement for the realm: "none", "external", or "all"
+    /// - "none": HTTP allowed (local dev only)
+    /// - "external": HTTPS required for external requests (recommended for production)
+    /// - "all": HTTPS required for all requests
+    pub ssl_required: String,
 }
 
 impl Config {
@@ -92,15 +102,29 @@ impl Config {
                     .unwrap_or_else(|_| "604800".to_string())
                     .parse()
                     .unwrap_or(604800),
+                private_key_pem: env::var("JWT_PRIVATE_KEY")
+                    .ok()
+                    .map(|value| value.replace("\\n", "\n")),
+                public_key_pem: env::var("JWT_PUBLIC_KEY")
+                    .ok()
+                    .map(|value| value.replace("\\n", "\n")),
             },
-            keycloak: KeycloakConfig {
-                url: env::var("KEYCLOAK_URL")
-                    .unwrap_or_else(|_| "http://localhost:8081".to_string()),
-                realm: env::var("KEYCLOAK_REALM").unwrap_or_else(|_| "auth9".to_string()),
-                admin_client_id: env::var("KEYCLOAK_ADMIN_CLIENT_ID")
-                    .unwrap_or_else(|_| "admin-cli".to_string()),
-                admin_client_secret: env::var("KEYCLOAK_ADMIN_CLIENT_SECRET")
-                    .unwrap_or_else(|_| String::new()),
+            keycloak: {
+                let url = env::var("KEYCLOAK_URL")
+                    .unwrap_or_else(|_| "http://localhost:8081".to_string());
+                let public_url = env::var("KEYCLOAK_PUBLIC_URL").unwrap_or_else(|_| url.clone());
+                KeycloakConfig {
+                    url,
+                    public_url,
+                    realm: env::var("KEYCLOAK_REALM").unwrap_or_else(|_| "auth9".to_string()),
+                    admin_client_id: env::var("KEYCLOAK_ADMIN_CLIENT_ID")
+                        .unwrap_or_else(|_| "admin-cli".to_string()),
+                    admin_client_secret: env::var("KEYCLOAK_ADMIN_CLIENT_SECRET")
+                        .unwrap_or_else(|_| String::new()),
+                    // Default to "external" for production safety
+                    ssl_required: env::var("KEYCLOAK_SSL_REQUIRED")
+                        .unwrap_or_else(|_| "external".to_string()),
+                }
             },
         })
     }
@@ -140,12 +164,16 @@ mod tests {
                 issuer: "test".to_string(),
                 access_token_ttl_secs: 3600,
                 refresh_token_ttl_secs: 604800,
+                private_key_pem: None,
+                public_key_pem: None,
             },
             keycloak: KeycloakConfig {
                 url: "http://localhost:8081".to_string(),
+                public_url: "http://localhost:8081".to_string(),
                 realm: "test".to_string(),
                 admin_client_id: "admin-cli".to_string(),
                 admin_client_secret: "secret".to_string(),
+                ssl_required: "external".to_string(),
             },
         };
 

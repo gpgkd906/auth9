@@ -1,5 +1,6 @@
 //! RBAC business logic
 
+use crate::cache::CacheManager;
 use crate::domain::{
     AssignRolesInput, CreatePermissionInput, CreateRoleInput, Permission, Role,
     RoleWithPermissions, UpdateRoleInput, UserRolesInTenant,
@@ -12,18 +13,26 @@ use validator::Validate;
 
 pub struct RbacService<R: RbacRepository> {
     repo: Arc<R>,
+    cache_manager: Option<CacheManager>,
 }
 
 impl<R: RbacRepository> RbacService<R> {
-    pub fn new(repo: Arc<R>) -> Self {
-        Self { repo }
+    pub fn new(repo: Arc<R>, cache_manager: Option<CacheManager>) -> Self {
+        Self {
+            repo,
+            cache_manager,
+        }
     }
 
     // ==================== Permissions ====================
 
     pub async fn create_permission(&self, input: CreatePermissionInput) -> Result<Permission> {
         input.validate()?;
-        self.repo.create_permission(&input).await
+        let permission = self.repo.create_permission(&input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(permission)
     }
 
     pub async fn get_permission(&self, id: Uuid) -> Result<Permission> {
@@ -39,14 +48,22 @@ impl<R: RbacRepository> RbacService<R> {
 
     pub async fn delete_permission(&self, id: Uuid) -> Result<()> {
         let _ = self.get_permission(id).await?;
-        self.repo.delete_permission(id).await
+        self.repo.delete_permission(id).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(())
     }
 
     // ==================== Roles ====================
 
     pub async fn create_role(&self, input: CreateRoleInput) -> Result<Role> {
         input.validate()?;
-        self.repo.create_role(&input).await
+        let role = self.repo.create_role(&input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(role)
     }
 
     pub async fn get_role(&self, id: Uuid) -> Result<Role> {
@@ -69,12 +86,20 @@ impl<R: RbacRepository> RbacService<R> {
     pub async fn update_role(&self, id: Uuid, input: UpdateRoleInput) -> Result<Role> {
         input.validate()?;
         let _ = self.get_role(id).await?;
-        self.repo.update_role(id, &input).await
+        let role = self.repo.update_role(id, &input).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(role)
     }
 
     pub async fn delete_role(&self, id: Uuid) -> Result<()> {
         let _ = self.get_role(id).await?;
-        self.repo.delete_role(id).await
+        self.repo.delete_role(id).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(())
     }
 
     // ==================== Role-Permission ====================
@@ -88,7 +113,11 @@ impl<R: RbacRepository> RbacService<R> {
         let _ = self.get_permission(permission_id).await?;
         self.repo
             .assign_permission_to_role(role_id, permission_id)
-            .await
+            .await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(())
     }
 
     pub async fn remove_permission_from_role(
@@ -98,7 +127,11 @@ impl<R: RbacRepository> RbacService<R> {
     ) -> Result<()> {
         self.repo
             .remove_permission_from_role(role_id, permission_id)
-            .await
+            .await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.invalidate_all_user_roles().await;
+        }
+        Ok(())
     }
 
     // ==================== User-Tenant-Role ====================
@@ -109,7 +142,13 @@ impl<R: RbacRepository> RbacService<R> {
         granted_by: Option<Uuid>,
     ) -> Result<()> {
         input.validate()?;
-        self.repo.assign_roles_to_user(&input, granted_by).await
+        self.repo.assign_roles_to_user(&input, granted_by).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache
+                .invalidate_user_roles_for_tenant(input.user_id, input.tenant_id)
+                .await;
+        }
+        Ok(())
     }
 
     pub async fn get_user_roles(
@@ -146,7 +185,7 @@ mod tests {
                 })
             });
 
-        let service = RbacService::new(Arc::new(mock));
+        let service = RbacService::new(Arc::new(mock), None);
 
         let result = service.get_user_roles(user_id, tenant_id).await;
         assert!(result.is_ok());

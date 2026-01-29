@@ -222,6 +222,7 @@ dependencies = [
  "redis",
  "regex",
  "reqwest",
+ "rsa",
  "rstest",
  "serde",
  "serde_json",

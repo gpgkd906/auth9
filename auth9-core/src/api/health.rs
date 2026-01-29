@@ -1,8 +1,8 @@
 //! Health check endpoints
 
+use crate::server::AppState;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::Serialize;
-use crate::server::AppState;
 
 #[derive(Serialize)]
 pub struct HealthResponse {

@@ -8,8 +8,8 @@ use crate::error::Result;
 use crate::server::AppState;
 use axum::{
     extract::{Path, Query, State},
-    http::StatusCode,
     http::HeaderMap,
+    http::StatusCode,
     response::IntoResponse,
     Json,
 };

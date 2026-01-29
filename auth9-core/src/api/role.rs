@@ -216,9 +216,16 @@ pub async fn assign_roles(
     // TODO: Get current user ID from auth context
     let granted_by = None;
     state.rbac_service.assign_roles(input, granted_by).await?;
-    let _ =
-        write_audit_log(&state, &headers, "rbac.assign_roles", "user_roles", None, None, None)
-            .await;
+    let _ = write_audit_log(
+        &state,
+        &headers,
+        "rbac.assign_roles",
+        "user_roles",
+        None,
+        None,
+        None,
+    )
+    .await;
     Ok(Json(MessageResponse::new("Roles assigned successfully")))
 }
 

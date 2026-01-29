@@ -134,6 +134,24 @@ impl CacheManager {
         }
     }
 
+    pub async fn invalidate_user_roles_for_tenant(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<()> {
+        let key = format!("{}:{}:{}", keys::USER_ROLES, user_id, tenant_id);
+        self.delete(&key).await?;
+        let pattern = format!("{}:{}:{}:*", keys::USER_ROLES_SERVICE, user_id, tenant_id);
+        self.delete_pattern(&pattern).await
+    }
+
+    pub async fn invalidate_all_user_roles(&self) -> Result<()> {
+        self.delete_pattern(&format!("{}:*", keys::USER_ROLES))
+            .await?;
+        self.delete_pattern(&format!("{}:*", keys::USER_ROLES_SERVICE))
+            .await
+    }
+
     pub async fn get_user_roles_for_service(
         &self,
         user_id: Uuid,
@@ -150,7 +168,11 @@ impl CacheManager {
         self.get(&key).await
     }
 
-    pub async fn set_user_roles_for_service(&self, roles: &UserRolesInTenant, service_id: Uuid) -> Result<()> {
+    pub async fn set_user_roles_for_service(
+        &self,
+        roles: &UserRolesInTenant,
+        service_id: Uuid,
+    ) -> Result<()> {
         let key = format!(
             "{}:{}:{}:{}",
             keys::USER_ROLES_SERVICE,
@@ -158,8 +180,12 @@ impl CacheManager {
             roles.tenant_id,
             service_id
         );
-        self.set(&key, roles, Duration::from_secs(ttl::USER_ROLES_SERVICE_SECS))
-            .await
+        self.set(
+            &key,
+            roles,
+            Duration::from_secs(ttl::USER_ROLES_SERVICE_SECS),
+        )
+        .await
     }
 
     // ==================== Service Config Cache ====================

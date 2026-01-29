@@ -20,6 +20,7 @@ services:
       KEYCLOAK_REALM: auth9
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
     depends_on:
       tidb:
         condition: service_healthy
@@ -52,9 +53,12 @@ services:
       JWT_SECRET: dev-jwt-secret-change-in-production
       JWT_ISSUER: http://localhost:8080
       KEYCLOAK_URL: http://keycloak:8080
+      KEYCLOAK_PUBLIC_URL: http://localhost:8081
       KEYCLOAK_REALM: auth9
       KEYCLOAK_ADMIN_CLIENT_ID: admin-cli
-      KEYCLOAK_ADMIN_CLIENT_SECRET: ${KEYCLOAK_ADMIN_SECRET:-admin}
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+      KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
     depends_on:
       auth9-init:
         condition: service_completed_successfully
@@ -124,7 +128,7 @@ services:
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
     container_name: auth9-keycloak
-    command: start-dev --health-enabled=true
+    command: start-dev --health-enabled=true --spi-login-protocol-openid-connect-legacy-logout-redirect-uri=true
     ports:
       - "8081:8080"
     environment:
@@ -132,6 +136,9 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KC_DB: dev-mem
       KC_HEALTH_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HOSTNAME_STRICT_HTTPS: "false"
+      KC_HTTP_ENABLED: "true"
     healthcheck:
       test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/localhost/8080"]
       interval: 10s

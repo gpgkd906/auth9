@@ -4,12 +4,16 @@ use crate::error::{AppError, Result};
 use crate::server::AppState;
 use axum::{
     extract::{Query, State},
+    http::StatusCode,
     response::{IntoResponse, Redirect, Response},
     Json,
 };
 use axum_extra::headers::{authorization::Bearer, Authorization};
 use axum_extra::TypedHeader;
 use base64::Engine;
+use rsa::pkcs8::DecodePublicKey;
+use rsa::traits::PublicKeyParts;
+use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
 use url::Url;
 
@@ -52,9 +56,10 @@ pub async fn authorize(
     let encoded_state = base64::engine::general_purpose::URL_SAFE_NO_PAD
         .encode(serde_json::to_vec(&state_payload).map_err(|e| AppError::Internal(e.into()))?);
 
+    // Use public_url for browser redirects
     let mut auth_url = Url::parse(&format!(
         "{}/realms/{}/protocol/openid-connect/auth",
-        state.config.keycloak.url, state.config.keycloak.realm
+        state.config.keycloak.public_url, state.config.keycloak.realm
     ))
     .map_err(|e| AppError::Internal(e.into()))?;
 
@@ -214,9 +219,10 @@ pub async fn token(
                 .await?;
 
             let email = format!("service+{}@auth9.local", service.client_id);
-            let identity_token = state
-                .jwt_manager
-                .create_identity_token(service.id, &email, None)?;
+            let identity_token =
+                state
+                    .jwt_manager
+                    .create_identity_token(service.id.0, &email, None)?;
 
             Ok(Json(TokenResponse {
                 access_token: identity_token,
@@ -292,9 +298,10 @@ pub async fn logout(
     State(state): State<AppState>,
     Query(params): Query<LogoutRequest>,
 ) -> Result<Response> {
+    // Use public_url for browser redirects
     let mut logout_url = Url::parse(&format!(
         "{}/realms/{}/protocol/openid-connect/logout",
-        state.config.keycloak.url, state.config.keycloak.realm
+        state.config.keycloak.public_url, state.config.keycloak.realm
     ))
     .map_err(|e| AppError::Internal(e.into()))?;
 
@@ -400,9 +407,13 @@ async fn exchange_code_for_tokens(
         )));
     }
 
-    response
-        .json()
-        .await
+    // Debug: log raw response for troubleshooting
+    let body = response.text().await.map_err(|e| {
+        AppError::Keycloak(format!("Failed to read token response: {}", e))
+    })?;
+    tracing::debug!("Token exchange response length: {} bytes", body.len());
+
+    serde_json::from_str(&body)
         .map_err(|e| AppError::Keycloak(format!("Failed to parse token response: {}", e)))
 }
 
@@ -460,6 +471,12 @@ async fn fetch_userinfo(state: &AppState, access_token: &str) -> Result<Keycloak
         state.config.keycloak.url, state.config.keycloak.realm
     );
 
+    tracing::debug!(
+        "Fetching userinfo from {} with token length {}",
+        userinfo_url,
+        access_token.len()
+    );
+
     let response = reqwest::Client::new()
         .get(&userinfo_url)
         .bearer_auth(access_token)
@@ -489,7 +506,7 @@ pub struct OpenIdConfiguration {
     pub authorization_endpoint: String,
     pub token_endpoint: String,
     pub userinfo_endpoint: String,
-    pub jwks_uri: String,
+    pub jwks_uri: Option<String>,
     pub end_session_endpoint: String,
     pub response_types_supported: Vec<String>,
     pub grant_types_supported: Vec<String>,
@@ -502,13 +519,22 @@ pub struct OpenIdConfiguration {
 
 pub async fn openid_configuration(State(state): State<AppState>) -> impl IntoResponse {
     let base_url = &state.config.jwt.issuer;
+    let jwks_uri = state
+        .jwt_manager
+        .public_key_pem()
+        .map(|_| format!("{}/.well-known/jwks.json", base_url));
+    let algs = if state.jwt_manager.uses_rsa() {
+        vec!["RS256".to_string()]
+    } else {
+        vec!["HS256".to_string()]
+    };
 
     Json(OpenIdConfiguration {
         issuer: base_url.clone(),
         authorization_endpoint: format!("{}/api/v1/auth/authorize", base_url),
         token_endpoint: format!("{}/api/v1/auth/token", base_url),
         userinfo_endpoint: format!("{}/api/v1/auth/userinfo", base_url),
-        jwks_uri: format!("{}/.well-known/jwks.json", base_url),
+        jwks_uri,
         end_session_endpoint: format!("{}/api/v1/auth/logout", base_url),
         response_types_supported: vec![
             "code".to_string(),
@@ -521,7 +547,7 @@ pub async fn openid_configuration(State(state): State<AppState>) -> impl IntoRes
             "refresh_token".to_string(),
         ],
         subject_types_supported: vec!["public".to_string()],
-        id_token_signing_alg_values_supported: vec!["HS256".to_string(), "RS256".to_string()],
+        id_token_signing_alg_values_supported: algs,
         scopes_supported: vec![
             "openid".to_string(),
             "profile".to_string(),
@@ -541,4 +567,48 @@ pub async fn openid_configuration(State(state): State<AppState>) -> impl IntoRes
             "iat".to_string(),
         ],
     })
+}
+
+#[derive(Debug, Serialize)]
+struct Jwks {
+    keys: Vec<JwkKey>,
+}
+
+#[derive(Debug, Serialize)]
+struct JwkKey {
+    kty: String,
+    #[serde(rename = "use")]
+    use_: String,
+    alg: String,
+    kid: String,
+    n: String,
+    e: String,
+}
+
+pub async fn jwks(State(state): State<AppState>) -> impl IntoResponse {
+    let public_key_pem = match state.jwt_manager.public_key_pem() {
+        Some(key) => key,
+        None => return StatusCode::NOT_FOUND.into_response(),
+    };
+
+    let public_key = match RsaPublicKey::from_public_key_pem(public_key_pem) {
+        Ok(key) => key,
+        Err(_) => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    };
+
+    let n = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
+    let e = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
+
+    let jwks = Jwks {
+        keys: vec![JwkKey {
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+            alg: "RS256".to_string(),
+            kid: "auth9-default".to_string(),
+            n,
+            e,
+        }],
+    };
+
+    Json(jwks).into_response()
 }

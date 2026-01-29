@@ -69,6 +69,11 @@ impl<R: UserRepository> UserService<R> {
         self.repo.delete(id).await
     }
 
+    pub async fn set_mfa_enabled(&self, id: Uuid, enabled: bool) -> Result<User> {
+        let _ = self.get(id).await?;
+        self.repo.update_mfa_enabled(id, enabled).await
+    }
+
     pub async fn add_to_tenant(&self, input: AddUserToTenantInput) -> Result<TenantUser> {
         input.validate()?;
         self.repo.add_to_tenant(&input).await

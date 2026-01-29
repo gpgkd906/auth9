@@ -7,6 +7,7 @@ use crate::domain::{
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
+use std::collections::{HashMap, HashSet, VecDeque};
 use uuid::Uuid;
 
 #[cfg_attr(test, mockall::automock)]
@@ -63,6 +64,46 @@ pub struct RbacRepositoryImpl {
 impl RbacRepositoryImpl {
     pub fn new(pool: MySqlPool) -> Self {
         Self { pool }
+    }
+
+    async fn resolve_inherited_roles(&self, base_roles: Vec<Role>) -> Result<Vec<Role>> {
+        let mut roles_by_id: HashMap<Uuid, Role> = base_roles
+            .iter()
+            .cloned()
+            .map(|role| (role.id, role))
+            .collect();
+        let mut queue: VecDeque<Uuid> = base_roles
+            .iter()
+            .filter_map(|role| role.parent_role_id)
+            .collect();
+        let mut visited: HashSet<Uuid> = roles_by_id.keys().cloned().collect();
+
+        while let Some(role_id) = queue.pop_front() {
+            if visited.contains(&role_id) {
+                continue;
+            }
+            visited.insert(role_id);
+            if let Some(role) = self.find_role_by_id(role_id).await? {
+                if let Some(parent_id) = role.parent_role_id {
+                    if !visited.contains(&parent_id) {
+                        queue.push_back(parent_id);
+                    }
+                }
+                roles_by_id.insert(role.id, role);
+            }
+        }
+
+        Ok(roles_by_id.into_values().collect())
+    }
+
+    async fn collect_permissions(&self, roles: &[Role]) -> Result<Vec<String>> {
+        let mut permissions = HashSet::new();
+        for role in roles {
+            for permission in self.find_role_permissions(role.id).await? {
+                permissions.insert(permission.code);
+            }
+        }
+        Ok(permissions.into_iter().collect())
     }
 }
 
@@ -322,42 +363,16 @@ impl RbacRepository for RbacRepositoryImpl {
         user_id: Uuid,
         tenant_id: Uuid,
     ) -> Result<UserRolesInTenant> {
-        // Get roles
-        let roles: Vec<(String,)> = sqlx::query_as(
-            r#"
-            SELECT r.name
-            FROM roles r
-            INNER JOIN user_tenant_roles utr ON r.id = utr.role_id
-            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
-            WHERE tu.user_id = ? AND tu.tenant_id = ?
-            "#,
-        )
-        .bind(user_id)
-        .bind(tenant_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        // Get permissions (from all assigned roles)
-        let permissions: Vec<(String,)> = sqlx::query_as(
-            r#"
-            SELECT DISTINCT p.code
-            FROM permissions p
-            INNER JOIN role_permissions rp ON p.id = rp.permission_id
-            INNER JOIN user_tenant_roles utr ON rp.role_id = utr.role_id
-            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
-            WHERE tu.user_id = ? AND tu.tenant_id = ?
-            "#,
-        )
-        .bind(user_id)
-        .bind(tenant_id)
-        .fetch_all(&self.pool)
-        .await?;
-
+        let base_roles = self
+            .find_user_role_records_in_tenant(user_id, tenant_id, None)
+            .await?;
+        let roles = self.resolve_inherited_roles(base_roles).await?;
+        let permissions = self.collect_permissions(&roles).await?;
         Ok(UserRolesInTenant {
             user_id,
             tenant_id,
-            roles: roles.into_iter().map(|(r,)| r).collect(),
-            permissions: permissions.into_iter().map(|(p,)| p).collect(),
+            roles: roles.into_iter().map(|role| role.name).collect(),
+            permissions,
         })
     }
 
@@ -367,43 +382,16 @@ impl RbacRepository for RbacRepositoryImpl {
         tenant_id: Uuid,
         service_id: Uuid,
     ) -> Result<UserRolesInTenant> {
-        let roles: Vec<(String,)> = sqlx::query_as(
-            r#"
-            SELECT r.name
-            FROM roles r
-            INNER JOIN user_tenant_roles utr ON r.id = utr.role_id
-            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
-            WHERE tu.user_id = ? AND tu.tenant_id = ? AND r.service_id = ?
-            "#,
-        )
-        .bind(user_id)
-        .bind(tenant_id)
-        .bind(service_id)
-        .fetch_all(&self.pool)
-        .await?;
-
-        let permissions: Vec<(String,)> = sqlx::query_as(
-            r#"
-            SELECT DISTINCT p.code
-            FROM permissions p
-            INNER JOIN role_permissions rp ON p.id = rp.permission_id
-            INNER JOIN roles r ON rp.role_id = r.id
-            INNER JOIN user_tenant_roles utr ON r.id = utr.role_id
-            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
-            WHERE tu.user_id = ? AND tu.tenant_id = ? AND r.service_id = ?
-            "#,
-        )
-        .bind(user_id)
-        .bind(tenant_id)
-        .bind(service_id)
-        .fetch_all(&self.pool)
-        .await?;
-
+        let base_roles = self
+            .find_user_role_records_in_tenant(user_id, tenant_id, Some(service_id))
+            .await?;
+        let roles = self.resolve_inherited_roles(base_roles).await?;
+        let permissions = self.collect_permissions(&roles).await?;
         Ok(UserRolesInTenant {
             user_id,
             tenant_id,
-            roles: roles.into_iter().map(|(r,)| r).collect(),
-            permissions: permissions.into_iter().map(|(p,)| p).collect(),
+            roles: roles.into_iter().map(|role| role.name).collect(),
+            permissions,
         })
     }
 

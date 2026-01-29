@@ -9,9 +9,8 @@ use crate::config::Config;
 use crate::keycloak::KeycloakSeeder;
 use anyhow::{Context, Result};
 use sqlx::mysql::MySqlPoolOptions;
-use sqlx::{Executor, MySql, Pool, Row};
+use sqlx::{Executor, MySql, Pool};
 use tracing::info;
-use uuid::Uuid;
 
 /// Default portal service configuration
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
@@ -34,11 +33,11 @@ fn get_base_url(url: &str) -> String {
 
 /// Ensure database exists, create if not
 async fn ensure_database_exists(config: &Config) -> Result<()> {
-    let db_name = extract_db_name(&config.database.url)
-        .context("Invalid DATABASE_URL: no database name")?;
-    
+    let db_name =
+        extract_db_name(&config.database.url).context("Invalid DATABASE_URL: no database name")?;
+
     let base_url = get_base_url(&config.database.url);
-    
+
     info!("Connecting to MySQL server...");
     let pool: Pool<MySql> = MySqlPoolOptions::new()
         .max_connections(1)
@@ -83,6 +82,8 @@ pub async fn run_migrations(config: &Config) -> Result<()> {
 
 /// Seed Keycloak with default realm, admin user, and portal client
 pub async fn seed_keycloak(config: &Config) -> Result<()> {
+    use tracing::warn;
+
     info!("Initializing Keycloak seeder...");
 
     let seeder = KeycloakSeeder::new(&config.keycloak);
@@ -94,12 +95,11 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to create realm")?;
 
-    // Seed default admin user
+    // Seed default admin user (non-fatal if fails)
     info!("Seeding default admin user...");
-    seeder
-        .seed_admin_user()
-        .await
-        .context("Failed to seed admin user")?;
+    if let Err(e) = seeder.seed_admin_user().await {
+        warn!("Failed to seed admin user (non-fatal): {}", e);
+    }
 
     // Seed portal client (OIDC client for auth9-portal)
     info!("Seeding portal client in Keycloak...");
@@ -118,7 +118,7 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Seed portal service in the database
+/// Seed portal service in the database (idempotent - only creates if not exists)
 async fn seed_portal_service(config: &Config) -> Result<()> {
     let pool: Pool<MySql> = MySqlPoolOptions::new()
         .max_connections(1)
@@ -127,41 +127,43 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
         .context("Failed to connect to database")?;
 
     // Check if portal service already exists
-    let exists: Option<(i64,)> = sqlx::query_as(
-        "SELECT COUNT(*) FROM services WHERE client_id = ?"
-    )
-    .bind(DEFAULT_PORTAL_CLIENT_ID)
-    .fetch_optional(&pool)
-    .await
-    .context("Failed to check portal service")?;
+    let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM services WHERE client_id = ?")
+        .bind(DEFAULT_PORTAL_CLIENT_ID)
+        .fetch_one(&pool)
+        .await
+        .context("Failed to check portal service")?;
 
-    if exists.map(|(count,)| count > 0).unwrap_or(false) {
-        info!("Portal service '{}' already exists in database, skipping", DEFAULT_PORTAL_CLIENT_ID);
+    if exists.0 > 0 {
+        info!(
+            "Portal service '{}' already exists in database, skipping",
+            DEFAULT_PORTAL_CLIENT_ID
+        );
         pool.close().await;
         return Ok(());
     }
 
-    // Create portal service
-    let id = Uuid::new_v4().to_string();
+    // Create portal service using MySQL UUID() function to ensure correct format
+    // Note: redirect_uris must be exact URLs (no wildcards) for validation
     let redirect_uris = serde_json::to_string(&vec![
-        "http://localhost:3000/*",
-        "http://127.0.0.1:3000/*",
-    ]).unwrap();
-    let logout_uris = serde_json::to_string(&vec![
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-    ]).unwrap();
-    
+        "http://localhost:3000/dashboard",
+        "http://localhost:3000/callback",
+        "http://127.0.0.1:3000/dashboard",
+        "http://127.0.0.1:3000/callback",
+    ])
+    .unwrap();
+    let logout_uris =
+        serde_json::to_string(&vec!["http://localhost:3000", "http://127.0.0.1:3000"]).unwrap();
+
     // For public clients, we use a placeholder hash (auth9-portal is a public client)
     let placeholder_hash = "public-client-no-secret";
 
+    // Use MySQL's UUID() function to generate UUID in correct CHAR(36) format
     sqlx::query(
         r#"
         INSERT INTO services (id, tenant_id, name, client_id, client_secret_hash, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
-        VALUES (?, NULL, ?, ?, ?, 'http://localhost:3000', ?, ?, 'active', NOW(), NOW())
+        VALUES (UUID(), NULL, ?, ?, ?, 'http://localhost:3000', ?, ?, 'active', NOW(), NOW())
         "#,
     )
-    .bind(&id)
     .bind(DEFAULT_PORTAL_NAME)
     .bind(DEFAULT_PORTAL_CLIENT_ID)
     .bind(placeholder_hash)
@@ -172,6 +174,9 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     .context("Failed to create portal service")?;
 
     pool.close().await;
-    info!("Created portal service '{}' in database", DEFAULT_PORTAL_CLIENT_ID);
+    info!(
+        "Created portal service '{}' in database",
+        DEFAULT_PORTAL_CLIENT_ID
+    );
     Ok(())
 }

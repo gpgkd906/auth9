@@ -16,6 +16,7 @@ pub trait UserRepository: Send + Sync {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>>;
     async fn count(&self) -> Result<i64>;
     async fn update(&self, id: Uuid, input: &UpdateUserInput) -> Result<User>;
+    async fn update_mfa_enabled(&self, id: Uuid, enabled: bool) -> Result<User>;
     async fn delete(&self, id: Uuid) -> Result<()>;
 
     // Tenant-User relations
@@ -157,6 +158,28 @@ impl UserRepository for UserRepositoryImpl {
         .bind(id)
         .execute(&self.pool)
         .await?;
+
+        self.find_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to update user")))
+    }
+
+    async fn update_mfa_enabled(&self, id: Uuid, enabled: bool) -> Result<User> {
+        let result = sqlx::query(
+            r#"
+            UPDATE users
+            SET mfa_enabled = ?, updated_at = NOW()
+            WHERE id = ?
+            "#,
+        )
+        .bind(enabled)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("User {} not found", id)));
+        }
 
         self.find_by_id(id)
             .await?

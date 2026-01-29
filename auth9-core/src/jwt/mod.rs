@@ -3,7 +3,7 @@
 use crate::config::JwtConfig;
 use crate::error::{AppError, Result};
 use chrono::{Duration, Utc};
-use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation};
+use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -66,16 +66,38 @@ pub struct JwtManager {
     config: JwtConfig,
     encoding_key: EncodingKey,
     decoding_key: DecodingKey,
+    algorithm: Algorithm,
+    public_key_pem: Option<String>,
 }
 
 impl JwtManager {
     pub fn new(config: JwtConfig) -> Self {
-        let encoding_key = EncodingKey::from_secret(config.secret.as_bytes());
-        let decoding_key = DecodingKey::from_secret(config.secret.as_bytes());
+        let algorithm = if config.private_key_pem.is_some() {
+            Algorithm::RS256
+        } else {
+            Algorithm::HS256
+        };
+        let public_key_pem = config.public_key_pem.clone();
+        let encoding_key = match config.private_key_pem.as_ref() {
+            Some(private_key) => EncodingKey::from_rsa_pem(private_key.as_bytes())
+                .expect("Failed to load JWT private key"),
+            None => EncodingKey::from_secret(config.secret.as_bytes()),
+        };
+        let decoding_key = match config.public_key_pem.as_ref() {
+            Some(public_key) => DecodingKey::from_rsa_pem(public_key.as_bytes())
+                .expect("Failed to load JWT public key"),
+            None => match config.private_key_pem.as_ref() {
+                Some(private_key) => DecodingKey::from_rsa_pem(private_key.as_bytes())
+                    .expect("Failed to load JWT private key"),
+                None => DecodingKey::from_secret(config.secret.as_bytes()),
+            },
+        };
         Self {
             config,
             encoding_key,
             decoding_key,
+            algorithm,
+            public_key_pem,
         }
     }
 
@@ -98,9 +120,8 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-
-        encode(&Header::default(), &claims, &self.encoding_key)
-            .map_err(|e| AppError::Internal(e.into()))
+        let header = Header::new(self.algorithm);
+        encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
     /// Create a tenant access token
@@ -127,9 +148,8 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-
-        encode(&Header::default(), &claims, &self.encoding_key)
-            .map_err(|e| AppError::Internal(e.into()))
+        let header = Header::new(self.algorithm);
+        encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
     pub fn create_refresh_token(
@@ -149,14 +169,13 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-
-        encode(&Header::default(), &claims, &self.encoding_key)
-            .map_err(|e| AppError::Internal(e.into()))
+        let header = Header::new(self.algorithm);
+        encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
     /// Verify and decode an identity token
     pub fn verify_identity_token(&self, token: &str) -> Result<IdentityClaims> {
-        let mut validation = Validation::default();
+        let mut validation = Validation::new(self.algorithm);
         validation.set_audience(&["auth9"]);
         validation.set_issuer(&[&self.config.issuer]);
 
@@ -170,7 +189,7 @@ impl JwtManager {
         token: &str,
         expected_audience: Option<&str>,
     ) -> Result<TenantAccessClaims> {
-        let mut validation = Validation::default();
+        let mut validation = Validation::new(self.algorithm);
         validation.set_issuer(&[&self.config.issuer]);
 
         if let Some(aud) = expected_audience {
@@ -187,6 +206,14 @@ impl JwtManager {
     pub fn access_token_ttl(&self) -> i64 {
         self.config.access_token_ttl_secs
     }
+
+    pub fn uses_rsa(&self) -> bool {
+        self.algorithm == Algorithm::RS256
+    }
+
+    pub fn public_key_pem(&self) -> Option<&str> {
+        self.public_key_pem.as_deref()
+    }
 }
 
 #[cfg(test)]
@@ -199,6 +226,8 @@ mod tests {
             issuer: "https://auth9.test".to_string(),
             access_token_ttl_secs: 3600,
             refresh_token_ttl_secs: 604800,
+            private_key_pem: None,
+            public_key_pem: None,
         }
     }
 
