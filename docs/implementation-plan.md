@@ -118,21 +118,29 @@
 - [x] GetUserRoles 实现
 - [x] IntrospectToken 实现
 
-### Phase 3.5: 前端交互完善 (Current Focus)
+### Phase 3.5: 前端交互完善 ✅
 
 #### 3.5.1 UI 组件库扩展
 
-- [ ] Dialog 组件 (Create/Edit 表单)
-- [ ] DropdownMenu 组件 (行操作菜单)
-- [ ] Select 组件
-- [ ] Label 组件
+- [x] Dialog 组件 (Create/Edit 表单)
+- [x] DropdownMenu 组件 (行操作菜单)
+- [x] Select 组件
+- [x] Label 组件
+- [x] Checkbox 组件
 
 #### 3.5.2 实体 CRUD 交互
 
-- [ ] Tenants: Create/Edit/Delete 交互实现
-- [ ] Services: Create/Edit/Delete 交互实现
-- [ ] Roles: Create/Edit/Delete 交互实现
-- [ ] Settings: 全局设置表单实现
+- [x] Tenants: Create/Edit/Delete 交互实现
+- [x] Services: Create/Edit/Delete 交互实现
+- [x] Roles: Create/Edit/Delete 交互实现
+- [x] Users: Create/Edit/Assign Tenant/Assign Roles 交互实现
+- [x] Settings: 全局设置表单实现
+
+#### 3.5.3 用户管理增强 (补完)
+
+- [x] 用户创建功能 - Users 页面添加 "Create User" 按钮和对话框
+- [x] 角色移除 API - `DELETE /api/v1/users/:user_id/tenants/:tenant_id/roles/:role_id`
+- [x] 前端集成角色移除功能 - Manage Roles 对话框支持取消勾选即时移除
 
 ### Phase 4: 高级功能
 
