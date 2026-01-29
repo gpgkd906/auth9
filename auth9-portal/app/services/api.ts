@@ -157,7 +157,44 @@ export const serviceApi = {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`);
     return handleResponse(response);
   },
+
+  create: async (input: CreateServiceInput): Promise<{ data: Service }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (id: string, input: Partial<CreateServiceInput>): Promise<{ data: Service }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
 };
+
+export interface CreateServiceInput {
+  name: string;
+  client_id?: string;
+  base_url?: string;
+  redirect_uris?: string[];
+  logout_uris?: string[];
+  tenant_id?: string;
+}
 
 export interface Role {
   id: string;
@@ -182,11 +219,46 @@ export const rbacApi = {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles`);
     return handleResponse(response);
   },
+
+  createRole: async (serviceId: string, input: CreateRoleInput): Promise<{ data: Role }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  updateRole: async (serviceId: string, roleId: string, input: Partial<CreateRoleInput>): Promise<{ data: Role }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles/${roleId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  deleteRole: async (serviceId: string, roleId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles/${roleId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
+
   listPermissions: async (serviceId: string): Promise<{ data: Permission[] }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/permissions`);
     return handleResponse(response);
   },
 };
+
+export interface CreateRoleInput {
+  name: string;
+  description?: string;
+  parent_role_id?: string;
+}
 
 export interface AuditLog {
   id: number;

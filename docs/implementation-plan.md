@@ -118,6 +118,22 @@
 - [x] GetUserRoles 实现
 - [x] IntrospectToken 实现
 
+### Phase 3.5: 前端交互完善 (Current Focus)
+
+#### 3.5.1 UI 组件库扩展
+
+- [ ] Dialog 组件 (Create/Edit 表单)
+- [ ] DropdownMenu 组件 (行操作菜单)
+- [ ] Select 组件
+- [ ] Label 组件
+
+#### 3.5.2 实体 CRUD 交互
+
+- [ ] Tenants: Create/Edit/Delete 交互实现
+- [ ] Services: Create/Edit/Delete 交互实现
+- [ ] Roles: Create/Edit/Delete 交互实现
+- [ ] Settings: 全局设置表单实现
+
 ### Phase 4: 高级功能
 
 #### 4.1 审计日志

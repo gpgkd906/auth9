@@ -1,7 +1,29 @@
-import type { LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
+import { json, redirect } from "@remix-run/node";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
+import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "~/components/ui/dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "~/components/ui/dropdown-menu";
 import { tenantApi } from "~/services/api";
 
 export const meta: MetaFunction = () => {
@@ -16,14 +38,110 @@ export async function loader({ request }: LoaderFunctionArgs) {
   return json(tenants);
 }
 
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  try {
+    if (intent === "create") {
+      const name = formData.get("name") as string;
+      const slug = formData.get("slug") as string;
+      const logo_url = formData.get("logo_url") as string;
+
+      await tenantApi.create({ name, slug, logo_url: logo_url || undefined });
+      return json({ success: true });
+    }
+
+    if (intent === "update") {
+      const id = formData.get("id") as string;
+      const name = formData.get("name") as string;
+      const slug = formData.get("slug") as string;
+      const logo_url = formData.get("logo_url") as string;
+
+      await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined });
+      return json({ success: true });
+    }
+
+    if (intent === "delete") {
+      const id = formData.get("id") as string;
+      await tenantApi.delete(id);
+      return json({ success: true });
+    }
+  } catch (error: any) {
+    return json({ error: error.message }, { status: 400 });
+  }
+
+  return json({ error: "Invalid intent" }, { status: 400 });
+}
+
 export default function TenantsPage() {
   const data = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+  const submit = useSubmit();
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [editingTenant, setEditingTenant] = useState<any>(null);
+
+  const isSubmitting = navigation.state === "submitting";
+
+  // Close dialogs on success
+  useEffect(() => {
+    if (actionData && "success" in actionData && actionData.success) {
+      setIsCreateOpen(false);
+      setEditingTenant(null);
+    }
+  }, [actionData]);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Tenants</h1>
-        <p className="text-sm text-gray-500">Manage tenant lifecycle and settings</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-gray-900">Tenants</h1>
+          <p className="text-sm text-gray-500">Manage tenant lifecycle and settings</p>
+        </div>
+        <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
+          <DialogTrigger asChild>
+            <Button>
+              <PlusIcon className="mr-2 h-4 w-4" /> Create Tenant
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Create Tenant</DialogTitle>
+              <DialogDescription>
+                Add a new tenant to the system. Slug must be unique.
+              </DialogDescription>
+            </DialogHeader>
+            <Form method="post" className="space-y-4">
+              <input type="hidden" name="intent" value="create" />
+              <div className="space-y-2">
+                <Label htmlFor="create-name">Name</Label>
+                <Input id="create-name" name="name" placeholder="Acme Corp" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-slug">Slug</Label>
+                <Input id="create-slug" name="slug" placeholder="acme" required />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="create-logo">Logo URL</Label>
+                <Input id="create-logo" name="logo_url" placeholder="https://..." />
+              </div>
+              {actionData && "error" in actionData && (
+                <p className="text-sm text-red-500">{actionData.error}</p>
+              )}
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? "Creating..." : "Create"}
+                </Button>
+              </DialogFooter>
+            </Form>
+          </DialogContent>
+        </Dialog>
       </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Tenant List</CardTitle>
@@ -41,22 +159,57 @@ export default function TenantsPage() {
                   <th className="px-4 py-3 font-medium">Slug</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Updated</th>
+                  <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {data.data.map((tenant) => (
-                  <tr key={tenant.id} className="text-gray-700">
-                    <td className="px-4 py-3 font-medium text-gray-900">{tenant.name}</td>
+                  <tr key={tenant.id} className="text-gray-700 hover:bg-gray-50/50">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <div className="flex items-center gap-2">
+                        {tenant.logo_url && (
+                          <img src={tenant.logo_url} alt="" className="h-6 w-6 rounded object-cover" />
+                        )}
+                        {tenant.name}
+                      </div>
+                    </td>
                     <td className="px-4 py-3">{tenant.slug}</td>
                     <td className="px-4 py-3 capitalize">{tenant.status}</td>
                     <td className="px-4 py-3">
                       {new Date(tenant.updated_at).toLocaleString()}
                     </td>
+                    <td className="px-4 py-3">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" className="h-8 w-8 p-0">
+                            <span className="sr-only">Open menu</span>
+                            <DotsHorizontalIcon className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuItem onClick={() => setEditingTenant(tenant)}>
+                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-red-600 focus:text-red-600"
+                            onClick={() => {
+                              if (confirm("Are you sure you want to delete this tenant?")) {
+                                submit({ intent: "delete", id: tenant.id }, { method: "post" });
+                              }
+                            }}
+                          >
+                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </td>
                   </tr>
                 ))}
                 {data.data.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
                       No tenants found
                     </td>
                   </tr>
@@ -66,6 +219,59 @@ export default function TenantsPage() {
           </div>
         </div>
       </Card>
+
+      {/* Edit Dialog */}
+      <Dialog open={!!editingTenant} onOpenChange={(open) => !open && setEditingTenant(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Tenant</DialogTitle>
+            <DialogDescription>
+              Update tenant details.
+            </DialogDescription>
+          </DialogHeader>
+          <Form method="post" className="space-y-4">
+            <input type="hidden" name="intent" value="update" />
+            <input type="hidden" name="id" value={editingTenant?.id || ""} />
+            <div className="space-y-2">
+              <Label htmlFor="edit-name">Name</Label>
+              <Input
+                id="edit-name"
+                name="name"
+                defaultValue={editingTenant?.name}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-slug">Slug</Label>
+              <Input
+                id="edit-slug"
+                name="slug"
+                defaultValue={editingTenant?.slug}
+                required
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="edit-logo">Logo URL</Label>
+              <Input
+                id="edit-logo"
+                name="logo_url"
+                defaultValue={editingTenant?.logo_url}
+              />
+            </div>
+            {actionData && "error" in actionData && (
+              <p className="text-sm text-red-500">{actionData.error}</p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting}>
+                {isSubmitting ? "Saving..." : "Save Changes"}
+              </Button>
+            </DialogFooter>
+          </Form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
