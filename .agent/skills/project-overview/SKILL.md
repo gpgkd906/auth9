@@ -1,0 +1,51 @@
+---
+name: project-overview
+description: Auth9 project overview - identity & access management service
+alwaysApply: true
+---
+
+# Auth9 Project Overview
+
+Auth9 is a self-hosted identity and access management service designed to replace Auth0.
+
+## Architecture
+
+| Component | Tech Stack | Purpose |
+|-----------|------------|---------|
+| **auth9-core** | Rust (axum, tonic, sqlx) | Backend API & gRPC services |
+| **auth9-portal** | Remix + TypeScript + Vite | Admin dashboard UI |
+| **Database** | TiDB (MySQL compatible) | Tenant, user, RBAC data |
+| **Cache** | Redis | Session, token caching |
+| **Auth Engine** | Keycloak | OIDC provider |
+
+## Core Concepts
+
+- **Headless Keycloak**: Keycloak handles OIDC/MFA only; business logic in auth9-core
+- **Token Exchange**: Identity Token → Tenant Access Token with roles/permissions
+- **Multi-tenant**: Isolated tenants with custom settings and RBAC
+
+## Key Directories
+
+```
+auth9-core/src/
+├── api/          # REST API handlers (axum)
+├── grpc/         # gRPC services (tonic)
+├── domain/       # Domain models
+├── repository/   # Data access layer (sqlx)
+├── service/      # Business logic
+├── keycloak/     # Keycloak Admin API client
+├── jwt/          # JWT signing & validation
+└── cache/        # Redis caching
+
+auth9-portal/app/
+├── routes/       # Remix file-system routes
+├── components/   # UI components
+├── services/     # API client layer
+└── lib/          # Utilities
+```
+
+## Performance Requirements
+
+- Token Exchange latency: < 20ms (use Redis cache)
+- Auth QPS: > 1000 requests/second
+- Availability: 99.9%
