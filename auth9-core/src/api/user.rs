@@ -3,7 +3,7 @@
 use crate::api::{
     write_audit_log, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
-use crate::domain::{AddUserToTenantInput, CreateUserInput, UpdateUserInput};
+use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput};
 use crate::error::Result;
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
 use crate::server::AppState;
@@ -37,6 +37,7 @@ pub async fn list(
 
 /// Get user by ID
 pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let user = state.user_service.get(id).await?;
     Ok(Json(SuccessResponse::new(user)))
 }
@@ -83,7 +84,7 @@ pub async fn create(
         &headers,
         "user.create",
         "user",
-        Some(user.id),
+        Some(*user.id),
         None,
         serde_json::to_value(&user).ok(),
     )
@@ -98,6 +99,7 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.user_service.get(id).await?;
     if input.display_name.is_some() {
         let update = KeycloakUserUpdate {
@@ -120,7 +122,7 @@ pub async fn update(
         &headers,
         "user.update",
         "user",
-        Some(user.id),
+        Some(*user.id),
         serde_json::to_value(&before).ok(),
         serde_json::to_value(&user).ok(),
     )
@@ -134,6 +136,7 @@ pub async fn delete(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.user_service.get(id).await?;
     if let Err(err) = state.keycloak_client.delete_user(&before.keycloak_id).await {
         if !matches!(err, crate::error::AppError::NotFound(_)) {
@@ -146,7 +149,7 @@ pub async fn delete(
         &headers,
         "user.delete",
         "user",
-        Some(id),
+        Some(*id),
         serde_json::to_value(&before).ok(),
         None,
     )
@@ -180,7 +183,7 @@ pub async fn add_to_tenant(
         &headers,
         "user.add_to_tenant",
         "tenant_user",
-        Some(tenant_user.id),
+        Some(*tenant_user.id),
         None,
         serde_json::to_value(&tenant_user).ok(),
     )
@@ -194,6 +197,8 @@ pub async fn remove_from_tenant(
     headers: HeaderMap,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    let user_id = StringUuid::from(user_id);
+    let tenant_id = StringUuid::from(tenant_id);
     state
         .user_service
         .remove_from_tenant(user_id, tenant_id)
@@ -216,6 +221,7 @@ pub async fn get_tenants(
     State(state): State<AppState>,
     Path(user_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let user_id = StringUuid::from(user_id);
     let tenants = state.user_service.get_user_tenants(user_id).await?;
     Ok(Json(SuccessResponse::new(tenants)))
 }
@@ -225,6 +231,7 @@ pub async fn enable_mfa(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let user = state.user_service.get(id).await?;
     let update = KeycloakUserUpdate {
         username: None,
@@ -245,7 +252,7 @@ pub async fn enable_mfa(
         &headers,
         "user.mfa.enable",
         "user",
-        Some(updated.id),
+        Some(*updated.id),
         None,
         serde_json::to_value(&updated).ok(),
     )
@@ -258,6 +265,7 @@ pub async fn disable_mfa(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let user = state.user_service.get(id).await?;
     state
         .keycloak_client
@@ -282,7 +290,7 @@ pub async fn disable_mfa(
         &headers,
         "user.mfa.disable",
         "user",
-        Some(updated.id),
+        Some(*updated.id),
         None,
         serde_json::to_value(&updated).ok(),
     )
@@ -296,6 +304,7 @@ pub async fn list_by_tenant(
     Path(tenant_id): Path<Uuid>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
+    let tenant_id = StringUuid::from(tenant_id);
     let users = state
         .user_service
         .list_tenant_users(tenant_id, pagination.page, pagination.per_page)

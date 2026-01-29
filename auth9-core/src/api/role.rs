@@ -1,7 +1,9 @@
 //! Role and permission API handlers
 
 use crate::api::{write_audit_log, MessageResponse, SuccessResponse};
-use crate::domain::{AssignRolesInput, CreatePermissionInput, CreateRoleInput, UpdateRoleInput};
+use crate::domain::{
+    AssignRolesInput, CreatePermissionInput, CreateRoleInput, StringUuid, UpdateRoleInput,
+};
 use crate::error::Result;
 use crate::server::AppState;
 use axum::{
@@ -21,6 +23,7 @@ pub async fn list_permissions(
     State(state): State<AppState>,
     Path(service_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let service_id = StringUuid::from(service_id);
     let permissions = state.rbac_service.list_permissions(service_id).await?;
     Ok(Json(SuccessResponse::new(permissions)))
 }
@@ -37,7 +40,7 @@ pub async fn create_permission(
         &headers,
         "permission.create",
         "permission",
-        Some(permission.id),
+        Some(*permission.id),
         None,
         serde_json::to_value(&permission).ok(),
     )
@@ -51,6 +54,7 @@ pub async fn delete_permission(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.rbac_service.get_permission(id).await?;
     state.rbac_service.delete_permission(id).await?;
     let _ = write_audit_log(
@@ -58,7 +62,7 @@ pub async fn delete_permission(
         &headers,
         "permission.delete",
         "permission",
-        Some(id),
+        Some(*id),
         serde_json::to_value(&before).ok(),
         None,
     )
@@ -75,6 +79,7 @@ pub async fn list_roles(
     State(state): State<AppState>,
     Path(service_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let service_id = StringUuid::from(service_id);
     let roles = state.rbac_service.list_roles(service_id).await?;
     Ok(Json(SuccessResponse::new(roles)))
 }
@@ -84,6 +89,7 @@ pub async fn get_role(
     State(state): State<AppState>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let role = state.rbac_service.get_role_with_permissions(id).await?;
     Ok(Json(SuccessResponse::new(role)))
 }
@@ -100,7 +106,7 @@ pub async fn create_role(
         &headers,
         "role.create",
         "role",
-        Some(role.id),
+        Some(*role.id),
         None,
         serde_json::to_value(&role).ok(),
     )
@@ -115,6 +121,7 @@ pub async fn update_role(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateRoleInput>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.rbac_service.get_role(id).await?;
     let role = state.rbac_service.update_role(id, input).await?;
     let _ = write_audit_log(
@@ -122,7 +129,7 @@ pub async fn update_role(
         &headers,
         "role.update",
         "role",
-        Some(role.id),
+        Some(*role.id),
         serde_json::to_value(&before).ok(),
         serde_json::to_value(&role).ok(),
     )
@@ -136,6 +143,7 @@ pub async fn delete_role(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.rbac_service.get_role(id).await?;
     state.rbac_service.delete_role(id).await?;
     let _ = write_audit_log(
@@ -143,7 +151,7 @@ pub async fn delete_role(
         &headers,
         "role.delete",
         "role",
-        Some(id),
+        Some(*id),
         serde_json::to_value(&before).ok(),
         None,
     )
@@ -165,16 +173,18 @@ pub async fn assign_permission(
     Path(role_id): Path<Uuid>,
     Json(input): Json<AssignPermissionInput>,
 ) -> Result<impl IntoResponse> {
+    let role_id = StringUuid::from(role_id);
+    let permission_id = StringUuid::from(input.permission_id);
     state
         .rbac_service
-        .assign_permission_to_role(role_id, input.permission_id)
+        .assign_permission_to_role(role_id, permission_id)
         .await?;
     let _ = write_audit_log(
         &state,
         &headers,
         "role.assign_permission",
         "role_permission",
-        Some(role_id),
+        Some(*role_id),
         None,
         None,
     )
@@ -188,6 +198,8 @@ pub async fn remove_permission(
     headers: HeaderMap,
     Path((role_id, permission_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    let role_id = StringUuid::from(role_id);
+    let permission_id = StringUuid::from(permission_id);
     state
         .rbac_service
         .remove_permission_from_role(role_id, permission_id)
@@ -197,7 +209,7 @@ pub async fn remove_permission(
         &headers,
         "role.remove_permission",
         "role_permission",
-        Some(role_id),
+        Some(*role_id),
         None,
         None,
     )
@@ -234,6 +246,8 @@ pub async fn get_user_roles(
     State(state): State<AppState>,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    let user_id = StringUuid::from(user_id);
+    let tenant_id = StringUuid::from(tenant_id);
     let roles = state
         .rbac_service
         .get_user_roles(user_id, tenant_id)

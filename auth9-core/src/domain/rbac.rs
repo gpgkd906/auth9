@@ -1,5 +1,6 @@
 //! RBAC (Role-Based Access Control) domain models
 
+use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -9,8 +10,8 @@ use validator::Validate;
 /// Permission entity
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Permission {
-    pub id: Uuid,
-    pub service_id: Uuid,
+    pub id: StringUuid,
+    pub service_id: StringUuid,
     /// Permission code (e.g., "user:read", "report:export")
     pub code: String,
     pub name: String,
@@ -20,8 +21,8 @@ pub struct Permission {
 impl Default for Permission {
     fn default() -> Self {
         Self {
-            id: Uuid::new_v4(),
-            service_id: Uuid::nil(),
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::nil(),
             code: String::new(),
             name: String::new(),
             description: None,
@@ -32,12 +33,12 @@ impl Default for Permission {
 /// Role entity
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Role {
-    pub id: Uuid,
-    pub service_id: Uuid,
+    pub id: StringUuid,
+    pub service_id: StringUuid,
     pub name: String,
     pub description: Option<String>,
     /// Parent role for inheritance (optional)
-    pub parent_role_id: Option<Uuid>,
+    pub parent_role_id: Option<StringUuid>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -46,8 +47,8 @@ impl Default for Role {
     fn default() -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
-            service_id: Uuid::nil(),
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::nil(),
             name: String::new(),
             description: None,
             parent_role_id: None,
@@ -60,18 +61,18 @@ impl Default for Role {
 /// Role-Permission mapping
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct RolePermission {
-    pub role_id: Uuid,
-    pub permission_id: Uuid,
+    pub role_id: StringUuid,
+    pub permission_id: StringUuid,
 }
 
 /// User-Tenant-Role assignment
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct UserTenantRole {
-    pub id: Uuid,
-    pub tenant_user_id: Uuid,
-    pub role_id: Uuid,
+    pub id: StringUuid,
+    pub tenant_user_id: StringUuid,
+    pub role_id: StringUuid,
     pub granted_at: DateTime<Utc>,
-    pub granted_by: Option<Uuid>,
+    pub granted_by: Option<StringUuid>,
 }
 
 /// Input for creating a permission

@@ -1,21 +1,20 @@
 //! Tenant repository
 
-use crate::domain::{CreateTenantInput, Tenant, TenantStatus, UpdateTenantInput};
+use crate::domain::{CreateTenantInput, StringUuid, Tenant, TenantStatus, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
-use uuid::Uuid;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait TenantRepository: Send + Sync {
     async fn create(&self, input: &CreateTenantInput) -> Result<Tenant>;
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<Tenant>>;
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Tenant>>;
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Tenant>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Tenant>>;
     async fn count(&self) -> Result<i64>;
-    async fn update(&self, id: Uuid, input: &UpdateTenantInput) -> Result<Tenant>;
-    async fn delete(&self, id: Uuid) -> Result<()>;
+    async fn update(&self, id: StringUuid, input: &UpdateTenantInput) -> Result<Tenant>;
+    async fn delete(&self, id: StringUuid) -> Result<()>;
 }
 
 pub struct TenantRepositoryImpl {
@@ -31,7 +30,7 @@ impl TenantRepositoryImpl {
 #[async_trait]
 impl TenantRepository for TenantRepositoryImpl {
     async fn create(&self, input: &CreateTenantInput) -> Result<Tenant> {
-        let id = Uuid::new_v4();
+        let id = StringUuid::new_v4();
         let settings = input.settings.clone().unwrap_or_default();
         let settings_json =
             serde_json::to_string(&settings).map_err(|e| AppError::Internal(e.into()))?;
@@ -55,7 +54,7 @@ impl TenantRepository for TenantRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create tenant")))
     }
 
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<Tenant>> {
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Tenant>> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
             SELECT id, name, slug, logo_url, settings, status, created_at, updated_at
@@ -109,7 +108,7 @@ impl TenantRepository for TenantRepositoryImpl {
         Ok(row.0)
     }
 
-    async fn update(&self, id: Uuid, input: &UpdateTenantInput) -> Result<Tenant> {
+    async fn update(&self, id: StringUuid, input: &UpdateTenantInput) -> Result<Tenant> {
         let existing = self
             .find_by_id(id)
             .await?
@@ -149,7 +148,7 @@ impl TenantRepository for TenantRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to update tenant")))
     }
 
-    async fn delete(&self, id: Uuid) -> Result<()> {
+    async fn delete(&self, id: StringUuid) -> Result<()> {
         let result = sqlx::query("DELETE FROM tenants WHERE id = ?")
             .bind(id)
             .execute(&self.pool)

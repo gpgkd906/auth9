@@ -1,10 +1,9 @@
 //! User business logic
 
-use crate::domain::{AddUserToTenantInput, CreateUserInput, TenantUser, UpdateUserInput, User};
+use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use crate::repository::UserRepository;
 use std::sync::Arc;
-use uuid::Uuid;
 use validator::Validate;
 
 pub struct UserService<R: UserRepository> {
@@ -30,7 +29,7 @@ impl<R: UserRepository> UserService<R> {
         self.repo.create(keycloak_id, &input).await
     }
 
-    pub async fn get(&self, id: Uuid) -> Result<User> {
+    pub async fn get(&self, id: StringUuid) -> Result<User> {
         self.repo
             .find_by_id(id)
             .await?
@@ -58,18 +57,18 @@ impl<R: UserRepository> UserService<R> {
         Ok((users, total))
     }
 
-    pub async fn update(&self, id: Uuid, input: UpdateUserInput) -> Result<User> {
+    pub async fn update(&self, id: StringUuid, input: UpdateUserInput) -> Result<User> {
         input.validate()?;
         let _ = self.get(id).await?;
         self.repo.update(id, &input).await
     }
 
-    pub async fn delete(&self, id: Uuid) -> Result<()> {
+    pub async fn delete(&self, id: StringUuid) -> Result<()> {
         let _ = self.get(id).await?;
         self.repo.delete(id).await
     }
 
-    pub async fn set_mfa_enabled(&self, id: Uuid, enabled: bool) -> Result<User> {
+    pub async fn set_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User> {
         let _ = self.get(id).await?;
         self.repo.update_mfa_enabled(id, enabled).await
     }
@@ -79,13 +78,13 @@ impl<R: UserRepository> UserService<R> {
         self.repo.add_to_tenant(&input).await
     }
 
-    pub async fn remove_from_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()> {
+    pub async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()> {
         self.repo.remove_from_tenant(user_id, tenant_id).await
     }
 
     pub async fn list_tenant_users(
         &self,
-        tenant_id: Uuid,
+        tenant_id: StringUuid,
         page: i64,
         per_page: i64,
     ) -> Result<Vec<User>> {
@@ -95,7 +94,7 @@ impl<R: UserRepository> UserService<R> {
             .await
     }
 
-    pub async fn get_user_tenants(&self, user_id: Uuid) -> Result<Vec<TenantUser>> {
+    pub async fn get_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
         self.repo.find_user_tenants(user_id).await
     }
 }

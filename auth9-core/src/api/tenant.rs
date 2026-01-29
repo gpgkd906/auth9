@@ -3,7 +3,7 @@
 use crate::api::{
     write_audit_log, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
-use crate::domain::{CreateTenantInput, UpdateTenantInput};
+use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::Result;
 use crate::server::AppState;
 use axum::{
@@ -35,7 +35,7 @@ pub async fn list(
 
 /// Get tenant by ID
 pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
-    let tenant = state.tenant_service.get(id).await?;
+    let tenant = state.tenant_service.get(StringUuid::from(id)).await?;
     Ok(Json(SuccessResponse::new(tenant)))
 }
 
@@ -51,7 +51,7 @@ pub async fn create(
         &headers,
         "tenant.create",
         "tenant",
-        Some(tenant.id),
+        Some(*tenant.id),
         None,
         serde_json::to_value(&tenant).ok(),
     )
@@ -66,6 +66,7 @@ pub async fn update(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.tenant_service.get(id).await?;
     let tenant = state.tenant_service.update(id, input).await?;
     let _ = write_audit_log(
@@ -73,7 +74,7 @@ pub async fn update(
         &headers,
         "tenant.update",
         "tenant",
-        Some(tenant.id),
+        Some(*tenant.id),
         serde_json::to_value(&before).ok(),
         serde_json::to_value(&tenant).ok(),
     )
@@ -87,6 +88,7 @@ pub async fn delete(
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(id);
     let before = state.tenant_service.get(id).await?;
     let tenant = state.tenant_service.disable(id).await?;
     let _ = write_audit_log(
@@ -94,7 +96,7 @@ pub async fn delete(
         &headers,
         "tenant.disable",
         "tenant",
-        Some(id),
+        Some(*id),
         serde_json::to_value(&before).ok(),
         serde_json::to_value(&tenant).ok(),
     )

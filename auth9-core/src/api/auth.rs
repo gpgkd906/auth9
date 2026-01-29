@@ -117,7 +117,7 @@ pub async fn callback(
     };
 
     let identity_token = state.jwt_manager.create_identity_token(
-        user.id,
+        *user.id,
         &userinfo.email,
         userinfo.name.as_deref(),
     )?;
@@ -191,7 +191,7 @@ pub async fn token(
             };
 
             let identity_token = state.jwt_manager.create_identity_token(
-                user.id,
+                *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
             )?;
@@ -265,7 +265,7 @@ pub async fn token(
             };
 
             let identity_token = state.jwt_manager.create_identity_token(
-                user.id,
+                *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
             )?;

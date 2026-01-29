@@ -44,8 +44,9 @@ impl ServiceRepository for ServiceRepositoryImpl {
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', NOW(), NOW())
             "#,
         )
-        .bind(id)
-        .bind(input.tenant_id)
+        // UUID must be converted to string for CHAR(36) columns
+        .bind(id.to_string())
+        .bind(input.tenant_id.map(|id| id.to_string()))
         .bind(&input.name)
         .bind(&input.client_id)
         .bind(secret_hash)
