@@ -126,24 +126,23 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
         .await
         .context("Failed to connect to database")?;
 
-    // Check if portal service already exists
-    let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM services WHERE client_id = ?")
+    // Check if portal client already exists (via clients table)
+    let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clients WHERE client_id = ?")
         .bind(DEFAULT_PORTAL_CLIENT_ID)
         .fetch_one(&pool)
         .await
-        .context("Failed to check portal service")?;
+        .context("Failed to check portal client")?;
 
     if exists.0 > 0 {
         info!(
-            "Portal service '{}' already exists in database, skipping",
+            "Portal client '{}' already exists in database, skipping",
             DEFAULT_PORTAL_CLIENT_ID
         );
         pool.close().await;
         return Ok(());
     }
 
-    // Create portal service using MySQL UUID() function to ensure correct format
-    // Note: redirect_uris must be exact URLs (no wildcards) for validation
+    // Create portal service first
     let redirect_uris = serde_json::to_string(&vec![
         "http://localhost:3000/dashboard",
         "http://localhost:3000/callback",
@@ -154,28 +153,44 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     let logout_uris =
         serde_json::to_string(&vec!["http://localhost:3000", "http://127.0.0.1:3000"]).unwrap();
 
-    // For public clients, we use a placeholder hash (auth9-portal is a public client)
-    let placeholder_hash = "public-client-no-secret";
+    // Generate a UUID for the service
+    let service_id = uuid::Uuid::new_v4().to_string();
 
-    // Use MySQL's UUID() function to generate UUID in correct CHAR(36) format
     sqlx::query(
         r#"
-        INSERT INTO services (id, tenant_id, name, client_id, client_secret_hash, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
-        VALUES (UUID(), NULL, ?, ?, ?, 'http://localhost:3000', ?, ?, 'active', NOW(), NOW())
+        INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
+        VALUES (?, NULL, ?, 'http://localhost:3000', ?, ?, 'active', NOW(), NOW())
         "#,
     )
+    .bind(&service_id)
     .bind(DEFAULT_PORTAL_NAME)
-    .bind(DEFAULT_PORTAL_CLIENT_ID)
-    .bind(placeholder_hash)
     .bind(&redirect_uris)
     .bind(&logout_uris)
     .execute(&pool)
     .await
     .context("Failed to create portal service")?;
 
+    // Create a client for the portal service (public client - no secret)
+    let client_id_record = uuid::Uuid::new_v4().to_string();
+    let placeholder_hash = "public-client-no-secret";
+
+    sqlx::query(
+        r#"
+        INSERT INTO clients (id, service_id, client_id, client_secret_hash, name, created_at)
+        VALUES (?, ?, ?, ?, 'Portal Client', NOW())
+        "#,
+    )
+    .bind(&client_id_record)
+    .bind(&service_id)
+    .bind(DEFAULT_PORTAL_CLIENT_ID)
+    .bind(placeholder_hash)
+    .execute(&pool)
+    .await
+    .context("Failed to create portal client")?;
+
     pool.close().await;
     info!(
-        "Created portal service '{}' in database",
+        "Created portal service and client '{}' in database",
         DEFAULT_PORTAL_CLIENT_ID
     );
     Ok(())

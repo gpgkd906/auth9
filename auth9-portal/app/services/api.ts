@@ -125,7 +125,7 @@ export const userApi = {
     const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user, password }),
+      body: JSON.stringify({ ...user, password }),
     });
     return handleResponse(response);
   },
@@ -169,13 +169,29 @@ export interface Service {
   id: string;
   tenant_id?: string;
   name: string;
-  client_id: string;
   base_url?: string;
   redirect_uris: string[];
   logout_uris: string[];
   status: "active" | "inactive";
   created_at: string;
   updated_at: string;
+}
+
+export interface Client {
+  id: string;
+  service_id: string;
+  client_id: string;
+  name?: string;
+  created_at: string;
+}
+
+export interface ClientWithSecret {
+  client: Client;
+  client_secret: string;
+}
+
+export interface CreateClientInput {
+  name?: string;
 }
 
 export const serviceApi = {
@@ -191,7 +207,7 @@ export const serviceApi = {
     return handleResponse(response);
   },
 
-  create: async (input: CreateServiceInput): Promise<{ data: Service }> => {
+  create: async (input: CreateServiceInput): Promise<{ data: { service: Service, client: ClientWithSecret } }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -219,8 +235,32 @@ export const serviceApi = {
     }
   },
 
-  regenerateSecret: async (id: string): Promise<{ data: { client_secret: string } }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}/secret`, {
+  listClients: async (serviceId: string): Promise<{ data: Client[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients`);
+    return handleResponse(response);
+  },
+
+  createClient: async (serviceId: string, input: CreateClientInput): Promise<{ data: ClientWithSecret }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  deleteClient: async (serviceId: string, clientId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients/${clientId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
+
+  regenerateClientSecret: async (serviceId: string, clientId: string): Promise<{ data: { client_id: string; client_secret: string } }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients/${clientId}/regenerate-secret`, {
       method: "POST",
     });
     return handleResponse(response);
