@@ -130,7 +130,7 @@ export default function RolesPage() {
                     <div className="text-base font-semibold text-gray-900">
                       {entry.service.name}
                     </div>
-                    <div className="text-xs text-gray-500 font-mono">{entry.service.client_id}</div>
+
                   </div>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => setCreateServiceId(entry.service.id)}>

@@ -6,7 +6,7 @@ import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
-import { Textarea } from "~/components/ui/textarea";
+import { Input } from "~/components/ui/input";
 import {
   Dialog,
   DialogContent,
@@ -20,6 +20,14 @@ import { tenantApi } from "~/services/api";
 export const meta: MetaFunction = () => {
   return [{ title: "Settings - Auth9" }];
 };
+
+interface TenantSettings {
+  branding?: {
+    logo_url?: string;
+    primary_color?: string;
+  };
+  [key: string]: unknown;
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -36,14 +44,16 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     if (intent === "update_settings") {
       const id = formData.get("id") as string;
-      const settingsJson = formData.get("settings") as string;
 
-      let settings: Record<string, unknown>;
-      try {
-        settings = JSON.parse(settingsJson);
-      } catch (e) {
-        return json({ error: "Invalid JSON format" }, { status: 400 });
-      }
+      const logo_url = formData.get("branding_logo_url") as string;
+      const primary_color = formData.get("branding_primary_color") as string;
+
+      const settings = {
+        branding: {
+          logo_url: logo_url || undefined,
+          primary_color: primary_color || undefined,
+        }
+      };
 
       await tenantApi.update(id, { settings });
       return json({ success: true });
@@ -90,26 +100,34 @@ export default function SettingsPage() {
                 <tr>
                   <th className="px-4 py-3 font-medium">Tenant</th>
                   <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Settings (Preview)</th>
+                  <th className="px-4 py-3 font-medium">Branding</th>
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {data.data.map((tenant) => (
-                  <tr key={tenant.id} className="text-gray-700 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{tenant.name}</td>
-                    <td className="px-4 py-3 capitalize">{tenant.status}</td>
-                    <td className="px-4 py-3 text-xs text-gray-600 font-mono">
-                      {JSON.stringify(tenant.settings).substring(0, 50)}
-                      {JSON.stringify(tenant.settings).length > 50 ? "..." : ""}
-                    </td>
-                    <td className="px-4 py-3">
-                      <Button variant="ghost" size="sm" onClick={() => setEditingTenant(tenant)}>
-                        <Pencil2Icon className="h-4 w-4" />
-                      </Button>
-                    </td>
-                  </tr>
-                ))}
+                {data.data.map((tenant) => {
+                  const settings = tenant.settings as TenantSettings;
+                  return (
+                    <tr key={tenant.id} className="text-gray-700 hover:bg-gray-50/50">
+                      <td className="px-4 py-3 font-medium text-gray-900">{tenant.name}</td>
+                      <td className="px-4 py-3 capitalize">{tenant.status}</td>
+                      <td className="px-4 py-3 text-xs text-gray-600">
+                        {settings?.branding?.logo_url && (
+                          <div className="flex items-center gap-2">
+                            <img src={settings.branding.logo_url} alt="Logo" className="h-6 w-6 object-contain rounded-sm bg-gray-100" />
+                            <span className="truncate max-w-[150px]">{settings.branding.logo_url}</span>
+                          </div>
+                        )}
+                        {!settings?.branding?.logo_url && <span className="text-gray-400">No branding</span>}
+                      </td>
+                      <td className="px-4 py-3">
+                        <Button variant="ghost" size="sm" onClick={() => setEditingTenant(tenant)}>
+                          <Pencil2Icon className="h-4 w-4" />
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
                 {data.data.length === 0 && (
                   <tr>
                     <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
@@ -129,22 +147,47 @@ export default function SettingsPage() {
           <DialogHeader>
             <DialogTitle>Edit Settings: {editingTenant?.name}</DialogTitle>
             <DialogDescription>
-              Update tenant configuration JSON.
+              Customize appearance and behavior.
             </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update_settings" />
             <input type="hidden" name="id" value={editingTenant?.id || ""} />
-            <div className="space-y-2">
-              <Label htmlFor="edit-settings">Settings (JSON)</Label>
-              <Textarea
-                id="edit-settings"
-                name="settings"
-                className="min-h-[200px] font-mono"
-                defaultValue={editingTenant ? JSON.stringify(editingTenant.settings, null, 2) : "{}"}
-                required
-              />
+
+            <div className="space-y-4">
+              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Branding</h3>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="branding_logo_url">Logo URL</Label>
+                  <Input
+                    id="branding_logo_url"
+                    name="branding_logo_url"
+                    defaultValue={(editingTenant?.settings as TenantSettings)?.branding?.logo_url || ""}
+                    placeholder="https://example.com/logo.png"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="branding_primary_color">Primary Color</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      id="branding_primary_color"
+                      name="branding_primary_color"
+                      type="color"
+                      className="w-12 h-10 p-1"
+                      defaultValue={(editingTenant?.settings as TenantSettings)?.branding?.primary_color || "#000000"}
+                    />
+                    <Input
+                      name="branding_primary_color_text"
+                      defaultValue={(editingTenant?.settings as TenantSettings)?.branding?.primary_color || "#000000"}
+                      placeholder="#000000"
+                      readOnly
+                      className="flex-1 bg-gray-50"
+                    />
+                  </div>
+                </div>
+              </div>
             </div>
+
             {actionData && "error" in actionData && (
               <p className="text-sm text-red-500">{actionData.error}</p>
             )}

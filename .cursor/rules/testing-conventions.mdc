@@ -1,10 +1,46 @@
 ---
-description: Testing conventions for Auth9 project
-globs: "**/*test*.{rs,ts,tsx}"
-alwaysApply: false
+description: TDD workflow and testing conventions for Auth9 project
+alwaysApply: true
 ---
 
 # Testing Conventions
+
+## TDD Development Workflow
+
+When implementing features or fixing bugs, follow the Test-Driven Development (TDD) cycle:
+
+```
+1. RED    → Write a failing test first
+2. GREEN  → Write minimal code to pass the test
+3. REFACTOR → Improve code while keeping tests green
+```
+
+### TDD Rules
+
+- **Write tests BEFORE implementation code**
+- **One test at a time**: Don't write multiple failing tests
+- **Minimal implementation**: Only write enough code to pass the current test
+- **Refactor continuously**: Clean up after each green phase
+
+### Coverage Requirement
+
+**Minimum test coverage: 90%**
+
+```bash
+# Rust - check coverage with tarpaulin
+cargo tarpaulin --out Html --output-dir target/coverage
+
+# TypeScript - check coverage with vitest
+npm run test -- --coverage
+```
+
+Coverage targets by layer:
+| Layer | Target |
+|-------|--------|
+| Domain/Business logic | 95%+ |
+| Service layer | 90%+ |
+| Repository layer | 85%+ |
+| API handlers | 80%+ |
 
 ## Test Pyramid
 

@@ -1,7 +1,9 @@
 //! Service/Client business logic
 
 use crate::cache::CacheManager;
-use crate::domain::{CreateServiceInput, Service, ServiceWithSecret, UpdateServiceInput};
+use crate::domain::{
+    Client, ClientWithSecret, CreateServiceInput, Service, ServiceWithClient, UpdateServiceInput,
+};
 use crate::error::{AppError, Result};
 use crate::repository::ServiceRepository;
 use argon2::{
@@ -26,18 +28,18 @@ impl<R: ServiceRepository> ClientService<R> {
         }
     }
 
-    pub async fn create(&self, input: CreateServiceInput) -> Result<ServiceWithSecret> {
+    pub async fn create(&self, input: CreateServiceInput) -> Result<ServiceWithClient> {
         input.validate()?;
 
         // Check for duplicate client_id
         if self
             .repo
-            .find_by_client_id(&input.client_id)
+            .find_client_by_client_id(&input.client_id)
             .await?
             .is_some()
         {
             return Err(AppError::Conflict(format!(
-                "Service with client_id '{}' already exists",
+                "Client with client_id '{}' already exists",
                 input.client_id
             )));
         }
@@ -46,14 +48,25 @@ impl<R: ServiceRepository> ClientService<R> {
         let client_secret = generate_client_secret();
         let secret_hash = hash_secret(&client_secret)?;
 
-        let service = self.repo.create(&input, &secret_hash).await?;
+        // Create Service (without client credentials)
+        let service = self.repo.create(&input).await?;
+        
+        // Create Client
+        let client = self
+            .repo
+            .create_client(service.id.0, &input.client_id, &secret_hash, Some("Initial Key".to_string()))
+            .await?;
+
         if let Some(cache) = &self.cache_manager {
             let _ = cache.set_service_config(service.id.0, &service).await;
         }
 
-        Ok(ServiceWithSecret {
+        Ok(ServiceWithClient {
             service,
-            client_secret: Some(client_secret),
+            client: ClientWithSecret {
+                client,
+                client_secret,
+            }
         })
     }
 
@@ -61,34 +74,98 @@ impl<R: ServiceRepository> ClientService<R> {
         &self,
         input: CreateServiceInput,
         client_secret: String,
-    ) -> Result<ServiceWithSecret> {
+    ) -> Result<ServiceWithClient> {
         input.validate()?;
 
         if self
             .repo
-            .find_by_client_id(&input.client_id)
+            .find_client_by_client_id(&input.client_id)
             .await?
             .is_some()
         {
             return Err(AppError::Conflict(format!(
-                "Service with client_id '{}' already exists",
+                "Client with client_id '{}' already exists",
                 input.client_id
             )));
         }
 
         let secret_hash = hash_secret(&client_secret)?;
-        let service = self.repo.create(&input, &secret_hash).await?;
+        
+        let service = self.repo.create(&input).await?;
+        let client = self
+            .repo
+            .create_client(service.id.0, &input.client_id, &secret_hash, Some("Initial Key".to_string()))
+            .await?;
+
         if let Some(cache) = &self.cache_manager {
             let _ = cache.set_service_config(service.id.0, &service).await;
         }
 
-        Ok(ServiceWithSecret {
+        Ok(ServiceWithClient {
             service,
-            client_secret: Some(client_secret),
+            client: ClientWithSecret {
+                client,
+                client_secret,
+            }
+        })
+    }
+
+    pub async fn create_client(
+        &self,
+        service_id: Uuid,
+        name: Option<String>,
+    ) -> Result<ClientWithSecret> {
+        // Verify service exists
+        let _ = self.get(service_id).await?;
+
+        // Generate ID and Secret
+        let client_id = Uuid::new_v4().to_string(); 
+        let client_secret = generate_client_secret();
+        let secret_hash = hash_secret(&client_secret)?;
+
+        let client = self.repo.create_client(service_id, &client_id, &secret_hash, name).await?;
+
+        Ok(ClientWithSecret {
+            client,
+            client_secret,
+        })
+    }
+
+    pub async fn create_client_with_secret(
+        &self,
+        service_id: Uuid,
+        client_id: String,
+        client_secret: String,
+        name: Option<String>,
+    ) -> Result<ClientWithSecret> {
+        let _ = self.get(service_id).await?;
+        
+        // Check duplicate
+         if self
+            .repo
+            .find_client_by_client_id(&client_id)
+            .await?
+            .is_some()
+        {
+            return Err(AppError::Conflict(format!(
+                "Client with client_id '{}' already exists",
+                client_id
+            )));
+        }
+
+        let secret_hash = hash_secret(&client_secret)?;
+        let client = self.repo.create_client(service_id, &client_id, &secret_hash, name).await?;
+
+        Ok(ClientWithSecret {
+            client,
+            client_secret,
         })
     }
 
     pub async fn get(&self, id: Uuid) -> Result<Service> {
+        // Cache logic for Service config (domain/base_url etc)
+        // Note: Clients are not cached in service config usually, or if they are, cache needs update.
+        // Assuming service config cache is only for Service struct.
         if let Some(cache) = &self.cache_manager {
             if let Ok(Some(service)) = cache.get_service_config(id).await {
                 return Ok(service);
@@ -110,10 +187,8 @@ impl<R: ServiceRepository> ClientService<R> {
             .repo
             .find_by_client_id(client_id)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Service '{}' not found", client_id)))?;
-        if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_service_config(service.id.0, &service).await;
-        }
+            .ok_or_else(|| AppError::NotFound(format!("Service for client '{}' not found", client_id)))?;
+        // Cache could be set here too
         Ok(service)
     }
 
@@ -128,6 +203,10 @@ impl<R: ServiceRepository> ClientService<R> {
         let total = self.repo.count(tenant_id).await?;
         Ok((services, total))
     }
+    
+    pub async fn list_clients(&self, service_id: Uuid) -> Result<Vec<Client>> {
+        self.repo.list_clients(service_id).await
+    }
 
     pub async fn update(&self, id: Uuid, input: UpdateServiceInput) -> Result<Service> {
         input.validate()?;
@@ -139,27 +218,26 @@ impl<R: ServiceRepository> ClientService<R> {
         Ok(service)
     }
 
-    pub async fn regenerate_secret(&self, id: Uuid) -> Result<String> {
-        let _ = self.get(id).await?;
-
-        let client_secret = generate_client_secret();
-        self.regenerate_secret_with_value(id, client_secret.clone())
-            .await?;
-        Ok(client_secret)
-    }
-
-    pub async fn regenerate_secret_with_value(
-        &self,
-        id: Uuid,
-        client_secret: String,
-    ) -> Result<String> {
-        let _ = self.get(id).await?;
-        let secret_hash = hash_secret(&client_secret)?;
-        self.repo.update_secret(id, &secret_hash).await?;
+    /// Regenerate the client secret for a specific client.
+    /// Returns the new plaintext secret (only shown once).
+    pub async fn regenerate_client_secret(&self, client_id: &str) -> Result<String> {
+        // Verify client exists
+        let client = self.repo.find_client_by_client_id(client_id).await?
+            .ok_or_else(|| AppError::NotFound(format!("Client {} not found", client_id)))?;
+        
+        // Generate new secret and hash
+        let new_secret = generate_client_secret();
+        let secret_hash = hash_secret(&new_secret)?;
+        
+        // Update in database
+        self.repo.update_client_secret_hash(client_id, &secret_hash).await?;
+        
+        // Invalidate cache if applicable
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.invalidate_service_config(id).await;
+            let _ = cache.invalidate_service_config(client.service_id.0).await;
         }
-        Ok(client_secret)
+        
+        Ok(new_secret)
     }
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
@@ -171,16 +249,39 @@ impl<R: ServiceRepository> ClientService<R> {
         Ok(())
     }
 
-    pub async fn verify_secret(&self, client_id: &str, secret: &str) -> Result<Service> {
-        let service = self.get_by_client_id(client_id).await?;
+    pub async fn delete_client(&self, service_id: Uuid, client_id: &str) -> Result<()> {
+        self.repo.delete_client(service_id, client_id).await
+    }
 
-        if verify_secret(secret, &service.client_secret_hash)? {
-            Ok(service)
-        } else {
-            Err(AppError::Unauthorized(
+    /// Update a client's secret hash in the database
+    pub async fn update_client_secret_hash(&self, client_id: &str, new_secret_hash: &str) -> Result<()> {
+        self.repo.update_client_secret_hash(client_id, new_secret_hash).await
+    }
+
+    pub async fn verify_secret(&self, client_id: &str, secret: &str) -> Result<Service> {
+        // 1. Find Client to get hash
+        let client = self.repo.find_client_by_client_id(client_id).await?
+            .ok_or_else(|| AppError::Unauthorized("Invalid client credentials".to_string()))?;
+
+        // 2. Verify Secret
+        if !verify_secret(secret, &client.client_secret_hash)? {
+            return Err(AppError::Unauthorized(
                 "Invalid client credentials".to_string(),
-            ))
+            ));
         }
+
+        // 3. Get Service
+        // We can use get_by_client_id or fetch by client.service_id
+        let service = self.get(client.service_id.0).await?;
+        
+        // Ensure service is active? (Service struct has status, checked in use cases usually?)
+        // Existing code checked status in api/service.rs? No, domain/service.rs defines Active/Inactive
+        // Logic might want to check if service.status is Active.
+        if service.status != crate::domain::ServiceStatus::Active {
+             return Err(AppError::Unauthorized("Service is inactive".to_string()));
+        }
+
+        Ok(service)
     }
 }
 

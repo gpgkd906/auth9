@@ -50,42 +50,24 @@ export async function action({ request }: ActionFunctionArgs) {
       const redirect_uris = (formData.get("redirect_uris") as string)?.split(",").map(s => s.trim()).filter(Boolean);
       const logout_uris = (formData.get("logout_uris") as string)?.split(",").map(s => s.trim()).filter(Boolean);
 
-      await serviceApi.create({
+      const res = await serviceApi.create({
         name,
         client_id: client_id || undefined,
         base_url: base_url || undefined,
         redirect_uris,
         logout_uris
       });
-      return json({ success: true });
-    }
-
-    if (intent === "update") {
-      const id = formData.get("id") as string;
-      const name = formData.get("name") as string;
-      const base_url = formData.get("base_url") as string;
-      const redirect_uris = (formData.get("redirect_uris") as string)?.split(",").map(s => s.trim()).filter(Boolean);
-      const logout_uris = (formData.get("logout_uris") as string)?.split(",").map(s => s.trim()).filter(Boolean);
-
-      await serviceApi.update(id, {
-        name,
-        base_url: base_url || undefined,
-        redirect_uris,
-        logout_uris
-      });
-      return json({ success: true });
+      // We might want to show the initial secret?
+      if (res.data.client) {
+        return json({ success: true, intent, secret: res.data.client.client_secret });
+      }
+      return json({ success: true, intent });
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await serviceApi.delete(id);
-      return json({ success: true });
-    }
-
-    if (intent === "regenerate_secret") {
-      const id = formData.get("id") as string;
-      const res = await serviceApi.regenerateSecret(id);
-      return json({ success: true, secret: res.data.client_secret, intent: "regenerate_secret" });
+      return json({ success: true, intent });
     }
   } catch (error: any) {
     return json({ error: error.message }, { status: 400 });
@@ -100,19 +82,15 @@ export default function ServicesPage() {
   const navigation = useNavigation();
   const submit = useSubmit();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingService, setEditingService] = useState<any>(null);
   const [newSecret, setNewSecret] = useState<string | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
 
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
-      if (actionData.intent !== "regenerate_secret") {
-        setIsCreateOpen(false);
-        setEditingService(null);
-      }
-      if (actionData.intent === "regenerate_secret" && actionData.secret) {
-        setNewSecret(actionData.secret);
+      setIsCreateOpen(false);
+      if (actionData.intent === "create" && "secret" in actionData && actionData.secret) {
+        setNewSecret(actionData.secret as string);
       }
     }
   }, [actionData]);
@@ -191,7 +169,6 @@ export default function ServicesPage() {
               <thead className="bg-gray-50 text-left text-gray-500">
                 <tr>
                   <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Client ID</th>
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Updated</th>
                   <th className="px-4 py-3 font-medium w-10"></th>
@@ -201,7 +178,6 @@ export default function ServicesPage() {
                 {data.data.map((service) => (
                   <tr key={service.id} className="text-gray-700 hover:bg-gray-50/50">
                     <td className="px-4 py-3 font-medium text-gray-900">{service.name}</td>
-                    <td className="px-4 py-3 font-mono text-xs">{service.client_id}</td>
                     <td className="px-4 py-3 capitalize">{service.status}</td>
                     <td className="px-4 py-3">
                       {new Date(service.updated_at).toLocaleString()}
@@ -216,8 +192,10 @@ export default function ServicesPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => setEditingService(service)}>
-                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Edit
+                          <DropdownMenuItem asChild>
+                            <a href={`/dashboard/services/${service.id}`} className="flex items-center cursor-pointer">
+                              <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Details
+                            </a>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
@@ -237,7 +215,7 @@ export default function ServicesPage() {
                 ))}
                 {data.data.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                    <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
                       No services found
                     </td>
                   </tr>
@@ -248,89 +226,12 @@ export default function ServicesPage() {
         </div>
       </Card>
 
-      {/* Edit Dialog */}
-      <Dialog open={!!editingService} onOpenChange={(open) => !open && setEditingService(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>Edit Service</DialogTitle>
-            <DialogDescription>
-              Update service details.
-            </DialogDescription>
-          </DialogHeader>
-          <Form method="post" className="space-y-4">
-            <input type="hidden" name="intent" value="update" />
-            <input type="hidden" name="id" value={editingService?.id || ""} />
-            <div className="space-y-2">
-              <Label htmlFor="edit-name">Service Name</Label>
-              <Input
-                id="edit-name"
-                name="name"
-                defaultValue={editingService?.name}
-                required
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-base-url">Base URL</Label>
-              <Input
-                id="edit-base-url"
-                name="base_url"
-                defaultValue={editingService?.base_url}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-redirect-uris">Redirect URIs (comma separated)</Label>
-              <Input
-                id="edit-redirect-uris"
-                name="redirect_uris"
-                defaultValue={editingService?.redirect_uris?.join(", ")}
-              />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="edit-logout-uris">Logout URIs (comma separated)</Label>
-              <Input
-                id="edit-logout-uris"
-                name="logout_uris"
-                defaultValue={editingService?.logout_uris?.join(", ")}
-              />
-            </div>
-            <div className="rounded-md bg-amber-50 p-3 text-sm text-amber-900 border border-amber-200">
-              <div className="font-semibold mb-1">Client Credentials</div>
-              <p className="mb-2">Client ID: <span className="font-mono">{editingService?.client_id}</span></p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full bg-white"
-                onClick={() => {
-                  if (confirm("This will invalidate the old secret. Generate new secret?")) {
-                    submit({ intent: "regenerate_secret", id: editingService.id }, { method: "post" });
-                  }
-                }}
-              >
-                Regenerate Client Secret
-              </Button>
-            </div>
-            {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{actionData.error}</p>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingService(null)}>
-                Cancel
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Changes"}
-              </Button>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
       {/* Secret Display Dialog */}
       <Dialog open={!!newSecret} onOpenChange={(open) => !open && setNewSecret(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Client Secret Generated</DialogTitle>
-            <DialogDescription>Please copy this secret now. It will not be shown again.</DialogDescription>
+            <DialogTitle>Initial Client Secret Generated</DialogTitle>
+            <DialogDescription>Please copy this value. It will not be shown again.</DialogDescription>
           </DialogHeader>
           <div className="p-4 bg-gray-100 rounded border font-mono text-center break-all select-all">
             {newSecret}

@@ -47,16 +47,12 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for ServiceStatus {
     }
 }
 
-/// Service/Client entity (OIDC client)
+/// Service entity (OIDC client container)
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Service {
     pub id: StringUuid,
     pub tenant_id: Option<StringUuid>,
     pub name: String,
-    pub client_id: String,
-    /// Hashed client secret (never expose raw secret)
-    #[serde(skip_serializing)]
-    pub client_secret_hash: String,
     pub base_url: Option<String>,
     #[sqlx(json)]
     pub redirect_uris: Vec<String>,
@@ -74,8 +70,6 @@ impl Default for Service {
             id: StringUuid::new_v4(),
             tenant_id: None,
             name: String::new(),
-            client_id: String::new(),
-            client_secret_hash: String::new(),
             base_url: None,
             redirect_uris: Vec::new(),
             logout_uris: Vec::new(),
@@ -86,6 +80,19 @@ impl Default for Service {
     }
 }
 
+/// Client entity (OIDC credentials)
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct Client {
+    pub id: StringUuid,
+    pub service_id: StringUuid,
+    pub client_id: String,
+    /// Hashed client secret (never expose raw secret)
+    #[serde(skip_serializing)]
+    pub client_secret_hash: String,
+    pub name: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
 /// Input for registering a new service
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreateServiceInput {
@@ -93,11 +100,18 @@ pub struct CreateServiceInput {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
     #[validate(length(min = 1, max = 255))]
-    pub client_id: String,
+    pub client_id: String, // Keep for initial client creation
     #[validate(url)]
     pub base_url: Option<String>,
     pub redirect_uris: Vec<String>,
     pub logout_uris: Option<Vec<String>>,
+}
+
+/// Input for creating a new client
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct CreateClientInput {
+    #[validate(length(min = 1, max = 255))]
+    pub name: Option<String>,
 }
 
 /// Input for updating a service
@@ -112,14 +126,20 @@ pub struct UpdateServiceInput {
     pub status: Option<ServiceStatus>,
 }
 
-/// Service response (with generated secret for creation)
+/// Service response with initial client
 #[derive(Debug, Clone, Serialize)]
-pub struct ServiceWithSecret {
+pub struct ServiceWithClient {
     #[serde(flatten)]
     pub service: Service,
-    /// Only present on creation
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub client_secret: Option<String>,
+    pub client: ClientWithSecret,
+}
+
+/// Client response with generated secret
+#[derive(Debug, Clone, Serialize)]
+pub struct ClientWithSecret {
+    #[serde(flatten)]
+    pub client: Client,
+    pub client_secret: String,
 }
 
 #[cfg(test)]

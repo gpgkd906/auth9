@@ -85,13 +85,21 @@ where
             return Err(Status::not_found("User not found"));
         }
 
-        // Verify service exists
+        // Verify client exists
+        let client = self
+            .service_repo
+            .find_client_by_client_id(&req.service_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to lookup client: {}", e)))?
+            .ok_or_else(|| Status::not_found("Client not found"))?;
+            
+        // Get Service
         let service = self
             .service_repo
-            .find_by_client_id(&req.service_id)
+            .find_by_id(client.service_id.0)
             .await
             .map_err(|e| Status::internal(format!("Failed to lookup service: {}", e)))?
-            .ok_or_else(|| Status::not_found("Service not found"))?;
+            .ok_or_else(|| Status::internal("Service integrity error"))?;
 
         let user_roles = match self
             .cache_manager
@@ -121,7 +129,7 @@ where
                 Uuid::from(user_id),
                 &claims.email,
                 Uuid::from(tenant_id),
-                &service.client_id,
+                &client.client_id,
                 user_roles.roles,
                 user_roles.permissions,
             )
@@ -129,7 +137,7 @@ where
 
         let refresh_token = self
             .jwt_manager
-            .create_refresh_token(Uuid::from(user_id), Uuid::from(tenant_id), &service.client_id)
+            .create_refresh_token(Uuid::from(user_id), Uuid::from(tenant_id), &client.client_id)
             .map_err(|e| Status::internal(format!("Failed to create refresh token: {}", e)))?;
 
         Ok(Response::new(ExchangeTokenResponse {

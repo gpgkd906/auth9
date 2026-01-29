@@ -218,7 +218,7 @@ pub async fn token(
                 .verify_secret(&client_id, &client_secret)
                 .await?;
 
-            let email = format!("service+{}@auth9.local", service.client_id);
+            let email = format!("service+{}@auth9.local", client_id);
             let identity_token =
                 state
                     .jwt_manager
