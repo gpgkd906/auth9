@@ -1,0 +1,28 @@
+# Tarpaulin coverage configuration for auth9-core
+# Run with: cargo tarpaulin --config tarpaulin.toml
+
+[report]
+out = ["Html", "Lcov"]
+output-dir = "target/coverage"
+
+[general]
+# Minimum coverage threshold (fail if below this)
+fail-under = 90
+
+# Exclude test code from coverage
+exclude-files = ["tests/*", "*_test.rs"]
+
+# Include all source files
+all-targets = true
+
+# Run doctests
+run-types = ["Tests", "Doctests"]
+
+# Timeout for each test (in seconds)
+timeout = "120s"
+
+# Use default branch coverage
+branch = true
+
+# Verbose output
+verbose = true

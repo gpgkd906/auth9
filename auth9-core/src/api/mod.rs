@@ -152,3 +152,115 @@ fn extract_ip(headers: &HeaderMap) -> Option<String> {
 
     None
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pagination_query_defaults() {
+        let query: PaginationQuery = serde_json::from_str("{}").unwrap();
+        assert_eq!(query.page, 1);
+        assert_eq!(query.per_page, 20);
+    }
+
+    #[test]
+    fn test_pagination_query_custom_values() {
+        let query: PaginationQuery = serde_json::from_str(r#"{"page": 5, "per_page": 50}"#).unwrap();
+        assert_eq!(query.page, 5);
+        assert_eq!(query.per_page, 50);
+    }
+
+    #[test]
+    fn test_paginated_response_calculation() {
+        let data = vec!["a", "b", "c"];
+        let response = PaginatedResponse::new(data, 1, 10, 100);
+        
+        assert_eq!(response.pagination.page, 1);
+        assert_eq!(response.pagination.per_page, 10);
+        assert_eq!(response.pagination.total, 100);
+        assert_eq!(response.pagination.total_pages, 10);
+        assert_eq!(response.data.len(), 3);
+    }
+
+    #[test]
+    fn test_paginated_response_partial_last_page() {
+        let data: Vec<String> = vec![];
+        let response = PaginatedResponse::new(data, 3, 10, 25);
+        
+        assert_eq!(response.pagination.total_pages, 3); // ceil(25/10) = 3
+    }
+
+    #[test]
+    fn test_success_response() {
+        let data = "test data";
+        let response = SuccessResponse::new(data);
+        assert_eq!(response.data, "test data");
+    }
+
+    #[test]
+    fn test_message_response() {
+        let response = MessageResponse::new("Operation successful");
+        assert_eq!(response.message, "Operation successful");
+    }
+
+    #[test]
+    fn test_message_response_from_string() {
+        let response = MessageResponse::new(String::from("Dynamic message"));
+        assert_eq!(response.message, "Dynamic message");
+    }
+
+    #[test]
+    fn test_extract_ip_from_x_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "192.168.1.1, 10.0.0.1".parse().unwrap());
+        
+        let ip = extract_ip(&headers);
+        assert_eq!(ip, Some("192.168.1.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ip_from_x_forwarded_for_single() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "203.0.113.50".parse().unwrap());
+        
+        let ip = extract_ip(&headers);
+        assert_eq!(ip, Some("203.0.113.50".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ip_from_x_real_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", "10.20.30.40".parse().unwrap());
+        
+        let ip = extract_ip(&headers);
+        assert_eq!(ip, Some("10.20.30.40".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ip_prefers_x_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
+        headers.insert("x-real-ip", "5.6.7.8".parse().unwrap());
+        
+        let ip = extract_ip(&headers);
+        assert_eq!(ip, Some("1.2.3.4".to_string()));
+    }
+
+    #[test]
+    fn test_extract_ip_empty_headers() {
+        let headers = HeaderMap::new();
+        let ip = extract_ip(&headers);
+        assert_eq!(ip, None);
+    }
+
+    #[test]
+    fn test_extract_ip_empty_x_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "".parse().unwrap());
+        headers.insert("x-real-ip", "1.2.3.4".parse().unwrap());
+        
+        let ip = extract_ip(&headers);
+        assert_eq!(ip, Some("1.2.3.4".to_string()));
+    }
+}

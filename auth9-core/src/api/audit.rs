@@ -24,3 +24,40 @@ pub async fn list(
 
     Ok(Json(PaginatedResponse::new(logs, page, per_page, total)))
 }
+
+/// Calculate pagination page from offset and limit
+fn calculate_page(offset: Option<i64>, limit: Option<i64>) -> i64 {
+    let offset = offset.unwrap_or(0);
+    let limit = limit.unwrap_or(50);
+    offset / limit + 1
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_calculate_page_defaults() {
+        assert_eq!(calculate_page(None, None), 1);
+    }
+
+    #[test]
+    fn test_calculate_page_first_page() {
+        assert_eq!(calculate_page(Some(0), Some(50)), 1);
+    }
+
+    #[test]
+    fn test_calculate_page_second_page() {
+        assert_eq!(calculate_page(Some(50), Some(50)), 2);
+    }
+
+    #[test]
+    fn test_calculate_page_custom_limit() {
+        assert_eq!(calculate_page(Some(20), Some(10)), 3);
+    }
+
+    #[test]
+    fn test_calculate_page_large_offset() {
+        assert_eq!(calculate_page(Some(200), Some(50)), 5);
+    }
+}

@@ -213,8 +213,8 @@ mod tests {
             .with(eq(user_id), eq(tenant_id))
             .returning(|uid, tid| {
                 Ok(UserRolesInTenant {
-                    user_id: uid,
-                    tenant_id: tid,
+                    user_id: *uid,
+                    tenant_id: *tid,
                     roles: vec!["admin".to_string()],
                     permissions: vec!["user:read".to_string(), "user:write".to_string()],
                 })

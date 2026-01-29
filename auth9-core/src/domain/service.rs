@@ -154,13 +154,46 @@ mod tests {
     }
 
     #[test]
-    fn test_service_serialization_hides_secret() {
+    fn test_service_serialization() {
         let service = Service {
-            client_secret_hash: "secret-hash".to_string(),
+            name: "Test Service".to_string(),
             ..Default::default()
         };
 
         let json = serde_json::to_string(&service).unwrap();
+        assert!(json.contains("Test Service"));
+        assert!(json.contains("active"));
+    }
+
+    #[test]
+    fn test_client_serialization_hides_secret() {
+        let client = Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::new_v4(),
+            client_id: "test-client".to_string(),
+            client_secret_hash: "secret-hash".to_string(),
+            name: Some("Test Client".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let json = serde_json::to_string(&client).unwrap();
+        // client_secret_hash is marked with #[serde(skip_serializing)]
         assert!(!json.contains("secret-hash"));
+        assert!(json.contains("test-client"));
+    }
+
+    #[test]
+    fn test_service_status_serialization() {
+        assert_eq!(serde_json::to_string(&ServiceStatus::Active).unwrap(), "\"active\"");
+        assert_eq!(serde_json::to_string(&ServiceStatus::Inactive).unwrap(), "\"inactive\"");
+    }
+
+    #[test]
+    fn test_service_status_deserialization() {
+        let active: ServiceStatus = serde_json::from_str("\"active\"").unwrap();
+        let inactive: ServiceStatus = serde_json::from_str("\"inactive\"").unwrap();
+        
+        assert_eq!(active, ServiceStatus::Active);
+        assert_eq!(inactive, ServiceStatus::Inactive);
     }
 }
