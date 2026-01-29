@@ -31,6 +31,8 @@ logs/
 coverage/
 .coverage
 htmlcov/
+*.profraw
+*.profraw
 
 # Rust
 **/*.rs.bk
