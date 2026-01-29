@@ -139,7 +139,7 @@ pub async fn run(config: Config) -> Result<()> {
 }
 
 /// Build the HTTP router
-fn build_router(state: AppState) -> Router {
+pub fn build_router(state: AppState) -> Router {
     // CORS configuration
     let cors = CorsLayer::new()
         .allow_origin(Any)

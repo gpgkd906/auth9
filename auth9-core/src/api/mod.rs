@@ -17,7 +17,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 /// Pagination query parameters
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PaginationQuery {
     #[serde(default = "default_page")]
     pub page: i64,
@@ -34,13 +34,13 @@ fn default_per_page() -> i64 {
 }
 
 /// Paginated response wrapper
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginatedResponse<T> {
     pub data: Vec<T>,
     pub pagination: PaginationMeta,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PaginationMeta {
     pub page: i64,
     pub per_page: i64,
@@ -64,7 +64,7 @@ impl<T: Serialize> PaginatedResponse<T> {
 }
 
 /// Success response wrapper
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SuccessResponse<T> {
     pub data: T,
 }
@@ -76,7 +76,7 @@ impl<T: Serialize> SuccessResponse<T> {
 }
 
 /// Message response (for delete, etc.)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct MessageResponse {
     pub message: String,
 }

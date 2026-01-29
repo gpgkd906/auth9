@@ -85,7 +85,7 @@ pub struct CallbackRequest {
     pub state: Option<String>,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct TokenResponse {
     pub access_token: String,
     pub token_type: String,
@@ -500,7 +500,7 @@ async fn fetch_userinfo(state: &AppState, access_token: &str) -> Result<Keycloak
 }
 
 /// OpenID Connect Discovery endpoint
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct OpenIdConfiguration {
     pub issuer: String,
     pub authorization_endpoint: String,
