@@ -1,6 +1,7 @@
 //! Token Exchange gRPC service implementation
 
 use crate::cache::CacheManager;
+use crate::domain::StringUuid;
 use crate::grpc::proto::{
     token_exchange_server::TokenExchange, ExchangeTokenRequest, ExchangeTokenResponse,
     GetUserRolesRequest, GetUserRolesResponse, IntrospectTokenRequest, IntrospectTokenResponse,
@@ -67,9 +68,11 @@ where
             .verify_identity_token(&req.identity_token)
             .map_err(|e| Status::unauthenticated(format!("Invalid identity token: {}", e)))?;
 
-        let user_id = Uuid::parse_str(&claims.sub)
+        let user_id = claims.sub
+            .parse::<StringUuid>()
             .map_err(|_| Status::internal("Invalid user ID in token"))?;
-        let tenant_id = Uuid::parse_str(&req.tenant_id)
+        let tenant_id = req.tenant_id
+            .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
 
         let user_exists = self
@@ -92,14 +95,14 @@ where
 
         let user_roles = match self
             .cache_manager
-            .get_user_roles_for_service(user_id, tenant_id, service.id.0)
+            .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service.id.0)
             .await
         {
             Ok(Some(roles)) => roles,
             _ => {
                 let roles = self
                     .rbac_repo
-                    .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id.0)
+                    .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id)
                     .await
                     .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
 
@@ -115,9 +118,9 @@ where
         let access_token = self
             .jwt_manager
             .create_tenant_access_token(
-                user_id,
+                Uuid::from(user_id),
                 &claims.email,
-                tenant_id,
+                Uuid::from(tenant_id),
                 &service.client_id,
                 user_roles.roles,
                 user_roles.permissions,
@@ -126,7 +129,7 @@ where
 
         let refresh_token = self
             .jwt_manager
-            .create_refresh_token(user_id, tenant_id, &service.client_id)
+            .create_refresh_token(Uuid::from(user_id), Uuid::from(tenant_id), &service.client_id)
             .map_err(|e| Status::internal(format!("Failed to create refresh token: {}", e)))?;
 
         Ok(Response::new(ExchangeTokenResponse {
@@ -174,13 +177,15 @@ where
     ) -> Result<Response<GetUserRolesResponse>, Status> {
         let req = request.into_inner();
 
-        let user_id = Uuid::parse_str(&req.user_id)
+        let user_id = req.user_id
+            .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
-        let tenant_id = Uuid::parse_str(&req.tenant_id)
+        let tenant_id = req.tenant_id
+            .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
 
         let (user_roles, role_records) = if req.service_id.is_empty() {
-            let user_roles = match self.cache_manager.get_user_roles(user_id, tenant_id).await {
+            let user_roles = match self.cache_manager.get_user_roles(Uuid::from(user_id), Uuid::from(tenant_id)).await {
                 Ok(Some(roles)) => roles,
                 _ => {
                     let roles = self
@@ -203,12 +208,13 @@ where
                 .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
             (user_roles, role_records)
         } else {
-            let service_id = Uuid::parse_str(&req.service_id)
+            let service_id = req.service_id
+                .parse::<StringUuid>()
                 .map_err(|_| Status::invalid_argument("Invalid service ID"))?;
 
             let user_roles = match self
                 .cache_manager
-                .get_user_roles_for_service(user_id, tenant_id, service_id)
+                .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service_id.0)
                 .await
             {
                 Ok(Some(roles)) => roles,
@@ -223,7 +229,7 @@ where
 
                     let _ = self
                         .cache_manager
-                        .set_user_roles_for_service(&roles, service_id)
+                        .set_user_roles_for_service(&roles, service_id.0)
                         .await;
                     roles
                 }

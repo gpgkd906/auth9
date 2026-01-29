@@ -1,7 +1,7 @@
 //! Tenant business logic
 
 use crate::cache::CacheManager;
-use crate::domain::{CreateTenantInput, Tenant, TenantStatus, UpdateTenantInput};
+use crate::domain::{CreateTenantInput, StringUuid, Tenant, TenantStatus, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::repository::TenantRepository;
 use std::sync::Arc;
@@ -35,14 +35,14 @@ impl<R: TenantRepository> TenantService<R> {
 
         let tenant = self.repo.create(&input).await?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_tenant_config(tenant.id, &tenant).await;
+            let _ = cache.set_tenant_config(Uuid::from(tenant.id), &tenant).await;
         }
         Ok(tenant)
     }
 
-    pub async fn get(&self, id: Uuid) -> Result<Tenant> {
+    pub async fn get(&self, id: StringUuid) -> Result<Tenant> {
         if let Some(cache) = &self.cache_manager {
-            if let Ok(Some(tenant)) = cache.get_tenant_config(id).await {
+            if let Ok(Some(tenant)) = cache.get_tenant_config(Uuid::from(id)).await {
                 return Ok(tenant);
             }
         }
@@ -52,7 +52,7 @@ impl<R: TenantRepository> TenantService<R> {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_tenant_config(tenant.id, &tenant).await;
+            let _ = cache.set_tenant_config(Uuid::from(tenant.id), &tenant).await;
         }
         Ok(tenant)
     }
@@ -64,7 +64,7 @@ impl<R: TenantRepository> TenantService<R> {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Tenant '{}' not found", slug)))?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_tenant_config(tenant.id, &tenant).await;
+            let _ = cache.set_tenant_config(Uuid::from(tenant.id), &tenant).await;
         }
         Ok(tenant)
     }
@@ -76,7 +76,7 @@ impl<R: TenantRepository> TenantService<R> {
         Ok((tenants, total))
     }
 
-    pub async fn update(&self, id: Uuid, input: UpdateTenantInput) -> Result<Tenant> {
+    pub async fn update(&self, id: StringUuid, input: UpdateTenantInput) -> Result<Tenant> {
         input.validate()?;
 
         // Verify tenant exists
@@ -84,22 +84,22 @@ impl<R: TenantRepository> TenantService<R> {
 
         let tenant = self.repo.update(id, &input).await?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.invalidate_tenant_config(id).await;
+            let _ = cache.invalidate_tenant_config(Uuid::from(id)).await;
         }
         Ok(tenant)
     }
 
-    pub async fn delete(&self, id: Uuid) -> Result<()> {
+    pub async fn delete(&self, id: StringUuid) -> Result<()> {
         // Verify tenant exists
         let _ = self.get(id).await?;
         self.repo.delete(id).await?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.invalidate_tenant_config(id).await;
+            let _ = cache.invalidate_tenant_config(Uuid::from(id)).await;
         }
         Ok(())
     }
 
-    pub async fn disable(&self, id: Uuid) -> Result<Tenant> {
+    pub async fn disable(&self, id: StringUuid) -> Result<Tenant> {
         let _ = self.get(id).await?;
         let input = UpdateTenantInput {
             name: None,
@@ -109,7 +109,7 @@ impl<R: TenantRepository> TenantService<R> {
         };
         let tenant = self.repo.update(id, &input).await?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.invalidate_tenant_config(id).await;
+            let _ = cache.invalidate_tenant_config(Uuid::from(id)).await;
         }
         Ok(tenant)
     }
@@ -118,6 +118,7 @@ impl<R: TenantRepository> TenantService<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::StringUuid;
     use crate::repository::tenant::MockTenantRepository;
     use mockall::predicate::*;
 
@@ -178,7 +179,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_tenant_not_found() {
         let mut mock = MockTenantRepository::new();
-        let id = Uuid::new_v4();
+        let id = StringUuid::new_v4();
 
         mock.expect_find_by_id()
             .with(eq(id))

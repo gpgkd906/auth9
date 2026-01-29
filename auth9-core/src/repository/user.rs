@@ -1,34 +1,35 @@
 //! User repository
 
-use crate::domain::{AddUserToTenantInput, CreateUserInput, TenantUser, UpdateUserInput, User};
+use crate::domain::{
+    AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User,
+};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
-use uuid::Uuid;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait UserRepository: Send + Sync {
     async fn create(&self, keycloak_id: &str, input: &CreateUserInput) -> Result<User>;
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>>;
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>>;
     async fn find_by_email(&self, email: &str) -> Result<Option<User>>;
     async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>>;
     async fn count(&self) -> Result<i64>;
-    async fn update(&self, id: Uuid, input: &UpdateUserInput) -> Result<User>;
-    async fn update_mfa_enabled(&self, id: Uuid, enabled: bool) -> Result<User>;
-    async fn delete(&self, id: Uuid) -> Result<()>;
+    async fn update(&self, id: StringUuid, input: &UpdateUserInput) -> Result<User>;
+    async fn update_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User>;
+    async fn delete(&self, id: StringUuid) -> Result<()>;
 
     // Tenant-User relations
     async fn add_to_tenant(&self, input: &AddUserToTenantInput) -> Result<TenantUser>;
-    async fn remove_from_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()>;
+    async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()>;
     async fn find_tenant_users(
         &self,
-        tenant_id: Uuid,
+        tenant_id: StringUuid,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<User>>;
-    async fn find_user_tenants(&self, user_id: Uuid) -> Result<Vec<TenantUser>>;
+    async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>>;
 }
 
 pub struct UserRepositoryImpl {
@@ -44,7 +45,7 @@ impl UserRepositoryImpl {
 #[async_trait]
 impl UserRepository for UserRepositoryImpl {
     async fn create(&self, keycloak_id: &str, input: &CreateUserInput) -> Result<User> {
-        let id = Uuid::new_v4();
+        let id = StringUuid::new_v4();
 
         sqlx::query(
             r#"
@@ -65,7 +66,7 @@ impl UserRepository for UserRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create user")))
     }
 
-    async fn find_by_id(&self, id: Uuid) -> Result<Option<User>> {
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
@@ -134,7 +135,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(row.0)
     }
 
-    async fn update(&self, id: Uuid, input: &UpdateUserInput) -> Result<User> {
+    async fn update(&self, id: StringUuid, input: &UpdateUserInput) -> Result<User> {
         let existing = self
             .find_by_id(id)
             .await?
@@ -164,7 +165,7 @@ impl UserRepository for UserRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to update user")))
     }
 
-    async fn update_mfa_enabled(&self, id: Uuid, enabled: bool) -> Result<User> {
+    async fn update_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User> {
         let result = sqlx::query(
             r#"
             UPDATE users
@@ -186,7 +187,7 @@ impl UserRepository for UserRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to update user")))
     }
 
-    async fn delete(&self, id: Uuid) -> Result<()> {
+    async fn delete(&self, id: StringUuid) -> Result<()> {
         let result = sqlx::query("DELETE FROM users WHERE id = ?")
             .bind(id)
             .execute(&self.pool)
@@ -200,7 +201,7 @@ impl UserRepository for UserRepositoryImpl {
     }
 
     async fn add_to_tenant(&self, input: &AddUserToTenantInput) -> Result<TenantUser> {
-        let id = Uuid::new_v4();
+        let id = StringUuid::new_v4();
 
         sqlx::query(
             r#"
@@ -209,8 +210,8 @@ impl UserRepository for UserRepositoryImpl {
             "#,
         )
         .bind(id)
-        .bind(input.tenant_id)
-        .bind(input.user_id)
+        .bind(StringUuid::from(input.tenant_id))
+        .bind(StringUuid::from(input.user_id))
         .bind(&input.role_in_tenant)
         .execute(&self.pool)
         .await?;
@@ -229,7 +230,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(tenant_user)
     }
 
-    async fn remove_from_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()> {
+    async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()> {
         let result = sqlx::query("DELETE FROM tenant_users WHERE user_id = ? AND tenant_id = ?")
             .bind(user_id)
             .bind(tenant_id)
@@ -247,7 +248,7 @@ impl UserRepository for UserRepositoryImpl {
 
     async fn find_tenant_users(
         &self,
-        tenant_id: Uuid,
+        tenant_id: StringUuid,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<User>> {
@@ -270,7 +271,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(users)
     }
 
-    async fn find_user_tenants(&self, user_id: Uuid) -> Result<Vec<TenantUser>> {
+    async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
         let tenant_users = sqlx::query_as::<_, TenantUser>(
             r#"
             SELECT id, tenant_id, user_id, role_in_tenant, joined_at

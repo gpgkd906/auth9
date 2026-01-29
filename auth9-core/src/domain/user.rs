@@ -1,5 +1,6 @@
 //! User domain model
 
+use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -9,7 +10,7 @@ use validator::Validate;
 /// User entity
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct User {
-    pub id: Uuid,
+    pub id: StringUuid,
     pub keycloak_id: String,
     pub email: String,
     pub display_name: Option<String>,
@@ -23,7 +24,7 @@ impl Default for User {
     fn default() -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
+            id: StringUuid::new_v4(),
             keycloak_id: String::new(),
             email: String::new(),
             display_name: None,
@@ -38,9 +39,9 @@ impl Default for User {
 /// User-Tenant relationship
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct TenantUser {
-    pub id: Uuid,
-    pub tenant_id: Uuid,
-    pub user_id: Uuid,
+    pub id: StringUuid,
+    pub tenant_id: StringUuid,
+    pub user_id: StringUuid,
     /// Role within the tenant (e.g., "admin", "member")
     pub role_in_tenant: String,
     pub joined_at: DateTime<Utc>,

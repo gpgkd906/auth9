@@ -1,5 +1,6 @@
 //! Service/Client domain model
 
+use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -43,82 +44,6 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for ServiceStatus {
             ServiceStatus::Inactive => "inactive",
         };
         <&str as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&s, buf)
-    }
-}
-
-/// Wrapper type for UUID stored as CHAR(36) in MySQL/TiDB
-/// sqlx's uuid feature expects BINARY(16), but we use CHAR(36)
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(transparent)]
-pub struct StringUuid(pub Uuid);
-
-impl StringUuid {
-    pub fn new_v4() -> Self {
-        StringUuid(Uuid::new_v4())
-    }
-
-    pub fn nil() -> Self {
-        StringUuid(Uuid::nil())
-    }
-
-    pub fn is_nil(&self) -> bool {
-        self.0.is_nil()
-    }
-}
-
-impl From<Uuid> for StringUuid {
-    fn from(uuid: Uuid) -> Self {
-        StringUuid(uuid)
-    }
-}
-
-impl From<StringUuid> for Uuid {
-    fn from(s: StringUuid) -> Self {
-        s.0
-    }
-}
-
-impl std::ops::Deref for StringUuid {
-    type Target = Uuid;
-    fn deref(&self) -> &Self::Target {
-        &self.0
-    }
-}
-
-impl std::fmt::Display for StringUuid {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        self.0.fmt(f)
-    }
-}
-
-impl std::str::FromStr for StringUuid {
-    type Err = uuid::Error;
-    fn from_str(s: &str) -> Result<Self, Self::Err> {
-        Ok(StringUuid(Uuid::parse_str(s)?))
-    }
-}
-
-impl sqlx::Type<sqlx::MySql> for StringUuid {
-    fn type_info() -> sqlx::mysql::MySqlTypeInfo {
-        <String as sqlx::Type<sqlx::MySql>>::type_info()
-    }
-
-    fn compatible(ty: &sqlx::mysql::MySqlTypeInfo) -> bool {
-        <String as sqlx::Type<sqlx::MySql>>::compatible(ty)
-    }
-}
-
-impl<'r> sqlx::Decode<'r, sqlx::MySql> for StringUuid {
-    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
-        let s = <String as sqlx::Decode<sqlx::MySql>>::decode(value)?;
-        let uuid = Uuid::parse_str(&s)?;
-        Ok(StringUuid(uuid))
-    }
-}
-
-impl<'q> sqlx::Encode<'q, sqlx::MySql> for StringUuid {
-    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
-        <String as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&self.0.to_string(), buf)
     }
 }
 

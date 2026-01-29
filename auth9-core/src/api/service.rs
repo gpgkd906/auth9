@@ -1,8 +1,6 @@
 //! Service/Client API handlers
 
-use crate::api::{
-    write_audit_log, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
-};
+use crate::api::{write_audit_log, MessageResponse, PaginatedResponse, SuccessResponse};
 use crate::domain::{CreateServiceInput, UpdateServiceInput};
 use crate::error::Result;
 use crate::keycloak::KeycloakOidcClient;
@@ -20,9 +18,19 @@ use uuid::Uuid;
 
 #[derive(Debug, Deserialize)]
 pub struct ListServicesQuery {
-    #[serde(flatten)]
-    pub pagination: PaginationQuery,
+    #[serde(default = "default_page")]
+    pub page: i64,
+    #[serde(default = "default_per_page")]
+    pub per_page: i64,
     pub tenant_id: Option<Uuid>,
+}
+
+fn default_page() -> i64 {
+    1
+}
+
+fn default_per_page() -> i64 {
+    20
 }
 
 /// List services
@@ -32,17 +40,13 @@ pub async fn list(
 ) -> Result<impl IntoResponse> {
     let (services, total) = state
         .client_service
-        .list(
-            query.tenant_id,
-            query.pagination.page,
-            query.pagination.per_page,
-        )
+        .list(query.tenant_id, query.page, query.per_page)
         .await?;
 
     Ok(Json(PaginatedResponse::new(
         services,
-        query.pagination.page,
-        query.pagination.per_page,
+        query.page,
+        query.per_page,
         total,
     )))
 }

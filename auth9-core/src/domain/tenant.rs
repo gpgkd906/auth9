@@ -1,9 +1,9 @@
 //! Tenant domain model
 
+use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
-use uuid::Uuid;
 use validator::Validate;
 
 /// Tenant status
@@ -58,7 +58,7 @@ pub struct TenantBranding {
 /// Tenant entity
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
 pub struct Tenant {
-    pub id: Uuid,
+    pub id: StringUuid,
     pub name: String,
     pub slug: String,
     pub logo_url: Option<String>,
@@ -73,7 +73,7 @@ impl Default for Tenant {
     fn default() -> Self {
         let now = Utc::now();
         Self {
-            id: Uuid::new_v4(),
+            id: StringUuid::new_v4(),
             name: String::new(),
             slug: String::new(),
             logo_url: None,

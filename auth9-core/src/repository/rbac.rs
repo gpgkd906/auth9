@@ -1,8 +1,8 @@
 //! RBAC repository
 
 use crate::domain::{
-    AssignRolesInput, CreatePermissionInput, CreateRoleInput, Permission, Role, UpdateRoleInput,
-    UserRolesInTenant,
+    AssignRolesInput, CreatePermissionInput, CreateRoleInput, Permission, Role, StringUuid,
+    UpdateRoleInput, UserRolesInTenant,
 };
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
@@ -15,45 +15,45 @@ use uuid::Uuid;
 pub trait RbacRepository: Send + Sync {
     // Permissions
     async fn create_permission(&self, input: &CreatePermissionInput) -> Result<Permission>;
-    async fn find_permission_by_id(&self, id: Uuid) -> Result<Option<Permission>>;
-    async fn find_permissions_by_service(&self, service_id: Uuid) -> Result<Vec<Permission>>;
-    async fn delete_permission(&self, id: Uuid) -> Result<()>;
+    async fn find_permission_by_id(&self, id: StringUuid) -> Result<Option<Permission>>;
+    async fn find_permissions_by_service(&self, service_id: StringUuid) -> Result<Vec<Permission>>;
+    async fn delete_permission(&self, id: StringUuid) -> Result<()>;
 
     // Roles
     async fn create_role(&self, input: &CreateRoleInput) -> Result<Role>;
-    async fn find_role_by_id(&self, id: Uuid) -> Result<Option<Role>>;
-    async fn find_roles_by_service(&self, service_id: Uuid) -> Result<Vec<Role>>;
-    async fn update_role(&self, id: Uuid, input: &UpdateRoleInput) -> Result<Role>;
-    async fn delete_role(&self, id: Uuid) -> Result<()>;
+    async fn find_role_by_id(&self, id: StringUuid) -> Result<Option<Role>>;
+    async fn find_roles_by_service(&self, service_id: StringUuid) -> Result<Vec<Role>>;
+    async fn update_role(&self, id: StringUuid, input: &UpdateRoleInput) -> Result<Role>;
+    async fn delete_role(&self, id: StringUuid) -> Result<()>;
 
     // Role-Permission mapping
-    async fn assign_permission_to_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()>;
-    async fn remove_permission_from_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()>;
-    async fn find_role_permissions(&self, role_id: Uuid) -> Result<Vec<Permission>>;
+    async fn assign_permission_to_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()>;
+    async fn remove_permission_from_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()>;
+    async fn find_role_permissions(&self, role_id: StringUuid) -> Result<Vec<Permission>>;
 
     // User-Tenant-Role
     async fn assign_roles_to_user(
         &self,
         input: &AssignRolesInput,
-        granted_by: Option<Uuid>,
+        granted_by: Option<StringUuid>,
     ) -> Result<()>;
-    async fn remove_role_from_user(&self, tenant_user_id: Uuid, role_id: Uuid) -> Result<()>;
+    async fn remove_role_from_user(&self, tenant_user_id: StringUuid, role_id: StringUuid) -> Result<()>;
     async fn find_user_roles_in_tenant(
         &self,
-        user_id: Uuid,
-        tenant_id: Uuid,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
     ) -> Result<UserRolesInTenant>;
     async fn find_user_roles_in_tenant_for_service(
         &self,
-        user_id: Uuid,
-        tenant_id: Uuid,
-        service_id: Uuid,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
     ) -> Result<UserRolesInTenant>;
     async fn find_user_role_records_in_tenant(
         &self,
-        user_id: Uuid,
-        tenant_id: Uuid,
-        service_id: Option<Uuid>,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        service_id: Option<StringUuid>,
     ) -> Result<Vec<Role>>;
 }
 
@@ -67,16 +67,16 @@ impl RbacRepositoryImpl {
     }
 
     async fn resolve_inherited_roles(&self, base_roles: Vec<Role>) -> Result<Vec<Role>> {
-        let mut roles_by_id: HashMap<Uuid, Role> = base_roles
+        let mut roles_by_id: HashMap<StringUuid, Role> = base_roles
             .iter()
             .cloned()
             .map(|role| (role.id, role))
             .collect();
-        let mut queue: VecDeque<Uuid> = base_roles
+        let mut queue: VecDeque<StringUuid> = base_roles
             .iter()
             .filter_map(|role| role.parent_role_id)
             .collect();
-        let mut visited: HashSet<Uuid> = roles_by_id.keys().cloned().collect();
+        let mut visited: HashSet<StringUuid> = roles_by_id.keys().cloned().collect();
 
         while let Some(role_id) = queue.pop_front() {
             if visited.contains(&role_id) {
@@ -110,7 +110,8 @@ impl RbacRepositoryImpl {
 #[async_trait]
 impl RbacRepository for RbacRepositoryImpl {
     async fn create_permission(&self, input: &CreatePermissionInput) -> Result<Permission> {
-        let id = Uuid::new_v4();
+        let id = StringUuid::new_v4();
+        let service_id = StringUuid::from(input.service_id);
 
         sqlx::query(
             r#"
@@ -119,7 +120,7 @@ impl RbacRepository for RbacRepositoryImpl {
             "#,
         )
         .bind(id)
-        .bind(input.service_id)
+        .bind(service_id)
         .bind(&input.code)
         .bind(&input.name)
         .bind(&input.description)
@@ -131,7 +132,7 @@ impl RbacRepository for RbacRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create permission")))
     }
 
-    async fn find_permission_by_id(&self, id: Uuid) -> Result<Option<Permission>> {
+    async fn find_permission_by_id(&self, id: StringUuid) -> Result<Option<Permission>> {
         let permission = sqlx::query_as::<_, Permission>(
             "SELECT id, service_id, code, name, description FROM permissions WHERE id = ?",
         )
@@ -142,7 +143,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(permission)
     }
 
-    async fn find_permissions_by_service(&self, service_id: Uuid) -> Result<Vec<Permission>> {
+    async fn find_permissions_by_service(&self, service_id: StringUuid) -> Result<Vec<Permission>> {
         let permissions = sqlx::query_as::<_, Permission>(
             "SELECT id, service_id, code, name, description FROM permissions WHERE service_id = ?",
         )
@@ -153,7 +154,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(permissions)
     }
 
-    async fn delete_permission(&self, id: Uuid) -> Result<()> {
+    async fn delete_permission(&self, id: StringUuid) -> Result<()> {
         // Delete role-permission mappings first
         sqlx::query("DELETE FROM role_permissions WHERE permission_id = ?")
             .bind(id)
@@ -173,7 +174,9 @@ impl RbacRepository for RbacRepositoryImpl {
     }
 
     async fn create_role(&self, input: &CreateRoleInput) -> Result<Role> {
-        let id = Uuid::new_v4();
+        let id = StringUuid::new_v4();
+        let service_id = StringUuid::from(input.service_id);
+        let parent_role_id = input.parent_role_id.map(StringUuid::from);
 
         sqlx::query(
             r#"
@@ -182,17 +185,17 @@ impl RbacRepository for RbacRepositoryImpl {
             "#,
         )
         .bind(id)
-        .bind(input.service_id)
+        .bind(service_id)
         .bind(&input.name)
         .bind(&input.description)
-        .bind(input.parent_role_id)
+        .bind(parent_role_id)
         .execute(&self.pool)
         .await?;
 
         // Assign permissions if provided
         if let Some(permission_ids) = &input.permission_ids {
             for perm_id in permission_ids {
-                self.assign_permission_to_role(id, *perm_id).await?;
+                self.assign_permission_to_role(id, StringUuid::from(*perm_id)).await?;
             }
         }
 
@@ -201,7 +204,7 @@ impl RbacRepository for RbacRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create role")))
     }
 
-    async fn find_role_by_id(&self, id: Uuid) -> Result<Option<Role>> {
+    async fn find_role_by_id(&self, id: StringUuid) -> Result<Option<Role>> {
         let role = sqlx::query_as::<_, Role>(
             "SELECT id, service_id, name, description, parent_role_id, created_at, updated_at FROM roles WHERE id = ?",
         )
@@ -212,7 +215,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(role)
     }
 
-    async fn find_roles_by_service(&self, service_id: Uuid) -> Result<Vec<Role>> {
+    async fn find_roles_by_service(&self, service_id: StringUuid) -> Result<Vec<Role>> {
         let roles = sqlx::query_as::<_, Role>(
             "SELECT id, service_id, name, description, parent_role_id, created_at, updated_at FROM roles WHERE service_id = ?",
         )
@@ -223,7 +226,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(roles)
     }
 
-    async fn update_role(&self, id: Uuid, input: &UpdateRoleInput) -> Result<Role> {
+    async fn update_role(&self, id: StringUuid, input: &UpdateRoleInput) -> Result<Role> {
         let existing = self
             .find_role_by_id(id)
             .await?
@@ -231,7 +234,7 @@ impl RbacRepository for RbacRepositoryImpl {
 
         let name = input.name.as_ref().unwrap_or(&existing.name);
         let description = input.description.as_ref().or(existing.description.as_ref());
-        let parent_role_id = input.parent_role_id.or(existing.parent_role_id);
+        let parent_role_id = input.parent_role_id.map(StringUuid::from).or(existing.parent_role_id);
 
         sqlx::query(
             r#"
@@ -252,7 +255,7 @@ impl RbacRepository for RbacRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to update role")))
     }
 
-    async fn delete_role(&self, id: Uuid) -> Result<()> {
+    async fn delete_role(&self, id: StringUuid) -> Result<()> {
         // Delete role-permission and user-role mappings first
         sqlx::query("DELETE FROM role_permissions WHERE role_id = ?")
             .bind(id)
@@ -276,7 +279,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn assign_permission_to_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()> {
+    async fn assign_permission_to_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()> {
         sqlx::query("INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
             .bind(role_id)
             .bind(permission_id)
@@ -286,7 +289,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn remove_permission_from_role(&self, role_id: Uuid, permission_id: Uuid) -> Result<()> {
+    async fn remove_permission_from_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()> {
         sqlx::query("DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?")
             .bind(role_id)
             .bind(permission_id)
@@ -296,7 +299,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn find_role_permissions(&self, role_id: Uuid) -> Result<Vec<Permission>> {
+    async fn find_role_permissions(&self, role_id: StringUuid) -> Result<Vec<Permission>> {
         let permissions = sqlx::query_as::<_, Permission>(
             r#"
             SELECT p.id, p.service_id, p.code, p.name, p.description
@@ -315,13 +318,15 @@ impl RbacRepository for RbacRepositoryImpl {
     async fn assign_roles_to_user(
         &self,
         input: &AssignRolesInput,
-        granted_by: Option<Uuid>,
+        granted_by: Option<StringUuid>,
     ) -> Result<()> {
         // First find the tenant_user record
-        let tenant_user_id: Option<(Uuid,)> =
+        let user_id = StringUuid::from(input.user_id);
+        let tenant_id = StringUuid::from(input.tenant_id);
+        let tenant_user_id: Option<(StringUuid,)> =
             sqlx::query_as("SELECT id FROM tenant_users WHERE user_id = ? AND tenant_id = ?")
-                .bind(input.user_id)
-                .bind(input.tenant_id)
+                .bind(user_id)
+                .bind(tenant_id)
                 .fetch_optional(&self.pool)
                 .await?;
 
@@ -330,7 +335,8 @@ impl RbacRepository for RbacRepositoryImpl {
             .0;
 
         for role_id in &input.role_ids {
-            let id = Uuid::new_v4();
+            let id = StringUuid::new_v4();
+            let role_id = StringUuid::from(*role_id);
             sqlx::query(
                 r#"
                 INSERT IGNORE INTO user_tenant_roles (id, tenant_user_id, role_id, granted_at, granted_by)
@@ -348,7 +354,7 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn remove_role_from_user(&self, tenant_user_id: Uuid, role_id: Uuid) -> Result<()> {
+    async fn remove_role_from_user(&self, tenant_user_id: StringUuid, role_id: StringUuid) -> Result<()> {
         sqlx::query("DELETE FROM user_tenant_roles WHERE tenant_user_id = ? AND role_id = ?")
             .bind(tenant_user_id)
             .bind(role_id)
@@ -360,8 +366,8 @@ impl RbacRepository for RbacRepositoryImpl {
 
     async fn find_user_roles_in_tenant(
         &self,
-        user_id: Uuid,
-        tenant_id: Uuid,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
     ) -> Result<UserRolesInTenant> {
         let base_roles = self
             .find_user_role_records_in_tenant(user_id, tenant_id, None)
@@ -369,8 +375,8 @@ impl RbacRepository for RbacRepositoryImpl {
         let roles = self.resolve_inherited_roles(base_roles).await?;
         let permissions = self.collect_permissions(&roles).await?;
         Ok(UserRolesInTenant {
-            user_id,
-            tenant_id,
+            user_id: Uuid::from(user_id),
+            tenant_id: Uuid::from(tenant_id),
             roles: roles.into_iter().map(|role| role.name).collect(),
             permissions,
         })
@@ -378,9 +384,9 @@ impl RbacRepository for RbacRepositoryImpl {
 
     async fn find_user_roles_in_tenant_for_service(
         &self,
-        user_id: Uuid,
-        tenant_id: Uuid,
-        service_id: Uuid,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
     ) -> Result<UserRolesInTenant> {
         let base_roles = self
             .find_user_role_records_in_tenant(user_id, tenant_id, Some(service_id))
@@ -388,8 +394,8 @@ impl RbacRepository for RbacRepositoryImpl {
         let roles = self.resolve_inherited_roles(base_roles).await?;
         let permissions = self.collect_permissions(&roles).await?;
         Ok(UserRolesInTenant {
-            user_id,
-            tenant_id,
+            user_id: Uuid::from(user_id),
+            tenant_id: Uuid::from(tenant_id),
             roles: roles.into_iter().map(|role| role.name).collect(),
             permissions,
         })
@@ -397,9 +403,9 @@ impl RbacRepository for RbacRepositoryImpl {
 
     async fn find_user_role_records_in_tenant(
         &self,
-        user_id: Uuid,
-        tenant_id: Uuid,
-        service_id: Option<Uuid>,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        service_id: Option<StringUuid>,
     ) -> Result<Vec<Role>> {
         let mut sql = String::from(
             "SELECT r.id, r.service_id, r.name, r.description, r.parent_role_id, r.created_at, r.updated_at \
