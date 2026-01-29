@@ -69,7 +69,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
             WHERE id = ?
             "#,
         )
-        .bind(id)
+        .bind(id.to_string())
         .fetch_optional(&self.pool)
         .await?;
 
@@ -102,7 +102,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
                 LIMIT ? OFFSET ?
                 "#,
             )
-            .bind(tid)
+            .bind(tid.to_string())
             .bind(limit)
             .bind(offset)
             .fetch_all(&self.pool)
@@ -128,7 +128,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
     async fn count(&self, tenant_id: Option<Uuid>) -> Result<i64> {
         let row: (i64,) = if let Some(tid) = tenant_id {
             sqlx::query_as("SELECT COUNT(*) FROM services WHERE tenant_id = ?")
-                .bind(tid)
+                .bind(tid.to_string())
                 .fetch_one(&self.pool)
                 .await?
         } else {
@@ -176,7 +176,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
         .bind(&redirect_uris_json)
         .bind(&logout_uris_json)
         .bind(status_str)
-        .bind(id)
+        .bind(id.to_string())
         .execute(&self.pool)
         .await?;
 
@@ -190,7 +190,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
             "UPDATE services SET client_secret_hash = ?, updated_at = NOW() WHERE id = ?",
         )
         .bind(secret_hash)
-        .bind(id)
+        .bind(id.to_string())
         .execute(&self.pool)
         .await?;
 
@@ -203,7 +203,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
 
     async fn delete(&self, id: Uuid) -> Result<()> {
         let result = sqlx::query("DELETE FROM services WHERE id = ?")
-            .bind(id)
+            .bind(id.to_string())
             .execute(&self.pool)
             .await?;
 
