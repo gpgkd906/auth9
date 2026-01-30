@@ -8,9 +8,6 @@ import {
   type Tenant,
   type User,
   type Service,
-  type Role,
-  type Permission,
-  type AuditLog,
   type PaginatedResponse,
 } from '~/services/api';
 

@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
+import { json } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
@@ -24,7 +24,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { tenantApi } from "~/services/api";
+import { tenantApi, type Tenant } from "~/services/api";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Tenants - Auth9" }];
@@ -67,8 +67,9 @@ export async function action({ request }: ActionFunctionArgs) {
       await tenantApi.delete(id);
       return json({ success: true });
     }
-  } catch (error: any) {
-    return json({ error: error.message }, { status: 400 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return json({ error: message }, { status: 400 });
   }
 
   return json({ error: "Invalid intent" }, { status: 400 });
@@ -80,7 +81,7 @@ export default function TenantsPage() {
   const navigation = useNavigation();
   const submit = useSubmit();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
-  const [editingTenant, setEditingTenant] = useState<any>(null);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
 

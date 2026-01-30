@@ -84,7 +84,7 @@ describe("DropdownMenu", () => {
 
     it("renders checkbox items", async () => {
         const user = userEvent.setup();
-        let checked = false;
+        const checked = false;
 
         render(
             <DropdownMenu>

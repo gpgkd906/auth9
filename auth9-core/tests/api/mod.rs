@@ -1,1 +1,1147 @@
-//! API integration tests
+//! API integration tests infrastructure
+//!
+//! This module provides test utilities for API handler testing without
+//! external dependencies (no database, no Redis, no Keycloak).
+
+pub mod tenant_api_test;
+pub mod user_api_test;
+pub mod role_api_test;
+
+use async_trait::async_trait;
+use auth9_core::cache::NoOpCacheManager;
+use auth9_core::config::JwtConfig;
+use auth9_core::domain::{
+    AddUserToTenantInput, AssignRolesInput, Client, CreatePermissionInput, CreateRoleInput,
+    CreateServiceInput, CreateTenantInput, CreateUserInput, Permission, Role, Service,
+    ServiceStatus, StringUuid, Tenant, TenantSettings, TenantStatus, TenantUser, UpdateRoleInput,
+    UpdateServiceInput, UpdateTenantInput, UpdateUserInput, User, UserRolesInTenant,
+};
+use auth9_core::error::{AppError, Result};
+use auth9_core::jwt::JwtManager;
+use auth9_core::repository::audit::{AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput};
+use auth9_core::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
+use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
+use chrono::Utc;
+use std::sync::Arc;
+use tokio::sync::RwLock;
+use uuid::Uuid;
+
+// ============================================================================
+// Test Configuration
+// ============================================================================
+
+pub fn test_jwt_config() -> JwtConfig {
+    JwtConfig {
+        secret: "test-secret-key-for-api-testing-purposes".to_string(),
+        issuer: "https://auth9.test".to_string(),
+        access_token_ttl_secs: 3600,
+        refresh_token_ttl_secs: 604800,
+        private_key_pem: None,
+        public_key_pem: None,
+    }
+}
+
+pub fn create_test_jwt_manager() -> JwtManager {
+    JwtManager::new(test_jwt_config())
+}
+
+pub fn create_test_cache() -> NoOpCacheManager {
+    NoOpCacheManager::new()
+}
+
+// ============================================================================
+// Test Repository Implementations
+// ============================================================================
+
+/// Configurable test tenant repository
+pub struct TestTenantRepository {
+    tenants: RwLock<Vec<Tenant>>,
+}
+
+impl TestTenantRepository {
+    pub fn new() -> Self {
+        Self {
+            tenants: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_tenant(&self, tenant: Tenant) {
+        self.tenants.write().await.push(tenant);
+    }
+
+    pub async fn set_tenants(&self, tenants: Vec<Tenant>) {
+        *self.tenants.write().await = tenants;
+    }
+
+    pub async fn clear(&self) {
+        self.tenants.write().await.clear();
+    }
+}
+
+impl Default for TestTenantRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl TenantRepository for TestTenantRepository {
+    async fn create(&self, input: &CreateTenantInput) -> Result<Tenant> {
+        let tenant = Tenant {
+            id: StringUuid::new_v4(),
+            name: input.name.clone(),
+            slug: input.slug.clone(),
+            logo_url: input.logo_url.clone(),
+            settings: input.settings.clone().unwrap_or_default(),
+            status: TenantStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        self.tenants.write().await.push(tenant.clone());
+        Ok(tenant)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Tenant>> {
+        let tenants = self.tenants.read().await;
+        Ok(tenants.iter().find(|t| t.id == id).cloned())
+    }
+
+    async fn find_by_slug(&self, slug: &str) -> Result<Option<Tenant>> {
+        let tenants = self.tenants.read().await;
+        Ok(tenants.iter().find(|t| t.slug == slug).cloned())
+    }
+
+    async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Tenant>> {
+        let tenants = self.tenants.read().await;
+        let start = offset as usize;
+        let end = (offset + limit) as usize;
+        Ok(tenants
+            .iter()
+            .skip(start)
+            .take(end - start)
+            .cloned()
+            .collect())
+    }
+
+    async fn count(&self) -> Result<i64> {
+        Ok(self.tenants.read().await.len() as i64)
+    }
+
+    async fn update(&self, id: StringUuid, input: &UpdateTenantInput) -> Result<Tenant> {
+        let mut tenants = self.tenants.write().await;
+        let tenant = tenants
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
+
+        if let Some(name) = &input.name {
+            tenant.name = name.clone();
+        }
+        if let Some(logo_url) = &input.logo_url {
+            tenant.logo_url = Some(logo_url.clone());
+        }
+        if let Some(settings) = &input.settings {
+            tenant.settings = settings.clone();
+        }
+        if let Some(status) = &input.status {
+            tenant.status = status.clone();
+        }
+        tenant.updated_at = Utc::now();
+        Ok(tenant.clone())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut tenants = self.tenants.write().await;
+        let pos = tenants
+            .iter()
+            .position(|t| t.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
+        tenants.remove(pos);
+        Ok(())
+    }
+}
+
+/// Configurable test user repository
+pub struct TestUserRepository {
+    users: RwLock<Vec<User>>,
+    tenant_users: RwLock<Vec<TenantUser>>,
+}
+
+impl TestUserRepository {
+    pub fn new() -> Self {
+        Self {
+            users: RwLock::new(vec![]),
+            tenant_users: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_user(&self, user: User) {
+        self.users.write().await.push(user);
+    }
+
+    pub async fn set_users(&self, users: Vec<User>) {
+        *self.users.write().await = users;
+    }
+
+    pub async fn add_tenant_user(&self, tenant_user: TenantUser) {
+        self.tenant_users.write().await.push(tenant_user);
+    }
+}
+
+impl Default for TestUserRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl UserRepository for TestUserRepository {
+    async fn create(&self, keycloak_id: &str, input: &CreateUserInput) -> Result<User> {
+        let user = User {
+            id: StringUuid::new_v4(),
+            email: input.email.clone(),
+            display_name: input.display_name.clone(),
+            avatar_url: input.avatar_url.clone(),
+            keycloak_id: keycloak_id.to_string(),
+            mfa_enabled: false,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        self.users.write().await.push(user.clone());
+        Ok(user)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>> {
+        let users = self.users.read().await;
+        Ok(users.iter().find(|u| u.id == id).cloned())
+    }
+
+    async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
+        let users = self.users.read().await;
+        Ok(users.iter().find(|u| u.email == email).cloned())
+    }
+
+    async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>> {
+        let users = self.users.read().await;
+        Ok(users.iter().find(|u| u.keycloak_id == keycloak_id).cloned())
+    }
+
+    async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
+        let users = self.users.read().await;
+        let start = offset as usize;
+        Ok(users.iter().skip(start).take(limit as usize).cloned().collect())
+    }
+
+    async fn count(&self) -> Result<i64> {
+        Ok(self.users.read().await.len() as i64)
+    }
+
+    async fn update(&self, id: StringUuid, input: &UpdateUserInput) -> Result<User> {
+        let mut users = self.users.write().await;
+        let user = users
+            .iter_mut()
+            .find(|u| u.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("User {} not found", id)))?;
+
+        if let Some(display_name) = &input.display_name {
+            user.display_name = Some(display_name.clone());
+        }
+        if let Some(avatar_url) = &input.avatar_url {
+            user.avatar_url = Some(avatar_url.clone());
+        }
+        user.updated_at = Utc::now();
+        Ok(user.clone())
+    }
+
+    async fn update_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User> {
+        let mut users = self.users.write().await;
+        let user = users
+            .iter_mut()
+            .find(|u| u.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("User {} not found", id)))?;
+        user.mfa_enabled = enabled;
+        user.updated_at = Utc::now();
+        Ok(user.clone())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut users = self.users.write().await;
+        let pos = users
+            .iter()
+            .position(|u| u.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("User {} not found", id)))?;
+        users.remove(pos);
+        Ok(())
+    }
+
+    async fn add_to_tenant(&self, input: &AddUserToTenantInput) -> Result<TenantUser> {
+        let tenant_user = TenantUser {
+            id: StringUuid::new_v4(),
+            user_id: StringUuid::from(input.user_id),
+            tenant_id: StringUuid::from(input.tenant_id),
+            role_in_tenant: input.role_in_tenant.clone(),
+            joined_at: Utc::now(),
+        };
+        self.tenant_users.write().await.push(tenant_user.clone());
+        Ok(tenant_user)
+    }
+
+    async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()> {
+        let mut tenant_users = self.tenant_users.write().await;
+        let pos = tenant_users
+            .iter()
+            .position(|tu| tu.user_id == user_id && tu.tenant_id == tenant_id)
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "User {} not in tenant {}",
+                    user_id, tenant_id
+                ))
+            })?;
+        tenant_users.remove(pos);
+        Ok(())
+    }
+
+    async fn find_tenant_users(
+        &self,
+        tenant_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<User>> {
+        let tenant_users = self.tenant_users.read().await;
+        let users = self.users.read().await;
+        let user_ids: Vec<StringUuid> = tenant_users
+            .iter()
+            .filter(|tu| tu.tenant_id == tenant_id)
+            .map(|tu| tu.user_id)
+            .collect();
+        Ok(users
+            .iter()
+            .filter(|u| user_ids.contains(&u.id))
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
+        let tenant_users = self.tenant_users.read().await;
+        Ok(tenant_users
+            .iter()
+            .filter(|tu| tu.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+}
+
+/// Configurable test service repository
+pub struct TestServiceRepository {
+    services: RwLock<Vec<Service>>,
+    clients: RwLock<Vec<Client>>,
+}
+
+impl TestServiceRepository {
+    pub fn new() -> Self {
+        Self {
+            services: RwLock::new(vec![]),
+            clients: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_service(&self, service: Service) {
+        self.services.write().await.push(service);
+    }
+
+    pub async fn add_client(&self, client: Client) {
+        self.clients.write().await.push(client);
+    }
+}
+
+impl Default for TestServiceRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ServiceRepository for TestServiceRepository {
+    async fn create(&self, input: &CreateServiceInput) -> Result<Service> {
+        let service = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: input.tenant_id.map(StringUuid::from),
+            name: input.name.clone(),
+            base_url: input.base_url.clone(),
+            redirect_uris: input.redirect_uris.clone(),
+            logout_uris: input.logout_uris.clone().unwrap_or_default(),
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        self.services.write().await.push(service.clone());
+        Ok(service)
+    }
+
+    async fn create_client(
+        &self,
+        service_id: Uuid,
+        client_id: &str,
+        secret_hash: &str,
+        name: Option<String>,
+    ) -> Result<Client> {
+        let client = Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(service_id),
+            client_id: client_id.to_string(),
+            name,
+            client_secret_hash: secret_hash.to_string(),
+            created_at: Utc::now(),
+        };
+        self.clients.write().await.push(client.clone());
+        Ok(client)
+    }
+
+    async fn find_by_id(&self, id: Uuid) -> Result<Option<Service>> {
+        let services = self.services.read().await;
+        Ok(services.iter().find(|s| s.id.0 == id).cloned())
+    }
+
+    async fn find_by_client_id(&self, client_id: &str) -> Result<Option<Service>> {
+        let clients = self.clients.read().await;
+        let client = clients.iter().find(|c| c.client_id == client_id);
+        if let Some(c) = client {
+            let services = self.services.read().await;
+            Ok(services.iter().find(|s| s.id == c.service_id).cloned())
+        } else {
+            Ok(None)
+        }
+    }
+
+    async fn find_client_by_client_id(&self, client_id: &str) -> Result<Option<Client>> {
+        let clients = self.clients.read().await;
+        Ok(clients.iter().find(|c| c.client_id == client_id).cloned())
+    }
+
+    async fn list(
+        &self,
+        tenant_id: Option<Uuid>,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Service>> {
+        let services = self.services.read().await;
+        let filtered: Vec<Service> = if let Some(tid) = tenant_id {
+            services
+                .iter()
+                .filter(|s| s.tenant_id.map(|t| t.0) == Some(tid))
+                .cloned()
+                .collect()
+        } else {
+            services.clone()
+        };
+        Ok(filtered
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
+    }
+
+    async fn list_clients(&self, service_id: Uuid) -> Result<Vec<Client>> {
+        let clients = self.clients.read().await;
+        Ok(clients
+            .iter()
+            .filter(|c| c.service_id.0 == service_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn count(&self, tenant_id: Option<Uuid>) -> Result<i64> {
+        let services = self.services.read().await;
+        if let Some(tid) = tenant_id {
+            Ok(services
+                .iter()
+                .filter(|s| s.tenant_id.map(|t| t.0) == Some(tid))
+                .count() as i64)
+        } else {
+            Ok(services.len() as i64)
+        }
+    }
+
+    async fn update(&self, id: Uuid, input: &UpdateServiceInput) -> Result<Service> {
+        let mut services = self.services.write().await;
+        let service = services
+            .iter_mut()
+            .find(|s| s.id.0 == id)
+            .ok_or_else(|| AppError::NotFound(format!("Service {} not found", id)))?;
+
+        if let Some(name) = &input.name {
+            service.name = name.clone();
+        }
+        if let Some(base_url) = &input.base_url {
+            service.base_url = Some(base_url.clone());
+        }
+        if let Some(redirect_uris) = &input.redirect_uris {
+            service.redirect_uris = redirect_uris.clone();
+        }
+        if let Some(logout_uris) = &input.logout_uris {
+            service.logout_uris = logout_uris.clone();
+        }
+        if let Some(status) = &input.status {
+            service.status = status.clone();
+        }
+        service.updated_at = Utc::now();
+        Ok(service.clone())
+    }
+
+    async fn delete(&self, id: Uuid) -> Result<()> {
+        let mut services = self.services.write().await;
+        let pos = services
+            .iter()
+            .position(|s| s.id.0 == id)
+            .ok_or_else(|| AppError::NotFound(format!("Service {} not found", id)))?;
+        services.remove(pos);
+        Ok(())
+    }
+
+    async fn delete_client(&self, _service_id: Uuid, client_id: &str) -> Result<()> {
+        let mut clients = self.clients.write().await;
+        let pos = clients
+            .iter()
+            .position(|c| c.client_id == client_id)
+            .ok_or_else(|| AppError::NotFound(format!("Client {} not found", client_id)))?;
+        clients.remove(pos);
+        Ok(())
+    }
+
+    async fn update_client_secret_hash(
+        &self,
+        client_id: &str,
+        new_secret_hash: &str,
+    ) -> Result<()> {
+        let mut clients = self.clients.write().await;
+        let client = clients
+            .iter_mut()
+            .find(|c| c.client_id == client_id)
+            .ok_or_else(|| AppError::NotFound(format!("Client {} not found", client_id)))?;
+        client.client_secret_hash = new_secret_hash.to_string();
+        Ok(())
+    }
+}
+
+/// Configurable test RBAC repository
+pub struct TestRbacRepository {
+    permissions: RwLock<Vec<Permission>>,
+    roles: RwLock<Vec<Role>>,
+    role_permissions: RwLock<Vec<(StringUuid, StringUuid)>>, // (role_id, permission_id)
+    user_roles: RwLock<Vec<(Uuid, Uuid, UserRolesInTenant)>>,
+    user_roles_for_service: RwLock<Vec<(Uuid, Uuid, Uuid, UserRolesInTenant)>>,
+    tenant_user_roles: RwLock<Vec<(StringUuid, StringUuid)>>, // (tenant_user_id, role_id)
+}
+
+impl TestRbacRepository {
+    pub fn new() -> Self {
+        Self {
+            permissions: RwLock::new(vec![]),
+            roles: RwLock::new(vec![]),
+            role_permissions: RwLock::new(vec![]),
+            user_roles: RwLock::new(vec![]),
+            user_roles_for_service: RwLock::new(vec![]),
+            tenant_user_roles: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_role(&self, role: Role) {
+        self.roles.write().await.push(role);
+    }
+
+    pub async fn add_permission(&self, permission: Permission) {
+        self.permissions.write().await.push(permission);
+    }
+
+    pub async fn set_user_roles(&self, user_id: Uuid, tenant_id: Uuid, roles: UserRolesInTenant) {
+        self.user_roles.write().await.push((user_id, tenant_id, roles));
+    }
+
+    pub async fn set_user_roles_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+        roles: UserRolesInTenant,
+    ) {
+        self.user_roles_for_service
+            .write()
+            .await
+            .push((user_id, tenant_id, service_id, roles));
+    }
+}
+
+impl Default for TestRbacRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl RbacRepository for TestRbacRepository {
+    async fn create_permission(&self, input: &CreatePermissionInput) -> Result<Permission> {
+        let permission = Permission {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(input.service_id),
+            code: input.code.clone(),
+            name: input.name.clone(),
+            description: input.description.clone(),
+        };
+        self.permissions.write().await.push(permission.clone());
+        Ok(permission)
+    }
+
+    async fn find_permission_by_id(&self, id: StringUuid) -> Result<Option<Permission>> {
+        let permissions = self.permissions.read().await;
+        Ok(permissions.iter().find(|p| p.id == id).cloned())
+    }
+
+    async fn find_permissions_by_service(&self, service_id: StringUuid) -> Result<Vec<Permission>> {
+        let permissions = self.permissions.read().await;
+        Ok(permissions
+            .iter()
+            .filter(|p| p.service_id == service_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn delete_permission(&self, id: StringUuid) -> Result<()> {
+        let mut permissions = self.permissions.write().await;
+        let pos = permissions
+            .iter()
+            .position(|p| p.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Permission {} not found", id)))?;
+        permissions.remove(pos);
+        Ok(())
+    }
+
+    async fn create_role(&self, input: &CreateRoleInput) -> Result<Role> {
+        let role = Role {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(input.service_id),
+            name: input.name.clone(),
+            description: input.description.clone(),
+            parent_role_id: input.parent_role_id.map(StringUuid::from),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        self.roles.write().await.push(role.clone());
+        Ok(role)
+    }
+
+    async fn find_role_by_id(&self, id: StringUuid) -> Result<Option<Role>> {
+        let roles = self.roles.read().await;
+        Ok(roles.iter().find(|r| r.id == id).cloned())
+    }
+
+    async fn find_roles_by_service(&self, service_id: StringUuid) -> Result<Vec<Role>> {
+        let roles = self.roles.read().await;
+        Ok(roles
+            .iter()
+            .filter(|r| r.service_id == service_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn update_role(&self, id: StringUuid, input: &UpdateRoleInput) -> Result<Role> {
+        let mut roles = self.roles.write().await;
+        let role = roles
+            .iter_mut()
+            .find(|r| r.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Role {} not found", id)))?;
+
+        if let Some(name) = &input.name {
+            role.name = name.clone();
+        }
+        if let Some(description) = &input.description {
+            role.description = Some(description.clone());
+        }
+        role.updated_at = Utc::now();
+        Ok(role.clone())
+    }
+
+    async fn delete_role(&self, id: StringUuid) -> Result<()> {
+        let mut roles = self.roles.write().await;
+        let pos = roles
+            .iter()
+            .position(|r| r.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Role {} not found", id)))?;
+        roles.remove(pos);
+        Ok(())
+    }
+
+    async fn assign_permission_to_role(
+        &self,
+        role_id: StringUuid,
+        permission_id: StringUuid,
+    ) -> Result<()> {
+        self.role_permissions
+            .write()
+            .await
+            .push((role_id, permission_id));
+        Ok(())
+    }
+
+    async fn remove_permission_from_role(
+        &self,
+        role_id: StringUuid,
+        permission_id: StringUuid,
+    ) -> Result<()> {
+        let mut role_permissions = self.role_permissions.write().await;
+        let pos = role_permissions
+            .iter()
+            .position(|(rid, pid)| *rid == role_id && *pid == permission_id)
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "Permission {} not assigned to role {}",
+                    permission_id, role_id
+                ))
+            })?;
+        role_permissions.remove(pos);
+        Ok(())
+    }
+
+    async fn find_role_permissions(&self, role_id: StringUuid) -> Result<Vec<Permission>> {
+        let role_permissions = self.role_permissions.read().await;
+        let permissions = self.permissions.read().await;
+        let permission_ids: Vec<StringUuid> = role_permissions
+            .iter()
+            .filter(|(rid, _)| *rid == role_id)
+            .map(|(_, pid)| *pid)
+            .collect();
+        Ok(permissions
+            .iter()
+            .filter(|p| permission_ids.contains(&p.id))
+            .cloned()
+            .collect())
+    }
+
+    async fn assign_roles_to_user(
+        &self,
+        input: &AssignRolesInput,
+        _granted_by: Option<StringUuid>,
+    ) -> Result<()> {
+        let mut tenant_user_roles = self.tenant_user_roles.write().await;
+        // Use user_id as a stand-in for tenant_user_id in tests
+        let tenant_user_id = StringUuid::from(input.user_id);
+        for role_id in &input.role_ids {
+            tenant_user_roles.push((tenant_user_id, StringUuid::from(*role_id)));
+        }
+        Ok(())
+    }
+
+    async fn remove_role_from_user(
+        &self,
+        tenant_user_id: StringUuid,
+        role_id: StringUuid,
+    ) -> Result<()> {
+        let mut tenant_user_roles = self.tenant_user_roles.write().await;
+        let pos = tenant_user_roles
+            .iter()
+            .position(|(tuid, rid)| *tuid == tenant_user_id && *rid == role_id)
+            .ok_or_else(|| {
+                AppError::NotFound(format!(
+                    "Role {} not assigned to tenant user {}",
+                    role_id, tenant_user_id
+                ))
+            })?;
+        tenant_user_roles.remove(pos);
+        Ok(())
+    }
+
+    async fn find_tenant_user_id(
+        &self,
+        _user_id: StringUuid,
+        _tenant_id: StringUuid,
+    ) -> Result<Option<StringUuid>> {
+        // Simplified: return a new UUID for testing
+        Ok(Some(StringUuid::new_v4()))
+    }
+
+    async fn find_user_roles_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<UserRolesInTenant> {
+        let roles = self.user_roles.read().await;
+        for (uid, tid, r) in roles.iter() {
+            if *uid == user_id.0 && *tid == tenant_id.0 {
+                return Ok(r.clone());
+            }
+        }
+        Ok(UserRolesInTenant {
+            user_id: user_id.0,
+            tenant_id: tenant_id.0,
+            roles: vec![],
+            permissions: vec![],
+        })
+    }
+
+    async fn find_user_roles_in_tenant_for_service(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+    ) -> Result<UserRolesInTenant> {
+        let roles = self.user_roles_for_service.read().await;
+        for (uid, tid, sid, r) in roles.iter() {
+            if *uid == user_id.0 && *tid == tenant_id.0 && *sid == service_id.0 {
+                return Ok(r.clone());
+            }
+        }
+        Ok(UserRolesInTenant {
+            user_id: user_id.0,
+            tenant_id: tenant_id.0,
+            roles: vec![],
+            permissions: vec![],
+        })
+    }
+
+    async fn find_user_role_records_in_tenant(
+        &self,
+        _user_id: StringUuid,
+        _tenant_id: StringUuid,
+        _service_id: Option<StringUuid>,
+    ) -> Result<Vec<Role>> {
+        Ok(self.roles.read().await.clone())
+    }
+}
+
+/// Configurable test audit repository
+pub struct TestAuditRepository {
+    logs: RwLock<Vec<AuditLog>>,
+    next_id: RwLock<i64>,
+}
+
+impl TestAuditRepository {
+    pub fn new() -> Self {
+        Self {
+            logs: RwLock::new(vec![]),
+            next_id: RwLock::new(1),
+        }
+    }
+
+    pub async fn get_logs(&self) -> Vec<AuditLog> {
+        self.logs.read().await.clone()
+    }
+}
+
+impl Default for TestAuditRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl AuditRepository for TestAuditRepository {
+    async fn create(&self, input: &CreateAuditLogInput) -> Result<()> {
+        let mut next_id = self.next_id.write().await;
+        let log = AuditLog {
+            id: *next_id,
+            actor_id: input.actor_id.map(|id| id.to_string()),
+            action: input.action.clone(),
+            resource_type: input.resource_type.clone(),
+            resource_id: input.resource_id.map(|id| id.to_string()),
+            old_value: input.old_value.clone(),
+            new_value: input.new_value.clone(),
+            ip_address: input.ip_address.clone(),
+            created_at: Utc::now(),
+        };
+        *next_id += 1;
+        self.logs.write().await.push(log);
+        Ok(())
+    }
+
+    async fn find(&self, query: &AuditLogQuery) -> Result<Vec<AuditLog>> {
+        let logs = self.logs.read().await;
+        let filtered: Vec<AuditLog> = logs
+            .iter()
+            .filter(|log| {
+                if let Some(actor_id) = query.actor_id {
+                    if log.actor_id.as_ref().map(|id| id.as_str())
+                        != Some(&actor_id.to_string())
+                    {
+                        return false;
+                    }
+                }
+                if let Some(ref resource_type) = query.resource_type {
+                    if &log.resource_type != resource_type {
+                        return false;
+                    }
+                }
+                if let Some(ref action) = query.action {
+                    if &log.action != action {
+                        return false;
+                    }
+                }
+                true
+            })
+            .cloned()
+            .collect();
+        let offset = query.offset.unwrap_or(0) as usize;
+        let limit = query.limit.unwrap_or(50) as usize;
+        Ok(filtered.into_iter().skip(offset).take(limit).collect())
+    }
+
+    async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
+        let logs = self.find(query).await?;
+        Ok(logs.len() as i64)
+    }
+}
+
+// ============================================================================
+// Test Data Helpers
+// ============================================================================
+
+pub fn create_test_tenant(id: Option<Uuid>) -> Tenant {
+    Tenant {
+        id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
+        name: "Test Tenant".to_string(),
+        slug: "test-tenant".to_string(),
+        logo_url: None,
+        settings: TenantSettings::default(),
+        status: TenantStatus::Active,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
+pub fn create_test_user(id: Option<Uuid>) -> User {
+    User {
+        id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
+        email: "test@example.com".to_string(),
+        display_name: Some("Test User".to_string()),
+        avatar_url: None,
+        keycloak_id: "kc-user-test".to_string(),
+        mfa_enabled: false,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
+pub fn create_test_service(id: Option<Uuid>, tenant_id: Option<Uuid>) -> Service {
+    Service {
+        id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
+        tenant_id: tenant_id.map(StringUuid::from),
+        name: "Test Service".to_string(),
+        base_url: Some("https://test.example.com".to_string()),
+        redirect_uris: vec!["https://test.example.com/callback".to_string()],
+        logout_uris: vec![],
+        status: ServiceStatus::Active,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
+pub fn create_test_role(id: Option<Uuid>, service_id: Uuid) -> Role {
+    Role {
+        id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
+        service_id: StringUuid::from(service_id),
+        name: "test-role".to_string(),
+        description: Some("Test role description".to_string()),
+        parent_role_id: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
+pub fn create_test_permission(id: Option<Uuid>, service_id: Uuid) -> Permission {
+    Permission {
+        id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
+        service_id: StringUuid::from(service_id),
+        code: "test:permission".to_string(),
+        name: "Test Permission".to_string(),
+        description: Some("Test permission".to_string()),
+    }
+}
+
+// ============================================================================
+// Test Services Builder
+// ============================================================================
+
+/// Builder for creating test services with mocked repositories
+pub struct TestServicesBuilder {
+    pub tenant_repo: Arc<TestTenantRepository>,
+    pub user_repo: Arc<TestUserRepository>,
+    pub service_repo: Arc<TestServiceRepository>,
+    pub rbac_repo: Arc<TestRbacRepository>,
+    pub audit_repo: Arc<TestAuditRepository>,
+}
+
+impl TestServicesBuilder {
+    pub fn new() -> Self {
+        Self {
+            tenant_repo: Arc::new(TestTenantRepository::new()),
+            user_repo: Arc::new(TestUserRepository::new()),
+            service_repo: Arc::new(TestServiceRepository::new()),
+            rbac_repo: Arc::new(TestRbacRepository::new()),
+            audit_repo: Arc::new(TestAuditRepository::new()),
+        }
+    }
+
+    pub fn build_tenant_service(&self) -> TenantService<TestTenantRepository> {
+        TenantService::new(self.tenant_repo.clone(), None)
+    }
+
+    pub fn build_user_service(&self) -> UserService<TestUserRepository> {
+        UserService::new(self.user_repo.clone())
+    }
+
+    pub fn build_client_service(&self) -> ClientService<TestServiceRepository> {
+        ClientService::new(self.service_repo.clone(), None)
+    }
+
+    pub fn build_rbac_service(&self) -> RbacService<TestRbacRepository> {
+        RbacService::new(self.rbac_repo.clone(), None)
+    }
+}
+
+impl Default for TestServicesBuilder {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+// ============================================================================
+// Tests
+// ============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_tenant_repository_crud() {
+        let repo = TestTenantRepository::new();
+
+        // Create
+        let input = CreateTenantInput {
+            name: "Test".to_string(),
+            slug: "test".to_string(),
+            logo_url: None,
+            settings: None,
+        };
+        let tenant = repo.create(&input).await.unwrap();
+        assert_eq!(tenant.name, "Test");
+
+        // Read
+        let found = repo.find_by_id(tenant.id).await.unwrap();
+        assert!(found.is_some());
+
+        // List
+        let list = repo.list(0, 10).await.unwrap();
+        assert_eq!(list.len(), 1);
+
+        // Update
+        let update_input = UpdateTenantInput {
+            name: Some("Updated".to_string()),
+            logo_url: None,
+            settings: None,
+            status: None,
+        };
+        let updated = repo.update(tenant.id, &update_input).await.unwrap();
+        assert_eq!(updated.name, "Updated");
+
+        // Delete
+        repo.delete(tenant.id).await.unwrap();
+        let deleted = repo.find_by_id(tenant.id).await.unwrap();
+        assert!(deleted.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_user_repository_crud() {
+        let repo = TestUserRepository::new();
+
+        // Create
+        let input = CreateUserInput {
+            email: "test@example.com".to_string(),
+            display_name: Some("Test".to_string()),
+            avatar_url: None,
+        };
+        let user = repo.create("kc-123", &input).await.unwrap();
+        assert_eq!(user.email, "test@example.com");
+
+        // Read
+        let found = repo.find_by_id(user.id).await.unwrap();
+        assert!(found.is_some());
+
+        // Find by email
+        let by_email = repo.find_by_email("test@example.com").await.unwrap();
+        assert!(by_email.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_service_repository_crud() {
+        let repo = TestServiceRepository::new();
+
+        // Create
+        let input = CreateServiceInput {
+            tenant_id: Some(Uuid::new_v4()),
+            name: "Test Service".to_string(),
+            client_id: "test-client".to_string(),
+            base_url: Some("https://test.com".to_string()),
+            redirect_uris: vec!["https://test.com/cb".to_string()],
+            logout_uris: None,
+        };
+        let service = repo.create(&input).await.unwrap();
+        assert_eq!(service.name, "Test Service");
+
+        // Create client
+        let client = repo
+            .create_client(*service.id, "client-1", "hash", Some("Client".to_string()))
+            .await
+            .unwrap();
+        assert_eq!(client.client_id, "client-1");
+    }
+
+    #[tokio::test]
+    async fn test_rbac_repository_operations() {
+        let repo = TestRbacRepository::new();
+        let service_id = Uuid::new_v4();
+
+        // Create role
+        let role_input = CreateRoleInput {
+            service_id,
+            name: "admin".to_string(),
+            description: Some("Admin role".to_string()),
+            parent_role_id: None,
+            permission_ids: None,
+        };
+        let role = repo.create_role(&role_input).await.unwrap();
+        assert_eq!(role.name, "admin");
+
+        // Create permission
+        let perm_input = CreatePermissionInput {
+            service_id,
+            code: "user:read".to_string(),
+            name: "Read Users".to_string(),
+            description: Some("Read users".to_string()),
+        };
+        let perm = repo.create_permission(&perm_input).await.unwrap();
+        assert_eq!(perm.code, "user:read");
+
+        // Assign permission to role
+        repo.assign_permission_to_role(role.id, perm.id).await.unwrap();
+
+        // Find role permissions
+        let perms = repo.find_role_permissions(role.id).await.unwrap();
+        assert_eq!(perms.len(), 1);
+    }
+
+    #[tokio::test]
+    async fn test_services_builder() {
+        let builder = TestServicesBuilder::new();
+
+        // Add test data
+        let tenant = create_test_tenant(None);
+        builder.tenant_repo.add_tenant(tenant.clone()).await;
+
+        // Build service and verify
+        let tenant_service = builder.build_tenant_service();
+        let result = tenant_service.get(tenant.id).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "Test Tenant");
+    }
+}

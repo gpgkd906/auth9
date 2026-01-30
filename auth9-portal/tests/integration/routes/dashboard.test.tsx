@@ -1,7 +1,6 @@
 import { createRemixStub } from "@remix-run/testing";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import { Outlet } from "@remix-run/react";
 import Dashboard from "~/routes/dashboard";
 
 describe("Dashboard Layout", () => {

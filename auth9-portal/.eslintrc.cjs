@@ -74,5 +74,13 @@ module.exports = {
         node: true,
       },
     },
+
+    // Test files - relax strict type checking for mock data
+    {
+      files: ["tests/**/*.ts", "tests/**/*.tsx"],
+      rules: {
+        "@typescript-eslint/no-explicit-any": "warn",
+      },
+    },
   ],
 };

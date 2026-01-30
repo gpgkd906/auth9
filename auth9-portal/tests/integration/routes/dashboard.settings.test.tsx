@@ -2,7 +2,7 @@ import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import SettingsPage, { loader, action } from "~/routes/dashboard.settings";
+import SettingsPage, { loader } from "~/routes/dashboard.settings";
 import { tenantApi } from "~/services/api";
 
 // Mock tenant API
