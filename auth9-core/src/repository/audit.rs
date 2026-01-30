@@ -4,8 +4,8 @@ use crate::error::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use sqlx::{FromRow, MySqlPool, Row};
 use sqlx::mysql::MySqlRow;
+use sqlx::{FromRow, MySqlPool, Row};
 use uuid::Uuid;
 
 /// Audit log entry
@@ -29,7 +29,7 @@ impl<'r> FromRow<'r, MySqlRow> for AuditLog {
         let action: String = row.try_get("action")?;
         let resource_type: String = row.try_get("resource_type")?;
         let resource_id: Option<String> = row.try_get("resource_id")?;
-        
+
         // Handle JSON fields that might be NULL
         // We read them as Option<String> or Option<serde_json::Value> explicitly
         // If the column is JSON type in MySQL, sqlx treats it as Value if valid.
@@ -38,11 +38,13 @@ impl<'r> FromRow<'r, MySqlRow> for AuditLog {
         // Actually, the macro magic IS what caused the issue (likely strictness).
         // A safer way is to read as Option<sqlx::types::Json<serde_json::Value>> and unwrap
         // OR read as Option<serde_json::Value> manually.
-        
-        let old_value_wrapper: Option<sqlx::types::Json<serde_json::Value>> = row.try_get("old_value")?;
+
+        let old_value_wrapper: Option<sqlx::types::Json<serde_json::Value>> =
+            row.try_get("old_value")?;
         let old_value = old_value_wrapper.map(|w| w.0);
 
-        let new_value_wrapper: Option<sqlx::types::Json<serde_json::Value>> = row.try_get("new_value")?;
+        let new_value_wrapper: Option<sqlx::types::Json<serde_json::Value>> =
+            row.try_get("new_value")?;
         let new_value = new_value_wrapper.map(|w| w.0);
 
         let ip_address: Option<String> = row.try_get("ip_address")?;

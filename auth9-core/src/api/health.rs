@@ -44,7 +44,7 @@ mod tests {
             status: "healthy".to_string(),
             version: "0.1.0".to_string(),
         };
-        
+
         assert_eq!(response.status, "healthy");
         assert_eq!(response.version, "0.1.0");
     }
@@ -55,7 +55,7 @@ mod tests {
             status: "healthy".to_string(),
             version: env!("CARGO_PKG_VERSION").to_string(),
         };
-        
+
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("healthy"));
         assert!(json.contains(env!("CARGO_PKG_VERSION")));

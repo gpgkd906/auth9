@@ -35,7 +35,9 @@ impl<R: TenantRepository> TenantService<R> {
 
         let tenant = self.repo.create(&input).await?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_tenant_config(Uuid::from(tenant.id), &tenant).await;
+            let _ = cache
+                .set_tenant_config(Uuid::from(tenant.id), &tenant)
+                .await;
         }
         Ok(tenant)
     }
@@ -52,7 +54,9 @@ impl<R: TenantRepository> TenantService<R> {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_tenant_config(Uuid::from(tenant.id), &tenant).await;
+            let _ = cache
+                .set_tenant_config(Uuid::from(tenant.id), &tenant)
+                .await;
         }
         Ok(tenant)
     }
@@ -64,7 +68,9 @@ impl<R: TenantRepository> TenantService<R> {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Tenant '{}' not found", slug)))?;
         if let Some(cache) = &self.cache_manager {
-            let _ = cache.set_tenant_config(Uuid::from(tenant.id), &tenant).await;
+            let _ = cache
+                .set_tenant_config(Uuid::from(tenant.id), &tenant)
+                .await;
         }
         Ok(tenant)
     }
@@ -320,14 +326,18 @@ mod tests {
     async fn test_list_tenants() {
         let mut mock = MockTenantRepository::new();
 
-        mock.expect_list()
-            .with(eq(0), eq(10))
-            .returning(|_, _| {
-                Ok(vec![
-                    Tenant { name: "Tenant 1".to_string(), ..Default::default() },
-                    Tenant { name: "Tenant 2".to_string(), ..Default::default() },
-                ])
-            });
+        mock.expect_list().with(eq(0), eq(10)).returning(|_, _| {
+            Ok(vec![
+                Tenant {
+                    name: "Tenant 1".to_string(),
+                    ..Default::default()
+                },
+                Tenant {
+                    name: "Tenant 2".to_string(),
+                    ..Default::default()
+                },
+            ])
+        });
 
         mock.expect_count().returning(|| Ok(2));
 
@@ -347,9 +357,10 @@ mod tests {
         mock.expect_list()
             .with(eq(10), eq(10)) // offset = (page - 1) * per_page = (2 - 1) * 10 = 10
             .returning(|_, _| {
-                Ok(vec![
-                    Tenant { name: "Tenant 11".to_string(), ..Default::default() },
-                ])
+                Ok(vec![Tenant {
+                    name: "Tenant 11".to_string(),
+                    ..Default::default()
+                }])
             });
 
         mock.expect_count().returning(|| Ok(11));
@@ -449,9 +460,7 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(tenant_clone.clone())));
 
-        mock.expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let service = TenantService::new(Arc::new(mock), None);
 

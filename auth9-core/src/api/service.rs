@@ -1,7 +1,9 @@
 //! Service/Client API handlers
 
 use crate::api::{write_audit_log, MessageResponse, PaginatedResponse, SuccessResponse};
-use crate::domain::{CreateServiceInput, Service, ServiceStatus, UpdateServiceInput, CreateClientInput};
+use crate::domain::{
+    CreateClientInput, CreateServiceInput, Service, ServiceStatus, UpdateServiceInput,
+};
 use crate::error::Result;
 use crate::keycloak::KeycloakOidcClient;
 use crate::server::AppState;
@@ -254,18 +256,18 @@ pub async fn create_client(
     Json(input): Json<CreateClientInput>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service.get(id).await?;
-    
+
     // Create new Keycloak client
     // We need to generate a client_id logic or let Keycloak do it?
     // User said "clientId and clientSecret auto generated".
     // Keycloak usually can generate. Or we generate UUID.
     // Let's generate a UUID based client_id.
     let new_client_id = Uuid::new_v4().to_string();
-    
+
     // Setup Keycloak Client with Service defaults
     // ... logic to create keycloak client ...
-      let logout_uris = service.logout_uris.clone();
-      let attributes = if logout_uris.is_empty() {
+    let logout_uris = service.logout_uris.clone();
+    let attributes = if logout_uris.is_empty() {
         None
     } else {
         let mut attrs = HashMap::new();
@@ -275,24 +277,35 @@ pub async fn create_client(
         );
         Some(attrs)
     };
-    
+
     let keycloak_client = KeycloakOidcClient {
         id: None,
         client_id: new_client_id.clone(),
-        name: Some(format!("{} - {}", service.name, input.name.clone().unwrap_or("Client".to_string()))),
+        name: Some(format!(
+            "{} - {}",
+            service.name,
+            input.name.clone().unwrap_or("Client".to_string())
+        )),
         enabled: service.status == crate::domain::ServiceStatus::Active,
         protocol: "openid-connect".to_string(),
         base_url: service.base_url.clone(),
         root_url: service.base_url.clone(),
         admin_url: service.base_url.clone(),
         redirect_uris: service.redirect_uris.clone(),
-        web_origins: service.base_url.as_ref().map(|url| vec![url.clone()]).unwrap_or_default(),
+        web_origins: service
+            .base_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default(),
         attributes,
         public_client: false,
         secret: None, // Keycloak will generate
     };
 
-    let kc_uuid = state.keycloak_client.create_oidc_client(&keycloak_client).await?;
+    let kc_uuid = state
+        .keycloak_client
+        .create_oidc_client(&keycloak_client)
+        .await?;
     let client_secret = state.keycloak_client.get_client_secret(&kc_uuid).await?;
 
     let client_with_secret = state
@@ -322,13 +335,20 @@ pub async fn delete_client(
 ) -> Result<impl IntoResponse> {
     // Check if client exists and belongs to service
     let _ = state.client_service.get(service_id).await?;
-    
+
     // Also delete from Keycloak
-    if let Ok(kc_uuid) = state.keycloak_client.get_client_uuid_by_client_id(&client_id).await {
+    if let Ok(kc_uuid) = state
+        .keycloak_client
+        .get_client_uuid_by_client_id(&client_id)
+        .await
+    {
         let _ = state.keycloak_client.delete_oidc_client(&kc_uuid).await;
     }
 
-    state.client_service.delete_client(service_id, &client_id).await?;
+    state
+        .client_service
+        .delete_client(service_id, &client_id)
+        .await?;
 
     let _ = write_audit_log(
         &state,
@@ -356,11 +376,15 @@ pub async fn delete(
     // Ideally we should iterate clients and delete them from Keycloak first.
     let clients = state.client_service.list_clients(id).await?;
     for client in clients {
-         if let Ok(kc_uuid) = state.keycloak_client.get_client_uuid_by_client_id(&client.client_id).await {
+        if let Ok(kc_uuid) = state
+            .keycloak_client
+            .get_client_uuid_by_client_id(&client.client_id)
+            .await
+        {
             let _ = state.keycloak_client.delete_oidc_client(&kc_uuid).await;
         }
     }
-    
+
     state.client_service.delete(id).await?;
     let _ = write_audit_log(
         &state,
@@ -383,32 +407,55 @@ pub async fn regenerate_client_secret(
 ) -> Result<impl IntoResponse> {
     // Verify service exists
     let _ = state.client_service.get(service_id).await?;
-    
+
     // Regenerate in Keycloak first (if it exists there)
-    let new_secret = if let Ok(kc_uuid) = state.keycloak_client.get_client_uuid_by_client_id(&client_id).await {
+    let new_secret = if let Ok(kc_uuid) = state
+        .keycloak_client
+        .get_client_uuid_by_client_id(&client_id)
+        .await
+    {
         // Use Keycloak's regenerated secret
-        state.keycloak_client.regenerate_client_secret(&kc_uuid).await?
+        state
+            .keycloak_client
+            .regenerate_client_secret(&kc_uuid)
+            .await?
     } else {
         // Fallback: generate our own secret using ClientService
-        state.client_service.regenerate_client_secret(&client_id).await?
+        state
+            .client_service
+            .regenerate_client_secret(&client_id)
+            .await?
     };
-    
+
     // If Keycloak was used, we need to sync the hash to our DB
     // ClientService.regenerate_client_secret already updates the hash if used
     // But if Keycloak generated, we need manual DB update
-    if state.keycloak_client.get_client_uuid_by_client_id(&client_id).await.is_ok() {
-        use argon2::{password_hash::{PasswordHasher, SaltString, rand_core::OsRng}, Argon2};
+    if state
+        .keycloak_client
+        .get_client_uuid_by_client_id(&client_id)
+        .await
+        .is_ok()
+    {
+        use argon2::{
+            password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
+            Argon2,
+        };
         let salt = SaltString::generate(&mut OsRng);
         let argon2 = Argon2::default();
         let secret_hash = argon2
             .hash_password(new_secret.as_bytes(), &salt)
-            .map_err(|e| crate::error::AppError::Internal(anyhow::anyhow!("Failed to hash secret: {}", e)))?
+            .map_err(|e| {
+                crate::error::AppError::Internal(anyhow::anyhow!("Failed to hash secret: {}", e))
+            })?
             .to_string();
-        
+
         // Use service method to update (we need to add this method)
-        state.client_service.update_client_secret_hash(&client_id, &secret_hash).await?;
+        state
+            .client_service
+            .update_client_secret_hash(&client_id, &secret_hash)
+            .await?;
     }
-    
+
     let _ = write_audit_log(
         &state,
         &headers,
@@ -429,7 +476,7 @@ pub async fn regenerate_client_secret(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{CreateServiceInput, UpdateServiceInput, ServiceStatus};
+    use crate::domain::{CreateServiceInput, ServiceStatus, UpdateServiceInput};
 
     #[test]
     fn test_list_services_query_defaults() {
@@ -464,7 +511,10 @@ mod tests {
         let input: CreateServiceInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.name, "My Service");
         assert_eq!(input.client_id, "my-service");
-        assert_eq!(input.base_url, Some("https://myservice.example.com".to_string()));
+        assert_eq!(
+            input.base_url,
+            Some("https://myservice.example.com".to_string())
+        );
         assert_eq!(input.redirect_uris.len(), 1);
     }
 
@@ -525,7 +575,10 @@ mod tests {
         }"#;
         let input: UpdateServiceInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.name, Some("Full Update".to_string()));
-        assert_eq!(input.base_url, Some("https://new-url.example.com".to_string()));
+        assert_eq!(
+            input.base_url,
+            Some("https://new-url.example.com".to_string())
+        );
         assert_eq!(input.redirect_uris.as_ref().unwrap().len(), 1);
         assert_eq!(input.logout_uris.as_ref().unwrap().len(), 1);
         assert_eq!(input.status, Some(ServiceStatus::Active));
@@ -533,15 +586,21 @@ mod tests {
 
     #[test]
     fn test_service_status_serialization() {
-        assert_eq!(serde_json::to_string(&ServiceStatus::Active).unwrap(), "\"active\"");
-        assert_eq!(serde_json::to_string(&ServiceStatus::Inactive).unwrap(), "\"inactive\"");
+        assert_eq!(
+            serde_json::to_string(&ServiceStatus::Active).unwrap(),
+            "\"active\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ServiceStatus::Inactive).unwrap(),
+            "\"inactive\""
+        );
     }
 
     #[test]
     fn test_service_status_deserialization() {
         let active: ServiceStatus = serde_json::from_str("\"active\"").unwrap();
         let inactive: ServiceStatus = serde_json::from_str("\"inactive\"").unwrap();
-        
+
         assert_eq!(active, ServiceStatus::Active);
         assert_eq!(inactive, ServiceStatus::Inactive);
     }
@@ -616,7 +675,10 @@ mod tests {
         assert_eq!(kc_client.name, Some("Test Service".to_string()));
         assert!(kc_client.enabled);
         assert_eq!(kc_client.protocol, "openid-connect");
-        assert_eq!(kc_client.base_url, Some("https://test.example.com".to_string()));
+        assert_eq!(
+            kc_client.base_url,
+            Some("https://test.example.com".to_string())
+        );
         assert_eq!(kc_client.redirect_uris.len(), 1);
         assert!(kc_client.attributes.is_some());
         assert!(!kc_client.public_client);
@@ -689,17 +751,20 @@ mod tests {
 
         let input = UpdateServiceInput {
             name: Some("Updated Name".to_string()),
-            base_url: None,  // Keep original
-            redirect_uris: None,  // Keep original
-            logout_uris: None,  // Keep original
-            status: None,  // Keep original
+            base_url: None,      // Keep original
+            redirect_uris: None, // Keep original
+            logout_uris: None,   // Keep original
+            status: None,        // Keep original
         };
 
         let merged = merge_service_update(&before, &input);
 
         assert_eq!(merged.name, "Updated Name");
         assert_eq!(merged.base_url, Some("https://original.com".to_string()));
-        assert_eq!(merged.redirect_uris, vec!["https://original.com/cb".to_string()]);
+        assert_eq!(
+            merged.redirect_uris,
+            vec!["https://original.com/cb".to_string()]
+        );
         assert_eq!(merged.status, ServiceStatus::Active);
     }
 
@@ -717,7 +782,10 @@ mod tests {
 
         assert_eq!(kc_client.client_id, "my-client-id");
         assert_eq!(kc_client.name, Some("Updated Service".to_string()));
-        assert_eq!(kc_client.base_url, Some("https://updated.example.com".to_string()));
+        assert_eq!(
+            kc_client.base_url,
+            Some("https://updated.example.com".to_string())
+        );
         assert!(kc_client.attributes.is_some());
     }
 }

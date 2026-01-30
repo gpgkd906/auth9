@@ -1,6 +1,8 @@
 //! User business logic
 
-use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User};
+use crate::domain::{
+    AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User,
+};
 use crate::error::{AppError, Result};
 use crate::repository::UserRepository;
 use std::sync::Arc;
@@ -78,7 +80,11 @@ impl<R: UserRepository> UserService<R> {
         self.repo.add_to_tenant(&input).await
     }
 
-    pub async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()> {
+    pub async fn remove_from_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<()> {
         self.repo.remove_from_tenant(user_id, tenant_id).await
     }
 
@@ -144,10 +150,12 @@ mod tests {
 
         mock.expect_find_by_email()
             .with(eq("existing@example.com"))
-            .returning(|_| Ok(Some(User {
-                email: "existing@example.com".to_string(),
-                ..Default::default()
-            })));
+            .returning(|_| {
+                Ok(Some(User {
+                    email: "existing@example.com".to_string(),
+                    ..Default::default()
+                }))
+            });
 
         let service = UserService::new(Arc::new(mock));
 
@@ -284,14 +292,18 @@ mod tests {
     async fn test_list_users() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_list()
-            .with(eq(0), eq(10))
-            .returning(|_, _| {
-                Ok(vec![
-                    User { email: "user1@example.com".to_string(), ..Default::default() },
-                    User { email: "user2@example.com".to_string(), ..Default::default() },
-                ])
-            });
+        mock.expect_list().with(eq(0), eq(10)).returning(|_, _| {
+            Ok(vec![
+                User {
+                    email: "user1@example.com".to_string(),
+                    ..Default::default()
+                },
+                User {
+                    email: "user2@example.com".to_string(),
+                    ..Default::default()
+                },
+            ])
+        });
 
         mock.expect_count().returning(|| Ok(2));
 
@@ -311,9 +323,10 @@ mod tests {
         mock.expect_list()
             .with(eq(20), eq(10)) // offset = (page - 1) * per_page = (3 - 1) * 10 = 20
             .returning(|_, _| {
-                Ok(vec![
-                    User { email: "user21@example.com".to_string(), ..Default::default() },
-                ])
+                Ok(vec![User {
+                    email: "user21@example.com".to_string(),
+                    ..Default::default()
+                }])
             });
 
         mock.expect_count().returning(|| Ok(21));
@@ -392,9 +405,7 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
-        mock.expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let service = UserService::new(Arc::new(mock));
 
@@ -516,8 +527,14 @@ mod tests {
             .with(eq(tenant_id), eq(0), eq(10))
             .returning(|_, _, _| {
                 Ok(vec![
-                    User { email: "user1@example.com".to_string(), ..Default::default() },
-                    User { email: "user2@example.com".to_string(), ..Default::default() },
+                    User {
+                        email: "user1@example.com".to_string(),
+                        ..Default::default()
+                    },
+                    User {
+                        email: "user2@example.com".to_string(),
+                        ..Default::default()
+                    },
                 ])
             });
 
@@ -536,15 +553,13 @@ mod tests {
         mock.expect_find_user_tenants()
             .with(eq(user_id))
             .returning(|uid| {
-                Ok(vec![
-                    TenantUser {
-                        id: StringUuid::new_v4(),
-                        tenant_id: StringUuid::new_v4(),
-                        user_id: uid,
-                        role_in_tenant: "member".to_string(),
-                        joined_at: chrono::Utc::now(),
-                    },
-                ])
+                Ok(vec![TenantUser {
+                    id: StringUuid::new_v4(),
+                    tenant_id: StringUuid::new_v4(),
+                    user_id: uid,
+                    role_in_tenant: "member".to_string(),
+                    joined_at: chrono::Utc::now(),
+                }])
             });
 
         let service = UserService::new(Arc::new(mock));

@@ -50,11 +50,16 @@ impl<R: ServiceRepository> ClientService<R> {
 
         // Create Service (without client credentials)
         let service = self.repo.create(&input).await?;
-        
+
         // Create Client
         let client = self
             .repo
-            .create_client(service.id.0, &input.client_id, &secret_hash, Some("Initial Key".to_string()))
+            .create_client(
+                service.id.0,
+                &input.client_id,
+                &secret_hash,
+                Some("Initial Key".to_string()),
+            )
             .await?;
 
         if let Some(cache) = &self.cache_manager {
@@ -66,7 +71,7 @@ impl<R: ServiceRepository> ClientService<R> {
             client: ClientWithSecret {
                 client,
                 client_secret,
-            }
+            },
         })
     }
 
@@ -90,11 +95,16 @@ impl<R: ServiceRepository> ClientService<R> {
         }
 
         let secret_hash = hash_secret(&client_secret)?;
-        
+
         let service = self.repo.create(&input).await?;
         let client = self
             .repo
-            .create_client(service.id.0, &input.client_id, &secret_hash, Some("Initial Key".to_string()))
+            .create_client(
+                service.id.0,
+                &input.client_id,
+                &secret_hash,
+                Some("Initial Key".to_string()),
+            )
             .await?;
 
         if let Some(cache) = &self.cache_manager {
@@ -106,7 +116,7 @@ impl<R: ServiceRepository> ClientService<R> {
             client: ClientWithSecret {
                 client,
                 client_secret,
-            }
+            },
         })
     }
 
@@ -119,11 +129,14 @@ impl<R: ServiceRepository> ClientService<R> {
         let _ = self.get(service_id).await?;
 
         // Generate ID and Secret
-        let client_id = Uuid::new_v4().to_string(); 
+        let client_id = Uuid::new_v4().to_string();
         let client_secret = generate_client_secret();
         let secret_hash = hash_secret(&client_secret)?;
 
-        let client = self.repo.create_client(service_id, &client_id, &secret_hash, name).await?;
+        let client = self
+            .repo
+            .create_client(service_id, &client_id, &secret_hash, name)
+            .await?;
 
         Ok(ClientWithSecret {
             client,
@@ -139,9 +152,9 @@ impl<R: ServiceRepository> ClientService<R> {
         name: Option<String>,
     ) -> Result<ClientWithSecret> {
         let _ = self.get(service_id).await?;
-        
+
         // Check duplicate
-         if self
+        if self
             .repo
             .find_client_by_client_id(&client_id)
             .await?
@@ -154,7 +167,10 @@ impl<R: ServiceRepository> ClientService<R> {
         }
 
         let secret_hash = hash_secret(&client_secret)?;
-        let client = self.repo.create_client(service_id, &client_id, &secret_hash, name).await?;
+        let client = self
+            .repo
+            .create_client(service_id, &client_id, &secret_hash, name)
+            .await?;
 
         Ok(ClientWithSecret {
             client,
@@ -187,7 +203,9 @@ impl<R: ServiceRepository> ClientService<R> {
             .repo
             .find_by_client_id(client_id)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Service for client '{}' not found", client_id)))?;
+            .ok_or_else(|| {
+                AppError::NotFound(format!("Service for client '{}' not found", client_id))
+            })?;
         // Cache could be set here too
         Ok(service)
     }
@@ -203,7 +221,7 @@ impl<R: ServiceRepository> ClientService<R> {
         let total = self.repo.count(tenant_id).await?;
         Ok((services, total))
     }
-    
+
     pub async fn list_clients(&self, service_id: Uuid) -> Result<Vec<Client>> {
         self.repo.list_clients(service_id).await
     }
@@ -222,21 +240,26 @@ impl<R: ServiceRepository> ClientService<R> {
     /// Returns the new plaintext secret (only shown once).
     pub async fn regenerate_client_secret(&self, client_id: &str) -> Result<String> {
         // Verify client exists
-        let client = self.repo.find_client_by_client_id(client_id).await?
+        let client = self
+            .repo
+            .find_client_by_client_id(client_id)
+            .await?
             .ok_or_else(|| AppError::NotFound(format!("Client {} not found", client_id)))?;
-        
+
         // Generate new secret and hash
         let new_secret = generate_client_secret();
         let secret_hash = hash_secret(&new_secret)?;
-        
+
         // Update in database
-        self.repo.update_client_secret_hash(client_id, &secret_hash).await?;
-        
+        self.repo
+            .update_client_secret_hash(client_id, &secret_hash)
+            .await?;
+
         // Invalidate cache if applicable
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_service_config(client.service_id.0).await;
         }
-        
+
         Ok(new_secret)
     }
 
@@ -254,13 +277,22 @@ impl<R: ServiceRepository> ClientService<R> {
     }
 
     /// Update a client's secret hash in the database
-    pub async fn update_client_secret_hash(&self, client_id: &str, new_secret_hash: &str) -> Result<()> {
-        self.repo.update_client_secret_hash(client_id, new_secret_hash).await
+    pub async fn update_client_secret_hash(
+        &self,
+        client_id: &str,
+        new_secret_hash: &str,
+    ) -> Result<()> {
+        self.repo
+            .update_client_secret_hash(client_id, new_secret_hash)
+            .await
     }
 
     pub async fn verify_secret(&self, client_id: &str, secret: &str) -> Result<Service> {
         // 1. Find Client to get hash
-        let client = self.repo.find_client_by_client_id(client_id).await?
+        let client = self
+            .repo
+            .find_client_by_client_id(client_id)
+            .await?
             .ok_or_else(|| AppError::Unauthorized("Invalid client credentials".to_string()))?;
 
         // 2. Verify Secret
@@ -273,12 +305,12 @@ impl<R: ServiceRepository> ClientService<R> {
         // 3. Get Service
         // We can use get_by_client_id or fetch by client.service_id
         let service = self.get(client.service_id.0).await?;
-        
+
         // Ensure service is active? (Service struct has status, checked in use cases usually?)
         // Existing code checked status in api/service.rs? No, domain/service.rs defines Active/Inactive
         // Logic might want to check if service.status is Active.
         if service.status != crate::domain::ServiceStatus::Active {
-             return Err(AppError::Unauthorized("Service is inactive".to_string()));
+            return Err(AppError::Unauthorized("Service is inactive".to_string()));
         }
 
         Ok(service)
@@ -356,7 +388,7 @@ mod tests {
         let secret = "my-secret";
         let hash1 = hash_secret(secret).unwrap();
         let hash2 = hash_secret(secret).unwrap();
-        
+
         assert_ne!(hash1, hash2);
         // But both should verify correctly
         assert!(verify_secret(secret, &hash1).unwrap());
@@ -380,20 +412,19 @@ mod tests {
             .with(eq("new-client-id"))
             .returning(|_| Ok(None));
 
-        mock.expect_create()
-            .returning(move |input| {
-                Ok(Service {
-                    id: StringUuid(service_id),
-                    tenant_id: input.tenant_id.map(StringUuid::from),
-                    name: input.name.clone(),
-                    base_url: input.base_url.clone(),
-                    redirect_uris: input.redirect_uris.clone(),
-                    logout_uris: input.logout_uris.clone().unwrap_or_default(),
-                    status: crate::domain::ServiceStatus::Active,
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                })
-            });
+        mock.expect_create().returning(move |input| {
+            Ok(Service {
+                id: StringUuid(service_id),
+                tenant_id: input.tenant_id.map(StringUuid::from),
+                name: input.name.clone(),
+                base_url: input.base_url.clone(),
+                redirect_uris: input.redirect_uris.clone(),
+                logout_uris: input.logout_uris.clone().unwrap_or_default(),
+                status: crate::domain::ServiceStatus::Active,
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            })
+        });
 
         mock.expect_create_client()
             .returning(move |sid, cid, _hash, name| {
@@ -431,14 +462,16 @@ mod tests {
 
         mock.expect_find_client_by_client_id()
             .with(eq("existing-client"))
-            .returning(|_| Ok(Some(crate::domain::Client {
-                id: StringUuid::new_v4(),
-                service_id: StringUuid::new_v4(),
-                client_id: "existing-client".to_string(),
-                client_secret_hash: "hash".to_string(),
-                name: None,
-                created_at: chrono::Utc::now(),
-            })));
+            .returning(|_| {
+                Ok(Some(crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid::new_v4(),
+                    client_id: "existing-client".to_string(),
+                    client_secret_hash: "hash".to_string(),
+                    name: None,
+                    created_at: chrono::Utc::now(),
+                }))
+            });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -481,13 +514,12 @@ mod tests {
         mock.expect_find_client_by_client_id()
             .returning(|_| Ok(None));
 
-        mock.expect_create()
-            .returning(move |_| {
-                Ok(Service {
-                    id: StringUuid(service_id),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(move |_| {
+            Ok(Service {
+                id: StringUuid(service_id),
+                ..Default::default()
+            })
+        });
 
         mock.expect_create_client()
             .returning(move |sid, cid, _hash, _| {
@@ -512,7 +544,9 @@ mod tests {
             logout_uris: None,
         };
 
-        let result = service.create_with_secret(input, "my-custom-secret".to_string()).await;
+        let result = service
+            .create_with_secret(input, "my-custom-secret".to_string())
+            .await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().client.client_secret, "my-custom-secret");
     }
@@ -523,22 +557,24 @@ mod tests {
     async fn test_create_client() {
         let mut mock_repo = MockServiceRepository::new();
         let service_id = Uuid::new_v4();
-        
+
         mock_repo
             .expect_find_by_id()
             .with(eq(service_id))
             .times(1)
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                tenant_id: None,
-                name: "Test Service".to_string(),
-                base_url: None,
-                redirect_uris: vec![],
-                logout_uris: vec![],
-                status: crate::domain::ServiceStatus::Active,
-                created_at: chrono::Utc::now(),
-                updated_at: chrono::Utc::now(),
-            })));
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    tenant_id: None,
+                    name: "Test Service".to_string(),
+                    base_url: None,
+                    redirect_uris: vec![],
+                    logout_uris: vec![],
+                    status: crate::domain::ServiceStatus::Active,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))
+            });
 
         mock_repo
             .expect_create_client()
@@ -553,11 +589,13 @@ mod tests {
                     created_at: chrono::Utc::now(),
                 })
             });
-            
+
         let service = ClientService::new(Arc::new(mock_repo), None);
-        
-        let result = service.create_client(service_id, Some("Client 1".to_string())).await;
-        
+
+        let result = service
+            .create_client(service_id, Some("Client 1".to_string()))
+            .await;
+
         assert!(result.is_ok());
         let client_with_secret = result.unwrap();
         assert_eq!(client_with_secret.client.name, Some("Client 1".to_string()));
@@ -586,36 +624,39 @@ mod tests {
 
         mock.expect_find_by_id()
             .with(eq(service_id))
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                status: crate::domain::ServiceStatus::Active,
-                ..Default::default()
-            })));
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    status: crate::domain::ServiceStatus::Active,
+                    ..Default::default()
+                }))
+            });
 
         mock.expect_find_client_by_client_id()
             .with(eq("custom-client-id"))
             .returning(|_| Ok(None));
 
-        mock.expect_create_client()
-            .returning(|sid, cid, _, name| {
-                Ok(crate::domain::Client {
-                    id: StringUuid::new_v4(),
-                    service_id: StringUuid(sid),
-                    client_id: cid.to_string(),
-                    client_secret_hash: "hash".to_string(),
-                    name,
-                    created_at: chrono::Utc::now(),
-                })
-            });
+        mock.expect_create_client().returning(|sid, cid, _, name| {
+            Ok(crate::domain::Client {
+                id: StringUuid::new_v4(),
+                service_id: StringUuid(sid),
+                client_id: cid.to_string(),
+                client_secret_hash: "hash".to_string(),
+                name,
+                created_at: chrono::Utc::now(),
+            })
+        });
 
         let service = ClientService::new(Arc::new(mock), None);
 
-        let result = service.create_client_with_secret(
-            service_id,
-            "custom-client-id".to_string(),
-            "custom-secret".to_string(),
-            Some("Custom Client".to_string()),
-        ).await;
+        let result = service
+            .create_client_with_secret(
+                service_id,
+                "custom-client-id".to_string(),
+                "custom-secret".to_string(),
+                Some("Custom Client".to_string()),
+            )
+            .await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().client_secret, "custom-secret");
@@ -626,32 +667,37 @@ mod tests {
         let mut mock = MockServiceRepository::new();
         let service_id = Uuid::new_v4();
 
-        mock.expect_find_by_id()
-            .returning(move |_| Ok(Some(Service {
+        mock.expect_find_by_id().returning(move |_| {
+            Ok(Some(Service {
                 id: StringUuid(service_id),
                 status: crate::domain::ServiceStatus::Active,
                 ..Default::default()
-            })));
+            }))
+        });
 
         mock.expect_find_client_by_client_id()
             .with(eq("existing-id"))
-            .returning(|_| Ok(Some(crate::domain::Client {
-                id: StringUuid::new_v4(),
-                service_id: StringUuid::new_v4(),
-                client_id: "existing-id".to_string(),
-                client_secret_hash: "hash".to_string(),
-                name: None,
-                created_at: chrono::Utc::now(),
-            })));
+            .returning(|_| {
+                Ok(Some(crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid::new_v4(),
+                    client_id: "existing-id".to_string(),
+                    client_secret_hash: "hash".to_string(),
+                    name: None,
+                    created_at: chrono::Utc::now(),
+                }))
+            });
 
         let service = ClientService::new(Arc::new(mock), None);
 
-        let result = service.create_client_with_secret(
-            service_id,
-            "existing-id".to_string(),
-            "secret".to_string(),
-            None,
-        ).await;
+        let result = service
+            .create_client_with_secret(
+                service_id,
+                "existing-id".to_string(),
+                "secret".to_string(),
+                None,
+            )
+            .await;
 
         assert!(matches!(result, Err(AppError::Conflict(_))));
     }
@@ -665,12 +711,14 @@ mod tests {
 
         mock.expect_find_by_id()
             .with(eq(service_id))
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                name: "My Service".to_string(),
-                status: crate::domain::ServiceStatus::Active,
-                ..Default::default()
-            })));
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    name: "My Service".to_string(),
+                    status: crate::domain::ServiceStatus::Active,
+                    ..Default::default()
+                }))
+            });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -701,11 +749,13 @@ mod tests {
 
         mock.expect_find_by_client_id()
             .with(eq("my-client"))
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                name: "Found Service".to_string(),
-                ..Default::default()
-            })));
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    name: "Found Service".to_string(),
+                    ..Default::default()
+                }))
+            });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -738,14 +788,18 @@ mod tests {
             .with(eq(None), eq(0), eq(10))
             .returning(|_, _, _| {
                 Ok(vec![
-                    Service { name: "Service 1".to_string(), ..Default::default() },
-                    Service { name: "Service 2".to_string(), ..Default::default() },
+                    Service {
+                        name: "Service 1".to_string(),
+                        ..Default::default()
+                    },
+                    Service {
+                        name: "Service 2".to_string(),
+                        ..Default::default()
+                    },
                 ])
             });
 
-        mock.expect_count()
-            .with(eq(None))
-            .returning(|_| Ok(2));
+        mock.expect_count().with(eq(None)).returning(|_| Ok(2));
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -764,9 +818,10 @@ mod tests {
         mock.expect_list()
             .with(eq(Some(tenant_id)), eq(10), eq(10))
             .returning(|_, _, _| {
-                Ok(vec![
-                    Service { name: "Tenant Service".to_string(), ..Default::default() },
-                ])
+                Ok(vec![Service {
+                    name: "Tenant Service".to_string(),
+                    ..Default::default()
+                }])
             });
 
         mock.expect_count()
@@ -790,16 +845,14 @@ mod tests {
         mock.expect_list_clients()
             .with(eq(service_id))
             .returning(|_| {
-                Ok(vec![
-                    crate::domain::Client {
-                        id: StringUuid::new_v4(),
-                        service_id: StringUuid::new_v4(),
-                        client_id: "client-1".to_string(),
-                        client_secret_hash: "hash".to_string(),
-                        name: Some("Client 1".to_string()),
-                        created_at: chrono::Utc::now(),
-                    },
-                ])
+                Ok(vec![crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid::new_v4(),
+                    client_id: "client-1".to_string(),
+                    client_secret_hash: "hash".to_string(),
+                    name: Some("Client 1".to_string()),
+                    created_at: chrono::Utc::now(),
+                }])
             });
 
         let service = ClientService::new(Arc::new(mock), None);
@@ -818,21 +871,25 @@ mod tests {
 
         mock.expect_find_by_id()
             .with(eq(service_id))
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                name: "Old Name".to_string(),
-                status: crate::domain::ServiceStatus::Active,
-                ..Default::default()
-            })));
-
-        mock.expect_update()
-            .returning(|_, input| {
-                Ok(Service {
-                    name: input.name.clone().unwrap_or_default(),
-                    status: input.status.clone().unwrap_or(crate::domain::ServiceStatus::Active),
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    name: "Old Name".to_string(),
+                    status: crate::domain::ServiceStatus::Active,
                     ..Default::default()
-                })
+                }))
             });
+
+        mock.expect_update().returning(|_, input| {
+            Ok(Service {
+                name: input.name.clone().unwrap_or_default(),
+                status: input
+                    .status
+                    .clone()
+                    .unwrap_or(crate::domain::ServiceStatus::Active),
+                ..Default::default()
+            })
+        });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -878,30 +935,32 @@ mod tests {
     async fn test_regenerate_client_secret() {
         let mut mock_repo = MockServiceRepository::new();
         let client_id = "test-client-id";
-        
+
         mock_repo
             .expect_find_client_by_client_id()
             .with(eq(client_id))
             .times(1)
-            .returning(move |_| Ok(Some(crate::domain::Client {
-                id: StringUuid(Uuid::new_v4()),
-                service_id: StringUuid(Uuid::new_v4()),
-                client_id: client_id.to_string(),
-                client_secret_hash: "old_hash".to_string(),
-                name: None,
-                created_at: chrono::Utc::now(),
-            })));
+            .returning(move |_| {
+                Ok(Some(crate::domain::Client {
+                    id: StringUuid(Uuid::new_v4()),
+                    service_id: StringUuid(Uuid::new_v4()),
+                    client_id: client_id.to_string(),
+                    client_secret_hash: "old_hash".to_string(),
+                    name: None,
+                    created_at: chrono::Utc::now(),
+                }))
+            });
 
         mock_repo
             .expect_update_client_secret_hash()
             .with(eq(client_id), always())
             .times(1)
             .returning(|_, _| Ok(()));
-            
+
         let service = ClientService::new(Arc::new(mock_repo), None);
-        
+
         let result = service.regenerate_client_secret(client_id).await;
-        
+
         assert!(result.is_ok());
         let new_secret = result.unwrap();
         assert!(!new_secret.is_empty());
@@ -931,11 +990,13 @@ mod tests {
 
         mock.expect_find_by_id()
             .with(eq(service_id))
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                status: crate::domain::ServiceStatus::Active,
-                ..Default::default()
-            })));
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    status: crate::domain::ServiceStatus::Active,
+                    ..Default::default()
+                }))
+            });
 
         mock.expect_delete()
             .with(eq(service_id))
@@ -988,22 +1049,26 @@ mod tests {
 
         mock.expect_find_client_by_client_id()
             .with(eq("valid-client"))
-            .returning(move |_| Ok(Some(crate::domain::Client {
-                id: StringUuid::new_v4(),
-                service_id: StringUuid(service_id),
-                client_id: "valid-client".to_string(),
-                client_secret_hash: secret_hash.clone(),
-                name: None,
-                created_at: chrono::Utc::now(),
-            })));
+            .returning(move |_| {
+                Ok(Some(crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid(service_id),
+                    client_id: "valid-client".to_string(),
+                    client_secret_hash: secret_hash.clone(),
+                    name: None,
+                    created_at: chrono::Utc::now(),
+                }))
+            });
 
         mock.expect_find_by_id()
             .with(eq(service_id))
-            .returning(move |_| Ok(Some(Service {
-                id: StringUuid(service_id),
-                status: crate::domain::ServiceStatus::Active,
-                ..Default::default()
-            })));
+            .returning(move |_| {
+                Ok(Some(Service {
+                    id: StringUuid(service_id),
+                    status: crate::domain::ServiceStatus::Active,
+                    ..Default::default()
+                }))
+            });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -1032,14 +1097,16 @@ mod tests {
 
         mock.expect_find_client_by_client_id()
             .with(eq("my-client"))
-            .returning(move |_| Ok(Some(crate::domain::Client {
-                id: StringUuid::new_v4(),
-                service_id: StringUuid::new_v4(),
-                client_id: "my-client".to_string(),
-                client_secret_hash: secret_hash.clone(),
-                name: None,
-                created_at: chrono::Utc::now(),
-            })));
+            .returning(move |_| {
+                Ok(Some(crate::domain::Client {
+                    id: StringUuid::new_v4(),
+                    service_id: StringUuid::new_v4(),
+                    client_id: "my-client".to_string(),
+                    client_secret_hash: secret_hash.clone(),
+                    name: None,
+                    created_at: chrono::Utc::now(),
+                }))
+            });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -1054,22 +1121,24 @@ mod tests {
         let client_secret = "test-secret";
         let secret_hash = hash_secret(client_secret).unwrap();
 
-        mock.expect_find_client_by_client_id()
-            .returning(move |_| Ok(Some(crate::domain::Client {
+        mock.expect_find_client_by_client_id().returning(move |_| {
+            Ok(Some(crate::domain::Client {
                 id: StringUuid::new_v4(),
                 service_id: StringUuid(service_id),
                 client_id: "client".to_string(),
                 client_secret_hash: secret_hash.clone(),
                 name: None,
                 created_at: chrono::Utc::now(),
-            })));
+            }))
+        });
 
-        mock.expect_find_by_id()
-            .returning(move |_| Ok(Some(Service {
+        mock.expect_find_by_id().returning(move |_| {
+            Ok(Some(Service {
                 id: StringUuid(service_id),
                 status: crate::domain::ServiceStatus::Inactive, // Inactive service
                 ..Default::default()
-            })));
+            }))
+        });
 
         let service = ClientService::new(Arc::new(mock), None);
 
@@ -1089,7 +1158,9 @@ mod tests {
 
         let service = ClientService::new(Arc::new(mock), None);
 
-        let result = service.update_client_secret_hash("my-client", "new-hash").await;
+        let result = service
+            .update_client_secret_hash("my-client", "new-hash")
+            .await;
         assert!(result.is_ok());
     }
 }

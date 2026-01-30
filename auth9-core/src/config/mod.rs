@@ -278,8 +278,12 @@ mod tests {
             issuer: "https://auth9.example.com".to_string(),
             access_token_ttl_secs: 1800,
             refresh_token_ttl_secs: 86400,
-            private_key_pem: Some("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----".to_string()),
-            public_key_pem: Some("-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----".to_string()),
+            private_key_pem: Some(
+                "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----".to_string(),
+            ),
+            public_key_pem: Some(
+                "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----".to_string(),
+            ),
         };
 
         assert!(jwt.private_key_pem.is_some());

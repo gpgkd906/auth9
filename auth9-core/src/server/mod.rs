@@ -220,12 +220,12 @@ pub fn build_router(state: AppState) -> Router {
             get(api::service::list_clients).post(api::service::create_client),
         )
         .route(
-             "/api/v1/services/:service_id/clients/:client_id",
-             delete(api::service::delete_client),
+            "/api/v1/services/:service_id/clients/:client_id",
+            delete(api::service::delete_client),
         )
         .route(
-             "/api/v1/services/:service_id/clients/:client_id/regenerate-secret",
-             post(api::service::regenerate_client_secret),
+            "/api/v1/services/:service_id/clients/:client_id/regenerate-secret",
+            post(api::service::regenerate_client_secret),
         )
         // Permission endpoints
         .route("/api/v1/permissions", post(api::role::create_permission))

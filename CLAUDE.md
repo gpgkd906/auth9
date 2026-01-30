@@ -1,65 +1,115 @@
-# Auth9 项目规则
+# CLAUDE.md
 
-## 测试策略
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-### 单元测试 (默认)
-- 运行快速（< 1秒/测试）
-- 使用 `mockall` 对 Repository traits 进行 mock
-- 使用 `wiremock` 对 HTTP 外部依赖 (Keycloak) 进行 mock
-- 覆盖所有业务逻辑
-- 运行命令: `cargo test`
+## Build & Test Commands
 
-### Mock 使用规范
-- Repository 层: 使用 `#[cfg_attr(test, mockall::automock)]` 注解 trait
-- HTTP 依赖: 使用 WireMock 模拟外部 API
-- Cache: 使用 `NoOpCacheManager` 或 `MockCacheOperations`
-
-### 禁止事项
-- 不使用 testcontainers
-- 不依赖真实数据库或 Redis 运行测试
-- 不使用 faker（直接构造测试数据）
-
-## 项目结构
-
-```
-auth9-core/
-├── src/
-│   ├── api/          # HTTP API handlers
-│   ├── cache/        # Redis cache layer (CacheManager, NoOpCacheManager)
-│   ├── config/       # Configuration types
-│   ├── domain/       # Domain models
-│   ├── error/        # Error types
-│   ├── grpc/         # gRPC service implementations
-│   ├── jwt/          # JWT token management
-│   ├── keycloak/     # Keycloak integration
-│   ├── repository/   # Data access layer (with mock support)
-│   ├── server/       # Server initialization
-│   └── service/      # Business logic (with unit tests)
-└── tests/
-    ├── common/       # Shared test utilities
-    └── grpc_*.rs     # gRPC service tests
+### auth9-core (Rust)
+```bash
+cd auth9-core
+cargo build                    # Build
+cargo test                     # Run all tests (fast, no external dependencies)
+cargo test --lib               # Unit tests only
+cargo test --test '*'          # Integration tests only
+cargo test test_name           # Run single test by name
+cargo test -- --nocapture      # Run with output
+cargo clippy                   # Lint
+cargo fmt                      # Format
+cargo tarpaulin --out Html     # Coverage report
 ```
 
-## 测试文件位置
+### auth9-portal (TypeScript/Remix)
+```bash
+cd auth9-portal
+npm install                    # Install dependencies
+npm run dev                    # Dev server
+npm run build                  # Build
+npm run test                   # Unit tests (Vitest)
+npm run lint                   # ESLint
+npm run typecheck              # TypeScript check
+```
 
-- **Service 层单元测试**: 放在 `src/service/*.rs` 的 `#[cfg(test)]` 模块中
-- **Repository trait mock**: 放在 `src/repository/*.rs` 的 trait 定义上
-- **gRPC 集成测试**: 放在 `tests/grpc_*.rs` 中
+### Local Development with Docker
+```bash
+# Start dependencies (TiDB, Redis, Keycloak)
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
-## 编码规范
+# Run backend
+cd auth9-core && cargo run
 
-### Repository 层
+# Run frontend
+cd auth9-portal && npm run dev
+```
+
+## Architecture
+
+Auth9 is a self-hosted identity and access management service (Auth0 alternative).
+
+**Core Concept**: Headless Keycloak architecture - Keycloak handles OIDC/MFA only; all business logic lives in auth9-core. Token Exchange flow: Identity Token → Tenant Access Token with roles/permissions.
+
+| Component | Stack | Purpose |
+|-----------|-------|---------|
+| auth9-core | Rust (axum, tonic, sqlx) | Backend API & gRPC |
+| auth9-portal | Remix + TypeScript + Vite | Admin dashboard |
+| Database | TiDB (MySQL compatible) | Tenant, user, RBAC data |
+| Cache | Redis | Session, token caching |
+| Auth Engine | Keycloak | OIDC provider |
+
+### Code Organization (auth9-core)
+```
+auth9-core/src/
+├── api/          # REST API handlers (axum) - thin layer
+├── grpc/         # gRPC handlers (tonic) - thin layer
+├── domain/       # Pure domain models with validation
+├── service/      # Business logic (depends on repository traits)
+├── repository/   # Data access layer (implements traits, mockall support)
+├── keycloak/     # Keycloak Admin API client
+├── jwt/          # JWT signing & validation
+├── cache/        # Redis caching (CacheManager, NoOpCacheManager)
+├── config/       # Configuration types
+└── error/        # Error types
+```
+
+## Skills
+
+Project skills are in `.claude/skills/`. Read the relevant skill file before executing related tasks:
+- `ops.md` - Running tests, Docker/K8s logs, troubleshooting
+- `test-coverage.md` - Coverage analysis, writing tests with mocks
+- `reset-local-env.md` - Resetting local development environment
+
+## Testing Strategy
+
+### No External Dependencies
+All tests run fast (~1-2 seconds) with **no Docker or external services**:
+- Repository layer: Mock traits with `mockall`
+- Service layer: Unit tests with mock repositories
+- gRPC services: `NoOpCacheManager` + mock repositories
+- Keycloak: `wiremock` HTTP mocking
+
+### Prohibited
+- No testcontainers - tests must not start Docker containers
+- No real database connections - use mock repositories
+- No real Redis connections - use `NoOpCacheManager`
+- No faker library - construct test data directly
+
+### Test File Locations
+- **Service layer tests**: `src/service/*.rs` in `#[cfg(test)]` modules
+- **Repository trait mocks**: `#[cfg_attr(test, mockall::automock)]` on trait definitions
+- **gRPC integration tests**: `tests/grpc_*.rs`
+- **Keycloak tests**: `tests/keycloak_unit_test.rs` (uses wiremock)
+
+### Mock Patterns
+
+Repository layer:
 ```rust
-// 使用 mockall 自动生成 mock
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
 pub trait TenantRepository: Send + Sync {
     async fn create(&self, input: &CreateTenantInput) -> Result<Tenant>;
-    // ...
 }
 ```
 
-### Service 层测试
+Service layer tests:
 ```rust
 #[cfg(test)]
 mod tests {
@@ -79,16 +129,9 @@ mod tests {
 }
 ```
 
-### gRPC 测试
+gRPC tests (use NoOpCacheManager):
 ```rust
-// 使用 NoOpCacheManager 代替真实 Redis
 fn create_test_cache() -> NoOpCacheManager {
     NoOpCacheManager::new()
-}
-
-#[tokio::test]
-async fn test_exchange_token() {
-    let cache = create_test_cache();
-    // ...
 }
 ```

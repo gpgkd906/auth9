@@ -1050,7 +1050,7 @@ impl KeycloakSeeder {
                 "http://127.0.0.1:3000".to_string(),
             ],
             attributes: None,
-            public_client: false,  // Confidential client - Keycloak will generate a secret
+            public_client: false, // Confidential client - Keycloak will generate a secret
             secret: None,
         };
 
@@ -1206,7 +1206,10 @@ mod tests {
             last_name: None,
             enabled: None,
             email_verified: None,
-            required_actions: Some(vec!["CONFIGURE_TOTP".to_string(), "UPDATE_PASSWORD".to_string()]),
+            required_actions: Some(vec![
+                "CONFIGURE_TOTP".to_string(),
+                "UPDATE_PASSWORD".to_string(),
+            ]),
         };
 
         let json = serde_json::to_string(&update).unwrap();
@@ -1289,7 +1292,10 @@ mod tests {
     #[test]
     fn test_keycloak_oidc_client_with_attributes() {
         let mut attrs = HashMap::new();
-        attrs.insert("post.logout.redirect.uris".to_string(), "https://app.com/logout".to_string());
+        attrs.insert(
+            "post.logout.redirect.uris".to_string(),
+            "https://app.com/logout".to_string(),
+        );
 
         let client = KeycloakOidcClient {
             id: None,

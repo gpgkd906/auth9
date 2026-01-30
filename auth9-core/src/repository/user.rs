@@ -349,14 +349,13 @@ mod tests {
             avatar_url: None,
         };
 
-        mock.expect_create()
-            .returning(|_, input| {
-                Ok(User {
-                    email: input.email.clone(),
-                    display_name: input.display_name.clone(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|_, input| {
+            Ok(User {
+                email: input.email.clone(),
+                display_name: input.display_name.clone(),
+                ..Default::default()
+            })
+        });
 
         let result = mock.create(keycloak_id, &input).await.unwrap();
         assert_eq!(result.email, "new@example.com");
@@ -367,14 +366,18 @@ mod tests {
     async fn test_mock_user_repository_list() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_list()
-            .with(eq(0), eq(10))
-            .returning(|_, _| {
-                Ok(vec![
-                    User { email: "user1@example.com".to_string(), ..Default::default() },
-                    User { email: "user2@example.com".to_string(), ..Default::default() },
-                ])
-            });
+        mock.expect_list().with(eq(0), eq(10)).returning(|_, _| {
+            Ok(vec![
+                User {
+                    email: "user1@example.com".to_string(),
+                    ..Default::default()
+                },
+                User {
+                    email: "user2@example.com".to_string(),
+                    ..Default::default()
+                },
+            ])
+        });
 
         let result = mock.list(0, 10).await.unwrap();
         assert_eq!(result.len(), 2);
@@ -384,8 +387,7 @@ mod tests {
     async fn test_mock_user_repository_count() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_count()
-            .returning(|| Ok(42));
+        mock.expect_count().returning(|| Ok(42));
 
         let result = mock.count().await.unwrap();
         assert_eq!(result, 42);
@@ -396,9 +398,7 @@ mod tests {
         let mut mock = MockUserRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let result = mock.delete(id).await;
         assert!(result.is_ok());

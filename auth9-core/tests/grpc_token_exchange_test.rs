@@ -3,6 +3,7 @@
 //! Tests for the TokenExchange gRPC service methods using mock repositories
 //! and a no-op cache manager (no Redis required).
 
+use async_trait::async_trait;
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
@@ -18,7 +19,6 @@ use auth9_core::grpc::proto::{
 use auth9_core::grpc::TokenExchangeService;
 use auth9_core::jwt::JwtManager;
 use auth9_core::repository::{RbacRepository, ServiceRepository, UserRepository};
-use async_trait::async_trait;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use tonic::Request;
@@ -179,7 +179,12 @@ impl ServiceRepository for TestServiceRepository {
         Ok(clients.iter().find(|c| c.client_id == client_id).cloned())
     }
 
-    async fn list(&self, _tenant_id: Option<Uuid>, _offset: i64, _limit: i64) -> Result<Vec<Service>> {
+    async fn list(
+        &self,
+        _tenant_id: Option<Uuid>,
+        _offset: i64,
+        _limit: i64,
+    ) -> Result<Vec<Service>> {
         Ok(vec![])
     }
 
@@ -203,7 +208,11 @@ impl ServiceRepository for TestServiceRepository {
         unimplemented!()
     }
 
-    async fn update_client_secret_hash(&self, _client_id: &str, _new_secret_hash: &str) -> Result<()> {
+    async fn update_client_secret_hash(
+        &self,
+        _client_id: &str,
+        _new_secret_hash: &str,
+    ) -> Result<()> {
         unimplemented!()
     }
 }
@@ -225,7 +234,10 @@ impl TestRbacRepository {
     }
 
     async fn set_user_roles(&self, user_id: Uuid, tenant_id: Uuid, roles: UserRolesInTenant) {
-        self.user_roles.write().await.push((user_id, tenant_id, roles));
+        self.user_roles
+            .write()
+            .await
+            .push((user_id, tenant_id, roles));
     }
 
     async fn set_user_roles_for_service(
@@ -256,7 +268,10 @@ impl RbacRepository for TestRbacRepository {
         Ok(None)
     }
 
-    async fn find_permissions_by_service(&self, _service_id: StringUuid) -> Result<Vec<Permission>> {
+    async fn find_permissions_by_service(
+        &self,
+        _service_id: StringUuid,
+    ) -> Result<Vec<Permission>> {
         Ok(vec![])
     }
 
@@ -479,7 +494,11 @@ async fn test_exchange_token_success() {
     });
 
     let response = grpc_service.exchange_token(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 
     let response = response.unwrap().into_inner();
     assert!(!response.access_token.is_empty());
@@ -856,7 +875,11 @@ async fn test_get_user_roles_success() {
     });
 
     let response = grpc_service.get_user_roles(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 
     let response = response.unwrap().into_inner();
     assert!(!response.roles.is_empty());
@@ -1304,16 +1327,18 @@ async fn test_exchange_token_with_multiple_permissions() {
         .unwrap();
 
     let user_repo = Arc::new(TestUserRepository::new());
-    user_repo.add_user(User {
-        id: StringUuid::from(user_id),
-        email: "multi-perm@example.com".to_string(),
-        display_name: Some("Multi Perm User".to_string()),
-        avatar_url: None,
-        keycloak_id: "kc-multi".to_string(),
-        mfa_enabled: true,
-        created_at: chrono::Utc::now(),
-        updated_at: chrono::Utc::now(),
-    }).await;
+    user_repo
+        .add_user(User {
+            id: StringUuid::from(user_id),
+            email: "multi-perm@example.com".to_string(),
+            display_name: Some("Multi Perm User".to_string()),
+            avatar_url: None,
+            keycloak_id: "kc-multi".to_string(),
+            mfa_enabled: true,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .await;
 
     let service_repo = Arc::new(TestServiceRepository::new());
     service_repo
@@ -1332,7 +1357,11 @@ async fn test_exchange_token_with_multiple_permissions() {
             UserRolesInTenant {
                 user_id,
                 tenant_id,
-                roles: vec!["admin".to_string(), "editor".to_string(), "viewer".to_string()],
+                roles: vec![
+                    "admin".to_string(),
+                    "editor".to_string(),
+                    "viewer".to_string(),
+                ],
                 permissions: vec![
                     "users:read".to_string(),
                     "users:write".to_string(),
@@ -1459,7 +1488,10 @@ async fn test_introspect_token_with_all_fields() {
     assert!(response.active);
     assert_eq!(response.email, "full@example.com");
     assert_eq!(response.roles, vec!["super-admin", "manager"]);
-    assert_eq!(response.permissions, vec!["all:read", "all:write", "all:delete"]);
+    assert_eq!(
+        response.permissions,
+        vec!["all:read", "all:write", "all:delete"]
+    );
     assert!(response.exp > 0);
     assert!(response.iat > 0);
     assert!(!response.iss.is_empty());
@@ -1489,7 +1521,11 @@ async fn test_get_user_roles_with_multiple_role_records() {
             UserRolesInTenant {
                 user_id,
                 tenant_id,
-                roles: vec!["admin".to_string(), "editor".to_string(), "viewer".to_string()],
+                roles: vec![
+                    "admin".to_string(),
+                    "editor".to_string(),
+                    "viewer".to_string(),
+                ],
                 permissions: vec!["read".to_string(), "write".to_string()],
             },
         )
@@ -1634,7 +1670,11 @@ async fn test_exchange_token_service_lookup_chain() {
     });
 
     let response = grpc_service.exchange_token(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 
     let response = response.unwrap().into_inner();
     assert!(!response.access_token.is_empty());
