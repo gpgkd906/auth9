@@ -41,10 +41,10 @@ async fn test_create_user_success() {
     let user_id = "user-uuid-12345";
     Mock::given(method("POST"))
         .and(path("/admin/realms/test/users"))
-        .respond_with(
-            ResponseTemplate::new(201)
-                .append_header("Location", format!("{}/admin/realms/test/users/{}", mock_server.uri(), user_id))
-        )
+        .respond_with(ResponseTemplate::new(201).append_header(
+            "Location",
+            format!("{}/admin/realms/test/users/{}", mock_server.uri(), user_id),
+        ))
         .mount(&mock_server)
         .await;
 
@@ -217,10 +217,14 @@ async fn test_create_oidc_client_success() {
     // Mock client creation endpoint
     Mock::given(method("POST"))
         .and(path("/admin/realms/test/clients"))
-        .respond_with(
-            ResponseTemplate::new(201)
-                .append_header("Location", format!("{}/admin/realms/test/clients/{}", mock_server.uri(), client_uuid))
-        )
+        .respond_with(ResponseTemplate::new(201).append_header(
+            "Location",
+            format!(
+                "{}/admin/realms/test/clients/{}",
+                mock_server.uri(),
+                client_uuid
+            ),
+        ))
         .mount(&mock_server)
         .await;
 
@@ -263,7 +267,10 @@ async fn test_get_client_secret_success() {
     let client_uuid = "client-uuid-123";
     // Mock get secret endpoint
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/clients/{}/client-secret", client_uuid)))
+        .and(path(format!(
+            "/admin/realms/test/clients/{}/client-secret",
+            client_uuid
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "type": "secret",
             "value": "super-secret-value-abc123"
@@ -294,7 +301,10 @@ async fn test_regenerate_client_secret_success() {
     let client_uuid = "client-uuid-456";
     // Mock regenerate secret endpoint
     Mock::given(method("POST"))
-        .and(path(format!("/admin/realms/test/clients/{}/client-secret", client_uuid)))
+        .and(path(format!(
+            "/admin/realms/test/clients/{}/client-secret",
+            client_uuid
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "type": "secret",
             "value": "new-regenerated-secret-xyz789"
@@ -339,7 +349,10 @@ async fn test_search_users_by_email() {
 
     let client = create_test_client(&mock_server.uri());
 
-    let users = client.search_users_by_email("found@example.com").await.unwrap();
+    let users = client
+        .search_users_by_email("found@example.com")
+        .await
+        .unwrap();
     assert_eq!(users.len(), 1);
     assert_eq!(users[0].email, Some("found@example.com".to_string()));
 }
@@ -721,7 +734,10 @@ async fn test_list_user_credentials_success() {
     let user_id = "user-uuid-12345";
     // Mock list credentials endpoint
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/users/{}/credentials", user_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!([
             {
                 "id": "cred-1",
@@ -761,7 +777,10 @@ async fn test_list_user_credentials_not_found() {
     let user_id = "nonexistent-user";
     // Mock 404 response
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/users/{}/credentials", user_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -790,7 +809,10 @@ async fn test_delete_user_credential_success() {
     let credential_id = "cred-uuid-67890";
     // Mock delete credential endpoint
     Mock::given(method("DELETE"))
-        .and(path(format!("/admin/realms/test/users/{}/credentials/{}", user_id, credential_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials/{}",
+            user_id, credential_id
+        )))
         .respond_with(ResponseTemplate::new(204))
         .mount(&mock_server)
         .await;
@@ -819,7 +841,10 @@ async fn test_delete_user_credential_not_found() {
     let credential_id = "nonexistent-cred";
     // Mock 404 response
     Mock::given(method("DELETE"))
-        .and(path(format!("/admin/realms/test/users/{}/credentials/{}", user_id, credential_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials/{}",
+            user_id, credential_id
+        )))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -848,7 +873,10 @@ async fn test_remove_totp_credentials_success() {
 
     // Mock list credentials endpoint
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/users/{}/credentials", user_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!([
             {
                 "id": "password-cred",
@@ -868,7 +896,10 @@ async fn test_remove_totp_credentials_success() {
 
     // Mock delete credential endpoint (matches any credential under this user)
     Mock::given(method("DELETE"))
-        .and(path_regex(format!(r"/admin/realms/test/users/{}/credentials/.*", user_id)))
+        .and(path_regex(format!(
+            r"/admin/realms/test/users/{}/credentials/.*",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(204))
         .mount(&mock_server)
         .await;
@@ -897,7 +928,10 @@ async fn test_remove_totp_credentials_empty() {
 
     // Mock list credentials endpoint - no OTP credentials
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/users/{}/credentials", user_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!([
             {
                 "id": "password-cred",

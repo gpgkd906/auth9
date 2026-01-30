@@ -1,6 +1,6 @@
 //! Role and permission API handlers
 
-use crate::api::{write_audit_log, MessageResponse, SuccessResponse};
+use crate::api::{extract_actor_id, write_audit_log, MessageResponse, SuccessResponse};
 use crate::domain::{
     AssignRolesInput, CreatePermissionInput, CreateRoleInput, StringUuid, UpdateRoleInput,
 };
@@ -225,8 +225,7 @@ pub async fn assign_roles(
     headers: HeaderMap,
     Json(input): Json<AssignRolesInput>,
 ) -> Result<impl IntoResponse> {
-    // TODO: Get current user ID from auth context
-    let granted_by = None;
+    let granted_by = extract_actor_id(&state, &headers).map(StringUuid::from);
     state.rbac_service.assign_roles(input, granted_by).await?;
     let _ = write_audit_log(
         &state,
@@ -298,13 +297,34 @@ pub async fn unassign_role(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{CreatePermissionInput, CreateRoleInput, UpdateRoleInput, AssignRolesInput};
+    use crate::api::{MessageResponse, SuccessResponse};
+    use crate::domain::{
+        AssignRolesInput, CreatePermissionInput, CreateRoleInput, Permission, Role,
+        RoleWithPermissions, UpdateRoleInput,
+    };
 
     #[test]
     fn test_assign_permission_input_deserialization() {
         let json = r#"{"permission_id": "550e8400-e29b-41d4-a716-446655440000"}"#;
         let input: AssignPermissionInput = serde_json::from_str(json).unwrap();
-        assert_eq!(input.permission_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(
+            input.permission_id.to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
+    }
+
+    #[test]
+    fn test_assign_permission_input_invalid_uuid() {
+        let json = r#"{"permission_id": "not-a-uuid"}"#;
+        let result: serde_json::Result<AssignPermissionInput> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_assign_permission_input_missing_field() {
+        let json = r#"{}"#;
+        let result: serde_json::Result<AssignPermissionInput> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -335,6 +355,16 @@ mod tests {
     }
 
     #[test]
+    fn test_create_permission_input_missing_required_field() {
+        let json = r#"{
+            "service_id": "550e8400-e29b-41d4-a716-446655440000",
+            "code": "users:read"
+        }"#;
+        let result: serde_json::Result<CreatePermissionInput> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
     fn test_create_role_input_deserialization() {
         let json = r#"{
             "service_id": "550e8400-e29b-41d4-a716-446655440000",
@@ -344,6 +374,37 @@ mod tests {
         let input: CreateRoleInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.name, "admin");
         assert_eq!(input.description, Some("Administrator role".to_string()));
+    }
+
+    #[test]
+    fn test_create_role_input_with_parent_and_permissions() {
+        let json = r#"{
+            "service_id": "550e8400-e29b-41d4-a716-446655440000",
+            "name": "editor",
+            "description": "Content editor",
+            "parent_role_id": "550e8400-e29b-41d4-a716-446655440001",
+            "permission_ids": [
+                "550e8400-e29b-41d4-a716-446655440002",
+                "550e8400-e29b-41d4-a716-446655440003"
+            ]
+        }"#;
+        let input: CreateRoleInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, "editor");
+        assert!(input.parent_role_id.is_some());
+        assert_eq!(input.permission_ids.as_ref().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn test_create_role_input_minimal() {
+        let json = r#"{
+            "service_id": "550e8400-e29b-41d4-a716-446655440000",
+            "name": "viewer"
+        }"#;
+        let input: CreateRoleInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, "viewer");
+        assert!(input.description.is_none());
+        assert!(input.parent_role_id.is_none());
+        assert!(input.permission_ids.is_none());
     }
 
     #[test]
@@ -362,7 +423,32 @@ mod tests {
         }"#;
         let input: UpdateRoleInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.name, Some("manager".to_string()));
-        assert_eq!(input.description, Some("Manager role with limited access".to_string()));
+        assert_eq!(
+            input.description,
+            Some("Manager role with limited access".to_string())
+        );
+    }
+
+    #[test]
+    fn test_update_role_input_empty() {
+        let json = r#"{}"#;
+        let input: UpdateRoleInput = serde_json::from_str(json).unwrap();
+        assert!(input.name.is_none());
+        assert!(input.description.is_none());
+        assert!(input.parent_role_id.is_none());
+    }
+
+    #[test]
+    fn test_update_role_input_with_parent_role() {
+        let json = r#"{
+            "parent_role_id": "550e8400-e29b-41d4-a716-446655440000"
+        }"#;
+        let input: UpdateRoleInput = serde_json::from_str(json).unwrap();
+        assert!(input.parent_role_id.is_some());
+        assert_eq!(
+            input.parent_role_id.unwrap().to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
     }
 
     #[test]
@@ -389,5 +475,88 @@ mod tests {
         }"#;
         let input: AssignRolesInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.role_ids.len(), 3);
+    }
+
+    #[test]
+    fn test_assign_roles_input_empty_roles() {
+        let json = r#"{
+            "user_id": "550e8400-e29b-41d4-a716-446655440000",
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440001",
+            "role_ids": []
+        }"#;
+        let input: AssignRolesInput = serde_json::from_str(json).unwrap();
+        assert!(input.role_ids.is_empty());
+    }
+
+    #[test]
+    fn test_assign_roles_input_missing_user_id() {
+        let json = r#"{
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440001",
+            "role_ids": []
+        }"#;
+        let result: serde_json::Result<AssignRolesInput> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_success_response_with_permission() {
+        let permission = Permission::default();
+        let response = SuccessResponse::new(permission);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_success_response_with_role() {
+        let role = Role::default();
+        let response = SuccessResponse::new(role);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_success_response_with_role_with_permissions() {
+        let role = Role::default();
+        let permissions = vec![Permission::default()];
+        let rwp = RoleWithPermissions { role, permissions };
+        let response = SuccessResponse::new(rwp);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+        assert!(json.contains("permissions"));
+    }
+
+    #[test]
+    fn test_message_response_permission_assigned() {
+        let response = MessageResponse::new("Permission assigned to role");
+        assert_eq!(response.message, "Permission assigned to role");
+    }
+
+    #[test]
+    fn test_message_response_role_deleted() {
+        let response = MessageResponse::new("Role deleted successfully");
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("Role deleted successfully"));
+    }
+
+    #[test]
+    fn test_message_response_roles_assigned() {
+        let response = MessageResponse::new("Roles assigned successfully");
+        assert_eq!(response.message, "Roles assigned successfully");
+    }
+
+    #[test]
+    fn test_success_response_with_vec_roles() {
+        let roles = vec![Role::default(), Role::default()];
+        let response = SuccessResponse::new(roles);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_success_response_with_vec_permissions() {
+        let permissions = vec![Permission::default(), Permission::default()];
+        let response = SuccessResponse::new(permissions);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
     }
 }

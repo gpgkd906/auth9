@@ -21,7 +21,7 @@ mod tests {
             tenant_id: String::new(),
             service_id: String::new(),
         };
-        
+
         let _ = ValidateTokenRequest {
             access_token: String::new(),
             audience: String::new(),

@@ -170,7 +170,7 @@ mod tests {
             logout_uris: vec!["https://example.com/logout".to_string()],
             ..Default::default()
         };
-        
+
         assert_eq!(service.tenant_id, Some(tenant_id));
         assert_eq!(service.name, "My Service");
         assert!(service.base_url.is_some());
@@ -196,10 +196,10 @@ mod tests {
             name: "Test Service".to_string(),
             ..Default::default()
         };
-        
+
         let json = serde_json::to_string(&service).unwrap();
         let deserialized: Service = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.name, "Test Service");
         assert_eq!(deserialized.status, ServiceStatus::Active);
     }
@@ -231,7 +231,7 @@ mod tests {
             name: None,
             created_at: Utc::now(),
         };
-        
+
         assert!(client.name.is_none());
     }
 
@@ -243,15 +243,21 @@ mod tests {
 
     #[test]
     fn test_service_status_serialization() {
-        assert_eq!(serde_json::to_string(&ServiceStatus::Active).unwrap(), "\"active\"");
-        assert_eq!(serde_json::to_string(&ServiceStatus::Inactive).unwrap(), "\"inactive\"");
+        assert_eq!(
+            serde_json::to_string(&ServiceStatus::Active).unwrap(),
+            "\"active\""
+        );
+        assert_eq!(
+            serde_json::to_string(&ServiceStatus::Inactive).unwrap(),
+            "\"inactive\""
+        );
     }
 
     #[test]
     fn test_service_status_deserialization() {
         let active: ServiceStatus = serde_json::from_str("\"active\"").unwrap();
         let inactive: ServiceStatus = serde_json::from_str("\"inactive\"").unwrap();
-        
+
         assert_eq!(active, ServiceStatus::Active);
         assert_eq!(inactive, ServiceStatus::Inactive);
     }
@@ -266,7 +272,7 @@ mod tests {
             redirect_uris: vec!["https://example.com/callback".to_string()],
             logout_uris: Some(vec!["https://example.com/logout".to_string()]),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -280,7 +286,7 @@ mod tests {
             redirect_uris: vec![],
             logout_uris: None,
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -294,7 +300,7 @@ mod tests {
             redirect_uris: vec![],
             logout_uris: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -308,7 +314,7 @@ mod tests {
             redirect_uris: vec![],
             logout_uris: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -322,7 +328,7 @@ mod tests {
             redirect_uris: vec![],
             logout_uris: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -331,16 +337,14 @@ mod tests {
         let input = CreateClientInput {
             name: Some("My Client".to_string()),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
     #[test]
     fn test_create_client_input_no_name() {
-        let input = CreateClientInput {
-            name: None,
-        };
-        
+        let input = CreateClientInput { name: None };
+
         assert!(input.validate().is_ok());
     }
 
@@ -349,7 +353,7 @@ mod tests {
         let input = CreateClientInput {
             name: Some("".to_string()),
         };
-        
+
         // Empty string is within length bounds (0 is not < 1 for Some values)
         // Actually, the validation is min = 1, so empty string should fail
         // But since name is Option<String>, the validation only applies when Some
@@ -365,7 +369,7 @@ mod tests {
             logout_uris: Some(vec!["https://new-logout.com".to_string()]),
             status: Some(ServiceStatus::Inactive),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -378,7 +382,7 @@ mod tests {
             logout_uris: None,
             status: Some(ServiceStatus::Inactive),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -391,7 +395,7 @@ mod tests {
             logout_uris: None,
             status: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -404,7 +408,7 @@ mod tests {
             logout_uris: None,
             status: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -420,7 +424,7 @@ mod tests {
             created_at: Utc::now(),
         };
         let client_secret = "secret123".to_string();
-        
+
         let swc = ServiceWithClient {
             service: service.clone(),
             client: ClientWithSecret {
@@ -428,7 +432,7 @@ mod tests {
                 client_secret: client_secret.clone(),
             },
         };
-        
+
         assert_eq!(swc.service.id, service.id);
         assert_eq!(swc.client.client_secret, client_secret);
     }
@@ -447,7 +451,7 @@ mod tests {
             name: None,
             created_at: Utc::now(),
         };
-        
+
         let swc = ServiceWithClient {
             service,
             client: ClientWithSecret {
@@ -455,7 +459,7 @@ mod tests {
                 client_secret: "secret123".to_string(),
             },
         };
-        
+
         let json = serde_json::to_string(&swc).unwrap();
         // Secret should be visible in ClientWithSecret
         assert!(json.contains("secret123"));
@@ -473,12 +477,12 @@ mod tests {
             name: Some("My Client".to_string()),
             created_at: Utc::now(),
         };
-        
+
         let cws = ClientWithSecret {
             client: client.clone(),
             client_secret: "plain-secret".to_string(),
         };
-        
+
         assert_eq!(cws.client.client_id, "my-client");
         assert_eq!(cws.client_secret, "plain-secret");
     }

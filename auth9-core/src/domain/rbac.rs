@@ -173,7 +173,7 @@ mod tests {
             name: "Read Users".to_string(),
             description: Some("Can read user data".to_string()),
         };
-        
+
         assert!(!perm.id.is_nil());
         assert!(!perm.service_id.is_nil());
         assert_eq!(perm.code, "user:read");
@@ -198,7 +198,7 @@ mod tests {
             parent_role_id: Some(parent_id),
             ..Default::default()
         };
-        
+
         assert_eq!(role.parent_role_id, Some(parent_id));
     }
 
@@ -209,7 +209,7 @@ mod tests {
         assert!(PERMISSION_CODE_REGEX.is_match("report:export:pdf"));
         assert!(PERMISSION_CODE_REGEX.is_match("a:b"));
         assert!(PERMISSION_CODE_REGEX.is_match("user1:action2"));
-        
+
         // Invalid codes
         assert!(!PERMISSION_CODE_REGEX.is_match("invalid"));
         assert!(!PERMISSION_CODE_REGEX.is_match("User:Read"));
@@ -230,7 +230,7 @@ mod tests {
     fn test_validate_permission_code_invalid() {
         let result = validate_permission_code("invalid");
         assert!(result.is_err());
-        
+
         let err = result.unwrap_err();
         assert_eq!(err.code.as_ref(), "invalid_permission_code");
     }
@@ -243,7 +243,7 @@ mod tests {
             name: "Read Users".to_string(),
             description: Some("Can read user data".to_string()),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -255,7 +255,7 @@ mod tests {
             name: "Read Users".to_string(),
             description: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -267,7 +267,7 @@ mod tests {
             name: "Read Users".to_string(),
             description: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -279,7 +279,7 @@ mod tests {
             name: "".to_string(),
             description: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -292,7 +292,7 @@ mod tests {
             parent_role_id: None,
             permission_ids: Some(vec![Uuid::new_v4()]),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -305,7 +305,7 @@ mod tests {
             parent_role_id: None,
             permission_ids: None,
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -318,7 +318,7 @@ mod tests {
             parent_role_id: None,
             permission_ids: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -329,7 +329,7 @@ mod tests {
             description: Some("Updated description".to_string()),
             parent_role_id: Some(Uuid::new_v4()),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -340,7 +340,7 @@ mod tests {
             description: Some("Only description".to_string()),
             parent_role_id: None,
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -351,7 +351,7 @@ mod tests {
             description: None,
             parent_role_id: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -362,7 +362,7 @@ mod tests {
             tenant_id: Uuid::new_v4(),
             role_ids: vec![Uuid::new_v4(), Uuid::new_v4()],
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -373,7 +373,7 @@ mod tests {
             tenant_id: Uuid::new_v4(),
             role_ids: vec![],
         };
-        
+
         // Empty roles is valid at validation level
         assert!(input.validate().is_ok());
     }
@@ -384,7 +384,7 @@ mod tests {
             role_id: StringUuid::new_v4(),
             permission_id: StringUuid::new_v4(),
         };
-        
+
         assert!(!role_perm.role_id.is_nil());
         assert!(!role_perm.permission_id.is_nil());
     }
@@ -398,7 +398,7 @@ mod tests {
             granted_at: Utc::now(),
             granted_by: Some(StringUuid::new_v4()),
         };
-        
+
         assert!(!utr.id.is_nil());
         assert!(utr.granted_by.is_some());
     }
@@ -412,7 +412,7 @@ mod tests {
             granted_at: Utc::now(),
             granted_by: None,
         };
-        
+
         assert!(utr.granted_by.is_none());
     }
 
@@ -420,12 +420,12 @@ mod tests {
     fn test_role_with_permissions_structure() {
         let role = Role::default();
         let permissions = vec![Permission::default()];
-        
+
         let rwp = RoleWithPermissions {
             role: role.clone(),
             permissions,
         };
-        
+
         assert_eq!(rwp.role.id, role.id);
         assert_eq!(rwp.permissions.len(), 1);
     }
@@ -439,7 +439,7 @@ mod tests {
             },
             permissions: vec![],
         };
-        
+
         let json = serde_json::to_string(&rwp).unwrap();
         assert!(json.contains("Admin"));
         assert!(json.contains("permissions"));
@@ -453,7 +453,7 @@ mod tests {
             roles: vec!["admin".to_string(), "user".to_string()],
             permissions: vec!["user:read".to_string(), "user:write".to_string()],
         };
-        
+
         assert_eq!(urit.roles.len(), 2);
         assert_eq!(urit.permissions.len(), 2);
     }
@@ -466,10 +466,10 @@ mod tests {
             roles: vec!["admin".to_string()],
             permissions: vec!["user:read".to_string()],
         };
-        
+
         let json = serde_json::to_string(&urit).unwrap();
         let deserialized: UserRolesInTenant = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.roles, urit.roles);
         assert_eq!(deserialized.permissions, urit.permissions);
     }

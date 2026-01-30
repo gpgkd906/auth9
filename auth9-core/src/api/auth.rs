@@ -50,16 +50,16 @@ pub async fn authorize(
 
     let encoded_state = encode_state(&state_payload)?;
 
-    let auth_url = build_keycloak_auth_url(
-        &state.config.keycloak.public_url,
-        &state.config.keycloak.realm,
-        &params.response_type,
-        &state_payload.client_id,
-        &callback_url,
-        &params.scope,
-        &encoded_state,
-        params.nonce.as_deref(),
-    )?;
+    let auth_url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+        keycloak_public_url: &state.config.keycloak.public_url,
+        realm: &state.config.keycloak.realm,
+        response_type: &params.response_type,
+        client_id: &state_payload.client_id,
+        callback_url: &callback_url,
+        scope: &params.scope,
+        encoded_state: &encoded_state,
+        nonce: params.nonce.as_deref(),
+    })?;
 
     Ok(Redirect::temporary(&auth_url).into_response())
 }
@@ -344,31 +344,35 @@ pub fn build_callback_url(issuer: &str) -> String {
     format!("{}/api/v1/auth/callback", issuer.trim_end_matches('/'))
 }
 
+/// Parameters for building Keycloak authorization URL
+#[derive(Debug)]
+pub struct KeycloakAuthUrlParams<'a> {
+    pub keycloak_public_url: &'a str,
+    pub realm: &'a str,
+    pub response_type: &'a str,
+    pub client_id: &'a str,
+    pub callback_url: &'a str,
+    pub scope: &'a str,
+    pub encoded_state: &'a str,
+    pub nonce: Option<&'a str>,
+}
+
 /// Build Keycloak authorization URL
-pub fn build_keycloak_auth_url(
-    keycloak_public_url: &str,
-    realm: &str,
-    response_type: &str,
-    client_id: &str,
-    callback_url: &str,
-    scope: &str,
-    encoded_state: &str,
-    nonce: Option<&str>,
-) -> Result<String> {
+pub fn build_keycloak_auth_url(params: &KeycloakAuthUrlParams) -> Result<String> {
     let mut auth_url = Url::parse(&format!(
         "{}/realms/{}/protocol/openid-connect/auth",
-        keycloak_public_url, realm
+        params.keycloak_public_url, params.realm
     ))
     .map_err(|e| AppError::Internal(e.into()))?;
 
     {
         let mut pairs = auth_url.query_pairs_mut();
-        pairs.append_pair("response_type", response_type);
-        pairs.append_pair("client_id", client_id);
-        pairs.append_pair("redirect_uri", callback_url);
-        pairs.append_pair("scope", scope);
-        pairs.append_pair("state", encoded_state);
-        if let Some(n) = nonce {
+        pairs.append_pair("response_type", params.response_type);
+        pairs.append_pair("client_id", params.client_id);
+        pairs.append_pair("redirect_uri", params.callback_url);
+        pairs.append_pair("scope", params.scope);
+        pairs.append_pair("state", params.encoded_state);
+        if let Some(n) = params.nonce {
             pairs.append_pair("nonce", n);
         }
     }
@@ -472,9 +476,10 @@ async fn exchange_code_for_tokens(
     }
 
     // Debug: log raw response for troubleshooting
-    let body = response.text().await.map_err(|e| {
-        AppError::Keycloak(format!("Failed to read token response: {}", e))
-    })?;
+    let body = response
+        .text()
+        .await
+        .map_err(|e| AppError::Keycloak(format!("Failed to read token response: {}", e)))?;
     tracing::debug!("Token exchange response length: {} bytes", body.len());
 
     serde_json::from_str(&body)
@@ -688,13 +693,13 @@ mod tests {
             client_id: "test-client".to_string(),
             original_state: Some("original".to_string()),
         };
-        
+
         let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(serde_json::to_vec(&state_payload).unwrap());
-        
+
         let result = decode_state(Some(&encoded));
         assert!(result.is_ok());
-        
+
         let decoded = result.unwrap();
         assert_eq!(decoded.redirect_uri, "https://example.com/callback");
         assert_eq!(decoded.client_id, "test-client");
@@ -715,9 +720,8 @@ mod tests {
 
     #[test]
     fn test_decode_state_invalid_json() {
-        let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
-            .encode(b"not valid json");
-        
+        let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(b"not valid json");
+
         let result = decode_state(Some(&encoded));
         assert!(matches!(result, Err(AppError::Internal(_))));
     }
@@ -729,10 +733,10 @@ mod tests {
             client_id: "test-client".to_string(),
             original_state: None,
         };
-        
+
         let encoded = base64::engine::general_purpose::URL_SAFE_NO_PAD
             .encode(serde_json::to_vec(&state_payload).unwrap());
-        
+
         let result = decode_state(Some(&encoded));
         assert!(result.is_ok());
         assert!(result.unwrap().original_state.is_none());
@@ -748,7 +752,7 @@ mod tests {
             "state": "abc123",
             "nonce": "xyz789"
         }"#;
-        
+
         let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.response_type, "code");
         assert_eq!(request.client_id, "my-app");
@@ -766,7 +770,7 @@ mod tests {
             "redirect_uri": "https://app.example.com/callback",
             "scope": "openid"
         }"#;
-        
+
         let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
         assert!(request.state.is_none());
         assert!(request.nonce.is_none());
@@ -780,7 +784,7 @@ mod tests {
             "code": "auth-code-123",
             "redirect_uri": "https://app.example.com/callback"
         }"#;
-        
+
         let request: TokenRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.grant_type, "authorization_code");
         assert_eq!(request.client_id, Some("my-app".to_string()));
@@ -794,7 +798,7 @@ mod tests {
             "client_id": "service-app",
             "client_secret": "secret123"
         }"#;
-        
+
         let request: TokenRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.grant_type, "client_credentials");
         assert_eq!(request.client_secret, Some("secret123".to_string()));
@@ -807,7 +811,7 @@ mod tests {
             "client_id": "my-app",
             "refresh_token": "refresh-token-abc"
         }"#;
-        
+
         let request: TokenRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.grant_type, "refresh_token");
         assert_eq!(request.refresh_token, Some("refresh-token-abc".to_string()));
@@ -820,17 +824,20 @@ mod tests {
             "post_logout_redirect_uri": "https://app.example.com/logged-out",
             "state": "logout-state"
         }"#;
-        
+
         let request: LogoutRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.id_token_hint, Some("token123".to_string()));
-        assert_eq!(request.post_logout_redirect_uri, Some("https://app.example.com/logged-out".to_string()));
+        assert_eq!(
+            request.post_logout_redirect_uri,
+            Some("https://app.example.com/logged-out".to_string())
+        );
         assert_eq!(request.state, Some("logout-state".to_string()));
     }
 
     #[test]
     fn test_logout_request_empty() {
         let json = r#"{}"#;
-        
+
         let request: LogoutRequest = serde_json::from_str(json).unwrap();
         assert!(request.id_token_hint.is_none());
         assert!(request.post_logout_redirect_uri.is_none());
@@ -846,7 +853,7 @@ mod tests {
             refresh_token: Some("refresh-token-abc".to_string()),
             id_token: Some("id-token-123".to_string()),
         };
-        
+
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("access_token"));
         assert!(json.contains("Bearer"));
@@ -1007,12 +1014,26 @@ mod tests {
             userinfo_endpoint: "https://test.example.com/userinfo".to_string(),
             jwks_uri: Some("https://test.example.com/jwks".to_string()),
             end_session_endpoint: "https://test.example.com/logout".to_string(),
-            response_types_supported: vec!["code".to_string(), "token".to_string(), "id_token".to_string()],
-            grant_types_supported: vec!["authorization_code".to_string(), "client_credentials".to_string()],
+            response_types_supported: vec![
+                "code".to_string(),
+                "token".to_string(),
+                "id_token".to_string(),
+            ],
+            grant_types_supported: vec![
+                "authorization_code".to_string(),
+                "client_credentials".to_string(),
+            ],
             subject_types_supported: vec!["public".to_string()],
             id_token_signing_alg_values_supported: vec!["RS256".to_string(), "HS256".to_string()],
-            scopes_supported: vec!["openid".to_string(), "profile".to_string(), "email".to_string()],
-            token_endpoint_auth_methods_supported: vec!["client_secret_basic".to_string(), "client_secret_post".to_string()],
+            scopes_supported: vec![
+                "openid".to_string(),
+                "profile".to_string(),
+                "email".to_string(),
+            ],
+            token_endpoint_auth_methods_supported: vec![
+                "client_secret_basic".to_string(),
+                "client_secret_post".to_string(),
+            ],
             claims_supported: vec!["sub".to_string(), "email".to_string(), "name".to_string()],
         };
 
@@ -1020,7 +1041,10 @@ mod tests {
         let parsed: OpenIdConfiguration = serde_json::from_str(&json).unwrap();
 
         assert_eq!(config.issuer, parsed.issuer);
-        assert_eq!(config.response_types_supported.len(), parsed.response_types_supported.len());
+        assert_eq!(
+            config.response_types_supported.len(),
+            parsed.response_types_supported.len()
+        );
     }
 
     // ========================================================================
@@ -1081,16 +1105,16 @@ mod tests {
 
     #[test]
     fn test_build_keycloak_auth_url() {
-        let url = build_keycloak_auth_url(
-            "https://keycloak.example.com",
-            "my-realm",
-            "code",
-            "my-client",
-            "https://app.com/callback",
-            "openid profile",
-            "encoded-state",
-            None,
-        )
+        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+            keycloak_public_url: "https://keycloak.example.com",
+            realm: "my-realm",
+            response_type: "code",
+            client_id: "my-client",
+            callback_url: "https://app.com/callback",
+            scope: "openid profile",
+            encoded_state: "encoded-state",
+            nonce: None,
+        })
         .unwrap();
 
         assert!(url.contains("keycloak.example.com"));
@@ -1102,16 +1126,16 @@ mod tests {
 
     #[test]
     fn test_build_keycloak_auth_url_with_nonce() {
-        let url = build_keycloak_auth_url(
-            "https://keycloak.example.com",
-            "test",
-            "code",
-            "client",
-            "https://app.com/cb",
-            "openid",
-            "state",
-            Some("my-nonce"),
-        )
+        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+            keycloak_public_url: "https://keycloak.example.com",
+            realm: "test",
+            response_type: "code",
+            client_id: "client",
+            callback_url: "https://app.com/cb",
+            scope: "openid",
+            encoded_state: "state",
+            nonce: Some("my-nonce"),
+        })
         .unwrap();
 
         assert!(url.contains("nonce=my-nonce"));
@@ -1119,14 +1143,9 @@ mod tests {
 
     #[test]
     fn test_build_keycloak_logout_url_minimal() {
-        let url = build_keycloak_logout_url(
-            "https://keycloak.example.com",
-            "my-realm",
-            None,
-            None,
-            None,
-        )
-        .unwrap();
+        let url =
+            build_keycloak_logout_url("https://keycloak.example.com", "my-realm", None, None, None)
+                .unwrap();
 
         assert!(url.contains("keycloak.example.com"));
         assert!(url.contains("my-realm"));

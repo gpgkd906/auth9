@@ -315,7 +315,8 @@ pub async fn list_by_tenant(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{CreateUserInput, UpdateUserInput};
+    use crate::api::{MessageResponse, PaginatedResponse, SuccessResponse};
+    use crate::domain::{CreateUserInput, TenantUser, UpdateUserInput, User};
 
     #[test]
     fn test_create_user_request_deserialization() {
@@ -328,7 +329,10 @@ mod tests {
         let request: CreateUserRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.user.email, "user@example.com");
         assert_eq!(request.user.display_name, Some("John Doe".to_string()));
-        assert_eq!(request.user.avatar_url, Some("https://example.com/avatar.png".to_string()));
+        assert_eq!(
+            request.user.avatar_url,
+            Some("https://example.com/avatar.png".to_string())
+        );
         assert_eq!(request.password, Some("secret123".to_string()));
     }
 
@@ -342,6 +346,15 @@ mod tests {
         assert!(request.user.display_name.is_none());
         assert!(request.user.avatar_url.is_none());
         assert!(request.password.is_none());
+    }
+
+    #[test]
+    fn test_create_user_request_missing_email() {
+        let json = r#"{
+            "display_name": "No Email User"
+        }"#;
+        let result: serde_json::Result<CreateUserRequest> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -368,7 +381,10 @@ mod tests {
         let json = r#"{"avatar_url": "https://new-avatar.example.com/img.jpg"}"#;
         let input: UpdateUserInput = serde_json::from_str(json).unwrap();
         assert!(input.display_name.is_none());
-        assert_eq!(input.avatar_url, Some("https://new-avatar.example.com/img.jpg".to_string()));
+        assert_eq!(
+            input.avatar_url,
+            Some("https://new-avatar.example.com/img.jpg".to_string())
+        );
     }
 
     #[test]
@@ -378,7 +394,10 @@ mod tests {
             "role_in_tenant": "admin"
         }"#;
         let request: AddToTenantRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(request.tenant_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(
+            request.tenant_id.to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
         assert_eq!(request.role_in_tenant, "admin");
     }
 
@@ -390,6 +409,34 @@ mod tests {
         }"#;
         let request: AddToTenantRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.role_in_tenant, "member");
+    }
+
+    #[test]
+    fn test_add_to_tenant_request_missing_tenant_id() {
+        let json = r#"{
+            "role_in_tenant": "admin"
+        }"#;
+        let result: serde_json::Result<AddToTenantRequest> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_to_tenant_request_missing_role() {
+        let json = r#"{
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000"
+        }"#;
+        let result: serde_json::Result<AddToTenantRequest> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_add_to_tenant_request_invalid_uuid() {
+        let json = r#"{
+            "tenant_id": "not-a-valid-uuid",
+            "role_in_tenant": "admin"
+        }"#;
+        let result: serde_json::Result<AddToTenantRequest> = serde_json::from_str(json);
+        assert!(result.is_err());
     }
 
     #[test]
@@ -436,7 +483,10 @@ mod tests {
         let input: UpdateUserInput = serde_json::from_str(json).unwrap();
 
         assert_eq!(input.display_name, Some("New Name".to_string()));
-        assert_eq!(input.avatar_url, Some("https://example.com/new-avatar.png".to_string()));
+        assert_eq!(
+            input.avatar_url,
+            Some("https://example.com/new-avatar.png".to_string())
+        );
     }
 
     #[test]
@@ -447,7 +497,10 @@ mod tests {
         }"#;
 
         let request: AddToTenantRequest = serde_json::from_str(json).unwrap();
-        assert_eq!(request.tenant_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(
+            request.tenant_id.to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
         assert_eq!(request.role_in_tenant, "viewer");
     }
 
@@ -466,9 +519,101 @@ mod tests {
         let roles = vec!["admin", "member", "viewer", "guest", "superuser"];
 
         for role in roles {
-            let json = format!(r#"{{"tenant_id": "550e8400-e29b-41d4-a716-446655440000", "role_in_tenant": "{}"}}"#, role);
+            let json = format!(
+                r#"{{"tenant_id": "550e8400-e29b-41d4-a716-446655440000", "role_in_tenant": "{}"}}"#,
+                role
+            );
             let request: AddToTenantRequest = serde_json::from_str(&json).unwrap();
             assert_eq!(request.role_in_tenant, role);
         }
+    }
+
+    #[test]
+    fn test_success_response_with_user() {
+        let user = User::default();
+        let response = SuccessResponse::new(user);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+        assert!(json.contains("email"));
+    }
+
+    #[test]
+    fn test_success_response_with_tenant_user() {
+        let tenant_user = TenantUser {
+            id: crate::domain::StringUuid::new_v4(),
+            tenant_id: crate::domain::StringUuid::new_v4(),
+            user_id: crate::domain::StringUuid::new_v4(),
+            role_in_tenant: "member".to_string(),
+            joined_at: chrono::Utc::now(),
+        };
+        let response = SuccessResponse::new(tenant_user);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_paginated_response_with_users() {
+        let users = vec![User::default(), User::default()];
+        let response = PaginatedResponse::new(users, 1, 10, 2);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+        assert!(json.contains("pagination"));
+        assert!(json.contains("\"total\":2"));
+    }
+
+    #[test]
+    fn test_message_response_user_deleted() {
+        let response = MessageResponse::new("User deleted successfully");
+        assert_eq!(response.message, "User deleted successfully");
+    }
+
+    #[test]
+    fn test_message_response_user_removed_from_tenant() {
+        let response = MessageResponse::new("User removed from tenant");
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("User removed from tenant"));
+    }
+
+    #[test]
+    fn test_success_response_with_vec_tenant_users() {
+        let tenant_user = TenantUser {
+            id: crate::domain::StringUuid::new_v4(),
+            tenant_id: crate::domain::StringUuid::new_v4(),
+            user_id: crate::domain::StringUuid::new_v4(),
+            role_in_tenant: "admin".to_string(),
+            joined_at: chrono::Utc::now(),
+        };
+        let tenant_users = vec![tenant_user];
+        let response = SuccessResponse::new(tenant_users);
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("data"));
+    }
+
+    #[test]
+    fn test_create_user_request_password_only() {
+        let json = r#"{
+            "email": "pwd@example.com",
+            "password": "OnlyPassword123"
+        }"#;
+        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.user.email, "pwd@example.com");
+        assert!(request.user.display_name.is_none());
+        assert_eq!(request.password, Some("OnlyPassword123".to_string()));
+    }
+
+    #[test]
+    fn test_create_user_request_special_characters_in_email() {
+        let json = r#"{
+            "email": "user+tag@example.com"
+        }"#;
+        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.user.email, "user+tag@example.com");
+    }
+
+    #[test]
+    fn test_update_user_input_null_avatar() {
+        let json = r#"{"avatar_url": null}"#;
+        let input: UpdateUserInput = serde_json::from_str(json).unwrap();
+        assert!(input.avatar_url.is_none());
     }
 }

@@ -100,7 +100,7 @@ mod tests {
     fn test_string_uuid_is_nil() {
         let nil_uuid = StringUuid::nil();
         let valid_uuid = StringUuid::new_v4();
-        
+
         assert!(nil_uuid.is_nil());
         assert!(!valid_uuid.is_nil());
     }
@@ -131,7 +131,7 @@ mod tests {
     fn test_string_uuid_deref() {
         let uuid = Uuid::new_v4();
         let string_uuid = StringUuid(uuid);
-        
+
         // Test deref - should be able to call Uuid methods directly
         assert_eq!(*string_uuid, uuid);
         assert_eq!(string_uuid.as_bytes(), uuid.as_bytes());
@@ -141,7 +141,7 @@ mod tests {
     fn test_string_uuid_display() {
         let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
         let uuid: StringUuid = uuid_str.parse().unwrap();
-        
+
         // Test Display trait
         assert_eq!(format!("{}", uuid), uuid_str);
     }
@@ -151,7 +151,7 @@ mod tests {
         let uuid1 = StringUuid::new_v4();
         let uuid2 = uuid1;
         let uuid3 = StringUuid::new_v4();
-        
+
         assert_eq!(uuid1, uuid2);
         assert_ne!(uuid1, uuid3);
     }
@@ -159,15 +159,15 @@ mod tests {
     #[test]
     fn test_string_uuid_hash() {
         use std::collections::HashSet;
-        
+
         let uuid1 = StringUuid::new_v4();
         let uuid2 = StringUuid::new_v4();
-        
+
         let mut set = HashSet::new();
         set.insert(uuid1);
         set.insert(uuid2);
         set.insert(uuid1); // Duplicate
-        
+
         assert_eq!(set.len(), 2);
     }
 
@@ -175,11 +175,11 @@ mod tests {
     fn test_string_uuid_serialization() {
         let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
         let uuid: StringUuid = uuid_str.parse().unwrap();
-        
+
         // Test serde serialization
         let json = serde_json::to_string(&uuid).unwrap();
         assert_eq!(json, format!("\"{}\"", uuid_str));
-        
+
         // Test deserialization
         let deserialized: StringUuid = serde_json::from_str(&json).unwrap();
         assert_eq!(uuid, deserialized);
@@ -189,7 +189,7 @@ mod tests {
     fn test_string_uuid_copy() {
         let uuid1 = StringUuid::new_v4();
         let uuid2 = uuid1; // Copy
-        
+
         // Both should be usable (Copy trait)
         assert_eq!(uuid1, uuid2);
         assert!(!uuid1.is_nil());

@@ -27,8 +27,16 @@ pub trait RbacRepository: Send + Sync {
     async fn delete_role(&self, id: StringUuid) -> Result<()>;
 
     // Role-Permission mapping
-    async fn assign_permission_to_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()>;
-    async fn remove_permission_from_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()>;
+    async fn assign_permission_to_role(
+        &self,
+        role_id: StringUuid,
+        permission_id: StringUuid,
+    ) -> Result<()>;
+    async fn remove_permission_from_role(
+        &self,
+        role_id: StringUuid,
+        permission_id: StringUuid,
+    ) -> Result<()>;
     async fn find_role_permissions(&self, role_id: StringUuid) -> Result<Vec<Permission>>;
 
     // User-Tenant-Role
@@ -37,7 +45,11 @@ pub trait RbacRepository: Send + Sync {
         input: &AssignRolesInput,
         granted_by: Option<StringUuid>,
     ) -> Result<()>;
-    async fn remove_role_from_user(&self, tenant_user_id: StringUuid, role_id: StringUuid) -> Result<()>;
+    async fn remove_role_from_user(
+        &self,
+        tenant_user_id: StringUuid,
+        role_id: StringUuid,
+    ) -> Result<()>;
     async fn find_tenant_user_id(
         &self,
         user_id: StringUuid,
@@ -200,7 +212,8 @@ impl RbacRepository for RbacRepositoryImpl {
         // Assign permissions if provided
         if let Some(permission_ids) = &input.permission_ids {
             for perm_id in permission_ids {
-                self.assign_permission_to_role(id, StringUuid::from(*perm_id)).await?;
+                self.assign_permission_to_role(id, StringUuid::from(*perm_id))
+                    .await?;
             }
         }
 
@@ -239,7 +252,10 @@ impl RbacRepository for RbacRepositoryImpl {
 
         let name = input.name.as_ref().unwrap_or(&existing.name);
         let description = input.description.as_ref().or(existing.description.as_ref());
-        let parent_role_id = input.parent_role_id.map(StringUuid::from).or(existing.parent_role_id);
+        let parent_role_id = input
+            .parent_role_id
+            .map(StringUuid::from)
+            .or(existing.parent_role_id);
 
         sqlx::query(
             r#"
@@ -284,7 +300,11 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn assign_permission_to_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()> {
+    async fn assign_permission_to_role(
+        &self,
+        role_id: StringUuid,
+        permission_id: StringUuid,
+    ) -> Result<()> {
         sqlx::query("INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
             .bind(role_id)
             .bind(permission_id)
@@ -294,7 +314,11 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn remove_permission_from_role(&self, role_id: StringUuid, permission_id: StringUuid) -> Result<()> {
+    async fn remove_permission_from_role(
+        &self,
+        role_id: StringUuid,
+        permission_id: StringUuid,
+    ) -> Result<()> {
         sqlx::query("DELETE FROM role_permissions WHERE role_id = ? AND permission_id = ?")
             .bind(role_id)
             .bind(permission_id)
@@ -359,7 +383,11 @@ impl RbacRepository for RbacRepositoryImpl {
         Ok(())
     }
 
-    async fn remove_role_from_user(&self, tenant_user_id: StringUuid, role_id: StringUuid) -> Result<()> {
+    async fn remove_role_from_user(
+        &self,
+        tenant_user_id: StringUuid,
+        role_id: StringUuid,
+    ) -> Result<()> {
         sqlx::query("DELETE FROM user_tenant_roles WHERE tenant_user_id = ? AND role_id = ?")
             .bind(tenant_user_id)
             .bind(role_id)
@@ -480,8 +508,16 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| {
                 Ok(vec![
-                    Permission { code: "read".to_string(), name: "Read".to_string(), ..Default::default() },
-                    Permission { code: "write".to_string(), name: "Write".to_string(), ..Default::default() },
+                    Permission {
+                        code: "read".to_string(),
+                        name: "Read".to_string(),
+                        ..Default::default()
+                    },
+                    Permission {
+                        code: "write".to_string(),
+                        name: "Write".to_string(),
+                        ..Default::default()
+                    },
                 ])
             });
 
@@ -513,8 +549,14 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| {
                 Ok(vec![
-                    Role { name: "admin".to_string(), ..Default::default() },
-                    Role { name: "viewer".to_string(), ..Default::default() },
+                    Role {
+                        name: "admin".to_string(),
+                        ..Default::default()
+                    },
+                    Role {
+                        name: "viewer".to_string(),
+                        ..Default::default()
+                    },
                 ])
             });
 
@@ -530,9 +572,10 @@ mod tests {
         mock.expect_find_role_permissions()
             .with(eq(role_id))
             .returning(|_| {
-                Ok(vec![
-                    Permission { code: "user:read".to_string(), ..Default::default() },
-                ])
+                Ok(vec![Permission {
+                    code: "user:read".to_string(),
+                    ..Default::default()
+                }])
             });
 
         let result = mock.find_role_permissions(role_id).await.unwrap();
@@ -557,7 +600,10 @@ mod tests {
                 })
             });
 
-        let result = mock.find_user_roles_in_tenant(user_id, tenant_id).await.unwrap();
+        let result = mock
+            .find_user_roles_in_tenant(user_id, tenant_id)
+            .await
+            .unwrap();
         assert_eq!(result.roles, vec!["admin"]);
         assert_eq!(result.permissions.len(), 2);
     }
@@ -594,9 +640,7 @@ mod tests {
         let mut mock = MockRbacRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_delete_role()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete_role().with(eq(id)).returning(|_| Ok(()));
 
         let result = mock.delete_role(id).await;
         assert!(result.is_ok());

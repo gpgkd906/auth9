@@ -212,16 +212,15 @@ mod tests {
         let mut mock = MockRbacRepository::new();
         let service_id = Uuid::new_v4();
 
-        mock.expect_create_permission()
-            .returning(|input| {
-                Ok(Permission {
-                    service_id: StringUuid::from(input.service_id),
-                    code: input.code.clone(),
-                    name: input.name.clone(),
-                    description: input.description.clone(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create_permission().returning(|input| {
+            Ok(Permission {
+                service_id: StringUuid::from(input.service_id),
+                code: input.code.clone(),
+                name: input.name.clone(),
+                description: input.description.clone(),
+                ..Default::default()
+            })
+        });
 
         let service = RbacService::new(Arc::new(mock), None);
 
@@ -294,8 +293,14 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| {
                 Ok(vec![
-                    Permission { code: "user:read".to_string(), ..Default::default() },
-                    Permission { code: "user:write".to_string(), ..Default::default() },
+                    Permission {
+                        code: "user:read".to_string(),
+                        ..Default::default()
+                    },
+                    Permission {
+                        code: "user:write".to_string(),
+                        ..Default::default()
+                    },
                 ])
             });
 
@@ -349,15 +354,14 @@ mod tests {
         let mut mock = MockRbacRepository::new();
         let service_id = Uuid::new_v4();
 
-        mock.expect_create_role()
-            .returning(|input| {
-                Ok(Role {
-                    service_id: StringUuid::from(input.service_id),
-                    name: input.name.clone(),
-                    description: input.description.clone(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create_role().returning(|input| {
+            Ok(Role {
+                service_id: StringUuid::from(input.service_id),
+                name: input.name.clone(),
+                description: input.description.clone(),
+                ..Default::default()
+            })
+        });
 
         let service = RbacService::new(Arc::new(mock), None);
 
@@ -394,7 +398,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_role_success() {
         let mut mock = MockRbacRepository::new();
-        let role = Role { name: "Admin".to_string(), ..Default::default() };
+        let role = Role {
+            name: "Admin".to_string(),
+            ..Default::default()
+        };
         let role_clone = role.clone();
         let id = role.id;
 
@@ -427,7 +434,10 @@ mod tests {
     #[tokio::test]
     async fn test_get_role_with_permissions() {
         let mut mock = MockRbacRepository::new();
-        let role = Role { name: "Admin".to_string(), ..Default::default() };
+        let role = Role {
+            name: "Admin".to_string(),
+            ..Default::default()
+        };
         let role_clone = role.clone();
         let id = role.id;
 
@@ -438,9 +448,10 @@ mod tests {
         mock.expect_find_role_permissions()
             .with(eq(id))
             .returning(|_| {
-                Ok(vec![
-                    Permission { code: "user:read".to_string(), ..Default::default() },
-                ])
+                Ok(vec![Permission {
+                    code: "user:read".to_string(),
+                    ..Default::default()
+                }])
             });
 
         let service = RbacService::new(Arc::new(mock), None);
@@ -461,8 +472,14 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| {
                 Ok(vec![
-                    Role { name: "Admin".to_string(), ..Default::default() },
-                    Role { name: "User".to_string(), ..Default::default() },
+                    Role {
+                        name: "Admin".to_string(),
+                        ..Default::default()
+                    },
+                    Role {
+                        name: "User".to_string(),
+                        ..Default::default()
+                    },
                 ])
             });
 
@@ -476,7 +493,10 @@ mod tests {
     #[tokio::test]
     async fn test_update_role_success() {
         let mut mock = MockRbacRepository::new();
-        let role = Role { name: "Admin".to_string(), ..Default::default() };
+        let role = Role {
+            name: "Admin".to_string(),
+            ..Default::default()
+        };
         let role_clone = role.clone();
         let id = role.id;
 
@@ -484,13 +504,12 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(role_clone.clone())));
 
-        mock.expect_update_role()
-            .returning(|_, input| {
-                Ok(Role {
-                    name: input.name.clone().unwrap_or_default(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_update_role().returning(|_, input| {
+            Ok(Role {
+                name: input.name.clone().unwrap_or_default(),
+                ..Default::default()
+            })
+        });
 
         let service = RbacService::new(Arc::new(mock), None);
 
@@ -537,9 +556,7 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(role_clone.clone())));
 
-        mock.expect_delete_role()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete_role().with(eq(id)).returning(|_| Ok(()));
 
         let service = RbacService::new(Arc::new(mock), None);
 
@@ -588,7 +605,9 @@ mod tests {
 
         let service = RbacService::new(Arc::new(mock), None);
 
-        let result = service.assign_permission_to_role(role_id, permission_id).await;
+        let result = service
+            .assign_permission_to_role(role_id, permission_id)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -604,7 +623,9 @@ mod tests {
 
         let service = RbacService::new(Arc::new(mock), None);
 
-        let result = service.assign_permission_to_role(role_id, permission_id).await;
+        let result = service
+            .assign_permission_to_role(role_id, permission_id)
+            .await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 
@@ -626,7 +647,9 @@ mod tests {
 
         let service = RbacService::new(Arc::new(mock), None);
 
-        let result = service.assign_permission_to_role(role_id, permission_id).await;
+        let result = service
+            .assign_permission_to_role(role_id, permission_id)
+            .await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 
@@ -642,7 +665,9 @@ mod tests {
 
         let service = RbacService::new(Arc::new(mock), None);
 
-        let result = service.remove_permission_from_role(role_id, permission_id).await;
+        let result = service
+            .remove_permission_from_role(role_id, permission_id)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -655,8 +680,7 @@ mod tests {
         let tenant_id = Uuid::new_v4();
         let role_id = Uuid::new_v4();
 
-        mock.expect_assign_roles_to_user()
-            .returning(|_, _| Ok(()));
+        mock.expect_assign_roles_to_user().returning(|_, _| Ok(()));
 
         let service = RbacService::new(Arc::new(mock), None);
 
@@ -706,9 +730,10 @@ mod tests {
         mock.expect_find_user_role_records_in_tenant()
             .with(eq(user_id), eq(tenant_id), eq(None))
             .returning(|_, _, _| {
-                Ok(vec![
-                    Role { name: "Admin".to_string(), ..Default::default() },
-                ])
+                Ok(vec![Role {
+                    name: "Admin".to_string(),
+                    ..Default::default()
+                }])
             });
 
         let service = RbacService::new(Arc::new(mock), None);

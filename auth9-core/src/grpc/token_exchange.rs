@@ -19,7 +19,9 @@ pub trait TokenExchangeCache: Send + Sync {
         user_id: Uuid,
         tenant_id: Uuid,
         service_id: Uuid,
-    ) -> impl std::future::Future<Output = crate::error::Result<Option<crate::domain::UserRolesInTenant>>> + Send;
+    ) -> impl std::future::Future<
+        Output = crate::error::Result<Option<crate::domain::UserRolesInTenant>>,
+    > + Send;
 
     fn set_user_roles_for_service(
         &self,
@@ -31,7 +33,9 @@ pub trait TokenExchangeCache: Send + Sync {
         &self,
         user_id: Uuid,
         tenant_id: Uuid,
-    ) -> impl std::future::Future<Output = crate::error::Result<Option<crate::domain::UserRolesInTenant>>> + Send;
+    ) -> impl std::future::Future<
+        Output = crate::error::Result<Option<crate::domain::UserRolesInTenant>>,
+    > + Send;
 
     fn set_user_roles(
         &self,
@@ -46,7 +50,8 @@ impl TokenExchangeCache for crate::cache::CacheManager {
         tenant_id: Uuid,
         service_id: Uuid,
     ) -> crate::error::Result<Option<crate::domain::UserRolesInTenant>> {
-        crate::cache::CacheManager::get_user_roles_for_service(self, user_id, tenant_id, service_id).await
+        crate::cache::CacheManager::get_user_roles_for_service(self, user_id, tenant_id, service_id)
+            .await
     }
 
     async fn set_user_roles_for_service(
@@ -165,10 +170,12 @@ where
             .verify_identity_token(&req.identity_token)
             .map_err(|e| Status::unauthenticated(format!("Invalid identity token: {}", e)))?;
 
-        let user_id = claims.sub
+        let user_id = claims
+            .sub
             .parse::<StringUuid>()
             .map_err(|_| Status::internal("Invalid user ID in token"))?;
-        let tenant_id = req.tenant_id
+        let tenant_id = req
+            .tenant_id
             .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
 
@@ -189,7 +196,7 @@ where
             .await
             .map_err(|e| Status::internal(format!("Failed to lookup client: {}", e)))?
             .ok_or_else(|| Status::not_found("Client not found"))?;
-            
+
         // Get Service
         let service = self
             .service_repo
@@ -234,7 +241,11 @@ where
 
         let refresh_token = self
             .jwt_manager
-            .create_refresh_token(Uuid::from(user_id), Uuid::from(tenant_id), &client.client_id)
+            .create_refresh_token(
+                Uuid::from(user_id),
+                Uuid::from(tenant_id),
+                &client.client_id,
+            )
             .map_err(|e| Status::internal(format!("Failed to create refresh token: {}", e)))?;
 
         Ok(Response::new(ExchangeTokenResponse {
@@ -282,15 +293,21 @@ where
     ) -> Result<Response<GetUserRolesResponse>, Status> {
         let req = request.into_inner();
 
-        let user_id = req.user_id
+        let user_id = req
+            .user_id
             .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
-        let tenant_id = req.tenant_id
+        let tenant_id = req
+            .tenant_id
             .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
 
         let (user_roles, role_records) = if req.service_id.is_empty() {
-            let user_roles = match self.cache_manager.get_user_roles(Uuid::from(user_id), Uuid::from(tenant_id)).await {
+            let user_roles = match self
+                .cache_manager
+                .get_user_roles(Uuid::from(user_id), Uuid::from(tenant_id))
+                .await
+            {
                 Ok(Some(roles)) => roles,
                 _ => {
                     let roles = self
@@ -313,13 +330,18 @@ where
                 .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
             (user_roles, role_records)
         } else {
-            let service_id = req.service_id
+            let service_id = req
+                .service_id
                 .parse::<StringUuid>()
                 .map_err(|_| Status::invalid_argument("Invalid service ID"))?;
 
             let user_roles = match self
                 .cache_manager
-                .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service_id.0)
+                .get_user_roles_for_service(
+                    Uuid::from(user_id),
+                    Uuid::from(tenant_id),
+                    service_id.0,
+                )
                 .await
             {
                 Ok(Some(roles)) => roles,
@@ -431,7 +453,7 @@ mod tests {
             tenant_id: "550e8400-e29b-41d4-a716-446655440000".to_string(),
             service_id: "my-service".to_string(),
         };
-        
+
         assert_eq!(request.identity_token, "test-token");
         assert!(!request.tenant_id.is_empty());
         assert_eq!(request.service_id, "my-service");
@@ -445,7 +467,7 @@ mod tests {
             expires_in: 3600,
             refresh_token: "refresh-token-abc".to_string(),
         };
-        
+
         assert_eq!(response.token_type, "Bearer");
         assert_eq!(response.expires_in, 3600);
         assert!(!response.access_token.is_empty());
@@ -457,7 +479,7 @@ mod tests {
             access_token: "test-access-token".to_string(),
             audience: "my-service".to_string(),
         };
-        
+
         assert!(!request.access_token.is_empty());
         assert_eq!(request.audience, "my-service");
     }
@@ -468,7 +490,7 @@ mod tests {
             access_token: "test-token".to_string(),
             audience: String::new(),
         };
-        
+
         assert!(request.audience.is_empty());
     }
 
@@ -480,7 +502,7 @@ mod tests {
             tenant_id: "tenant-456".to_string(),
             error: String::new(),
         };
-        
+
         assert!(response.valid);
         assert!(response.error.is_empty());
     }
@@ -493,7 +515,7 @@ mod tests {
             tenant_id: String::new(),
             error: "Token expired".to_string(),
         };
-        
+
         assert!(!response.valid);
         assert!(!response.error.is_empty());
     }
@@ -505,7 +527,7 @@ mod tests {
             tenant_id: "tenant-456".to_string(),
             service_id: "service-789".to_string(),
         };
-        
+
         assert!(!request.service_id.is_empty());
     }
 
@@ -516,7 +538,7 @@ mod tests {
             tenant_id: "tenant-456".to_string(),
             service_id: String::new(),
         };
-        
+
         assert!(request.service_id.is_empty());
     }
 
@@ -537,7 +559,7 @@ mod tests {
             ],
             permissions: vec!["read".to_string(), "write".to_string()],
         };
-        
+
         assert_eq!(response.roles.len(), 2);
         assert_eq!(response.permissions.len(), 2);
     }
@@ -547,7 +569,7 @@ mod tests {
         let request = IntrospectTokenRequest {
             token: "some-jwt-token".to_string(),
         };
-        
+
         assert!(!request.token.is_empty());
     }
 
@@ -565,7 +587,7 @@ mod tests {
             iss: "https://auth9.example.com".to_string(),
             aud: "my-service".to_string(),
         };
-        
+
         assert!(response.active);
         assert_eq!(response.sub, "user-123");
         assert!(!response.roles.is_empty());
@@ -585,7 +607,7 @@ mod tests {
             iss: String::new(),
             aud: String::new(),
         };
-        
+
         assert!(!response.active);
         assert!(response.sub.is_empty());
         assert!(response.roles.is_empty());

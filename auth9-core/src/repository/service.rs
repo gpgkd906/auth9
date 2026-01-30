@@ -10,17 +10,27 @@ use uuid::Uuid;
 #[async_trait]
 pub trait ServiceRepository: Send + Sync {
     async fn create(&self, input: &CreateServiceInput) -> Result<Service>;
-    async fn create_client(&self, service_id: Uuid, client_id: &str, secret_hash: &str, name: Option<String>) -> Result<crate::domain::Client>;
+    async fn create_client(
+        &self,
+        service_id: Uuid,
+        client_id: &str,
+        secret_hash: &str,
+        name: Option<String>,
+    ) -> Result<crate::domain::Client>;
     async fn find_by_id(&self, id: Uuid) -> Result<Option<Service>>;
     async fn find_by_client_id(&self, client_id: &str) -> Result<Option<Service>>;
-    async fn find_client_by_client_id(&self, client_id: &str) -> Result<Option<crate::domain::Client>>;
+    async fn find_client_by_client_id(
+        &self,
+        client_id: &str,
+    ) -> Result<Option<crate::domain::Client>>;
     async fn list(&self, tenant_id: Option<Uuid>, offset: i64, limit: i64) -> Result<Vec<Service>>;
     async fn list_clients(&self, service_id: Uuid) -> Result<Vec<crate::domain::Client>>;
     async fn count(&self, tenant_id: Option<Uuid>) -> Result<i64>;
     async fn update(&self, id: Uuid, input: &UpdateServiceInput) -> Result<Service>;
     async fn delete(&self, id: Uuid) -> Result<()>;
     async fn delete_client(&self, service_id: Uuid, client_id: &str) -> Result<()>;
-    async fn update_client_secret_hash(&self, client_id: &str, new_secret_hash: &str) -> Result<()>;
+    async fn update_client_secret_hash(&self, client_id: &str, new_secret_hash: &str)
+        -> Result<()>;
 }
 
 pub struct ServiceRepositoryImpl {
@@ -63,7 +73,13 @@ impl ServiceRepository for ServiceRepositoryImpl {
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create service")))
     }
 
-    async fn create_client(&self, service_id: Uuid, client_id: &str, secret_hash: &str, name: Option<String>) -> Result<crate::domain::Client> {
+    async fn create_client(
+        &self,
+        service_id: Uuid,
+        client_id: &str,
+        secret_hash: &str,
+        name: Option<String>,
+    ) -> Result<crate::domain::Client> {
         let id = Uuid::new_v4();
         sqlx::query(
             r#"
@@ -79,12 +95,11 @@ impl ServiceRepository for ServiceRepositoryImpl {
         .execute(&self.pool)
         .await?;
 
-        let client = sqlx::query_as::<_, crate::domain::Client>(
-            "SELECT * FROM clients WHERE id = ?"
-        )
-        .bind(id.to_string())
-        .fetch_one(&self.pool)
-        .await?;
+        let client =
+            sqlx::query_as::<_, crate::domain::Client>("SELECT * FROM clients WHERE id = ?")
+                .bind(id.to_string())
+                .fetch_one(&self.pool)
+                .await?;
 
         Ok(client)
     }
@@ -120,13 +135,15 @@ impl ServiceRepository for ServiceRepositoryImpl {
         Ok(service)
     }
 
-    async fn find_client_by_client_id(&self, client_id: &str) -> Result<Option<crate::domain::Client>> {
-        let client = sqlx::query_as::<_, crate::domain::Client>(
-            "SELECT * FROM clients WHERE client_id = ?"
-        )
-        .bind(client_id)
-        .fetch_optional(&self.pool)
-        .await?;
+    async fn find_client_by_client_id(
+        &self,
+        client_id: &str,
+    ) -> Result<Option<crate::domain::Client>> {
+        let client =
+            sqlx::query_as::<_, crate::domain::Client>("SELECT * FROM clients WHERE client_id = ?")
+                .bind(client_id)
+                .fetch_optional(&self.pool)
+                .await?;
 
         Ok(client)
     }
@@ -167,7 +184,7 @@ impl ServiceRepository for ServiceRepositoryImpl {
 
     async fn list_clients(&self, service_id: Uuid) -> Result<Vec<crate::domain::Client>> {
         let clients = sqlx::query_as::<_, crate::domain::Client>(
-            "SELECT * FROM clients WHERE service_id = ? ORDER BY created_at DESC"
+            "SELECT * FROM clients WHERE service_id = ? ORDER BY created_at DESC",
         )
         .bind(service_id.to_string())
         .fetch_all(&self.pool)
@@ -254,22 +271,32 @@ impl ServiceRepository for ServiceRepositoryImpl {
             .bind(client_id)
             .execute(&self.pool)
             .await?;
-        
+
         if result.rows_affected() == 0 {
-            return Err(AppError::NotFound(format!("Client {} not found", client_id)));
+            return Err(AppError::NotFound(format!(
+                "Client {} not found",
+                client_id
+            )));
         }
         Ok(())
     }
 
-    async fn update_client_secret_hash(&self, client_id: &str, new_secret_hash: &str) -> Result<()> {
+    async fn update_client_secret_hash(
+        &self,
+        client_id: &str,
+        new_secret_hash: &str,
+    ) -> Result<()> {
         let result = sqlx::query("UPDATE clients SET client_secret_hash = ? WHERE client_id = ?")
             .bind(new_secret_hash)
             .bind(client_id)
             .execute(&self.pool)
             .await?;
-        
+
         if result.rows_affected() == 0 {
-            return Err(AppError::NotFound(format!("Client {} not found", client_id)));
+            return Err(AppError::NotFound(format!(
+                "Client {} not found",
+                client_id
+            )));
         }
         Ok(())
     }

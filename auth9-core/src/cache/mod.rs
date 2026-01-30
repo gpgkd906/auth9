@@ -14,10 +14,23 @@ use uuid::Uuid;
 #[async_trait]
 pub trait CacheOperations: Send + Sync {
     async fn ping(&self) -> Result<()>;
-    async fn get_user_roles(&self, user_id: Uuid, tenant_id: Uuid) -> Result<Option<UserRolesInTenant>>;
+    async fn get_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>>;
     async fn set_user_roles(&self, roles: &UserRolesInTenant) -> Result<()>;
-    async fn get_user_roles_for_service(&self, user_id: Uuid, tenant_id: Uuid, service_id: Uuid) -> Result<Option<UserRolesInTenant>>;
-    async fn set_user_roles_for_service(&self, roles: &UserRolesInTenant, service_id: Uuid) -> Result<()>;
+    async fn get_user_roles_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>>;
+    async fn set_user_roles_for_service(
+        &self,
+        roles: &UserRolesInTenant,
+        service_id: Uuid,
+    ) -> Result<()>;
     async fn invalidate_user_roles(&self, user_id: Uuid, tenant_id: Option<Uuid>) -> Result<()>;
     async fn invalidate_user_roles_for_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()>;
     async fn invalidate_all_user_roles(&self) -> Result<()>;
@@ -262,7 +275,11 @@ impl CacheOperations for CacheManager {
         CacheManager::ping(self).await
     }
 
-    async fn get_user_roles(&self, user_id: Uuid, tenant_id: Uuid) -> Result<Option<UserRolesInTenant>> {
+    async fn get_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
         CacheManager::get_user_roles(self, user_id, tenant_id).await
     }
 
@@ -270,11 +287,20 @@ impl CacheOperations for CacheManager {
         CacheManager::set_user_roles(self, roles).await
     }
 
-    async fn get_user_roles_for_service(&self, user_id: Uuid, tenant_id: Uuid, service_id: Uuid) -> Result<Option<UserRolesInTenant>> {
+    async fn get_user_roles_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
         CacheManager::get_user_roles_for_service(self, user_id, tenant_id, service_id).await
     }
 
-    async fn set_user_roles_for_service(&self, roles: &UserRolesInTenant, service_id: Uuid) -> Result<()> {
+    async fn set_user_roles_for_service(
+        &self,
+        roles: &UserRolesInTenant,
+        service_id: Uuid,
+    ) -> Result<()> {
         CacheManager::set_user_roles_for_service(self, roles, service_id).await
     }
 
@@ -472,7 +498,10 @@ mod tests {
             roles: vec![],
             permissions: vec![],
         };
-        assert!(cache.set_user_roles_for_service(&roles, Uuid::new_v4()).await.is_ok());
+        assert!(cache
+            .set_user_roles_for_service(&roles, Uuid::new_v4())
+            .await
+            .is_ok());
     }
 
     #[tokio::test]

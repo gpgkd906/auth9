@@ -195,7 +195,7 @@ mod tests {
             logo_url: Some("https://example.com/logo.png".to_string()),
             ..Default::default()
         };
-        
+
         assert_eq!(tenant.name, "My Tenant");
         assert_eq!(tenant.slug, "my-tenant");
         assert!(tenant.logo_url.is_some());
@@ -222,7 +222,7 @@ mod tests {
                 logo_url: Some("https://example.com/logo.png".to_string()),
             },
         };
-        
+
         assert!(settings.require_mfa);
         assert_eq!(settings.session_timeout_secs, 7200);
         assert_eq!(settings.allowed_auth_methods.len(), 2);
@@ -244,7 +244,7 @@ mod tests {
         assert!(SLUG_REGEX.is_match("a"));
         assert!(SLUG_REGEX.is_match("abc-def-ghi"));
         assert!(SLUG_REGEX.is_match("tenant1-test2"));
-        
+
         // Invalid slugs
         assert!(!SLUG_REGEX.is_match("My Tenant"));
         assert!(!SLUG_REGEX.is_match("tenant_name"));
@@ -265,20 +265,35 @@ mod tests {
     fn test_validate_slug_invalid() {
         let result = validate_slug("Invalid Slug");
         assert!(result.is_err());
-        
+
         let err = result.unwrap_err();
         assert_eq!(err.code.as_ref(), "invalid_slug");
     }
 
     #[test]
     fn test_tenant_status_from_str() {
-        assert_eq!("active".parse::<TenantStatus>().unwrap(), TenantStatus::Active);
-        assert_eq!("inactive".parse::<TenantStatus>().unwrap(), TenantStatus::Inactive);
-        assert_eq!("suspended".parse::<TenantStatus>().unwrap(), TenantStatus::Suspended);
-        
+        assert_eq!(
+            "active".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Active
+        );
+        assert_eq!(
+            "inactive".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Inactive
+        );
+        assert_eq!(
+            "suspended".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Suspended
+        );
+
         // Case insensitive
-        assert_eq!("ACTIVE".parse::<TenantStatus>().unwrap(), TenantStatus::Active);
-        assert_eq!("Active".parse::<TenantStatus>().unwrap(), TenantStatus::Active);
+        assert_eq!(
+            "ACTIVE".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Active
+        );
+        assert_eq!(
+            "Active".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Active
+        );
     }
 
     #[test]
@@ -303,9 +318,18 @@ mod tests {
 
     #[test]
     fn test_tenant_status_serialization() {
-        assert_eq!(serde_json::to_string(&TenantStatus::Active).unwrap(), "\"active\"");
-        assert_eq!(serde_json::to_string(&TenantStatus::Inactive).unwrap(), "\"inactive\"");
-        assert_eq!(serde_json::to_string(&TenantStatus::Suspended).unwrap(), "\"suspended\"");
+        assert_eq!(
+            serde_json::to_string(&TenantStatus::Active).unwrap(),
+            "\"active\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TenantStatus::Inactive).unwrap(),
+            "\"inactive\""
+        );
+        assert_eq!(
+            serde_json::to_string(&TenantStatus::Suspended).unwrap(),
+            "\"suspended\""
+        );
     }
 
     #[test]
@@ -313,7 +337,7 @@ mod tests {
         let active: TenantStatus = serde_json::from_str("\"active\"").unwrap();
         let inactive: TenantStatus = serde_json::from_str("\"inactive\"").unwrap();
         let suspended: TenantStatus = serde_json::from_str("\"suspended\"").unwrap();
-        
+
         assert_eq!(active, TenantStatus::Active);
         assert_eq!(inactive, TenantStatus::Inactive);
         assert_eq!(suspended, TenantStatus::Suspended);
@@ -327,7 +351,7 @@ mod tests {
             logo_url: Some("https://example.com/logo.png".to_string()),
             settings: Some(TenantSettings::default()),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -339,7 +363,7 @@ mod tests {
             logo_url: None,
             settings: None,
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -351,7 +375,7 @@ mod tests {
             logo_url: None,
             settings: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -363,7 +387,7 @@ mod tests {
             logo_url: None,
             settings: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -375,7 +399,7 @@ mod tests {
             logo_url: None,
             settings: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -387,7 +411,7 @@ mod tests {
             settings: Some(TenantSettings::default()),
             status: Some(TenantStatus::Inactive),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -399,7 +423,7 @@ mod tests {
             settings: None,
             status: Some(TenantStatus::Suspended),
         };
-        
+
         assert!(input.validate().is_ok());
     }
 
@@ -411,7 +435,7 @@ mod tests {
             settings: None,
             status: None,
         };
-        
+
         assert!(input.validate().is_err());
     }
 
@@ -423,12 +447,15 @@ mod tests {
             session_timeout_secs: 3600,
             branding: TenantBranding::default(),
         };
-        
+
         let json = serde_json::to_string(&settings).unwrap();
         let deserialized: TenantSettings = serde_json::from_str(&json).unwrap();
-        
+
         assert_eq!(deserialized.require_mfa, settings.require_mfa);
-        assert_eq!(deserialized.session_timeout_secs, settings.session_timeout_secs);
+        assert_eq!(
+            deserialized.session_timeout_secs,
+            settings.session_timeout_secs
+        );
     }
 
     #[test]
@@ -443,7 +470,7 @@ mod tests {
             id: tenant1.id,
             ..Default::default()
         };
-        
+
         // Same ID should have same identity
         assert_eq!(tenant1.id, tenant2.id);
     }

@@ -114,7 +114,7 @@ pub async fn write_audit_log(
         .await
 }
 
-fn extract_actor_id(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
+pub(crate) fn extract_actor_id(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
     let auth_header = headers.get(axum::http::header::AUTHORIZATION)?;
     let auth_str = auth_header.to_str().ok()?;
     let token = auth_str.strip_prefix("Bearer ")?;
@@ -166,7 +166,8 @@ mod tests {
 
     #[test]
     fn test_pagination_query_custom_values() {
-        let query: PaginationQuery = serde_json::from_str(r#"{"page": 5, "per_page": 50}"#).unwrap();
+        let query: PaginationQuery =
+            serde_json::from_str(r#"{"page": 5, "per_page": 50}"#).unwrap();
         assert_eq!(query.page, 5);
         assert_eq!(query.per_page, 50);
     }
@@ -175,7 +176,7 @@ mod tests {
     fn test_paginated_response_calculation() {
         let data = vec!["a", "b", "c"];
         let response = PaginatedResponse::new(data, 1, 10, 100);
-        
+
         assert_eq!(response.pagination.page, 1);
         assert_eq!(response.pagination.per_page, 10);
         assert_eq!(response.pagination.total, 100);
@@ -187,7 +188,7 @@ mod tests {
     fn test_paginated_response_partial_last_page() {
         let data: Vec<String> = vec![];
         let response = PaginatedResponse::new(data, 3, 10, 25);
-        
+
         assert_eq!(response.pagination.total_pages, 3); // ceil(25/10) = 3
     }
 
@@ -214,7 +215,7 @@ mod tests {
     fn test_extract_ip_from_x_forwarded_for() {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "192.168.1.1, 10.0.0.1".parse().unwrap());
-        
+
         let ip = extract_ip(&headers);
         assert_eq!(ip, Some("192.168.1.1".to_string()));
     }
@@ -223,7 +224,7 @@ mod tests {
     fn test_extract_ip_from_x_forwarded_for_single() {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "203.0.113.50".parse().unwrap());
-        
+
         let ip = extract_ip(&headers);
         assert_eq!(ip, Some("203.0.113.50".to_string()));
     }
@@ -232,7 +233,7 @@ mod tests {
     fn test_extract_ip_from_x_real_ip() {
         let mut headers = HeaderMap::new();
         headers.insert("x-real-ip", "10.20.30.40".parse().unwrap());
-        
+
         let ip = extract_ip(&headers);
         assert_eq!(ip, Some("10.20.30.40".to_string()));
     }
@@ -242,7 +243,7 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", "1.2.3.4".parse().unwrap());
         headers.insert("x-real-ip", "5.6.7.8".parse().unwrap());
-        
+
         let ip = extract_ip(&headers);
         assert_eq!(ip, Some("1.2.3.4".to_string()));
     }
@@ -324,7 +325,10 @@ mod tests {
 
     #[test]
     fn test_pagination_query_serialization() {
-        let query = PaginationQuery { page: 3, per_page: 15 };
+        let query = PaginationQuery {
+            page: 3,
+            per_page: 15,
+        };
         let json = serde_json::to_string(&query).unwrap();
         assert!(json.contains("\"page\":3"));
         assert!(json.contains("\"per_page\":15"));
@@ -338,7 +342,10 @@ mod tests {
             name: String,
         }
 
-        let data = TestData { id: 1, name: "Test".to_string() };
+        let data = TestData {
+            id: 1,
+            name: "Test".to_string(),
+        };
         let response = SuccessResponse::new(data);
 
         let json = serde_json::to_string(&response).unwrap();
@@ -349,7 +356,10 @@ mod tests {
     #[test]
     fn test_extract_ip_multiple_proxies() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-for", "192.168.1.100, 10.0.0.1, 172.16.0.1".parse().unwrap());
+        headers.insert(
+            "x-forwarded-for",
+            "192.168.1.100, 10.0.0.1, 172.16.0.1".parse().unwrap(),
+        );
 
         let ip = extract_ip(&headers);
         // Should return the first (client) IP
@@ -368,9 +378,15 @@ mod tests {
     #[test]
     fn test_extract_ip_ipv6_full() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-real-ip", "2001:0db8:85a3:0000:0000:8a2e:0370:7334".parse().unwrap());
+        headers.insert(
+            "x-real-ip",
+            "2001:0db8:85a3:0000:0000:8a2e:0370:7334".parse().unwrap(),
+        );
 
         let ip = extract_ip(&headers);
-        assert_eq!(ip, Some("2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string()));
+        assert_eq!(
+            ip,
+            Some("2001:0db8:85a3:0000:0000:8a2e:0370:7334".to_string())
+        );
     }
 }
