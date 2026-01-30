@@ -1,24 +1,18 @@
 ---
 name: test-coverage
-description: Run tests and check coverage for Auth9 project. Use when running unit tests, integration tests, coverage analysis, or writing new repository/service tests.
+description: Run tests and check coverage for Auth9 project. Use when running unit tests, coverage analysis, or writing new service tests with mocks.
 ---
 
 # Test Coverage Skill
 
 ## Backend (Auth9 Core)
 
-### Run Unit Tests
+### Run All Tests
 ```bash
 cd auth9-core
-cargo test --lib
+cargo test
 ```
-
-### Run Integration Tests
-```bash
-cd auth9-core
-cargo test --test '*'
-```
-*Requires Docker for testcontainers. Set `DATABASE_URL` to use external database.*
+All tests run fast (~1-2 seconds) with **no Docker or external services required**.
 
 ### Run Coverage Analysis
 ```bash
@@ -42,132 +36,148 @@ npm run test:coverage
 
 ---
 
-## Repository Integration Tests
+## Testing Strategy
 
-### Test Infrastructure
+### No External Dependencies
 
-Located in `tests/common/mod.rs`, provides:
+Auth9-core tests use **mocks instead of real services**:
 
-| Function | Purpose |
-|----------|---------|
-| `get_test_pool()` | Get MySQL connection (testcontainers or `DATABASE_URL`) |
-| `setup_database(&pool)` | Run migrations |
-| `cleanup_database(&pool)` | Clear test data in FK-safe order |
+| Component | Testing Approach |
+|-----------|-----------------|
+| Repository layer | Mock traits with `mockall` |
+| Service layer | Unit tests with mock repositories |
+| gRPC services | `NoOpCacheManager` + mock repositories |
+| Keycloak | `wiremock` HTTP mocking |
 
-### Test Pattern
+### Prohibited
+
+- **No testcontainers** - tests must not start Docker containers
+- **No real database connections** - use mock repositories
+- **No real Redis connections** - use `NoOpCacheManager`
+- **No faker library** - construct test data directly
+
+---
+
+## Test File Structure
+
+```
+auth9-core/
+├── src/
+│   ├── service/
+│   │   ├── tenant.rs      # Service + unit tests (#[cfg(test)])
+│   │   ├── user.rs        # Service + unit tests
+│   │   ├── client.rs      # Service + unit tests
+│   │   └── rbac.rs        # Service + unit tests
+│   └── repository/
+│       └── *.rs           # Traits with #[mockall::automock]
+└── tests/
+    ├── common/mod.rs              # Test config helpers
+    ├── grpc_token_exchange_test.rs # gRPC tests with NoOpCacheManager
+    └── keycloak_unit_test.rs      # Keycloak with wiremock
+```
+
+---
+
+## Writing Service Layer Tests
+
+Service tests live in `src/service/*.rs` inside `#[cfg(test)]` modules:
 
 ```rust
-use auth9_core::repository::tenant::TenantRepositoryImpl;
-use auth9_core::repository::TenantRepository;
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repository::tenant::MockTenantRepository;
+    use mockall::predicate::*;
 
-mod common;
+    #[tokio::test]
+    async fn test_create_tenant_success() {
+        let mut mock = MockTenantRepository::new();
 
-#[tokio::test]
-async fn test_example() {
-    // 1. Get pool (skip if unavailable)
-    let pool = match common::get_test_pool().await {
-        Ok(pool) => pool,
-        Err(e) => {
-            eprintln!("Skipping: {}", e);
-            return;
-        }
-    };
+        mock.expect_find_by_slug()
+            .with(eq("test-tenant"))
+            .returning(|_| Ok(None));
 
-    // 2. Setup and cleanup
-    common::setup_database(&pool).await.unwrap();
-    common::cleanup_database(&pool).await.unwrap();
+        mock.expect_create()
+            .returning(|input| Ok(Tenant {
+                name: input.name.clone(),
+                slug: input.slug.clone(),
+                ..Default::default()
+            }));
 
-    // 3. Create repository
-    let repo = TenantRepositoryImpl::new(pool.clone());
+        let service = TenantService::new(Arc::new(mock), None);
 
-    // 4. Test logic here...
+        let result = service.create(CreateTenantInput {
+            name: "Test Tenant".to_string(),
+            slug: "test-tenant".to_string(),
+            logo_url: None,
+            settings: None,
+        }).await;
 
-    // 5. Cleanup after test
-    common::cleanup_database(&pool).await.unwrap();
-}
-```
-
-### Test File Structure
-
-```
-auth9-core/tests/
-├── common/mod.rs      # Test utilities
-├── tenant_test.rs     # TenantRepository tests
-├── user_test.rs       # UserRepository tests
-├── rbac_test.rs       # RbacRepository tests
-├── service_test.rs    # ServiceRepository tests
-└── audit_test.rs      # AuditRepository tests
-```
-
-### Environment Modes
-
-| Mode | Configuration | Use Case |
-|------|--------------|----------|
-| **Testcontainers** | No env vars | CI/CD (auto-start MySQL) |
-| **External DB** | `DATABASE_URL=mysql://...` | Local dev (faster) |
-
-Local development example:
-```bash
-export DATABASE_URL="mysql://root@localhost:4000/auth9_test"
-cargo test --test '*'
-```
-
-### Writing Repository Tests
-
-1. **Import the repository trait and impl**:
-   ```rust
-   use auth9_core::repository::tenant::TenantRepositoryImpl;
-   use auth9_core::repository::TenantRepository;
-   ```
-
-2. **Import domain types for inputs**:
-   ```rust
-   use auth9_core::domain::{CreateTenantInput, UpdateTenantInput, TenantStatus};
-   ```
-
-3. **Use `*entity.id` to extract UUID from StringUuid**:
-   ```rust
-   let input = CreatePermissionInput {
-       service_id: *service.id,  // Dereference StringUuid
-       // ...
-   };
-   ```
-
-4. **Test both success and edge cases**:
-   - Create → find → verify fields
-   - Update → verify changes
-   - Delete → verify not found
-   - Query with filters and pagination
-
-### Cross-Entity Test Helper
-
-For tests needing related entities (e.g., RBAC needs tenant + user + service):
-
-```rust
-async fn setup_test_entities(pool: &MySqlPool) 
-    -> (Tenant, User, Service) 
-{
-    let tenant_repo = TenantRepositoryImpl::new(pool.clone());
-    let user_repo = UserRepositoryImpl::new(pool.clone());
-    let service_repo = ServiceRepositoryImpl::new(pool.clone());
-
-    let tenant = tenant_repo.create(&CreateTenantInput {
-        name: "Test Tenant".to_string(),
-        slug: format!("test-{}", Uuid::new_v4()),
-        logo_url: None,
-        settings: None,
-    }).await.unwrap();
-
-    // ... create user and service similarly
-
-    (tenant, user, service)
+        assert!(result.is_ok());
+    }
 }
 ```
 
 ---
 
+## Writing gRPC Tests
+
+gRPC tests use `NoOpCacheManager` instead of real Redis:
+
+```rust
+use auth9_core::cache::NoOpCacheManager;
+
+fn create_test_cache() -> NoOpCacheManager {
+    NoOpCacheManager::new()
+}
+
+#[tokio::test]
+async fn test_exchange_token() {
+    let cache_manager = create_test_cache();
+    let grpc_service = TokenExchangeService::new(
+        jwt_manager,
+        cache_manager,  // No Redis needed
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+    // ...
+}
+```
+
+---
+
+## Repository Mock Pattern
+
+Repository traits use `#[cfg_attr(test, mockall::automock)]`:
+
+```rust
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait TenantRepository: Send + Sync {
+    async fn create(&self, input: &CreateTenantInput) -> Result<Tenant>;
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Tenant>>;
+    // ...
+}
+```
+
+This generates `MockTenantRepository` for use in tests.
+
+---
+
+## Coverage Targets
+
+| Layer | Target |
+|-------|--------|
+| Domain/Business logic | 95%+ |
+| Service layer | 90%+ |
+| API handlers | 80%+ |
+| gRPC handlers | 85%+ |
+
+---
+
 ## Troubleshooting
 
-- **Network errors in tarpaulin**: Add `required_permissions: ["network"]`
-- **Testcontainers startup fails**: Ensure Docker is running
 - **Compilation errors**: Run `cargo clean` first
+- **Mock expectations not met**: Check predicate conditions
+- **Network errors in tarpaulin**: Add `required_permissions: ["network"]`

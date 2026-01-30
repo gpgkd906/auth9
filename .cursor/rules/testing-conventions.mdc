@@ -39,8 +39,8 @@ Coverage targets by layer:
 |-------|--------|
 | Domain/Business logic | 95%+ |
 | Service layer | 90%+ |
-| Repository layer | 85%+ |
 | API handlers | 80%+ |
+| gRPC handlers | 85%+ |
 
 ## Test Pyramid
 
@@ -48,57 +48,119 @@ Coverage targets by layer:
         E2E Tests (few, critical flows)
               /\
              /  \
-    Integration Tests (API, gRPC, DB)
+        Unit Tests (service layer with mocks)
            /      \
           /        \
-     Unit Tests (business logic core)
+     gRPC/Keycloak Tests (wiremock, NoOpCache)
 ```
 
 ## auth9-core (Rust)
 
-### Unit Tests
+### Testing Strategy - NO EXTERNAL DEPENDENCIES
+
+All tests run fast (~1-2 seconds) with **no Docker or external services**:
+
+| Component | Testing Approach |
+|-----------|-----------------|
+| Repository layer | Mock traits with `mockall` |
+| Service layer | Unit tests with mock repositories |
+| gRPC services | `NoOpCacheManager` + mock repositories |
+| Keycloak | `wiremock` HTTP mocking |
+
+### Prohibited
+
+- **No testcontainers** - tests must not start Docker containers
+- **No real database connections** - use mock repositories
+- **No real Redis connections** - use `NoOpCacheManager`
+- **No faker library** - construct test data directly
+
+### Unit Tests (Service Layer)
 
 ```rust
-// Location: src/*/tests.rs or inline #[cfg(test)]
-// Use mockall for mocking dependencies
+// Location: src/service/*.rs inside #[cfg(test)] module
+// Use mockall for mocking repository dependencies
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    
+    use crate::repository::tenant::MockTenantRepository;
+    use mockall::predicate::*;
+
     #[tokio::test]
-    async fn test_tenant_validation() {
-        let tenant = Tenant::new("Test", "test-slug");
-        assert!(tenant.validate().is_ok());
+    async fn test_create_tenant_success() {
+        let mut mock = MockTenantRepository::new();
+
+        mock.expect_find_by_slug()
+            .with(eq("test-tenant"))
+            .returning(|_| Ok(None));
+
+        mock.expect_create()
+            .returning(|input| Ok(Tenant {
+                name: input.name.clone(),
+                ..Default::default()
+            }));
+
+        let service = TenantService::new(Arc::new(mock), None);
+        let result = service.create(input).await;
+        assert!(result.is_ok());
     }
 }
 ```
 
-### Integration Tests
+### gRPC Tests
 
 ```rust
-// Location: tests/api/, tests/grpc/
-// Use testcontainers-rs for MySQL + Redis
+// Location: tests/grpc_*.rs
+// Use NoOpCacheManager instead of real Redis
+
+use auth9_core::cache::NoOpCacheManager;
+
+fn create_test_cache() -> NoOpCacheManager {
+    NoOpCacheManager::new()
+}
 
 #[tokio::test]
-async fn test_create_tenant_api() {
-    let app = TestApp::spawn().await;
-    
-    let response = app.client
-        .post("/api/v1/tenants")
-        .json(&json!({"name": "Test", "slug": "test"}))
-        .send()
+async fn test_token_exchange() {
+    let cache = create_test_cache();
+    let service = TokenExchangeService::new(
+        jwt_manager,
+        cache,  // No Redis connection needed
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+    // ...
+}
+```
+
+### Keycloak Tests
+
+```rust
+// Location: tests/keycloak_unit_test.rs
+// Use wiremock for HTTP mocking
+
+use wiremock::{Mock, ResponseTemplate, matchers::{method, path}};
+
+#[tokio::test]
+async fn test_keycloak_create_user() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/test/users"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&mock_server)
         .await;
-    
-    assert_eq!(response.status(), 201);
+
+    let client = KeycloakClient::new(config_with_mock(&mock_server.uri()));
+    let result = client.create_user(&input).await;
+    assert!(result.is_ok());
 }
 ```
 
 ### Commands
 
 ```bash
-cargo test --lib        # Unit tests (fast)
-cargo test --test '*'   # Integration tests (requires Docker)
+cargo test              # All tests (fast, no Docker)
 cargo tarpaulin --out Html  # Coverage report
 ```
 
@@ -144,4 +206,5 @@ npx playwright test    # E2E tests
 
 - Use descriptive names: `test_create_tenant_with_valid_data`
 - Keep test data minimal and focused
-- Clean up test data after integration tests
+- Construct test data directly (no faker)
+- Use `Default::default()` for domain types when possible

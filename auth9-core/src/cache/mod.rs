@@ -3,10 +3,25 @@
 use crate::config::RedisConfig;
 use crate::domain::UserRolesInTenant;
 use crate::error::{AppError, Result};
+use async_trait::async_trait;
 use redis::{aio::ConnectionManager, AsyncCommands};
 use serde::{de::DeserializeOwned, Serialize};
 use std::time::Duration;
 use uuid::Uuid;
+
+/// Cache operations trait for dependency injection and testing
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait CacheOperations: Send + Sync {
+    async fn ping(&self) -> Result<()>;
+    async fn get_user_roles(&self, user_id: Uuid, tenant_id: Uuid) -> Result<Option<UserRolesInTenant>>;
+    async fn set_user_roles(&self, roles: &UserRolesInTenant) -> Result<()>;
+    async fn get_user_roles_for_service(&self, user_id: Uuid, tenant_id: Uuid, service_id: Uuid) -> Result<Option<UserRolesInTenant>>;
+    async fn set_user_roles_for_service(&self, roles: &UserRolesInTenant, service_id: Uuid) -> Result<()>;
+    async fn invalidate_user_roles(&self, user_id: Uuid, tenant_id: Option<Uuid>) -> Result<()>;
+    async fn invalidate_user_roles_for_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()>;
+    async fn invalidate_all_user_roles(&self) -> Result<()>;
+}
 
 /// Cache key prefixes
 mod keys {
@@ -238,6 +253,110 @@ impl CacheManager {
     pub async fn invalidate_tenant_config(&self, tenant_id: Uuid) -> Result<()> {
         let key = format!("{}:{}", keys::TENANT_CONFIG, tenant_id);
         self.delete(&key).await
+    }
+}
+
+#[async_trait]
+impl CacheOperations for CacheManager {
+    async fn ping(&self) -> Result<()> {
+        CacheManager::ping(self).await
+    }
+
+    async fn get_user_roles(&self, user_id: Uuid, tenant_id: Uuid) -> Result<Option<UserRolesInTenant>> {
+        CacheManager::get_user_roles(self, user_id, tenant_id).await
+    }
+
+    async fn set_user_roles(&self, roles: &UserRolesInTenant) -> Result<()> {
+        CacheManager::set_user_roles(self, roles).await
+    }
+
+    async fn get_user_roles_for_service(&self, user_id: Uuid, tenant_id: Uuid, service_id: Uuid) -> Result<Option<UserRolesInTenant>> {
+        CacheManager::get_user_roles_for_service(self, user_id, tenant_id, service_id).await
+    }
+
+    async fn set_user_roles_for_service(&self, roles: &UserRolesInTenant, service_id: Uuid) -> Result<()> {
+        CacheManager::set_user_roles_for_service(self, roles, service_id).await
+    }
+
+    async fn invalidate_user_roles(&self, user_id: Uuid, tenant_id: Option<Uuid>) -> Result<()> {
+        CacheManager::invalidate_user_roles(self, user_id, tenant_id).await
+    }
+
+    async fn invalidate_user_roles_for_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()> {
+        CacheManager::invalidate_user_roles_for_tenant(self, user_id, tenant_id).await
+    }
+
+    async fn invalidate_all_user_roles(&self) -> Result<()> {
+        CacheManager::invalidate_all_user_roles(self).await
+    }
+}
+
+/// No-op cache manager for testing without Redis
+#[derive(Clone)]
+pub struct NoOpCacheManager;
+
+impl NoOpCacheManager {
+    pub fn new() -> Self {
+        Self
+    }
+
+    pub async fn ping(&self) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn get_user_roles(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
+        Ok(None)
+    }
+
+    pub async fn set_user_roles(&self, _roles: &UserRolesInTenant) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn get_user_roles_for_service(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+        _service_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
+        Ok(None)
+    }
+
+    pub async fn set_user_roles_for_service(
+        &self,
+        _roles: &UserRolesInTenant,
+        _service_id: Uuid,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn invalidate_user_roles(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Option<Uuid>,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn invalidate_user_roles_for_tenant(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn invalidate_all_user_roles(&self) -> Result<()> {
+        Ok(())
+    }
+}
+
+impl Default for NoOpCacheManager {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
