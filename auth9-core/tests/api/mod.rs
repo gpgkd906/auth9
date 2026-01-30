@@ -3,9 +3,13 @@
 //! This module provides test utilities for API handler testing without
 //! external dependencies (no database, no Redis, no Keycloak).
 
+pub mod http;
+pub mod role_api_test;
 pub mod tenant_api_test;
 pub mod user_api_test;
-pub mod role_api_test;
+
+// Re-export MockKeycloakServer for use in http tests
+pub use http::mock_keycloak::MockKeycloakServer;
 
 use async_trait::async_trait;
 use auth9_core::cache::NoOpCacheManager;

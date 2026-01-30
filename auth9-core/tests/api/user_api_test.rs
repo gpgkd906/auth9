@@ -5,7 +5,6 @@
 use super::*;
 use auth9_core::domain::{AddUserToTenantInput, CreateUserInput, UpdateUserInput};
 use auth9_core::error::AppError;
-use uuid::Uuid;
 
 // ============================================================================
 // List Users Tests
