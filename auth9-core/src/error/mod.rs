@@ -73,7 +73,7 @@ impl IntoResponse for AppError {
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "database_error",
-                    "A database error occurred".to_string(),
+                    format!("Database error: {}", e),
                 )
             }
             AppError::Redis(e) => {

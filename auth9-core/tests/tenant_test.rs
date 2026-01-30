@@ -241,3 +241,68 @@ async fn test_update_tenant_full() {
 
     common::cleanup_database(&pool).await.unwrap();
 }
+
+#[tokio::test]
+async fn test_update_nonexistent_tenant() {
+    let pool = match common::get_test_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            eprintln!("Skipping test: could not connect to database: {}", e);
+            return;
+        }
+    };
+
+    common::setup_database(&pool).await.unwrap();
+    common::cleanup_database(&pool).await.unwrap();
+
+    let repo = TenantRepositoryImpl::new(pool.clone());
+
+    // Try to update a tenant that doesn't exist
+    let non_existent_id = auth9_core::domain::StringUuid::new_v4();
+    let result = repo
+        .update(
+            non_existent_id,
+            &UpdateTenantInput {
+                name: Some("New Name".to_string()),
+                logo_url: None,
+                settings: None,
+                status: None,
+            },
+        )
+        .await;
+
+    // Should return NotFound error
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(matches!(err, auth9_core::error::AppError::NotFound(_)));
+
+    common::cleanup_database(&pool).await.unwrap();
+}
+
+#[tokio::test]
+async fn test_delete_nonexistent_tenant() {
+    let pool = match common::get_test_pool().await {
+        Ok(pool) => pool,
+        Err(e) => {
+            eprintln!("Skipping test: could not connect to database: {}", e);
+            return;
+        }
+    };
+
+    common::setup_database(&pool).await.unwrap();
+    common::cleanup_database(&pool).await.unwrap();
+
+    let repo = TenantRepositoryImpl::new(pool.clone());
+
+    // Try to delete a tenant that doesn't exist
+    let non_existent_id = auth9_core::domain::StringUuid::new_v4();
+    let result = repo.delete(non_existent_id).await;
+
+    // Should return NotFound error
+    assert!(result.is_err());
+    let err = result.unwrap_err();
+    assert!(matches!(err, auth9_core::error::AppError::NotFound(_)));
+
+    common::cleanup_database(&pool).await.unwrap();
+}
+

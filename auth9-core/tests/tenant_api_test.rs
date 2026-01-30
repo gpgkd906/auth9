@@ -85,3 +85,87 @@ async fn test_tenant_crud() {
     // Let's check status.
     // Actually tenant::delete calls service.disable().
 }
+
+#[tokio::test]
+async fn test_get_nonexistent_tenant_returns_404() {
+    let app = TestApp::spawn().await;
+    let client = app.http_client();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let response = client
+        .get(&app.api_url(&format!("/api/v1/tenants/{}", fake_id)))
+        .send()
+        .await
+        .expect("Request failed");
+
+    assert_eq!(response.status().as_u16(), 404);
+}
+
+#[tokio::test]
+async fn test_create_tenant_validation_error() {
+    let app = TestApp::spawn().await;
+    let client = app.http_client();
+
+    // Missing required fields
+    let response = client
+        .post(&app.api_url("/api/v1/tenants"))
+        .json(&serde_json::json!({}))
+        .send()
+        .await
+        .expect("Request failed");
+
+    // Should return 422 (Unprocessable Entity) or 400 (Bad Request)
+    let status = response.status().as_u16();
+    assert!(status == 400 || status == 422, "Expected 400 or 422, got {}", status);
+}
+
+#[tokio::test]
+async fn test_update_nonexistent_tenant_returns_404() {
+    let app = TestApp::spawn().await;
+    let client = app.http_client();
+
+    let fake_id = uuid::Uuid::new_v4();
+    let response = client
+        .put(&app.api_url(&format!("/api/v1/tenants/{}", fake_id)))
+        .json(&json!({"name": "Updated Name"}))
+        .send()
+        .await
+        .expect("Request failed");
+
+    assert_eq!(response.status().as_u16(), 404);
+}
+
+#[tokio::test]
+async fn test_tenant_list_pagination() {
+    let app = TestApp::spawn().await;
+    let client = app.http_client();
+
+    // Create multiple tenants
+    for i in 1..=5 {
+        client
+            .post(&app.api_url("/api/v1/tenants"))
+            .json(&json!({
+                "name": format!("Page Test Tenant {}", i),
+                "slug": format!("page-test-{}-{}", i, uuid::Uuid::new_v4())
+            }))
+            .send()
+            .await
+            .unwrap();
+    }
+
+    // Test pagination
+    let page1 = client
+        .get(&app.api_url("/api/v1/tenants"))
+        .query(&[("page", "1"), ("per_page", "2")])
+        .send()
+        .await
+        .unwrap();
+    
+    assert!(page1.status().is_success());
+    let body: serde_json::Value = page1.json().await.unwrap();
+    let items = body["data"].as_array().unwrap();
+    assert_eq!(items.len(), 2);
+    
+    // Verify pagination metadata
+    assert!(body["pagination"]["total"].as_i64().unwrap() >= 5);
+}

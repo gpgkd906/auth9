@@ -1,13 +1,12 @@
-//! Audit repository integration tests
-
 use auth9_core::repository::audit::{AuditLogQuery, AuditRepositoryImpl, CreateAuditLogInput};
-use auth9_core::repository::AuditRepository;
+use auth9_core::repository::{AuditRepository, UserRepository};
+use auth9_core::repository::user::UserRepositoryImpl;
+use auth9_core::domain::CreateUserInput;
 use uuid::Uuid;
 
 mod common;
 
 #[tokio::test]
-#[ignore]
 async fn test_create_audit_log() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -21,14 +20,25 @@ async fn test_create_audit_log() {
     common::cleanup_database(&pool).await.unwrap();
 
     let repo = AuditRepositoryImpl::new(pool.clone());
+    let user_repo = UserRepositoryImpl::new(pool.clone());
+
+    // Create a user for actor_id
+    let user = user_repo.create(
+        &format!("test-actor-{}", Uuid::new_v4()), 
+        &CreateUserInput {
+            email: format!("actor-{}@example.com", Uuid::new_v4()),
+            display_name: None,
+            avatar_url: None,
+        }
+    ).await.unwrap();
+    let actor_id = user.id;
 
     // Create an audit log entry
-    let actor_id = Uuid::new_v4();
     let resource_id = Uuid::new_v4();
 
     let result = repo
         .create(&CreateAuditLogInput {
-            actor_id: Some(actor_id),
+            actor_id: Some(*actor_id),
             action: "user.create".to_string(),
             resource_type: "user".to_string(),
             resource_id: Some(resource_id),
@@ -43,7 +53,7 @@ async fn test_create_audit_log() {
     // Verify the log was created by querying
     let logs = repo
         .find(&AuditLogQuery {
-            actor_id: Some(actor_id),
+            actor_id: Some(*actor_id),
             ..Default::default()
         })
         .await
@@ -52,14 +62,13 @@ async fn test_create_audit_log() {
     assert_eq!(logs.len(), 1);
     assert_eq!(logs[0].action, "user.create");
     assert_eq!(logs[0].resource_type, "user");
-    assert_eq!(logs[0].resource_id, Some(resource_id));
+    assert_eq!(logs[0].resource_id, Some(resource_id.to_string()));
     assert_eq!(logs[0].ip_address, Some("192.168.1.1".to_string()));
 
     common::cleanup_database(&pool).await.unwrap();
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_create_audit_log_minimal() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -107,7 +116,6 @@ async fn test_create_audit_log_minimal() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_find_audit_logs_with_filters() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -121,14 +129,32 @@ async fn test_find_audit_logs_with_filters() {
     common::cleanup_database(&pool).await.unwrap();
 
     let repo = AuditRepositoryImpl::new(pool.clone());
+    let user_repo = UserRepositoryImpl::new(pool.clone());
 
-    let actor1 = Uuid::new_v4();
-    let actor2 = Uuid::new_v4();
+    let actor1_user = user_repo.create(
+        &format!("test-actor-{}", Uuid::new_v4()), 
+        &CreateUserInput {
+            email: format!("actor-{}@example.com", Uuid::new_v4()),
+            display_name: None,
+            avatar_url: None,
+        }
+    ).await.unwrap();
+    let actor1 = actor1_user.id;
+
+    let actor2_user = user_repo.create(
+        &format!("test-actor-{}", Uuid::new_v4()), 
+        &CreateUserInput {
+            email: format!("actor-{}@example.com", Uuid::new_v4()),
+            display_name: None,
+            avatar_url: None,
+        }
+    ).await.unwrap();
+    let actor2 = actor2_user.id;
     let resource1 = Uuid::new_v4();
 
     // Create multiple audit logs
     repo.create(&CreateAuditLogInput {
-        actor_id: Some(actor1),
+        actor_id: Some(*actor1),
         action: "tenant.create".to_string(),
         resource_type: "tenant".to_string(),
         resource_id: Some(resource1),
@@ -140,7 +166,7 @@ async fn test_find_audit_logs_with_filters() {
     .unwrap();
 
     repo.create(&CreateAuditLogInput {
-        actor_id: Some(actor1),
+        actor_id: Some(*actor1),
         action: "tenant.update".to_string(),
         resource_type: "tenant".to_string(),
         resource_id: Some(resource1),
@@ -152,7 +178,7 @@ async fn test_find_audit_logs_with_filters() {
     .unwrap();
 
     repo.create(&CreateAuditLogInput {
-        actor_id: Some(actor2),
+        actor_id: Some(*actor2),
         action: "user.create".to_string(),
         resource_type: "user".to_string(),
         resource_id: None,
@@ -166,7 +192,7 @@ async fn test_find_audit_logs_with_filters() {
     // Test filter by actor_id
     let logs_actor1 = repo
         .find(&AuditLogQuery {
-            actor_id: Some(actor1),
+            actor_id: Some(*actor1),
             ..Default::default()
         })
         .await
@@ -207,9 +233,9 @@ async fn test_find_audit_logs_with_filters() {
     // Test combined filters
     let logs_combined = repo
         .find(&AuditLogQuery {
-            actor_id: Some(actor1),
+            actor_id: Some(*actor1),
             action: Some("tenant.update".to_string()),
-            ..Default::default()
+            ..Default::default() 
         })
         .await
         .unwrap();
@@ -240,7 +266,6 @@ async fn test_find_audit_logs_with_filters() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_count_audit_logs() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -254,13 +279,22 @@ async fn test_count_audit_logs() {
     common::cleanup_database(&pool).await.unwrap();
 
     let repo = AuditRepositoryImpl::new(pool.clone());
+    let user_repo = UserRepositoryImpl::new(pool.clone());
 
-    let actor1 = Uuid::new_v4();
+    let actor1_user = user_repo.create(
+        &format!("test-actor-{}", Uuid::new_v4()), 
+        &CreateUserInput {
+            email: format!("actor-{}@example.com", Uuid::new_v4()),
+            display_name: None,
+            avatar_url: None,
+        }
+    ).await.unwrap();
+    let actor1 = actor1_user.id;
 
     // Create multiple audit logs
     for i in 0..5 {
         repo.create(&CreateAuditLogInput {
-            actor_id: Some(actor1),
+            actor_id: Some(*actor1),
             action: format!("action.{}", i),
             resource_type: "test".to_string(),
             resource_id: None,
@@ -273,10 +307,18 @@ async fn test_count_audit_logs() {
     }
 
     // Create some logs with different actor
-    let actor2 = Uuid::new_v4();
+    let actor2_user = user_repo.create(
+        &format!("test-actor-{}", Uuid::new_v4()), 
+        &CreateUserInput {
+            email: format!("actor-{}@example.com", Uuid::new_v4()),
+            display_name: None,
+            avatar_url: None,
+        }
+    ).await.unwrap();
+    let actor2 = actor2_user.id;
     for i in 0..3 {
         repo.create(&CreateAuditLogInput {
-            actor_id: Some(actor2),
+            actor_id: Some(*actor2),
             action: format!("other.{}", i),
             resource_type: "other".to_string(),
             resource_id: None,
@@ -295,7 +337,7 @@ async fn test_count_audit_logs() {
     // Count by actor_id
     let count_actor1 = repo
         .count(&AuditLogQuery {
-            actor_id: Some(actor1),
+            actor_id: Some(*actor1),
             ..Default::default()
         })
         .await
@@ -325,7 +367,6 @@ async fn test_count_audit_logs() {
 }
 
 #[tokio::test]
-#[ignore]
 async fn test_audit_log_with_json_values() {
     let pool = match common::get_test_pool().await {
         Ok(pool) => pool,
@@ -339,8 +380,17 @@ async fn test_audit_log_with_json_values() {
     common::cleanup_database(&pool).await.unwrap();
 
     let repo = AuditRepositoryImpl::new(pool.clone());
+    let user_repo = UserRepositoryImpl::new(pool.clone());
 
-    let actor_id = Uuid::new_v4();
+    let actor_user = user_repo.create(
+        &format!("test-actor-{}", Uuid::new_v4()), 
+        &CreateUserInput {
+            email: format!("actor-{}@example.com", Uuid::new_v4()),
+            display_name: None,
+            avatar_url: None,
+        }
+    ).await.unwrap();
+    let actor_id = actor_user.id;
     let old_value = serde_json::json!({
         "name": "Old Name",
         "status": "active",
@@ -360,7 +410,7 @@ async fn test_audit_log_with_json_values() {
     });
 
     repo.create(&CreateAuditLogInput {
-        actor_id: Some(actor_id),
+        actor_id: Some(*actor_id),
         action: "tenant.update".to_string(),
         resource_type: "tenant".to_string(),
         resource_id: None,
@@ -373,7 +423,7 @@ async fn test_audit_log_with_json_values() {
 
     let logs = repo
         .find(&AuditLogQuery {
-            actor_id: Some(actor_id),
+            actor_id: Some(*actor_id),
             ..Default::default()
         })
         .await

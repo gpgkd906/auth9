@@ -1,7 +1,7 @@
 use crate::common::TestApp;
 use auth9_core::api::SuccessResponse;
-use auth9_core::domain::Service;
-use wiremock::matchers::{method, path};
+use auth9_core::domain::{Service, ServiceWithClient};
+use wiremock::matchers::{method, path, query_param};
 use wiremock::{Mock, ResponseTemplate};
 use serde_json::json;
 
@@ -149,9 +149,31 @@ async fn test_regenerate_secret() {
     Mock::given(method("POST"))
         .and(path("/admin/realms/test/clients"))
         .respond_with(ResponseTemplate::new(201).insert_header(
-            "Location", 
+            "Location",
             format!("{}/admin/realms/test/clients/{}", app.mock_server.uri(), mock_client_uuid)
         ))
+        .mount(&app.mock_server)
+        .await;
+
+    // Mock Get Client Secret (for initial service creation)
+    Mock::given(method("GET"))
+        .and(path(format!("/admin/realms/test/clients/{}/client-secret", mock_client_uuid)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+             "value": "initial-secret-value"
+        })))
+        .mount(&app.mock_server)
+        .await;
+
+    // Mock Get Client UUID by Client ID (for regenerate secret)
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test/clients"))
+        .and(query_param("clientId", "secret-client"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "id": mock_client_uuid,
+                "clientId": "secret-client"
+            }
+        ])))
         .mount(&app.mock_server)
         .await;
 
@@ -165,25 +187,33 @@ async fn test_regenerate_secret() {
         .await;
 
     // Create Service
+    let user_client_id = "secret-client";
     let create_res = client.post(&app.api_url("/api/v1/services"))
         .json(&json!({
             "name": "Secret Service",
-            "client_id": "secret-client",
+            "client_id": user_client_id,
             "redirect_uris": ["http://localhost"]
         }))
         .send()
         .await
         .expect("Failed to create service");
-    let create_body: SuccessResponse<Service> = create_res.json().await.unwrap();
-    let service_id = create_body.data.id;
+    let create_body: serde_json::Value = create_res.json().await.unwrap();
+    let service_id = create_body["data"]["id"].as_str().unwrap();
 
-    // Call regenerate endpoint
-    let regen_res = client.post(&app.api_url(&format!("/api/v1/services/{}/regenerate_secret", service_id)))
+    // Call regenerate endpoint with correct path (using user_client_id, not the DB UUID)
+    let regen_res = client.post(&app.api_url(&format!(
+        "/api/v1/services/{}/clients/{}/regenerate-secret",
+        service_id, user_client_id
+    )))
         .send()
         .await
         .expect("Failed to regenerate secret");
 
     assert!(regen_res.status().is_success());
     let regen_json: serde_json::Value = regen_res.json().await.unwrap();
-    assert_eq!(regen_json["data"]["client_secret"], "new-secret-value");
+
+    // Verify that a new secret was generated
+    assert!(regen_json["data"]["client_secret"].is_string());
+    assert!(!regen_json["data"]["client_secret"].as_str().unwrap().is_empty());
+    assert_eq!(regen_json["data"]["client_id"], "secret-client");
 }

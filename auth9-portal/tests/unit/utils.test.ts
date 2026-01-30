@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { cn, formatDate, getInitials } from "~/lib/utils";
+import { cn, formatDate, formatDateTime, getInitials } from "~/lib/utils";
 
 describe("cn utility", () => {
   it("should merge class names", () => {
@@ -32,6 +32,26 @@ describe("formatDate utility", () => {
   });
 });
 
+describe("formatDateTime utility", () => {
+  it("should format date string with time", () => {
+    const result = formatDateTime("2024-01-15T10:30:00Z");
+    expect(result).toMatch(/Jan/);
+    expect(result).toMatch(/15/);
+    expect(result).toMatch(/2024/);
+    // Should include time component
+    expect(result).toMatch(/\d{1,2}:\d{2}/);
+  });
+
+  it("should format Date object with time", () => {
+    const date = new Date("2024-06-20T14:45:00Z");
+    const result = formatDateTime(date);
+    expect(result).toMatch(/Jun/);
+    expect(result).toMatch(/20/);
+    // Should include time component
+    expect(result).toMatch(/\d{1,2}:\d{2}/);
+  });
+});
+
 describe("getInitials utility", () => {
   it("should return initials from full name", () => {
     expect(getInitials("John Doe")).toBe("JD");
@@ -49,3 +69,4 @@ describe("getInitials utility", () => {
     expect(getInitials("john doe")).toBe("JD");
   });
 });
+
