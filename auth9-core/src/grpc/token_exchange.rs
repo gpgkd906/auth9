@@ -1,6 +1,5 @@
 //! Token Exchange gRPC service implementation
 
-use crate::cache::CacheManager;
 use crate::domain::StringUuid;
 use crate::grpc::proto::{
     token_exchange_server::TokenExchange, ExchangeTokenRequest, ExchangeTokenResponse,
@@ -13,28 +12,125 @@ use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use uuid::Uuid;
 
-pub struct TokenExchangeService<U, S, R>
+/// Trait for cache operations needed by TokenExchangeService
+pub trait TokenExchangeCache: Send + Sync {
+    fn get_user_roles_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> impl std::future::Future<Output = crate::error::Result<Option<crate::domain::UserRolesInTenant>>> + Send;
+
+    fn set_user_roles_for_service(
+        &self,
+        roles: &crate::domain::UserRolesInTenant,
+        service_id: Uuid,
+    ) -> impl std::future::Future<Output = crate::error::Result<()>> + Send;
+
+    fn get_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> impl std::future::Future<Output = crate::error::Result<Option<crate::domain::UserRolesInTenant>>> + Send;
+
+    fn set_user_roles(
+        &self,
+        roles: &crate::domain::UserRolesInTenant,
+    ) -> impl std::future::Future<Output = crate::error::Result<()>> + Send;
+}
+
+impl TokenExchangeCache for crate::cache::CacheManager {
+    async fn get_user_roles_for_service(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+        service_id: Uuid,
+    ) -> crate::error::Result<Option<crate::domain::UserRolesInTenant>> {
+        crate::cache::CacheManager::get_user_roles_for_service(self, user_id, tenant_id, service_id).await
+    }
+
+    async fn set_user_roles_for_service(
+        &self,
+        roles: &crate::domain::UserRolesInTenant,
+        service_id: Uuid,
+    ) -> crate::error::Result<()> {
+        crate::cache::CacheManager::set_user_roles_for_service(self, roles, service_id).await
+    }
+
+    async fn get_user_roles(
+        &self,
+        user_id: Uuid,
+        tenant_id: Uuid,
+    ) -> crate::error::Result<Option<crate::domain::UserRolesInTenant>> {
+        crate::cache::CacheManager::get_user_roles(self, user_id, tenant_id).await
+    }
+
+    async fn set_user_roles(
+        &self,
+        roles: &crate::domain::UserRolesInTenant,
+    ) -> crate::error::Result<()> {
+        crate::cache::CacheManager::set_user_roles(self, roles).await
+    }
+}
+
+impl TokenExchangeCache for crate::cache::NoOpCacheManager {
+    async fn get_user_roles_for_service(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+        _service_id: Uuid,
+    ) -> crate::error::Result<Option<crate::domain::UserRolesInTenant>> {
+        Ok(None)
+    }
+
+    async fn set_user_roles_for_service(
+        &self,
+        _roles: &crate::domain::UserRolesInTenant,
+        _service_id: Uuid,
+    ) -> crate::error::Result<()> {
+        Ok(())
+    }
+
+    async fn get_user_roles(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+    ) -> crate::error::Result<Option<crate::domain::UserRolesInTenant>> {
+        Ok(None)
+    }
+
+    async fn set_user_roles(
+        &self,
+        _roles: &crate::domain::UserRolesInTenant,
+    ) -> crate::error::Result<()> {
+        Ok(())
+    }
+}
+
+pub struct TokenExchangeService<U, S, R, C>
 where
     U: UserRepository,
     S: ServiceRepository,
     R: RbacRepository,
+    C: TokenExchangeCache,
 {
     jwt_manager: JwtManager,
-    cache_manager: CacheManager,
+    cache_manager: C,
     user_repo: Arc<U>,
     service_repo: Arc<S>,
     rbac_repo: Arc<R>,
 }
 
-impl<U, S, R> TokenExchangeService<U, S, R>
+impl<U, S, R, C> TokenExchangeService<U, S, R, C>
 where
     U: UserRepository,
     S: ServiceRepository,
     R: RbacRepository,
+    C: TokenExchangeCache,
 {
     pub fn new(
         jwt_manager: JwtManager,
-        cache_manager: CacheManager,
+        cache_manager: C,
         user_repo: Arc<U>,
         service_repo: Arc<S>,
         rbac_repo: Arc<R>,
@@ -50,11 +146,12 @@ where
 }
 
 #[tonic::async_trait]
-impl<U, S, R> TokenExchange for TokenExchangeService<U, S, R>
+impl<U, S, R, C> TokenExchange for TokenExchangeService<U, S, R, C>
 where
     U: UserRepository + 'static,
     S: ServiceRepository + 'static,
     R: RbacRepository + 'static,
+    C: TokenExchangeCache + 'static,
 {
     async fn exchange_token(
         &self,

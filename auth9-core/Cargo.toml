@@ -65,10 +65,7 @@ rsa = { version = "0.9", features = ["pem"] }
 # Testing
 tokio-test = "0.4"
 mockall = "0.12"
-testcontainers = "0.15"
-testcontainers-modules = { version = "0.3", features = ["mysql", "redis"] }
 wiremock = "0.6"
-fake = { version = "2", features = ["derive"] }
 rstest = "0.18"
 pretty_assertions = "1"
 
