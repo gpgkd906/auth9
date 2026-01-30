@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
 import { Pencil2Icon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -15,7 +15,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { tenantApi } from "~/services/api";
+import { tenantApi, type Tenant } from "~/services/api";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Settings - Auth9" }];
@@ -58,8 +58,9 @@ export async function action({ request }: ActionFunctionArgs) {
       await tenantApi.update(id, { settings });
       return json({ success: true });
     }
-  } catch (error: any) {
-    return json({ error: error.message }, { status: 400 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return json({ error: message }, { status: 400 });
   }
 
   return json({ error: "Invalid intent" }, { status: 400 });
@@ -69,7 +70,7 @@ export default function SettingsPage() {
   const data = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
-  const [editingTenant, setEditingTenant] = useState<any>(null);
+  const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
 

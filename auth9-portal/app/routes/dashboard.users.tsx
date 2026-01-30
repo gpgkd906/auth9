@@ -1,8 +1,17 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useFetcher } from "@remix-run/react";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { userApi, tenantApi, rbacApi, serviceApi } from "~/services/api";
+import { userApi, tenantApi, rbacApi, serviceApi, type User, type Tenant, type Service, type Role } from "~/services/api";
+
+// Type for user-tenant relationship from userApi.getTenants
+interface UserTenant {
+  id: string;
+  tenant_id: string;
+  role_in_tenant: string;
+  joined_at: string;
+  tenant: Tenant;
+}
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -19,7 +28,6 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon } from "@radix-ui/react-icons";
@@ -100,8 +108,9 @@ export async function action({ request }: ActionFunctionArgs) {
       return json({ success: true, intent });
     }
 
-  } catch (error: any) {
-    return json({ error: error.message, intent }, { status: 400 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return json({ error: message, intent }, { status: 400 });
   }
 
   return json({ error: "Invalid intent", intent }, { status: 400 });
@@ -112,18 +121,17 @@ export default function UsersPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
-  const fetcher = useFetcher();
 
-  const [editingUser, setEditingUser] = useState<any>(null);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
-  const [managingTenantsUser, setManagingTenantsUser] = useState<any>(null);
-  const [managingRoles, setManagingRoles] = useState<{ user: any, tenant: any } | null>(null);
+  const [managingTenantsUser, setManagingTenantsUser] = useState<User | null>(null);
+  const [managingRoles, setManagingRoles] = useState<{ user: User, tenant: Tenant } | null>(null);
 
   // State for Manage Roles
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
-  const [availableRoles, setAvailableRoles] = useState<any[]>([]);
+  const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [assignedRoleIds, setAssignedRoleIds] = useState<Set<string>>(new Set());
-  const [allAssignedRoles, setAllAssignedRoles] = useState<any[]>([]);
+  const [allAssignedRoles, setAllAssignedRoles] = useState<Role[]>([]);
 
   const isSubmitting = navigation.state === "submitting";
 
@@ -140,15 +148,16 @@ export default function UsersPage() {
         rbacApi.getUserAssignedRoles(managingRoles.user.id, managingRoles.tenant.id)
           .then(res => {
             setAllAssignedRoles(res.data);
-            const ids = new Set(res.data.map((r: any) => r.id));
+            const ids = new Set(res.data.map((r: Role) => r.id));
             setAssignedRoleIds(ids);
           });
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData]);
 
   // Fetch user tenants when opening Manage Tenants dialog
-  const [userTenants, setUserTenants] = useState<any[]>([]);
+  const [userTenants, setUserTenants] = useState<UserTenant[]>([]);
   useEffect(() => {
     if (managingTenantsUser) {
       userApi.getTenants(managingTenantsUser.id).then(res => setUserTenants(res.data));
@@ -162,7 +171,7 @@ export default function UsersPage() {
       rbacApi.getUserAssignedRoles(managingRoles.user.id, managingRoles.tenant.id)
         .then(res => {
           setAllAssignedRoles(res.data);
-          const ids = new Set(res.data.map((r: any) => r.id));
+          const ids = new Set(res.data.map((r: Role) => r.id));
           setAssignedRoleIds(ids);
         });
     }
@@ -265,7 +274,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {users.data.map((user: any) => (
+                {users.data.map((user: User) => (
                   <tr key={user.id} className="text-gray-700 hover:bg-gray-50/50">
                     <td className="px-4 py-3 font-medium text-gray-900">{user.email}</td>
                     <td className="px-4 py-3">{user.display_name || "-"}</td>
@@ -401,15 +410,15 @@ export default function UsersPage() {
             <div className="rounded-md border p-4">
               <h4 className="mb-4 text-sm font-medium">Joined Tenants</h4>
               <div className="space-y-2">
-                {userTenants.map((ut: any) => (
+                {userTenants.map((ut: UserTenant) => (
                   <div key={ut.tenant_id} className="flex items-center justify-between rounded-md bg-gray-50 p-2 text-sm">
                     <div className="flex items-center gap-2">
-                      {ut.tenant.logo_url && <img src={ut.tenant.logo_url} className="h-5 w-5 rounded" />}
+                      {ut.tenant.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
                       <span className="font-medium">{ut.tenant.name}</span>
                       <span className="text-gray-500">({ut.role_in_tenant})</span>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })}>
+                      <Button size="sm" variant="outline" onClick={() => managingTenantsUser && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })}>
                         <GearIcon className="mr-2 h-3.5 w-3.5" /> Roles
                       </Button>
                       <Form method="post" className="inline">
@@ -440,8 +449,8 @@ export default function UsersPage() {
                     </SelectTrigger>
                     <SelectContent>
                       {tenants.data
-                        .filter((t: any) => !userTenants.some((ut: any) => ut.tenant_id === t.id))
-                        .map((t: any) => (
+                        .filter((t: Tenant) => !userTenants.some((ut: UserTenant) => ut.tenant_id === t.id))
+                        .map((t: Tenant) => (
                           <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
                         ))}
                     </SelectContent>
@@ -485,7 +494,7 @@ export default function UsersPage() {
                   <SelectValue placeholder="Select Service" />
                 </SelectTrigger>
                 <SelectContent>
-                  {services.data.map((s: any) => (
+                  {services.data.map((s: Service) => (
                     <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
                   ))}
                 </SelectContent>
@@ -497,9 +506,9 @@ export default function UsersPage() {
                 {availableRoles.length === 0 ? (
                   <p className="text-sm text-gray-500">No roles defined for this service.</p>
                 ) : (
-                  availableRoles.map((role: any) => {
+                  availableRoles.map((role: Role) => {
                     const isAssigned = assignedRoleIds.has(role.id);
-                    const wasOriginallyAssigned = allAssignedRoles.some((r: any) => r.id === role.id);
+                    const wasOriginallyAssigned = allAssignedRoles.some((r: Role) => r.id === role.id);
                     return (
                       <div key={role.id} className="flex items-center space-x-2">
                         <Checkbox

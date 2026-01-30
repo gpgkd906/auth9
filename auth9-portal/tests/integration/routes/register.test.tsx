@@ -153,7 +153,16 @@ describe("Register Page", () => {
     });
 
     it("action creates user and redirects on success", async () => {
-        (userApi.create as any).mockResolvedValue({ id: "user-1" });
+        vi.mocked(userApi.create).mockResolvedValue({
+            data: {
+                id: "user-1",
+                email: "test@example.com",
+                display_name: "Test User",
+                mfa_enabled: false,
+                created_at: "2024-01-01T00:00:00Z",
+                updated_at: "2024-01-01T00:00:00Z"
+            }
+        });
 
         const body = new URLSearchParams();
         body.append("email", "test@example.com");
@@ -178,7 +187,7 @@ describe("Register Page", () => {
     });
 
     it("action returns error when API call fails", async () => {
-        (userApi.create as any).mockRejectedValue(new Error("User already exists"));
+        vi.mocked(userApi.create).mockRejectedValue(new Error("User already exists"));
 
         const body = new URLSearchParams();
         body.append("email", "existing@example.com");

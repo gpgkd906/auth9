@@ -14,7 +14,6 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "~/components/ui/dialog";
 import {
   DropdownMenu,
@@ -24,7 +23,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { rbacApi, serviceApi } from "~/services/api";
+import { rbacApi, serviceApi, type Role } from "~/services/api";
+
+// Extended role type with service_id for editing
+interface EditableRole extends Role {
+  service_id: string;
+}
 
 export const meta: MetaFunction = () => {
   return [{ title: "Roles - Auth9" }];
@@ -79,8 +83,9 @@ export async function action({ request }: ActionFunctionArgs) {
       await rbacApi.deleteRole(serviceId, roleId);
       return json({ success: true });
     }
-  } catch (error: any) {
-    return json({ error: error.message }, { status: 400 });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Unknown error";
+    return json({ error: message }, { status: 400 });
   }
 
   return json({ error: "Invalid intent" }, { status: 400 });
@@ -93,7 +98,7 @@ export default function RolesPage() {
   const submit = useSubmit();
 
   const [createServiceId, setCreateServiceId] = useState<string | null>(null);
-  const [editingRole, setEditingRole] = useState<any>(null);
+  const [editingRole, setEditingRole] = useState<EditableRole | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
 

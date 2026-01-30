@@ -79,8 +79,9 @@ export async function action({ request, params }: ActionFunctionArgs) {
             return json({ success: true, intent, secret: res.data.client_secret, regeneratedClientId: clientId });
         }
 
-    } catch (error: any) {
-        return json({ error: error.message }, { status: 400 });
+    } catch (error) {
+        const message = error instanceof Error ? error.message : "Unknown error";
+        return json({ error: message }, { status: 400 });
     }
 
     return json({ error: "Invalid intent" }, { status: 400 });
