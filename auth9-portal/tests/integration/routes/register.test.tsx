@@ -1,9 +1,21 @@
 import { createRemixStub } from "@remix-run/testing";
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import Register, { action } from "~/routes/register";
+import { userApi } from "~/services/api";
+
+// Mock the API
+vi.mock("~/services/api", () => ({
+    userApi: {
+        create: vi.fn(),
+    },
+}));
 
 describe("Register Page", () => {
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it("renders registration form", async () => {
         const RemixStub = createRemixStub([
             {
@@ -105,4 +117,99 @@ describe("Register Page", () => {
 
         expect(screen.getByText("A")).toBeInTheDocument();
     });
+
+    it("action returns error when email is missing", async () => {
+        const body = new URLSearchParams();
+        body.append("password", "test123");
+
+        const request = new Request("http://localhost:3000/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+        const data = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Email and password are required");
+    });
+
+    it("action returns error when password is missing", async () => {
+        const body = new URLSearchParams();
+        body.append("email", "test@example.com");
+
+        const request = new Request("http://localhost:3000/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+        const data = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Email and password are required");
+    });
+
+    it("action creates user and redirects on success", async () => {
+        (userApi.create as any).mockResolvedValue({ id: "user-1" });
+
+        const body = new URLSearchParams();
+        body.append("email", "test@example.com");
+        body.append("password", "securePassword123");
+        body.append("display_name", "Test User");
+
+        const request = new Request("http://localhost:3000/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        expect(userApi.create).toHaveBeenCalledWith({
+            email: "test@example.com",
+            display_name: "Test User",
+            password: "securePassword123",
+        });
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe("/login");
+    });
+
+    it("action returns error when API call fails", async () => {
+        (userApi.create as any).mockRejectedValue(new Error("User already exists"));
+
+        const body = new URLSearchParams();
+        body.append("email", "existing@example.com");
+        body.append("password", "password123");
+
+        const request = new Request("http://localhost:3000/register", {
+            method: "POST",
+            headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            body: body.toString(),
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+        const data = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("User already exists");
+    });
+
+    it("sign in link navigates to login page", async () => {
+        const RemixStub = createRemixStub([
+            {
+                path: "/register",
+                Component: Register,
+                action,
+            },
+        ]);
+
+        render(<RemixStub initialEntries={["/register"]} />);
+
+        const signInLink = screen.getByRole("link", { name: /sign in/i });
+        expect(signInLink).toHaveAttribute("href", "/login");
+    });
 });
+

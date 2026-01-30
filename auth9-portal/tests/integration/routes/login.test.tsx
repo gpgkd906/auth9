@@ -1,5 +1,6 @@
 import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import Login, { action } from "~/routes/login";
 
@@ -19,6 +20,91 @@ describe("Login Page", () => {
         expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
     });
 
-    // Note: Full form submission testing with action requires more complex mocking of the action
-    // or relying on the stub's internal handling. For now, we verify rendering and basic interaction.
+    it("displays Auth9 branding", async () => {
+        const RemixStub = createRemixStub([
+            {
+                path: "/login",
+                Component: Login,
+            },
+        ]);
+
+        render(<RemixStub initialEntries={["/login"]} />);
+
+        expect(screen.getByText("Sign in to your Auth9 account")).toBeInTheDocument();
+    });
+
+    it("has link to registration page", async () => {
+        const RemixStub = createRemixStub([
+            {
+                path: "/login",
+                Component: Login,
+            },
+        ]);
+
+        render(<RemixStub initialEntries={["/login"]} />);
+
+        expect(screen.getByText("Sign up")).toBeInTheDocument();
+        expect(screen.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/register");
+    });
+
+    it("renders sign in button with correct text", async () => {
+        const RemixStub = createRemixStub([
+            {
+                path: "/login",
+                Component: Login,
+            },
+        ]);
+
+        render(<RemixStub initialEntries={["/login"]} />);
+
+        const submitButton = screen.getByRole("button", { name: /sign in with sso/i });
+        expect(submitButton).toBeInTheDocument();
+        expect(submitButton).not.toBeDisabled();
+    });
+
+    it("displays Auth9 logo with letter A", async () => {
+        const RemixStub = createRemixStub([
+            {
+                path: "/login",
+                Component: Login,
+            },
+        ]);
+
+        render(<RemixStub initialEntries={["/login"]} />);
+
+        // Logo container has letter "A"
+        expect(screen.getByText("A")).toBeInTheDocument();
+    });
+
+    it("displays 'Don't have an account?' text", async () => {
+        const RemixStub = createRemixStub([
+            {
+                path: "/login",
+                Component: Login,
+            },
+        ]);
+
+        render(<RemixStub initialEntries={["/login"]} />);
+
+        expect(screen.getByText(/Don't have an account\?/i)).toBeInTheDocument();
+    });
+
+    it("action redirects to authorize endpoint", async () => {
+        // Create a mock request
+        const request = new Request("http://localhost:3000/login", {
+            method: "POST",
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        // Verify it returns a redirect
+        expect(response.status).toBe(302);
+
+        // Get the Location header
+        const location = response.headers.get("Location");
+        expect(location).toContain("/api/v1/auth/authorize");
+        expect(location).toContain("response_type=code");
+        expect(location).toContain("scope=openid+email+profile");
+    });
 });
+
