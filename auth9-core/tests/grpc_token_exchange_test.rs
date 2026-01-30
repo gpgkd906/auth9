@@ -1284,3 +1284,359 @@ async fn test_get_user_roles_invalid_service_id() {
     let status = response.unwrap_err();
     assert_eq!(status.code(), tonic::Code::InvalidArgument);
 }
+
+// ============================================================================
+// Additional coverage tests for edge cases
+// ============================================================================
+
+#[tokio::test]
+async fn test_exchange_token_with_multiple_permissions() {
+    let cache_manager = create_test_cache();
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+    let service_id = Uuid::new_v4();
+    let client_id = Uuid::new_v4();
+
+    let jwt_manager = JwtManager::new(test_jwt_config());
+    let identity_token = jwt_manager
+        .create_identity_token(user_id, "multi-perm@example.com", Some("Multi Perm User"))
+        .unwrap();
+
+    let user_repo = Arc::new(TestUserRepository::new());
+    user_repo.add_user(User {
+        id: StringUuid::from(user_id),
+        email: "multi-perm@example.com".to_string(),
+        display_name: Some("Multi Perm User".to_string()),
+        avatar_url: None,
+        keycloak_id: "kc-multi".to_string(),
+        mfa_enabled: true,
+        created_at: chrono::Utc::now(),
+        updated_at: chrono::Utc::now(),
+    }).await;
+
+    let service_repo = Arc::new(TestServiceRepository::new());
+    service_repo
+        .add_service(create_test_service(service_id, tenant_id))
+        .await;
+    service_repo
+        .add_client(create_test_client(client_id, service_id))
+        .await;
+
+    let rbac_repo = Arc::new(TestRbacRepository::new());
+    rbac_repo
+        .set_user_roles_for_service(
+            user_id,
+            tenant_id,
+            service_id,
+            UserRolesInTenant {
+                user_id,
+                tenant_id,
+                roles: vec!["admin".to_string(), "editor".to_string(), "viewer".to_string()],
+                permissions: vec![
+                    "users:read".to_string(),
+                    "users:write".to_string(),
+                    "users:delete".to_string(),
+                    "tenants:read".to_string(),
+                    "tenants:manage".to_string(),
+                ],
+            },
+        )
+        .await;
+
+    let grpc_service = TokenExchangeService::new(
+        jwt_manager.clone(),
+        cache_manager,
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+
+    let request = Request::new(ExchangeTokenRequest {
+        identity_token,
+        tenant_id: tenant_id.to_string(),
+        service_id: "test-client".to_string(),
+    });
+
+    let response = grpc_service.exchange_token(request).await;
+    assert!(response.is_ok());
+
+    let response = response.unwrap().into_inner();
+    assert!(!response.access_token.is_empty());
+
+    // Verify the token contains the roles
+    let claims = jwt_manager
+        .verify_tenant_access_token(&response.access_token, Some("test-client"))
+        .unwrap();
+    assert_eq!(claims.roles.len(), 3);
+    assert_eq!(claims.permissions.len(), 5);
+}
+
+#[tokio::test]
+async fn test_validate_token_with_special_characters_in_audience() {
+    let cache_manager = create_test_cache();
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+
+    let jwt_manager = JwtManager::new(test_jwt_config());
+    let access_token = jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "test@example.com",
+            tenant_id,
+            "service-with-special-chars_123",
+            vec![],
+            vec![],
+        )
+        .unwrap();
+
+    let user_repo = Arc::new(TestUserRepository::new());
+    let service_repo = Arc::new(TestServiceRepository::new());
+    let rbac_repo = Arc::new(TestRbacRepository::new());
+
+    let grpc_service = TokenExchangeService::new(
+        jwt_manager,
+        cache_manager,
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+
+    let request = Request::new(ValidateTokenRequest {
+        access_token,
+        audience: "service-with-special-chars_123".to_string(),
+    });
+
+    let response = grpc_service.validate_token(request).await;
+    assert!(response.is_ok());
+    assert!(response.unwrap().into_inner().valid);
+}
+
+#[tokio::test]
+async fn test_introspect_token_with_all_fields() {
+    let cache_manager = create_test_cache();
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+
+    let jwt_manager = JwtManager::new(test_jwt_config());
+    let access_token = jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "full@example.com",
+            tenant_id,
+            "full-service",
+            vec!["super-admin".to_string(), "manager".to_string()],
+            vec![
+                "all:read".to_string(),
+                "all:write".to_string(),
+                "all:delete".to_string(),
+            ],
+        )
+        .unwrap();
+
+    let user_repo = Arc::new(TestUserRepository::new());
+    let service_repo = Arc::new(TestServiceRepository::new());
+    let rbac_repo = Arc::new(TestRbacRepository::new());
+
+    let grpc_service = TokenExchangeService::new(
+        jwt_manager,
+        cache_manager,
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+
+    let request = Request::new(IntrospectTokenRequest {
+        token: access_token,
+    });
+
+    let response = grpc_service.introspect_token(request).await;
+    assert!(response.is_ok());
+
+    let response = response.unwrap().into_inner();
+    assert!(response.active);
+    assert_eq!(response.email, "full@example.com");
+    assert_eq!(response.roles, vec!["super-admin", "manager"]);
+    assert_eq!(response.permissions, vec!["all:read", "all:write", "all:delete"]);
+    assert!(response.exp > 0);
+    assert!(response.iat > 0);
+    assert!(!response.iss.is_empty());
+    assert_eq!(response.aud, "full-service");
+}
+
+#[tokio::test]
+async fn test_get_user_roles_with_multiple_role_records() {
+    let cache_manager = create_test_cache();
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+    let service_id = Uuid::new_v4();
+    let role_id_1 = Uuid::new_v4();
+    let role_id_2 = Uuid::new_v4();
+    let role_id_3 = Uuid::new_v4();
+
+    let jwt_manager = JwtManager::new(test_jwt_config());
+    let user_repo = Arc::new(TestUserRepository::new());
+    let service_repo = Arc::new(TestServiceRepository::new());
+
+    let rbac_repo = Arc::new(TestRbacRepository::new());
+    rbac_repo
+        .set_user_roles(
+            user_id,
+            tenant_id,
+            UserRolesInTenant {
+                user_id,
+                tenant_id,
+                roles: vec!["admin".to_string(), "editor".to_string(), "viewer".to_string()],
+                permissions: vec!["read".to_string(), "write".to_string()],
+            },
+        )
+        .await;
+
+    // Add multiple role records
+    rbac_repo
+        .add_role_record(Role {
+            id: StringUuid::from(role_id_1),
+            service_id: StringUuid::from(service_id),
+            name: "admin".to_string(),
+            description: Some("Full admin".to_string()),
+            parent_role_id: None,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .await;
+    rbac_repo
+        .add_role_record(Role {
+            id: StringUuid::from(role_id_2),
+            service_id: StringUuid::from(service_id),
+            name: "editor".to_string(),
+            description: Some("Content editor".to_string()),
+            parent_role_id: Some(StringUuid::from(role_id_1)),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .await;
+    rbac_repo
+        .add_role_record(Role {
+            id: StringUuid::from(role_id_3),
+            service_id: StringUuid::from(service_id),
+            name: "viewer".to_string(),
+            description: None,
+            parent_role_id: Some(StringUuid::from(role_id_2)),
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .await;
+
+    let grpc_service = TokenExchangeService::new(
+        jwt_manager,
+        cache_manager,
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+
+    let request = Request::new(GetUserRolesRequest {
+        user_id: user_id.to_string(),
+        tenant_id: tenant_id.to_string(),
+        service_id: String::new(),
+    });
+
+    let response = grpc_service.get_user_roles(request).await;
+    assert!(response.is_ok());
+
+    let response = response.unwrap().into_inner();
+    assert_eq!(response.roles.len(), 3);
+    assert_eq!(response.permissions.len(), 2);
+
+    // Verify role details
+    let role_names: Vec<&str> = response.roles.iter().map(|r| r.name.as_str()).collect();
+    assert!(role_names.contains(&"admin"));
+    assert!(role_names.contains(&"editor"));
+    assert!(role_names.contains(&"viewer"));
+}
+
+#[tokio::test]
+async fn test_exchange_token_service_lookup_chain() {
+    // Test the full lookup chain: client -> service -> roles
+    let cache_manager = create_test_cache();
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+    let service_id = Uuid::new_v4();
+    let client_id = Uuid::new_v4();
+
+    let jwt_manager = JwtManager::new(test_jwt_config());
+    let identity_token = jwt_manager
+        .create_identity_token(user_id, "chain@example.com", None)
+        .unwrap();
+
+    let user_repo = Arc::new(TestUserRepository::new());
+    user_repo.add_user(create_test_user(user_id)).await;
+
+    let service_repo = Arc::new(TestServiceRepository::new());
+    // Add service with specific tenant
+    service_repo
+        .add_service(Service {
+            id: StringUuid::from(service_id),
+            tenant_id: Some(StringUuid::from(tenant_id)),
+            name: "Chain Test Service".to_string(),
+            base_url: Some("https://chain.example.com".to_string()),
+            redirect_uris: vec!["https://chain.example.com/cb".to_string()],
+            logout_uris: vec!["https://chain.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        })
+        .await;
+    // Add client with custom client_id
+    service_repo
+        .add_client(Client {
+            id: StringUuid::from(client_id),
+            service_id: StringUuid::from(service_id),
+            client_id: "chain-client-id".to_string(),
+            name: Some("Chain Client".to_string()),
+            client_secret_hash: "hash".to_string(),
+            created_at: chrono::Utc::now(),
+        })
+        .await;
+
+    let rbac_repo = Arc::new(TestRbacRepository::new());
+    rbac_repo
+        .set_user_roles_for_service(
+            user_id,
+            tenant_id,
+            service_id,
+            UserRolesInTenant {
+                user_id,
+                tenant_id,
+                roles: vec!["chain-role".to_string()],
+                permissions: vec!["chain:execute".to_string()],
+            },
+        )
+        .await;
+
+    let grpc_service = TokenExchangeService::new(
+        jwt_manager,
+        cache_manager,
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+
+    // Use the custom client_id
+    let request = Request::new(ExchangeTokenRequest {
+        identity_token,
+        tenant_id: tenant_id.to_string(),
+        service_id: "chain-client-id".to_string(),
+    });
+
+    let response = grpc_service.exchange_token(request).await;
+    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+
+    let response = response.unwrap().into_inner();
+    assert!(!response.access_token.is_empty());
+    assert_eq!(response.token_type, "Bearer");
+}

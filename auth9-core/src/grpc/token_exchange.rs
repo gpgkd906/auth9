@@ -598,9 +598,157 @@ mod tests {
             name: "administrator".to_string(),
             service_id: "550e8400-e29b-41d4-a716-446655440001".to_string(),
         };
-        
+
         assert_eq!(role.name, "administrator");
         assert!(!role.id.is_empty());
         assert!(!role.service_id.is_empty());
+    }
+
+    #[test]
+    fn test_exchange_token_request_empty_fields() {
+        let request = ExchangeTokenRequest {
+            identity_token: String::new(),
+            tenant_id: String::new(),
+            service_id: String::new(),
+        };
+
+        assert!(request.identity_token.is_empty());
+        assert!(request.tenant_id.is_empty());
+        assert!(request.service_id.is_empty());
+    }
+
+    #[test]
+    fn test_exchange_token_response_defaults() {
+        let response = ExchangeTokenResponse {
+            access_token: "token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 0,
+            refresh_token: String::new(),
+        };
+
+        assert_eq!(response.expires_in, 0);
+        assert!(response.refresh_token.is_empty());
+    }
+
+    #[test]
+    fn test_validate_token_response_error_message() {
+        let response = ValidateTokenResponse {
+            valid: false,
+            user_id: String::new(),
+            tenant_id: String::new(),
+            error: "Token signature verification failed".to_string(),
+        };
+
+        assert!(!response.valid);
+        assert!(response.error.contains("signature"));
+    }
+
+    #[test]
+    fn test_get_user_roles_response_empty() {
+        let response = GetUserRolesResponse {
+            roles: vec![],
+            permissions: vec![],
+        };
+
+        assert!(response.roles.is_empty());
+        assert!(response.permissions.is_empty());
+    }
+
+    #[test]
+    fn test_get_user_roles_response_with_many_permissions() {
+        let response = GetUserRolesResponse {
+            roles: vec![ProtoRole {
+                id: "role-1".to_string(),
+                name: "super-admin".to_string(),
+                service_id: "service-1".to_string(),
+            }],
+            permissions: vec![
+                "users:read".to_string(),
+                "users:write".to_string(),
+                "users:delete".to_string(),
+                "tenants:read".to_string(),
+                "tenants:write".to_string(),
+                "tenants:delete".to_string(),
+                "roles:read".to_string(),
+                "roles:write".to_string(),
+                "roles:delete".to_string(),
+                "permissions:manage".to_string(),
+            ],
+        };
+
+        assert_eq!(response.roles.len(), 1);
+        assert_eq!(response.permissions.len(), 10);
+    }
+
+    #[test]
+    fn test_introspect_token_response_timestamps() {
+        let now = chrono::Utc::now().timestamp();
+        let response = IntrospectTokenResponse {
+            active: true,
+            sub: "user-id".to_string(),
+            email: "test@example.com".to_string(),
+            tenant_id: "tenant-id".to_string(),
+            roles: vec![],
+            permissions: vec![],
+            exp: now + 3600,
+            iat: now,
+            iss: "https://auth9.example.com".to_string(),
+            aud: "my-service".to_string(),
+        };
+
+        assert!(response.exp > response.iat);
+        assert_eq!(response.exp - response.iat, 3600);
+    }
+
+    #[test]
+    fn test_proto_role_with_uuid_format() {
+        use uuid::Uuid;
+        let id = Uuid::new_v4();
+        let service_id = Uuid::new_v4();
+
+        let role = ProtoRole {
+            id: id.to_string(),
+            name: "test-role".to_string(),
+            service_id: service_id.to_string(),
+        };
+
+        // Verify UUIDs can be parsed back
+        assert!(Uuid::parse_str(&role.id).is_ok());
+        assert!(Uuid::parse_str(&role.service_id).is_ok());
+    }
+
+    #[test]
+    fn test_introspect_request_with_jwt_format() {
+        // Typical JWT has 3 parts separated by dots
+        let request = IntrospectTokenRequest {
+            token: "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ0ZXN0In0.signature".to_string(),
+        };
+
+        let parts: Vec<&str> = request.token.split('.').collect();
+        assert_eq!(parts.len(), 3);
+    }
+
+    #[test]
+    fn test_validate_token_request_with_long_audience() {
+        let request = ValidateTokenRequest {
+            access_token: "token".to_string(),
+            audience: "very-long-service-name-with-multiple-segments-and-dashes-12345".to_string(),
+        };
+
+        assert!(request.audience.len() > 50);
+    }
+
+    #[test]
+    fn test_exchange_token_request_with_uuid_tenant() {
+        use uuid::Uuid;
+        let tenant_id = Uuid::new_v4();
+
+        let request = ExchangeTokenRequest {
+            identity_token: "token".to_string(),
+            tenant_id: tenant_id.to_string(),
+            service_id: "service".to_string(),
+        };
+
+        assert!(Uuid::parse_str(&request.tenant_id).is_ok());
     }
 }

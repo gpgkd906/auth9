@@ -144,9 +144,8 @@ impl Config {
 mod tests {
     use super::*;
 
-    #[test]
-    fn test_config_addresses() {
-        let config = Config {
+    fn test_config() -> Config {
+        Config {
             http_host: "127.0.0.1".to_string(),
             http_port: 8080,
             grpc_host: "127.0.0.1".to_string(),
@@ -175,9 +174,234 @@ mod tests {
                 admin_client_secret: "secret".to_string(),
                 ssl_required: "external".to_string(),
             },
-        };
+        }
+    }
+
+    #[test]
+    fn test_config_addresses() {
+        let config = test_config();
 
         assert_eq!(config.http_addr(), "127.0.0.1:8080");
         assert_eq!(config.grpc_addr(), "127.0.0.1:50051");
+    }
+
+    #[test]
+    fn test_config_http_addr_ipv6() {
+        let mut config = test_config();
+        config.http_host = "::1".to_string();
+        config.http_port = 3000;
+
+        assert_eq!(config.http_addr(), "::1:3000");
+    }
+
+    #[test]
+    fn test_config_grpc_addr_custom() {
+        let mut config = test_config();
+        config.grpc_host = "0.0.0.0".to_string();
+        config.grpc_port = 9000;
+
+        assert_eq!(config.grpc_addr(), "0.0.0.0:9000");
+    }
+
+    #[test]
+    fn test_config_clone() {
+        let config1 = test_config();
+        let config2 = config1.clone();
+
+        assert_eq!(config1.http_host, config2.http_host);
+        assert_eq!(config1.http_port, config2.http_port);
+        assert_eq!(config1.database.url, config2.database.url);
+    }
+
+    #[test]
+    fn test_config_debug() {
+        let config = test_config();
+        let debug_str = format!("{:?}", config);
+
+        assert!(debug_str.contains("Config"));
+        assert!(debug_str.contains("http_host"));
+        assert!(debug_str.contains("127.0.0.1"));
+    }
+
+    #[test]
+    fn test_database_config_clone() {
+        let db = DatabaseConfig {
+            url: "mysql://user:pass@host/db".to_string(),
+            max_connections: 20,
+            min_connections: 5,
+        };
+        let db2 = db.clone();
+
+        assert_eq!(db.url, db2.url);
+        assert_eq!(db.max_connections, db2.max_connections);
+        assert_eq!(db.min_connections, db2.min_connections);
+    }
+
+    #[test]
+    fn test_database_config_debug() {
+        let db = DatabaseConfig {
+            url: "mysql://localhost/test".to_string(),
+            max_connections: 10,
+            min_connections: 2,
+        };
+        let debug_str = format!("{:?}", db);
+
+        assert!(debug_str.contains("DatabaseConfig"));
+        assert!(debug_str.contains("max_connections"));
+    }
+
+    #[test]
+    fn test_redis_config_clone() {
+        let redis = RedisConfig {
+            url: "redis://localhost:6379".to_string(),
+        };
+        let redis2 = redis.clone();
+
+        assert_eq!(redis.url, redis2.url);
+    }
+
+    #[test]
+    fn test_redis_config_debug() {
+        let redis = RedisConfig {
+            url: "redis://localhost:6379".to_string(),
+        };
+        let debug_str = format!("{:?}", redis);
+
+        assert!(debug_str.contains("RedisConfig"));
+        assert!(debug_str.contains("redis://localhost:6379"));
+    }
+
+    #[test]
+    fn test_jwt_config_with_rsa_keys() {
+        let jwt = JwtConfig {
+            secret: "fallback-secret".to_string(),
+            issuer: "https://auth9.example.com".to_string(),
+            access_token_ttl_secs: 1800,
+            refresh_token_ttl_secs: 86400,
+            private_key_pem: Some("-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----".to_string()),
+            public_key_pem: Some("-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----".to_string()),
+        };
+
+        assert!(jwt.private_key_pem.is_some());
+        assert!(jwt.public_key_pem.is_some());
+    }
+
+    #[test]
+    fn test_jwt_config_clone() {
+        let jwt = JwtConfig {
+            secret: "secret".to_string(),
+            issuer: "issuer".to_string(),
+            access_token_ttl_secs: 3600,
+            refresh_token_ttl_secs: 604800,
+            private_key_pem: None,
+            public_key_pem: None,
+        };
+        let jwt2 = jwt.clone();
+
+        assert_eq!(jwt.secret, jwt2.secret);
+        assert_eq!(jwt.issuer, jwt2.issuer);
+    }
+
+    #[test]
+    fn test_jwt_config_debug() {
+        let jwt = JwtConfig {
+            secret: "secret".to_string(),
+            issuer: "https://issuer.com".to_string(),
+            access_token_ttl_secs: 3600,
+            refresh_token_ttl_secs: 604800,
+            private_key_pem: None,
+            public_key_pem: None,
+        };
+        let debug_str = format!("{:?}", jwt);
+
+        assert!(debug_str.contains("JwtConfig"));
+        assert!(debug_str.contains("issuer"));
+    }
+
+    #[test]
+    fn test_keycloak_config_clone() {
+        let kc = KeycloakConfig {
+            url: "http://keycloak:8080".to_string(),
+            public_url: "http://localhost:8081".to_string(),
+            realm: "auth9".to_string(),
+            admin_client_id: "admin-cli".to_string(),
+            admin_client_secret: "secret".to_string(),
+            ssl_required: "none".to_string(),
+        };
+        let kc2 = kc.clone();
+
+        assert_eq!(kc.url, kc2.url);
+        assert_eq!(kc.public_url, kc2.public_url);
+        assert_eq!(kc.realm, kc2.realm);
+    }
+
+    #[test]
+    fn test_keycloak_config_debug() {
+        let kc = KeycloakConfig {
+            url: "http://keycloak:8080".to_string(),
+            public_url: "http://localhost:8081".to_string(),
+            realm: "auth9".to_string(),
+            admin_client_id: "admin-cli".to_string(),
+            admin_client_secret: "secret".to_string(),
+            ssl_required: "external".to_string(),
+        };
+        let debug_str = format!("{:?}", kc);
+
+        assert!(debug_str.contains("KeycloakConfig"));
+        assert!(debug_str.contains("realm"));
+    }
+
+    #[test]
+    fn test_keycloak_ssl_required_options() {
+        let ssl_options = ["none", "external", "all"];
+
+        for opt in &ssl_options {
+            let kc = KeycloakConfig {
+                url: "http://localhost:8081".to_string(),
+                public_url: "http://localhost:8081".to_string(),
+                realm: "test".to_string(),
+                admin_client_id: "admin".to_string(),
+                admin_client_secret: "secret".to_string(),
+                ssl_required: opt.to_string(),
+            };
+            assert_eq!(kc.ssl_required, *opt);
+        }
+    }
+
+    #[test]
+    fn test_config_different_hosts() {
+        let config = Config {
+            http_host: "192.168.1.100".to_string(),
+            http_port: 3000,
+            grpc_host: "192.168.1.100".to_string(),
+            grpc_port: 4000,
+            database: DatabaseConfig {
+                url: "mysql://db.example.com/prod".to_string(),
+                max_connections: 50,
+                min_connections: 10,
+            },
+            redis: RedisConfig {
+                url: "redis://cache.example.com:6379".to_string(),
+            },
+            jwt: JwtConfig {
+                secret: "production-secret".to_string(),
+                issuer: "https://auth.example.com".to_string(),
+                access_token_ttl_secs: 900,
+                refresh_token_ttl_secs: 2592000,
+                private_key_pem: None,
+                public_key_pem: None,
+            },
+            keycloak: KeycloakConfig {
+                url: "http://keycloak.internal:8080".to_string(),
+                public_url: "https://auth.example.com".to_string(),
+                realm: "production".to_string(),
+                admin_client_id: "auth9-admin".to_string(),
+                admin_client_secret: "admin-secret".to_string(),
+                ssl_required: "all".to_string(),
+            },
+        };
+
+        assert_eq!(config.http_addr(), "192.168.1.100:3000");
+        assert_eq!(config.grpc_addr(), "192.168.1.100:4000");
     }
 }

@@ -401,4 +401,74 @@ mod tests {
         };
         assert_eq!(input.role_in_tenant, "owner");
     }
+
+    #[test]
+    fn test_create_user_request_with_all_fields() {
+        let json = r#"{
+            "email": "full@example.com",
+            "display_name": "Full Name",
+            "avatar_url": "https://cdn.example.com/avatars/full.png",
+            "password": "SecureP@ssw0rd!"
+        }"#;
+        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+
+        assert_eq!(request.user.email, "full@example.com");
+        assert_eq!(request.user.display_name, Some("Full Name".to_string()));
+        assert!(request.user.avatar_url.is_some());
+        assert!(request.password.is_some());
+    }
+
+    #[test]
+    fn test_update_user_input_empty() {
+        let json = r#"{}"#;
+        let input: UpdateUserInput = serde_json::from_str(json).unwrap();
+
+        assert!(input.display_name.is_none());
+        assert!(input.avatar_url.is_none());
+    }
+
+    #[test]
+    fn test_update_user_input_both_fields() {
+        let json = r#"{
+            "display_name": "New Name",
+            "avatar_url": "https://example.com/new-avatar.png"
+        }"#;
+        let input: UpdateUserInput = serde_json::from_str(json).unwrap();
+
+        assert_eq!(input.display_name, Some("New Name".to_string()));
+        assert_eq!(input.avatar_url, Some("https://example.com/new-avatar.png".to_string()));
+    }
+
+    #[test]
+    fn test_add_to_tenant_request_roundtrip() {
+        let json = r#"{
+            "tenant_id": "550e8400-e29b-41d4-a716-446655440000",
+            "role_in_tenant": "viewer"
+        }"#;
+
+        let request: AddToTenantRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.tenant_id.to_string(), "550e8400-e29b-41d4-a716-446655440000");
+        assert_eq!(request.role_in_tenant, "viewer");
+    }
+
+    #[test]
+    fn test_create_user_input_email_only() {
+        let json = r#"{"email": "simple@example.com"}"#;
+        let input: CreateUserInput = serde_json::from_str(json).unwrap();
+
+        assert_eq!(input.email, "simple@example.com");
+        assert!(input.display_name.is_none());
+        assert!(input.avatar_url.is_none());
+    }
+
+    #[test]
+    fn test_add_to_tenant_request_various_roles() {
+        let roles = vec!["admin", "member", "viewer", "guest", "superuser"];
+
+        for role in roles {
+            let json = format!(r#"{{"tenant_id": "550e8400-e29b-41d4-a716-446655440000", "role_in_tenant": "{}"}}"#, role);
+            let request: AddToTenantRequest = serde_json::from_str(&json).unwrap();
+            assert_eq!(request.role_in_tenant, role);
+        }
+    }
 }

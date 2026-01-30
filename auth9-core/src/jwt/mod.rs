@@ -303,4 +303,264 @@ mod tests {
         let result = manager.verify_tenant_access_token(&token, Some("other-service"));
         assert!(result.is_err());
     }
+
+    #[test]
+    fn test_identity_token_without_name() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+
+        let token = manager
+            .create_identity_token(user_id, "noname@example.com", None)
+            .unwrap();
+
+        let claims = manager.verify_identity_token(&token).unwrap();
+
+        assert_eq!(claims.sub, user_id.to_string());
+        assert_eq!(claims.email, "noname@example.com");
+        assert!(claims.name.is_none());
+    }
+
+    #[test]
+    fn test_refresh_token_creation() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+        let tenant_id = Uuid::new_v4();
+
+        let token = manager
+            .create_refresh_token(user_id, tenant_id, "my-service")
+            .unwrap();
+
+        // Refresh tokens should be valid JWT strings
+        assert!(!token.is_empty());
+        assert!(token.contains('.'));
+    }
+
+    #[test]
+    fn test_access_token_ttl() {
+        let manager = JwtManager::new(test_config());
+        assert_eq!(manager.access_token_ttl(), 3600);
+    }
+
+    #[test]
+    fn test_uses_rsa_false_for_hmac() {
+        let manager = JwtManager::new(test_config());
+        assert!(!manager.uses_rsa());
+    }
+
+    #[test]
+    fn test_public_key_pem_none_for_hmac() {
+        let manager = JwtManager::new(test_config());
+        assert!(manager.public_key_pem().is_none());
+    }
+
+    #[test]
+    fn test_tenant_access_token_without_audience_validation() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+        let tenant_id = Uuid::new_v4();
+
+        let token = manager
+            .create_tenant_access_token(
+                user_id,
+                "test@example.com",
+                tenant_id,
+                "any-service",
+                vec!["user".to_string()],
+                vec!["read".to_string()],
+            )
+            .unwrap();
+
+        // Should succeed without audience check
+        let claims = manager.verify_tenant_access_token(&token, None).unwrap();
+        assert_eq!(claims.aud, "any-service");
+    }
+
+    #[test]
+    fn test_tenant_access_token_empty_roles_and_permissions() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+        let tenant_id = Uuid::new_v4();
+
+        let token = manager
+            .create_tenant_access_token(
+                user_id,
+                "minimal@example.com",
+                tenant_id,
+                "service",
+                vec![],
+                vec![],
+            )
+            .unwrap();
+
+        let claims = manager.verify_tenant_access_token(&token, None).unwrap();
+        assert!(claims.roles.is_empty());
+        assert!(claims.permissions.is_empty());
+    }
+
+    #[test]
+    fn test_identity_claims_serialization() {
+        let claims = IdentityClaims {
+            sub: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            name: Some("Test User".to_string()),
+            iss: "https://auth9.test".to_string(),
+            aud: "auth9".to_string(),
+            iat: 1000000,
+            exp: 1003600,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(json.contains("\"sub\":\"user-123\""));
+        assert!(json.contains("\"email\":\"test@example.com\""));
+        assert!(json.contains("\"name\":\"Test User\""));
+    }
+
+    #[test]
+    fn test_identity_claims_serialization_without_name() {
+        let claims = IdentityClaims {
+            sub: "user-123".to_string(),
+            email: "test@example.com".to_string(),
+            name: None,
+            iss: "https://auth9.test".to_string(),
+            aud: "auth9".to_string(),
+            iat: 1000000,
+            exp: 1003600,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(!json.contains("\"name\""));
+    }
+
+    #[test]
+    fn test_tenant_access_claims_serialization() {
+        let claims = TenantAccessClaims {
+            sub: "user-456".to_string(),
+            email: "tenant@example.com".to_string(),
+            iss: "https://auth9.test".to_string(),
+            aud: "my-app".to_string(),
+            tenant_id: "tenant-789".to_string(),
+            roles: vec!["admin".to_string(), "user".to_string()],
+            permissions: vec!["read".to_string(), "write".to_string()],
+            iat: 1000000,
+            exp: 1003600,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(json.contains("\"tenant_id\":\"tenant-789\""));
+        assert!(json.contains("\"roles\":[\"admin\",\"user\"]"));
+        assert!(json.contains("\"permissions\":[\"read\",\"write\"]"));
+    }
+
+    #[test]
+    fn test_refresh_claims_serialization() {
+        let claims = RefreshClaims {
+            sub: "user-123".to_string(),
+            iss: "https://auth9.test".to_string(),
+            aud: "my-service".to_string(),
+            tenant_id: "tenant-456".to_string(),
+            iat: 1000000,
+            exp: 1604800,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(json.contains("\"sub\":\"user-123\""));
+        assert!(json.contains("\"tenant_id\":\"tenant-456\""));
+    }
+
+    #[test]
+    fn test_identity_claims_deserialization() {
+        let json = r#"{
+            "sub": "user-123",
+            "email": "test@example.com",
+            "name": "Test User",
+            "iss": "https://auth9.test",
+            "aud": "auth9",
+            "iat": 1000000,
+            "exp": 1003600
+        }"#;
+
+        let claims: IdentityClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(claims.sub, "user-123");
+        assert_eq!(claims.name, Some("Test User".to_string()));
+    }
+
+    #[test]
+    fn test_tenant_access_claims_deserialization() {
+        let json = r#"{
+            "sub": "user-456",
+            "email": "tenant@example.com",
+            "iss": "https://auth9.test",
+            "aud": "my-app",
+            "tenant_id": "tenant-789",
+            "roles": ["admin"],
+            "permissions": ["read", "write"],
+            "iat": 1000000,
+            "exp": 1003600
+        }"#;
+
+        let claims: TenantAccessClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(claims.tenant_id, "tenant-789");
+        assert_eq!(claims.roles, vec!["admin"]);
+        assert_eq!(claims.permissions, vec!["read", "write"]);
+    }
+
+    #[test]
+    fn test_jwt_manager_clone() {
+        let manager1 = JwtManager::new(test_config());
+        let manager2 = manager1.clone();
+
+        let user_id = Uuid::new_v4();
+        let token = manager1
+            .create_identity_token(user_id, "test@example.com", None)
+            .unwrap();
+
+        // Cloned manager should be able to verify the token
+        let claims = manager2.verify_identity_token(&token).unwrap();
+        assert_eq!(claims.sub, user_id.to_string());
+    }
+
+    #[test]
+    fn test_token_has_valid_structure() {
+        let manager = JwtManager::new(test_config());
+        let token = manager
+            .create_identity_token(Uuid::new_v4(), "test@example.com", None)
+            .unwrap();
+
+        // JWT should have 3 parts separated by dots
+        let parts: Vec<&str> = token.split('.').collect();
+        assert_eq!(parts.len(), 3);
+
+        // Each part should be non-empty
+        for part in parts {
+            assert!(!part.is_empty());
+        }
+    }
+
+    #[test]
+    fn test_token_issuer_validation() {
+        let manager = JwtManager::new(test_config());
+        let user_id = Uuid::new_v4();
+
+        let token = manager
+            .create_identity_token(user_id, "test@example.com", None)
+            .unwrap();
+
+        let claims = manager.verify_identity_token(&token).unwrap();
+        assert_eq!(claims.iss, "https://auth9.test");
+    }
+
+    #[test]
+    fn test_custom_ttl_config() {
+        let config = JwtConfig {
+            secret: "test-secret".to_string(),
+            issuer: "https://custom.issuer".to_string(),
+            access_token_ttl_secs: 1800,
+            refresh_token_ttl_secs: 86400,
+            private_key_pem: None,
+            public_key_pem: None,
+        };
+
+        let manager = JwtManager::new(config);
+        assert_eq!(manager.access_token_ttl(), 1800);
+    }
 }
