@@ -375,4 +375,151 @@ mod tests {
             "auth9:user_roles:550e8400-e29b-41d4-a716-446655440000:6ba7b810-9dad-11d1-80b4-00c04fd430c8"
         );
     }
+
+    #[test]
+    fn test_cache_key_constants() {
+        assert_eq!(keys::USER_ROLES, "auth9:user_roles");
+        assert_eq!(keys::USER_ROLES_SERVICE, "auth9:user_roles_service");
+        assert_eq!(keys::SERVICE_CONFIG, "auth9:service");
+        assert_eq!(keys::TENANT_CONFIG, "auth9:tenant");
+    }
+
+    #[test]
+    fn test_cache_ttl_constants() {
+        assert_eq!(ttl::USER_ROLES_SECS, 300);
+        assert_eq!(ttl::USER_ROLES_SERVICE_SECS, 300);
+        assert_eq!(ttl::SERVICE_CONFIG_SECS, 600);
+        assert_eq!(ttl::TENANT_CONFIG_SECS, 600);
+    }
+
+    #[test]
+    fn test_service_config_key_format() {
+        let service_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let key = format!("{}:{}", keys::SERVICE_CONFIG, service_id);
+        assert_eq!(key, "auth9:service:550e8400-e29b-41d4-a716-446655440000");
+    }
+
+    #[test]
+    fn test_tenant_config_key_format() {
+        let tenant_id = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+        let key = format!("{}:{}", keys::TENANT_CONFIG, tenant_id);
+        assert_eq!(key, "auth9:tenant:6ba7b810-9dad-11d1-80b4-00c04fd430c8");
+    }
+
+    #[test]
+    fn test_user_roles_service_key_format() {
+        let user_id = Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let tenant_id = Uuid::parse_str("6ba7b810-9dad-11d1-80b4-00c04fd430c8").unwrap();
+        let service_id = Uuid::parse_str("a1a2a3a4-b1b2-c1c2-d1d2-e1e2e3e4e5e6").unwrap();
+
+        let key = format!(
+            "{}:{}:{}:{}",
+            keys::USER_ROLES_SERVICE,
+            user_id,
+            tenant_id,
+            service_id
+        );
+        assert!(key.starts_with("auth9:user_roles_service:"));
+        assert!(key.contains(&user_id.to_string()));
+        assert!(key.contains(&tenant_id.to_string()));
+        assert!(key.contains(&service_id.to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_ping() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache.ping().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_get_user_roles() {
+        let cache = NoOpCacheManager::new();
+        let result = cache
+            .get_user_roles(Uuid::new_v4(), Uuid::new_v4())
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_set_user_roles() {
+        let cache = NoOpCacheManager::new();
+        let roles = UserRolesInTenant {
+            user_id: Uuid::new_v4(),
+            tenant_id: Uuid::new_v4(),
+            roles: vec![],
+            permissions: vec![],
+        };
+        assert!(cache.set_user_roles(&roles).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_get_user_roles_for_service() {
+        let cache = NoOpCacheManager::new();
+        let result = cache
+            .get_user_roles_for_service(Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4())
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_set_user_roles_for_service() {
+        let cache = NoOpCacheManager::new();
+        let roles = UserRolesInTenant {
+            user_id: Uuid::new_v4(),
+            tenant_id: Uuid::new_v4(),
+            roles: vec![],
+            permissions: vec![],
+        };
+        assert!(cache.set_user_roles_for_service(&roles, Uuid::new_v4()).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_invalidate_user_roles_with_tenant() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache
+            .invalidate_user_roles(Uuid::new_v4(), Some(Uuid::new_v4()))
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_invalidate_user_roles_without_tenant() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache
+            .invalidate_user_roles(Uuid::new_v4(), None)
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_invalidate_user_roles_for_tenant() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache
+            .invalidate_user_roles_for_tenant(Uuid::new_v4(), Uuid::new_v4())
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_invalidate_all_user_roles() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache.invalidate_all_user_roles().await.is_ok());
+    }
+
+    #[test]
+    fn test_noop_cache_manager_default() {
+        let cache = NoOpCacheManager::default();
+        // Just verify it creates without panic
+        let _ = cache;
+    }
+
+    #[test]
+    fn test_noop_cache_manager_clone() {
+        let cache1 = NoOpCacheManager::new();
+        let cache2 = cache1.clone();
+        // Just verify cloning works
+        let _ = cache2;
+    }
 }

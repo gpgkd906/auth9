@@ -1,7 +1,7 @@
 //! Service/Client API handlers
 
 use crate::api::{write_audit_log, MessageResponse, PaginatedResponse, SuccessResponse};
-use crate::domain::{CreateServiceInput, UpdateServiceInput, CreateClientInput};
+use crate::domain::{CreateServiceInput, Service, ServiceStatus, UpdateServiceInput, CreateClientInput};
 use crate::error::Result;
 use crate::keycloak::KeycloakOidcClient;
 use crate::server::AppState;
@@ -12,9 +12,110 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use std::collections::HashMap;
 use uuid::Uuid;
+
+// ============================================================================
+// Helper functions (testable without AppState)
+// ============================================================================
+
+/// Build Keycloak attributes from logout URIs
+pub fn build_logout_attributes(logout_uris: &[String]) -> Option<HashMap<String, String>> {
+    if logout_uris.is_empty() {
+        None
+    } else {
+        let mut attrs = HashMap::new();
+        attrs.insert(
+            "post.logout.redirect.uris".to_string(),
+            logout_uris.join(" "),
+        );
+        Some(attrs)
+    }
+}
+
+/// Build KeycloakOidcClient from CreateServiceInput
+pub fn build_keycloak_client_from_create_input(input: &CreateServiceInput) -> KeycloakOidcClient {
+    let logout_uris = input.logout_uris.clone().unwrap_or_default();
+    let attributes = build_logout_attributes(&logout_uris);
+
+    KeycloakOidcClient {
+        id: None,
+        client_id: input.client_id.clone(),
+        name: Some(input.name.clone()),
+        enabled: true,
+        protocol: "openid-connect".to_string(),
+        base_url: input.base_url.clone(),
+        root_url: input.base_url.clone(),
+        admin_url: input.base_url.clone(),
+        redirect_uris: input.redirect_uris.clone(),
+        web_origins: input
+            .base_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default(),
+        attributes,
+        public_client: false,
+        secret: None,
+    }
+}
+
+/// Merge update input with existing service values
+pub struct MergedServiceUpdate {
+    pub name: String,
+    pub base_url: Option<String>,
+    pub redirect_uris: Vec<String>,
+    pub logout_uris: Vec<String>,
+    pub status: ServiceStatus,
+}
+
+pub fn merge_service_update(before: &Service, input: &UpdateServiceInput) -> MergedServiceUpdate {
+    MergedServiceUpdate {
+        name: input.name.clone().unwrap_or_else(|| before.name.clone()),
+        base_url: input.base_url.clone().or(before.base_url.clone()),
+        redirect_uris: input
+            .redirect_uris
+            .clone()
+            .unwrap_or_else(|| before.redirect_uris.clone()),
+        logout_uris: input
+            .logout_uris
+            .clone()
+            .unwrap_or_else(|| before.logout_uris.clone()),
+        status: input.status.clone().unwrap_or(before.status.clone()),
+    }
+}
+
+/// Build KeycloakOidcClient for update from merged values
+pub fn build_keycloak_client_for_update(
+    client_id: &str,
+    merged: &MergedServiceUpdate,
+) -> KeycloakOidcClient {
+    let attributes = build_logout_attributes(&merged.logout_uris);
+
+    KeycloakOidcClient {
+        id: None,
+        client_id: client_id.to_string(),
+        name: Some(merged.name.clone()),
+        enabled: true,
+        protocol: "openid-connect".to_string(),
+        base_url: merged.base_url.clone(),
+        root_url: merged.base_url.clone(),
+        admin_url: merged.base_url.clone(),
+        redirect_uris: merged.redirect_uris.clone(),
+        web_origins: merged
+            .base_url
+            .as_ref()
+            .map(|url| vec![url.clone()])
+            .unwrap_or_default(),
+        attributes,
+        public_client: false,
+        secret: None,
+    }
+}
+
+// ============================================================================
+// API Handlers
+// ============================================================================
 
 #[derive(Debug, Deserialize)]
 pub struct ListServicesQuery {
@@ -63,36 +164,7 @@ pub async fn create(
     headers: HeaderMap,
     Json(input): Json<CreateServiceInput>,
 ) -> Result<impl IntoResponse> {
-    let logout_uris = input.logout_uris.clone().unwrap_or_default();
-    let attributes = if logout_uris.is_empty() {
-        None
-    } else {
-        let mut attrs = HashMap::new();
-        attrs.insert(
-            "post.logout.redirect.uris".to_string(),
-            logout_uris.join(" "),
-        );
-        Some(attrs)
-    };
-    let keycloak_client = KeycloakOidcClient {
-        id: None,
-        client_id: input.client_id.clone(),
-        name: Some(input.name.clone()),
-        enabled: true,
-        protocol: "openid-connect".to_string(),
-        base_url: input.base_url.clone(),
-        root_url: input.base_url.clone(),
-        admin_url: input.base_url.clone(),
-        redirect_uris: input.redirect_uris.clone(),
-        web_origins: input
-            .base_url
-            .as_ref()
-            .map(|url| vec![url.clone()])
-            .unwrap_or_default(),
-        attributes,
-        public_client: false,
-        secret: None,
-    };
+    let keycloak_client = build_keycloak_client_from_create_input(&input);
 
     let client_uuid = state
         .keycloak_client
@@ -133,134 +205,35 @@ pub async fn update(
     Json(input): Json<UpdateServiceInput>,
 ) -> Result<impl IntoResponse> {
     let before = state.client_service.get(id).await?;
-    let updated_name = input.name.clone().unwrap_or_else(|| before.name.clone());
-    let updated_base_url = input.base_url.clone().or(before.base_url.clone());
-    let updated_redirect_uris = input
-        .redirect_uris
-        .clone()
-        .unwrap_or_else(|| before.redirect_uris.clone());
-    let updated_logout_uris = input
-        .logout_uris
-        .clone()
-        .unwrap_or_else(|| before.logout_uris.clone());
-    let updated_status = input.status.clone().unwrap_or(before.status.clone());
-    let attributes = if updated_logout_uris.is_empty() {
-        None
-    } else {
-        let mut attrs = HashMap::new();
-        attrs.insert(
-            "post.logout.redirect.uris".to_string(),
-            updated_logout_uris.join(" "),
-        );
-        Some(attrs)
-    };
+    let merged = merge_service_update(&before, &input);
 
-    // Note: Keycloak OIDC Client update might need to know which Keycloak Client to update.
-    // We assume 'client_id' is constant for the Service, but we removed client_id from Service!
-    // Wait, Keycloak Client has a client_id.
-    // If Service moves to multiple clients, which one maps to the Keycloak Client ID?
-    // Keycloak OIDC client is a "Service" effectively.
-    // The "clients" in our DB are credentials.
-    // But Keycloak has "Credentials" tab which allows Rotated Secrets?
-    // Keycloak supports Secret Rotation if we use "Client Secret".
-    // But our `clients` table manages them too?
-    // IF we are using Keycloak as backing, we might need to be careful.
-    // In "Headless Keycloak", `services` table == Keycloak Clients.
-    // And `clients` table == credentials?
-    // If so, `Service` struct needs to know the KEYCLOAK CLIENT ID string (not UUID).
-    // I removed `client_id` from `Service` struct!
-    // This is a problem if `client_id` was the link to Keycloak.
-    // Original `Service` had `client_id` (e.g. "my-app").
-    // New `Service` removed it.
-    // BUT `CreateServiceInput` has `client_id`.
-    // If I removed `client_id` from `Service`, how do I know which Keycloak client it is?
-    // ERROR: I probably deleted `client_id` from Service too hastily. 
-    // `Service` usually represents the "Application". The "Application" has a "Client ID" in OIDC.
-    // The "Client Secret" is what we rotate.
-    // The `client_id` usually stays constant for the Application.
-    // BUT the User Requirement says: "去掉clientId栏目，改为允许单独创建client，clientId和clientSecret自动生成".
-    // "Remove clientId column, allow creating separate clients, clientId and clientSecret auto-generated."
-    // This implies `Service` is just a container, and we can have MULTIPLE valid `client_id`s for one Service?
-    // If so, Keycloak mapping becomes 1 Service -> N Keycloak Clients? Or 1 Keycloak Client with multiple secrets using some advanced feature?
-    // Or maybe we are NOT mapping 1:1 to Keycloak Clients anymore?
-    // If we have multiple `client_id`s, for OIDC, each `client_id` IS a Keycloak Client.
-    // So 1 "Service" in our DB = N "keycloak_clients" in Keycloak?
-    // If so, `create_client` should create a NEW Keycloak Client.
-    // And `Service` is just a grouping logical entity.
-    
-    // IF that is the case, `Service` struct should NOT have `client_id`.
-    // And `create` Service might just be creating the Container.
-    // And `create_client` creates the actual OIDC Client in Keycloak.
-
-    // Let's assume this design: Service = Group of Clients.
-    // But then, `base_url`, `redirect_uris` are usually per Client in OIDC.
-    // Although they can be shared.
-    
-    // In `api/service.rs`: `update` uses `before.client_id` to find Keycloak client.
-    // If `Service` doesn't have `client_id`, we can't update Keycloak client easily if we assume 1:1.
-    
-    // If we assume 1 Service = N Clients (Keycloak Clients), then `update` service (base_url etc) should update ALL associated Keycloak Clients?
-    // This seems correct for "Service" level settings.
-    
-    // SO: `Service` has no `client_id`.
-    // `Client` has `client_id`.
-    // When updating Service, we should find ALL Clients of this service, and update their Keycloak config?
-    // Or maybe Service settings are just templates?
-    
-    // Let's look at `update` again.
-    // `before.client_id` is used.
-    // I removed it. So `before.client_id` will fail to compile.
-    
-    // I need to fetch all clients for the service.
-    // And update each of them in Keycloak?
-    
-    // Or, maybe the "Service" itself has a "Primary Client ID" that stays?
-    // The user requirement "client_id and client_secret auto generated" and "remove clientId column" suggests we shouldn't have a fixed one on Service.
-    
-    // So, `input` to `update` changes Service DB fields.
-    // And we should probably iterate all clients and update Keycloak.
-    
-    // REVISED UPDATE LOGIC:
-    // 1. Update Service DB.
-    // 2. Fetch all clients of service.
-    // 3. For each client, update Keycloak Client (using client.client_id).
-    
-    // I need to inject `list_clients` here.
-    
+    // Update all associated Keycloak clients with new service settings
     let keycloak_clients = state.client_service.list_clients(id).await?;
-    
     for client in keycloak_clients {
-        let logout_uris = input.logout_uris.clone().unwrap_or_default();
-        let attributes = if logout_uris.is_empty() {
-            None
-        } else {
-            let mut attrs = std::collections::HashMap::new();
-            attrs.insert("post.logout.redirect.uris".to_string(), logout_uris.join(" "));
-            Some(attrs)
-        };
-        
-        let keycloak_client = KeycloakOidcClient {
-            id: None,
-            client_id: client.client_id.clone(),
-            name: Some(updated_name.clone()),
-            enabled: true,
-            protocol: "openid-connect".to_string(),
-            base_url: input.base_url.clone(),
-            root_url: input.base_url.clone(),
-            admin_url: input.base_url.clone(),
-            redirect_uris: input.redirect_uris.clone().unwrap_or_default(),
-            web_origins: input.base_url.as_ref().map(|u| vec![u.clone()]).unwrap_or_default(),
-            attributes,
-            public_client: false,
-            secret: None,
-        };
-        if let Ok(kc_uuid) = state.keycloak_client.get_client_uuid_by_client_id(&client.client_id).await {
-            let _ = state.keycloak_client.update_oidc_client(&kc_uuid, &keycloak_client).await;
+        let keycloak_client = build_keycloak_client_for_update(&client.client_id, &merged);
+        if let Ok(kc_uuid) = state
+            .keycloak_client
+            .get_client_uuid_by_client_id(&client.client_id)
+            .await
+        {
+            let _ = state
+                .keycloak_client
+                .update_oidc_client(&kc_uuid, &keycloak_client)
+                .await;
         }
     }
-    
+
     let service = state.client_service.update(id, input).await?;
-    // ...
+    let _ = write_audit_log(
+        &state,
+        &headers,
+        "service.update",
+        "service",
+        Some(service.id.0),
+        serde_json::to_value(&before).ok(),
+        serde_json::to_value(&service).ok(),
+    )
+    .await;
     Ok(Json(SuccessResponse::new(service)))
 }
 
@@ -585,5 +558,166 @@ mod tests {
         let json = r#"{}"#;
         let input: CreateClientInput = serde_json::from_str(json).unwrap();
         assert!(input.name.is_none());
+    }
+
+    // ========================================================================
+    // Tests for extracted helper functions
+    // ========================================================================
+
+    #[test]
+    fn test_build_logout_attributes_empty() {
+        let result = build_logout_attributes(&[]);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_build_logout_attributes_single() {
+        let uris = vec!["https://app.com/logout".to_string()];
+        let result = build_logout_attributes(&uris);
+
+        assert!(result.is_some());
+        let attrs = result.unwrap();
+        assert_eq!(
+            attrs.get("post.logout.redirect.uris"),
+            Some(&"https://app.com/logout".to_string())
+        );
+    }
+
+    #[test]
+    fn test_build_logout_attributes_multiple() {
+        let uris = vec![
+            "https://app.com/logout".to_string(),
+            "https://app.com/signout".to_string(),
+        ];
+        let result = build_logout_attributes(&uris);
+
+        assert!(result.is_some());
+        let attrs = result.unwrap();
+        let value = attrs.get("post.logout.redirect.uris").unwrap();
+        assert!(value.contains("https://app.com/logout"));
+        assert!(value.contains("https://app.com/signout"));
+        assert!(value.contains(" ")); // Space-separated
+    }
+
+    #[test]
+    fn test_build_keycloak_client_from_create_input() {
+        let input = CreateServiceInput {
+            tenant_id: Some(uuid::Uuid::new_v4()),
+            name: "Test Service".to_string(),
+            client_id: "test-client".to_string(),
+            base_url: Some("https://test.example.com".to_string()),
+            redirect_uris: vec!["https://test.example.com/callback".to_string()],
+            logout_uris: Some(vec!["https://test.example.com/logout".to_string()]),
+        };
+
+        let kc_client = build_keycloak_client_from_create_input(&input);
+
+        assert_eq!(kc_client.client_id, "test-client");
+        assert_eq!(kc_client.name, Some("Test Service".to_string()));
+        assert!(kc_client.enabled);
+        assert_eq!(kc_client.protocol, "openid-connect");
+        assert_eq!(kc_client.base_url, Some("https://test.example.com".to_string()));
+        assert_eq!(kc_client.redirect_uris.len(), 1);
+        assert!(kc_client.attributes.is_some());
+        assert!(!kc_client.public_client);
+    }
+
+    #[test]
+    fn test_build_keycloak_client_from_create_input_minimal() {
+        let input = CreateServiceInput {
+            tenant_id: Some(uuid::Uuid::new_v4()),
+            name: "Minimal".to_string(),
+            client_id: "minimal".to_string(),
+            base_url: None,
+            redirect_uris: vec![],
+            logout_uris: None,
+        };
+
+        let kc_client = build_keycloak_client_from_create_input(&input);
+
+        assert_eq!(kc_client.client_id, "minimal");
+        assert!(kc_client.base_url.is_none());
+        assert!(kc_client.redirect_uris.is_empty());
+        assert!(kc_client.web_origins.is_empty());
+        assert!(kc_client.attributes.is_none());
+    }
+
+    #[test]
+    fn test_merge_service_update_all_fields() {
+        let before = Service {
+            id: crate::domain::StringUuid::new_v4(),
+            tenant_id: None,
+            name: "Old Name".to_string(),
+            base_url: Some("https://old.example.com".to_string()),
+            redirect_uris: vec!["https://old.example.com/cb".to_string()],
+            logout_uris: vec!["https://old.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let input = UpdateServiceInput {
+            name: Some("New Name".to_string()),
+            base_url: Some("https://new.example.com".to_string()),
+            redirect_uris: Some(vec!["https://new.example.com/cb".to_string()]),
+            logout_uris: Some(vec!["https://new.example.com/logout".to_string()]),
+            status: Some(ServiceStatus::Inactive),
+        };
+
+        let merged = merge_service_update(&before, &input);
+
+        assert_eq!(merged.name, "New Name");
+        assert_eq!(merged.base_url, Some("https://new.example.com".to_string()));
+        assert_eq!(merged.redirect_uris.len(), 1);
+        assert_eq!(merged.logout_uris.len(), 1);
+        assert_eq!(merged.status, ServiceStatus::Inactive);
+    }
+
+    #[test]
+    fn test_merge_service_update_partial() {
+        let before = Service {
+            id: crate::domain::StringUuid::new_v4(),
+            tenant_id: None,
+            name: "Original".to_string(),
+            base_url: Some("https://original.com".to_string()),
+            redirect_uris: vec!["https://original.com/cb".to_string()],
+            logout_uris: vec![],
+            status: ServiceStatus::Active,
+            created_at: chrono::Utc::now(),
+            updated_at: chrono::Utc::now(),
+        };
+
+        let input = UpdateServiceInput {
+            name: Some("Updated Name".to_string()),
+            base_url: None,  // Keep original
+            redirect_uris: None,  // Keep original
+            logout_uris: None,  // Keep original
+            status: None,  // Keep original
+        };
+
+        let merged = merge_service_update(&before, &input);
+
+        assert_eq!(merged.name, "Updated Name");
+        assert_eq!(merged.base_url, Some("https://original.com".to_string()));
+        assert_eq!(merged.redirect_uris, vec!["https://original.com/cb".to_string()]);
+        assert_eq!(merged.status, ServiceStatus::Active);
+    }
+
+    #[test]
+    fn test_build_keycloak_client_for_update() {
+        let merged = MergedServiceUpdate {
+            name: "Updated Service".to_string(),
+            base_url: Some("https://updated.example.com".to_string()),
+            redirect_uris: vec!["https://updated.example.com/cb".to_string()],
+            logout_uris: vec!["https://updated.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+        };
+
+        let kc_client = build_keycloak_client_for_update("my-client-id", &merged);
+
+        assert_eq!(kc_client.client_id, "my-client-id");
+        assert_eq!(kc_client.name, Some("Updated Service".to_string()));
+        assert_eq!(kc_client.base_url, Some("https://updated.example.com".to_string()));
+        assert!(kc_client.attributes.is_some());
     }
 }

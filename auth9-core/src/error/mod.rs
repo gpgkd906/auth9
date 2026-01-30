@@ -142,4 +142,158 @@ mod tests {
         let err: AppError = anyhow::anyhow!("Something went wrong").into();
         assert!(matches!(err, AppError::Internal(_)));
     }
+
+    #[test]
+    fn test_bad_request_display() {
+        let err = AppError::BadRequest("Invalid input".to_string());
+        assert_eq!(err.to_string(), "Bad request: Invalid input");
+    }
+
+    #[test]
+    fn test_unauthorized_display() {
+        let err = AppError::Unauthorized("Token expired".to_string());
+        assert_eq!(err.to_string(), "Unauthorized: Token expired");
+    }
+
+    #[test]
+    fn test_forbidden_display() {
+        let err = AppError::Forbidden("Access denied".to_string());
+        assert_eq!(err.to_string(), "Forbidden: Access denied");
+    }
+
+    #[test]
+    fn test_conflict_display() {
+        let err = AppError::Conflict("Resource already exists".to_string());
+        assert_eq!(err.to_string(), "Conflict: Resource already exists");
+    }
+
+    #[test]
+    fn test_validation_display() {
+        let err = AppError::Validation("Email is required".to_string());
+        assert_eq!(err.to_string(), "Validation error: Email is required");
+    }
+
+    #[test]
+    fn test_keycloak_display() {
+        let err = AppError::Keycloak("Connection refused".to_string());
+        assert_eq!(err.to_string(), "Keycloak error: Connection refused");
+    }
+
+    #[test]
+    fn test_error_response_serialization() {
+        let response = ErrorResponse {
+            error: "not_found".to_string(),
+            message: "User not found".to_string(),
+            details: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"error\":\"not_found\""));
+        assert!(json.contains("\"message\":\"User not found\""));
+        assert!(!json.contains("\"details\"")); // Skip serialization when None
+    }
+
+    #[test]
+    fn test_error_response_with_details() {
+        let response = ErrorResponse {
+            error: "validation".to_string(),
+            message: "Validation failed".to_string(),
+            details: Some(serde_json::json!({"field": "email", "reason": "invalid format"})),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("\"details\""));
+        assert!(json.contains("\"field\":\"email\""));
+    }
+
+    #[test]
+    fn test_app_error_debug() {
+        let err = AppError::NotFound("Test".to_string());
+        let debug_str = format!("{:?}", err);
+        assert!(debug_str.contains("NotFound"));
+        assert!(debug_str.contains("Test"));
+    }
+
+    #[test]
+    fn test_not_found_error_variant() {
+        let err = AppError::NotFound("Resource".to_string());
+        assert!(matches!(err, AppError::NotFound(_)));
+    }
+
+    #[test]
+    fn test_bad_request_error_variant() {
+        let err = AppError::BadRequest("Invalid".to_string());
+        assert!(matches!(err, AppError::BadRequest(_)));
+    }
+
+    #[test]
+    fn test_unauthorized_error_variant() {
+        let err = AppError::Unauthorized("No token".to_string());
+        assert!(matches!(err, AppError::Unauthorized(_)));
+    }
+
+    #[test]
+    fn test_forbidden_error_variant() {
+        let err = AppError::Forbidden("Not allowed".to_string());
+        assert!(matches!(err, AppError::Forbidden(_)));
+    }
+
+    #[test]
+    fn test_conflict_error_variant() {
+        let err = AppError::Conflict("Duplicate".to_string());
+        assert!(matches!(err, AppError::Conflict(_)));
+    }
+
+    #[test]
+    fn test_validation_error_variant() {
+        let err = AppError::Validation("Invalid field".to_string());
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn test_keycloak_error_variant() {
+        let err = AppError::Keycloak("Auth failed".to_string());
+        assert!(matches!(err, AppError::Keycloak(_)));
+    }
+
+    #[test]
+    fn test_internal_error_variant() {
+        let err = AppError::Internal(anyhow::anyhow!("Internal issue"));
+        assert!(matches!(err, AppError::Internal(_)));
+    }
+
+    #[test]
+    fn test_jwt_error_conversion() {
+        // Create an invalid JWT error through verification
+        let invalid_result: std::result::Result<jsonwebtoken::TokenData<serde_json::Value>, _> =
+            jsonwebtoken::decode(
+                "invalid",
+                &jsonwebtoken::DecodingKey::from_secret(b"secret"),
+                &jsonwebtoken::Validation::default(),
+            );
+
+        if let Err(jwt_err) = invalid_result {
+            let app_err: AppError = jwt_err.into();
+            assert!(matches!(app_err, AppError::Jwt(_)));
+        }
+    }
+
+    #[test]
+    fn test_error_messages_are_descriptive() {
+        let errors = vec![
+            AppError::NotFound("User with ID 123".to_string()),
+            AppError::BadRequest("Missing required field: email".to_string()),
+            AppError::Unauthorized("Session expired".to_string()),
+            AppError::Forbidden("Admin access required".to_string()),
+            AppError::Conflict("Email already registered".to_string()),
+            AppError::Validation("Password too short".to_string()),
+            AppError::Keycloak("Failed to authenticate".to_string()),
+        ];
+
+        for err in errors {
+            let msg = err.to_string();
+            assert!(!msg.is_empty());
+            assert!(msg.len() > 10); // Should have meaningful message
+        }
+    }
 }
