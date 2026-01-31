@@ -25,20 +25,22 @@ describe("Service Detail Page", () => {
         id: "s1",
         name: "My App",
         base_url: "https://myapp.com",
-        status: "active",
+        redirect_uris: [],
+        logout_uris: [],
+        status: "active" as const,
         created_at: new Date().toISOString(),
         updated_at: new Date().toISOString(),
     };
 
     const mockClients = {
         data: [
-            { id: "c1", client_id: "client-id-1", name: "Web App", created_at: new Date().toISOString() },
+            { id: "c1", service_id: "s1", client_id: "client-id-1", name: "Web App", created_at: new Date().toISOString() },
         ],
     };
 
     it("renders service details and clients", async () => {
-        (serviceApi.get as any).mockResolvedValue({ data: mockService });
-        (serviceApi.listClients as any).mockResolvedValue(mockClients);
+        vi.mocked(serviceApi.get).mockResolvedValue({ data: mockService });
+        vi.mocked(serviceApi.listClients).mockResolvedValue(mockClients);
 
         const RemixStub = createRemixStub([
             {
@@ -58,9 +60,9 @@ describe("Service Detail Page", () => {
     });
 
     it("regenerates client secret", async () => {
-        (serviceApi.get as any).mockResolvedValue({ data: mockService });
-        (serviceApi.listClients as any).mockResolvedValue(mockClients);
-        (serviceApi.regenerateClientSecret as any).mockResolvedValue({
+        vi.mocked(serviceApi.get).mockResolvedValue({ data: mockService });
+        vi.mocked(serviceApi.listClients).mockResolvedValue(mockClients);
+        vi.mocked(serviceApi.regenerateClientSecret).mockResolvedValue({
             data: { client_id: "client-id-1", client_secret: "new-secret-123" },
         });
 

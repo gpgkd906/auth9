@@ -1,7 +1,8 @@
 import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -22,7 +23,38 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "~/components/ui/alert-dialog";
 import { systemApi, type EmailProviderConfig } from "~/services/api";
+
+// Helper to get provider display info
+function getProviderInfo(config: EmailProviderConfig): { name: string; details: string } | null {
+  switch (config.type) {
+    case "smtp":
+      return { name: "SMTP", details: `${config.host}:${config.port}` };
+    case "ses":
+      return { name: "AWS SES", details: `Region: ${config.region}` };
+    case "oracle":
+      return { name: "Oracle Email Delivery", details: config.smtp_endpoint };
+    default:
+      return null;
+  }
+}
+
+const PROVIDER_LABELS: Record<string, string> = {
+  none: "None (Email disabled)",
+  smtp: "SMTP",
+  ses: "AWS SES",
+  oracle: "Oracle Email Delivery",
+};
 
 export const meta: MetaFunction = () => {
   return [{ title: "Email Settings - Auth9" }];
@@ -31,7 +63,10 @@ export const meta: MetaFunction = () => {
 export async function loader() {
   try {
     const result = await systemApi.getEmailSettings();
-    return json({ config: result.data, error: null });
+    // The API returns { data: { category, setting_key, value, ... } }
+    // The actual config is in result.data.value
+    const config = result.data.value as EmailProviderConfig;
+    return json({ config, error: null });
   } catch (error) {
     // If no config exists yet, return none
     return json({ config: { type: "none" } as EmailProviderConfig, error: null });
@@ -127,9 +162,39 @@ export default function EmailSettingsPage() {
   const [providerType, setProviderType] = useState<string>(config.type);
   const [isTestEmailOpen, setIsTestEmailOpen] = useState(false);
   const [testEmail, setTestEmail] = useState("");
+  const [pendingProviderType, setPendingProviderType] = useState<string | null>(null);
 
   const isSubmitting = navigation.state === "submitting";
   const currentIntent = navigation.formData?.get("intent");
+
+  // Get current provider info for status display
+  const currentProviderInfo = getProviderInfo(config);
+  const isConfigured = config.type !== "none";
+
+  // Reset provider type when config changes (after successful save)
+  useEffect(() => {
+    setProviderType(config.type);
+  }, [config.type]);
+
+  const handleProviderChange = (newType: string) => {
+    // If switching from a configured provider to a different type, show warning
+    if (isConfigured && newType !== config.type && newType !== "none") {
+      setPendingProviderType(newType);
+    } else {
+      setProviderType(newType);
+    }
+  };
+
+  const confirmProviderSwitch = () => {
+    if (pendingProviderType) {
+      setProviderType(pendingProviderType);
+      setPendingProviderType(null);
+    }
+  };
+
+  const cancelProviderSwitch = () => {
+    setPendingProviderType(null);
+  };
 
   const handleTestConnection = () => {
     submit({ intent: "test_connection" }, { method: "post" });
@@ -155,6 +220,44 @@ export default function EmailSettingsPage() {
         </div>
       )}
 
+      {/* Current Status Card */}
+      <Card className={isConfigured ? "border-green-200 bg-green-50/50" : "border-yellow-200 bg-yellow-50/50"}>
+        <CardContent className="pt-6">
+          <div className="flex items-center gap-3">
+            {isConfigured ? (
+              <CheckCircledIcon className="h-5 w-5 text-green-600" />
+            ) : (
+              <CrossCircledIcon className="h-5 w-5 text-yellow-600" />
+            )}
+            <div>
+              <p className="text-sm font-medium text-gray-900">
+                {isConfigured ? "Email Provider Active" : "Email Provider Not Configured"}
+              </p>
+              {currentProviderInfo ? (
+                <p className="text-sm text-gray-600">
+                  Using <span className="font-medium">{currentProviderInfo.name}</span> ({currentProviderInfo.details})
+                </p>
+              ) : (
+                <p className="text-sm text-gray-600">
+                  System emails are disabled. Configure a provider below to enable email functionality.
+                </p>
+              )}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Info Banner */}
+      <div className="rounded-apple bg-blue-50 border border-blue-200 p-4 text-sm text-blue-700 flex items-start gap-3">
+        <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+        <div>
+          <p className="font-medium">Single Provider Configuration</p>
+          <p className="mt-1">
+            The system supports one email provider at a time. Switching to a different provider type will replace the current configuration.
+          </p>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <CardTitle>Email Provider Configuration</CardTitle>
@@ -171,7 +274,7 @@ export default function EmailSettingsPage() {
               <Select
                 name="provider_type"
                 value={providerType}
-                onValueChange={setProviderType}
+                onValueChange={handleProviderChange}
               >
                 <SelectTrigger className="w-full max-w-xs">
                   <SelectValue placeholder="Select a provider" />
@@ -183,6 +286,11 @@ export default function EmailSettingsPage() {
                   <SelectItem value="oracle">Oracle Email Delivery</SelectItem>
                 </SelectContent>
               </Select>
+              {providerType !== config.type && providerType !== "none" && config.type !== "none" && (
+                <p className="text-xs text-amber-600 mt-1">
+                  Saving will replace your current {PROVIDER_LABELS[config.type]} configuration.
+                </p>
+              )}
             </div>
 
             {/* SMTP Configuration */}
@@ -476,6 +584,27 @@ export default function EmailSettingsPage() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Provider Switch Confirmation Dialog */}
+      <AlertDialog open={pendingProviderType !== null} onOpenChange={(open) => !open && cancelProviderSwitch()}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch Email Provider?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You are about to switch from <strong>{PROVIDER_LABELS[config.type]}</strong> to{" "}
+              <strong>{pendingProviderType ? PROVIDER_LABELS[pendingProviderType] : ""}</strong>.
+              <br /><br />
+              Your current configuration will be replaced when you save. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={cancelProviderSwitch}>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmProviderSwitch}>
+              Switch Provider
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

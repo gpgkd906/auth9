@@ -4,10 +4,11 @@ use serde::{Deserialize, Serialize};
 use validator::Validate;
 
 /// Email provider configuration - supports multiple provider types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EmailProviderConfig {
     /// No email provider configured
+    #[default]
     None,
 
     /// SMTP email provider
@@ -18,12 +19,6 @@ pub enum EmailProviderConfig {
 
     /// Oracle Email Delivery (uses SMTP protocol)
     Oracle(OracleEmailConfig),
-}
-
-impl Default for EmailProviderConfig {
-    fn default() -> Self {
-        Self::None
-    }
 }
 
 impl EmailProviderConfig {

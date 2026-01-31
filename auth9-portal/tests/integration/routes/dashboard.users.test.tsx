@@ -37,6 +37,7 @@ describe("Users Page", () => {
                 email: "alice@example.com",
                 display_name: "Alice",
                 mfa_enabled: false,
+                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             },
             {
@@ -44,30 +45,31 @@ describe("Users Page", () => {
                 email: "bob@example.com",
                 display_name: "Bob",
                 mfa_enabled: true,
+                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             },
         ],
-        pagination: { total: 2, page: 1, total_pages: 1 },
+        pagination: { total: 2, page: 1, per_page: 20, total_pages: 1 },
     };
 
     const mockTenants = {
         data: [
-            { id: "t1", name: "Tenant 1", slug: "t1" },
+            { id: "t1", name: "Tenant 1", slug: "t1", settings: {}, status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
-        pagination: { total: 1, page: 1, total_pages: 1 },
+        pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
     };
 
     const mockServices = {
         data: [
-            { id: "s1", name: "Service 1" },
+            { id: "s1", name: "Service 1", redirect_uris: [], logout_uris: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
-        pagination: { total: 1, page: 1, total_pages: 1 },
+        pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
     };
 
     it("renders user list from loader", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -86,9 +88,9 @@ describe("Users Page", () => {
     });
 
     it("displays create user dialog", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -110,9 +112,9 @@ describe("Users Page", () => {
     });
 
     it("shows MFA status for each user", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -132,12 +134,12 @@ describe("Users Page", () => {
     });
 
     it("displays empty state when no users", async () => {
-        (userApi.list as any).mockResolvedValue({
+        vi.mocked(userApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -155,9 +157,9 @@ describe("Users Page", () => {
     });
 
     it("displays user directory card title", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -176,9 +178,9 @@ describe("Users Page", () => {
     });
 
     it("displays user table headers", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -199,9 +201,9 @@ describe("Users Page", () => {
     });
 
     it("opens edit user dialog when clicking edit", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -233,10 +235,10 @@ describe("Users Page", () => {
     });
 
     it("opens manage tenants dialog when clicking manage tenants", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (userApi.getTenants as any).mockResolvedValue({ data: [] });
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(userApi.getTenants).mockResolvedValue({ data: [] });
 
         const RemixStub = createRemixStub([
             {
@@ -270,15 +272,17 @@ describe("Users Page", () => {
     it("shows joined tenants list in manage tenants dialog", async () => {
         const userTenantsData = [
             {
+                id: "ut1",
                 tenant_id: "t1",
                 role_in_tenant: "admin",
-                tenant: { id: "t1", name: "Tenant 1", logo_url: null },
+                joined_at: new Date().toISOString(),
+                tenant: { id: "t1", name: "Tenant 1", slug: "t1", logo_url: undefined, settings: {}, status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
             },
         ];
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (userApi.getTenants as any).mockResolvedValue({ data: userTenantsData });
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
 
         const RemixStub = createRemixStub([
             {
@@ -304,10 +308,10 @@ describe("Users Page", () => {
     });
 
     it("shows empty state when user has no tenants", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (userApi.getTenants as any).mockResolvedValue({ data: [] });
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(userApi.getTenants).mockResolvedValue({ data: [] });
 
         const RemixStub = createRemixStub([
             {
@@ -332,9 +336,9 @@ describe("Users Page", () => {
     });
 
     it("displays page header and description", async () => {
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -355,16 +359,18 @@ describe("Users Page", () => {
     it("opens manage roles dialog and displays service selector", async () => {
         const userTenantsData = [
             {
+                id: "ut1",
                 tenant_id: "t1",
                 role_in_tenant: "admin",
-                tenant: { id: "t1", name: "Tenant 1", logo_url: null },
+                joined_at: new Date().toISOString(),
+                tenant: { id: "t1", name: "Tenant 1", slug: "t1", logo_url: undefined, settings: {}, status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
             },
         ];
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (userApi.getTenants as any).mockResolvedValue({ data: userTenantsData });
-        (rbacApi.getUserAssignedRoles as any).mockResolvedValue({ data: [] });
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
+        vi.mocked(rbacApi.getUserAssignedRoles).mockResolvedValue({ data: [] });
 
         const RemixStub = createRemixStub([
             {
@@ -398,16 +404,18 @@ describe("Users Page", () => {
     it("disables save roles button when no service is selected", async () => {
         const userTenantsData = [
             {
+                id: "ut1",
                 tenant_id: "t1",
                 role_in_tenant: "admin",
-                tenant: { id: "t1", name: "Tenant 1", logo_url: null },
+                joined_at: new Date().toISOString(),
+                tenant: { id: "t1", name: "Tenant 1", slug: "t1", logo_url: undefined, settings: {}, status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
             },
         ];
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (userApi.getTenants as any).mockResolvedValue({ data: userTenantsData });
-        (rbacApi.getUserAssignedRoles as any).mockResolvedValue({ data: [] });
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
+        vi.mocked(rbacApi.getUserAssignedRoles).mockResolvedValue({ data: [] });
 
         const RemixStub = createRemixStub([
             {
@@ -439,19 +447,21 @@ describe("Users Page", () => {
     it("fetches user assigned roles when opening roles dialog", async () => {
         const userTenantsData = [
             {
+                id: "ut1",
                 tenant_id: "t1",
                 role_in_tenant: "admin",
-                tenant: { id: "t1", name: "Tenant 1", logo_url: null },
+                joined_at: new Date().toISOString(),
+                tenant: { id: "t1", name: "Tenant 1", slug: "t1", logo_url: undefined, settings: {}, status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
             },
         ];
         const assignedRoles = [
-            { id: "r1", name: "Admin", description: "Admin role" },
+            { id: "r1", service_id: "s1", name: "Admin", description: "Admin role", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ];
-        (userApi.list as any).mockResolvedValue(mockUsers);
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (userApi.getTenants as any).mockResolvedValue({ data: userTenantsData });
-        (rbacApi.getUserAssignedRoles as any).mockResolvedValue({ data: assignedRoles });
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
+        vi.mocked(rbacApi.getUserAssignedRoles).mockResolvedValue({ data: assignedRoles });
 
         const RemixStub = createRemixStub([
             {

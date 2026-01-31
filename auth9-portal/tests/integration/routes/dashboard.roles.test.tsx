@@ -22,14 +22,14 @@ vi.mock("~/services/api", () => ({
 describe("Roles Page", () => {
     const mockServices = {
         data: [
-            { id: "s1", name: "Service A" },
+            { id: "s1", name: "Service A", redirect_uris: [], logout_uris: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
-        pagination: { total: 1, page: 1, total_pages: 1 },
+        pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
     };
 
     const mockRoles = {
         data: [
-            { id: "r1", name: "Admin", description: "Full access" },
+            { id: "r1", service_id: "s1", name: "Admin", description: "Full access", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
     };
 
@@ -38,9 +38,9 @@ describe("Roles Page", () => {
     };
 
     it("renders roles grouped by service", async () => {
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (rbacApi.listRoles as any).mockResolvedValue(mockRoles);
-        (rbacApi.listPermissions as any).mockResolvedValue(mockPermissions);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(rbacApi.listRoles).mockResolvedValue(mockRoles);
+        vi.mocked(rbacApi.listPermissions).mockResolvedValue(mockPermissions);
 
         const RemixStub = createRemixStub([
             {
@@ -60,9 +60,9 @@ describe("Roles Page", () => {
     });
 
     it("opens create role dialog", async () => {
-        (serviceApi.list as any).mockResolvedValue(mockServices);
-        (rbacApi.listRoles as any).mockResolvedValue(mockRoles);
-        (rbacApi.listPermissions as any).mockResolvedValue(mockPermissions);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+        vi.mocked(rbacApi.listRoles).mockResolvedValue(mockRoles);
+        vi.mocked(rbacApi.listPermissions).mockResolvedValue(mockPermissions);
 
         const RemixStub = createRemixStub([
             {

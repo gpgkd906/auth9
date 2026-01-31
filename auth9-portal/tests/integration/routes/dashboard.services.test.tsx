@@ -17,13 +17,13 @@ vi.mock("~/services/api", () => ({
 describe("Services Page", () => {
     const mockServices = {
         data: [
-            { id: "s1", name: "My App", status: "active", updated_at: new Date().toISOString() },
+            { id: "s1", name: "My App", redirect_uris: [], logout_uris: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
         ],
-        pagination: { total: 1, page: 1, total_pages: 1 },
+        pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
     };
 
     it("renders service registry list", async () => {
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -42,7 +42,7 @@ describe("Services Page", () => {
     });
 
     it("displays register service dialog", async () => {
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -63,9 +63,9 @@ describe("Services Page", () => {
     });
 
     it("displays empty state when no services", async () => {
-        (serviceApi.list as any).mockResolvedValue({
+        vi.mocked(serviceApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
 
         const RemixStub = createRemixStub([
@@ -84,9 +84,9 @@ describe("Services Page", () => {
     });
 
     it("displays pagination information", async () => {
-        (serviceApi.list as any).mockResolvedValue({
-            data: [{ id: "s1", name: "Service 1", status: "active", updated_at: new Date().toISOString() }],
-            pagination: { total: 25, page: 2, total_pages: 3 },
+        vi.mocked(serviceApi.list).mockResolvedValue({
+            data: [{ id: "s1", name: "Service 1", redirect_uris: [], logout_uris: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() }],
+            pagination: { total: 25, page: 2, per_page: 20, total_pages: 3 },
         });
 
         const RemixStub = createRemixStub([
@@ -106,7 +106,7 @@ describe("Services Page", () => {
     });
 
     it("displays page header and description", async () => {
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -125,7 +125,7 @@ describe("Services Page", () => {
     });
 
     it("displays table headers", async () => {
-        (serviceApi.list as any).mockResolvedValue(mockServices);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RemixStub = createRemixStub([
             {
@@ -146,9 +146,9 @@ describe("Services Page", () => {
 
     it("displays service row with correct data", async () => {
         const testDate = new Date("2026-01-15T10:30:00Z");
-        (serviceApi.list as any).mockResolvedValue({
-            data: [{ id: "s1", name: "Test App", status: "inactive", updated_at: testDate.toISOString() }],
-            pagination: { total: 1, page: 1, total_pages: 1 },
+        vi.mocked(serviceApi.list).mockResolvedValue({
+            data: [{ id: "s1", name: "Test App", redirect_uris: [], logout_uris: [], status: "inactive" as const, created_at: testDate.toISOString(), updated_at: testDate.toISOString() }],
+            pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
         });
 
         const RemixStub = createRemixStub([
