@@ -1,12 +1,12 @@
 //! Service/Client API handlers
 
-use crate::api::{write_audit_log, MessageResponse, PaginatedResponse, SuccessResponse};
+use crate::api::{write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse};
 use crate::domain::{
     CreateClientInput, CreateServiceInput, Service, ServiceStatus, UpdateServiceInput,
 };
 use crate::error::Result;
 use crate::keycloak::KeycloakOidcClient;
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -137,12 +137,12 @@ fn default_per_page() -> i64 {
 }
 
 /// List services
-pub async fn list(
-    State(state): State<AppState>,
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
     Query(query): Query<ListServicesQuery>,
 ) -> Result<impl IntoResponse> {
     let (services, total) = state
-        .client_service
+        .client_service()
         .list(query.tenant_id, query.page, query.per_page)
         .await?;
 
@@ -155,35 +155,38 @@ pub async fn list(
 }
 
 /// Get service by ID
-pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
-    let service = state.client_service.get(id).await?;
+pub async fn get<S: HasServices>(
+    State(state): State<S>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let service = state.client_service().get(id).await?;
     Ok(Json(SuccessResponse::new(service)))
 }
 
 /// Create service
-pub async fn create(
-    State(state): State<AppState>,
+pub async fn create<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<CreateServiceInput>,
 ) -> Result<impl IntoResponse> {
     let keycloak_client = build_keycloak_client_from_create_input(&input);
 
     let client_uuid = state
-        .keycloak_client
+        .keycloak_client()
         .create_oidc_client(&keycloak_client)
         .await?;
     let client_secret = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_secret(&client_uuid)
         .await?;
 
     // create_with_secret now creates the service AND an initial client
     let service_with_client = state
-        .client_service
+        .client_service()
         .create_with_secret(input, client_secret)
         .await?;
 
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "service.create",
@@ -200,33 +203,33 @@ pub async fn create(
 }
 
 /// Update service
-pub async fn update(
-    State(state): State<AppState>,
+pub async fn update<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateServiceInput>,
 ) -> Result<impl IntoResponse> {
-    let before = state.client_service.get(id).await?;
+    let before = state.client_service().get(id).await?;
     let merged = merge_service_update(&before, &input);
 
     // Update all associated Keycloak clients with new service settings
-    let keycloak_clients = state.client_service.list_clients(id).await?;
+    let keycloak_clients = state.client_service().list_clients(id).await?;
     for client in keycloak_clients {
         let keycloak_client = build_keycloak_client_for_update(&client.client_id, &merged);
         if let Ok(kc_uuid) = state
-            .keycloak_client
+            .keycloak_client()
             .get_client_uuid_by_client_id(&client.client_id)
             .await
         {
             let _ = state
-                .keycloak_client
+                .keycloak_client()
                 .update_oidc_client(&kc_uuid, &keycloak_client)
                 .await;
         }
     }
 
-    let service = state.client_service.update(id, input).await?;
-    let _ = write_audit_log(
+    let service = state.client_service().update(id, input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "service.update",
@@ -240,22 +243,22 @@ pub async fn update(
 }
 
 /// List clients of a service
-pub async fn list_clients(
-    State(state): State<AppState>,
+pub async fn list_clients<S: HasServices>(
+    State(state): State<S>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    let clients = state.client_service.list_clients(id).await?;
+    let clients = state.client_service().list_clients(id).await?;
     Ok(Json(SuccessResponse::new(clients)))
 }
 
 /// Create a new client for a service
-pub async fn create_client(
-    State(state): State<AppState>,
+pub async fn create_client<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<CreateClientInput>,
 ) -> Result<impl IntoResponse> {
-    let service = state.client_service.get(id).await?;
+    let service = state.client_service().get(id).await?;
 
     // Create new Keycloak client
     // We need to generate a client_id logic or let Keycloak do it?
@@ -303,17 +306,17 @@ pub async fn create_client(
     };
 
     let kc_uuid = state
-        .keycloak_client
+        .keycloak_client()
         .create_oidc_client(&keycloak_client)
         .await?;
-    let client_secret = state.keycloak_client.get_client_secret(&kc_uuid).await?;
+    let client_secret = state.keycloak_client().get_client_secret(&kc_uuid).await?;
 
     let client_with_secret = state
-        .client_service
+        .client_service()
         .create_client_with_secret(id, new_client_id, client_secret, input.name.clone())
         .await?;
 
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "service.client.create",
@@ -328,29 +331,29 @@ pub async fn create_client(
 }
 
 /// Delete a client from a service
-pub async fn delete_client(
-    State(state): State<AppState>,
+pub async fn delete_client<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path((service_id, client_id)): Path<(Uuid, String)>,
 ) -> Result<impl IntoResponse> {
     // Check if client exists and belongs to service
-    let _ = state.client_service.get(service_id).await?;
+    let _ = state.client_service().get(service_id).await?;
 
     // Also delete from Keycloak
     if let Ok(kc_uuid) = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_uuid_by_client_id(&client_id)
         .await
     {
-        let _ = state.keycloak_client.delete_oidc_client(&kc_uuid).await;
+        let _ = state.keycloak_client().delete_oidc_client(&kc_uuid).await;
     }
 
     state
-        .client_service
+        .client_service()
         .delete_client(service_id, &client_id)
         .await?;
 
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "service.client.delete",
@@ -365,8 +368,8 @@ pub async fn delete_client(
 }
 
 /// Delete service
-pub async fn delete(
-    State(state): State<AppState>,
+pub async fn delete<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
@@ -374,19 +377,19 @@ pub async fn delete(
     // If we assume a name prefix or just delete clients in DB...
     // The clients in DB have `client_id` which maps to Keycloak.
     // Ideally we should iterate clients and delete them from Keycloak first.
-    let clients = state.client_service.list_clients(id).await?;
+    let clients = state.client_service().list_clients(id).await?;
     for client in clients {
         if let Ok(kc_uuid) = state
-            .keycloak_client
+            .keycloak_client()
             .get_client_uuid_by_client_id(&client.client_id)
             .await
         {
-            let _ = state.keycloak_client.delete_oidc_client(&kc_uuid).await;
+            let _ = state.keycloak_client().delete_oidc_client(&kc_uuid).await;
         }
     }
 
-    state.client_service.delete(id).await?;
-    let _ = write_audit_log(
+    state.client_service().delete(id).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "service.delete",
@@ -400,29 +403,29 @@ pub async fn delete(
 }
 
 /// Regenerate client secret
-pub async fn regenerate_client_secret(
-    State(state): State<AppState>,
+pub async fn regenerate_client_secret<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path((service_id, client_id)): Path<(Uuid, String)>,
 ) -> Result<impl IntoResponse> {
     // Verify service exists
-    let _ = state.client_service.get(service_id).await?;
+    let _ = state.client_service().get(service_id).await?;
 
     // Regenerate in Keycloak first (if it exists there)
     let new_secret = if let Ok(kc_uuid) = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_uuid_by_client_id(&client_id)
         .await
     {
         // Use Keycloak's regenerated secret
         state
-            .keycloak_client
+            .keycloak_client()
             .regenerate_client_secret(&kc_uuid)
             .await?
     } else {
         // Fallback: generate our own secret using ClientService
         state
-            .client_service
+            .client_service()
             .regenerate_client_secret(&client_id)
             .await?
     };
@@ -431,7 +434,7 @@ pub async fn regenerate_client_secret(
     // ClientService.regenerate_client_secret already updates the hash if used
     // But if Keycloak generated, we need manual DB update
     if state
-        .keycloak_client
+        .keycloak_client()
         .get_client_uuid_by_client_id(&client_id)
         .await
         .is_ok()
@@ -451,12 +454,12 @@ pub async fn regenerate_client_secret(
 
         // Use service method to update (we need to add this method)
         state
-            .client_service
+            .client_service()
             .update_client_secret_hash(&client_id, &secret_hash)
             .await?;
     }
 
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "service.client.regenerate_secret",

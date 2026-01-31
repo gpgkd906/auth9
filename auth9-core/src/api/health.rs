@@ -1,6 +1,6 @@
 //! Health check endpoints
 
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
@@ -19,13 +19,8 @@ pub async fn health() -> impl IntoResponse {
 }
 
 /// Readiness check endpoint
-pub async fn ready(State(state): State<AppState>) -> impl IntoResponse {
-    let db_ok = sqlx::query("SELECT 1")
-        .execute(&state.db_pool)
-        .await
-        .is_ok();
-
-    let cache_ok = state.cache_manager.ping().await.is_ok();
+pub async fn ready<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
+    let (db_ok, cache_ok) = state.check_ready().await;
 
     if db_ok && cache_ok {
         (StatusCode::OK, "ready")

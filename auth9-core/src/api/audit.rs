@@ -4,7 +4,7 @@ use crate::api::PaginatedResponse;
 use crate::error::Result;
 use crate::repository::audit::AuditLogQuery;
 use crate::repository::AuditRepository;
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{
     extract::{Query, State},
     response::IntoResponse,
@@ -12,12 +12,12 @@ use axum::{
 };
 
 /// List audit logs
-pub async fn list(
-    State(state): State<AppState>,
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
     Query(query): Query<AuditLogQuery>,
 ) -> Result<impl IntoResponse> {
-    let logs = state.audit_repo.find(&query).await?;
-    let total = state.audit_repo.count(&query).await?;
+    let logs = state.audit_repo().find(&query).await?;
+    let total = state.audit_repo().count(&query).await?;
 
     let page = calculate_page(query.offset, query.limit);
     let per_page = query.limit.unwrap_or(50);

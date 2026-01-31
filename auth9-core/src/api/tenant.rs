@@ -1,11 +1,11 @@
 //! Tenant API handlers
 
 use crate::api::{
-    write_audit_log, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
+    write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::Result;
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -16,12 +16,12 @@ use axum::{
 use uuid::Uuid;
 
 /// List tenants
-pub async fn list(
-    State(state): State<AppState>,
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
     let (tenants, total) = state
-        .tenant_service
+        .tenant_service()
         .list(pagination.page, pagination.per_page)
         .await?;
 
@@ -34,19 +34,22 @@ pub async fn list(
 }
 
 /// Get tenant by ID
-pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
-    let tenant = state.tenant_service.get(StringUuid::from(id)).await?;
+pub async fn get<S: HasServices>(
+    State(state): State<S>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let tenant = state.tenant_service().get(StringUuid::from(id)).await?;
     Ok(Json(SuccessResponse::new(tenant)))
 }
 
 /// Create tenant
-pub async fn create(
-    State(state): State<AppState>,
+pub async fn create<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<CreateTenantInput>,
 ) -> Result<impl IntoResponse> {
-    let tenant = state.tenant_service.create(input).await?;
-    let _ = write_audit_log(
+    let tenant = state.tenant_service().create(input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "tenant.create",
@@ -60,16 +63,16 @@ pub async fn create(
 }
 
 /// Update tenant
-pub async fn update(
-    State(state): State<AppState>,
+pub async fn update<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.tenant_service.get(id).await?;
-    let tenant = state.tenant_service.update(id, input).await?;
-    let _ = write_audit_log(
+    let before = state.tenant_service().get(id).await?;
+    let tenant = state.tenant_service().update(id, input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "tenant.update",
@@ -83,15 +86,15 @@ pub async fn update(
 }
 
 /// Delete tenant
-pub async fn delete(
-    State(state): State<AppState>,
+pub async fn delete<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.tenant_service.get(id).await?;
-    let tenant = state.tenant_service.disable(id).await?;
-    let _ = write_audit_log(
+    let before = state.tenant_service().get(id).await?;
+    let tenant = state.tenant_service().disable(id).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "tenant.disable",
