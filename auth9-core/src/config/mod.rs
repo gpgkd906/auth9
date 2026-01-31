@@ -93,7 +93,7 @@ impl Config {
             jwt: JwtConfig {
                 secret: env::var("JWT_SECRET").context("JWT_SECRET is required")?,
                 issuer: env::var("JWT_ISSUER")
-                    .unwrap_or_else(|_| "https://auth9.example.com".to_string()),
+                    .unwrap_or_else(|_| "https://auth9.gitski.work".to_string()),
                 access_token_ttl_secs: env::var("JWT_ACCESS_TOKEN_TTL_SECS")
                     .unwrap_or_else(|_| "3600".to_string())
                     .parse()

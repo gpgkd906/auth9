@@ -20,7 +20,7 @@ data:
   DATABASE_MIN_CONNECTIONS: "2"
   
   # JWT configuration
-  JWT_ISSUER: "https://auth9.example.com"
+  JWT_ISSUER: "https://auth9.gitski.work"
   JWT_ACCESS_TOKEN_TTL_SECS: "3600"
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"
   
@@ -30,6 +30,6 @@ data:
   
   # Portal configuration
   AUTH9_CORE_URL: "http://auth9-core:8080"
-  AUTH9_CORE_PUBLIC_URL: "https://api.auth9.example.com"
-  AUTH9_PORTAL_URL: "https://auth9.example.com"
+  AUTH9_CORE_PUBLIC_URL: "https://api.auth9.gitski.work"
+  AUTH9_PORTAL_URL: "https://auth9.gitski.work"
   NODE_ENV: "production"
