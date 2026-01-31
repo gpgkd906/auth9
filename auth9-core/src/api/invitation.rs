@@ -291,4 +291,155 @@ mod tests {
         let request: AcceptInvitationRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(request.token.len(), 256);
     }
+
+    #[test]
+    fn test_accept_invitation_request_special_chars() {
+        let json = r#"{"token": "abc-123_XYZ.token"}"#;
+        let request: AcceptInvitationRequest = serde_json::from_str(&json).unwrap();
+        assert_eq!(request.token, "abc-123_XYZ.token");
+    }
+
+    #[test]
+    fn test_create_invitation_input_empty_roles() {
+        let json = r#"{
+            "email": "test@example.com",
+            "role_ids": []
+        }"#;
+
+        let input: CreateInvitationInput = serde_json::from_str(json).unwrap();
+        assert!(input.role_ids.is_empty());
+    }
+
+    #[test]
+    fn test_create_invitation_input_with_custom_expiry() {
+        let json = r#"{
+            "email": "user@test.com",
+            "role_ids": ["00000000-0000-0000-0000-000000000001"],
+            "expires_in_hours": 24
+        }"#;
+
+        let input: CreateInvitationInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.expires_in_hours, Some(24));
+    }
+
+    #[test]
+    fn test_create_invitation_input_long_expiry() {
+        let json = r#"{
+            "email": "user@test.com",
+            "role_ids": ["00000000-0000-0000-0000-000000000001"],
+            "expires_in_hours": 720
+        }"#;
+
+        let input: CreateInvitationInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.expires_in_hours, Some(720)); // 30 days
+    }
+
+    #[test]
+    fn test_invitation_response_with_multiple_roles() {
+        let response = InvitationResponse {
+            id: StringUuid::new_v4(),
+            tenant_id: StringUuid::new_v4(),
+            email: "multi-role@example.com".to_string(),
+            role_ids: vec![StringUuid::new_v4(), StringUuid::new_v4(), StringUuid::new_v4()],
+            invited_by: StringUuid::new_v4(),
+            status: InvitationStatus::Pending,
+            expires_at: chrono::Utc::now() + chrono::Duration::hours(72),
+            accepted_at: None,
+            created_at: chrono::Utc::now(),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("multi-role@example.com"));
+        assert_eq!(response.role_ids.len(), 3);
+    }
+
+    #[test]
+    fn test_invitation_status_serialization() {
+        // All status variants
+        let statuses = vec![
+            InvitationStatus::Pending,
+            InvitationStatus::Accepted,
+            InvitationStatus::Expired,
+            InvitationStatus::Revoked,
+        ];
+
+        let expected = vec!["pending", "accepted", "expired", "revoked"];
+
+        for (status, expected_str) in statuses.into_iter().zip(expected.into_iter()) {
+            let json = serde_json::to_string(&status).unwrap();
+            assert!(json.contains(expected_str));
+        }
+    }
+
+    #[test]
+    fn test_create_invitation_input_email_validation() {
+        // Valid email formats
+        let valid_emails = vec![
+            "user@example.com",
+            "user.name@example.com",
+            "user+tag@example.com",
+            "user@subdomain.example.com",
+        ];
+
+        for email in valid_emails {
+            let json = format!(
+                r#"{{"email": "{}", "role_ids": ["00000000-0000-0000-0000-000000000001"]}}"#,
+                email
+            );
+            let input: CreateInvitationInput = serde_json::from_str(&json).unwrap();
+            assert_eq!(input.email, email);
+        }
+    }
+
+    #[test]
+    fn test_invitation_response_timestamps() {
+        let now = chrono::Utc::now();
+        let expires = now + chrono::Duration::hours(72);
+        let accepted = now + chrono::Duration::hours(1);
+
+        let response = InvitationResponse {
+            id: StringUuid::new_v4(),
+            tenant_id: StringUuid::new_v4(),
+            email: "test@example.com".to_string(),
+            role_ids: vec![],
+            invited_by: StringUuid::new_v4(),
+            status: InvitationStatus::Accepted,
+            expires_at: expires,
+            accepted_at: Some(accepted),
+            created_at: now,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        // Verify all timestamp fields are present
+        assert!(json.contains("expires_at"));
+        assert!(json.contains("accepted_at"));
+        assert!(json.contains("created_at"));
+    }
+
+    #[test]
+    fn test_accept_invitation_request_unicode_token() {
+        // Tokens should typically be ASCII, but test handling
+        let json = r#"{"token": "token-with-émojis-🎉"}"#;
+        let request: AcceptInvitationRequest = serde_json::from_str(json).unwrap();
+        assert!(request.token.contains("🎉"));
+    }
+
+    #[test]
+    fn test_invitation_response_empty_roles() {
+        let response = InvitationResponse {
+            id: StringUuid::new_v4(),
+            tenant_id: StringUuid::new_v4(),
+            email: "no-roles@example.com".to_string(),
+            role_ids: vec![],
+            invited_by: StringUuid::new_v4(),
+            status: InvitationStatus::Pending,
+            expires_at: chrono::Utc::now() + chrono::Duration::hours(72),
+            accepted_at: None,
+            created_at: chrono::Utc::now(),
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("role_ids"));
+        assert!(json.contains("[]")); // Empty array
+    }
 }

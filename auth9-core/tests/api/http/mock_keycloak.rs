@@ -42,6 +42,77 @@ impl MockKeycloakServer {
     }
 
     // ========================================================================
+    // OIDC Endpoints for Auth Flow Testing
+    // ========================================================================
+
+    /// Mock successful token exchange (authorization code → tokens)
+    pub async fn mock_token_exchange_success(
+        &self,
+        access_token: &str,
+        refresh_token: Option<&str>,
+        id_token: Option<&str>,
+    ) {
+        let mut response = json!({
+            "access_token": access_token,
+            "token_type": "Bearer",
+            "expires_in": 300
+        });
+        if let Some(rt) = refresh_token {
+            response["refresh_token"] = json!(rt);
+        }
+        if let Some(it) = id_token {
+            response["id_token"] = json!(it);
+        }
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock failed token exchange
+    pub async fn mock_token_exchange_failure(&self, error: &str, error_description: &str) {
+        Mock::given(method("POST"))
+            .and(path("/realms/test/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+                "error": error,
+                "error_description": error_description
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock userinfo endpoint
+    pub async fn mock_userinfo_endpoint(&self, sub: &str, email: &str, name: Option<&str>) {
+        let mut response = json!({
+            "sub": sub,
+            "email": email
+        });
+        if let Some(n) = name {
+            response["name"] = json!(n);
+        }
+
+        Mock::given(method("GET"))
+            .and(path("/realms/test/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(response))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock userinfo endpoint failure (invalid token)
+    pub async fn mock_userinfo_endpoint_failure(&self) {
+        Mock::given(method("GET"))
+            .and(path("/realms/test/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+                "error": "invalid_token",
+                "error_description": "Token is invalid"
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
+    // ========================================================================
     // User Endpoints
     // ========================================================================
 

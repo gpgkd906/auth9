@@ -2,6 +2,7 @@
 
 pub mod common;
 pub mod email;
+pub mod email_template;
 pub mod invitation;
 pub mod rbac;
 pub mod service;
@@ -11,6 +12,7 @@ pub mod user;
 
 pub use common::*;
 pub use email::*;
+pub use email_template::*;
 pub use invitation::*;
 pub use rbac::*;
 pub use service::*;

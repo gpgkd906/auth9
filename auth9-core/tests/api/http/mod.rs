@@ -8,25 +8,28 @@
 //! - Uses production `build_router()` with `TestAppState` for actual handler coverage
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
+pub mod auth_http_test;
+pub mod email_template_http_test;
 pub mod mock_keycloak;
 pub mod role_http_test;
 pub mod service_http_test;
+pub mod system_settings_http_test;
 pub mod tenant_http_test;
 pub mod user_http_test;
 
 use crate::api::{
     create_test_jwt_manager, TestAuditRepository, TestRbacRepository, TestServiceRepository,
-    TestTenantRepository, TestUserRepository,
+    TestSystemSettingsRepository, TestTenantRepository, TestUserRepository,
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{Config, DatabaseConfig, JwtConfig, KeycloakConfig, RedisConfig};
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::repository::audit::AuditRepository;
-use auth9_core::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
+use auth9_core::repository::{RbacRepository, ServiceRepository, SystemSettingsRepository, TenantRepository, UserRepository};
 use auth9_core::server::build_router;
-use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
-use auth9_core::state::HasServices;
+use auth9_core::service::{ClientService, EmailService, EmailTemplateService, RbacService, SystemSettingsService, TenantService, UserService};
+use auth9_core::state::{HasEmailTemplates, HasServices, HasSystemSettings};
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
@@ -87,6 +90,9 @@ pub struct TestAppState {
     pub user_service: Arc<UserService<TestUserRepository>>,
     pub client_service: Arc<ClientService<TestServiceRepository>>,
     pub rbac_service: Arc<RbacService<TestRbacRepository>>,
+    pub system_settings_service: Arc<SystemSettingsService<TestSystemSettingsRepository>>,
+    pub email_service: Arc<EmailService<TestSystemSettingsRepository>>,
+    pub email_template_service: Arc<EmailTemplateService<TestSystemSettingsRepository>>,
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
     pub keycloak_client: KeycloakClient,
@@ -96,6 +102,7 @@ pub struct TestAppState {
     pub user_repo: Arc<TestUserRepository>,
     pub service_repo: Arc<TestServiceRepository>,
     pub rbac_repo: Arc<TestRbacRepository>,
+    pub system_settings_repo: Arc<TestSystemSettingsRepository>,
 }
 
 impl TestAppState {
@@ -107,11 +114,15 @@ impl TestAppState {
         let service_repo = Arc::new(TestServiceRepository::new());
         let rbac_repo = Arc::new(TestRbacRepository::new());
         let audit_repo = Arc::new(TestAuditRepository::new());
+        let system_settings_repo = Arc::new(TestSystemSettingsRepository::new());
 
         let tenant_service = Arc::new(TenantService::new(tenant_repo.clone(), None));
         let user_service = Arc::new(UserService::new(user_repo.clone()));
         let client_service = Arc::new(ClientService::new(service_repo.clone(), None));
         let rbac_service = Arc::new(RbacService::new(rbac_repo.clone(), None));
+        let system_settings_service = Arc::new(SystemSettingsService::new(system_settings_repo.clone(), None));
+        let email_service = Arc::new(EmailService::new(system_settings_service.clone()));
+        let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
 
         let jwt_manager = create_test_jwt_manager();
         let keycloak_client = KeycloakClient::new(config.keycloak.clone());
@@ -123,6 +134,9 @@ impl TestAppState {
             user_service,
             client_service,
             rbac_service,
+            system_settings_service,
+            email_service,
+            email_template_service,
             audit_repo,
             jwt_manager,
             keycloak_client,
@@ -131,6 +145,7 @@ impl TestAppState {
             user_repo,
             service_repo,
             rbac_repo,
+            system_settings_repo,
         }
     }
 
@@ -187,6 +202,26 @@ impl HasServices for TestAppState {
     }
 }
 
+/// Implement HasSystemSettings trait for TestAppState
+impl HasSystemSettings for TestAppState {
+    type SystemSettingsRepo = TestSystemSettingsRepository;
+
+    fn system_settings_service(&self) -> &SystemSettingsService<Self::SystemSettingsRepo> {
+        &self.system_settings_service
+    }
+
+    fn email_service(&self) -> &EmailService<Self::SystemSettingsRepo> {
+        &self.email_service
+    }
+}
+
+/// Implement HasEmailTemplates trait for TestAppState
+impl HasEmailTemplates for TestAppState {
+    fn email_template_service(&self) -> &EmailTemplateService<Self::SystemSettingsRepo> {
+        &self.email_template_service
+    }
+}
+
 // ============================================================================
 // Test Router Builder
 // ============================================================================
@@ -201,9 +236,110 @@ pub fn build_test_router(state: TestAppState) -> Router {
     build_router(state)
 }
 
+/// Build a router with email template endpoints for testing.
+///
+/// This creates a minimal router that includes the email template handlers,
+/// allowing us to test them without implementing all traits required by build_full_router.
+pub fn build_email_template_test_router(state: TestAppState) -> Router {
+    use auth9_core::api::email_template;
+    use axum::routing::{delete, get, post, put};
+
+    Router::new()
+        .route(
+            "/api/v1/system/email-templates",
+            get(email_template::list_templates::<TestAppState>),
+        )
+        .route(
+            "/api/v1/system/email-templates/:type",
+            get(email_template::get_template::<TestAppState>)
+                .put(email_template::update_template::<TestAppState>)
+                .delete(email_template::reset_template::<TestAppState>),
+        )
+        .route(
+            "/api/v1/system/email-templates/:type/preview",
+            post(email_template::preview_template::<TestAppState>),
+        )
+        .with_state(state)
+}
+
+/// Build a router with system settings endpoints for testing.
+///
+/// This creates a minimal router that includes the system settings handlers.
+pub fn build_system_settings_test_router(state: TestAppState) -> Router {
+    use auth9_core::api::system_settings;
+    use axum::routing::{get, post, put};
+
+    Router::new()
+        .route(
+            "/api/v1/system/email",
+            get(system_settings::get_email_settings::<TestAppState>)
+                .put(system_settings::update_email_settings::<TestAppState>),
+        )
+        .route(
+            "/api/v1/system/email/test",
+            post(system_settings::test_email_connection::<TestAppState>),
+        )
+        .route(
+            "/api/v1/system/email/send-test",
+            post(system_settings::send_test_email::<TestAppState>),
+        )
+        .with_state(state)
+}
+
 // ============================================================================
 // HTTP Test Helpers
 // ============================================================================
+
+/// Make a raw GET request and return the response
+pub async fn get_raw(
+    app: &Router,
+    path: &str,
+) -> (StatusCode, axum::body::Bytes) {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_default();
+
+    (status, body_bytes)
+}
+
+/// Make a GET request with Authorization header and parse JSON response
+pub async fn get_json_with_auth<T: DeserializeOwned>(
+    app: &Router,
+    path: &str,
+    token: &str,
+) -> (StatusCode, Option<T>) {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri(path)
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_default();
+
+    if body_bytes.is_empty() {
+        return (status, None);
+    }
+
+    match serde_json::from_slice(&body_bytes) {
+        Ok(data) => (status, Some(data)),
+        Err(_) => (status, None),
+    }
+}
 
 /// Make a GET request and parse JSON response
 pub async fn get_json<T: DeserializeOwned>(

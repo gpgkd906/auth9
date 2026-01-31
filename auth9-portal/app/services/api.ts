@@ -558,3 +558,115 @@ export const invitationApi = {
     }
   },
 };
+
+// Email Template Types
+export type EmailTemplateType =
+  | "invitation"
+  | "password_reset"
+  | "email_mfa"
+  | "welcome"
+  | "email_verification"
+  | "password_changed"
+  | "security_alert";
+
+export interface TemplateVariable {
+  name: string;
+  description: string;
+  example: string;
+}
+
+export interface EmailTemplateMetadata {
+  template_type: EmailTemplateType;
+  name: string;
+  description: string;
+  variables: TemplateVariable[];
+}
+
+export interface EmailTemplateContent {
+  subject: string;
+  html_body: string;
+  text_body: string;
+}
+
+export interface EmailTemplateWithContent {
+  metadata: EmailTemplateMetadata;
+  content: EmailTemplateContent;
+  is_customized: boolean;
+  updated_at?: string;
+}
+
+export interface RenderedEmailPreview {
+  subject: string;
+  html_body: string;
+  text_body: string;
+}
+
+export interface SendTemplateTestEmailRequest {
+  to_email: string;
+  subject: string;
+  html_body: string;
+  text_body: string;
+  variables: Record<string, string>;
+}
+
+export interface SendTemplateTestEmailResponse {
+  success: boolean;
+  message: string;
+  message_id?: string;
+}
+
+// Email Template API
+export const emailTemplateApi = {
+  list: async (): Promise<{ data: EmailTemplateWithContent[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates`);
+    return handleResponse(response);
+  },
+
+  get: async (type: EmailTemplateType): Promise<{ data: EmailTemplateWithContent }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`);
+    return handleResponse(response);
+  },
+
+  update: async (
+    type: EmailTemplateType,
+    content: EmailTemplateContent
+  ): Promise<{ data: EmailTemplateWithContent }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(content),
+    });
+    return handleResponse(response);
+  },
+
+  reset: async (type: EmailTemplateType): Promise<{ data: EmailTemplateWithContent }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`, {
+      method: "DELETE",
+    });
+    return handleResponse(response);
+  },
+
+  preview: async (
+    type: EmailTemplateType,
+    content: EmailTemplateContent
+  ): Promise<{ data: RenderedEmailPreview }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}/preview`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(content),
+    });
+    return handleResponse(response);
+  },
+
+  sendTestEmail: async (
+    type: EmailTemplateType,
+    request: SendTemplateTestEmailRequest
+  ): Promise<SendTemplateTestEmailResponse> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}/send-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(request),
+    });
+    return handleResponse(response);
+  },
+};

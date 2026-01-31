@@ -17,13 +17,14 @@ use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
     AddUserToTenantInput, AssignRolesInput, Client, CreatePermissionInput, CreateRoleInput,
     CreateServiceInput, CreateTenantInput, CreateUserInput, Permission, Role, Service,
-    ServiceStatus, StringUuid, Tenant, TenantSettings, TenantStatus, TenantUser, UpdateRoleInput,
-    UpdateServiceInput, UpdateTenantInput, UpdateUserInput, User, UserRolesInTenant,
+    ServiceStatus, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
+    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpsertSystemSettingInput,
+    User, UserRolesInTenant,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
 use auth9_core::repository::audit::{AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput};
-use auth9_core::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
+use auth9_core::repository::{RbacRepository, ServiceRepository, SystemSettingsRepository, TenantRepository, UserRepository};
 use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
 use chrono::Utc;
 use std::sync::Arc;
@@ -892,6 +893,93 @@ impl AuditRepository for TestAuditRepository {
     async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
         let logs = self.find(query).await?;
         Ok(logs.len() as i64)
+    }
+}
+
+/// Configurable test system settings repository
+pub struct TestSystemSettingsRepository {
+    settings: RwLock<Vec<SystemSettingRow>>,
+    next_id: RwLock<i32>,
+}
+
+impl TestSystemSettingsRepository {
+    pub fn new() -> Self {
+        Self {
+            settings: RwLock::new(vec![]),
+            next_id: RwLock::new(1),
+        }
+    }
+
+    pub async fn add_setting(&self, setting: SystemSettingRow) {
+        self.settings.write().await.push(setting);
+    }
+
+    pub async fn clear(&self) {
+        self.settings.write().await.clear();
+    }
+}
+
+impl Default for TestSystemSettingsRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SystemSettingsRepository for TestSystemSettingsRepository {
+    async fn get(&self, category: &str, key: &str) -> Result<Option<SystemSettingRow>> {
+        let settings = self.settings.read().await;
+        Ok(settings
+            .iter()
+            .find(|s| s.category == category && s.setting_key == key)
+            .cloned())
+    }
+
+    async fn list_by_category(&self, category: &str) -> Result<Vec<SystemSettingRow>> {
+        let settings = self.settings.read().await;
+        Ok(settings
+            .iter()
+            .filter(|s| s.category == category)
+            .cloned()
+            .collect())
+    }
+
+    async fn upsert(&self, input: &UpsertSystemSettingInput) -> Result<SystemSettingRow> {
+        let mut settings = self.settings.write().await;
+
+        // Check if exists
+        if let Some(existing) = settings
+            .iter_mut()
+            .find(|s| s.category == input.category && s.setting_key == input.setting_key)
+        {
+            existing.value = input.value.clone();
+            existing.encrypted = input.encrypted;
+            existing.description = input.description.clone();
+            existing.updated_at = Utc::now();
+            return Ok(existing.clone());
+        }
+
+        // Create new
+        let mut next_id = self.next_id.write().await;
+        let setting = SystemSettingRow {
+            id: *next_id,
+            category: input.category.clone(),
+            setting_key: input.setting_key.clone(),
+            value: input.value.clone(),
+            encrypted: input.encrypted,
+            description: input.description.clone(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        *next_id += 1;
+        settings.push(setting.clone());
+        Ok(setting)
+    }
+
+    async fn delete(&self, category: &str, key: &str) -> Result<()> {
+        let mut settings = self.settings.write().await;
+        settings.retain(|s| !(s.category == category && s.setting_key == key));
+        Ok(())
     }
 }
 

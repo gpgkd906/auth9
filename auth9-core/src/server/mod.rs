@@ -18,10 +18,10 @@ use crate::repository::{
     user::UserRepositoryImpl,
 };
 use crate::service::{
-    ClientService, EmailService, InvitationService, RbacService, SystemSettingsService,
-    TenantService, UserService,
+    ClientService, EmailService, EmailTemplateService, InvitationService, RbacService,
+    SystemSettingsService, TenantService, UserService,
 };
-use crate::state::{HasInvitations, HasServices, HasSystemSettings};
+use crate::state::{HasEmailTemplates, HasInvitations, HasServices, HasSystemSettings};
 use anyhow::Result;
 use axum::{
     routing::{delete, get, post},
@@ -52,6 +52,7 @@ pub struct AppState {
     pub keycloak_client: KeycloakClient,
     pub system_settings_service: Arc<SystemSettingsService<SystemSettingsRepositoryImpl>>,
     pub email_service: Arc<EmailService<SystemSettingsRepositoryImpl>>,
+    pub email_template_service: Arc<EmailTemplateService<SystemSettingsRepositoryImpl>>,
     pub invitation_service: Arc<
         InvitationService<
             InvitationRepositoryImpl,
@@ -135,6 +136,13 @@ impl HasInvitations for AppState {
     }
 }
 
+/// Implement HasEmailTemplates trait for production AppState
+impl HasEmailTemplates for AppState {
+    fn email_template_service(&self) -> &EmailTemplateService<Self::SystemSettingsRepo> {
+        &self.email_template_service
+    }
+}
+
 /// Run the server
 pub async fn run(config: Config) -> Result<()> {
     // Create database connection pool
@@ -195,6 +203,9 @@ pub async fn run(config: Config) -> Result<()> {
     // Create email service
     let email_service = Arc::new(EmailService::new(system_settings_service.clone()));
 
+    // Create email template service
+    let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
+
     // Get app base URL for invitation links
     let app_base_url =
         std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -221,6 +232,7 @@ pub async fn run(config: Config) -> Result<()> {
         keycloak_client,
         system_settings_service,
         email_service,
+        email_template_service,
         invitation_service,
     };
 
@@ -412,7 +424,7 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
 /// This function requires the state to implement both HasServices and the new traits.
 pub fn build_full_router<S>(state: S) -> Router
 where
-    S: HasServices + HasSystemSettings + HasInvitations,
+    S: HasServices + HasSystemSettings + HasInvitations + HasEmailTemplates,
 {
     // CORS configuration
     let cors = CorsLayer::new()
@@ -557,6 +569,25 @@ where
         .route(
             "/api/v1/system/email/send-test",
             post(api::system_settings::send_test_email::<S>),
+        )
+        // Email template endpoints
+        .route(
+            "/api/v1/system/email-templates",
+            get(api::email_template::list_templates::<S>),
+        )
+        .route(
+            "/api/v1/system/email-templates/:type",
+            get(api::email_template::get_template::<S>)
+                .put(api::email_template::update_template::<S>)
+                .delete(api::email_template::reset_template::<S>),
+        )
+        .route(
+            "/api/v1/system/email-templates/:type/preview",
+            post(api::email_template::preview_template::<S>),
+        )
+        .route(
+            "/api/v1/system/email-templates/:type/send-test",
+            post(api::email_template::send_test_email::<S>),
         )
         // Invitation endpoints
         .route(
