@@ -649,10 +649,7 @@ mod tests {
     #[test]
     fn test_template_engine_set_all() {
         let mut engine = TemplateEngine::new();
-        engine.set_all([
-            ("a", "1"),
-            ("b", "2"),
-        ]);
+        engine.set_all([("a", "1"), ("b", "2")]);
 
         let result = engine.render("{{a}} + {{b}}");
         assert_eq!(result, "1 + 2");
@@ -690,7 +687,9 @@ mod tests {
 
         assert!(rendered.subject.contains("Acme Corp"));
         assert!(rendered.html_body.contains("Admin User"));
-        assert!(rendered.html_body.contains("https://example.com/invite/abc123"));
+        assert!(rendered
+            .html_body
+            .contains("https://example.com/invite/abc123"));
         assert!(rendered.text_body.contains("72 hours"));
     }
 
@@ -716,9 +715,13 @@ mod tests {
     fn test_email_template_subjects() {
         assert!(EmailTemplate::Invitation.subject().contains("invited"));
         assert!(EmailTemplate::PasswordReset.subject().contains("password"));
-        assert!(EmailTemplate::EmailMfa.subject().contains("verification_code"));
+        assert!(EmailTemplate::EmailMfa
+            .subject()
+            .contains("verification_code"));
         assert!(EmailTemplate::Welcome.subject().contains("Welcome"));
-        assert!(EmailTemplate::EmailVerification.subject().contains("Verify"));
+        assert!(EmailTemplate::EmailVerification
+            .subject()
+            .contains("Verify"));
         assert!(EmailTemplate::PasswordChanged.subject().contains("changed"));
         assert!(EmailTemplate::SecurityAlert.subject().contains("Security"));
     }
@@ -783,7 +786,9 @@ mod tests {
         let rendered = engine.render_template(EmailTemplate::EmailVerification);
 
         assert!(rendered.subject.contains("Verify"));
-        assert!(rendered.html_body.contains("https://example.com/verify/abc123"));
+        assert!(rendered
+            .html_body
+            .contains("https://example.com/verify/abc123"));
         assert!(rendered.text_body.contains("24 hours"));
     }
 

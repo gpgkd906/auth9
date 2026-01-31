@@ -44,8 +44,11 @@ async fn test_list_permissions() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) =
-        get_json(&app, &format!("/api/v1/services/{}/permissions", service_id)).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json(
+        &app,
+        &format!("/api/v1/services/{}/permissions", service_id),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -61,8 +64,11 @@ async fn test_list_permissions_empty() {
 
     let service_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) =
-        get_json(&app, &format!("/api/v1/services/{}/permissions", service_id)).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json(
+        &app,
+        &format!("/api/v1/services/{}/permissions", service_id),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -392,8 +398,12 @@ async fn test_assign_permission_to_role() {
         "permission_id": permission_id.to_string()
     });
 
-    let (status, body): (StatusCode, Option<MessageResponse>) =
-        post_json(&app, &format!("/api/v1/roles/{}/permissions", role_id), &input).await;
+    let (status, body): (StatusCode, Option<MessageResponse>) = post_json(
+        &app,
+        &format!("/api/v1/roles/{}/permissions", role_id),
+        &input,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -424,7 +434,10 @@ async fn test_remove_permission_from_role() {
 
     let (status, body): (StatusCode, Option<MessageResponse>) = delete_json(
         &app,
-        &format!("/api/v1/roles/{}/permissions/{}", role_id.0, permission_id.0),
+        &format!(
+            "/api/v1/roles/{}/permissions/{}",
+            role_id.0, permission_id.0
+        ),
     )
     .await;
 
@@ -487,7 +500,10 @@ async fn test_get_user_roles() {
         roles: vec!["admin".to_string(), "editor".to_string()],
         permissions: vec!["users:read".to_string(), "users:write".to_string()],
     };
-    state.rbac_repo.set_user_roles(user_id, tenant_id, roles).await;
+    state
+        .rbac_repo
+        .set_user_roles(user_id, tenant_id, roles)
+        .await;
 
     let app = build_test_router(state);
 

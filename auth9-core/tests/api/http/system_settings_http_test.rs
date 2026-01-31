@@ -2,7 +2,10 @@
 //!
 //! Tests for the system settings HTTP endpoints using mock repositories.
 
-use super::{build_system_settings_test_router, get_json, post_json, put_json, MockKeycloakServer, TestAppState};
+use super::{
+    build_system_settings_test_router, get_json, post_json, put_json, MockKeycloakServer,
+    TestAppState,
+};
 use auth9_core::api::system_settings::TestEmailResponse;
 use auth9_core::domain::SystemSettingRow;
 use axum::http::StatusCode;

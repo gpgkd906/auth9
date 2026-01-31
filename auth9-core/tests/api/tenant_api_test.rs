@@ -4,7 +4,9 @@
 //! These tests verify the service layer behavior that API handlers depend on.
 
 use super::*;
-use auth9_core::domain::{CreateTenantInput, TenantBranding, TenantSettings, TenantStatus, UpdateTenantInput};
+use auth9_core::domain::{
+    CreateTenantInput, TenantBranding, TenantSettings, TenantStatus, UpdateTenantInput,
+};
 use auth9_core::error::AppError;
 
 // ============================================================================

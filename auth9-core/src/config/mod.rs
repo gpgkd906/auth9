@@ -60,6 +60,10 @@ pub struct KeycloakConfig {
     /// - "external": HTTPS required for external requests (recommended for production)
     /// - "all": HTTPS required for all requests
     pub ssl_required: String,
+    /// Public URL for Auth9 Core API (e.g., https://api.auth9.example.com)
+    pub core_public_url: Option<String>,
+    /// Public URL for Auth9 Portal (e.g., https://auth9.example.com)
+    pub portal_url: Option<String>,
 }
 
 impl Config {
@@ -113,6 +117,11 @@ impl Config {
                 let url = env::var("KEYCLOAK_URL")
                     .unwrap_or_else(|_| "http://localhost:8081".to_string());
                 let public_url = env::var("KEYCLOAK_PUBLIC_URL").unwrap_or_else(|_| url.clone());
+
+                // Read production URLs for portal client redirect URIs
+                let core_public_url = env::var("AUTH9_CORE_PUBLIC_URL").ok();
+                let portal_url = env::var("AUTH9_PORTAL_URL").ok();
+
                 KeycloakConfig {
                     url,
                     public_url,
@@ -124,6 +133,8 @@ impl Config {
                     // Default to "external" for production safety
                     ssl_required: env::var("KEYCLOAK_SSL_REQUIRED")
                         .unwrap_or_else(|_| "external".to_string()),
+                    core_public_url,
+                    portal_url,
                 }
             },
         })
@@ -173,6 +184,8 @@ mod tests {
                 admin_client_id: "admin-cli".to_string(),
                 admin_client_secret: "secret".to_string(),
                 ssl_required: "external".to_string(),
+                core_public_url: None,
+                portal_url: None,
             },
         }
     }
@@ -331,6 +344,8 @@ mod tests {
             admin_client_id: "admin-cli".to_string(),
             admin_client_secret: "secret".to_string(),
             ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
         };
         let kc2 = kc.clone();
 
@@ -348,6 +363,8 @@ mod tests {
             admin_client_id: "admin-cli".to_string(),
             admin_client_secret: "secret".to_string(),
             ssl_required: "external".to_string(),
+            core_public_url: None,
+            portal_url: None,
         };
         let debug_str = format!("{:?}", kc);
 
@@ -367,6 +384,8 @@ mod tests {
                 admin_client_id: "admin".to_string(),
                 admin_client_secret: "secret".to_string(),
                 ssl_required: opt.to_string(),
+                core_public_url: None,
+                portal_url: None,
             };
             assert_eq!(kc.ssl_required, *opt);
         }
@@ -402,6 +421,8 @@ mod tests {
                 admin_client_id: "auth9-admin".to_string(),
                 admin_client_secret: "admin-secret".to_string(),
                 ssl_required: "all".to_string(),
+                core_public_url: None,
+                portal_url: None,
             },
         };
 

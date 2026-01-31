@@ -126,7 +126,10 @@ async fn test_list_permissions_by_service() {
     }
 
     let service = builder.build_rbac_service();
-    let permissions = service.list_permissions(StringUuid::from(service_id)).await.unwrap();
+    let permissions = service
+        .list_permissions(StringUuid::from(service_id))
+        .await
+        .unwrap();
 
     assert_eq!(permissions.len(), 3);
 }
@@ -136,7 +139,10 @@ async fn test_list_permissions_empty() {
     let builder = TestServicesBuilder::new();
     let service = builder.build_rbac_service();
 
-    let permissions = service.list_permissions(StringUuid::new_v4()).await.unwrap();
+    let permissions = service
+        .list_permissions(StringUuid::new_v4())
+        .await
+        .unwrap();
     assert!(permissions.is_empty());
 }
 
@@ -309,7 +315,10 @@ async fn test_list_roles_by_service() {
     }
 
     let service = builder.build_rbac_service();
-    let roles = service.list_roles(StringUuid::from(service_id)).await.unwrap();
+    let roles = service
+        .list_roles(StringUuid::from(service_id))
+        .await
+        .unwrap();
 
     assert_eq!(roles.len(), 3);
 }
@@ -364,7 +373,10 @@ async fn test_update_role_description() {
 
     let result = service.update_role(role_id, input).await;
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().description, Some("New description".to_string()));
+    assert_eq!(
+        result.unwrap().description,
+        Some("New description".to_string())
+    );
 }
 
 #[tokio::test]
@@ -430,7 +442,9 @@ async fn test_assign_permission_to_role_success() {
 
     let service = builder.build_rbac_service();
 
-    let result = service.assign_permission_to_role(role_id, permission_id).await;
+    let result = service
+        .assign_permission_to_role(role_id, permission_id)
+        .await;
     assert!(result.is_ok());
 
     // Verify assignment
@@ -495,7 +509,9 @@ async fn test_remove_permission_from_role_success() {
     let service = builder.build_rbac_service();
 
     // Remove
-    let result = service.remove_permission_from_role(role_id, permission_id).await;
+    let result = service
+        .remove_permission_from_role(role_id, permission_id)
+        .await;
     assert!(result.is_ok());
 }
 
@@ -555,7 +571,10 @@ async fn test_create_multiple_permissions_same_service() {
     }
 
     // Verify all created
-    let permissions = service.list_permissions(StringUuid::from(service_id)).await.unwrap();
+    let permissions = service
+        .list_permissions(StringUuid::from(service_id))
+        .await
+        .unwrap();
     assert_eq!(permissions.len(), 4);
 }
 

@@ -1,7 +1,9 @@
 //! Email template API handlers
 
 use crate::api::SuccessResponse;
-use crate::domain::{EmailAddress, EmailMessage, EmailTemplateContent, EmailTemplateType, EmailTemplateWithContent};
+use crate::domain::{
+    EmailAddress, EmailMessage, EmailTemplateContent, EmailTemplateType, EmailTemplateWithContent,
+};
 use crate::error::{AppError, Result};
 use crate::state::{HasEmailTemplates, HasSystemSettings};
 use axum::{
@@ -91,7 +93,10 @@ pub async fn get_template<S: HasEmailTemplates>(
     Path(template_type): Path<String>,
 ) -> Result<impl IntoResponse> {
     let template_type = parse_template_type(&template_type)?;
-    let template = state.email_template_service().get_template(template_type).await?;
+    let template = state
+        .email_template_service()
+        .get_template(template_type)
+        .await?;
     Ok(Json(SuccessResponse::new(template)))
 }
 
@@ -120,7 +125,10 @@ pub async fn reset_template<S: HasEmailTemplates>(
     Path(template_type): Path<String>,
 ) -> Result<impl IntoResponse> {
     let template_type = parse_template_type(&template_type)?;
-    let template = state.email_template_service().reset_template(template_type).await?;
+    let template = state
+        .email_template_service()
+        .reset_template(template_type)
+        .await?;
     Ok(Json(SuccessResponse::new(template)))
 }
 

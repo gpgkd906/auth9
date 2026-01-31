@@ -121,8 +121,7 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
         &self,
         config: &EmailProviderConfig,
     ) -> Result<(serde_json::Value, bool)> {
-        let mut value =
-            serde_json::to_value(config).map_err(|e| AppError::Internal(e.into()))?;
+        let mut value = serde_json::to_value(config).map_err(|e| AppError::Internal(e.into()))?;
 
         if let Some(key) = &self.encryption_key {
             // Encrypt sensitive fields
@@ -414,7 +413,12 @@ mod tests {
         let masked = service.mask_sensitive_fields(row);
 
         assert_eq!(
-            masked.value.get("secret_access_key").unwrap().as_str().unwrap(),
+            masked
+                .value
+                .get("secret_access_key")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "***"
         );
         assert_eq!(
@@ -462,7 +466,10 @@ mod tests {
         let response = service.get_email_config_masked().await.unwrap();
         assert_eq!(response.category, "email");
         assert_eq!(response.setting_key, "provider");
-        assert_eq!(response.value.get("type").unwrap().as_str().unwrap(), "none");
+        assert_eq!(
+            response.value.get("type").unwrap().as_str().unwrap(),
+            "none"
+        );
     }
 
     #[test]
@@ -615,14 +622,22 @@ mod tests {
 
         let encrypted = service.encrypt_sensitive_fields(&value, &key).unwrap();
 
-        let enc_secret = encrypted.get("secret_access_key").unwrap().as_str().unwrap();
+        let enc_secret = encrypted
+            .get("secret_access_key")
+            .unwrap()
+            .as_str()
+            .unwrap();
         assert!(enc_secret.contains(':'));
         assert_ne!(enc_secret, "my-secret-key");
 
         // Decrypt should restore original
         let decrypted = service.decrypt_sensitive_fields(&encrypted, &key).unwrap();
         assert_eq!(
-            decrypted.get("secret_access_key").unwrap().as_str().unwrap(),
+            decrypted
+                .get("secret_access_key")
+                .unwrap()
+                .as_str()
+                .unwrap(),
             "my-secret-key"
         );
     }

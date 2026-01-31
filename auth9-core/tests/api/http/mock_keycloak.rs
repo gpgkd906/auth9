@@ -313,7 +313,9 @@ impl MockKeycloakServer {
     /// Mock get client secret for any client
     pub async fn mock_get_client_secret_any(&self, secret: &str) {
         Mock::given(method("GET"))
-            .and(path_regex(r"/admin/realms/test/clients/[^/]+/client-secret$"))
+            .and(path_regex(
+                r"/admin/realms/test/clients/[^/]+/client-secret$",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "type": "secret",
                 "value": secret
@@ -340,7 +342,9 @@ impl MockKeycloakServer {
     /// Mock regenerate client secret for any client
     pub async fn mock_regenerate_client_secret_any(&self, new_secret: &str) {
         Mock::given(method("POST"))
-            .and(path_regex(r"/admin/realms/test/clients/[^/]+/client-secret$"))
+            .and(path_regex(
+                r"/admin/realms/test/clients/[^/]+/client-secret$",
+            ))
             .respond_with(ResponseTemplate::new(200).set_body_json(json!({
                 "type": "secret",
                 "value": new_secret
@@ -431,7 +435,8 @@ impl MockKeycloakServer {
 
     /// Set up all mocks needed for MFA disable test
     pub async fn setup_for_mfa_disable(&self, user_id: &str) {
-        self.mock_list_user_credentials(user_id, vec![("cred-1", "totp")]).await;
+        self.mock_list_user_credentials(user_id, vec![("cred-1", "totp")])
+            .await;
         self.mock_delete_user_credential_success().await;
         self.mock_update_user_success(user_id).await;
     }
@@ -439,7 +444,8 @@ impl MockKeycloakServer {
     /// Set up all mocks needed for service/client creation test
     pub async fn setup_for_service_creation(&self, client_uuid: &str, client_secret: &str) {
         self.mock_create_oidc_client_success(client_uuid).await;
-        self.mock_get_client_secret(client_uuid, client_secret).await;
+        self.mock_get_client_secret(client_uuid, client_secret)
+            .await;
     }
 
     /// Set up mocks for service deletion (needs to delete associated Keycloak clients)

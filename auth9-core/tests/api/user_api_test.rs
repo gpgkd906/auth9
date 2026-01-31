@@ -97,7 +97,10 @@ async fn test_list_tenant_users_empty() {
     let builder = TestServicesBuilder::new();
     let service = builder.build_user_service();
 
-    let users = service.list_tenant_users(StringUuid::new_v4(), 1, 10).await.unwrap();
+    let users = service
+        .list_tenant_users(StringUuid::new_v4(), 1, 10)
+        .await
+        .unwrap();
     assert!(users.is_empty());
 }
 
@@ -292,7 +295,10 @@ async fn test_update_user_display_name() {
 
     let result = service.update(user_id, input).await;
     assert!(result.is_ok());
-    assert_eq!(result.unwrap().display_name, Some("Updated Name".to_string()));
+    assert_eq!(
+        result.unwrap().display_name,
+        Some("Updated Name".to_string())
+    );
 }
 
 #[tokio::test]

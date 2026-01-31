@@ -74,8 +74,8 @@ impl InvitationRepository for InvitationRepositoryImpl {
         let id = StringUuid::new_v4();
         let expires_in = input.expires_in_hours.unwrap_or(72);
         let expires_at = Utc::now() + Duration::hours(expires_in);
-        let role_ids_json = serde_json::to_string(&input.role_ids)
-            .map_err(|e| AppError::Internal(e.into()))?;
+        let role_ids_json =
+            serde_json::to_string(&input.role_ids).map_err(|e| AppError::Internal(e.into()))?;
 
         sqlx::query(
             r#"
@@ -241,15 +241,13 @@ mod tests {
         let id = StringUuid::new_v4();
         let id_clone = id;
 
-        mock.expect_find_by_id()
-            .with(eq(id))
-            .returning(move |_| {
-                Ok(Some(Invitation {
-                    id: id_clone,
-                    email: "test@example.com".to_string(),
-                    ..Default::default()
-                }))
-            });
+        mock.expect_find_by_id().with(eq(id)).returning(move |_| {
+            Ok(Some(Invitation {
+                id: id_clone,
+                email: "test@example.com".to_string(),
+                ..Default::default()
+            }))
+        });
 
         let result = mock.find_by_id(id).await.unwrap();
         assert!(result.is_some());
@@ -260,8 +258,7 @@ mod tests {
     async fn test_mock_find_by_id_not_found() {
         let mut mock = MockInvitationRepository::new();
 
-        mock.expect_find_by_id()
-            .returning(|_| Ok(None));
+        mock.expect_find_by_id().returning(|_| Ok(None));
 
         let result = mock.find_by_id(StringUuid::new_v4()).await.unwrap();
         assert!(result.is_none());
@@ -307,7 +304,10 @@ mod tests {
                 })
             });
 
-        let result = mock.update_status(id, InvitationStatus::Revoked).await.unwrap();
+        let result = mock
+            .update_status(id, InvitationStatus::Revoked)
+            .await
+            .unwrap();
         assert_eq!(result.status, InvitationStatus::Revoked);
     }
 
@@ -315,8 +315,7 @@ mod tests {
     async fn test_mock_expire_pending() {
         let mut mock = MockInvitationRepository::new();
 
-        mock.expect_expire_pending()
-            .returning(|| Ok(5));
+        mock.expect_expire_pending().returning(|| Ok(5));
 
         let result = mock.expire_pending().await.unwrap();
         assert_eq!(result, 5);

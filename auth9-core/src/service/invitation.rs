@@ -309,20 +309,18 @@ where
         // For this implementation, we assume the full token is stored and we need
         // to iterate through pending invitations
 
-        Err(AppError::NotFound(
-            "Invalid invitation token".to_string(),
-        ))
+        Err(AppError::NotFound("Invalid invitation token".to_string()))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::domain::Tenant;
     use crate::repository::invitation::MockInvitationRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use crate::repository::tenant::MockTenantRepository;
     use crate::service::SystemSettingsService;
-    use crate::domain::Tenant;
     use mockall::predicate::*;
 
     fn create_test_service() -> InvitationService<
@@ -640,9 +638,7 @@ mod tests {
     async fn test_expire_pending() {
         let mut invitation_repo = MockInvitationRepository::new();
 
-        invitation_repo
-            .expect_expire_pending()
-            .returning(|| Ok(5));
+        invitation_repo.expect_expire_pending().returning(|| Ok(5));
 
         let tenant_repo = Arc::new(MockTenantRepository::new());
         let settings_repo = Arc::new(MockSystemSettingsRepository::new());

@@ -86,10 +86,7 @@ async fn test_get_public_branding_custom() {
         response["data"]["logo_url"].as_str(),
         Some("https://example.com/logo.png")
     );
-    assert_eq!(
-        response["data"]["company_name"].as_str(),
-        Some("Test Corp")
-    );
+    assert_eq!(response["data"]["company_name"].as_str(), Some("Test Corp"));
 }
 
 // ============================================================================
@@ -443,7 +440,10 @@ async fn test_branding_allow_registration_default_false() {
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
-    assert_eq!(response["data"]["allow_registration"].as_bool(), Some(false));
+    assert_eq!(
+        response["data"]["allow_registration"].as_bool(),
+        Some(false)
+    );
 }
 
 #[tokio::test]
@@ -474,7 +474,10 @@ async fn test_update_branding_with_allow_registration() {
     let (_, read_body): (StatusCode, Option<serde_json::Value>) =
         get_json(&app, "/api/v1/public/branding").await;
     let read_response = read_body.unwrap();
-    assert_eq!(read_response["data"]["allow_registration"].as_bool(), Some(true));
+    assert_eq!(
+        read_response["data"]["allow_registration"].as_bool(),
+        Some(true)
+    );
 }
 
 #[tokio::test]
@@ -498,5 +501,8 @@ async fn test_update_branding_without_allow_registration_defaults_false() {
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
-    assert_eq!(response["data"]["allow_registration"].as_bool(), Some(false));
+    assert_eq!(
+        response["data"]["allow_registration"].as_bool(),
+        Some(false)
+    );
 }

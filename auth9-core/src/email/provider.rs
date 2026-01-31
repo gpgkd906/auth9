@@ -49,11 +49,9 @@ mod tests {
     async fn test_mock_email_provider() {
         let mut mock = MockEmailProvider::new();
 
-        mock.expect_provider_name()
-            .returning(|| "mock");
+        mock.expect_provider_name().returning(|| "mock");
 
-        mock.expect_test_connection()
-            .returning(|| Ok(()));
+        mock.expect_test_connection().returning(|| Ok(()));
 
         mock.expect_send()
             .returning(|_| Ok(EmailSendResult::success(Some("msg-123".to_string()))));

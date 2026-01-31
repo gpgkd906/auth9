@@ -16,6 +16,37 @@ use tracing::info;
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
 const DEFAULT_PORTAL_NAME: &str = "Auth9 Admin Portal";
 
+/// Build redirect URIs for database (JSON array)
+fn build_db_redirect_uris(_core_public_url: Option<&str>, portal_url: Option<&str>) -> String {
+    let mut uris = vec![
+        "http://localhost:3000/dashboard".to_string(),
+        "http://localhost:3000/callback".to_string(),
+        "http://127.0.0.1:3000/dashboard".to_string(),
+        "http://127.0.0.1:3000/callback".to_string(),
+    ];
+
+    if let Some(portal_url_str) = portal_url {
+        uris.push(format!("{}/dashboard", portal_url_str));
+        uris.push(format!("{}/callback", portal_url_str));
+    }
+
+    serde_json::to_string(&uris).unwrap()
+}
+
+/// Build logout URIs for database (JSON array)
+fn build_db_logout_uris(portal_url: Option<&str>) -> String {
+    let mut uris = vec![
+        "http://localhost:3000".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+    ];
+
+    if let Some(portal_url_str) = portal_url {
+        uris.push(portal_url_str.to_string());
+    }
+
+    serde_json::to_string(&uris).unwrap()
+}
+
 /// Extract database name from DATABASE_URL
 fn extract_db_name(url: &str) -> Option<&str> {
     // URL format: mysql://user:pass@host:port/dbname
@@ -116,7 +147,10 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .context("Failed to seed portal client in Keycloak")?;
 
     // Seed admin client in configured realm (Confidential client for realm-level operations)
-    info!("Seeding admin client in realm '{}'...", config.keycloak.realm);
+    info!(
+        "Seeding admin client in realm '{}'...",
+        config.keycloak.realm
+    );
     seeder
         .seed_admin_client()
         .await
@@ -157,15 +191,18 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     }
 
     // Create portal service first
-    let redirect_uris = serde_json::to_string(&vec![
-        "http://localhost:3000/dashboard",
-        "http://localhost:3000/callback",
-        "http://127.0.0.1:3000/dashboard",
-        "http://127.0.0.1:3000/callback",
-    ])
-    .unwrap();
-    let logout_uris =
-        serde_json::to_string(&vec!["http://localhost:3000", "http://127.0.0.1:3000"]).unwrap();
+    let redirect_uris = build_db_redirect_uris(
+        config.keycloak.core_public_url.as_deref(),
+        config.keycloak.portal_url.as_deref(),
+    );
+
+    let logout_uris = build_db_logout_uris(config.keycloak.portal_url.as_deref());
+
+    let base_url = config
+        .keycloak
+        .portal_url
+        .as_deref()
+        .unwrap_or("http://localhost:3000");
 
     // Generate a UUID for the service
     let service_id = uuid::Uuid::new_v4().to_string();
@@ -173,11 +210,12 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     sqlx::query(
         r#"
         INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
-        VALUES (?, NULL, ?, 'http://localhost:3000', ?, ?, 'active', NOW(), NOW())
+        VALUES (?, NULL, ?, ?, ?, ?, 'active', NOW(), NOW())
         "#,
     )
     .bind(&service_id)
     .bind(DEFAULT_PORTAL_NAME)
+    .bind(base_url)
     .bind(&redirect_uris)
     .bind(&logout_uris)
     .execute(&pool)

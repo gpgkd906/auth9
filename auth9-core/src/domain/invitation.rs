@@ -43,9 +43,7 @@ impl std::fmt::Display for InvitationStatus {
 }
 
 impl<'r> sqlx::Decode<'r, sqlx::MySql> for InvitationStatus {
-    fn decode(
-        value: sqlx::mysql::MySqlValueRef<'r>,
-    ) -> Result<Self, sqlx::error::BoxDynError> {
+    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s: String = sqlx::Decode::<'r, sqlx::MySql>::decode(value)?;
         s.parse().map_err(|e: String| e.into())
     }

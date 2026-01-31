@@ -22,9 +22,7 @@ pub async fn get_public_branding<S: HasBranding>(
 /// Get branding configuration (authenticated endpoint)
 ///
 /// GET /api/v1/system/branding
-pub async fn get_branding<S: HasBranding>(
-    State(state): State<S>,
-) -> Result<impl IntoResponse> {
+pub async fn get_branding<S: HasBranding>(State(state): State<S>) -> Result<impl IntoResponse> {
     let config = state.branding_service().get_branding().await?;
     Ok(Json(SuccessResponse::new(config)))
 }

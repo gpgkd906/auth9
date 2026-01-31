@@ -27,7 +27,10 @@ use auth9_core::config::{Config, DatabaseConfig, JwtConfig, KeycloakConfig, Redi
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::server::build_router;
-use auth9_core::service::{BrandingService, ClientService, EmailService, EmailTemplateService, RbacService, SystemSettingsService, TenantService, UserService};
+use auth9_core::service::{
+    BrandingService, ClientService, EmailService, EmailTemplateService, RbacService,
+    SystemSettingsService, TenantService, UserService,
+};
 use auth9_core::state::{HasBranding, HasEmailTemplates, HasServices, HasSystemSettings};
 use axum::{
     body::Body,
@@ -73,6 +76,8 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             admin_client_id: "admin-cli".to_string(),
             admin_client_secret: "test-secret".to_string(),
             ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
         },
     }
 }
@@ -120,9 +125,13 @@ impl TestAppState {
         let user_service = Arc::new(UserService::new(user_repo.clone()));
         let client_service = Arc::new(ClientService::new(service_repo.clone(), None));
         let rbac_service = Arc::new(RbacService::new(rbac_repo.clone(), None));
-        let system_settings_service = Arc::new(SystemSettingsService::new(system_settings_repo.clone(), None));
+        let system_settings_service = Arc::new(SystemSettingsService::new(
+            system_settings_repo.clone(),
+            None,
+        ));
         let email_service = Arc::new(EmailService::new(system_settings_service.clone()));
-        let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
+        let email_template_service =
+            Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
         let branding_service = Arc::new(BrandingService::new(system_settings_repo.clone()));
 
         let jwt_manager = create_test_jwt_manager();
@@ -322,10 +331,7 @@ pub fn build_branding_test_router(state: TestAppState) -> Router {
 // ============================================================================
 
 /// Make a raw GET request and return the response
-pub async fn get_raw(
-    app: &Router,
-    path: &str,
-) -> (StatusCode, axum::body::Bytes) {
+pub async fn get_raw(app: &Router, path: &str) -> (StatusCode, axum::body::Bytes) {
     let request = Request::builder()
         .method(Method::GET)
         .uri(path)
@@ -373,10 +379,7 @@ pub async fn get_json_with_auth<T: DeserializeOwned>(
 }
 
 /// Make a GET request and parse JSON response
-pub async fn get_json<T: DeserializeOwned>(
-    app: &Router,
-    path: &str,
-) -> (StatusCode, Option<T>) {
+pub async fn get_json<T: DeserializeOwned>(app: &Router, path: &str) -> (StatusCode, Option<T>) {
     let request = Request::builder()
         .method(Method::GET)
         .uri(path)
@@ -462,10 +465,7 @@ pub async fn put_json<T: Serialize, R: DeserializeOwned>(
 }
 
 /// Make a DELETE request and parse JSON response
-pub async fn delete_json<R: DeserializeOwned>(
-    app: &Router,
-    path: &str,
-) -> (StatusCode, Option<R>) {
+pub async fn delete_json<R: DeserializeOwned>(app: &Router, path: &str) -> (StatusCode, Option<R>) {
     let request = Request::builder()
         .method(Method::DELETE)
         .uri(path)

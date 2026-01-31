@@ -18,13 +18,17 @@ use auth9_core::domain::{
     AddUserToTenantInput, AssignRolesInput, Client, CreatePermissionInput, CreateRoleInput,
     CreateServiceInput, CreateTenantInput, CreateUserInput, Permission, Role, Service,
     ServiceStatus, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
-    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpsertSystemSettingInput,
-    User, UserRolesInTenant,
+    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput,
+    UpsertSystemSettingInput, User, UserRolesInTenant,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
-use auth9_core::repository::audit::{AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput};
-use auth9_core::repository::{RbacRepository, ServiceRepository, SystemSettingsRepository, TenantRepository, UserRepository};
+use auth9_core::repository::audit::{
+    AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput,
+};
+use auth9_core::repository::{
+    RbacRepository, ServiceRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+};
 use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
 use chrono::Utc;
 use std::sync::Arc;
@@ -234,7 +238,12 @@ impl UserRepository for TestUserRepository {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let users = self.users.read().await;
         let start = offset as usize;
-        Ok(users.iter().skip(start).take(limit as usize).cloned().collect())
+        Ok(users
+            .iter()
+            .skip(start)
+            .take(limit as usize)
+            .cloned()
+            .collect())
     }
 
     async fn count(&self) -> Result<i64> {
@@ -297,10 +306,7 @@ impl UserRepository for TestUserRepository {
             .iter()
             .position(|tu| tu.user_id == user_id && tu.tenant_id == tenant_id)
             .ok_or_else(|| {
-                AppError::NotFound(format!(
-                    "User {} not in tenant {}",
-                    user_id, tenant_id
-                ))
+                AppError::NotFound(format!("User {} not in tenant {}", user_id, tenant_id))
             })?;
         tenant_users.remove(pos);
         Ok(())
@@ -425,12 +431,7 @@ impl ServiceRepository for TestServiceRepository {
         Ok(clients.iter().find(|c| c.client_id == client_id).cloned())
     }
 
-    async fn list(
-        &self,
-        tenant_id: Option<Uuid>,
-        offset: i64,
-        limit: i64,
-    ) -> Result<Vec<Service>> {
+    async fn list(&self, tenant_id: Option<Uuid>, offset: i64, limit: i64) -> Result<Vec<Service>> {
         let services = self.services.read().await;
         let filtered: Vec<Service> = if let Some(tid) = tenant_id {
             services
@@ -561,7 +562,10 @@ impl TestRbacRepository {
     }
 
     pub async fn set_user_roles(&self, user_id: Uuid, tenant_id: Uuid, roles: UserRolesInTenant) {
-        self.user_roles.write().await.push((user_id, tenant_id, roles));
+        self.user_roles
+            .write()
+            .await
+            .push((user_id, tenant_id, roles));
     }
 
     pub async fn set_user_roles_for_service(
@@ -865,9 +869,7 @@ impl AuditRepository for TestAuditRepository {
             .iter()
             .filter(|log| {
                 if let Some(actor_id) = query.actor_id {
-                    if log.actor_id.as_ref().map(|id| id.as_str())
-                        != Some(&actor_id.to_string())
-                    {
+                    if log.actor_id.as_ref().map(|id| id.as_str()) != Some(&actor_id.to_string()) {
                         return false;
                     }
                 }
@@ -1215,7 +1217,9 @@ mod tests {
         assert_eq!(perm.code, "user:read");
 
         // Assign permission to role
-        repo.assign_permission_to_role(role.id, perm.id).await.unwrap();
+        repo.assign_permission_to_role(role.id, perm.id)
+            .await
+            .unwrap();
 
         // Find role permissions
         let perms = repo.find_role_permissions(role.id).await.unwrap();

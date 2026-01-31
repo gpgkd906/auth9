@@ -747,7 +747,8 @@ fn generate_secure_password() -> String {
     password.push(CHARSET_SPECIAL[rng.gen_range(0..CHARSET_SPECIAL.len())] as char);
 
     // Fill remaining with mixed charset
-    let all_chars: Vec<u8> = [CHARSET_LOWER, CHARSET_UPPER, CHARSET_DIGIT, CHARSET_SPECIAL].concat();
+    let all_chars: Vec<u8> =
+        [CHARSET_LOWER, CHARSET_UPPER, CHARSET_DIGIT, CHARSET_SPECIAL].concat();
     for _ in 0..12 {
         password.push(all_chars[rng.gen_range(0..all_chars.len())] as char);
     }
@@ -782,6 +783,52 @@ pub struct KeycloakRealm {
     /// SSL requirement: "none", "external", or "all"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssl_required: Option<String>,
+}
+
+/// Build comprehensive redirect URIs list combining localhost and production URLs
+fn build_redirect_uris(core_public_url: Option<&str>, portal_url: Option<&str>) -> Vec<String> {
+    let mut uris = Vec::new();
+
+    // Always include localhost URLs for local development
+    uris.extend([
+        "http://localhost:8080/api/v1/auth/callback".to_string(),
+        "http://127.0.0.1:8080/api/v1/auth/callback".to_string(),
+        "http://localhost:3000/*".to_string(),
+        "http://127.0.0.1:3000/*".to_string(),
+    ]);
+
+    // Add production URLs if configured
+    if let Some(core_url) = core_public_url {
+        uris.push(format!("{}/api/v1/auth/callback", core_url));
+    }
+    if let Some(portal_url_str) = portal_url {
+        uris.push(format!("{}/*", portal_url_str));
+    }
+
+    uris
+}
+
+/// Build comprehensive web origins list
+fn build_web_origins(core_public_url: Option<&str>, portal_url: Option<&str>) -> Vec<String> {
+    let mut origins = Vec::new();
+
+    // Always include localhost
+    origins.extend([
+        "http://localhost:8080".to_string(),
+        "http://127.0.0.1:8080".to_string(),
+        "http://localhost:3000".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+    ]);
+
+    // Add production URLs
+    if let Some(core_url) = core_public_url {
+        origins.push(core_url.to_string());
+    }
+    if let Some(portal_url_str) = portal_url {
+        origins.push(portal_url_str.to_string());
+    }
+
+    origins
 }
 
 /// Keycloak Seeder for initialization
@@ -1093,23 +1140,35 @@ impl KeycloakSeeder {
             name: Some(DEFAULT_PORTAL_CLIENT_NAME.to_string()),
             enabled: true,
             protocol: "openid-connect".to_string(),
-            base_url: Some("http://localhost:3000".to_string()),
-            root_url: Some("http://localhost:3000".to_string()),
-            admin_url: Some("http://localhost:3000".to_string()),
-            redirect_uris: vec![
-                // Auth9-core callback URL (Keycloak redirects here after login)
-                "http://localhost:8080/api/v1/auth/callback".to_string(),
-                "http://127.0.0.1:8080/api/v1/auth/callback".to_string(),
-                // Portal URLs for direct OIDC if needed
-                "http://localhost:3000/*".to_string(),
-                "http://127.0.0.1:3000/*".to_string(),
-            ],
-            web_origins: vec![
-                "http://localhost:8080".to_string(),
-                "http://localhost:3000".to_string(),
-                "http://127.0.0.1:8080".to_string(),
-                "http://127.0.0.1:3000".to_string(),
-            ],
+            base_url: Some(
+                self.config
+                    .portal_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:3000")
+                    .to_string(),
+            ),
+            root_url: Some(
+                self.config
+                    .portal_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:3000")
+                    .to_string(),
+            ),
+            admin_url: Some(
+                self.config
+                    .portal_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:3000")
+                    .to_string(),
+            ),
+            redirect_uris: build_redirect_uris(
+                self.config.core_public_url.as_deref(),
+                self.config.portal_url.as_deref(),
+            ),
+            web_origins: build_web_origins(
+                self.config.core_public_url.as_deref(),
+                self.config.portal_url.as_deref(),
+            ),
             attributes: None,
             public_client: false, // Confidential client - Keycloak will generate a secret
             secret: None,
@@ -1142,29 +1201,142 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Seed portal client (idempotent)
+    /// Update existing portal client configuration
+    async fn update_portal_client(&self, token: &str) -> anyhow::Result<()> {
+        // 1. Query existing client to get UUID
+        let url = format!(
+            "{}/admin/realms/{}/clients?clientId={}",
+            self.config.url, self.config.realm, DEFAULT_PORTAL_CLIENT_ID
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to query portal client")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Failed to query portal client for update");
+        }
+
+        let clients: Vec<KeycloakOidcClient> = response.json().await?;
+        let existing_client = clients
+            .into_iter()
+            .next()
+            .context("Portal client not found for update")?;
+
+        let client_uuid = existing_client.id.context("Portal client UUID missing")?;
+
+        // 2. Build updated client configuration
+        let updated_client = KeycloakOidcClient {
+            id: Some(client_uuid.clone()),
+            client_id: DEFAULT_PORTAL_CLIENT_ID.to_string(),
+            name: Some(DEFAULT_PORTAL_CLIENT_NAME.to_string()),
+            enabled: true,
+            protocol: "openid-connect".to_string(),
+            base_url: Some(
+                self.config
+                    .portal_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:3000")
+                    .to_string(),
+            ),
+            root_url: Some(
+                self.config
+                    .portal_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:3000")
+                    .to_string(),
+            ),
+            admin_url: Some(
+                self.config
+                    .portal_url
+                    .as_deref()
+                    .unwrap_or("http://localhost:3000")
+                    .to_string(),
+            ),
+            redirect_uris: build_redirect_uris(
+                self.config.core_public_url.as_deref(),
+                self.config.portal_url.as_deref(),
+            ),
+            web_origins: build_web_origins(
+                self.config.core_public_url.as_deref(),
+                self.config.portal_url.as_deref(),
+            ),
+            attributes: existing_client.attributes,
+            public_client: false,
+            secret: existing_client.secret,
+        };
+
+        // 3. Update client
+        let update_url = format!(
+            "{}/admin/realms/{}/clients/{}",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .put(&update_url)
+            .bearer_auth(token)
+            .json(&updated_client)
+            .send()
+            .await
+            .context("Failed to update portal client")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to update portal client: {} - {}", status, body);
+        }
+
+        info!(
+            "Updated portal client '{}' configuration",
+            DEFAULT_PORTAL_CLIENT_ID
+        );
+        Ok(())
+    }
+
+    /// Seed portal client (idempotent - creates or updates)
     pub async fn seed_portal_client(&self) -> anyhow::Result<()> {
         let token = self.get_master_admin_token().await?;
 
+        // Log configuration being used
+        match (&self.config.core_public_url, &self.config.portal_url) {
+            (Some(core), Some(portal)) => {
+                info!(
+                    "Configuring portal client with production URLs: core={}, portal={}",
+                    core, portal
+                );
+            }
+            _ => {
+                warn!(
+                    "Production URLs not configured (AUTH9_CORE_PUBLIC_URL, AUTH9_PORTAL_URL). \
+                    Using localhost URLs only. This is OK for local development but not for production."
+                );
+            }
+        }
+
         if self.portal_client_exists(&token).await? {
             info!(
-                "Portal client '{}' already exists, skipping",
+                "Portal client '{}' already exists, updating configuration...",
                 DEFAULT_PORTAL_CLIENT_ID
             );
+
+            // Update existing client to ensure production URLs are configured
+            self.update_portal_client(&token).await?;
+
             return Ok(());
         }
 
+        // Create new client
         self.create_portal_client(&token).await?;
         Ok(())
     }
 
-
     /// Check if admin client exists in a specific realm
-    async fn admin_client_exists_in_realm(
-        &self,
-        token: &str,
-        realm: &str,
-    ) -> anyhow::Result<bool> {
+    async fn admin_client_exists_in_realm(&self, token: &str, realm: &str) -> anyhow::Result<bool> {
         let client_id = DEFAULT_ADMIN_CLIENT_ID;
         let url = format!("{}/admin/realms/{}/clients", self.config.url, realm);
 
@@ -1185,11 +1357,7 @@ impl KeycloakSeeder {
     }
 
     /// Create auth9-admin client in a specific realm
-    async fn create_admin_client_in_realm(
-        &self,
-        token: &str,
-        realm: &str,
-    ) -> anyhow::Result<()> {
+    async fn create_admin_client_in_realm(&self, token: &str, realm: &str) -> anyhow::Result<()> {
         info!(
             "Creating auth9-admin client in realm '{}' (Confidential Client)",
             realm
@@ -1361,23 +1529,22 @@ impl KeycloakSeeder {
         let token = self.get_master_admin_token().await?;
 
         // Check if client already exists in master realm
-        if self
-            .admin_client_exists_in_realm(&token, "master")
-            .await?
-        {
+        if self.admin_client_exists_in_realm(&token, "master").await? {
             info!("auth9-admin client already exists in master realm, skipping");
             return Ok(());
         }
 
         // Create client in master realm
-        self.create_admin_client_in_realm(&token, "master")
-            .await?;
+        self.create_admin_client_in_realm(&token, "master").await?;
         Ok(())
     }
 
     /// Seed auth9-admin client in configured realm (idempotent)
     pub async fn seed_admin_client(&self) -> anyhow::Result<()> {
-        info!("Seeding auth9-admin client in realm '{}'...", self.config.realm);
+        info!(
+            "Seeding auth9-admin client in realm '{}'...",
+            self.config.realm
+        );
 
         // Get admin token using current configuration (admin-cli or auth9-admin)
         let token = self.get_master_admin_token().await?;
@@ -1387,7 +1554,10 @@ impl KeycloakSeeder {
             .admin_client_exists_in_realm(&token, &self.config.realm)
             .await?
         {
-            info!("auth9-admin client already exists in realm '{}', skipping", self.config.realm);
+            info!(
+                "auth9-admin client already exists in realm '{}', skipping",
+                self.config.realm
+            );
             return Ok(());
         }
 

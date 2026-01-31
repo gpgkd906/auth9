@@ -9,19 +9,17 @@ use crate::grpc::TokenExchangeService;
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
-    audit::AuditRepositoryImpl,
-    invitation::InvitationRepositoryImpl,
-    rbac::RbacRepositoryImpl,
-    service::ServiceRepositoryImpl,
-    system_settings::SystemSettingsRepositoryImpl,
-    tenant::TenantRepositoryImpl,
-    user::UserRepositoryImpl,
+    audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl, rbac::RbacRepositoryImpl,
+    service::ServiceRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
+    tenant::TenantRepositoryImpl, user::UserRepositoryImpl,
 };
 use crate::service::{
     BrandingService, ClientService, EmailService, EmailTemplateService, InvitationService,
     RbacService, SystemSettingsService, TenantService, UserService,
 };
-use crate::state::{HasBranding, HasEmailTemplates, HasInvitations, HasServices, HasSystemSettings};
+use crate::state::{
+    HasBranding, HasEmailTemplates, HasInvitations, HasServices, HasSystemSettings,
+};
 use anyhow::Result;
 use axum::{
     routing::{delete, get, post},
@@ -104,10 +102,7 @@ impl HasServices for AppState {
     }
 
     async fn check_ready(&self) -> (bool, bool) {
-        let db_ok = sqlx::query("SELECT 1")
-            .execute(&self.db_pool)
-            .await
-            .is_ok();
+        let db_ok = sqlx::query("SELECT 1").execute(&self.db_pool).await.is_ok();
         let cache_ok = self.cache_manager.ping().await.is_ok();
         (db_ok, cache_ok)
     }
@@ -382,7 +377,10 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
             post(api::service::regenerate_client_secret::<S>),
         )
         // Permission endpoints
-        .route("/api/v1/permissions", post(api::role::create_permission::<S>))
+        .route(
+            "/api/v1/permissions",
+            post(api::role::create_permission::<S>),
+        )
         .route(
             "/api/v1/permissions/:id",
             delete(api::role::delete_permission::<S>),
@@ -525,7 +523,10 @@ where
             post(api::service::regenerate_client_secret::<S>),
         )
         // Permission endpoints
-        .route("/api/v1/permissions", post(api::role::create_permission::<S>))
+        .route(
+            "/api/v1/permissions",
+            post(api::role::create_permission::<S>),
+        )
         .route(
             "/api/v1/permissions/:id",
             delete(api::role::delete_permission::<S>),

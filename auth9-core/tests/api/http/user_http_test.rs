@@ -549,8 +549,12 @@ async fn test_enable_mfa_user_not_found() {
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, &format!("/api/v1/users/{}/mfa", nonexistent_id), &json!({})).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json(
+        &app,
+        &format!("/api/v1/users/{}/mfa", nonexistent_id),
+        &json!({}),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
