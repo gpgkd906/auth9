@@ -737,6 +737,295 @@ Authorization: Bearer <token>
 }
 ```
 
+## 邀请 API
+
+### 获取租户邀请列表
+
+```http
+GET /api/v1/tenants/{tenant_id}/invitations?page=1&per_page=20
+Authorization: Bearer <token>
+```
+
+响应：
+
+```json
+{
+  "data": [
+    {
+      "id": "invitation-uuid",
+      "tenant_id": "tenant-uuid",
+      "email": "newuser@example.com",
+      "role_ids": ["role-uuid-1", "role-uuid-2"],
+      "status": "pending",
+      "invited_by": "admin-uuid",
+      "expires_at": "2024-02-01T00:00:00Z",
+      "created_at": "2024-01-01T00:00:00Z"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "per_page": 20,
+    "total": 5
+  }
+}
+```
+
+### 创建邀请
+
+```http
+POST /api/v1/tenants/{tenant_id}/invitations
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "email": "newuser@example.com",
+  "role_ids": ["role-uuid-1", "role-uuid-2"],
+  "expires_in_days": 7,
+  "message": "欢迎加入我们的团队！"
+}
+```
+
+响应：
+
+```json
+{
+  "data": {
+    "id": "invitation-uuid",
+    "email": "newuser@example.com",
+    "invitation_url": "https://auth9.yourdomain.com/accept-invitation?token=xxx",
+    "expires_at": "2024-01-08T00:00:00Z"
+  }
+}
+```
+
+### 接受邀请
+
+```http
+POST /api/v1/invitations/accept
+Content-Type: application/json
+
+{
+  "token": "invitation-token-here"
+}
+```
+
+### 撤销邀请
+
+```http
+DELETE /api/v1/invitations/{invitation_id}
+Authorization: Bearer <token>
+```
+
+## 品牌定制 API
+
+### 获取品牌配置（公开接口）
+
+```http
+GET /api/v1/public/branding
+```
+
+响应：
+
+```json
+{
+  "data": {
+    "logo_url": "https://example.com/logo.png",
+    "favicon_url": "https://example.com/favicon.ico",
+    "primary_color": "#007AFF",
+    "secondary_color": "#5856D6",
+    "company_name": "我的公司",
+    "support_email": "support@example.com",
+    "custom_css": "/* 自定义样式 */"
+  }
+}
+```
+
+### 获取品牌配置（需认证）
+
+```http
+GET /api/v1/system/branding
+Authorization: Bearer <token>
+```
+
+### 更新品牌配置
+
+```http
+PUT /api/v1/system/branding
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "config": {
+    "logo_url": "https://example.com/new-logo.png",
+    "primary_color": "#FF6B6B",
+    "company_name": "新公司名称"
+  }
+}
+```
+
+## 邮件模板 API
+
+### 获取邮件模板列表
+
+```http
+GET /api/v1/email-templates
+Authorization: Bearer <token>
+```
+
+响应：
+
+```json
+{
+  "data": [
+    {
+      "template_type": "invitation",
+      "subject": "您收到了一个邀请",
+      "html_body": "<html>...</html>",
+      "text_body": "纯文本内容",
+      "available_variables": ["{{tenant_name}}", "{{invitation_url}}"],
+      "updated_at": "2024-01-01T00:00:00Z"
+    },
+    {
+      "template_type": "password_reset",
+      "subject": "重置您的密码",
+      "html_body": "<html>...</html>",
+      "text_body": "纯文本内容",
+      "available_variables": ["{{reset_url}}", "{{user_name}}"],
+      "updated_at": "2024-01-01T00:00:00Z"
+    }
+  ]
+}
+```
+
+### 获取特定邮件模板
+
+```http
+GET /api/v1/email-templates/{template_type}
+Authorization: Bearer <token>
+```
+
+### 更新邮件模板
+
+```http
+PUT /api/v1/email-templates/{template_type}
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "subject": "新的邮件主题",
+  "html_body": "<html><body><h1>Hello {{user_name}}</h1></body></html>",
+  "text_body": "Hello {{user_name}}"
+}
+```
+
+### 重置邮件模板为默认
+
+```http
+POST /api/v1/email-templates/{template_type}/reset
+Authorization: Bearer <token>
+```
+
+### 预览邮件模板
+
+```http
+POST /api/v1/email-templates/preview
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "subject": "测试主题 {{user_name}}",
+  "html_body": "<html>...</html>",
+  "text_body": "纯文本",
+  "variables": {
+    "user_name": "张三",
+    "tenant_name": "测试公司"
+  }
+}
+```
+
+响应：
+
+```json
+{
+  "data": {
+    "rendered_subject": "测试主题 张三",
+    "rendered_html": "<html>渲染后的HTML</html>",
+    "rendered_text": "渲染后的纯文本"
+  }
+}
+```
+
+## 系统设置 API
+
+### 获取邮件设置
+
+```http
+GET /api/v1/system/email-settings
+Authorization: Bearer <token>
+```
+
+响应（敏感信息已脱敏）：
+
+```json
+{
+  "data": {
+    "provider": "smtp",
+    "smtp_host": "smtp.example.com",
+    "smtp_port": 587,
+    "smtp_username": "noreply@example.com",
+    "smtp_password": "********",
+    "smtp_from_email": "noreply@example.com",
+    "smtp_from_name": "Auth9",
+    "smtp_use_tls": true
+  }
+}
+```
+
+### 更新邮件设置
+
+```http
+PUT /api/v1/system/email-settings
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "config": {
+    "provider": "smtp",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_username": "your-email@gmail.com",
+    "smtp_password": "your-app-password",
+    "smtp_from_email": "noreply@yourdomain.com",
+    "smtp_from_name": "Your Company",
+    "smtp_use_tls": true
+  }
+}
+```
+
+### 发送测试邮件
+
+```http
+POST /api/v1/system/email-settings/test
+Authorization: Bearer <token>
+Content-Type: application/json
+
+{
+  "to_email": "test@example.com"
+}
+```
+
+响应：
+
+```json
+{
+  "data": {
+    "success": true,
+    "message": "测试邮件已发送",
+    "message_id": "msg-uuid"
+  }
+}
+```
+
 ## 健康检查 API
 
 ### 健康检查
