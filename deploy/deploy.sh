@@ -132,8 +132,9 @@ kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
 echo "  Deploying keycloak..."
 kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
 
-echo "  Applying ingress..."
-kubectl apply -f "$K8S_DIR/ingress.yaml" $DRY_RUN
+# Note: Ingress is not deployed by default.
+# Use cloudflared for secure external access instead.
+# See wiki/安装部署.md for cloudflared configuration.
 
 # Step 5: Wait for PostgreSQL to be ready (Keycloak depends on it)
 echo -e "${GREEN}[5/6] Waiting for keycloak-postgres to be ready...${NC}"
@@ -184,6 +185,5 @@ if [ -z "$DRY_RUN" ]; then
     echo -e "${YELLOW}Services:${NC}"
     kubectl get svc -n "$NAMESPACE"
     echo ""
-    echo -e "${YELLOW}Ingress:${NC}"
-    kubectl get ingress -n "$NAMESPACE"
+    echo -e "${YELLOW}Note:${NC} Use cloudflared to expose services. See wiki/安装部署.md"
 fi

@@ -181,7 +181,7 @@
 - [x] auth9-portal Deployment
 - [x] auth9-portal Service
 - [x] auth9-portal HPA
-- [x] Ingress (HTTP + gRPC)
+- [x] cloudflared 配置（替代传统 Ingress）
 - [x] deploy.sh 部署脚本
 
 ## 目录结构
@@ -225,7 +225,7 @@ auth9/
 │   │   ├── serviceaccount.yaml
 │   │   ├── auth9-core/
 │   │   ├── auth9-portal/
-│   │   └── ingress.yaml
+│   │   └── keycloak/
 │   └── deploy.sh
 ├── .github/
 │   └── workflows/
@@ -318,7 +318,7 @@ kubectl create secret generic auth9-secrets \
 # 3. 查看状态
 kubectl get pods -n auth9
 kubectl get svc -n auth9
-kubectl get ingress -n auth9
+# 使用 cloudflared 替代 Ingress，参见 wiki/安装部署.md
 ```
 
 ## 测试指南
