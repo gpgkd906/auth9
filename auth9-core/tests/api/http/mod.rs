@@ -9,6 +9,7 @@
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
 pub mod auth_http_test;
+pub mod branding_http_test;
 pub mod email_template_http_test;
 pub mod mock_keycloak;
 pub mod role_http_test;
@@ -25,11 +26,9 @@ use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{Config, DatabaseConfig, JwtConfig, KeycloakConfig, RedisConfig};
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
-use auth9_core::repository::audit::AuditRepository;
-use auth9_core::repository::{RbacRepository, ServiceRepository, SystemSettingsRepository, TenantRepository, UserRepository};
 use auth9_core::server::build_router;
-use auth9_core::service::{ClientService, EmailService, EmailTemplateService, RbacService, SystemSettingsService, TenantService, UserService};
-use auth9_core::state::{HasEmailTemplates, HasServices, HasSystemSettings};
+use auth9_core::service::{BrandingService, ClientService, EmailService, EmailTemplateService, RbacService, SystemSettingsService, TenantService, UserService};
+use auth9_core::state::{HasBranding, HasEmailTemplates, HasServices, HasSystemSettings};
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
@@ -93,6 +92,7 @@ pub struct TestAppState {
     pub system_settings_service: Arc<SystemSettingsService<TestSystemSettingsRepository>>,
     pub email_service: Arc<EmailService<TestSystemSettingsRepository>>,
     pub email_template_service: Arc<EmailTemplateService<TestSystemSettingsRepository>>,
+    pub branding_service: Arc<BrandingService<TestSystemSettingsRepository>>,
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
     pub keycloak_client: KeycloakClient,
@@ -123,6 +123,7 @@ impl TestAppState {
         let system_settings_service = Arc::new(SystemSettingsService::new(system_settings_repo.clone(), None));
         let email_service = Arc::new(EmailService::new(system_settings_service.clone()));
         let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
+        let branding_service = Arc::new(BrandingService::new(system_settings_repo.clone()));
 
         let jwt_manager = create_test_jwt_manager();
         let keycloak_client = KeycloakClient::new(config.keycloak.clone());
@@ -137,6 +138,7 @@ impl TestAppState {
             system_settings_service,
             email_service,
             email_template_service,
+            branding_service,
             audit_repo,
             jwt_manager,
             keycloak_client,
@@ -222,6 +224,15 @@ impl HasEmailTemplates for TestAppState {
     }
 }
 
+/// Implement HasBranding trait for TestAppState
+impl HasBranding for TestAppState {
+    type BrandingRepo = TestSystemSettingsRepository;
+
+    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo> {
+        &self.branding_service
+    }
+}
+
 // ============================================================================
 // Test Router Builder
 // ============================================================================
@@ -282,6 +293,26 @@ pub fn build_system_settings_test_router(state: TestAppState) -> Router {
         .route(
             "/api/v1/system/email/send-test",
             post(system_settings::send_test_email::<TestAppState>),
+        )
+        .with_state(state)
+}
+
+/// Build a router with branding endpoints for testing.
+///
+/// This creates a minimal router that includes the branding handlers.
+pub fn build_branding_test_router(state: TestAppState) -> Router {
+    use auth9_core::api::branding;
+    use axum::routing::{get, put};
+
+    Router::new()
+        .route(
+            "/api/v1/public/branding",
+            get(branding::get_public_branding::<TestAppState>),
+        )
+        .route(
+            "/api/v1/system/branding",
+            get(branding::get_branding::<TestAppState>)
+                .put(branding::update_branding::<TestAppState>),
         )
         .with_state(state)
 }

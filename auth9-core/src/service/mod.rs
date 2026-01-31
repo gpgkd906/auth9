@@ -1,5 +1,6 @@
 //! Business logic layer
 
+pub mod branding;
 pub mod client;
 pub mod email;
 pub mod email_template;
@@ -9,6 +10,7 @@ pub mod system_settings;
 pub mod tenant;
 pub mod user;
 
+pub use branding::BrandingService;
 pub use client::ClientService;
 pub use email::EmailService;
 pub use email_template::EmailTemplateService;

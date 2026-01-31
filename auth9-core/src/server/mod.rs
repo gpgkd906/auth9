@@ -18,10 +18,10 @@ use crate::repository::{
     user::UserRepositoryImpl,
 };
 use crate::service::{
-    ClientService, EmailService, EmailTemplateService, InvitationService, RbacService,
-    SystemSettingsService, TenantService, UserService,
+    BrandingService, ClientService, EmailService, EmailTemplateService, InvitationService,
+    RbacService, SystemSettingsService, TenantService, UserService,
 };
-use crate::state::{HasEmailTemplates, HasInvitations, HasServices, HasSystemSettings};
+use crate::state::{HasBranding, HasEmailTemplates, HasInvitations, HasServices, HasSystemSettings};
 use anyhow::Result;
 use axum::{
     routing::{delete, get, post},
@@ -60,6 +60,7 @@ pub struct AppState {
             SystemSettingsRepositoryImpl,
         >,
     >,
+    pub branding_service: Arc<BrandingService<SystemSettingsRepositoryImpl>>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -143,6 +144,15 @@ impl HasEmailTemplates for AppState {
     }
 }
 
+/// Implement HasBranding trait for production AppState
+impl HasBranding for AppState {
+    type BrandingRepo = SystemSettingsRepositoryImpl;
+
+    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo> {
+        &self.branding_service
+    }
+}
+
 /// Run the server
 pub async fn run(config: Config) -> Result<()> {
     // Create database connection pool
@@ -206,6 +216,9 @@ pub async fn run(config: Config) -> Result<()> {
     // Create email template service
     let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
 
+    // Create branding service
+    let branding_service = Arc::new(BrandingService::new(system_settings_repo.clone()));
+
     // Get app base URL for invitation links
     let app_base_url =
         std::env::var("APP_BASE_URL").unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -234,6 +247,7 @@ pub async fn run(config: Config) -> Result<()> {
         email_service,
         email_template_service,
         invitation_service,
+        branding_service,
     };
 
     // Create gRPC service
@@ -424,7 +438,7 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
 /// This function requires the state to implement both HasServices and the new traits.
 pub fn build_full_router<S>(state: S) -> Router
 where
-    S: HasServices + HasSystemSettings + HasInvitations + HasEmailTemplates,
+    S: HasServices + HasSystemSettings + HasInvitations + HasEmailTemplates + HasBranding,
 {
     // CORS configuration
     let cors = CorsLayer::new()
@@ -610,6 +624,17 @@ where
         .route(
             "/api/v1/invitations/accept",
             post(api::invitation::accept::<S>),
+        )
+        // Branding endpoints
+        // Public endpoint (no auth required) for Keycloak themes
+        .route(
+            "/api/v1/public/branding",
+            get(api::branding::get_public_branding::<S>),
+        )
+        // Admin endpoints (auth required)
+        .route(
+            "/api/v1/system/branding",
+            get(api::branding::get_branding::<S>).put(api::branding::update_branding::<S>),
         )
         // Add middleware
         .layer(TraceLayer::new_for_http())

@@ -1,0 +1,27 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+dist_keycloak/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+
+# Logs
+*.log
+npm-debug.log*
+
+# Storybook
+storybook-static/
+
+# TypeScript
+*.tsbuildinfo
+
+# Keycloakify generated files (auto-generated on build)
+src/kc.gen.tsx
+public/keycloakify-dev-resources/

@@ -124,6 +124,18 @@ services:
       - auth9-network
     restart: unless-stopped
 
+  # ==================== Keycloak Theme Builder ====================
+  # Run with: docker-compose --profile build up auth9-theme-builder
+  auth9-theme-builder:
+    build:
+      context: ./auth9-keycloak-theme
+      dockerfile: Dockerfile
+    container_name: auth9-theme-builder
+    volumes:
+      - keycloak-theme:/theme-output
+    profiles:
+      - build
+
   # ==================== Keycloak (Auth Engine) ====================
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
@@ -141,6 +153,12 @@ services:
       KC_HOSTNAME_STRICT: "false"
       KC_HOSTNAME_STRICT_HTTPS: "false"
       KC_HTTP_ENABLED: "true"
+      # Set auth9 as default login theme for all realms
+      KC_SPI_THEME_DEFAULT: auth9
+      # Auth9 API URL for custom theme
+      AUTH9_API_URL: http://auth9-core:8080
+    volumes:
+      - keycloak-theme:/opt/keycloak/providers:ro
     healthcheck:
       test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/localhost/8080"]
       interval: 10s
@@ -174,3 +192,4 @@ networks:
 volumes:
   tidb-data:
   redis-data:
+  keycloak-theme:
