@@ -35,6 +35,10 @@ declare -A AUTH9_SECRETS
 declare -A KEYCLOAK_SECRETS
 declare -A CONFIGMAP_VALUES
 
+# Admin credentials (extracted from init job)
+AUTH9_ADMIN_USERNAME=""
+AUTH9_ADMIN_PASSWORD=""
+
 # Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
@@ -42,6 +46,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 CYAN='\033[0;36m'
 BOLD='\033[1m'
+DIM='\033[2m'
 NC='\033[0m' # No Color
 
 # Signal handling
@@ -104,12 +109,12 @@ prompt_password() {
 
     while true; do
         read -s "pass1?$message: "
-        echo ""
+        echo "" >&2  # Output to stderr, not stdout (avoid capture by $())
         read -s "pass2?Confirm password: "
-        echo ""
+        echo "" >&2  # Output to stderr, not stdout
 
         if [ "$pass1" = "$pass2" ] && [ -n "$pass1" ]; then
-            echo "$pass1"
+            printf '%s' "$pass1"  # Use printf without newline
             return 0
         fi
 
@@ -776,13 +781,22 @@ extract_client_secret() {
         print_info "Reading auth9-init job logs..."
         local init_logs=$(kubectl logs job/auth9-init -n "$NAMESPACE" 2>/dev/null || echo "")
 
+        # Extract admin credentials if present
+        if echo "$init_logs" | grep -q "AUTH9_ADMIN_USERNAME="; then
+            AUTH9_ADMIN_USERNAME=$(echo "$init_logs" | grep "AUTH9_ADMIN_USERNAME=" | sed 's/.*AUTH9_ADMIN_USERNAME=//' | head -1)
+            AUTH9_ADMIN_PASSWORD=$(echo "$init_logs" | grep "AUTH9_ADMIN_PASSWORD=" | sed 's/.*AUTH9_ADMIN_PASSWORD=//' | head -1)
+            if [ -n "$AUTH9_ADMIN_PASSWORD" ]; then
+                print_success "Extracted admin credentials"
+            fi
+        fi
+
         if echo "$init_logs" | grep -q "KEYCLOAK_ADMIN_CLIENT_SECRET"; then
             local client_secret=$(echo "$init_logs" | grep "KEYCLOAK_ADMIN_CLIENT_SECRET=" | sed 's/.*KEYCLOAK_ADMIN_CLIENT_SECRET=//' | head -1)
 
             if [ -n "$client_secret" ]; then
                 print_success "Extracted client secret: ${client_secret:0:8}..."
                 echo ""
-                echo -e "  ${BLUE}📋 KEYCLOAK_ADMIN_CLIENT_SECRET:${NC}"
+                echo -e "  ${BLUE}KEYCLOAK_ADMIN_CLIENT_SECRET:${NC}"
                 echo "  $client_secret"
                 echo ""
 
@@ -861,19 +875,14 @@ wait_for_keycloak() {
         print_info "Waiting for keycloak deployment..."
         kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=300s || true
 
-        # Also wait for keycloak to be actually ready (responding to health check)
-        print_info "Waiting for keycloak to respond..."
-        local retries=30
-        while [ $retries -gt 0 ]; do
-            if kubectl exec -n "$NAMESPACE" deploy/keycloak -- curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health/ready 2>/dev/null | grep -q "200"; then
-                print_success "Keycloak is ready"
-                return 0
-            fi
-            sleep 5
-            ((retries--))
-            print_info "Waiting for keycloak... ($retries retries left)"
-        done
-        print_warning "Keycloak health check timed out, continuing anyway..."
+        # Wait for all keycloak pods to be ready (using kubectl wait)
+        print_info "Waiting for keycloak pods to be ready..."
+        if kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=keycloak -n "$NAMESPACE" --timeout=150s 2>/dev/null; then
+            print_success "Keycloak is ready"
+            return 0
+        else
+            print_warning "Keycloak readiness check timed out, continuing anyway..."
+        fi
     fi
 }
 
@@ -909,20 +918,40 @@ print_deployment_complete() {
         echo -e "${YELLOW}Note:${NC} Use cloudflared to expose services. See wiki/安装部署.md"
         echo ""
         echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║  Cloudflared Configuration - Cluster Internal DNS              ║${NC}"
+        echo -e "${CYAN}║  Cloudflared Configuration                                      ║${NC}"
         echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        echo -e "${BOLD}Copy these DNS entries for cloudflared tunnel configuration:${NC}"
+        echo -e "${BOLD}Service URLs:${NC}"
         echo ""
+        local portal_url="${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
+        local core_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
         echo -e "  ${GREEN}auth9-portal (Admin Dashboard):${NC}"
-        echo -e "    auth9-portal.$NAMESPACE.svc.cluster.local:3000"
+        echo -e "    Public URL:   ${YELLOW}${portal_url}${NC}"
+        echo -e "    Internal:     auth9-portal.$NAMESPACE.svc.cluster.local:3000"
         echo ""
         echo -e "  ${GREEN}auth9-core (Backend API):${NC}"
-        echo -e "    auth9-core.$NAMESPACE.svc.cluster.local:8080"
+        echo -e "    Public URL:   ${YELLOW}${core_url}${NC}"
+        echo -e "    Internal:     auth9-core.$NAMESPACE.svc.cluster.local:8080"
         echo ""
         echo -e "  ${GREEN}keycloak (OIDC Provider):${NC}"
-        echo -e "    keycloak.$NAMESPACE.svc.cluster.local:8080"
+        echo -e "    Internal:     keycloak.$NAMESPACE.svc.cluster.local:8080"
+        echo -e "    ${DIM}(Keycloak is accessed internally by auth9-core)${NC}"
         echo ""
+
+        # Display admin credentials if extracted
+        if [ -n "$AUTH9_ADMIN_PASSWORD" ]; then
+            echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+            echo -e "${CYAN}║  Auth9 Admin Credentials                                        ║${NC}"
+            echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+            echo ""
+            echo -e "  ${RED}${BOLD}IMPORTANT: Save these credentials securely!${NC}"
+            echo ""
+            echo -e "  ${GREEN}Username:${NC}  ${YELLOW}${AUTH9_ADMIN_USERNAME}${NC}"
+            echo -e "  ${GREEN}Password:${NC}  ${YELLOW}${AUTH9_ADMIN_PASSWORD}${NC}"
+            echo ""
+            echo -e "  ${DIM}Login at: ${portal_url}${NC}"
+            echo ""
+        fi
     fi
 }
 

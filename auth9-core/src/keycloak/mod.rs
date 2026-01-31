@@ -713,10 +713,40 @@ impl KeycloakClient {
 // ============================================================================
 
 /// Default admin user configuration
+const DEFAULT_ADMIN_USERNAME: &str = "admin";
 const DEFAULT_ADMIN_EMAIL: &str = "admin@auth9.local";
-const DEFAULT_ADMIN_PASSWORD: &str = "Admin123!";
 const DEFAULT_ADMIN_FIRST_NAME: &str = "Admin";
 const DEFAULT_ADMIN_LAST_NAME: &str = "User";
+
+/// Generate a cryptographically secure random password
+fn generate_secure_password() -> String {
+    use rand::Rng;
+    const CHARSET_LOWER: &[u8] = b"abcdefghijkmnopqrstuvwxyz";
+    const CHARSET_UPPER: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const CHARSET_DIGIT: &[u8] = b"23456789";
+    const CHARSET_SPECIAL: &[u8] = b"!@#$%^&*";
+
+    let mut rng = rand::thread_rng();
+
+    // Ensure at least one of each type
+    let mut password: Vec<char> = Vec::with_capacity(16);
+    password.push(CHARSET_LOWER[rng.gen_range(0..CHARSET_LOWER.len())] as char);
+    password.push(CHARSET_UPPER[rng.gen_range(0..CHARSET_UPPER.len())] as char);
+    password.push(CHARSET_DIGIT[rng.gen_range(0..CHARSET_DIGIT.len())] as char);
+    password.push(CHARSET_SPECIAL[rng.gen_range(0..CHARSET_SPECIAL.len())] as char);
+
+    // Fill remaining with mixed charset
+    let all_chars: Vec<u8> = [CHARSET_LOWER, CHARSET_UPPER, CHARSET_DIGIT, CHARSET_SPECIAL].concat();
+    for _ in 0..12 {
+        password.push(all_chars[rng.gen_range(0..all_chars.len())] as char);
+    }
+
+    // Shuffle the password
+    use rand::seq::SliceRandom;
+    password.shuffle(&mut rng);
+
+    password.into_iter().collect()
+}
 
 /// Default portal client configuration
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
@@ -917,8 +947,8 @@ impl KeycloakSeeder {
     /// Check if admin user exists by email
     async fn admin_user_exists(&self, token: &str) -> anyhow::Result<bool> {
         let url = format!(
-            "{}/admin/realms/{}/users?email={}&exact=true",
-            self.config.url, self.config.realm, DEFAULT_ADMIN_EMAIL
+            "{}/admin/realms/{}/users?username={}&exact=true",
+            self.config.url, self.config.realm, DEFAULT_ADMIN_USERNAME
         );
 
         let response = self
@@ -938,15 +968,18 @@ impl KeycloakSeeder {
         Ok(!users.is_empty())
     }
 
-    /// Create default admin user
-    async fn create_admin_user(&self, token: &str) -> anyhow::Result<()> {
+    /// Create default admin user with a randomly generated password
+    /// Returns the generated password if user was created
+    async fn create_admin_user(&self, token: &str) -> anyhow::Result<Option<String>> {
         let url = format!(
             "{}/admin/realms/{}/users",
             self.config.url, self.config.realm
         );
 
+        let password = generate_secure_password();
+
         let user = CreateKeycloakUserInput {
-            username: DEFAULT_ADMIN_EMAIL.to_string(),
+            username: DEFAULT_ADMIN_USERNAME.to_string(),
             email: DEFAULT_ADMIN_EMAIL.to_string(),
             first_name: Some(DEFAULT_ADMIN_FIRST_NAME.to_string()),
             last_name: Some(DEFAULT_ADMIN_LAST_NAME.to_string()),
@@ -954,7 +987,7 @@ impl KeycloakSeeder {
             email_verified: true,
             credentials: Some(vec![KeycloakCredential {
                 credential_type: "password".to_string(),
-                value: DEFAULT_ADMIN_PASSWORD.to_string(),
+                value: password.clone(),
                 temporary: false,
             }]),
         };
@@ -969,8 +1002,8 @@ impl KeycloakSeeder {
             .context("Failed to create admin user")?;
 
         if response.status() == StatusCode::CONFLICT {
-            info!("Admin user '{}' already exists", DEFAULT_ADMIN_EMAIL);
-            return Ok(());
+            info!("Admin user '{}' already exists", DEFAULT_ADMIN_USERNAME);
+            return Ok(None);
         }
 
         if !response.status().is_success() {
@@ -979,11 +1012,8 @@ impl KeycloakSeeder {
             anyhow::bail!("Failed to create admin user: {} - {}", status, body);
         }
 
-        info!(
-            "Created admin user '{}' with password '{}'",
-            DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD
-        );
-        Ok(())
+        info!("Created admin user '{}'", DEFAULT_ADMIN_USERNAME);
+        Ok(Some(password))
     }
 
     /// Seed default admin user (idempotent)
@@ -993,18 +1023,24 @@ impl KeycloakSeeder {
         if self.admin_user_exists(&token).await? {
             info!(
                 "Admin user '{}' already exists, skipping",
-                DEFAULT_ADMIN_EMAIL
+                DEFAULT_ADMIN_USERNAME
             );
             return Ok(());
         }
 
-        self.create_admin_user(&token).await?;
+        if let Some(password) = self.create_admin_user(&token).await? {
+            // Print credentials in machine-parseable format for deploy script
+            println!("========================================");
+            println!("AUTH9_ADMIN_USERNAME={}", DEFAULT_ADMIN_USERNAME);
+            println!("AUTH9_ADMIN_PASSWORD={}", password);
+            println!("========================================");
 
-        warn!(
-            "Default admin credentials - Email: {}, Password: {}",
-            DEFAULT_ADMIN_EMAIL, DEFAULT_ADMIN_PASSWORD
-        );
-        warn!("Please change the default admin password after first login!");
+            warn!(
+                "Created admin user '{}' with generated password",
+                DEFAULT_ADMIN_USERNAME
+            );
+            warn!("Please save the admin credentials shown above!");
+        }
 
         Ok(())
     }
