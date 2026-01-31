@@ -1043,3 +1043,242 @@ async fn test_backward_compatibility_without_client_secret() {
     let result = client.create_user(&input).await;
     assert!(result.is_ok());
 }
+
+// ============================================================================
+// Master Realm Admin Client Tests
+// ============================================================================
+
+use auth9_core::keycloak::KeycloakSeeder;
+
+fn create_seeder_config(base_url: &str) -> KeycloakConfig {
+    KeycloakConfig {
+        url: base_url.to_string(),
+        public_url: base_url.to_string(),
+        realm: "auth9".to_string(),
+        admin_client_id: "auth9-admin".to_string(),
+        admin_client_secret: "test-secret".to_string(),
+        ssl_required: "none".to_string(),
+    }
+}
+
+#[tokio::test]
+async fn test_seed_master_admin_client_success() {
+    let mock_server = MockServer::start().await;
+
+    // Set environment variable for client secret
+    std::env::set_var("KEYCLOAK_ADMIN_CLIENT_SECRET", "preset-secret-123");
+
+    // Mock token endpoint (using admin-cli)
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .and(wiremock::matchers::body_string_contains("client_id=admin-cli"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "admin-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock check if client exists (not found)
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/master/clients"))
+        .and(wiremock::matchers::query_param("clientId", "auth9-admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&mock_server)
+        .await;
+
+    // Mock client creation in master realm
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/master/clients"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&mock_server)
+        .await;
+
+    let config = create_seeder_config(&mock_server.uri());
+    let seeder = KeycloakSeeder::new(&config);
+
+    let result = seeder.seed_master_admin_client().await;
+    assert!(result.is_ok());
+
+    // Clean up
+    std::env::remove_var("KEYCLOAK_ADMIN_CLIENT_SECRET");
+}
+
+#[tokio::test]
+async fn test_seed_master_admin_client_already_exists() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "admin-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock check if client exists (found)
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/master/clients"))
+        .and(wiremock::matchers::query_param("clientId", "auth9-admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "id": "existing-client-uuid",
+                "clientId": "auth9-admin"
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    let config = create_seeder_config(&mock_server.uri());
+    let seeder = KeycloakSeeder::new(&config);
+
+    let result = seeder.seed_master_admin_client().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_seed_master_admin_client_conflict_handling() {
+    let mock_server = MockServer::start().await;
+
+    std::env::set_var("KEYCLOAK_ADMIN_CLIENT_SECRET", "preset-secret-123");
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "admin-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock check if client exists (not found initially)
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/master/clients"))
+        .and(wiremock::matchers::query_param("clientId", "auth9-admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&mock_server)
+        .await;
+
+    // Mock client creation returning conflict (race condition scenario)
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/master/clients"))
+        .respond_with(ResponseTemplate::new(409).set_body_json(json!({
+            "errorMessage": "Client auth9-admin already exists"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let config = create_seeder_config(&mock_server.uri());
+    let seeder = KeycloakSeeder::new(&config);
+
+    let result = seeder.seed_master_admin_client().await;
+    // Should succeed despite conflict (idempotency)
+    assert!(result.is_ok());
+
+    std::env::remove_var("KEYCLOAK_ADMIN_CLIENT_SECRET");
+}
+
+#[tokio::test]
+async fn test_seed_master_admin_client_with_auto_generated_secret() {
+    let mock_server = MockServer::start().await;
+
+    // No preset secret (should retrieve auto-generated one)
+    std::env::remove_var("KEYCLOAK_ADMIN_CLIENT_SECRET");
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "admin-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock check if client exists (not found)
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/master/clients"))
+        .and(wiremock::matchers::query_param("clientId", "auth9-admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&mock_server)
+        .await;
+
+    // Mock client creation
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/master/clients"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&mock_server)
+        .await;
+
+    // Mock get client UUID by clientId
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/master/clients"))
+        .and(wiremock::matchers::query_param("clientId", "auth9-admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "id": "new-client-uuid-123",
+                "clientId": "auth9-admin"
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    // Mock get client secret
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/master/clients/new-client-uuid-123/client-secret"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "type": "secret",
+            "value": "auto-generated-secret-xyz"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let config = create_seeder_config(&mock_server.uri());
+    let seeder = KeycloakSeeder::new(&config);
+
+    let result = seeder.seed_master_admin_client().await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_seed_admin_client_in_configured_realm() {
+    let mock_server = MockServer::start().await;
+
+    std::env::set_var("KEYCLOAK_ADMIN_CLIENT_SECRET", "preset-secret-123");
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "admin-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock check if client exists in auth9 realm (not found)
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/auth9/clients"))
+        .and(wiremock::matchers::query_param("clientId", "auth9-admin"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&mock_server)
+        .await;
+
+    // Mock client creation in auth9 realm
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/auth9/clients"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&mock_server)
+        .await;
+
+    let config = create_seeder_config(&mock_server.uri());
+    let seeder = KeycloakSeeder::new(&config);
+
+    let result = seeder.seed_admin_client().await;
+    assert!(result.is_ok());
+
+    std::env::remove_var("KEYCLOAK_ADMIN_CLIENT_SECRET");
+}
