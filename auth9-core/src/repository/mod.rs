@@ -1,14 +1,18 @@
 //! Data access layer (Repository pattern)
 
 pub mod audit;
+pub mod invitation;
 pub mod rbac;
 pub mod service;
+pub mod system_settings;
 pub mod tenant;
 pub mod user;
 
 pub use audit::AuditRepository;
+pub use invitation::InvitationRepository;
 pub use rbac::RbacRepository;
 pub use service::ServiceRepository;
+pub use system_settings::SystemSettingsRepository;
 pub use tenant::TenantRepository;
 pub use user::UserRepository;
 

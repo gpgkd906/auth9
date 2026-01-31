@@ -1,7 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
 import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
-import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, EnvelopeClosedIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -191,6 +191,11 @@ export default function TenantsPage() {
                           <DropdownMenuLabel>Actions</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => setEditingTenant(tenant)}>
                             <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Edit
+                          </DropdownMenuItem>
+                          <DropdownMenuItem asChild>
+                            <Link to={`/dashboard/tenants/${tenant.id}/invitations`}>
+                              <EnvelopeClosedIcon className="mr-2 h-3.5 w-3.5" /> Invitations
+                            </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
