@@ -12,6 +12,7 @@ use crate::repository::{
     tenant::TenantRepositoryImpl, user::UserRepositoryImpl,
 };
 use crate::service::{ClientService, RbacService, TenantService, UserService};
+use crate::state::HasServices;
 use anyhow::Result;
 use axum::{
     routing::{delete, get, post},
@@ -40,6 +41,56 @@ pub struct AppState {
     pub jwt_manager: JwtManager,
     pub cache_manager: CacheManager,
     pub keycloak_client: KeycloakClient,
+}
+
+/// Implement HasServices trait for production AppState
+impl HasServices for AppState {
+    type TenantRepo = TenantRepositoryImpl;
+    type UserRepo = UserRepositoryImpl;
+    type ServiceRepo = ServiceRepositoryImpl;
+    type RbacRepo = RbacRepositoryImpl;
+    type AuditRepo = AuditRepositoryImpl;
+
+    fn config(&self) -> &Config {
+        &self.config
+    }
+
+    fn tenant_service(&self) -> &TenantService<Self::TenantRepo> {
+        &self.tenant_service
+    }
+
+    fn user_service(&self) -> &UserService<Self::UserRepo> {
+        &self.user_service
+    }
+
+    fn client_service(&self) -> &ClientService<Self::ServiceRepo> {
+        &self.client_service
+    }
+
+    fn rbac_service(&self) -> &RbacService<Self::RbacRepo> {
+        &self.rbac_service
+    }
+
+    fn audit_repo(&self) -> &Self::AuditRepo {
+        &self.audit_repo
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+
+    fn keycloak_client(&self) -> &KeycloakClient {
+        &self.keycloak_client
+    }
+
+    async fn check_ready(&self) -> (bool, bool) {
+        let db_ok = sqlx::query("SELECT 1")
+            .execute(&self.db_pool)
+            .await
+            .is_ok();
+        let cache_ok = self.cache_manager.ping().await.is_ok();
+        (db_ok, cache_ok)
+    }
 }
 
 /// Run the server
@@ -138,8 +189,11 @@ pub async fn run(config: Config) -> Result<()> {
     Ok(())
 }
 
-/// Build the HTTP router
-pub fn build_router(state: AppState) -> Router {
+/// Build the HTTP router with generic state type
+///
+/// This function is generic over the state type, allowing it to work with
+/// both production `AppState` and test implementations that implement `HasServices`.
+pub fn build_router<S: HasServices>(state: S) -> Router {
     // CORS configuration
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -149,67 +203,67 @@ pub fn build_router(state: AppState) -> Router {
     Router::new()
         // Health endpoints
         .route("/health", get(api::health::health))
-        .route("/ready", get(api::health::ready))
+        .route("/ready", get(api::health::ready::<S>))
         // OpenID Connect Discovery
         .route(
             "/.well-known/openid-configuration",
-            get(api::auth::openid_configuration),
+            get(api::auth::openid_configuration::<S>),
         )
-        .route("/.well-known/jwks.json", get(api::auth::jwks))
+        .route("/.well-known/jwks.json", get(api::auth::jwks::<S>))
         // Auth endpoints
-        .route("/api/v1/auth/authorize", get(api::auth::authorize))
-        .route("/api/v1/auth/callback", get(api::auth::callback))
-        .route("/api/v1/auth/token", post(api::auth::token))
-        .route("/api/v1/auth/logout", get(api::auth::logout))
-        .route("/api/v1/auth/userinfo", get(api::auth::userinfo))
+        .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
+        .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
+        .route("/api/v1/auth/token", post(api::auth::token::<S>))
+        .route("/api/v1/auth/logout", get(api::auth::logout::<S>))
+        .route("/api/v1/auth/userinfo", get(api::auth::userinfo::<S>))
         // Tenant endpoints
         .route(
             "/api/v1/tenants",
-            get(api::tenant::list).post(api::tenant::create),
+            get(api::tenant::list::<S>).post(api::tenant::create::<S>),
         )
         .route(
             "/api/v1/tenants/:id",
-            get(api::tenant::get)
-                .put(api::tenant::update)
-                .delete(api::tenant::delete),
+            get(api::tenant::get::<S>)
+                .put(api::tenant::update::<S>)
+                .delete(api::tenant::delete::<S>),
         )
         // User endpoints
         .route(
             "/api/v1/users",
-            get(api::user::list).post(api::user::create),
+            get(api::user::list::<S>).post(api::user::create::<S>),
         )
         .route(
             "/api/v1/users/:id",
-            get(api::user::get)
-                .put(api::user::update)
-                .delete(api::user::delete),
+            get(api::user::get::<S>)
+                .put(api::user::update::<S>)
+                .delete(api::user::delete::<S>),
         )
         .route(
             "/api/v1/users/:id/mfa",
-            post(api::user::enable_mfa).delete(api::user::disable_mfa),
+            post(api::user::enable_mfa::<S>).delete(api::user::disable_mfa::<S>),
         )
         .route(
             "/api/v1/users/:id/tenants",
-            get(api::user::get_tenants).post(api::user::add_to_tenant),
+            get(api::user::get_tenants::<S>).post(api::user::add_to_tenant::<S>),
         )
         .route(
             "/api/v1/users/:user_id/tenants/:tenant_id",
-            delete(api::user::remove_from_tenant),
+            delete(api::user::remove_from_tenant::<S>),
         )
         .route(
             "/api/v1/tenants/:tenant_id/users",
-            get(api::user::list_by_tenant),
+            get(api::user::list_by_tenant::<S>),
         )
         // Service endpoints
         .route(
             "/api/v1/services",
-            get(api::service::list).post(api::service::create),
+            get(api::service::list::<S>).post(api::service::create::<S>),
         )
         .route(
             "/api/v1/services/:id",
-            get(api::service::get)
-                .put(api::service::update)
-                .delete(api::service::delete),
+            get(api::service::get::<S>)
+                .put(api::service::update::<S>)
+                .delete(api::service::delete::<S>),
         )
         // .route(
         //     "/api/v1/services/:id/secret",
@@ -217,62 +271,62 @@ pub fn build_router(state: AppState) -> Router {
         // )
         .route(
             "/api/v1/services/:id/clients",
-            get(api::service::list_clients).post(api::service::create_client),
+            get(api::service::list_clients::<S>).post(api::service::create_client::<S>),
         )
         .route(
             "/api/v1/services/:service_id/clients/:client_id",
-            delete(api::service::delete_client),
+            delete(api::service::delete_client::<S>),
         )
         .route(
             "/api/v1/services/:service_id/clients/:client_id/regenerate-secret",
-            post(api::service::regenerate_client_secret),
+            post(api::service::regenerate_client_secret::<S>),
         )
         // Permission endpoints
-        .route("/api/v1/permissions", post(api::role::create_permission))
+        .route("/api/v1/permissions", post(api::role::create_permission::<S>))
         .route(
             "/api/v1/permissions/:id",
-            delete(api::role::delete_permission),
+            delete(api::role::delete_permission::<S>),
         )
         .route(
             "/api/v1/services/:service_id/permissions",
-            get(api::role::list_permissions),
+            get(api::role::list_permissions::<S>),
         )
         // Role endpoints
-        .route("/api/v1/roles", post(api::role::create_role))
+        .route("/api/v1/roles", post(api::role::create_role::<S>))
         .route(
             "/api/v1/roles/:id",
-            get(api::role::get_role)
-                .put(api::role::update_role)
-                .delete(api::role::delete_role),
+            get(api::role::get_role::<S>)
+                .put(api::role::update_role::<S>)
+                .delete(api::role::delete_role::<S>),
         )
         .route(
             "/api/v1/services/:service_id/roles",
-            get(api::role::list_roles),
+            get(api::role::list_roles::<S>),
         )
         .route(
             "/api/v1/roles/:role_id/permissions",
-            post(api::role::assign_permission),
+            post(api::role::assign_permission::<S>),
         )
         .route(
             "/api/v1/roles/:role_id/permissions/:permission_id",
-            delete(api::role::remove_permission),
+            delete(api::role::remove_permission::<S>),
         )
         // RBAC assignment
-        .route("/api/v1/rbac/assign", post(api::role::assign_roles))
+        .route("/api/v1/rbac/assign", post(api::role::assign_roles::<S>))
         .route(
             "/api/v1/users/:user_id/tenants/:tenant_id/roles",
-            get(api::role::get_user_roles),
+            get(api::role::get_user_roles::<S>),
         )
         .route(
             "/api/v1/users/:user_id/tenants/:tenant_id/assigned-roles",
-            get(api::role::get_user_assigned_roles),
+            get(api::role::get_user_assigned_roles::<S>),
         )
         .route(
             "/api/v1/users/:user_id/tenants/:tenant_id/roles/:role_id",
-            delete(api::role::unassign_role),
+            delete(api::role::unassign_role::<S>),
         )
         // Audit logs
-        .route("/api/v1/audit-logs", get(api::audit::list))
+        .route("/api/v1/audit-logs", get(api::audit::list::<S>))
         // Add middleware
         .layer(TraceLayer::new_for_http())
         .layer(cors)

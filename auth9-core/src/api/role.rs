@@ -1,11 +1,11 @@
 //! Role and permission API handlers
 
-use crate::api::{extract_actor_id, write_audit_log, MessageResponse, SuccessResponse};
+use crate::api::{extract_actor_id_generic, write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::domain::{
     AssignRolesInput, CreatePermissionInput, CreateRoleInput, StringUuid, UpdateRoleInput,
 };
 use crate::error::Result;
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -19,23 +19,23 @@ use uuid::Uuid;
 // ==================== Permissions ====================
 
 /// List permissions for a service
-pub async fn list_permissions(
-    State(state): State<AppState>,
+pub async fn list_permissions<S: HasServices>(
+    State(state): State<S>,
     Path(service_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let service_id = StringUuid::from(service_id);
-    let permissions = state.rbac_service.list_permissions(service_id).await?;
+    let permissions = state.rbac_service().list_permissions(service_id).await?;
     Ok(Json(SuccessResponse::new(permissions)))
 }
 
 /// Create permission
-pub async fn create_permission(
-    State(state): State<AppState>,
+pub async fn create_permission<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<CreatePermissionInput>,
 ) -> Result<impl IntoResponse> {
-    let permission = state.rbac_service.create_permission(input).await?;
-    let _ = write_audit_log(
+    let permission = state.rbac_service().create_permission(input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "permission.create",
@@ -49,15 +49,15 @@ pub async fn create_permission(
 }
 
 /// Delete permission
-pub async fn delete_permission(
-    State(state): State<AppState>,
+pub async fn delete_permission<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.rbac_service.get_permission(id).await?;
-    state.rbac_service.delete_permission(id).await?;
-    let _ = write_audit_log(
+    let before = state.rbac_service().get_permission(id).await?;
+    state.rbac_service().delete_permission(id).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "permission.delete",
@@ -75,33 +75,33 @@ pub async fn delete_permission(
 // ==================== Roles ====================
 
 /// List roles for a service
-pub async fn list_roles(
-    State(state): State<AppState>,
+pub async fn list_roles<S: HasServices>(
+    State(state): State<S>,
     Path(service_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let service_id = StringUuid::from(service_id);
-    let roles = state.rbac_service.list_roles(service_id).await?;
+    let roles = state.rbac_service().list_roles(service_id).await?;
     Ok(Json(SuccessResponse::new(roles)))
 }
 
 /// Get role by ID
-pub async fn get_role(
-    State(state): State<AppState>,
+pub async fn get_role<S: HasServices>(
+    State(state): State<S>,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let role = state.rbac_service.get_role_with_permissions(id).await?;
+    let role = state.rbac_service().get_role_with_permissions(id).await?;
     Ok(Json(SuccessResponse::new(role)))
 }
 
 /// Create role
-pub async fn create_role(
-    State(state): State<AppState>,
+pub async fn create_role<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<CreateRoleInput>,
 ) -> Result<impl IntoResponse> {
-    let role = state.rbac_service.create_role(input).await?;
-    let _ = write_audit_log(
+    let role = state.rbac_service().create_role(input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "role.create",
@@ -115,16 +115,16 @@ pub async fn create_role(
 }
 
 /// Update role
-pub async fn update_role(
-    State(state): State<AppState>,
+pub async fn update_role<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateRoleInput>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.rbac_service.get_role(id).await?;
-    let role = state.rbac_service.update_role(id, input).await?;
-    let _ = write_audit_log(
+    let before = state.rbac_service().get_role(id).await?;
+    let role = state.rbac_service().update_role(id, input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "role.update",
@@ -138,15 +138,15 @@ pub async fn update_role(
 }
 
 /// Delete role
-pub async fn delete_role(
-    State(state): State<AppState>,
+pub async fn delete_role<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.rbac_service.get_role(id).await?;
-    state.rbac_service.delete_role(id).await?;
-    let _ = write_audit_log(
+    let before = state.rbac_service().get_role(id).await?;
+    state.rbac_service().delete_role(id).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "role.delete",
@@ -167,8 +167,8 @@ pub struct AssignPermissionInput {
 }
 
 /// Assign permission to role
-pub async fn assign_permission(
-    State(state): State<AppState>,
+pub async fn assign_permission<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(role_id): Path<Uuid>,
     Json(input): Json<AssignPermissionInput>,
@@ -176,10 +176,10 @@ pub async fn assign_permission(
     let role_id = StringUuid::from(role_id);
     let permission_id = StringUuid::from(input.permission_id);
     state
-        .rbac_service
+        .rbac_service()
         .assign_permission_to_role(role_id, permission_id)
         .await?;
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "role.assign_permission",
@@ -193,18 +193,18 @@ pub async fn assign_permission(
 }
 
 /// Remove permission from role
-pub async fn remove_permission(
-    State(state): State<AppState>,
+pub async fn remove_permission<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path((role_id, permission_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     let role_id = StringUuid::from(role_id);
     let permission_id = StringUuid::from(permission_id);
     state
-        .rbac_service
+        .rbac_service()
         .remove_permission_from_role(role_id, permission_id)
         .await?;
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "role.remove_permission",
@@ -220,14 +220,14 @@ pub async fn remove_permission(
 // ==================== User-Role Assignment ====================
 
 /// Assign roles to user in tenant
-pub async fn assign_roles(
-    State(state): State<AppState>,
+pub async fn assign_roles<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<AssignRolesInput>,
 ) -> Result<impl IntoResponse> {
-    let granted_by = extract_actor_id(&state, &headers).map(StringUuid::from);
-    state.rbac_service.assign_roles(input, granted_by).await?;
-    let _ = write_audit_log(
+    let granted_by = extract_actor_id_generic(&state, &headers).map(StringUuid::from);
+    state.rbac_service().assign_roles(input, granted_by).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "rbac.assign_roles",
@@ -241,36 +241,36 @@ pub async fn assign_roles(
 }
 
 /// Get user roles in tenant
-pub async fn get_user_roles(
-    State(state): State<AppState>,
+pub async fn get_user_roles<S: HasServices>(
+    State(state): State<S>,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     let roles = state
-        .rbac_service
+        .rbac_service()
         .get_user_roles(user_id, tenant_id)
         .await?;
     Ok(Json(SuccessResponse::new(roles)))
 }
 
 /// Get user assigned roles (raw records with IDs)
-pub async fn get_user_assigned_roles(
-    State(state): State<AppState>,
+pub async fn get_user_assigned_roles<S: HasServices>(
+    State(state): State<S>,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     let roles = state
-        .rbac_service
+        .rbac_service()
         .get_user_role_records(user_id, tenant_id)
         .await?;
     Ok(Json(SuccessResponse::new(roles)))
 }
 
 /// Unassign role from user in tenant
-pub async fn unassign_role(
-    State(state): State<AppState>,
+pub async fn unassign_role<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path((user_id, tenant_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
@@ -278,10 +278,10 @@ pub async fn unassign_role(
     let tenant_id = StringUuid::from(tenant_id);
     let role_id = StringUuid::from(role_id);
     state
-        .rbac_service
+        .rbac_service()
         .unassign_role(user_id, tenant_id, role_id)
         .await?;
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "rbac.unassign_role",

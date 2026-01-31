@@ -1,7 +1,7 @@
 //! Authentication API handlers
 
 use crate::error::{AppError, Result};
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{
     extract::{Query, State},
     http::StatusCode,
@@ -29,18 +29,18 @@ pub struct AuthorizeRequest {
 }
 
 /// Login redirect (initiates OIDC flow)
-pub async fn authorize(
-    State(state): State<AppState>,
+pub async fn authorize<S: HasServices>(
+    State(state): State<S>,
     Query(params): Query<AuthorizeRequest>,
 ) -> Result<Response> {
     let service = state
-        .client_service
+        .client_service()
         .get_by_client_id(&params.client_id)
         .await?;
 
     validate_redirect_uri(&service.redirect_uris, &params.redirect_uri)?;
 
-    let callback_url = build_callback_url(&state.config.jwt.issuer);
+    let callback_url = build_callback_url(&state.config().jwt.issuer);
 
     let state_payload = CallbackState {
         redirect_uri: params.redirect_uri,
@@ -51,8 +51,8 @@ pub async fn authorize(
     let encoded_state = encode_state(&state_payload)?;
 
     let auth_url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
-        keycloak_public_url: &state.config.keycloak.public_url,
-        realm: &state.config.keycloak.realm,
+        keycloak_public_url: &state.config().keycloak.public_url,
+        realm: &state.config().keycloak.realm,
         response_type: &params.response_type,
         client_id: &state_payload.client_id,
         callback_url: &callback_url,
@@ -80,8 +80,8 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
 }
 
-pub async fn callback(
-    State(state): State<AppState>,
+pub async fn callback<S: HasServices>(
+    State(state): State<S>,
     Query(params): Query<CallbackRequest>,
 ) -> Result<Response> {
     let state_payload = decode_state(params.state.as_deref())?;
@@ -89,7 +89,7 @@ pub async fn callback(
     let token_response = exchange_code_for_tokens(&state, &state_payload, &params.code).await?;
     let userinfo = fetch_userinfo(&state, &token_response.access_token).await?;
 
-    let user = match state.user_service.get_by_keycloak_id(&userinfo.sub).await {
+    let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
         Ok(existing) => existing,
         Err(AppError::NotFound(_)) => {
             let input = crate::domain::CreateUserInput {
@@ -97,12 +97,12 @@ pub async fn callback(
                 display_name: userinfo.name.clone(),
                 avatar_url: None,
             };
-            state.user_service.create(&userinfo.sub, input).await?
+            state.user_service().create(&userinfo.sub, input).await?
         }
         Err(e) => return Err(e),
     };
 
-    let identity_token = state.jwt_manager.create_identity_token(
+    let identity_token = state.jwt_manager().create_identity_token(
         *user.id,
         &userinfo.email,
         userinfo.name.as_deref(),
@@ -117,7 +117,7 @@ pub async fn callback(
         pairs.append_pair("token_type", "Bearer");
         pairs.append_pair(
             "expires_in",
-            &state.jwt_manager.access_token_ttl().to_string(),
+            &state.jwt_manager().access_token_ttl().to_string(),
         );
         if let Some(original_state) = state_payload.original_state {
             pairs.append_pair("state", &original_state);
@@ -138,8 +138,8 @@ pub struct TokenRequest {
     pub refresh_token: Option<String>,
 }
 
-pub async fn token(
-    State(state): State<AppState>,
+pub async fn token<S: HasServices>(
+    State(state): State<S>,
     Json(params): Json<TokenRequest>,
 ) -> Result<Response> {
     match params.grant_type.as_str() {
@@ -163,7 +163,7 @@ pub async fn token(
             let token_response = exchange_code_for_tokens(&state, &state_payload, &code).await?;
             let userinfo = fetch_userinfo(&state, &token_response.access_token).await?;
 
-            let user = match state.user_service.get_by_keycloak_id(&userinfo.sub).await {
+            let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
                 Ok(existing) => existing,
                 Err(AppError::NotFound(_)) => {
                     let input = crate::domain::CreateUserInput {
@@ -171,12 +171,12 @@ pub async fn token(
                         display_name: userinfo.name.clone(),
                         avatar_url: None,
                     };
-                    state.user_service.create(&userinfo.sub, input).await?
+                    state.user_service().create(&userinfo.sub, input).await?
                 }
                 Err(e) => return Err(e),
             };
 
-            let identity_token = state.jwt_manager.create_identity_token(
+            let identity_token = state.jwt_manager().create_identity_token(
                 *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
@@ -185,7 +185,7 @@ pub async fn token(
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),
-                expires_in: state.jwt_manager.access_token_ttl(),
+                expires_in: state.jwt_manager().access_token_ttl(),
                 refresh_token: token_response.refresh_token,
                 id_token: token_response.id_token,
             })
@@ -200,20 +200,20 @@ pub async fn token(
                 .ok_or_else(|| AppError::BadRequest("Missing client_secret".to_string()))?;
 
             let service = state
-                .client_service
+                .client_service()
                 .verify_secret(&client_id, &client_secret)
                 .await?;
 
             let email = format!("service+{}@auth9.local", client_id);
             let identity_token =
                 state
-                    .jwt_manager
+                    .jwt_manager()
                     .create_identity_token(service.id.0, &email, None)?;
 
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),
-                expires_in: state.jwt_manager.access_token_ttl(),
+                expires_in: state.jwt_manager().access_token_ttl(),
                 refresh_token: None,
                 id_token: None,
             })
@@ -237,7 +237,7 @@ pub async fn token(
                 exchange_refresh_token(&state, &state_payload, &refresh_token).await?;
             let userinfo = fetch_userinfo(&state, &token_response.access_token).await?;
 
-            let user = match state.user_service.get_by_keycloak_id(&userinfo.sub).await {
+            let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
                 Ok(existing) => existing,
                 Err(AppError::NotFound(_)) => {
                     let input = crate::domain::CreateUserInput {
@@ -245,12 +245,12 @@ pub async fn token(
                         display_name: userinfo.name.clone(),
                         avatar_url: None,
                     };
-                    state.user_service.create(&userinfo.sub, input).await?
+                    state.user_service().create(&userinfo.sub, input).await?
                 }
                 Err(e) => return Err(e),
             };
 
-            let identity_token = state.jwt_manager.create_identity_token(
+            let identity_token = state.jwt_manager().create_identity_token(
                 *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
@@ -259,7 +259,7 @@ pub async fn token(
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),
-                expires_in: state.jwt_manager.access_token_ttl(),
+                expires_in: state.jwt_manager().access_token_ttl(),
                 refresh_token: token_response.refresh_token,
                 id_token: token_response.id_token,
             })
@@ -280,13 +280,13 @@ pub struct LogoutRequest {
     pub state: Option<String>,
 }
 
-pub async fn logout(
-    State(state): State<AppState>,
+pub async fn logout<S: HasServices>(
+    State(state): State<S>,
     Query(params): Query<LogoutRequest>,
 ) -> Result<Response> {
     let logout_url = build_keycloak_logout_url(
-        &state.config.keycloak.public_url,
-        &state.config.keycloak.realm,
+        &state.config().keycloak.public_url,
+        &state.config().keycloak.realm,
         params.id_token_hint.as_deref(),
         params.post_logout_redirect_uri.as_deref(),
         params.state.as_deref(),
@@ -296,11 +296,11 @@ pub async fn logout(
 }
 
 /// UserInfo endpoint
-pub async fn userinfo(
-    State(state): State<AppState>,
+pub async fn userinfo<S: HasServices>(
+    State(state): State<S>,
     TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
 ) -> Result<Response> {
-    let claims = state.jwt_manager.verify_identity_token(auth.token())?;
+    let claims = state.jwt_manager().verify_identity_token(auth.token())?;
 
     Ok(Json(claims).into_response())
 }
@@ -428,27 +428,27 @@ struct KeycloakUserInfo {
     name: Option<String>,
 }
 
-async fn exchange_code_for_tokens(
-    state: &AppState,
+async fn exchange_code_for_tokens<S: HasServices>(
+    state: &S,
     callback_state: &CallbackState,
     code: &str,
 ) -> Result<KeycloakTokenResponse> {
     let client_uuid = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_uuid_by_client_id(&callback_state.client_id)
         .await?;
     let client_secret = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_secret(&client_uuid)
         .await?;
 
     let token_url = format!(
         "{}/realms/{}/protocol/openid-connect/token",
-        state.config.keycloak.url, state.config.keycloak.realm
+        state.config().keycloak.url, state.config().keycloak.realm
     );
     let callback_url = format!(
         "{}/api/v1/auth/callback",
-        state.config.jwt.issuer.trim_end_matches('/')
+        state.config().jwt.issuer.trim_end_matches('/')
     );
 
     let params = [
@@ -486,23 +486,23 @@ async fn exchange_code_for_tokens(
         .map_err(|e| AppError::Keycloak(format!("Failed to parse token response: {}", e)))
 }
 
-async fn exchange_refresh_token(
-    state: &AppState,
+async fn exchange_refresh_token<S: HasServices>(
+    state: &S,
     callback_state: &CallbackState,
     refresh_token: &str,
 ) -> Result<KeycloakTokenResponse> {
     let client_uuid = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_uuid_by_client_id(&callback_state.client_id)
         .await?;
     let client_secret = state
-        .keycloak_client
+        .keycloak_client()
         .get_client_secret(&client_uuid)
         .await?;
 
     let token_url = format!(
         "{}/realms/{}/protocol/openid-connect/token",
-        state.config.keycloak.url, state.config.keycloak.realm
+        state.config().keycloak.url, state.config().keycloak.realm
     );
 
     let params = [
@@ -534,10 +534,10 @@ async fn exchange_refresh_token(
         .map_err(|e| AppError::Keycloak(format!("Failed to parse token response: {}", e)))
 }
 
-async fn fetch_userinfo(state: &AppState, access_token: &str) -> Result<KeycloakUserInfo> {
+async fn fetch_userinfo<S: HasServices>(state: &S, access_token: &str) -> Result<KeycloakUserInfo> {
     let userinfo_url = format!(
         "{}/realms/{}/protocol/openid-connect/userinfo",
-        state.config.keycloak.url, state.config.keycloak.realm
+        state.config().keycloak.url, state.config().keycloak.realm
     );
 
     tracing::debug!(
@@ -586,13 +586,13 @@ pub struct OpenIdConfiguration {
     pub claims_supported: Vec<String>,
 }
 
-pub async fn openid_configuration(State(state): State<AppState>) -> impl IntoResponse {
-    let base_url = &state.config.jwt.issuer;
+pub async fn openid_configuration<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
+    let base_url = &state.config().jwt.issuer;
     let jwks_uri = state
-        .jwt_manager
+        .jwt_manager()
         .public_key_pem()
         .map(|_| format!("{}/.well-known/jwks.json", base_url));
-    let algs = if state.jwt_manager.uses_rsa() {
+    let algs = if state.jwt_manager().uses_rsa() {
         vec!["RS256".to_string()]
     } else {
         vec!["HS256".to_string()]
@@ -654,8 +654,8 @@ struct JwkKey {
     e: String,
 }
 
-pub async fn jwks(State(state): State<AppState>) -> impl IntoResponse {
-    let public_key_pem = match state.jwt_manager.public_key_pem() {
+pub async fn jwks<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
+    let public_key_pem = match state.jwt_manager().public_key_pem() {
         Some(key) => key,
         None => return StatusCode::NOT_FOUND.into_response(),
     };

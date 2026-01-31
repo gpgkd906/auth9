@@ -15,6 +15,7 @@ pub mod migration;
 pub mod repository;
 pub mod server;
 pub mod service;
+pub mod state;
 
 // Re-export commonly used types
 pub use config::Config;

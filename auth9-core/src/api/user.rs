@@ -1,12 +1,12 @@
 //! User API handlers
 
 use crate::api::{
-    write_audit_log, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
+    write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
 use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput};
 use crate::error::Result;
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
-use crate::server::AppState;
+use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -18,12 +18,12 @@ use serde::Deserialize;
 use uuid::Uuid;
 
 /// List users
-pub async fn list(
-    State(state): State<AppState>,
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
     let (users, total) = state
-        .user_service
+        .user_service()
         .list(pagination.page, pagination.per_page)
         .await?;
 
@@ -36,9 +36,12 @@ pub async fn list(
 }
 
 /// Get user by ID
-pub async fn get(State(state): State<AppState>, Path(id): Path<Uuid>) -> Result<impl IntoResponse> {
+pub async fn get<S: HasServices>(
+    State(state): State<S>,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let user = state.user_service.get(id).await?;
+    let user = state.user_service().get(id).await?;
     Ok(Json(SuccessResponse::new(user)))
 }
 
@@ -51,8 +54,8 @@ pub struct CreateUserRequest {
 }
 
 /// Create user
-pub async fn create(
-    State(state): State<AppState>,
+pub async fn create<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse> {
@@ -65,7 +68,7 @@ pub async fn create(
     });
 
     let keycloak_id = state
-        .keycloak_client
+        .keycloak_client()
         .create_user(&CreateKeycloakUserInput {
             username: input.user.email.clone(),
             email: input.user.email.clone(),
@@ -77,9 +80,9 @@ pub async fn create(
         })
         .await?;
 
-    let user = state.user_service.create(&keycloak_id, input.user).await?;
+    let user = state.user_service().create(&keycloak_id, input.user).await?;
 
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.create",
@@ -93,14 +96,14 @@ pub async fn create(
 }
 
 /// Update user
-pub async fn update(
-    State(state): State<AppState>,
+pub async fn update<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.user_service.get(id).await?;
+    let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
         let update = KeycloakUserUpdate {
             username: None,
@@ -112,12 +115,12 @@ pub async fn update(
             required_actions: None,
         };
         state
-            .keycloak_client
+            .keycloak_client()
             .update_user(&before.keycloak_id, &update)
             .await?;
     }
-    let user = state.user_service.update(id, input).await?;
-    let _ = write_audit_log(
+    let user = state.user_service().update(id, input).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.update",
@@ -131,20 +134,20 @@ pub async fn update(
 }
 
 /// Delete user
-pub async fn delete(
-    State(state): State<AppState>,
+pub async fn delete<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let before = state.user_service.get(id).await?;
-    if let Err(err) = state.keycloak_client.delete_user(&before.keycloak_id).await {
+    let before = state.user_service().get(id).await?;
+    if let Err(err) = state.keycloak_client().delete_user(&before.keycloak_id).await {
         if !matches!(err, crate::error::AppError::NotFound(_)) {
             return Err(err);
         }
     }
-    state.user_service.delete(id).await?;
-    let _ = write_audit_log(
+    state.user_service().delete(id).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.delete",
@@ -164,21 +167,21 @@ pub struct AddToTenantRequest {
     pub role_in_tenant: String,
 }
 
-pub async fn add_to_tenant(
-    State(state): State<AppState>,
+pub async fn add_to_tenant<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(user_id): Path<Uuid>,
     Json(input): Json<AddToTenantRequest>,
 ) -> Result<impl IntoResponse> {
     let tenant_user = state
-        .user_service
+        .user_service()
         .add_to_tenant(AddUserToTenantInput {
             user_id,
             tenant_id: input.tenant_id,
             role_in_tenant: input.role_in_tenant,
         })
         .await?;
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.add_to_tenant",
@@ -192,18 +195,18 @@ pub async fn add_to_tenant(
 }
 
 /// Remove user from tenant
-pub async fn remove_from_tenant(
-    State(state): State<AppState>,
+pub async fn remove_from_tenant<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     state
-        .user_service
+        .user_service()
         .remove_from_tenant(user_id, tenant_id)
         .await?;
-    let _ = write_audit_log(
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.remove_from_tenant",
@@ -217,22 +220,22 @@ pub async fn remove_from_tenant(
 }
 
 /// Get user's tenants
-pub async fn get_tenants(
-    State(state): State<AppState>,
+pub async fn get_tenants<S: HasServices>(
+    State(state): State<S>,
     Path(user_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let user_id = StringUuid::from(user_id);
-    let tenants = state.user_service.get_user_tenants(user_id).await?;
+    let tenants = state.user_service().get_user_tenants(user_id).await?;
     Ok(Json(SuccessResponse::new(tenants)))
 }
 
-pub async fn enable_mfa(
-    State(state): State<AppState>,
+pub async fn enable_mfa<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let user = state.user_service.get(id).await?;
+    let user = state.user_service().get(id).await?;
     let update = KeycloakUserUpdate {
         username: None,
         email: None,
@@ -243,11 +246,11 @@ pub async fn enable_mfa(
         required_actions: Some(vec!["CONFIGURE_TOTP".to_string()]),
     };
     state
-        .keycloak_client
+        .keycloak_client()
         .update_user(&user.keycloak_id, &update)
         .await?;
-    let updated = state.user_service.set_mfa_enabled(id, true).await?;
-    let _ = write_audit_log(
+    let updated = state.user_service().set_mfa_enabled(id, true).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.mfa.enable",
@@ -260,15 +263,15 @@ pub async fn enable_mfa(
     Ok(Json(SuccessResponse::new(updated)))
 }
 
-pub async fn disable_mfa(
-    State(state): State<AppState>,
+pub async fn disable_mfa<S: HasServices>(
+    State(state): State<S>,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
-    let user = state.user_service.get(id).await?;
+    let user = state.user_service().get(id).await?;
     state
-        .keycloak_client
+        .keycloak_client()
         .remove_totp_credentials(&user.keycloak_id)
         .await?;
     let update = KeycloakUserUpdate {
@@ -281,11 +284,11 @@ pub async fn disable_mfa(
         required_actions: Some(vec![]),
     };
     state
-        .keycloak_client
+        .keycloak_client()
         .update_user(&user.keycloak_id, &update)
         .await?;
-    let updated = state.user_service.set_mfa_enabled(id, false).await?;
-    let _ = write_audit_log(
+    let updated = state.user_service().set_mfa_enabled(id, false).await?;
+    let _ = write_audit_log_generic(
         &state,
         &headers,
         "user.mfa.disable",
@@ -299,14 +302,14 @@ pub async fn disable_mfa(
 }
 
 /// List users in a tenant
-pub async fn list_by_tenant(
-    State(state): State<AppState>,
+pub async fn list_by_tenant<S: HasServices>(
+    State(state): State<S>,
     Path(tenant_id): Path<Uuid>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
     let users = state
-        .user_service
+        .user_service()
         .list_tenant_users(tenant_id, pagination.page, pagination.per_page)
         .await?;
     Ok(Json(SuccessResponse::new(users)))
