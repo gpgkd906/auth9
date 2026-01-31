@@ -1,0 +1,41 @@
+# Rust build artifacts (14GB!)
+target/
+**/target/
+
+# Coverage reports
+coverage/
+tarpaulin-report.html
+*.profraw
+*.profdata
+
+# Test artifacts
+llvm-cov-target/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+../.github/
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+tmp/
+temp/

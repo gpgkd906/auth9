@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/usr/bin/env zsh
 # Auth9 Interactive Deployment Script
 #
 # This script deploys Auth9 to a Kubernetes cluster with interactive configuration setup.
@@ -10,7 +10,6 @@
 #   --interactive       Enable interactive mode (default)
 #   --non-interactive   Disable interactive mode, use original behavior
 #   --dry-run           Print what would be applied without executing
-#   --skip-restart      Skip the deployment restart step
 #   --skip-init         Skip the auth9-init job (use if already initialized)
 #   --namespace NS      Use a different namespace (default: auth9)
 #   --config-file FILE  Load configuration from file (JSON or env format)
@@ -24,9 +23,8 @@ set -e
 
 # Configuration
 NAMESPACE="${NAMESPACE:-auth9}"
-K8S_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/k8s"
+K8S_DIR="$(cd "$(dirname "$0")" && pwd)/k8s"
 DRY_RUN=""
-SKIP_RESTART=""
 SKIP_INIT=""
 INTERACTIVE="true"
 CONFIG_FILE=""
@@ -91,10 +89,10 @@ prompt_user() {
     local input
 
     if [ -n "$default" ]; then
-        read -p "$message [$default]: " input
+        read "input?$message [$default]: "
         echo "${input:-$default}"
     else
-        read -p "$message: " input
+        read "input?$message: "
         echo "$input"
     fi
 }
@@ -105,9 +103,9 @@ prompt_password() {
     local pass2
 
     while true; do
-        read -s -p "$message: " pass1
+        read -s "pass1?$message: "
         echo ""
-        read -s -p "Confirm password: " pass2
+        read -s "pass2?Confirm password: "
         echo ""
 
         if [ "$pass1" = "$pass2" ] && [ -n "$pass1" ]; then
@@ -124,7 +122,7 @@ confirm_action() {
     local response
 
     while true; do
-        read -p "$message [y/N]: " response
+        read "response?$message [y/N]: "
         case "$response" in
             [Yy]* ) return 0 ;;
             [Nn]* | "" ) return 1 ;;
@@ -188,8 +186,9 @@ check_prerequisites() {
 detect_existing_secrets() {
     local secret_name="$1"
     local namespace="$2"
-    local -n secret_array=$3
-    local keys=("${!4}")
+    local array_name="$3"
+    shift 3
+    local keys=("$@")
 
     if ! kubectl get secret "$secret_name" -n "$namespace" &>/dev/null; then
         print_warning "$secret_name not found (will create)"
@@ -200,7 +199,7 @@ detect_existing_secrets() {
     for key in "${keys[@]}"; do
         local value=$(kubectl get secret "$secret_name" -n "$namespace" -o jsonpath="{.data.$key}" 2>/dev/null | base64 -d 2>/dev/null || echo "")
         if [ -n "$value" ]; then
-            secret_array[$key]="$value"
+            eval "${array_name}[$key]=\"\$value\""
             ((found_count++))
         fi
     done
@@ -431,7 +430,7 @@ generate_secrets() {
         print_warning "Generated JWT_SECRET - SAVE THIS SECURELY:"
         echo -e "${GREEN}${AUTH9_SECRETS[JWT_SECRET]}${NC}"
         echo ""
-        read -p "Press Enter after saving..."
+        read "?Press Enter after saving..."
     else
         print_info "JWT_SECRET already exists (not regenerating)"
     fi
@@ -443,7 +442,7 @@ generate_secrets() {
         print_warning "Generated SESSION_SECRET - SAVE THIS SECURELY:"
         echo -e "${GREEN}${AUTH9_SECRETS[SESSION_SECRET]}${NC}"
         echo ""
-        read -p "Press Enter after saving..."
+        read "?Press Enter after saving..."
     else
         print_info "SESSION_SECRET already exists (not regenerating)"
     fi
@@ -456,14 +455,21 @@ generate_secrets() {
 create_or_patch_secret() {
     local secret_name=$1
     local namespace=$2
-    local -n secret_data=$3
+    local array_name=$3
+
+    # Get keys from the associative array using eval
+    local keys=()
+    eval 'keys=(${(k)'$array_name'})'
+    local key_count=${#keys[@]}
 
     if kubectl get secret "$secret_name" -n "$namespace" &>/dev/null; then
         # Secret exists, use patch
         print_info "Updating existing $secret_name..."
 
-        for key in "${!secret_data[@]}"; do
-            local value_b64=$(echo -n "${secret_data[$key]}" | base64 | tr -d '\n')
+        for key in "${keys[@]}"; do
+            local value
+            eval 'value="${'$array_name'[$key]}"'
+            local value_b64=$(echo -n "$value" | base64 | tr -d '\n')
             local patch_add="[{\"op\":\"add\",\"path\":\"/data/$key\",\"value\":\"$value_b64\"}]"
             local patch_replace="[{\"op\":\"replace\",\"path\":\"/data/$key\",\"value\":\"$value_b64\"}]"
 
@@ -476,21 +482,23 @@ create_or_patch_secret() {
             fi
         done
 
-        print_success "$secret_name updated (${#secret_data[@]} keys)"
+        print_success "$secret_name updated ($key_count keys)"
     else
         # Secret doesn't exist, create it
         print_info "Creating $secret_name..."
 
         local create_cmd="kubectl create secret generic $secret_name"
-        for key in "${!secret_data[@]}"; do
+        for key in "${keys[@]}"; do
+            local value
+            eval 'value="${'$array_name'[$key]}"'
             # Escape single quotes in value
-            local escaped_value="${secret_data[$key]//\'/\'\\\'\'}"
+            local escaped_value="${value//\'/\'\\\'\'}"
             create_cmd+=" --from-literal=$key='${escaped_value}'"
         done
         create_cmd+=" -n $namespace"
 
         if eval "$create_cmd"; then
-            print_success "$secret_name created (${#secret_data[@]} keys)"
+            print_success "$secret_name created ($key_count keys)"
         else
             print_error "Failed to create $secret_name"
             return 1
@@ -549,15 +557,16 @@ run_interactive_setup() {
     print_progress "2/6" "Detecting existing configuration"
 
     # Detect auth9-secrets
-    local auth9_keys=("DATABASE_URL" "REDIS_URL" "JWT_SECRET" "SESSION_SECRET" "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET")
-    detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS auth9_keys[@]
+    detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
+        "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "SESSION_SECRET" \
+        "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" || true
 
     # Detect keycloak-secrets
-    local keycloak_keys=("KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD")
-    detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS keycloak_keys[@]
+    detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
+        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" || true
 
     # Detect ConfigMap
-    detect_existing_configmap
+    detect_existing_configmap || true
 
     # Check if init job is needed
     should_run_init_job
@@ -622,56 +631,60 @@ deploy_auth9() {
     print_header "Auth9 Deployment"
 
     # Step 1: Create namespace and service account
-    print_progress "1/9" "Creating namespace and service account"
+    print_progress "1/10" "Creating namespace and service account"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/ghcr-secret.yaml" $DRY_RUN
 
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "2/9" "Applying ConfigMap"
+        print_progress "2/10" "Applying ConfigMap"
         kubectl apply -f "$K8S_DIR/configmap.yaml" $DRY_RUN
     else
-        print_progress "2/9" "ConfigMap already applied"
+        print_progress "2/10" "ConfigMap already applied"
     fi
 
     # Step 3: Secrets already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "3/9" "Checking secrets"
+        print_progress "3/10" "Checking secrets"
         check_secrets_non_interactive
     else
-        print_progress "3/9" "Secrets already applied"
+        print_progress "3/10" "Secrets already applied"
     fi
 
-    # Step 4-5: Init job (conditional execution)
-    if [ "$NEEDS_INIT_JOB" = "true" ] && [ -z "$SKIP_INIT" ]; then
-        print_progress "4/9" "Running auth9-init job"
-        run_init_job
+    # Step 4: Deploy infrastructure (keycloak, redis, postgres)
+    print_progress "4/10" "Deploying infrastructure"
+    deploy_infrastructure
 
-        print_progress "5/9" "Extracting Keycloak admin client secret"
-        extract_client_secret
-    else
-        print_progress "4/9" "Skipping auth9-init job"
-        print_progress "5/9" "Skipping secret extraction"
-    fi
-
-    # Step 6: Deploy applications
-    print_progress "6/9" "Deploying applications"
-    deploy_applications
-
-    # Step 7-8: Wait for dependencies
-    print_progress "7/9" "Waiting for keycloak-postgres to be ready"
+    # Step 5-6: Wait for dependencies
+    print_progress "5/10" "Waiting for keycloak-postgres to be ready"
     wait_for_postgres
 
-    print_progress "8/9" "Waiting for redis to be ready"
-    wait_for_redis
+    print_progress "6/10" "Waiting for keycloak to be ready"
+    wait_for_keycloak
 
-    # Step 9: Restart deployments
-    if [ -z "$SKIP_RESTART" ] && [ -z "$DRY_RUN" ]; then
-        print_progress "9/9" "Restarting deployments"
-        restart_deployments
+    # Step 7-8: Init job (conditional execution) - runs AFTER keycloak is ready
+    if [ "$NEEDS_INIT_JOB" = "true" ] && [ -z "$SKIP_INIT" ]; then
+        print_progress "7/10" "Running auth9-init job"
+        run_init_job
+
+        print_progress "8/10" "Extracting Keycloak admin client secret"
+        extract_client_secret
     else
-        print_progress "9/9" "Skipping restart step"
+        print_progress "7/10" "Skipping auth9-init job"
+        print_progress "8/10" "Skipping secret extraction"
+    fi
+
+    # Step 9: Deploy auth9 applications
+    print_progress "9/10" "Deploying auth9 applications"
+    deploy_auth9_apps
+
+    # Step 10: Wait for auth9 apps to be ready
+    if [ -z "$DRY_RUN" ]; then
+        print_progress "10/10" "Waiting for auth9 applications"
+        wait_for_auth9_apps
+    else
+        print_progress "10/10" "Skipping wait (dry-run)"
     fi
 
     print_deployment_complete
@@ -815,7 +828,21 @@ extract_client_secret() {
     fi
 }
 
-deploy_applications() {
+deploy_infrastructure() {
+    if [ -z "$DRY_RUN" ]; then
+        print_info "Deploying keycloak..."
+        kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
+
+        print_info "Deploying redis..."
+        kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN
+
+        print_success "Infrastructure deployed"
+    else
+        print_info "Skipping infrastructure deployment (dry-run)"
+    fi
+}
+
+deploy_auth9_apps() {
     if [ -z "$DRY_RUN" ]; then
         print_info "Deploying auth9-core..."
         kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
@@ -823,16 +850,42 @@ deploy_applications() {
         print_info "Deploying auth9-portal..."
         kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
 
-        print_info "Deploying keycloak..."
-        kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
-
-        print_info "Deploying redis..."
-        kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN
-
-        print_success "All applications deployed"
+        print_success "Auth9 applications deployed"
     else
-        print_info "Skipping application deployment (dry-run)"
+        print_info "Skipping auth9 deployment (dry-run)"
     fi
+}
+
+wait_for_keycloak() {
+    if [ -z "$DRY_RUN" ]; then
+        print_info "Waiting for keycloak deployment..."
+        kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=300s || true
+
+        # Also wait for keycloak to be actually ready (responding to health check)
+        print_info "Waiting for keycloak to respond..."
+        local retries=30
+        while [ $retries -gt 0 ]; do
+            if kubectl exec -n "$NAMESPACE" deploy/keycloak -- curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/health/ready 2>/dev/null | grep -q "200"; then
+                print_success "Keycloak is ready"
+                return 0
+            fi
+            sleep 5
+            ((retries--))
+            print_info "Waiting for keycloak... ($retries retries left)"
+        done
+        print_warning "Keycloak health check timed out, continuing anyway..."
+    fi
+}
+
+wait_for_auth9_apps() {
+    print_info "Waiting for auth9-core..."
+    kubectl rollout status deployment/auth9-core -n "$NAMESPACE" --timeout=300s || true
+
+    print_info "Waiting for auth9-portal..."
+    kubectl rollout status deployment/auth9-portal -n "$NAMESPACE" --timeout=300s || true
+
+    print_info "Waiting for redis..."
+    kubectl rollout status deployment/redis -n "$NAMESPACE" --timeout=300s || true
 }
 
 wait_for_postgres() {
@@ -841,40 +894,6 @@ wait_for_postgres() {
     fi
 }
 
-wait_for_redis() {
-    if [ -z "$DRY_RUN" ]; then
-        kubectl rollout status deployment/redis -n "$NAMESPACE" --timeout=300s || true
-    fi
-}
-
-restart_deployments() {
-    print_info "Restarting auth9-core..."
-    kubectl rollout restart deployment/auth9-core -n "$NAMESPACE"
-
-    print_info "Restarting auth9-portal..."
-    kubectl rollout restart deployment/auth9-portal -n "$NAMESPACE"
-
-    print_info "Restarting keycloak..."
-    kubectl rollout restart deployment/keycloak -n "$NAMESPACE"
-
-    print_info "Restarting redis..."
-    kubectl rollout restart deployment/redis -n "$NAMESPACE"
-
-    echo ""
-    print_info "Waiting for rollout to complete..."
-
-    print_info "Waiting for auth9-core..."
-    kubectl rollout status deployment/auth9-core -n "$NAMESPACE" --timeout=300s
-
-    print_info "Waiting for auth9-portal..."
-    kubectl rollout status deployment/auth9-portal -n "$NAMESPACE" --timeout=300s
-
-    print_info "Waiting for keycloak..."
-    kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=300s
-
-    print_info "Waiting for redis..."
-    kubectl rollout status deployment/redis -n "$NAMESPACE" --timeout=300s
-}
 
 print_deployment_complete() {
     echo ""
@@ -926,10 +945,6 @@ parse_arguments() {
                 DRY_RUN="--dry-run=client"
                 shift
                 ;;
-            --skip-restart)
-                SKIP_RESTART="true"
-                shift
-                ;;
             --skip-init)
                 SKIP_INIT="true"
                 shift
@@ -951,7 +966,6 @@ parse_arguments() {
                 echo "  --interactive       Enable interactive mode (default)"
                 echo "  --non-interactive   Disable interactive mode"
                 echo "  --dry-run           Print what would be applied without executing"
-                echo "  --skip-restart      Skip the deployment restart step"
                 echo "  --skip-init         Skip the auth9-init job"
                 echo "  --namespace NS      Use a different namespace (default: auth9)"
                 echo "  --config-file FILE  Load configuration from file"

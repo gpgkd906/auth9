@@ -88,6 +88,13 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
 
     let seeder = KeycloakSeeder::new(&config.keycloak);
 
+    // 🆕 Priority: Create admin client in master realm first
+    info!("Seeding admin client in master realm...");
+    seeder
+        .seed_master_admin_client()
+        .await
+        .context("Failed to seed admin client in master realm")?;
+
     // Create realm if not exists
     info!("Ensuring realm '{}' exists...", config.keycloak.realm);
     seeder
@@ -108,8 +115,8 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed portal client in Keycloak")?;
 
-    // Seed admin client (Confidential client for admin operations)
-    info!("Seeding admin client in Keycloak...");
+    // Seed admin client in configured realm (Confidential client for realm-level operations)
+    info!("Seeding admin client in realm '{}'...", config.keycloak.realm);
     seeder
         .seed_admin_client()
         .await

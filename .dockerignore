@@ -1,0 +1,42 @@
+# Rust build artifacts
+auth9-core/target/
+**/target/
+
+# Node.js
+auth9-portal/node_modules/
+**/node_modules/
+auth9-portal/build/
+auth9-portal/.cache/
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git
+.git/
+.gitignore
+
+# CI/CD
+.github/
+
+# Documentation
+*.md
+!README.md
+
+# Logs
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test coverage
+auth9-core/coverage/
+auth9-core/tarpaulin-report.html
+
+# Temporary files
+tmp/
+temp/
