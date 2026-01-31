@@ -2,7 +2,7 @@ import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import BrandingSettingsPage, { loader, action } from "~/routes/dashboard.settings.branding";
+import BrandingSettingsPage, { loader } from "~/routes/dashboard.settings.branding";
 import { brandingApi } from "~/services/api";
 
 // Mock branding API

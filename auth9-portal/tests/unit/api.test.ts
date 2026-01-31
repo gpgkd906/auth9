@@ -5,6 +5,10 @@ import {
   serviceApi,
   rbacApi,
   auditApi,
+  systemApi,
+  invitationApi,
+  brandingApi,
+  emailTemplateApi,
   type Tenant,
   type User,
   type Service,
@@ -582,6 +586,450 @@ describe('API Service', () => {
       });
 
       await expect(tenantApi.list()).rejects.toThrow('Internal Server Error');
+    });
+  });
+
+  describe('systemApi', () => {
+    it('should get email settings', async () => {
+      const mockSettings = {
+        data: {
+          category: 'email',
+          setting_key: 'provider',
+          value: { type: 'smtp', host: 'smtp.test.com', port: 587 },
+          updated_at: new Date().toISOString(),
+        },
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => mockSettings,
+      });
+
+      const result = await systemApi.getEmailSettings();
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email')
+      );
+      expect(result.data.value.type).toBe('smtp');
+    });
+
+    it('should update email settings', async () => {
+      const config = { type: 'smtp' as const, host: 'smtp.new.com', port: 587, use_tls: true, from_email: 'test@test.com' };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { category: 'email', value: config } }),
+      });
+
+      await systemApi.updateEmailSettings(config);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ config }),
+        })
+      );
+    });
+
+    it('should test email connection', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: 'Connection successful' }),
+      });
+
+      const result = await systemApi.testEmailConnection();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email/test'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.success).toBe(true);
+    });
+
+    it('should send test email', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: 'Email sent', message_id: 'msg-123' }),
+      });
+
+      const result = await systemApi.sendTestEmail('test@example.com');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email/send-test'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ to_email: 'test@example.com' }),
+        })
+      );
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('invitationApi', () => {
+    it('should list invitations for a tenant', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 } }),
+      });
+
+      await invitationApi.list('tenant-123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-123/invitations?page=1&per_page=20')
+      );
+    });
+
+    it('should create an invitation', async () => {
+      const input = { email: 'new@example.com', role_ids: ['role-1'], expires_in_hours: 48 };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { id: 'inv-123', tenant_id: 'tenant-123', ...input, status: 'pending', invited_by: 'admin', expires_at: '', created_at: '' },
+        }),
+      });
+
+      await invitationApi.create('tenant-123', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-123/invitations'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should get an invitation by ID', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { id: 'inv-123', tenant_id: 'tenant-123', email: 'test@test.com', status: 'pending' },
+        }),
+      });
+
+      const result = await invitationApi.get('inv-123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/invitations/inv-123')
+      );
+      expect(result.data.id).toBe('inv-123');
+    });
+
+    it('should revoke an invitation', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { id: 'inv-123', status: 'revoked' },
+        }),
+      });
+
+      const result = await invitationApi.revoke('inv-123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/invitations/inv-123/revoke'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.data.status).toBe('revoked');
+    });
+
+    it('should resend an invitation', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { id: 'inv-123', status: 'pending' },
+        }),
+      });
+
+      await invitationApi.resend('inv-123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/invitations/inv-123/resend'),
+        expect.objectContaining({ method: 'POST' })
+      );
+    });
+
+    it('should delete an invitation', async () => {
+      mockFetch.mockResolvedValue({ ok: true });
+
+      await invitationApi.delete('inv-123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/invitations/inv-123'),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    it('should throw error when deleting invitation fails', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'not_found', message: 'Invitation not found' }),
+      });
+
+      await expect(invitationApi.delete('inv-123')).rejects.toThrow('Invitation not found');
+    });
+  });
+
+  describe('brandingApi', () => {
+    it('should get branding config', async () => {
+      const mockConfig = {
+        data: {
+          primary_color: '#007AFF',
+          secondary_color: '#5856D6',
+          background_color: '#F5F5F7',
+          text_color: '#1D1D1F',
+          allow_registration: false,
+        },
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => mockConfig,
+      });
+
+      const result = await brandingApi.get();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/branding')
+      );
+      expect(result.data.primary_color).toBe('#007AFF');
+    });
+
+    it('should update branding config', async () => {
+      const config = {
+        primary_color: '#FF0000',
+        secondary_color: '#00FF00',
+        background_color: '#0000FF',
+        text_color: '#FFFFFF',
+        allow_registration: true,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: config }),
+      });
+
+      await brandingApi.update(config);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/branding'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ config }),
+        })
+      );
+    });
+  });
+
+  describe('emailTemplateApi', () => {
+    it('should list email templates', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [] }),
+      });
+
+      await emailTemplateApi.list();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email-templates')
+      );
+    });
+
+    it('should get a specific email template', async () => {
+      const mockTemplate = {
+        metadata: { template_type: 'invitation', name: 'Invitation', description: '', variables: [] },
+        content: { subject: 'You are invited', html_body: '<p>Hello</p>', text_body: 'Hello' },
+        is_customized: false,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: mockTemplate }),
+      });
+
+      const result = await emailTemplateApi.get('invitation');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email-templates/invitation')
+      );
+      expect(result.data.metadata.template_type).toBe('invitation');
+    });
+
+    it('should update an email template', async () => {
+      const content = { subject: 'New Subject', html_body: '<p>New Body</p>', text_body: 'New Body' };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { content, is_customized: true } }),
+      });
+
+      await emailTemplateApi.update('invitation', content);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email-templates/invitation'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(content),
+        })
+      );
+    });
+
+    it('should reset an email template to default', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { is_customized: false } }),
+      });
+
+      const result = await emailTemplateApi.reset('invitation');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email-templates/invitation'),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+      expect(result.data.is_customized).toBe(false);
+    });
+
+    it('should preview an email template', async () => {
+      const content = { subject: 'Preview Subject', html_body: '<p>Preview</p>', text_body: 'Preview' };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { subject: 'Rendered Subject', html_body: '<p>Rendered</p>', text_body: 'Rendered' } }),
+      });
+
+      const result = await emailTemplateApi.preview('invitation', content);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email-templates/invitation/preview'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(content),
+        })
+      );
+      expect(result.data.subject).toBe('Rendered Subject');
+    });
+
+    it('should send a test email for a template', async () => {
+      const request = {
+        to_email: 'test@example.com',
+        subject: 'Test Subject',
+        html_body: '<p>Test</p>',
+        text_body: 'Test',
+        variables: { name: 'John' },
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ success: true, message: 'Test email sent', message_id: 'msg-456' }),
+      });
+
+      const result = await emailTemplateApi.sendTestEmail('invitation', request);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/email-templates/invitation/send-test'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(request),
+        })
+      );
+      expect(result.success).toBe(true);
+    });
+  });
+
+  describe('serviceApi additional tests', () => {
+    it('should update a service', async () => {
+      const input = { name: 'Updated Service', base_url: 'https://updated.com' };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { id: '123', name: 'Updated Service', redirect_uris: [], logout_uris: [], status: 'active', created_at: '', updated_at: '' },
+        }),
+      });
+
+      await serviceApi.update('123', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/123'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should throw error on delete service failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'forbidden', message: 'Cannot delete active service' }),
+      });
+
+      await expect(serviceApi.delete('123')).rejects.toThrow('Cannot delete active service');
+    });
+
+    it('should throw error on delete client failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'not_found', message: 'Client not found' }),
+      });
+
+      await expect(serviceApi.deleteClient('svc-123', 'client-456')).rejects.toThrow('Client not found');
+    });
+  });
+
+  describe('tenantApi additional tests', () => {
+    it('should throw error on delete tenant failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'conflict', message: 'Tenant has active users' }),
+      });
+
+      await expect(tenantApi.delete('123')).rejects.toThrow('Tenant has active users');
+    });
+  });
+
+  describe('userApi additional tests', () => {
+    it('should throw error on remove from tenant failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'not_found', message: 'User not in tenant' }),
+      });
+
+      await expect(userApi.removeFromTenant('user-123', 'tenant-456')).rejects.toThrow('User not in tenant');
+    });
+
+    it('should get user assigned roles', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 'role-1', name: 'admin' }] }),
+      });
+
+      const result = await rbacApi.getUserAssignedRoles('user-123', 'tenant-456');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/user-123/tenants/tenant-456/assigned-roles')
+      );
+      expect(result.data).toHaveLength(1);
+    });
+  });
+
+  describe('rbacApi additional tests', () => {
+    it('should throw error on delete role failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'conflict', message: 'Role is in use' }),
+      });
+
+      await expect(rbacApi.deleteRole('svc-123', 'role-456')).rejects.toThrow('Role is in use');
+    });
+
+    it('should throw error on unassign role failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'not_found', message: 'Role assignment not found' }),
+      });
+
+      await expect(rbacApi.unassignRole('user-123', 'tenant-456', 'role-789')).rejects.toThrow('Role assignment not found');
     });
   });
 });
