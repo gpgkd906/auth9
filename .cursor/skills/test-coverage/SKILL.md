@@ -16,13 +16,13 @@ All tests run fast (~1-2 seconds) with **no Docker or external services required
 
 ### Run Coverage Analysis
 
-**Use `cargo-llvm-cov`** (recommended over tarpaulin):
+**Use `make coverage`** (wraps cargo-llvm-cov with exclusions):
 
 ```bash
 cd auth9-core
-cargo llvm-cov                 # Text summary
-cargo llvm-cov --html          # HTML report in target/llvm-cov/html/
-cargo llvm-cov --json          # JSON output
+make coverage                  # Text summary
+make coverage-html             # HTML report in target/llvm-cov/html/
+make coverage-json             # JSON output
 ```
 
 > **Why llvm-cov?** tarpaulin has known issues with `#[tonic::async_trait]` macros (reports ~9% instead of actual ~87% for gRPC code). `cargo-llvm-cov` uses LLVM's instrumentation and correctly tracks async trait code.
@@ -31,6 +31,18 @@ Install if needed:
 ```bash
 cargo install cargo-llvm-cov
 ```
+
+### Coverage Exclusions
+
+The following files are excluded from coverage tracking:
+
+| File/Directory | Reason |
+|----------------|--------|
+| `repository/*.rs` | Thin data mapping layer (ORM-equivalent), no business logic to test |
+| `main.rs` | Program entry point |
+| `migration/*.rs` | Database migration scripts |
+
+These exclusions are configured in `auth9-core/Makefile`. Repository layer coverage is low by design - all business logic lives in the service layer, which is tested via mock repositories.
 
 ## Frontend (Auth9 Portal)
 
@@ -367,13 +379,13 @@ This generates `MockTenantRepository` for use in tests.
 
 ## Coverage Targets
 
-| Layer | Target |
-|-------|--------|
-| Domain/Business logic | 95%+ |
-| Service layer | 90%+ |
-| Repository traits | N/A (implementation tested via service) |
-| API handlers | 80%+ |
-| gRPC handlers | 85%+ |
+| Layer | Target | Notes |
+|-------|--------|-------|
+| Domain/Business logic | 95%+ | Pure validation, no I/O |
+| Service layer | 90%+ | Core business logic |
+| API handlers | 80%+ | HTTP routing |
+| gRPC handlers | 85%+ | Token exchange, validation |
+| Repository layer | N/A | Excluded from tracking (thin data mapping) |
 
 ---
 

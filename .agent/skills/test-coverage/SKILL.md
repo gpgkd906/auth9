@@ -15,10 +15,27 @@ cargo test
 All tests run fast (~1-2 seconds) with **no Docker or external services required**.
 
 ### Run Coverage Analysis
+
+**Use `make coverage`** (wraps cargo-llvm-cov with exclusions):
+
 ```bash
 cd auth9-core
-cargo llvm-cov --ignore-config --run-types Tests --out Json --output-dir target/llvm-cov
+make coverage                  # Text summary
+make coverage-html             # HTML report in target/llvm-cov/html/
+make coverage-json             # JSON output
 ```
+
+### Coverage Exclusions
+
+The following files are excluded from coverage tracking:
+
+| File/Directory | Reason |
+|----------------|--------|
+| `repository/*.rs` | Thin data mapping layer (ORM-equivalent), no business logic to test |
+| `main.rs` | Program entry point |
+| `migration/*.rs` | Database migration scripts |
+
+These exclusions are configured in `auth9-core/Makefile`. Repository layer coverage is low by design - all business logic lives in the service layer, which is tested via mock repositories.
 
 ## Frontend (Auth9 Portal)
 
@@ -167,12 +184,13 @@ This generates `MockTenantRepository` for use in tests.
 
 ## Coverage Targets
 
-| Layer | Target |
-|-------|--------|
-| Domain/Business logic | 95%+ |
-| Service layer | 90%+ |
-| API handlers | 80%+ |
-| gRPC handlers | 85%+ |
+| Layer | Target | Notes |
+|-------|--------|-------|
+| Domain/Business logic | 95%+ | Pure validation, no I/O |
+| Service layer | 90%+ | Core business logic |
+| API handlers | 80%+ | HTTP routing |
+| gRPC handlers | 85%+ | Token exchange, validation |
+| Repository layer | N/A | Excluded from tracking (thin data mapping) |
 
 ---
 

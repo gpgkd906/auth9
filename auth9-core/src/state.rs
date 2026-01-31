@@ -8,8 +8,14 @@ use crate::config::Config;
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
-use crate::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
-use crate::service::{ClientService, RbacService, TenantService, UserService};
+use crate::repository::{
+    InvitationRepository, RbacRepository, ServiceRepository, SystemSettingsRepository,
+    TenantRepository, UserRepository,
+};
+use crate::service::{
+    ClientService, EmailService, InvitationService, RbacService, SystemSettingsService,
+    TenantService, UserService,
+};
 
 /// Trait for application state that provides access to all services.
 ///
@@ -69,4 +75,27 @@ pub trait HasAuditLog: HasServices {
         before: Option<serde_json::Value>,
         after: Option<serde_json::Value>,
     ) -> impl std::future::Future<Output = ()> + Send;
+}
+
+/// Trait for states that provide system settings and email services
+pub trait HasSystemSettings: Clone + Send + Sync + 'static {
+    /// The system settings repository type
+    type SystemSettingsRepo: SystemSettingsRepository;
+
+    /// Get the system settings service
+    fn system_settings_service(&self) -> &SystemSettingsService<Self::SystemSettingsRepo>;
+
+    /// Get the email service
+    fn email_service(&self) -> &EmailService<Self::SystemSettingsRepo>;
+}
+
+/// Trait for states that provide invitation services
+pub trait HasInvitations: HasServices + HasSystemSettings {
+    /// The invitation repository type
+    type InvitationRepo: InvitationRepository;
+
+    /// Get the invitation service
+    fn invitation_service(
+        &self,
+    ) -> &InvitationService<Self::InvitationRepo, Self::TenantRepo, Self::SystemSettingsRepo>;
 }

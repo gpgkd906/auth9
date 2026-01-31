@@ -3,8 +3,10 @@
 pub mod audit;
 pub mod auth;
 pub mod health;
+pub mod invitation;
 pub mod role;
 pub mod service;
+pub mod system_settings;
 pub mod tenant;
 pub mod user;
 

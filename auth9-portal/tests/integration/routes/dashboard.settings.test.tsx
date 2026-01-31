@@ -2,7 +2,8 @@ import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import SettingsPage, { loader } from "~/routes/dashboard.settings";
+import SettingsLayout from "~/routes/dashboard.settings";
+import OrganizationSettingsPage, { loader } from "~/routes/dashboard.settings._index";
 import { tenantApi } from "~/services/api";
 
 // Mock tenant API
@@ -49,8 +50,14 @@ describe("Settings Page", () => {
         const RemixStub = createRemixStub([
             {
                 path: "/dashboard/settings",
-                Component: SettingsPage,
-                loader,
+                Component: SettingsLayout,
+                children: [
+                    {
+                        index: true,
+                        Component: OrganizationSettingsPage,
+                        loader,
+                    },
+                ],
             },
         ]);
 
@@ -70,8 +77,14 @@ describe("Settings Page", () => {
         const RemixStub = createRemixStub([
             {
                 path: "/dashboard/settings",
-                Component: SettingsPage,
-                loader,
+                Component: SettingsLayout,
+                children: [
+                    {
+                        index: true,
+                        Component: OrganizationSettingsPage,
+                        loader,
+                    },
+                ],
             },
         ]);
 
@@ -91,8 +104,14 @@ describe("Settings Page", () => {
         const RemixStub = createRemixStub([
             {
                 path: "/dashboard/settings",
-                Component: SettingsPage,
-                loader,
+                Component: SettingsLayout,
+                children: [
+                    {
+                        index: true,
+                        Component: OrganizationSettingsPage,
+                        loader,
+                    },
+                ],
             },
         ]);
 
@@ -126,8 +145,14 @@ describe("Settings Page", () => {
         const RemixStub = createRemixStub([
             {
                 path: "/dashboard/settings",
-                Component: SettingsPage,
-                loader,
+                Component: SettingsLayout,
+                children: [
+                    {
+                        index: true,
+                        Component: OrganizationSettingsPage,
+                        loader,
+                    },
+                ],
             },
         ]);
 
@@ -144,8 +169,14 @@ describe("Settings Page", () => {
         const RemixStub = createRemixStub([
             {
                 path: "/dashboard/settings",
-                Component: SettingsPage,
-                loader,
+                Component: SettingsLayout,
+                children: [
+                    {
+                        index: true,
+                        Component: OrganizationSettingsPage,
+                        loader,
+                    },
+                ],
             },
         ]);
 

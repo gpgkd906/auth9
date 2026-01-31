@@ -15,8 +15,8 @@ cargo test test_name           # Run single test by name
 cargo test -- --nocapture      # Run with output
 cargo clippy                   # Lint
 cargo fmt                      # Format
-cargo llvm-cov                 # Coverage report (recommended)
-cargo llvm-cov --html          # Coverage HTML report
+make coverage                  # Coverage report (excludes repository/migration layers)
+make coverage-html             # Coverage HTML report
 ```
 
 ### auth9-portal (TypeScript/Remix)

@@ -403,3 +403,149 @@ export const auditApi = {
     return handleResponse(response);
   },
 };
+
+// Email Provider Configuration Types
+export interface SmtpConfig {
+  type: "smtp";
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  use_tls: boolean;
+  from_email: string;
+  from_name?: string;
+}
+
+export interface SesConfig {
+  type: "ses";
+  region: string;
+  access_key_id?: string;
+  secret_access_key?: string;
+  from_email: string;
+  from_name?: string;
+  configuration_set?: string;
+}
+
+export interface OracleEmailConfig {
+  type: "oracle";
+  smtp_endpoint: string;
+  port: number;
+  username: string;
+  password: string;
+  from_email: string;
+  from_name?: string;
+}
+
+export interface NoneConfig {
+  type: "none";
+}
+
+export type EmailProviderConfig = NoneConfig | SmtpConfig | SesConfig | OracleEmailConfig;
+
+export interface TestEmailResponse {
+  success: boolean;
+  message: string;
+  message_id?: string;
+}
+
+// System Settings API
+export const systemApi = {
+  getEmailSettings: async (): Promise<{ data: EmailProviderConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email`);
+    return handleResponse(response);
+  },
+
+  updateEmailSettings: async (config: EmailProviderConfig): Promise<{ data: EmailProviderConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config }),
+    });
+    return handleResponse(response);
+  },
+
+  testEmailConnection: async (): Promise<TestEmailResponse> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email/test`, {
+      method: "POST",
+    });
+    return handleResponse(response);
+  },
+
+  sendTestEmail: async (toEmail: string): Promise<TestEmailResponse> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email/send-test`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ to_email: toEmail }),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Invitation Types
+export type InvitationStatus = "pending" | "accepted" | "expired" | "revoked";
+
+export interface Invitation {
+  id: string;
+  tenant_id: string;
+  email: string;
+  role_ids: string[];
+  invited_by: string;
+  status: InvitationStatus;
+  expires_at: string;
+  accepted_at?: string;
+  created_at: string;
+}
+
+export interface CreateInvitationInput {
+  email: string;
+  role_ids: string[];
+  expires_in_hours?: number;
+}
+
+// Invitation API
+export const invitationApi = {
+  list: async (tenantId: string, page = 1, perPage = 20): Promise<PaginatedResponse<Invitation>> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations?page=${page}&per_page=${perPage}`
+    );
+    return handleResponse(response);
+  },
+
+  create: async (tenantId: string, input: CreateInvitationInput): Promise<{ data: Invitation }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  get: async (id: string): Promise<{ data: Invitation }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}`);
+    return handleResponse(response);
+  },
+
+  revoke: async (id: string): Promise<{ data: Invitation }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}/revoke`, {
+      method: "POST",
+    });
+    return handleResponse(response);
+  },
+
+  resend: async (id: string): Promise<{ data: Invitation }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}/resend`, {
+      method: "POST",
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
+};
