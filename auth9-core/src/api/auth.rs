@@ -444,7 +444,8 @@ async fn exchange_code_for_tokens<S: HasServices>(
 
     let token_url = format!(
         "{}/realms/{}/protocol/openid-connect/token",
-        state.config().keycloak.url, state.config().keycloak.realm
+        state.config().keycloak.url,
+        state.config().keycloak.realm
     );
     let callback_url = format!(
         "{}/api/v1/auth/callback",
@@ -502,7 +503,8 @@ async fn exchange_refresh_token<S: HasServices>(
 
     let token_url = format!(
         "{}/realms/{}/protocol/openid-connect/token",
-        state.config().keycloak.url, state.config().keycloak.realm
+        state.config().keycloak.url,
+        state.config().keycloak.realm
     );
 
     let params = [
@@ -537,7 +539,8 @@ async fn exchange_refresh_token<S: HasServices>(
 async fn fetch_userinfo<S: HasServices>(state: &S, access_token: &str) -> Result<KeycloakUserInfo> {
     let userinfo_url = format!(
         "{}/realms/{}/protocol/openid-connect/userinfo",
-        state.config().keycloak.url, state.config().keycloak.realm
+        state.config().keycloak.url,
+        state.config().keycloak.realm
     );
 
     tracing::debug!(
@@ -1256,7 +1259,10 @@ mod tests {
         .unwrap();
 
         // Verify URL encoding
-        assert!(url.contains("scope=openid+profile+email") || url.contains("scope=openid%20profile%20email"));
+        assert!(
+            url.contains("scope=openid+profile+email")
+                || url.contains("scope=openid%20profile%20email")
+        );
     }
 
     #[test]

@@ -171,7 +171,10 @@ async fn test_introspect_token_with_all_fields() {
     assert!(response.active);
     assert_eq!(response.email, "full@example.com");
     assert_eq!(response.roles, vec!["super-admin", "manager"]);
-    assert_eq!(response.permissions, vec!["all:read", "all:write", "all:delete"]);
+    assert_eq!(
+        response.permissions,
+        vec!["all:read", "all:write", "all:delete"]
+    );
     assert!(response.exp > 0);
     assert!(response.iat > 0);
     assert!(!response.iss.is_empty());

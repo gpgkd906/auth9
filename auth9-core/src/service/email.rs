@@ -158,10 +158,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         self.settings_service.get_email_config().await
     }
 
-    fn create_provider(
-        &self,
-        config: &EmailProviderConfig,
-    ) -> Result<Box<dyn EmailProvider>> {
+    fn create_provider(&self, config: &EmailProviderConfig) -> Result<Box<dyn EmailProvider>> {
         match config {
             EmailProviderConfig::None => Err(AppError::BadRequest(
                 "Email provider not configured".to_string(),
@@ -197,8 +194,8 @@ impl<R: SystemSettingsRepository> EmailService<R> {
 mod tests {
     use super::*;
     use crate::domain::SmtpConfig;
-    use crate::repository::system_settings::MockSystemSettingsRepository;
     use crate::domain::SystemSettingRow;
+    use crate::repository::system_settings::MockSystemSettingsRepository;
     use mockall::predicate::*;
 
     #[tokio::test]
@@ -439,7 +436,9 @@ mod tests {
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let email_service = EmailService::new(settings_service);
 
-        let result = email_service.send_test_email("test@example.com", None).await;
+        let result = email_service
+            .send_test_email("test@example.com", None)
+            .await;
         assert!(result.is_err());
     }
 }

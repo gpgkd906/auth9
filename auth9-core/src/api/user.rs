@@ -80,7 +80,10 @@ pub async fn create<S: HasServices>(
         })
         .await?;
 
-    let user = state.user_service().create(&keycloak_id, input.user).await?;
+    let user = state
+        .user_service()
+        .create(&keycloak_id, input.user)
+        .await?;
 
     let _ = write_audit_log_generic(
         &state,
@@ -141,7 +144,11 @@ pub async fn delete<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
     let before = state.user_service().get(id).await?;
-    if let Err(err) = state.keycloak_client().delete_user(&before.keycloak_id).await {
+    if let Err(err) = state
+        .keycloak_client()
+        .delete_user(&before.keycloak_id)
+        .await
+    {
         if !matches!(err, crate::error::AppError::NotFound(_)) {
             return Err(err);
         }

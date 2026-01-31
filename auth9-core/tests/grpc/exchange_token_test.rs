@@ -47,7 +47,11 @@ async fn test_exchange_token_success() {
     });
 
     let response = service.exchange_token(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 
     let response = response.unwrap().into_inner();
     assert!(!response.access_token.is_empty());
@@ -254,7 +258,10 @@ async fn test_exchange_token_with_multiple_permissions() {
 
     let jwt_manager = builder.jwt_manager.clone();
     let service = builder
-        .with_user(create_test_user_with_email(user_id, "multi-perm@example.com"))
+        .with_user(create_test_user_with_email(
+            user_id,
+            "multi-perm@example.com",
+        ))
         .await
         .with_service(create_test_service(service_id, tenant_id))
         .await
@@ -267,7 +274,11 @@ async fn test_exchange_token_with_multiple_permissions() {
             create_user_roles(
                 user_id,
                 tenant_id,
-                vec!["admin".to_string(), "editor".to_string(), "viewer".to_string()],
+                vec![
+                    "admin".to_string(),
+                    "editor".to_string(),
+                    "viewer".to_string(),
+                ],
                 vec![
                     "users:read".to_string(),
                     "users:write".to_string(),
@@ -339,7 +350,11 @@ async fn test_exchange_token_service_with_null_tenant() {
     });
 
     let response = service.exchange_token(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 }
 
 #[tokio::test]
@@ -386,7 +401,11 @@ async fn test_exchange_token_with_mfa_enabled_user() {
     });
 
     let response = service.exchange_token(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 }
 
 #[tokio::test]

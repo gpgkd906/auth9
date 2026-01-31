@@ -47,15 +47,23 @@ async fn test_openid_configuration_endpoints() {
     let config = body.unwrap();
 
     // Verify all endpoint URLs are correctly set
-    assert!(config.authorization_endpoint.contains("/api/v1/auth/authorize"));
+    assert!(config
+        .authorization_endpoint
+        .contains("/api/v1/auth/authorize"));
     assert!(config.token_endpoint.contains("/api/v1/auth/token"));
     assert!(config.userinfo_endpoint.contains("/api/v1/auth/userinfo"));
     assert!(config.end_session_endpoint.contains("/api/v1/auth/logout"));
 
     // Verify supported values
-    assert!(config.response_types_supported.contains(&"code".to_string()));
-    assert!(config.grant_types_supported.contains(&"authorization_code".to_string()));
-    assert!(config.grant_types_supported.contains(&"client_credentials".to_string()));
+    assert!(config
+        .response_types_supported
+        .contains(&"code".to_string()));
+    assert!(config
+        .grant_types_supported
+        .contains(&"authorization_code".to_string()));
+    assert!(config
+        .grant_types_supported
+        .contains(&"client_credentials".to_string()));
     assert!(config.scopes_supported.contains(&"openid".to_string()));
 }
 
@@ -72,7 +80,9 @@ async fn test_openid_configuration_hmac_algorithm() {
     let config = body.unwrap();
 
     // Without RSA keys configured, should use HS256
-    assert!(config.id_token_signing_alg_values_supported.contains(&"HS256".to_string()));
+    assert!(config
+        .id_token_signing_alg_values_supported
+        .contains(&"HS256".to_string()));
     // JWKS URI should be None without RSA keys
     assert!(config.jwks_uri.is_none());
 }
@@ -385,8 +395,11 @@ async fn test_callback_invalid_state() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
-    let (status, _body) =
-        get_raw(&app, "/api/v1/auth/callback?code=auth-code-123&state=invalid-state").await;
+    let (status, _body) = get_raw(
+        &app,
+        "/api/v1/auth/callback?code=auth-code-123&state=invalid-state",
+    )
+    .await;
 
     // Invalid state (not base64) should return 400
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -403,7 +416,10 @@ async fn test_callback_invalid_state_json() {
 
     let (status, _body) = get_raw(
         &app,
-        &format!("/api/v1/auth/callback?code=auth-code-123&state={}", invalid_state),
+        &format!(
+            "/api/v1/auth/callback?code=auth-code-123&state={}",
+            invalid_state
+        ),
     )
     .await;
 

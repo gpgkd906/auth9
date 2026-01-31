@@ -129,10 +129,10 @@ impl TokenExchangeCache for MockCacheManager {
         service_id: Uuid,
     ) -> auth9_core::error::Result<()> {
         self.set_count.fetch_add(1, Ordering::Relaxed);
-        self.cached_roles_for_service.write().await.insert(
-            (roles.user_id, roles.tenant_id, service_id),
-            roles.clone(),
-        );
+        self.cached_roles_for_service
+            .write()
+            .await
+            .insert((roles.user_id, roles.tenant_id, service_id), roles.clone());
         Ok(())
     }
 
@@ -146,10 +146,7 @@ impl TokenExchangeCache for MockCacheManager {
         Ok(cache.get(&(user_id, tenant_id)).cloned())
     }
 
-    async fn set_user_roles(
-        &self,
-        roles: &UserRolesInTenant,
-    ) -> auth9_core::error::Result<()> {
+    async fn set_user_roles(&self, roles: &UserRolesInTenant) -> auth9_core::error::Result<()> {
         self.set_count.fetch_add(1, Ordering::Relaxed);
         self.cached_roles
             .write()
@@ -325,8 +322,12 @@ impl GrpcTestBuilder {
 
     pub fn build_with_noop_cache(
         self,
-    ) -> TokenExchangeService<TestUserRepository, TestServiceRepository, TestRbacRepository, NoOpCacheManager>
-    {
+    ) -> TokenExchangeService<
+        TestUserRepository,
+        TestServiceRepository,
+        TestRbacRepository,
+        NoOpCacheManager,
+    > {
         TokenExchangeService::new(
             self.jwt_manager,
             NoOpCacheManager::new(),
@@ -339,8 +340,12 @@ impl GrpcTestBuilder {
     pub fn build_with_mock_cache(
         self,
         cache: MockCacheManager,
-    ) -> TokenExchangeService<TestUserRepository, TestServiceRepository, TestRbacRepository, MockCacheManager>
-    {
+    ) -> TokenExchangeService<
+        TestUserRepository,
+        TestServiceRepository,
+        TestRbacRepository,
+        MockCacheManager,
+    > {
         TokenExchangeService::new(
             self.jwt_manager,
             cache,

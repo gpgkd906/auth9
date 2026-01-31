@@ -72,9 +72,9 @@ impl SmtpEmailProvider {
             self.from_email.clone()
         };
 
-        mailbox
-            .parse()
-            .map_err(|e| EmailProviderError::InvalidConfiguration(format!("Invalid from address: {}", e)))
+        mailbox.parse().map_err(|e| {
+            EmailProviderError::InvalidConfiguration(format!("Invalid from address: {}", e))
+        })
     }
 }
 
@@ -92,7 +92,9 @@ impl EmailProvider for SmtpEmailProvider {
                 addr.email.clone()
             }
             .parse()
-            .map_err(|e| EmailProviderError::InvalidConfiguration(format!("Invalid to address: {}", e)))?;
+            .map_err(|e| {
+                EmailProviderError::InvalidConfiguration(format!("Invalid to address: {}", e))
+            })?;
             to_list.push(mailbox);
         }
 
@@ -103,9 +105,7 @@ impl EmailProvider for SmtpEmailProvider {
         }
 
         // Build the message
-        let mut email_builder = Message::builder()
-            .from(from)
-            .subject(&message.subject);
+        let mut email_builder = Message::builder().from(from).subject(&message.subject);
 
         for to in to_list {
             email_builder = email_builder.to(to);

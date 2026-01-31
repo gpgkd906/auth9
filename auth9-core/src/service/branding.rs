@@ -43,8 +43,7 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         self.validate_branding(&config)?;
 
         // Convert to JSON value
-        let value =
-            serde_json::to_value(&config).map_err(|e| AppError::Internal(e.into()))?;
+        let value = serde_json::to_value(&config).map_err(|e| AppError::Internal(e.into()))?;
 
         // Store in system_settings
         let input = UpsertSystemSettingInput {

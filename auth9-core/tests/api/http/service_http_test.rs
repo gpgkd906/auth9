@@ -191,7 +191,9 @@ async fn test_create_service() {
     let mock_kc = MockKeycloakServer::new().await;
     let client_uuid = "kc-client-12345";
     let client_secret = "super-secret-value";
-    mock_kc.setup_for_service_creation(client_uuid, client_secret).await;
+    mock_kc
+        .setup_for_service_creation(client_uuid, client_secret)
+        .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
@@ -221,7 +223,9 @@ async fn test_create_service_with_logout_uris() {
     let mock_kc = MockKeycloakServer::new().await;
     let client_uuid = "kc-client-logout";
     let client_secret = "secret-with-logout";
-    mock_kc.setup_for_service_creation(client_uuid, client_secret).await;
+    mock_kc
+        .setup_for_service_creation(client_uuid, client_secret)
+        .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
@@ -251,7 +255,9 @@ async fn test_create_service_with_logout_uris() {
 #[tokio::test]
 async fn test_create_service_minimal() {
     let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.setup_for_service_creation("kc-minimal", "minimal-secret").await;
+    mock_kc
+        .setup_for_service_creation("kc-minimal", "minimal-secret")
+        .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
@@ -359,8 +365,12 @@ async fn test_update_service_not_found() {
         "name": "Updated"
     });
 
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, &format!("/api/v1/services/{}", nonexistent_id), &input).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json(
+        &app,
+        &format!("/api/v1/services/{}", nonexistent_id),
+        &input,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -458,8 +468,12 @@ async fn test_list_clients() {
 #[tokio::test]
 async fn test_create_client() {
     let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_oidc_client_success("kc-new-client").await;
-    mock_kc.mock_get_client_secret_any("new-client-secret").await;
+    mock_kc
+        .mock_create_oidc_client_success("kc-new-client")
+        .await;
+    mock_kc
+        .mock_get_client_secret_any("new-client-secret")
+        .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
@@ -473,8 +487,12 @@ async fn test_create_client() {
         "name": "New Client"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) =
-        post_json(&app, &format!("/api/v1/services/{}/clients", service_id), &input).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json(
+        &app,
+        &format!("/api/v1/services/{}/clients", service_id),
+        &input,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -485,7 +503,9 @@ async fn test_create_client() {
 #[tokio::test]
 async fn test_create_client_without_name() {
     let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.mock_create_oidc_client_success("kc-nameless-client").await;
+    mock_kc
+        .mock_create_oidc_client_success("kc-nameless-client")
+        .await;
     mock_kc.mock_get_client_secret_any("nameless-secret").await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
@@ -498,8 +518,12 @@ async fn test_create_client_without_name() {
 
     let input = json!({});
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) =
-        post_json(&app, &format!("/api/v1/services/{}/clients", service_id), &input).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json(
+        &app,
+        &format!("/api/v1/services/{}/clients", service_id),
+        &input,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -545,8 +569,12 @@ async fn test_delete_client() {
 async fn test_regenerate_client_secret() {
     let mock_kc = MockKeycloakServer::new().await;
     let kc_uuid = "kc-client-uuid";
-    mock_kc.mock_get_client_uuid_by_client_id("existing-client", kc_uuid).await;
-    mock_kc.mock_regenerate_client_secret(kc_uuid, "brand-new-secret").await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("existing-client", kc_uuid)
+        .await;
+    mock_kc
+        .mock_regenerate_client_secret(kc_uuid, "brand-new-secret")
+        .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
@@ -590,7 +618,9 @@ async fn test_regenerate_client_secret() {
 #[tokio::test]
 async fn test_service_with_multiple_redirect_uris() {
     let mock_kc = MockKeycloakServer::new().await;
-    mock_kc.setup_for_service_creation("kc-multi-uri", "multi-uri-secret").await;
+    mock_kc
+        .setup_for_service_creation("kc-multi-uri", "multi-uri-secret")
+        .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);

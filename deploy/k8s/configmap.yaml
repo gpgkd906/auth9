@@ -31,6 +31,6 @@ data:
   
   # Portal configuration
   AUTH9_CORE_URL: "http://auth9-core:8080"
-  AUTH9_CORE_PUBLIC_URL: "https://api.auth9.gitski.work"
+  AUTH9_CORE_PUBLIC_URL: "https://api-auth9.gitski.work"
   AUTH9_PORTAL_URL: "https://auth9.gitski.work"
   NODE_ENV: "production"

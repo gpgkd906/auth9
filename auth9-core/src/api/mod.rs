@@ -162,7 +162,10 @@ pub(crate) fn extract_actor_id(state: &AppState, headers: &HeaderMap) -> Option<
 }
 
 /// Generic version of extract_actor_id that works with any HasServices implementation
-pub(crate) fn extract_actor_id_generic<S: HasServices>(state: &S, headers: &HeaderMap) -> Option<Uuid> {
+pub(crate) fn extract_actor_id_generic<S: HasServices>(
+    state: &S,
+    headers: &HeaderMap,
+) -> Option<Uuid> {
     let auth_header = headers.get(axum::http::header::AUTHORIZATION)?;
     let auth_str = auth_header.to_str().ok()?;
     let token = auth_str.strip_prefix("Bearer ")?;

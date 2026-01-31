@@ -38,7 +38,10 @@ impl<R: SystemSettingsRepository> EmailTemplateService<R> {
         // Build result with all template types
         let mut templates = Vec::new();
         for template_type in EmailTemplateType::all() {
-            let template = self.build_template_with_content(*template_type, custom_map.get(template_type.as_str()));
+            let template = self.build_template_with_content(
+                *template_type,
+                custom_map.get(template_type.as_str()),
+            );
             templates.push(template);
         }
 
@@ -68,15 +71,19 @@ impl<R: SystemSettingsRepository> EmailTemplateService<R> {
         self.validate_content(&content)?;
 
         // Store in database
-        let value = serde_json::to_value(&content)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize content: {}", e)))?;
+        let value = serde_json::to_value(&content).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to serialize content: {}", e))
+        })?;
 
         let input = UpsertSystemSettingInput {
             category: EMAIL_TEMPLATES_CATEGORY.to_string(),
             setting_key: template_type.as_str().to_string(),
             value,
             encrypted: false,
-            description: Some(format!("Custom {} email template", template_type.display_name())),
+            description: Some(format!(
+                "Custom {} email template",
+                template_type.display_name()
+            )),
         };
 
         let row = self.repo.upsert(&input).await?;
@@ -149,7 +156,10 @@ impl<R: SystemSettingsRepository> EmailTemplateService<R> {
 
     /// Get the content for a template (used by email sending code)
     /// Returns custom content if available, otherwise default content
-    pub async fn get_content(&self, template_type: EmailTemplateType) -> Result<EmailTemplateContent> {
+    pub async fn get_content(
+        &self,
+        template_type: EmailTemplateType,
+    ) -> Result<EmailTemplateContent> {
         let custom = self
             .repo
             .get(EMAIL_TEMPLATES_CATEGORY, template_type.as_str())
@@ -199,8 +209,9 @@ impl<R: SystemSettingsRepository> EmailTemplateService<R> {
     }
 
     fn parse_content(&self, value: &serde_json::Value) -> Result<EmailTemplateContent> {
-        serde_json::from_value(value.clone())
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse template content: {}", e)))
+        serde_json::from_value(value.clone()).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to parse template content: {}", e))
+        })
     }
 
     fn validate_content(&self, content: &EmailTemplateContent) -> Result<()> {
@@ -208,10 +219,14 @@ impl<R: SystemSettingsRepository> EmailTemplateService<R> {
             return Err(AppError::Validation("Subject cannot be empty".to_string()));
         }
         if content.html_body.trim().is_empty() {
-            return Err(AppError::Validation("HTML body cannot be empty".to_string()));
+            return Err(AppError::Validation(
+                "HTML body cannot be empty".to_string(),
+            ));
         }
         if content.text_body.trim().is_empty() {
-            return Err(AppError::Validation("Text body cannot be empty".to_string()));
+            return Err(AppError::Validation(
+                "Text body cannot be empty".to_string(),
+            ));
         }
         // Max length checks
         if content.subject.len() > 500 {

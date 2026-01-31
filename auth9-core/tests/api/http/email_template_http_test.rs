@@ -3,7 +3,9 @@
 //! Tests the handlers in `src/api/email_template.rs` using the production router
 //! with `TestAppState` to achieve high coverage without external dependencies.
 
-use super::{build_email_template_test_router, get_json, post_json, put_json, delete_json, TestAppState};
+use super::{
+    build_email_template_test_router, delete_json, get_json, post_json, put_json, TestAppState,
+};
 use auth9_core::api::SuccessResponse;
 use auth9_core::domain::{
     EmailTemplateContent, EmailTemplateType, EmailTemplateWithContent, RenderedEmailPreview,
@@ -54,16 +56,19 @@ async fn test_list_templates_shows_customized() {
         html_body: "<h1>Custom</h1>".to_string(),
         text_body: "Custom".to_string(),
     };
-    state.system_settings_repo.add_setting(SystemSettingRow {
-        id: 1,
-        category: "email_templates".to_string(),
-        setting_key: "invitation".to_string(),
-        value: serde_json::to_value(&custom_content).unwrap(),
-        encrypted: false,
-        description: Some("Custom invitation template".to_string()),
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    }).await;
+    state
+        .system_settings_repo
+        .add_setting(SystemSettingRow {
+            id: 1,
+            category: "email_templates".to_string(),
+            setting_key: "invitation".to_string(),
+            value: serde_json::to_value(&custom_content).unwrap(),
+            encrypted: false,
+            description: Some("Custom invitation template".to_string()),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await;
 
     let app = build_email_template_test_router(state);
 
@@ -74,7 +79,11 @@ async fn test_list_templates_shows_customized() {
     let response = body.unwrap();
 
     // Find the invitation template
-    let invitation = response.data.iter().find(|t| t.metadata.template_type == EmailTemplateType::Invitation).unwrap();
+    let invitation = response
+        .data
+        .iter()
+        .find(|t| t.metadata.template_type == EmailTemplateType::Invitation)
+        .unwrap();
     assert!(invitation.is_customized);
     assert_eq!(invitation.content.subject, "Custom Subject");
 }
@@ -95,7 +104,10 @@ async fn test_get_template_default() {
     let response = body.unwrap();
     let template = response.data;
 
-    assert_eq!(template.metadata.template_type, EmailTemplateType::Invitation);
+    assert_eq!(
+        template.metadata.template_type,
+        EmailTemplateType::Invitation
+    );
     assert!(!template.is_customized);
     // Default template has content from email/templates
     assert!(!template.content.subject.is_empty());
@@ -112,16 +124,19 @@ async fn test_get_template_customized() {
         html_body: "<h1>Welcome!</h1>".to_string(),
         text_body: "Welcome!".to_string(),
     };
-    state.system_settings_repo.add_setting(SystemSettingRow {
-        id: 1,
-        category: "email_templates".to_string(),
-        setting_key: "welcome".to_string(),
-        value: serde_json::to_value(&custom_content).unwrap(),
-        encrypted: false,
-        description: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    }).await;
+    state
+        .system_settings_repo
+        .add_setting(SystemSettingRow {
+            id: 1,
+            category: "email_templates".to_string(),
+            setting_key: "welcome".to_string(),
+            value: serde_json::to_value(&custom_content).unwrap(),
+            encrypted: false,
+            description: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await;
 
     let app = build_email_template_test_router(state);
 
@@ -166,7 +181,12 @@ async fn test_get_all_template_types() {
         let path = format!("/api/v1/system/email-templates/{}", template_type);
         let (status, _): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
             get_json(&app, &path).await;
-        assert_eq!(status, StatusCode::OK, "Failed for template type: {}", template_type);
+        assert_eq!(
+            status,
+            StatusCode::OK,
+            "Failed for template type: {}",
+            template_type
+        );
     }
 }
 
@@ -185,15 +205,22 @@ async fn test_update_template_success() {
         "text_body": "Updated text"
     });
 
-    let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-        put_json(&app, "/api/v1/system/email-templates/invitation", &update_request).await;
+    let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) = put_json(
+        &app,
+        "/api/v1/system/email-templates/invitation",
+        &update_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     let template = body.unwrap().data;
 
     assert!(template.is_customized);
     assert_eq!(template.content.subject, "Updated Subject {{name}}");
-    assert_eq!(template.content.html_body, "<html><body>Updated HTML</body></html>");
+    assert_eq!(
+        template.content.html_body,
+        "<html><body>Updated HTML</body></html>"
+    );
     assert!(template.updated_at.is_some());
 }
 
@@ -208,8 +235,12 @@ async fn test_update_template_invalid_type() {
         "text_body": "Test"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email-templates/invalid_type", &update_request).await;
+    let (status, _): (_, Option<serde_json::Value>) = put_json(
+        &app,
+        "/api/v1/system/email-templates/invalid_type",
+        &update_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -225,8 +256,12 @@ async fn test_update_template_empty_subject() {
         "text_body": "Content"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email-templates/invitation", &update_request).await;
+    let (status, _): (_, Option<serde_json::Value>) = put_json(
+        &app,
+        "/api/v1/system/email-templates/invitation",
+        &update_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -242,8 +277,12 @@ async fn test_update_template_empty_html_body() {
         "text_body": "Text"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email-templates/invitation", &update_request).await;
+    let (status, _): (_, Option<serde_json::Value>) = put_json(
+        &app,
+        "/api/v1/system/email-templates/invitation",
+        &update_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -262,16 +301,19 @@ async fn test_reset_template_success() {
         html_body: "<h1>Custom</h1>".to_string(),
         text_body: "Custom".to_string(),
     };
-    state.system_settings_repo.add_setting(SystemSettingRow {
-        id: 1,
-        category: "email_templates".to_string(),
-        setting_key: "password_reset".to_string(),
-        value: serde_json::to_value(&custom_content).unwrap(),
-        encrypted: false,
-        description: None,
-        created_at: Utc::now(),
-        updated_at: Utc::now(),
-    }).await;
+    state
+        .system_settings_repo
+        .add_setting(SystemSettingRow {
+            id: 1,
+            category: "email_templates".to_string(),
+            setting_key: "password_reset".to_string(),
+            value: serde_json::to_value(&custom_content).unwrap(),
+            encrypted: false,
+            description: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        })
+        .await;
 
     let app = build_email_template_test_router(state);
 
@@ -331,8 +373,12 @@ async fn test_preview_template_success() {
         "text_body": "Hello! {{inviter_name}} has invited you to join {{app_name}}!"
     });
 
-    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) =
-        post_json(&app, "/api/v1/system/email-templates/invitation/preview", &preview_request).await;
+    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json(
+        &app,
+        "/api/v1/system/email-templates/invitation/preview",
+        &preview_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     let preview = body.unwrap().data;
@@ -343,9 +389,9 @@ async fn test_preview_template_success() {
     assert!(!preview.text_body.contains("{{"));
 
     // Verify actual substitutions (from domain/email_template.rs example values)
-    assert!(preview.subject.contains("Acme Corp"));  // tenant_name example
+    assert!(preview.subject.contains("Acme Corp")); // tenant_name example
     assert!(preview.html_body.contains("John Doe")); // inviter_name example
-    assert!(preview.html_body.contains("Auth9"));    // app_name example
+    assert!(preview.html_body.contains("Auth9")); // app_name example
 }
 
 #[tokio::test]
@@ -359,8 +405,12 @@ async fn test_preview_template_password_reset() {
         "text_body": "Reset: {{reset_link}}"
     });
 
-    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) =
-        post_json(&app, "/api/v1/system/email-templates/password_reset/preview", &preview_request).await;
+    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json(
+        &app,
+        "/api/v1/system/email-templates/password_reset/preview",
+        &preview_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     let preview = body.unwrap().data;
@@ -380,8 +430,12 @@ async fn test_preview_template_email_mfa() {
         "text_body": "Code: {{verification_code}}"
     });
 
-    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) =
-        post_json(&app, "/api/v1/system/email-templates/email_mfa/preview", &preview_request).await;
+    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json(
+        &app,
+        "/api/v1/system/email-templates/email_mfa/preview",
+        &preview_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     let preview = body.unwrap().data;
@@ -401,8 +455,12 @@ async fn test_preview_template_invalid_type() {
         "text_body": "Test"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/system/email-templates/invalid/preview", &preview_request).await;
+    let (status, _): (_, Option<serde_json::Value>) = post_json(
+        &app,
+        "/api/v1/system/email-templates/invalid/preview",
+        &preview_request,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

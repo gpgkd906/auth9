@@ -4,12 +4,7 @@ use crate::api::SuccessResponse;
 use crate::domain::EmailProviderConfig;
 use crate::error::{AppError, Result};
 use crate::state::HasSystemSettings;
-use axum::{
-    extract::State,
-    http::StatusCode,
-    response::IntoResponse,
-    Json,
-};
+use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
 
 /// Request body for updating email settings
@@ -36,7 +31,10 @@ pub struct SendTestEmailRequest {
 pub async fn get_email_settings<S: HasSystemSettings>(
     State(state): State<S>,
 ) -> Result<impl IntoResponse> {
-    let settings = state.system_settings_service().get_email_config_masked().await?;
+    let settings = state
+        .system_settings_service()
+        .get_email_config_masked()
+        .await?;
     Ok(Json(SuccessResponse::new(settings)))
 }
 
@@ -57,7 +55,10 @@ pub async fn update_email_settings<S: HasSystemSettings>(
         .await?;
 
     // Return the masked settings
-    let settings = state.system_settings_service().get_email_config_masked().await?;
+    let settings = state
+        .system_settings_service()
+        .get_email_config_masked()
+        .await?;
     Ok(Json(SuccessResponse::new(settings)))
 }
 

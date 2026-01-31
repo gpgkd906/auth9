@@ -340,7 +340,11 @@ mod tests {
             id: StringUuid::new_v4(),
             tenant_id: StringUuid::new_v4(),
             email: "multi-role@example.com".to_string(),
-            role_ids: vec![StringUuid::new_v4(), StringUuid::new_v4(), StringUuid::new_v4()],
+            role_ids: vec![
+                StringUuid::new_v4(),
+                StringUuid::new_v4(),
+                StringUuid::new_v4(),
+            ],
             invited_by: StringUuid::new_v4(),
             status: InvitationStatus::Pending,
             expires_at: chrono::Utc::now() + chrono::Duration::hours(72),

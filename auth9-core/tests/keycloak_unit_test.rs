@@ -15,6 +15,8 @@ fn create_test_config(base_url: &str) -> KeycloakConfig {
         admin_client_id: "auth9-admin".to_string(),
         admin_client_secret: "test-secret".to_string(),
         ssl_required: "none".to_string(),
+        core_public_url: None,
+        portal_url: None,
     }
 }
 
@@ -954,8 +956,12 @@ async fn test_confidential_client_with_secret() {
     // Mock token endpoint - should receive client_secret parameter
     Mock::given(method("POST"))
         .and(path("/realms/master/protocol/openid-connect/token"))
-        .and(wiremock::matchers::body_string_contains("client_secret=test-secret"))
-        .and(wiremock::matchers::body_string_contains("grant_type=password"))
+        .and(wiremock::matchers::body_string_contains(
+            "client_secret=test-secret",
+        ))
+        .and(wiremock::matchers::body_string_contains(
+            "grant_type=password",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "access_token": "confidential-token",
             "expires_in": 300,
@@ -1001,14 +1007,18 @@ async fn test_backward_compatibility_without_client_secret() {
         public_url: mock_server.uri(),
         realm: "test".to_string(),
         admin_client_id: "admin-cli".to_string(),
-        admin_client_secret: String::new(),  // Empty secret
+        admin_client_secret: String::new(), // Empty secret
         ssl_required: "none".to_string(),
+        core_public_url: None,
+        portal_url: None,
     };
 
     // Mock token endpoint - should NOT receive client_secret parameter
     Mock::given(method("POST"))
         .and(path("/realms/master/protocol/openid-connect/token"))
-        .and(wiremock::matchers::body_string_contains("grant_type=password"))
+        .and(wiremock::matchers::body_string_contains(
+            "grant_type=password",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "access_token": "public-token",
             "expires_in": 300,
@@ -1058,6 +1068,8 @@ fn create_seeder_config(base_url: &str) -> KeycloakConfig {
         admin_client_id: "auth9-admin".to_string(),
         admin_client_secret: "test-secret".to_string(),
         ssl_required: "none".to_string(),
+        core_public_url: None,
+        portal_url: None,
     }
 }
 
@@ -1071,7 +1083,9 @@ async fn test_seed_master_admin_client_success() {
     // Mock token endpoint (using admin-cli)
     Mock::given(method("POST"))
         .and(path("/realms/master/protocol/openid-connect/token"))
-        .and(wiremock::matchers::body_string_contains("client_id=admin-cli"))
+        .and(wiremock::matchers::body_string_contains(
+            "client_id=admin-cli",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "access_token": "admin-token",
             "expires_in": 300
@@ -1228,7 +1242,9 @@ async fn test_seed_master_admin_client_with_auto_generated_secret() {
 
     // Mock get client secret
     Mock::given(method("GET"))
-        .and(path("/admin/realms/master/clients/new-client-uuid-123/client-secret"))
+        .and(path(
+            "/admin/realms/master/clients/new-client-uuid-123/client-secret",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "type": "secret",
             "value": "auto-generated-secret-xyz"

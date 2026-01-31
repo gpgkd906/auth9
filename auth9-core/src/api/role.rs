@@ -1,6 +1,8 @@
 //! Role and permission API handlers
 
-use crate::api::{extract_actor_id_generic, write_audit_log_generic, MessageResponse, SuccessResponse};
+use crate::api::{
+    extract_actor_id_generic, write_audit_log_generic, MessageResponse, SuccessResponse,
+};
 use crate::domain::{
     AssignRolesInput, CreatePermissionInput, CreateRoleInput, StringUuid, UpdateRoleInput,
 };

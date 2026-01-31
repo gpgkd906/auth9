@@ -35,6 +35,8 @@ pub fn test_config() -> Config {
             admin_client_id: "admin-cli".to_string(),
             admin_client_secret: "secret".to_string(),
             ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
         },
     }
 }

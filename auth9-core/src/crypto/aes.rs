@@ -71,8 +71,8 @@ impl EncryptionKey {
 /// Returns base64-encoded ciphertext in format: nonce:ciphertext
 /// The nonce is 12 bytes (96 bits) as required by GCM
 pub fn encrypt(key: &EncryptionKey, plaintext: &str) -> Result<String, EncryptionError> {
-    let cipher = Aes256Gcm::new_from_slice(&key.key)
-        .map_err(|_| EncryptionError::EncryptionFailed)?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key.key).map_err(|_| EncryptionError::EncryptionFailed)?;
 
     // Generate random 12-byte nonce
     let mut nonce_bytes = [0u8; 12];
@@ -107,8 +107,8 @@ pub fn decrypt(key: &EncryptionKey, encrypted: &str) -> Result<String, Encryptio
 
     let ciphertext = BASE64.decode(parts[1])?;
 
-    let cipher = Aes256Gcm::new_from_slice(&key.key)
-        .map_err(|_| EncryptionError::DecryptionFailed)?;
+    let cipher =
+        Aes256Gcm::new_from_slice(&key.key).map_err(|_| EncryptionError::DecryptionFailed)?;
 
     let nonce = Nonce::from_slice(&nonce_bytes);
 
@@ -126,10 +126,9 @@ mod tests {
     fn test_key() -> EncryptionKey {
         // Test key: 32 bytes
         EncryptionKey::new([
-            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07,
-            0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f,
-            0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17,
-            0x18, 0x19, 0x1a, 0x1b, 0x1c, 0x1d, 0x1e, 0x1f,
+            0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d,
+            0x0e, 0x0f, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
+            0x1c, 0x1d, 0x1e, 0x1f,
         ])
     }
 
@@ -178,11 +177,17 @@ mod tests {
 
         // Missing colon separator
         let result = decrypt(&key, "invalid");
-        assert!(matches!(result, Err(EncryptionError::InvalidCiphertextFormat)));
+        assert!(matches!(
+            result,
+            Err(EncryptionError::InvalidCiphertextFormat)
+        ));
 
         // Too many parts
         let result = decrypt(&key, "a:b:c");
-        assert!(matches!(result, Err(EncryptionError::InvalidCiphertextFormat)));
+        assert!(matches!(
+            result,
+            Err(EncryptionError::InvalidCiphertextFormat)
+        ));
     }
 
     #[test]

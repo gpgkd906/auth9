@@ -384,7 +384,7 @@ collect_jwt_issuer() {
 collect_core_public_url() {
     print_info "Auth9 Core Public URL Configuration"
 
-    local current="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.gitski.work}"
+    local current="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}"
     echo "  Current: $current"
     echo "  This is the cloudflared tunnel URL for browser-side OAuth redirects"
 
@@ -535,7 +535,7 @@ data:
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
   KEYCLOAK_SSL_REQUIRED: "none"
   AUTH9_CORE_URL: "http://auth9-core:8080"
-  AUTH9_CORE_PUBLIC_URL: "${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.gitski.work}"
+  AUTH9_CORE_PUBLIC_URL: "${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}"
   AUTH9_PORTAL_URL: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.gitski.work}"
   NODE_ENV: "production"
 EOF
@@ -623,7 +623,7 @@ print_summary() {
     echo "  Database: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password
     echo "  Redis: ${AUTH9_SECRETS[REDIS_URL]}"
     echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-https://auth9.gitski.work}"
-    echo "  Core Public URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.gitski.work}"
+    echo "  Core Public URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}"
     echo "  Portal URL: ${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.gitski.work}"
     echo "  Init job: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "will run" || echo "will skip (client secret exists)")"
     echo ""
@@ -925,7 +925,7 @@ print_deployment_complete() {
         echo -e "${BOLD}Service URLs:${NC}"
         echo ""
         local portal_url="${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.gitski.work}"
-        local core_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.gitski.work}"
+        local core_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}"
         echo -e "  ${GREEN}auth9-portal (Admin Dashboard):${NC}"
         echo -e "    Public URL:   ${YELLOW}${portal_url}${NC}"
         echo -e "    Internal:     auth9-portal.$NAMESPACE.svc.cluster.local:3000"

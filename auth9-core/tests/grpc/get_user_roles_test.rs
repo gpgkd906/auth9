@@ -41,7 +41,11 @@ async fn test_get_user_roles_success() {
     });
 
     let response = service.get_user_roles(request).await;
-    assert!(response.is_ok(), "Expected success but got: {:?}", response.err());
+    assert!(
+        response.is_ok(),
+        "Expected success but got: {:?}",
+        response.err()
+    );
 
     let response = response.unwrap().into_inner();
     assert!(!response.roles.is_empty());
@@ -217,7 +221,11 @@ async fn test_get_user_roles_with_multiple_role_records() {
             create_user_roles(
                 user_id,
                 tenant_id,
-                vec!["admin".to_string(), "editor".to_string(), "viewer".to_string()],
+                vec![
+                    "admin".to_string(),
+                    "editor".to_string(),
+                    "viewer".to_string(),
+                ],
                 vec!["read".to_string(), "write".to_string()],
             ),
         )

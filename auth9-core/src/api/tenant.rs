@@ -110,7 +110,9 @@ pub async fn delete<S: HasServices>(
 #[cfg(test)]
 mod tests {
     use crate::api::{MessageResponse, PaginatedResponse, SuccessResponse};
-    use crate::domain::{CreateTenantInput, Tenant, TenantSettings, TenantStatus, UpdateTenantInput};
+    use crate::domain::{
+        CreateTenantInput, Tenant, TenantSettings, TenantStatus, UpdateTenantInput,
+    };
 
     #[test]
     fn test_create_tenant_input_deserialization() {
