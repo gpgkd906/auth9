@@ -220,11 +220,16 @@ detect_existing_configmap() {
         return 1
     fi
 
-    # Read JWT_ISSUER
+    # Read JWT_ISSUER and URLs
     local jwt_issuer=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.JWT_ISSUER}' 2>/dev/null || echo "")
+    local core_public_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_CORE_PUBLIC_URL}' 2>/dev/null || echo "")
+    local portal_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_PORTAL_URL}' 2>/dev/null || echo "")
+
     if [ -n "$jwt_issuer" ]; then
         CONFIGMAP_VALUES[JWT_ISSUER]="$jwt_issuer"
-        print_info "auth9-config ConfigMap found (JWT_ISSUER: $jwt_issuer)"
+        [ -n "$core_public_url" ] && CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$core_public_url"
+        [ -n "$portal_url" ] && CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$portal_url"
+        print_info "auth9-config ConfigMap found"
         return 0
     fi
 
@@ -372,6 +377,52 @@ collect_jwt_issuer() {
     print_success "JWT Issuer configured"
 }
 
+collect_core_public_url() {
+    print_info "Auth9 Core Public URL Configuration"
+
+    local current="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
+    echo "  Current: $current"
+    echo "  This is the cloudflared tunnel URL for browser-side OAuth redirects"
+
+    if confirm_action "  Change Auth9 Core Public URL?"; then
+        local new_url
+        while true; do
+            new_url=$(prompt_user "  Auth9 Core Public URL (cloudflared tunnel)" "$current")
+            if validate_url "$new_url"; then
+                CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$new_url"
+                break
+            fi
+        done
+    else
+        CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$current"
+    fi
+
+    print_success "Auth9 Core Public URL configured"
+}
+
+collect_portal_url() {
+    print_info "Auth9 Portal URL Configuration"
+
+    local current="${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
+    echo "  Current: $current"
+    echo "  This is the cloudflared tunnel URL for Portal"
+
+    if confirm_action "  Change Auth9 Portal URL?"; then
+        local new_url
+        while true; do
+            new_url=$(prompt_user "  Auth9 Portal URL (cloudflared tunnel)" "$current")
+            if validate_url "$new_url"; then
+                CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$new_url"
+                break
+            fi
+        done
+    else
+        CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$current"
+    fi
+
+    print_success "Auth9 Portal URL configured"
+}
+
 generate_secrets() {
     # JWT_SECRET
     if [ -z "${AUTH9_SECRETS[JWT_SECRET]}" ]; then
@@ -470,6 +521,8 @@ data:
   KEYCLOAK_REALM: "auth9"
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
   AUTH9_CORE_URL: "http://auth9-core:8080"
+  AUTH9_CORE_PUBLIC_URL: "${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
+  AUTH9_PORTAL_URL: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
   NODE_ENV: "production"
 EOF
 
@@ -519,6 +572,8 @@ run_interactive_setup() {
     collect_keycloak_config
     collect_keycloak_db_password
     collect_jwt_issuer
+    collect_core_public_url
+    collect_portal_url
 
     # Step 4/6: Generate secrets
     print_progress "4/6" "Generating secure secrets"
@@ -553,6 +608,8 @@ print_summary() {
     echo "  Database: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password
     echo "  Redis: ${AUTH9_SECRETS[REDIS_URL]}"
     echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-https://auth9.example.com}"
+    echo "  Core Public URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
+    echo "  Portal URL: ${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
     echo "  Init job: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "will run" || echo "will skip (client secret exists)")"
     echo ""
 }

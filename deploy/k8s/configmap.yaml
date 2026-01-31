@@ -30,4 +30,6 @@ data:
   
   # Portal configuration
   AUTH9_CORE_URL: "http://auth9-core:8080"
+  AUTH9_CORE_PUBLIC_URL: "https://api.auth9.example.com"
+  AUTH9_PORTAL_URL: "https://auth9.example.com"
   NODE_ENV: "production"
