@@ -143,7 +143,7 @@ impl KeycloakClient {
             }
         }
 
-        // Fetch new token using password grant (admin-cli is a public client)
+        // Fetch new token using password grant with auth9-admin (Confidential Client)
         let token_url = format!(
             "{}/realms/master/protocol/openid-connect/token",
             self.config.url
@@ -155,12 +155,17 @@ impl KeycloakClient {
         let admin_password =
             std::env::var("KEYCLOAK_ADMIN_PASSWORD").unwrap_or_else(|_| "admin".to_string());
 
-        let params = [
+        let mut params = vec![
             ("grant_type", "password"),
-            ("client_id", &self.config.admin_client_id),
+            ("client_id", &self.config.admin_client_id), // auth9-admin (Confidential Client)
             ("username", &admin_username),
             ("password", &admin_password),
         ];
+
+        // Add client_secret for Confidential Client (required for auth9-admin)
+        if !self.config.admin_client_secret.is_empty() {
+            params.push(("client_secret", &self.config.admin_client_secret));
+        }
 
         let response = self
             .http_client
@@ -717,6 +722,10 @@ const DEFAULT_ADMIN_LAST_NAME: &str = "User";
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
 const DEFAULT_PORTAL_CLIENT_NAME: &str = "Auth9 Admin Portal";
 
+/// Default admin client configuration
+const DEFAULT_ADMIN_CLIENT_ID: &str = "auth9-admin";
+const DEFAULT_ADMIN_CLIENT_NAME: &str = "Auth9 Admin Client";
+
 /// Keycloak realm representation
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -755,6 +764,7 @@ impl KeycloakSeeder {
 
     /// Get admin token using master realm password grant
     /// Uses KEYCLOAK_ADMIN and KEYCLOAK_ADMIN_PASSWORD environment variables
+    /// Uses admin-cli client (default public client in master realm)
     async fn get_master_admin_token(&self) -> anyhow::Result<String> {
         let admin_username = env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
         let admin_password =
@@ -765,9 +775,13 @@ impl KeycloakSeeder {
             self.config.url
         );
 
-        let params = [
+        // Use admin-cli (Keycloak's default public client in master realm)
+        // This is necessary during initialization when auth9-admin client doesn't exist yet
+        let admin_cli = "admin-cli";
+
+        let params = vec![
             ("grant_type", "password"),
-            ("client_id", "admin-cli"),
+            ("client_id", admin_cli),
             ("username", &admin_username),
             ("password", &admin_password),
         ];
@@ -1094,6 +1108,199 @@ impl KeycloakSeeder {
         }
 
         self.create_portal_client(&token).await?;
+        Ok(())
+    }
+
+    /// Check if auth9-admin client exists
+    async fn admin_client_exists(&self, token: &str) -> anyhow::Result<bool> {
+        let client_id = DEFAULT_ADMIN_CLIENT_ID;
+        let url = format!(
+            "{}/admin/realms/{}/clients",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .query(&[("clientId", client_id)])
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            return Ok(false);
+        }
+
+        let clients: Vec<serde_json::Value> = response.json().await?;
+        Ok(!clients.is_empty())
+    }
+
+    /// Create auth9-admin client (Confidential Client for admin operations)
+    async fn create_admin_client(&self, token: &str) -> anyhow::Result<()> {
+        info!("Creating auth9-admin client (Confidential Client)");
+
+        // Read secret from environment (for Docker Compose preset, or K8s manual config)
+        let client_secret = env::var("KEYCLOAK_ADMIN_CLIENT_SECRET")
+            .unwrap_or_else(|_| String::new());
+
+        // Build client configuration
+        let mut client = serde_json::json!({
+            "clientId": DEFAULT_ADMIN_CLIENT_ID,
+            "name": DEFAULT_ADMIN_CLIENT_NAME,
+            "enabled": true,
+            "protocol": "openid-connect",
+            "publicClient": false,  // Confidential client
+            "serviceAccountsEnabled": false,  // Use password grant, not client credentials
+            "standardFlowEnabled": false,
+            "directAccessGrantsEnabled": true,  // Enable password grant
+            "redirectUris": [],
+            "webOrigins": [],
+        });
+
+        // If secret is provided (Docker Compose), set it explicitly
+        if !client_secret.is_empty() {
+            client["secret"] = serde_json::json!(client_secret);
+        }
+
+        let url = format!(
+            "{}/admin/realms/{}/clients",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(token)
+            .json(&client)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await?;
+            anyhow::bail!(
+                "Failed to create auth9-admin client: {} - {}",
+                status,
+                body
+            );
+        }
+
+        // If no secret was provided, retrieve the auto-generated one
+        if client_secret.is_empty() {
+            info!("Retrieving auto-generated client secret...");
+            match self.get_admin_client_secret(token).await {
+                Ok(secret) => {
+                    info!("✅ auth9-admin client created successfully!");
+                    info!("📋 Copy this secret to your secrets configuration:");
+                    info!("   KEYCLOAK_ADMIN_CLIENT_SECRET={}", secret);
+                }
+                Err(e) => {
+                    warn!("Client created but failed to retrieve secret: {}", e);
+                    info!("You can retrieve it manually from Keycloak Admin Console:");
+                    info!("  Clients → auth9-admin → Credentials tab");
+                }
+            }
+        } else {
+            info!("✅ auth9-admin client created with preset secret");
+        }
+
+        Ok(())
+    }
+
+    /// Get client UUID by client ID
+    async fn get_client_uuid_by_client_id(
+        &self,
+        token: &str,
+        client_id: &str,
+    ) -> anyhow::Result<String> {
+        let url = format!(
+            "{}/admin/realms/{}/clients",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .query(&[("clientId", client_id)])
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await?;
+            anyhow::bail!("Failed to get client by clientId: {} - {}", status, body);
+        }
+
+        let clients: Vec<serde_json::Value> = response.json().await?;
+        if clients.is_empty() {
+            anyhow::bail!("Client '{}' not found", client_id);
+        }
+
+        let client_uuid = clients[0]["id"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Client UUID not found in response"))?
+            .to_string();
+
+        Ok(client_uuid)
+    }
+
+    /// Get client secret
+    async fn get_client_secret(&self, token: &str, client_uuid: &str) -> anyhow::Result<String> {
+        let url = format!(
+            "{}/admin/realms/{}/clients/{}/client-secret",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await?;
+            anyhow::bail!("Failed to get client secret: {} - {}", status, body);
+        }
+
+        let secret_response: serde_json::Value = response.json().await?;
+        let secret = secret_response["value"]
+            .as_str()
+            .ok_or_else(|| anyhow::anyhow!("Client secret value not found in response"))?
+            .to_string();
+
+        Ok(secret)
+    }
+
+    /// Get the client secret for auth9-admin
+    async fn get_admin_client_secret(&self, token: &str) -> anyhow::Result<String> {
+        // Get client UUID
+        let client_uuid = self
+            .get_client_uuid_by_client_id(token, DEFAULT_ADMIN_CLIENT_ID)
+            .await?;
+
+        // Get client secret
+        let secret = self.get_client_secret(token, &client_uuid).await?;
+        Ok(secret)
+    }
+
+    /// Seed auth9-admin client (idempotent)
+    pub async fn seed_admin_client(&self) -> anyhow::Result<()> {
+        info!("Seeding auth9-admin client...");
+
+        // Get admin token using current configuration (admin-cli or auth9-admin)
+        let token = self.get_master_admin_token().await?;
+
+        // Check if client already exists
+        if self.admin_client_exists(&token).await? {
+            info!("auth9-admin client already exists, skipping");
+            return Ok(());
+        }
+
+        // Create client
+        self.create_admin_client(&token).await?;
         Ok(())
     }
 }
