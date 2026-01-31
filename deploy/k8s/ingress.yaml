@@ -93,3 +93,41 @@ spec:
                 name: auth9-core
                 port:
                   number: 50051
+---
+# Keycloak Ingress
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: keycloak-ingress
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/part-of: auth9
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "60"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    # Keycloak requires sticky sessions for clustered deployment
+    nginx.ingress.kubernetes.io/affinity: "cookie"
+    nginx.ingress.kubernetes.io/session-cookie-name: "KC_ROUTE"
+    nginx.ingress.kubernetes.io/session-cookie-expires: "172800"
+    nginx.ingress.kubernetes.io/session-cookie-max-age: "172800"
+spec:
+  ingressClassName: nginx
+  # Uncomment and configure TLS for production
+  # tls:
+  #   - hosts:
+  #       - login.auth9.example.com
+  #     secretName: keycloak-tls
+  rules:
+    - host: login.auth9.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080

@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: auth-engine
+    app.kubernetes.io/part-of: auth9
+data:
+  # Database configuration
+  KC_DB: postgres
+  KC_DB_URL_HOST: keycloak-postgres
+  KC_DB_URL_PORT: "5432"
+  KC_DB_URL_DATABASE: keycloak
+
+  # Server configuration
+  KC_HTTP_ENABLED: "true"
+  KC_HOSTNAME_STRICT: "false"
+  KC_HEALTH_ENABLED: "true"
+  KC_METRICS_ENABLED: "true"
+  KC_PROXY: edge
+
+  # Theme configuration
+  KC_SPI_THEME_DEFAULT: auth9
+
+  # Auth9 API URL for theme integration
+  AUTH9_API_URL: http://auth9-core:8080
+
+  # Logging
+  KC_LOG_LEVEL: INFO
