@@ -8,6 +8,7 @@ export const meta: MetaFunction = () => {
 
 const settingsNav = [
   { name: "Organization", href: "/dashboard/settings", description: "Tenant branding settings" },
+  { name: "Login Branding", href: "/dashboard/settings/branding", description: "Customize login pages" },
   { name: "Email Provider", href: "/dashboard/settings/email", description: "Email delivery configuration" },
   { name: "Email Templates", href: "/dashboard/settings/email-templates", description: "Customize email content" },
 ];

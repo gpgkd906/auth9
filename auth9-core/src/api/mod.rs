@@ -2,6 +2,7 @@
 
 pub mod audit;
 pub mod auth;
+pub mod branding;
 pub mod email_template;
 pub mod health;
 pub mod invitation;

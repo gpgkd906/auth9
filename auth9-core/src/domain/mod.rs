@@ -1,5 +1,6 @@
 //! Domain models for Auth9 Core
 
+pub mod branding;
 pub mod common;
 pub mod email;
 pub mod email_template;
@@ -10,6 +11,7 @@ pub mod system_settings;
 pub mod tenant;
 pub mod user;
 
+pub use branding::*;
 pub use common::*;
 pub use email::*;
 pub use email_template::*;

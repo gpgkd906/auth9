@@ -13,8 +13,8 @@ use crate::repository::{
     TenantRepository, UserRepository,
 };
 use crate::service::{
-    ClientService, EmailService, EmailTemplateService, InvitationService, RbacService,
-    SystemSettingsService, TenantService, UserService,
+    BrandingService, ClientService, EmailService, EmailTemplateService, InvitationService,
+    RbacService, SystemSettingsService, TenantService, UserService,
 };
 
 /// Trait for application state that provides access to all services.
@@ -104,4 +104,13 @@ pub trait HasInvitations: HasServices + HasSystemSettings {
 pub trait HasEmailTemplates: HasSystemSettings {
     /// Get the email template service
     fn email_template_service(&self) -> &EmailTemplateService<Self::SystemSettingsRepo>;
+}
+
+/// Trait for states that provide branding services
+pub trait HasBranding: Clone + Send + Sync + 'static {
+    /// The system settings repository type used for branding storage
+    type BrandingRepo: SystemSettingsRepository;
+
+    /// Get the branding service
+    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo>;
 }

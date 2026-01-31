@@ -113,7 +113,6 @@ pub async fn send_test_email<S: HasSystemSettings>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{OracleEmailConfig, SesConfig};
 
     #[test]
     fn test_update_email_settings_request_deserialization() {

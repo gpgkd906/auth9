@@ -615,6 +615,36 @@ export interface SendTemplateTestEmailResponse {
   message_id?: string;
 }
 
+// Branding Configuration Types
+export interface BrandingConfig {
+  logo_url?: string;
+  primary_color: string;
+  secondary_color: string;
+  background_color: string;
+  text_color: string;
+  custom_css?: string;
+  company_name?: string;
+  favicon_url?: string;
+  allow_registration: boolean;
+}
+
+// Branding API
+export const brandingApi = {
+  get: async (): Promise<{ data: BrandingConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/branding`);
+    return handleResponse(response);
+  },
+
+  update: async (config: BrandingConfig): Promise<{ data: BrandingConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/branding`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ config }),
+    });
+    return handleResponse(response);
+  },
+};
+
 // Email Template API
 export const emailTemplateApi = {
   list: async (): Promise<{ data: EmailTemplateWithContent[] }> => {
