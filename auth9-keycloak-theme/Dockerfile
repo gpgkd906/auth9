@@ -13,6 +13,9 @@ RUN npm ci
 # Copy source files
 COPY . .
 
+# Generate kc.gen files (required before TypeScript compilation)
+RUN npx keycloakify update-kc-gen
+
 # Build the theme JAR
 RUN npm run build && npx keycloakify build
 

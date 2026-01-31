@@ -76,20 +76,20 @@ if ! kubectl cluster-info &> /dev/null; then
 fi
 
 # Step 1: Create namespace and service account
-echo -e "${GREEN}[1/5] Creating namespace and service account...${NC}"
+echo -e "${GREEN}[1/6] Creating namespace and service account...${NC}"
 kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
 kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
 
 # Step 2: Apply ConfigMap
-echo -e "${GREEN}[2/5] Applying ConfigMap...${NC}"
+echo -e "${GREEN}[2/6] Applying ConfigMap...${NC}"
 kubectl apply -f "$K8S_DIR/configmap.yaml" $DRY_RUN
 
 # Step 3: Check for secrets
-echo -e "${GREEN}[3/5] Checking secrets...${NC}"
+echo -e "${GREEN}[3/6] Checking secrets...${NC}"
 if kubectl get secret auth9-secrets -n "$NAMESPACE" &> /dev/null; then
-    echo -e "  ${GREEN}✓${NC} Secrets exist"
+    echo -e "  ${GREEN}✓${NC} auth9-secrets exist"
 else
-    echo -e "  ${YELLOW}⚠ Secrets not found. Please create them:${NC}"
+    echo -e "  ${YELLOW}⚠ auth9-secrets not found. Please create them:${NC}"
     echo "    kubectl create secret generic auth9-secrets \\"
     echo "      --from-literal=DATABASE_URL='...' \\"
     echo "      --from-literal=REDIS_URL='...' \\"
@@ -104,8 +104,24 @@ else
     fi
 fi
 
+if kubectl get secret keycloak-secrets -n "$NAMESPACE" &> /dev/null; then
+    echo -e "  ${GREEN}✓${NC} keycloak-secrets exist"
+else
+    echo -e "  ${YELLOW}⚠ keycloak-secrets not found. Please create them:${NC}"
+    echo "    kubectl create secret generic keycloak-secrets \\"
+    echo "      --from-literal=KEYCLOAK_ADMIN='admin' \\"
+    echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
+    echo "      --from-literal=KC_DB_USERNAME='keycloak' \\"
+    echo "      --from-literal=KC_DB_PASSWORD='...' \\"
+    echo "      -n $NAMESPACE"
+    echo ""
+    if [ -z "$DRY_RUN" ]; then
+        echo -e "  ${YELLOW}Continuing anyway (deployment may fail without secrets)${NC}"
+    fi
+fi
+
 # Step 4: Deploy auth9-core and auth9-portal
-echo -e "${GREEN}[4/5] Deploying applications...${NC}"
+echo -e "${GREEN}[4/6] Deploying applications...${NC}"
 
 echo "  Deploying auth9-core..."
 kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
@@ -113,29 +129,45 @@ kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
 echo "  Deploying auth9-portal..."
 kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
 
+echo "  Deploying keycloak..."
+kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
+
 echo "  Applying ingress..."
 kubectl apply -f "$K8S_DIR/ingress.yaml" $DRY_RUN
 
-# Step 5: Restart deployments (if not skipped and not dry-run)
+# Step 5: Wait for PostgreSQL to be ready (Keycloak depends on it)
+echo -e "${GREEN}[5/6] Waiting for keycloak-postgres to be ready...${NC}"
+if [ -z "$DRY_RUN" ]; then
+    kubectl rollout status statefulset/keycloak-postgres -n "$NAMESPACE" --timeout=300s || true
+fi
+
+# Step 6: Restart deployments (if not skipped and not dry-run)
 if [ -z "$SKIP_RESTART" ] && [ -z "$DRY_RUN" ]; then
-    echo -e "${GREEN}[5/5] Restarting deployments to pick up latest images...${NC}"
-    
+    echo -e "${GREEN}[6/6] Restarting deployments to pick up latest images...${NC}"
+
     echo "  Restarting auth9-core..."
     kubectl rollout restart deployment/auth9-core -n "$NAMESPACE"
-    
+
     echo "  Restarting auth9-portal..."
     kubectl rollout restart deployment/auth9-portal -n "$NAMESPACE"
-    
+
+    echo "  Restarting keycloak..."
+    kubectl rollout restart deployment/keycloak -n "$NAMESPACE"
+
     echo ""
     echo -e "${YELLOW}Waiting for rollout to complete...${NC}"
-    
+
     echo "  Waiting for auth9-core..."
     kubectl rollout status deployment/auth9-core -n "$NAMESPACE" --timeout=300s
-    
+
     echo "  Waiting for auth9-portal..."
     kubectl rollout status deployment/auth9-portal -n "$NAMESPACE" --timeout=300s
+
+    echo "  Waiting for keycloak..."
+    kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=300s
 else
-    echo -e "${GREEN}[5/5] Skipping restart step${NC}"
+    echo -e "${GREEN}[5/6] Skipping PostgreSQL wait (dry-run)${NC}"
+    echo -e "${GREEN}[6/6] Skipping restart step${NC}"
 fi
 
 echo ""
