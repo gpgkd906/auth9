@@ -397,7 +397,7 @@ cargo test --lib
 cargo test --test '*'
 
 # 全部测试 + 覆盖率
-cargo tarpaulin --out Html
+cargo llvm-cov --html
 ```
 
 ## 9. 性能优化策略

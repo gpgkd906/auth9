@@ -15,7 +15,8 @@ cargo test test_name           # Run single test by name
 cargo test -- --nocapture      # Run with output
 cargo clippy                   # Lint
 cargo fmt                      # Format
-cargo tarpaulin --out Html     # Coverage report
+cargo llvm-cov                 # Coverage report (recommended)
+cargo llvm-cov --html          # Coverage HTML report
 ```
 
 ### auth9-portal (TypeScript/Remix)
@@ -95,8 +96,12 @@ All tests run fast (~1-2 seconds) with **no Docker or external services**:
 ### Test File Locations
 - **Service layer tests**: `src/service/*.rs` in `#[cfg(test)]` modules
 - **Repository trait mocks**: `#[cfg_attr(test, mockall::automock)]` on trait definitions
+- **HTTP handler tests**: `tests/api/http/*_http_test.rs` (uses `HasServices` DI pattern)
 - **gRPC integration tests**: `tests/grpc_*.rs`
 - **Keycloak tests**: `tests/keycloak_unit_test.rs` (uses wiremock)
+
+### HTTP Handler DI Pattern
+All API handlers use `<S: HasServices>` generic instead of concrete `AppState`. This enables testing production handler code with `TestAppState` + mock repositories. See `test-coverage.md` skill for details.
 
 ### Mock Patterns
 

@@ -15,14 +15,21 @@ cargo test
 All tests run fast (~1-2 seconds) with **no Docker or external services required**.
 
 ### Run Coverage Analysis
+
+**Use `cargo-llvm-cov`** (recommended over tarpaulin):
+
 ```bash
 cd auth9-core
-cargo tarpaulin --ignore-config --run-types Tests --out Json --output-dir target/tarpaulin
+cargo llvm-cov                 # Text summary
+cargo llvm-cov --html          # HTML report in target/llvm-cov/html/
+cargo llvm-cov --json          # JSON output
 ```
 
-HTML output:
+> **Why llvm-cov?** tarpaulin has known issues with `#[tonic::async_trait]` macros (reports ~9% instead of actual ~87% for gRPC code). `cargo-llvm-cov` uses LLVM's instrumentation and correctly tracks async trait code.
+
+Install if needed:
 ```bash
-cargo tarpaulin --out Html --output-dir target/coverage
+cargo install cargo-llvm-cov
 ```
 
 ## Frontend (Auth9 Portal)
@@ -68,6 +75,9 @@ Auth9-core tests use **mocks instead of real services**:
 ```
 auth9-core/
 ├── src/
+│   ├── api/
+│   │   └── *.rs           # Handlers with <S: HasServices> generics
+│   ├── state.rs           # HasServices trait definition
 │   ├── service/
 │   │   ├── tenant.rs      # Service + unit tests (#[cfg(test)])
 │   │   ├── user.rs        # Service + unit tests
@@ -76,10 +86,120 @@ auth9-core/
 │   └── repository/
 │       └── *.rs           # Traits with #[mockall::automock]
 └── tests/
-    ├── common/mod.rs              # Test config helpers
-    ├── grpc_token_exchange_test.rs # gRPC tests with NoOpCacheManager
+    ├── api_test.rs                # Entry point for api/ and grpc/ modules
+    ├── api/
+    │   ├── mod.rs                 # Test repositories (TestTenantRepository, etc.)
+    │   └── http/
+    │       ├── mod.rs             # TestAppState, build_test_router, helpers
+    │       ├── mock_keycloak.rs   # wiremock Keycloak mocking
+    │       └── *_http_test.rs     # HTTP handler tests
+    ├── grpc/
+    │   ├── mod.rs                 # GrpcTestBuilder, MockCacheManager
+    │   ├── exchange_token_test.rs # exchange_token gRPC tests
+    │   ├── validate_token_test.rs # validate_token gRPC tests
+    │   ├── get_user_roles_test.rs # get_user_roles gRPC tests
+    │   └── introspect_token_test.rs # introspect_token gRPC tests
     └── keycloak_unit_test.rs      # Keycloak with wiremock
 ```
+
+---
+
+## Writing HTTP Handler Tests (API Layer)
+
+HTTP handler tests use **Dependency Injection via `HasServices` trait** to test production code with mock repositories.
+
+### Architecture
+
+```
+Production:  AppState (impl HasServices) → build_router() → Handlers<AppState>
+Tests:       TestAppState (impl HasServices) → build_router() → Handlers<TestAppState>
+                                                    ↑
+                                          Same production handlers!
+```
+
+### Key Files
+
+| File | Purpose |
+|------|---------|
+| `src/state.rs` | `HasServices` trait definition |
+| `src/server/mod.rs` | `AppState` + `build_router<S: HasServices>()` |
+| `tests/api/http/mod.rs` | `TestAppState` + test helpers |
+| `tests/api/http/*_http_test.rs` | HTTP handler tests |
+
+### HasServices Trait Pattern
+
+All handlers use generic `<S: HasServices>` instead of concrete `AppState`:
+
+```rust
+// src/api/tenant.rs
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<impl IntoResponse> {
+    let (tenants, total) = state
+        .tenant_service()  // Method from HasServices trait
+        .list(pagination.page, pagination.per_page)
+        .await?;
+    Ok(Json(PaginatedResponse::new(tenants, pagination.page, pagination.per_page, total)))
+}
+```
+
+### TestAppState Implementation
+
+```rust
+// tests/api/http/mod.rs
+pub struct TestAppState {
+    pub tenant_service: Arc<TenantService<TestTenantRepository>>,
+    pub user_service: Arc<UserService<TestUserRepository>>,
+    // ... other services with test repositories
+}
+
+impl HasServices for TestAppState {
+    type TenantRepo = TestTenantRepository;
+    type UserRepo = TestUserRepository;
+    // ... associated types
+
+    fn tenant_service(&self) -> &TenantService<Self::TenantRepo> {
+        &self.tenant_service
+    }
+    // ... other methods
+}
+```
+
+### Writing HTTP Tests
+
+```rust
+// tests/api/http/tenant_http_test.rs
+use crate::api::http::{build_test_router, get_json, post_json, TestAppState};
+
+#[tokio::test]
+async fn test_list_tenants_returns_200() {
+    let state = TestAppState::new("http://mock-keycloak");
+
+    // Seed test data
+    state.tenant_repo.seed_tenant(CreateTenantInput {
+        name: "Test".to_string(),
+        slug: "test".to_string(),
+        ..Default::default()
+    }).await;
+
+    // Use production router with TestAppState
+    let app = build_test_router(state);
+
+    let (status, body): (_, Option<PaginatedResponse<Tenant>>) =
+        get_json(&app, "/api/v1/tenants").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body.unwrap().data.len(), 1);
+}
+```
+
+### Important Rules
+
+1. **Always use `HasServices` trait** for new handlers - never use concrete `AppState`
+2. **Test production code** - `build_test_router()` uses `build_router(state)` from production
+3. **Mock Keycloak with wiremock** - see `tests/api/http/mock_keycloak.rs`
+4. **Use test repositories** - `TestTenantRepository`, `TestUserRepository`, etc.
 
 ---
 
@@ -261,4 +381,5 @@ This generates `MockTenantRepository` for use in tests.
 
 - **Compilation errors**: Run `cargo clean` first
 - **Mock expectations not met**: Check predicate conditions with `mockall::predicate::*`
-- **Network errors in tarpaulin**: Add `required_permissions: ["network"]` in tarpaulin.toml
+- **Low gRPC coverage with tarpaulin**: Use `cargo llvm-cov` instead (tarpaulin can't track `#[async_trait]` macros properly)
+- **llvm-cov not found**: Install with `cargo install cargo-llvm-cov`
