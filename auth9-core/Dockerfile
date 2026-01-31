@@ -1,38 +1,32 @@
 # Auth9 Core - Rust Backend
 # Multi-stage build for minimal image size
 
-# ==================== Builder Stage ====================
-FROM rust:latest AS builder
+# ==================== Chef Stage ====================
+FROM rust:1.93 AS chef
+
+# Install cargo-chef
+RUN cargo install cargo-chef
 
 WORKDIR /app
+
+# ==================== Planner Stage ====================
+FROM chef AS planner
+
+COPY . .
+RUN cargo chef prepare --recipe-path recipe.json
+
+# ==================== Builder Stage ====================
+FROM chef AS builder
 
 # Install protobuf compiler
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
-# Copy Cargo files for dependency caching
-COPY Cargo.toml Cargo.lock ./
-COPY build.rs ./
-COPY proto ./proto
+# Build dependencies using cargo-chef
+COPY --from=planner /app/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 
-# Create dummy main.rs to build dependencies
-RUN mkdir -p src && echo "fn main() {}" > src/main.rs
-
-# Update dependencies to be compatible with container's Rust version
-RUN cargo update
-
-# Build dependencies (this layer will be cached)
-RUN cargo build --release && rm -rf src
-
-# Copy migrations (needed by sqlx::migrate! macro at compile time)
-COPY migrations ./migrations
-
-# Copy actual source code
-COPY src ./src
-
-# Touch main.rs to force rebuild
-RUN touch src/main.rs
-
-# Build the actual application
+# Copy source code and build application
+COPY . .
 RUN cargo build --release
 
 # ==================== Runtime Stage ====================

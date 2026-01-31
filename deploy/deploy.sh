@@ -568,6 +568,7 @@ deploy_auth9() {
     print_progress "1/9" "Creating namespace and service account"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
+    kubectl apply -f "$K8S_DIR/ghcr-secret.yaml" $DRY_RUN
 
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
@@ -830,6 +831,22 @@ print_deployment_complete() {
         kubectl get svc -n "$NAMESPACE"
         echo ""
         echo -e "${YELLOW}Note:${NC} Use cloudflared to expose services. See wiki/安装部署.md"
+        echo ""
+        echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
+        echo -e "${CYAN}║  Cloudflared Configuration - Cluster Internal DNS              ║${NC}"
+        echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
+        echo ""
+        echo -e "${BOLD}Copy these DNS entries for cloudflared tunnel configuration:${NC}"
+        echo ""
+        echo -e "  ${GREEN}auth9-portal (Admin Dashboard):${NC}"
+        echo -e "    auth9-portal.$NAMESPACE.svc.cluster.local:3000"
+        echo ""
+        echo -e "  ${GREEN}auth9-core (Backend API):${NC}"
+        echo -e "    auth9-core.$NAMESPACE.svc.cluster.local:8080"
+        echo ""
+        echo -e "  ${GREEN}keycloak (OIDC Provider):${NC}"
+        echo -e "    keycloak.$NAMESPACE.svc.cluster.local:8080"
+        echo ""
     fi
 }
 
