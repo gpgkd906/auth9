@@ -335,7 +335,7 @@ cargo test --lib
 cargo test --test '*'
 
 # 带覆盖率
-cargo tarpaulin --out Html
+cargo llvm-cov --html
 ```
 
 ### auth9-portal 测试

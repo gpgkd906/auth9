@@ -27,8 +27,8 @@ When implementing features or fixing bugs, follow the Test-Driven Development (T
 **Minimum test coverage: 90%**
 
 ```bash
-# Rust - check coverage with tarpaulin
-cargo tarpaulin --out Html --output-dir target/coverage
+# Rust - check coverage with llvm-cov (not tarpaulin)
+cargo llvm-cov --html
 
 # TypeScript - check coverage with vitest
 npm run test -- --coverage
@@ -157,11 +157,68 @@ async fn test_keycloak_create_user() {
 }
 ```
 
+### HTTP Handler Tests (API Layer)
+
+HTTP handler tests use **Dependency Injection via `HasServices` trait** to test production code with mock repositories.
+
+**Architecture:**
+```
+Production:  AppState (impl HasServices) → build_router() → Handlers<AppState>
+Tests:       TestAppState (impl HasServices) → build_router() → Handlers<TestAppState>
+                                                    ↑
+                                          Same production handlers!
+```
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `src/state.rs` | `HasServices` trait definition |
+| `src/server/mod.rs` | `AppState` + `build_router<S: HasServices>()` |
+| `tests/api/http/mod.rs` | `TestAppState` + test helpers |
+| `tests/api/http/*_http_test.rs` | HTTP handler tests |
+
+**Handler Pattern - Always use generics:**
+```rust
+// src/api/tenant.rs - CORRECT
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<impl IntoResponse> {
+    let (tenants, total) = state
+        .tenant_service()  // Method from HasServices trait
+        .list(pagination.page, pagination.per_page)
+        .await?;
+    Ok(Json(PaginatedResponse::new(tenants, pagination.page, pagination.per_page, total)))
+}
+```
+
+**Test Example:**
+```rust
+// tests/api/http/tenant_http_test.rs
+use crate::api::http::{build_test_router, get_json, TestAppState};
+
+#[tokio::test]
+async fn test_list_tenants_returns_200() {
+    let state = TestAppState::new("http://mock-keycloak");
+    state.tenant_repo.seed_tenant(input).await;
+
+    let app = build_test_router(state);  // Uses production build_router()
+    let (status, body) = get_json(&app, "/api/v1/tenants").await;
+
+    assert_eq!(status, StatusCode::OK);
+}
+```
+
+**Important Rules:**
+1. **Always use `HasServices` trait** for new handlers - never use concrete `AppState`
+2. **Test production code** - `build_test_router()` uses `build_router(state)` from production
+3. **Mock Keycloak with wiremock** - see `tests/api/http/mock_keycloak.rs`
+
 ### Commands
 
 ```bash
 cargo test              # All tests (fast, no Docker)
-cargo tarpaulin --out Html  # Coverage report
+cargo llvm-cov --html   # Coverage report
 ```
 
 ## auth9-portal (TypeScript)

@@ -28,8 +28,8 @@ When implementing features or fixing bugs, follow the Test-Driven Development (T
 **Minimum test coverage: 90%**
 
 ```bash
-# Rust - check coverage with tarpaulin
-cargo tarpaulin --out Html --output-dir target/coverage
+# Rust - check coverage with llvm-cov
+cargo llvm-cov --out Html --output-dir target/coverage
 
 # TypeScript - check coverage with vitest
 npm run test -- --coverage
@@ -100,7 +100,7 @@ async fn test_create_tenant_api() {
 ```bash
 cargo test --lib        # Unit tests (fast)
 cargo test --test '*'   # Integration tests (requires Docker)
-cargo tarpaulin --out Html  # Coverage report
+cargo llvm-cov --out Html  # Coverage report
 ```
 
 ## auth9-portal (TypeScript)

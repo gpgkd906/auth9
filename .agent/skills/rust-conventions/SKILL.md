@@ -193,7 +193,7 @@ let tenant = sqlx::query_as!(
 
 ```bash
 cargo test              # All tests (fast, no Docker)
-cargo tarpaulin --out Html  # Coverage report
+cargo llvm-cov --out Html  # Coverage report
 cargo clippy            # Linting
 cargo fmt               # Format code
 ```

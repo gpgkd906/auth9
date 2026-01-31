@@ -17,7 +17,7 @@ All tests run fast (~1-2 seconds) with **no Docker or external services required
 ### Run Coverage Analysis
 ```bash
 cd auth9-core
-cargo tarpaulin --ignore-config --run-types Tests --out Json --output-dir target/tarpaulin
+cargo llvm-cov --ignore-config --run-types Tests --out Json --output-dir target/llvm-cov
 ```
 
 ## Frontend (Auth9 Portal)
@@ -180,4 +180,4 @@ This generates `MockTenantRepository` for use in tests.
 
 - **Compilation errors**: Run `cargo clean` first
 - **Mock expectations not met**: Check predicate conditions
-- **Network errors in tarpaulin**: Add `required_permissions: ["network"]`
+- **Network errors in llvm-cov**: Add `required_permissions: ["network"]`

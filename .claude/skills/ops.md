@@ -30,8 +30,8 @@ cd auth9-core && cargo test
 # Test with output
 cd auth9-core && cargo test -- --nocapture
 
-# Coverage report
-cd auth9-core && cargo tarpaulin --out Html
+# Coverage report (use llvm-cov, not tarpaulin)
+cd auth9-core && cargo llvm-cov --html
 ```
 
 ### auth9-portal (TypeScript)
