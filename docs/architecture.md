@@ -31,7 +31,7 @@ flowchart TB
     end
 
     subgraph core [Core Layer]
-        Gateway[API Gateway / Ingress]
+        Gateway[cloudflared<br/>Cloudflare Tunnel]
         Auth9Core[auth9-core<br/>Rust Backend]
         Cache[(Redis Cluster)]
     end
