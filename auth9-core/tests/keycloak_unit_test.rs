@@ -12,7 +12,7 @@ fn create_test_config(base_url: &str) -> KeycloakConfig {
         url: base_url.to_string(),
         public_url: base_url.to_string(),
         realm: "test".to_string(),
-        admin_client_id: "admin-cli".to_string(),
+        admin_client_id: "auth9-admin".to_string(),
         admin_client_secret: "test-secret".to_string(),
         ssl_required: "none".to_string(),
     }
@@ -944,5 +944,102 @@ async fn test_remove_totp_credentials_empty() {
     let client = create_test_client(&mock_server.uri());
 
     let result = client.remove_totp_credentials(user_id).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_confidential_client_with_secret() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint - should receive client_secret parameter
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .and(wiremock::matchers::body_string_contains("client_secret=test-secret"))
+        .and(wiremock::matchers::body_string_contains("grant_type=password"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "confidential-token",
+            "expires_in": 300,
+            "token_type": "Bearer"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock create user endpoint
+    Mock::given(method("POST"))
+        .and(path_regex(r"^/admin/realms/test/users$"))
+        .respond_with(ResponseTemplate::new(201).insert_header(
+            "Location",
+            &format!("{}/admin/realms/test/users/user-123", mock_server.uri()),
+        ))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    // Any operation that requires admin token should send client_secret
+    let input = CreateKeycloakUserInput {
+        username: "testuser".to_string(),
+        email: "test@example.com".to_string(),
+        first_name: Some("Test".to_string()),
+        last_name: Some("User".to_string()),
+        enabled: true,
+        email_verified: false,
+        credentials: None,
+    };
+
+    let result = client.create_user(&input).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_backward_compatibility_without_client_secret() {
+    let mock_server = MockServer::start().await;
+
+    // Create config without client_secret (backward compatibility)
+    let config = KeycloakConfig {
+        url: mock_server.uri(),
+        public_url: mock_server.uri(),
+        realm: "test".to_string(),
+        admin_client_id: "admin-cli".to_string(),
+        admin_client_secret: String::new(),  // Empty secret
+        ssl_required: "none".to_string(),
+    };
+
+    // Mock token endpoint - should NOT receive client_secret parameter
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .and(wiremock::matchers::body_string_contains("grant_type=password"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "public-token",
+            "expires_in": 300,
+            "token_type": "Bearer"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock create user endpoint
+    Mock::given(method("POST"))
+        .and(path_regex(r"^/admin/realms/test/users$"))
+        .respond_with(ResponseTemplate::new(201).insert_header(
+            "Location",
+            &format!("{}/admin/realms/test/users/user-456", mock_server.uri()),
+        ))
+        .mount(&mock_server)
+        .await;
+
+    let client = KeycloakClient::new(config);
+
+    // Verify the client works without secret (backward compatibility)
+    let input = CreateKeycloakUserInput {
+        username: "testuser2".to_string(),
+        email: "test2@example.com".to_string(),
+        first_name: Some("Test".to_string()),
+        last_name: Some("User".to_string()),
+        enabled: true,
+        email_verified: false,
+        credentials: None,
+    };
+
+    let result = client.create_user(&input).await;
     assert!(result.is_ok());
 }

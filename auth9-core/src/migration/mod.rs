@@ -108,6 +108,13 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed portal client in Keycloak")?;
 
+    // Seed admin client (Confidential client for admin operations)
+    info!("Seeding admin client in Keycloak...");
+    seeder
+        .seed_admin_client()
+        .await
+        .context("Failed to seed admin client in Keycloak")?;
+
     // Seed portal service in database
     info!("Seeding portal service in database...");
     seed_portal_service(config)

@@ -18,6 +18,8 @@ services:
       JWT_SECRET: dev-jwt-secret-change-in-production
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_REALM: auth9
+      KEYCLOAK_ADMIN_CLIENT_ID: auth9-admin
+      KEYCLOAK_ADMIN_CLIENT_SECRET: dev-client-secret-change-in-production
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
@@ -55,7 +57,8 @@ services:
       KEYCLOAK_URL: http://keycloak:8080
       KEYCLOAK_PUBLIC_URL: http://localhost:8081
       KEYCLOAK_REALM: auth9
-      KEYCLOAK_ADMIN_CLIENT_ID: admin-cli
+      KEYCLOAK_ADMIN_CLIENT_ID: auth9-admin
+      KEYCLOAK_ADMIN_CLIENT_SECRET: dev-client-secret-change-in-production
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
