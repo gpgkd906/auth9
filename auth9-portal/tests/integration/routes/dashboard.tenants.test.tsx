@@ -22,26 +22,31 @@ describe("Tenants Page", () => {
                 id: "1",
                 name: "Acme Corp",
                 slug: "acme",
-                status: "active",
+                settings: {},
+                status: "active" as const,
+                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             },
             {
                 id: "2",
                 name: "Globex",
                 slug: "globex",
-                status: "inactive",
+                settings: {},
+                status: "inactive" as const,
+                created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
             },
         ],
         pagination: {
             total: 2,
             page: 1,
+            per_page: 20,
             total_pages: 1,
         },
     };
 
     it("renders tenant list from loader", async () => {
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RemixStub = createRemixStub([
             {
@@ -60,7 +65,7 @@ describe("Tenants Page", () => {
     });
 
     it("displays create tenant dialog when button clicked", async () => {
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RemixStub = createRemixStub([
             {
@@ -82,9 +87,9 @@ describe("Tenants Page", () => {
     });
 
     it("renders empty state when no tenants found", async () => {
-        (tenantApi.list as any).mockResolvedValue({
+        vi.mocked(tenantApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 }
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 }
         });
 
         const RemixStub = createRemixStub([

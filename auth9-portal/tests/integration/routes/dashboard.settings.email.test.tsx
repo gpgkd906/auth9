@@ -1,8 +1,7 @@
 import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
-import EmailSettingsPage, { loader, action } from "~/routes/dashboard.settings.email";
+import EmailSettingsPage, { loader } from "~/routes/dashboard.settings.email";
 import { systemApi } from "~/services/api";
 
 // Mock system API
@@ -16,21 +15,38 @@ vi.mock("~/services/api", () => ({
 }));
 
 describe("Email Settings Page", () => {
+  // Mock data matches the SystemSettingResponse structure from backend
   const mockSmtpConfig = {
     data: {
-      type: "smtp",
-      host: "smtp.example.com",
-      port: 587,
-      username: "user@example.com",
-      password: "***",
-      use_tls: true,
-      from_email: "noreply@example.com",
-      from_name: "Auth9",
+      category: "email",
+      setting_key: "provider",
+      value: {
+        type: "smtp" as const,
+        host: "smtp.example.com",
+        port: 587,
+        username: "user@example.com",
+        password: "***",
+        use_tls: true,
+        from_email: "noreply@example.com",
+        from_name: "Auth9",
+      },
+      description: "Email provider configuration",
+      updated_at: new Date().toISOString(),
+    },
+  };
+
+  const mockNoneConfig = {
+    data: {
+      category: "email",
+      setting_key: "provider",
+      value: { type: "none" as const },
+      description: "Email provider configuration",
+      updated_at: new Date().toISOString(),
     },
   };
 
   it("renders email settings page with provider selection", async () => {
-    (systemApi.getEmailSettings as any).mockResolvedValue({ data: { type: "none" } });
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -49,7 +65,7 @@ describe("Email Settings Page", () => {
   });
 
   it("shows SMTP configuration fields when SMTP is selected", async () => {
-    (systemApi.getEmailSettings as any).mockResolvedValue(mockSmtpConfig);
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -74,7 +90,7 @@ describe("Email Settings Page", () => {
   });
 
   it("loads existing SMTP configuration values", async () => {
-    (systemApi.getEmailSettings as any).mockResolvedValue(mockSmtpConfig);
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -96,7 +112,7 @@ describe("Email Settings Page", () => {
   });
 
   it("shows action buttons when provider is not none", async () => {
-    (systemApi.getEmailSettings as any).mockResolvedValue(mockSmtpConfig);
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -116,7 +132,7 @@ describe("Email Settings Page", () => {
   });
 
   it("hides test buttons when provider is none", async () => {
-    (systemApi.getEmailSettings as any).mockResolvedValue({ data: { type: "none" } });
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -136,7 +152,7 @@ describe("Email Settings Page", () => {
   });
 
   it("has test email button when provider is configured", async () => {
-    (systemApi.getEmailSettings as any).mockResolvedValue(mockSmtpConfig);
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -159,16 +175,22 @@ describe("Email Settings Page", () => {
   it("shows AWS SES configuration fields when SES is selected", async () => {
     const sesConfig = {
       data: {
-        type: "ses",
-        region: "us-east-1",
-        access_key_id: "AKIA***",
-        secret_access_key: "***",
-        from_email: "noreply@example.com",
-        from_name: "Auth9",
+        category: "email",
+        setting_key: "provider",
+        value: {
+          type: "ses" as const,
+          region: "us-east-1",
+          access_key_id: "AKIA***",
+          secret_access_key: "***",
+          from_email: "noreply@example.com",
+          from_name: "Auth9",
+        },
+        description: "Email provider configuration",
+        updated_at: new Date().toISOString(),
       },
     };
 
-    (systemApi.getEmailSettings as any).mockResolvedValue(sesConfig);
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(sesConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -192,17 +214,23 @@ describe("Email Settings Page", () => {
   it("shows Oracle configuration fields when Oracle is selected", async () => {
     const oracleConfig = {
       data: {
-        type: "oracle",
-        smtp_endpoint: "smtp.us-ashburn-1.oraclecloud.com",
-        port: 587,
-        username: "ocid1.user",
-        password: "***",
-        from_email: "noreply@example.com",
-        from_name: "Auth9",
+        category: "email",
+        setting_key: "provider",
+        value: {
+          type: "oracle" as const,
+          smtp_endpoint: "smtp.us-ashburn-1.oraclecloud.com",
+          port: 587,
+          username: "ocid1.user",
+          password: "***",
+          from_email: "noreply@example.com",
+          from_name: "Auth9",
+        },
+        description: "Email provider configuration",
+        updated_at: new Date().toISOString(),
       },
     };
 
-    (systemApi.getEmailSettings as any).mockResolvedValue(oracleConfig);
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(oracleConfig);
 
     const RemixStub = createRemixStub([
       {
@@ -223,7 +251,7 @@ describe("Email Settings Page", () => {
   });
 
   it("handles API error gracefully", async () => {
-    (systemApi.getEmailSettings as any).mockRejectedValue(new Error("API Error"));
+    vi.mocked(systemApi.getEmailSettings).mockRejectedValue(new Error("API Error"));
 
     const RemixStub = createRemixStub([
       {

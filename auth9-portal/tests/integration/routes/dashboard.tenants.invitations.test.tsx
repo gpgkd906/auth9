@@ -1,8 +1,7 @@
 import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
-import InvitationsPage, { loader, action } from "~/routes/dashboard.tenants.$tenantId.invitations";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import InvitationsPage, { loader } from "~/routes/dashboard.tenants.$tenantId.invitations";
 import { invitationApi, tenantApi, serviceApi, rbacApi } from "~/services/api";
 
 // Mock APIs
@@ -30,7 +29,10 @@ describe("Invitations Page", () => {
     id: "tenant-1",
     name: "Acme Corp",
     slug: "acme",
-    status: "active",
+    settings: {},
+    status: "active" as const,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
   };
 
   const mockInvitations = [
@@ -40,7 +42,7 @@ describe("Invitations Page", () => {
       email: "pending@example.com",
       role_ids: ["role-1"],
       invited_by: "admin-1",
-      status: "pending",
+      status: "pending" as const,
       expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
       created_at: new Date().toISOString(),
     },
@@ -50,7 +52,7 @@ describe("Invitations Page", () => {
       email: "accepted@example.com",
       role_ids: ["role-1", "role-2"],
       invited_by: "admin-1",
-      status: "accepted",
+      status: "accepted" as const,
       expires_at: new Date(Date.now() + 72 * 60 * 60 * 1000).toISOString(),
       accepted_at: new Date().toISOString(),
       created_at: new Date().toISOString(),
@@ -61,29 +63,29 @@ describe("Invitations Page", () => {
       email: "expired@example.com",
       role_ids: ["role-1"],
       invited_by: "admin-1",
-      status: "expired",
+      status: "expired" as const,
       expires_at: new Date(Date.now() - 1 * 60 * 60 * 1000).toISOString(),
       created_at: new Date().toISOString(),
     },
   ];
 
   const mockServices = [
-    { id: "service-1", name: "Main App", tenant_id: "tenant-1", status: "active" },
+    { id: "service-1", name: "Main App", tenant_id: "tenant-1", redirect_uris: [], logout_uris: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   ];
 
   const mockRoles = [
-    { id: "role-1", name: "Admin", description: "Full access", service_id: "service-1" },
-    { id: "role-2", name: "User", description: "Standard user access", service_id: "service-1" },
+    { id: "role-1", service_id: "service-1", name: "Admin", description: "Full access", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: "role-2", service_id: "service-1", name: "User", description: "Standard user access", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
   ];
 
   beforeEach(() => {
-    (tenantApi.get as any).mockResolvedValue({ data: mockTenant });
-    (invitationApi.list as any).mockResolvedValue({
+    vi.mocked(tenantApi.get).mockResolvedValue({ data: mockTenant });
+    vi.mocked(invitationApi.list).mockResolvedValue({
       data: mockInvitations,
       pagination: { page: 1, per_page: 20, total: 3, total_pages: 1 },
     });
-    (serviceApi.list as any).mockResolvedValue({ data: mockServices });
-    (rbacApi.listRoles as any).mockResolvedValue({ data: mockRoles });
+    vi.mocked(serviceApi.list).mockResolvedValue({ data: mockServices, pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 } });
+    vi.mocked(rbacApi.listRoles).mockResolvedValue({ data: mockRoles });
   });
 
   it("renders invitations page with tenant info", async () => {
@@ -200,7 +202,7 @@ describe("Invitations Page", () => {
   });
 
   it("shows empty state when no invitations", async () => {
-    (invitationApi.list as any).mockResolvedValue({
+    vi.mocked(invitationApi.list).mockResolvedValue({
       data: [],
       pagination: { page: 1, per_page: 20, total: 0, total_pages: 1 },
     });
@@ -238,7 +240,7 @@ describe("Invitations Page", () => {
   });
 
   it("handles empty services list", async () => {
-    (serviceApi.list as any).mockResolvedValue({ data: [] });
+    vi.mocked(serviceApi.list).mockResolvedValue({ data: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 1 } });
 
     const RemixStub = createRemixStub([
       {

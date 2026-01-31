@@ -21,31 +21,36 @@ describe("Settings Page", () => {
                 id: "1",
                 name: "Acme Corp",
                 slug: "acme",
-                status: "active",
+                status: "active" as const,
                 settings: {
                     branding: {
                         logo_url: "https://example.com/logo.png",
                         primary_color: "#ff5500",
                     },
                 },
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
             },
             {
                 id: "2",
                 name: "Globex",
                 slug: "globex",
-                status: "inactive",
-                settings: null,
+                status: "inactive" as const,
+                settings: {},
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
             },
         ],
         pagination: {
             total: 2,
             page: 1,
+            per_page: 20,
             total_pages: 1,
         },
     };
 
     it("renders settings page with tenant list", async () => {
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RemixStub = createRemixStub([
             {
@@ -72,7 +77,7 @@ describe("Settings Page", () => {
     });
 
     it("displays branding info for tenants with settings", async () => {
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RemixStub = createRemixStub([
             {
@@ -99,7 +104,7 @@ describe("Settings Page", () => {
     });
 
     it("shows edit dialog when edit button clicked", async () => {
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RemixStub = createRemixStub([
             {
@@ -137,9 +142,9 @@ describe("Settings Page", () => {
     });
 
     it("shows empty state when no tenants", async () => {
-        (tenantApi.list as any).mockResolvedValue({
+        vi.mocked(tenantApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
 
         const RemixStub = createRemixStub([
@@ -164,7 +169,7 @@ describe("Settings Page", () => {
     });
 
     it("displays pagination info", async () => {
-        (tenantApi.list as any).mockResolvedValue(mockTenants);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RemixStub = createRemixStub([
             {

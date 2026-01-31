@@ -448,14 +448,23 @@ export interface TestEmailResponse {
   message_id?: string;
 }
 
+// System Setting Response from backend
+export interface SystemSettingResponse {
+  category: string;
+  setting_key: string;
+  value: EmailProviderConfig;
+  description?: string;
+  updated_at: string;
+}
+
 // System Settings API
 export const systemApi = {
-  getEmailSettings: async (): Promise<{ data: EmailProviderConfig }> => {
+  getEmailSettings: async (): Promise<{ data: SystemSettingResponse }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email`);
     return handleResponse(response);
   },
 
-  updateEmailSettings: async (config: EmailProviderConfig): Promise<{ data: EmailProviderConfig }> => {
+  updateEmailSettings: async (config: EmailProviderConfig): Promise<{ data: SystemSettingResponse }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },

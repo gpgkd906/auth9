@@ -14,34 +14,34 @@ vi.mock("~/services/api", () => ({
 
 describe("Dashboard Index Page", () => {
     const mockApiResponses = () => {
-        (tenantApi.list as any).mockResolvedValue({
+        vi.mocked(tenantApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 5, page: 1, total_pages: 1 },
+            pagination: { total: 5, page: 1, per_page: 20, total_pages: 1 },
         });
-        (userApi.list as any).mockResolvedValue({
+        vi.mocked(userApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 12, page: 1, total_pages: 1 },
+            pagination: { total: 12, page: 1, per_page: 20, total_pages: 1 },
         });
-        (serviceApi.list as any).mockResolvedValue({
+        vi.mocked(serviceApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 3, page: 1, total_pages: 1 },
+            pagination: { total: 3, page: 1, per_page: 20, total_pages: 1 },
         });
-        (auditApi.list as any).mockResolvedValue({
+        vi.mocked(auditApi.list).mockResolvedValue({
             data: [
                 {
-                    id: "1",
+                    id: 1,
                     action: "CREATE",
                     resource_type: "tenant",
                     created_at: new Date().toISOString(),
                 },
                 {
-                    id: "2",
+                    id: 2,
                     action: "UPDATE",
                     resource_type: "user",
                     created_at: new Date().toISOString(),
                 },
             ],
-            pagination: { total: 2, page: 1, total_pages: 1 },
+            pagination: { total: 2, page: 1, per_page: 50, total_pages: 1 },
         });
     };
 
@@ -107,21 +107,21 @@ describe("Dashboard Index Page", () => {
     });
 
     it("shows empty state when no audit logs", async () => {
-        (tenantApi.list as any).mockResolvedValue({
+        vi.mocked(tenantApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
-        (userApi.list as any).mockResolvedValue({
+        vi.mocked(userApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
-        (serviceApi.list as any).mockResolvedValue({
+        vi.mocked(serviceApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
-        (auditApi.list as any).mockResolvedValue({
+        vi.mocked(auditApi.list).mockResolvedValue({
             data: [],
-            pagination: { total: 0, page: 1, total_pages: 1 },
+            pagination: { total: 0, page: 1, per_page: 50, total_pages: 1 },
         });
 
         const RemixStub = createRemixStub([
