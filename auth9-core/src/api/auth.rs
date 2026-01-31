@@ -1169,4 +1169,221 @@ mod tests {
         assert!(url.contains("post_logout_redirect_uri="));
         assert!(url.contains("state=logout-state"));
     }
+
+    #[test]
+    fn test_build_keycloak_logout_url_partial() {
+        // Only id_token_hint
+        let url = build_keycloak_logout_url(
+            "https://keycloak.example.com",
+            "test",
+            Some("hint"),
+            None,
+            None,
+        )
+        .unwrap();
+        assert!(url.contains("id_token_hint=hint"));
+        assert!(!url.contains("post_logout_redirect_uri"));
+
+        // Only redirect_uri
+        let url = build_keycloak_logout_url(
+            "https://keycloak.example.com",
+            "test",
+            None,
+            Some("https://app.com/logout"),
+            None,
+        )
+        .unwrap();
+        assert!(!url.contains("id_token_hint"));
+        assert!(url.contains("post_logout_redirect_uri="));
+    }
+
+    #[test]
+    fn test_encode_state_with_empty_original_state() {
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "client".to_string(),
+            original_state: None,
+        };
+
+        let encoded = encode_state(&state).unwrap();
+        let decoded = decode_state(Some(&encoded)).unwrap();
+
+        assert!(decoded.original_state.is_none());
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_with_multiple_uris() {
+        let allowed = vec![
+            "https://app1.com/cb".to_string(),
+            "https://app2.com/cb".to_string(),
+            "https://app3.com/cb".to_string(),
+        ];
+
+        assert!(validate_redirect_uri(&allowed, "https://app1.com/cb").is_ok());
+        assert!(validate_redirect_uri(&allowed, "https://app2.com/cb").is_ok());
+        assert!(validate_redirect_uri(&allowed, "https://app3.com/cb").is_ok());
+        assert!(validate_redirect_uri(&allowed, "https://app4.com/cb").is_err());
+    }
+
+    #[test]
+    fn test_validate_redirect_uri_exact_match() {
+        let allowed = vec!["https://app.com/callback".to_string()];
+
+        // Should not match partial or similar URIs
+        assert!(validate_redirect_uri(&allowed, "https://app.com/callback").is_ok());
+        assert!(validate_redirect_uri(&allowed, "https://app.com/callback/").is_err());
+        assert!(validate_redirect_uri(&allowed, "https://app.com/callback?foo=bar").is_err());
+    }
+
+    #[test]
+    fn test_build_callback_url_with_path() {
+        let url = build_callback_url("https://auth9.example.com/api");
+        assert_eq!(url, "https://auth9.example.com/api/api/v1/auth/callback");
+    }
+
+    #[test]
+    fn test_build_keycloak_auth_url_encodes_special_chars() {
+        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+            keycloak_public_url: "https://keycloak.example.com",
+            realm: "test",
+            response_type: "code",
+            client_id: "my-app",
+            callback_url: "https://app.com/cb?foo=bar",
+            scope: "openid profile email",
+            encoded_state: "state123",
+            nonce: Some("nonce with spaces"),
+        })
+        .unwrap();
+
+        // Verify URL encoding
+        assert!(url.contains("scope=openid+profile+email") || url.contains("scope=openid%20profile%20email"));
+    }
+
+    #[test]
+    fn test_token_response_serialization_with_nulls() {
+        let response = TokenResponse {
+            access_token: "token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 3600,
+            refresh_token: None,
+            id_token: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        // Optional fields should be present as null
+        assert!(json.contains("refresh_token"));
+        assert!(json.contains("id_token"));
+    }
+
+    #[test]
+    fn test_decode_state_with_empty_string() {
+        let result = decode_state(Some(""));
+        // Empty string decodes to empty bytes, which is invalid JSON
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_decode_state_with_unicode() {
+        let state = CallbackState {
+            redirect_uri: "https://例え.jp/callback".to_string(),
+            client_id: "日本語クライアント".to_string(),
+            original_state: Some("состояние".to_string()),
+        };
+
+        let encoded = encode_state(&state).unwrap();
+        let decoded = decode_state(Some(&encoded)).unwrap();
+
+        assert_eq!(decoded.redirect_uri, state.redirect_uri);
+        assert_eq!(decoded.client_id, state.client_id);
+        assert_eq!(decoded.original_state, state.original_state);
+    }
+
+    #[test]
+    fn test_callback_request_with_special_characters() {
+        let json = r#"{"code": "code-with-special-chars!@#$%", "state": "state+with/slash"}"#;
+        let request: CallbackRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.code, "code-with-special-chars!@#$%");
+        assert_eq!(request.state, Some("state+with/slash".to_string()));
+    }
+
+    #[test]
+    fn test_openid_configuration_deserialization() {
+        let json = r#"{
+            "issuer": "https://test.com",
+            "authorization_endpoint": "https://test.com/auth",
+            "token_endpoint": "https://test.com/token",
+            "userinfo_endpoint": "https://test.com/userinfo",
+            "jwks_uri": "https://test.com/jwks",
+            "end_session_endpoint": "https://test.com/logout",
+            "response_types_supported": ["code"],
+            "grant_types_supported": ["authorization_code"],
+            "subject_types_supported": ["public"],
+            "id_token_signing_alg_values_supported": ["RS256"],
+            "scopes_supported": ["openid"],
+            "token_endpoint_auth_methods_supported": ["client_secret_post"],
+            "claims_supported": ["sub"]
+        }"#;
+
+        let config: OpenIdConfiguration = serde_json::from_str(json).unwrap();
+        assert_eq!(config.issuer, "https://test.com");
+        assert_eq!(config.jwks_uri, Some("https://test.com/jwks".to_string()));
+    }
+
+    #[test]
+    fn test_token_request_all_fields() {
+        let json = r#"{
+            "grant_type": "authorization_code",
+            "client_id": "app",
+            "client_secret": "secret",
+            "code": "auth-code",
+            "redirect_uri": "https://app.com/cb",
+            "refresh_token": "refresh"
+        }"#;
+
+        let request: TokenRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.grant_type, "authorization_code");
+        assert!(request.client_id.is_some());
+        assert!(request.client_secret.is_some());
+        assert!(request.code.is_some());
+        assert!(request.redirect_uri.is_some());
+        assert!(request.refresh_token.is_some());
+    }
+
+    #[test]
+    fn test_jwks_key_structure() {
+        let key = JwkKey {
+            kty: "RSA".to_string(),
+            use_: "sig".to_string(),
+            alg: "RS256".to_string(),
+            kid: "key-1".to_string(),
+            n: "modulus".to_string(),
+            e: "AQAB".to_string(),
+        };
+
+        let json = serde_json::to_string(&key).unwrap();
+        assert!(json.contains("\"kty\":\"RSA\""));
+        assert!(json.contains("\"use\":\"sig\""));
+        assert!(json.contains("\"alg\":\"RS256\""));
+        assert!(json.contains("\"kid\":\"key-1\""));
+        assert!(json.contains("\"n\":\"modulus\""));
+        assert!(json.contains("\"e\":\"AQAB\""));
+    }
+
+    #[test]
+    fn test_jwks_structure() {
+        let jwks = Jwks {
+            keys: vec![JwkKey {
+                kty: "RSA".to_string(),
+                use_: "sig".to_string(),
+                alg: "RS256".to_string(),
+                kid: "default".to_string(),
+                n: "n".to_string(),
+                e: "e".to_string(),
+            }],
+        };
+
+        let json = serde_json::to_string(&jwks).unwrap();
+        assert!(json.contains("\"keys\""));
+        assert!(json.contains("RSA"));
+    }
 }
