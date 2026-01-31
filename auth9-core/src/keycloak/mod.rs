@@ -718,6 +718,17 @@ const DEFAULT_ADMIN_EMAIL: &str = "admin@auth9.local";
 const DEFAULT_ADMIN_FIRST_NAME: &str = "Admin";
 const DEFAULT_ADMIN_LAST_NAME: &str = "User";
 
+/// Get admin password from env var or generate a secure random one
+fn get_admin_password() -> String {
+    // Allow override via environment variable (useful for local development)
+    if let Ok(password) = env::var("AUTH9_ADMIN_PASSWORD") {
+        if !password.is_empty() {
+            return password;
+        }
+    }
+    generate_secure_password()
+}
+
 /// Generate a cryptographically secure random password
 fn generate_secure_password() -> String {
     use rand::Rng;
@@ -976,7 +987,7 @@ impl KeycloakSeeder {
             self.config.url, self.config.realm
         );
 
-        let password = generate_secure_password();
+        let password = get_admin_password();
 
         let user = CreateKeycloakUserInput {
             username: DEFAULT_ADMIN_USERNAME.to_string(),

@@ -23,6 +23,7 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
+      AUTH9_ADMIN_PASSWORD: Admin123!  # Fixed password for local development
     depends_on:
       tidb:
         condition: service_healthy

@@ -250,10 +250,11 @@ export default function BrandingSettingsPage() {
                 <div className="space-y-0.5">
                   <Label htmlFor="allow_registration">Allow Registration</Label>
                   <p className="text-xs text-gray-500">
-                    Show "Create account" link on the login page
+                    Show &quot;Create account&quot; link on the login page
                   </p>
                 </div>
-                <label className="relative inline-flex items-center cursor-pointer">
+                <label htmlFor="allow_registration" className="relative inline-flex items-center cursor-pointer">
+                  <span className="sr-only">Toggle allow registration</span>
                   <input
                     type="checkbox"
                     id="allow_registration"

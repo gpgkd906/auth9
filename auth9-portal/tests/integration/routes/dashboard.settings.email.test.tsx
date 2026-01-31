@@ -1,5 +1,6 @@
 import { createRemixStub } from "@remix-run/testing";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import EmailSettingsPage, { loader } from "~/routes/dashboard.settings.email";
 import { systemApi } from "~/services/api";
@@ -266,6 +267,158 @@ describe("Email Settings Page", () => {
     // Should fallback to "none" config
     await waitFor(() => {
       expect(screen.getByText("Email Provider Configuration")).toBeInTheDocument();
+    });
+  });
+
+  it("shows status banner for configured provider", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email Provider Active")).toBeInTheDocument();
+      expect(screen.getByText(/smtp.example.com:587/)).toBeInTheDocument();
+    });
+  });
+
+  it("shows unconfigured status banner when no provider", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Email Provider Not Configured")).toBeInTheDocument();
+    });
+  });
+
+  it("opens test email dialog when clicking Send Test Email button", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
+    const user = userEvent.setup();
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Send Test Email")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Send Test Email"));
+
+    await waitFor(() => {
+      expect(screen.getByText("Enter an email address to receive a test email and verify your configuration.")).toBeInTheDocument();
+      expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
+    });
+  });
+
+  it("has provider type select with correct options", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Provider Type")).toBeInTheDocument();
+      // Verify select trigger exists
+      expect(screen.getByRole("combobox")).toBeInTheDocument();
+    });
+  });
+
+  it("shows info banner about single provider configuration", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Single Provider Configuration")).toBeInTheDocument();
+    });
+  });
+
+  it("closes test email dialog when clicking Cancel", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
+    const user = userEvent.setup();
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Send Test Email")).toBeInTheDocument();
+    });
+
+    await user.click(screen.getByText("Send Test Email"));
+
+    await waitFor(() => {
+      expect(screen.getByLabelText("Email Address")).toBeInTheDocument();
+    });
+
+    // Click Cancel button in dialog
+    const cancelButton = screen.getByRole("button", { name: "Cancel" });
+    await user.click(cancelButton);
+
+    await waitFor(() => {
+      expect(screen.queryByLabelText("Email Address")).not.toBeInTheDocument();
+    });
+  });
+
+  it("displays password hint when SMTP password exists", async () => {
+    vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
+
+    const RemixStub = createRemixStub([
+      {
+        path: "/dashboard/settings/email",
+        Component: EmailSettingsPage,
+        loader,
+      },
+    ]);
+
+    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Leave blank to keep existing password")).toBeInTheDocument();
     });
   });
 });
