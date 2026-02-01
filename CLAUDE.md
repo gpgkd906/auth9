@@ -92,6 +92,14 @@ auth9-core/src/
 └── error/        # Error types
 ```
 
+## Documentation
+
+Project documentation is in `docs/`. Read the relevant doc before related tasks:
+- `design-system.md` - Auth9 Portal UI design system (Liquid Glass style, colors, components)
+- `architecture.md` - System architecture overview
+- `api-access-control.md` - API access control design
+- `keycloak-theme.md` - Keycloak theme customization
+
 ## Skills
 
 Project skills are in `.claude/skills/`. Read the relevant skill file before executing related tasks:

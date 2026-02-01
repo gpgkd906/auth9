@@ -28,15 +28,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export default function DashboardIndex() {
   const data = useLoaderData<typeof loader>();
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="animate-fade-in-up">
-        <h1 className="text-3xl font-bold text-[var(--text-primary)]">Dashboard</h1>
-        <p className="mt-2 text-[var(--text-secondary)]">
+        <h1 className="text-[28px] font-bold text-[var(--text-primary)] tracking-tight">Dashboard</h1>
+        <p className="mt-1 text-[15px] text-[var(--text-secondary)]">
           Welcome to Auth9. Here&apos;s an overview of your identity service.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} color="blue" delay="delay-1" />
         <StatsCard title="Active Users" value={data.totals.users.toString()} color="purple" delay="delay-2" />
         <StatsCard title="Services" value={data.totals.services.toString()} color="green" delay="delay-3" />
@@ -98,9 +98,9 @@ function StatsCard({
   return (
     <Card className={`animate-fade-in-up ${delay} relative overflow-hidden`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${colorClasses[color]} pointer-events-none`} />
-      <CardContent className="pt-6 relative">
-        <p className="text-sm font-medium text-[var(--text-secondary)]">{title}</p>
-        <p className="mt-2 text-3xl font-bold text-[var(--text-primary)]">{value}</p>
+      <CardContent className="pt-5 relative">
+        <p className="text-[13px] font-medium text-[var(--text-secondary)]">{title}</p>
+        <p className="mt-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{value}</p>
       </CardContent>
     </Card>
   );

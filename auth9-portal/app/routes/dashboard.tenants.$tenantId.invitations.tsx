@@ -228,7 +228,7 @@ export default function InvitationsPage() {
             >
               <ArrowLeftIcon className="h-5 w-5" />
             </Link>
-            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Invitations</h1>
+            <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Invitations</h1>
           </div>
           <p className="text-sm text-[var(--text-secondary)] ml-8">
             Manage user invitations for <span className="font-medium">{tenant.name}</span>

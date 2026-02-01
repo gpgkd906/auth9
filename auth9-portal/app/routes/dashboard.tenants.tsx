@@ -96,7 +96,7 @@ export default function TenantsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Tenants</h1>
+          <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Tenants</h1>
           <p className="text-sm text-[var(--text-secondary)]">Manage tenant lifecycle and settings</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

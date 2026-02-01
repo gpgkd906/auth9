@@ -451,21 +451,21 @@
 
   /* Page Header */
   .page-title {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.02em;
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .page-description {
-    font-size: 15px;
+    font-size: 14px;
     color: var(--text-secondary);
   }
 
   /* Stat Cards */
   .stat-card {
-    padding: 20px;
+    padding: 16px 20px;
     position: relative;
     overflow: hidden;
   }
@@ -516,7 +516,7 @@
   }
 
   .stat-value {
-    font-size: 28px;
+    font-size: 26px;
     font-weight: 700;
     color: var(--text-primary);
     letter-spacing: -0.02em;
@@ -680,24 +680,24 @@
 
   /* Card Styles */
   .card-header-glass {
-    padding: 20px 20px 0;
+    padding: 16px 20px 0;
     border-bottom: none;
   }
 
   .card-title-glass {
-    font-size: 17px;
+    font-size: 16px;
     font-weight: 600;
     color: var(--text-primary);
-    margin-bottom: 4px;
+    margin-bottom: 2px;
   }
 
   .card-description-glass {
-    font-size: 13px;
+    font-size: 12px;
     color: var(--text-secondary);
   }
 
   .card-content-glass {
-    padding: 16px 20px 20px;
+    padding: 12px 20px 20px;
   }
 
   /* Form Group */
@@ -924,7 +924,7 @@
   }
 
   .table-glass th {
-    padding: 12px 20px;
+    padding: 10px 16px;
     text-align: left;
     font-size: 11px;
     font-weight: 600;
@@ -934,8 +934,8 @@
   }
 
   .table-glass td {
-    padding: 14px 20px;
-    font-size: 14px;
+    padding: 12px 16px;
+    font-size: 13px;
     color: var(--text-secondary);
     border-top: 1px solid var(--glass-border-subtle);
   }
