@@ -8,7 +8,5 @@ CREATE TABLE IF NOT EXISTS clients (
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     INDEX idx_clients_service (service_id),
-    INDEX idx_clients_client_id (client_id),
-
-    CONSTRAINT fk_clients_service FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+    INDEX idx_clients_client_id (client_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

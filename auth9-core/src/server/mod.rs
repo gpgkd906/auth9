@@ -48,9 +48,31 @@ use tracing::info;
 pub struct AppState {
     pub config: Arc<Config>,
     pub db_pool: MySqlPool,
-    pub tenant_service: Arc<TenantService<TenantRepositoryImpl>>,
-    pub user_service: Arc<UserService<UserRepositoryImpl>>,
-    pub client_service: Arc<ClientService<ServiceRepositoryImpl>>,
+    pub tenant_service: Arc<
+        TenantService<
+            TenantRepositoryImpl,
+            ServiceRepositoryImpl,
+            WebhookRepositoryImpl,
+            InvitationRepositoryImpl,
+            UserRepositoryImpl,
+            RbacRepositoryImpl,
+            LoginEventRepositoryImpl,
+            SecurityAlertRepositoryImpl,
+        >,
+    >,
+    pub user_service: Arc<
+        UserService<
+            UserRepositoryImpl,
+            SessionRepositoryImpl,
+            PasswordResetRepositoryImpl,
+            LinkedIdentityRepositoryImpl,
+            LoginEventRepositoryImpl,
+            SecurityAlertRepositoryImpl,
+            AuditRepositoryImpl,
+            RbacRepositoryImpl,
+        >,
+    >,
+    pub client_service: Arc<ClientService<ServiceRepositoryImpl, RbacRepositoryImpl>>,
     pub rbac_service: Arc<RbacService<RbacRepositoryImpl>>,
     pub audit_repo: Arc<AuditRepositoryImpl>,
     pub jwt_manager: JwtManager,
@@ -93,20 +115,49 @@ impl HasServices for AppState {
     type ServiceRepo = ServiceRepositoryImpl;
     type RbacRepo = RbacRepositoryImpl;
     type AuditRepo = AuditRepositoryImpl;
+    type SessionRepo = SessionRepositoryImpl;
+    type PasswordResetRepo = PasswordResetRepositoryImpl;
+    type LinkedIdentityRepo = LinkedIdentityRepositoryImpl;
+    type LoginEventRepo = LoginEventRepositoryImpl;
+    type SecurityAlertRepo = SecurityAlertRepositoryImpl;
+    type WebhookRepo = WebhookRepositoryImpl;
+    type CascadeInvitationRepo = InvitationRepositoryImpl;
 
     fn config(&self) -> &Config {
         &self.config
     }
 
-    fn tenant_service(&self) -> &TenantService<Self::TenantRepo> {
+    fn tenant_service(
+        &self,
+    ) -> &TenantService<
+        Self::TenantRepo,
+        Self::ServiceRepo,
+        Self::WebhookRepo,
+        Self::CascadeInvitationRepo,
+        Self::UserRepo,
+        Self::RbacRepo,
+        Self::LoginEventRepo,
+        Self::SecurityAlertRepo,
+    > {
         &self.tenant_service
     }
 
-    fn user_service(&self) -> &UserService<Self::UserRepo> {
+    fn user_service(
+        &self,
+    ) -> &UserService<
+        Self::UserRepo,
+        Self::SessionRepo,
+        Self::PasswordResetRepo,
+        Self::LinkedIdentityRepo,
+        Self::LoginEventRepo,
+        Self::SecurityAlertRepo,
+        Self::AuditRepo,
+        Self::RbacRepo,
+    > {
         &self.user_service
     }
 
-    fn client_service(&self) -> &ClientService<Self::ServiceRepo> {
+    fn client_service(&self) -> &ClientService<Self::ServiceRepo, Self::RbacRepo> {
         &self.client_service
     }
 
@@ -302,26 +353,47 @@ pub async fn run(config: Config) -> Result<()> {
     let webhook_repo = Arc::new(WebhookRepositoryImpl::new(db_pool.clone()));
     let security_alert_repo = Arc::new(SecurityAlertRepositoryImpl::new(db_pool.clone()));
 
+    // Create JWT manager
+    let jwt_manager = JwtManager::new(config.jwt.clone());
+
+    // Create Keycloak client
+    let keycloak_client = KeycloakClient::new(config.keycloak.clone());
+
     // Create services
+    // Create Arc-wrapped Keycloak client for services that need it
+    let keycloak_arc = Arc::new(keycloak_client.clone());
+
     let tenant_service = Arc::new(TenantService::new(
         tenant_repo.clone(),
+        service_repo.clone(),
+        webhook_repo.clone(),
+        invitation_repo.clone(),
+        user_repo.clone(),
+        rbac_repo.clone(),
+        login_event_repo.clone(),
+        security_alert_repo.clone(),
         Some(cache_manager.clone()),
     ));
-    let user_service = Arc::new(UserService::new(user_repo.clone()));
+    let user_service = Arc::new(UserService::new(
+        user_repo.clone(),
+        session_repo.clone(),
+        password_reset_repo.clone(),
+        linked_identity_repo.clone(),
+        login_event_repo.clone(),
+        security_alert_repo.clone(),
+        audit_repo.clone(),
+        rbac_repo.clone(),
+        Some(keycloak_client.clone()),
+    ));
     let client_service = Arc::new(ClientService::new(
         service_repo.clone(),
+        rbac_repo.clone(),
         Some(cache_manager.clone()),
     ));
     let rbac_service = Arc::new(RbacService::new(
         rbac_repo.clone(),
         Some(cache_manager.clone()),
     ));
-
-    // Create JWT manager
-    let jwt_manager = JwtManager::new(config.jwt.clone());
-
-    // Create Keycloak client
-    let keycloak_client = KeycloakClient::new(config.keycloak.clone());
 
     // Load encryption key for settings (optional)
     let encryption_key = EncryptionKey::from_env().ok();
@@ -350,25 +422,22 @@ pub async fn run(config: Config) -> Result<()> {
 
     // Create invitation service
     let invitation_service = Arc::new(InvitationService::new(
-        invitation_repo,
+        invitation_repo.clone(),
         tenant_repo.clone(),
         email_service.clone(),
         app_base_url.clone(),
     ));
 
-    // Create Arc-wrapped Keycloak client for new services
-    let keycloak_arc = Arc::new(keycloak_client.clone());
-
     // Create new services for 5 features
     let password_service = Arc::new(PasswordService::new(
-        password_reset_repo,
+        password_reset_repo.clone(),
         user_repo.clone(),
         email_service.clone(),
         keycloak_arc.clone(),
     ));
 
     let session_service = Arc::new(SessionService::new(
-        session_repo,
+        session_repo.clone(),
         user_repo.clone(),
         keycloak_arc.clone(),
     ));
@@ -376,7 +445,7 @@ pub async fn run(config: Config) -> Result<()> {
     let webauthn_service = Arc::new(WebAuthnService::new(keycloak_arc.clone()));
 
     let identity_provider_service = Arc::new(IdentityProviderService::new(
-        linked_identity_repo,
+        linked_identity_repo.clone(),
         user_repo.clone(),
         keycloak_arc,
     ));

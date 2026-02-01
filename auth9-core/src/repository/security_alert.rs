@@ -18,6 +18,12 @@ pub trait SecurityAlertRepository: Send + Sync {
     async fn count_unresolved(&self) -> Result<i64>;
     async fn resolve(&self, id: StringUuid, resolved_by: StringUuid) -> Result<SecurityAlert>;
     async fn delete_old(&self, days: i64) -> Result<u64>;
+
+    /// Nullify user_id for security alerts (preserve audit trail when user is deleted)
+    async fn nullify_user_id(&self, user_id: StringUuid) -> Result<u64>;
+
+    /// Delete all security alerts for a tenant (when tenant is deleted)
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
 }
 
 pub struct SecurityAlertRepositoryImpl {
@@ -213,6 +219,24 @@ impl SecurityAlertRepository for SecurityAlertRepositoryImpl {
         .bind(days)
         .execute(&self.pool)
         .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn nullify_user_id(&self, user_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("UPDATE security_alerts SET user_id = NULL WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM security_alerts WHERE tenant_id = ?")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected())
     }

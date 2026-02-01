@@ -15,6 +15,9 @@ pub trait WebhookRepository: Send + Sync {
     async fn update(&self, id: StringUuid, input: &UpdateWebhookInput) -> Result<Webhook>;
     async fn update_triggered(&self, id: StringUuid, success: bool) -> Result<()>;
     async fn delete(&self, id: StringUuid) -> Result<()>;
+
+    /// Delete all webhooks for a tenant (for cascade delete)
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
 }
 
 pub struct WebhookRepositoryImpl {
@@ -186,6 +189,15 @@ impl WebhookRepository for WebhookRepositoryImpl {
         }
 
         Ok(())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM webhooks WHERE tenant_id = ?")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 }
 

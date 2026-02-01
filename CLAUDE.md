@@ -59,6 +59,24 @@ Auth9 is a self-hosted identity and access management service (Auth0 alternative
 | Cache | Redis | Session, token caching |
 | Auth Engine | Keycloak | OIDC provider |
 
+### Data Modeling Rules
+
+**No Foreign Keys**: TiDB 是分布式数据库，外键约束会导致跨节点协调开销。所有引用完整性在应用层管理：
+
+- 迁移文件中不使用 `FOREIGN KEY` 约束
+- 保留 `INDEX` 用于查询性能
+- 级联删除在 Service 层实现
+- 孤儿记录清理通过定期任务或删除操作时处理
+
+**删除操作的级联处理**:
+| 删除对象 | 需清理的关联表 |
+|---------|---------------|
+| Tenant | tenant_users, services, webhooks, invitations |
+| User | tenant_users, sessions, password_reset_tokens, linked_identities |
+| Service | permissions, roles, clients |
+| Role | role_permissions, user_tenant_roles |
+| TenantUser | user_tenant_roles |
+
 ### Code Organization (auth9-core)
 ```
 auth9-core/src/

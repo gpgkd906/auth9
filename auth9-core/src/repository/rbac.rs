@@ -72,6 +72,20 @@ pub trait RbacRepository: Send + Sync {
         tenant_id: StringUuid,
         service_id: Option<StringUuid>,
     ) -> Result<Vec<Role>>;
+
+    // Cascade delete methods
+
+    /// Delete all permissions for a service (including role_permissions mappings)
+    async fn delete_permissions_by_service(&self, service_id: StringUuid) -> Result<u64>;
+
+    /// Delete all roles for a service (including role_permissions and user_tenant_roles mappings)
+    async fn delete_roles_by_service(&self, service_id: StringUuid) -> Result<u64>;
+
+    /// Clear parent_role_id references for a service (SET NULL before deleting roles)
+    async fn clear_parent_role_references(&self, service_id: StringUuid) -> Result<u64>;
+
+    /// Delete all user role assignments for a tenant_user
+    async fn delete_user_roles_by_tenant_user(&self, tenant_user_id: StringUuid) -> Result<u64>;
 }
 
 pub struct RbacRepositoryImpl {
@@ -476,6 +490,70 @@ impl RbacRepository for RbacRepositoryImpl {
 
         let roles = query.fetch_all(&self.pool).await?;
         Ok(roles)
+    }
+
+    async fn delete_permissions_by_service(&self, service_id: StringUuid) -> Result<u64> {
+        // First delete role_permissions mappings for permissions in this service
+        sqlx::query(
+            "DELETE FROM role_permissions WHERE permission_id IN (SELECT id FROM permissions WHERE service_id = ?)",
+        )
+        .bind(service_id)
+        .execute(&self.pool)
+        .await?;
+
+        // Then delete the permissions
+        let result = sqlx::query("DELETE FROM permissions WHERE service_id = ?")
+            .bind(service_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_roles_by_service(&self, service_id: StringUuid) -> Result<u64> {
+        // First delete role_permissions mappings for roles in this service
+        sqlx::query(
+            "DELETE FROM role_permissions WHERE role_id IN (SELECT id FROM roles WHERE service_id = ?)",
+        )
+        .bind(service_id)
+        .execute(&self.pool)
+        .await?;
+
+        // Delete user_tenant_roles mappings for roles in this service
+        sqlx::query(
+            "DELETE FROM user_tenant_roles WHERE role_id IN (SELECT id FROM roles WHERE service_id = ?)",
+        )
+        .bind(service_id)
+        .execute(&self.pool)
+        .await?;
+
+        // Then delete the roles
+        let result = sqlx::query("DELETE FROM roles WHERE service_id = ?")
+            .bind(service_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn clear_parent_role_references(&self, service_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query(
+            "UPDATE roles SET parent_role_id = NULL WHERE service_id = ? AND parent_role_id IS NOT NULL",
+        )
+        .bind(service_id)
+        .execute(&self.pool)
+        .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_user_roles_by_tenant_user(&self, tenant_user_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM user_tenant_roles WHERE tenant_user_id = ?")
+            .bind(tenant_user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 }
 

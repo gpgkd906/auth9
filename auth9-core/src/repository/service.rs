@@ -31,6 +31,12 @@ pub trait ServiceRepository: Send + Sync {
     async fn delete_client(&self, service_id: Uuid, client_id: &str) -> Result<()>;
     async fn update_client_secret_hash(&self, client_id: &str, new_secret_hash: &str)
         -> Result<()>;
+
+    /// List all services for a tenant (for cascade delete)
+    async fn list_by_tenant(&self, tenant_id: Uuid) -> Result<Vec<Service>>;
+
+    /// Delete all clients for a service (for cascade delete)
+    async fn delete_clients_by_service(&self, service_id: Uuid) -> Result<u64>;
 }
 
 pub struct ServiceRepositoryImpl {
@@ -299,5 +305,29 @@ impl ServiceRepository for ServiceRepositoryImpl {
             )));
         }
         Ok(())
+    }
+
+    async fn list_by_tenant(&self, tenant_id: Uuid) -> Result<Vec<Service>> {
+        let services = sqlx::query_as::<_, Service>(
+            r#"
+            SELECT id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at
+            FROM services
+            WHERE tenant_id = ?
+            "#,
+        )
+        .bind(tenant_id.to_string())
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(services)
+    }
+
+    async fn delete_clients_by_service(&self, service_id: Uuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM clients WHERE service_id = ?")
+            .bind(service_id.to_string())
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 }

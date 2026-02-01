@@ -10,6 +10,5 @@ CREATE TABLE IF NOT EXISTS linked_identities (
     linked_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 
     UNIQUE INDEX idx_linked_provider_external (provider_alias, external_user_id),
-    INDEX idx_linked_user_id (user_id),
-    CONSTRAINT fk_linked_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    INDEX idx_linked_user_id (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

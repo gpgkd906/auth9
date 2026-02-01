@@ -21,6 +21,12 @@ pub trait LoginEventRepository: Send + Sync {
     async fn count_failed_by_ip(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64>;
     async fn count_failed_by_ip_multi_user(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64>;
     async fn delete_old(&self, days: i64) -> Result<u64>;
+
+    /// Nullify user_id for login events (preserve audit trail when user is deleted)
+    async fn nullify_user_id(&self, user_id: StringUuid) -> Result<u64>;
+
+    /// Delete all login events for a tenant (when tenant is deleted)
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
 }
 
 pub struct LoginEventRepositoryImpl {
@@ -250,6 +256,24 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         .bind(days)
         .execute(&self.pool)
         .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn nullify_user_id(&self, user_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("UPDATE login_events SET user_id = NULL WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM login_events WHERE tenant_id = ?")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected())
     }

@@ -1,5 +1,6 @@
 //! Audit log repository
 
+use crate::domain::StringUuid;
 use crate::error::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -95,6 +96,9 @@ pub trait AuditRepository: Send + Sync {
     async fn create(&self, input: &CreateAuditLogInput) -> Result<()>;
     async fn find(&self, query: &AuditLogQuery) -> Result<Vec<AuditLog>>;
     async fn count(&self, query: &AuditLogQuery) -> Result<i64>;
+
+    /// Nullify actor_id for audit logs (preserve audit trail when user is deleted)
+    async fn nullify_actor_id(&self, actor_id: StringUuid) -> Result<u64>;
 }
 
 pub struct AuditRepositoryImpl {
@@ -241,5 +245,14 @@ impl AuditRepository for AuditRepositoryImpl {
 
         let (count,) = query_builder.fetch_one(&self.pool).await?;
         Ok(count)
+    }
+
+    async fn nullify_actor_id(&self, actor_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("UPDATE audit_logs SET actor_id = NULL WHERE actor_id = ?")
+            .bind(actor_id.to_string())
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 }

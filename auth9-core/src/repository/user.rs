@@ -30,6 +30,18 @@ pub trait UserRepository: Send + Sync {
         limit: i64,
     ) -> Result<Vec<User>>;
     async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>>;
+
+    /// Delete all tenant memberships for a user (tenant_users records)
+    async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64>;
+
+    /// List all tenant_user IDs for a user (for cascade delete)
+    async fn list_tenant_user_ids(&self, user_id: StringUuid) -> Result<Vec<StringUuid>>;
+
+    /// List all tenant_user IDs for a tenant (for cascade delete)
+    async fn list_tenant_user_ids_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<StringUuid>>;
+
+    /// Delete all tenant memberships for a tenant
+    async fn delete_tenant_memberships_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
 }
 
 pub struct UserRepositoryImpl {
@@ -284,6 +296,44 @@ impl UserRepository for UserRepositoryImpl {
         .await?;
 
         Ok(tenant_users)
+    }
+
+    async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM tenant_users WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn list_tenant_user_ids(&self, user_id: StringUuid) -> Result<Vec<StringUuid>> {
+        let ids: Vec<(StringUuid,)> =
+            sqlx::query_as("SELECT id FROM tenant_users WHERE user_id = ?")
+                .bind(user_id)
+                .fetch_all(&self.pool)
+                .await?;
+
+        Ok(ids.into_iter().map(|(id,)| id).collect())
+    }
+
+    async fn list_tenant_user_ids_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<StringUuid>> {
+        let ids: Vec<(StringUuid,)> =
+            sqlx::query_as("SELECT id FROM tenant_users WHERE tenant_id = ?")
+                .bind(tenant_id)
+                .fetch_all(&self.pool)
+                .await?;
+
+        Ok(ids.into_iter().map(|(id,)| id).collect())
+    }
+
+    async fn delete_tenant_memberships_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM tenant_users WHERE tenant_id = ?")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
     }
 }
 

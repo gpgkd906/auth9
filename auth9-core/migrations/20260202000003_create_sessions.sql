@@ -14,6 +14,5 @@ CREATE TABLE IF NOT EXISTS sessions (
 
     INDEX idx_sessions_user_id (user_id),
     INDEX idx_sessions_keycloak_session (keycloak_session_id),
-    INDEX idx_sessions_last_active (last_active_at),
-    CONSTRAINT fk_sessions_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    INDEX idx_sessions_last_active (last_active_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

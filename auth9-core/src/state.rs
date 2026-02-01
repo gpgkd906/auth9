@@ -36,18 +36,54 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     type RbacRepo: RbacRepository;
     /// The audit repository type
     type AuditRepo: AuditRepository;
+    /// The session repository type (for cascade delete)
+    type SessionRepo: SessionRepository;
+    /// The password reset repository type (for cascade delete)
+    type PasswordResetRepo: PasswordResetRepository;
+    /// The linked identity repository type (for cascade delete)
+    type LinkedIdentityRepo: LinkedIdentityRepository;
+    /// The login event repository type (for cascade delete)
+    type LoginEventRepo: LoginEventRepository;
+    /// The security alert repository type (for cascade delete)
+    type SecurityAlertRepo: SecurityAlertRepository;
+    /// The webhook repository type (for cascade delete)
+    type WebhookRepo: WebhookRepository;
+    /// The invitation repository type (for cascade delete) - Note: HasInvitations also has this
+    type CascadeInvitationRepo: InvitationRepository;
 
     /// Get the application configuration
     fn config(&self) -> &Config;
 
     /// Get the tenant service
-    fn tenant_service(&self) -> &TenantService<Self::TenantRepo>;
+    fn tenant_service(
+        &self,
+    ) -> &TenantService<
+        Self::TenantRepo,
+        Self::ServiceRepo,
+        Self::WebhookRepo,
+        Self::CascadeInvitationRepo,
+        Self::UserRepo,
+        Self::RbacRepo,
+        Self::LoginEventRepo,
+        Self::SecurityAlertRepo,
+    >;
 
     /// Get the user service
-    fn user_service(&self) -> &UserService<Self::UserRepo>;
+    fn user_service(
+        &self,
+    ) -> &UserService<
+        Self::UserRepo,
+        Self::SessionRepo,
+        Self::PasswordResetRepo,
+        Self::LinkedIdentityRepo,
+        Self::LoginEventRepo,
+        Self::SecurityAlertRepo,
+        Self::AuditRepo,
+        Self::RbacRepo,
+    >;
 
     /// Get the client/service service
-    fn client_service(&self) -> &ClientService<Self::ServiceRepo>;
+    fn client_service(&self) -> &ClientService<Self::ServiceRepo, Self::RbacRepo>;
 
     /// Get the RBAC service
     fn rbac_service(&self) -> &RbacService<Self::RbacRepo>;

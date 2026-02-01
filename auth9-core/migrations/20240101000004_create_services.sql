@@ -16,7 +16,5 @@ CREATE TABLE IF NOT EXISTS services (
 
     INDEX idx_services_tenant (tenant_id),
     INDEX idx_services_status (status),
-    UNIQUE INDEX idx_services_tenant_name_unique (tenant_id_key, name),
-
-    CONSTRAINT fk_services_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE SET NULL
+    UNIQUE INDEX idx_services_tenant_name_unique (tenant_id_key, name)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

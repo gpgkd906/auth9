@@ -16,8 +16,5 @@ CREATE TABLE invitations (
     INDEX idx_tenant_id (tenant_id),
     INDEX idx_email (email),
     INDEX idx_status (status),
-    INDEX idx_expires_at (expires_at),
-
-    CONSTRAINT fk_invitations_tenant
-        FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    INDEX idx_expires_at (expires_at)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

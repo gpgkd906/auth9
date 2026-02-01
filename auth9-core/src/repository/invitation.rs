@@ -50,6 +50,9 @@ pub trait InvitationRepository: Send + Sync {
 
     /// Expire all pending invitations that have passed their expiration date
     async fn expire_pending(&self) -> Result<u64>;
+
+    /// Delete all invitations for a tenant (for cascade delete)
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
 }
 
 pub struct InvitationRepositoryImpl {
@@ -225,6 +228,15 @@ impl InvitationRepository for InvitationRepositoryImpl {
         )
         .execute(&self.pool)
         .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM invitations WHERE tenant_id = ?")
+            .bind(tenant_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected())
     }
