@@ -706,6 +706,529 @@ impl KeycloakClient {
 
         Ok(())
     }
+
+    // ============================================================================
+    // Password Management
+    // ============================================================================
+
+    /// Reset a user's password
+    pub async fn reset_user_password(
+        &self,
+        user_id: &str,
+        password: &str,
+        temporary: bool,
+    ) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/reset-password",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let credential = serde_json::json!({
+            "type": "password",
+            "value": password,
+            "temporary": temporary
+        });
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(&token)
+            .json(&credential)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to reset password: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to reset password: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Validate a user's password by attempting to get a token
+    pub async fn validate_user_password(&self, user_id: &str, password: &str) -> Result<bool> {
+        // Get the user to get their username
+        let user = self.get_user(user_id).await?;
+
+        // Try to authenticate with the password
+        let token_url = format!(
+            "{}/realms/{}/protocol/openid-connect/token",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .post(&token_url)
+            .form(&[
+                ("grant_type", "password"),
+                ("client_id", &self.config.admin_client_id),
+                ("client_secret", &self.config.admin_client_secret),
+                ("username", &user.username),
+                ("password", password),
+            ])
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to validate password: {}", e)))?;
+
+        Ok(response.status().is_success())
+    }
+
+    // ============================================================================
+    // Session Management
+    // ============================================================================
+
+    /// Get all sessions for a user
+    pub async fn get_user_sessions(&self, user_id: &str) -> Result<Vec<KeycloakSession>> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/sessions",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to get user sessions: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to get user sessions: {} - {}",
+                status, body
+            )));
+        }
+
+        let sessions: Vec<KeycloakSession> = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse sessions: {}", e)))?;
+
+        Ok(sessions)
+    }
+
+    /// Delete a specific session
+    pub async fn delete_user_session(&self, session_id: &str) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/sessions/{}",
+            self.config.url, self.config.realm, session_id
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to delete session: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(
+                "Session not found in Keycloak".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to delete session: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Logout user from all sessions
+    pub async fn logout_user(&self, user_id: &str) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/logout",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to logout user: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to logout user: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    // ============================================================================
+    // Identity Provider Management
+    // ============================================================================
+
+    /// List all identity providers
+    pub async fn list_identity_providers(&self) -> Result<Vec<KeycloakIdentityProvider>> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/identity-provider/instances",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to list identity providers: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to list identity providers: {} - {}",
+                status, body
+            )));
+        }
+
+        let providers: Vec<KeycloakIdentityProvider> = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse identity providers: {}", e)))?;
+
+        Ok(providers)
+    }
+
+    /// Get an identity provider by alias
+    pub async fn get_identity_provider(&self, alias: &str) -> Result<KeycloakIdentityProvider> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/identity-provider/instances/{}",
+            self.config.url, self.config.realm, alias
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to get identity provider: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(format!(
+                "Identity provider '{}' not found",
+                alias
+            )));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to get identity provider: {} - {}",
+                status, body
+            )));
+        }
+
+        let provider: KeycloakIdentityProvider = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse identity provider: {}", e)))?;
+
+        Ok(provider)
+    }
+
+    /// Create an identity provider
+    pub async fn create_identity_provider(&self, provider: &KeycloakIdentityProvider) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/identity-provider/instances",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(&token)
+            .json(provider)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to create identity provider: {}", e)))?;
+
+        if response.status() == StatusCode::CONFLICT {
+            return Err(AppError::Conflict(format!(
+                "Identity provider '{}' already exists",
+                provider.alias
+            )));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to create identity provider: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Update an identity provider
+    pub async fn update_identity_provider(
+        &self,
+        alias: &str,
+        provider: &KeycloakIdentityProvider,
+    ) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/identity-provider/instances/{}",
+            self.config.url, self.config.realm, alias
+        );
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(&token)
+            .json(provider)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to update identity provider: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(format!(
+                "Identity provider '{}' not found",
+                alias
+            )));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to update identity provider: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Delete an identity provider
+    pub async fn delete_identity_provider(&self, alias: &str) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/identity-provider/instances/{}",
+            self.config.url, self.config.realm, alias
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to delete identity provider: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(format!(
+                "Identity provider '{}' not found",
+                alias
+            )));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to delete identity provider: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Get federated identities for a user
+    pub async fn get_user_federated_identities(
+        &self,
+        user_id: &str,
+    ) -> Result<Vec<KeycloakFederatedIdentity>> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/federated-identity",
+            self.config.url, self.config.realm, user_id
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to get federated identities: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to get federated identities: {} - {}",
+                status, body
+            )));
+        }
+
+        let identities: Vec<KeycloakFederatedIdentity> = response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse federated identities: {}", e)))?;
+
+        Ok(identities)
+    }
+
+    /// Remove a federated identity from a user
+    pub async fn remove_user_federated_identity(
+        &self,
+        user_id: &str,
+        provider_alias: &str,
+    ) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/federated-identity/{}",
+            self.config.url, self.config.realm, user_id, provider_alias
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to remove federated identity: {}", e)))?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(
+                "Federated identity not found".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to remove federated identity: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// List WebAuthn credentials for a user
+    pub async fn list_webauthn_credentials(&self, user_id: &str) -> Result<Vec<KeycloakCredentialRepresentation>> {
+        let all_creds = self.list_user_credentials(user_id).await?;
+
+        let webauthn_creds: Vec<KeycloakCredentialRepresentation> = all_creds
+            .into_iter()
+            .filter(|c| {
+                let ct = c.credential_type.to_lowercase();
+                ct.contains("webauthn")
+            })
+            .map(|c| KeycloakCredentialRepresentation {
+                id: c.id,
+                credential_type: c.credential_type,
+                user_label: None,
+                created_date: None,
+            })
+            .collect();
+
+        Ok(webauthn_creds)
+    }
+}
+
+/// Keycloak session representation
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakSession {
+    pub id: String,
+    pub username: Option<String>,
+    pub user_id: Option<String>,
+    pub ip_address: Option<String>,
+    pub start: Option<i64>,
+    pub last_access: Option<i64>,
+    #[serde(default)]
+    pub clients: std::collections::HashMap<String, String>,
+}
+
+/// Keycloak identity provider representation
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakIdentityProvider {
+    pub alias: String,
+    pub display_name: Option<String>,
+    pub provider_id: String,
+    pub enabled: bool,
+    #[serde(default)]
+    pub trust_email: bool,
+    #[serde(default)]
+    pub store_token: bool,
+    #[serde(default)]
+    pub link_only: bool,
+    pub first_broker_login_flow_alias: Option<String>,
+    #[serde(default)]
+    pub config: std::collections::HashMap<String, String>,
+}
+
+/// Keycloak federated identity representation
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakFederatedIdentity {
+    pub identity_provider: String,
+    pub user_id: String,
+    pub user_name: Option<String>,
+}
+
+/// Keycloak credential representation for WebAuthn
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakCredentialRepresentation {
+    pub id: String,
+    #[serde(rename = "type")]
+    pub credential_type: String,
+    pub user_label: Option<String>,
+    pub created_date: Option<i64>,
 }
 
 // ============================================================================

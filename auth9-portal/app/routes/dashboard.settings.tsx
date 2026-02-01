@@ -11,6 +11,10 @@ const settingsNav = [
   { name: "Login Branding", href: "/dashboard/settings/branding", description: "Customize login pages" },
   { name: "Email Provider", href: "/dashboard/settings/email", description: "Email delivery configuration" },
   { name: "Email Templates", href: "/dashboard/settings/email-templates", description: "Customize email content" },
+  { name: "Security", href: "/dashboard/settings/security", description: "Password and security settings" },
+  { name: "Sessions", href: "/dashboard/settings/sessions", description: "Active sessions" },
+  { name: "Passkeys", href: "/dashboard/settings/passkeys", description: "Passwordless authentication" },
+  { name: "Identity Providers", href: "/dashboard/settings/identity-providers", description: "Social login and SSO" },
 ];
 
 export default function SettingsLayout() {

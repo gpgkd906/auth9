@@ -14,8 +14,6 @@ test.describe("Scenario: Tenant Management", () => {
     logoUrl: "https://example.com/logo.png",
   };
 
-  let createdTenantId: string | null = null;
-
   test.beforeEach(async ({ page }) => {
     // Login first
     await loginAsTestUser(page);

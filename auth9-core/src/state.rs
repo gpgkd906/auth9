@@ -9,12 +9,15 @@ use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
 use crate::repository::{
-    InvitationRepository, RbacRepository, ServiceRepository, SystemSettingsRepository,
-    TenantRepository, UserRepository,
+    InvitationRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
+    RbacRepository, SecurityAlertRepository, ServiceRepository, SessionRepository,
+    SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
 };
 use crate::service::{
-    BrandingService, ClientService, EmailService, EmailTemplateService, InvitationService,
-    RbacService, SystemSettingsService, TenantService, UserService,
+    AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
+    IdentityProviderService, InvitationService, PasswordService, RbacService,
+    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
+    WebAuthnService, WebhookService,
 };
 
 /// Trait for application state that provides access to all services.
@@ -113,4 +116,101 @@ pub trait HasBranding: Clone + Send + Sync + 'static {
 
     /// Get the branding service
     fn branding_service(&self) -> &BrandingService<Self::BrandingRepo>;
+}
+
+/// Trait for states that provide password management services
+pub trait HasPasswordManagement: Clone + Send + Sync + 'static {
+    /// The password reset repository type
+    type PasswordResetRepo: PasswordResetRepository;
+    /// The user repository type
+    type PasswordUserRepo: UserRepository;
+    /// The system settings repository type
+    type PasswordSystemSettingsRepo: SystemSettingsRepository;
+
+    /// Get the password service
+    fn password_service(
+        &self,
+    ) -> &PasswordService<Self::PasswordResetRepo, Self::PasswordUserRepo, Self::PasswordSystemSettingsRepo>;
+
+    /// Get the JWT manager for token verification
+    fn jwt_manager(&self) -> &JwtManager;
+}
+
+/// Trait for states that provide session management services
+pub trait HasSessionManagement: Clone + Send + Sync + 'static {
+    /// The session repository type
+    type SessionRepo: SessionRepository;
+    /// The user repository type
+    type SessionUserRepo: UserRepository;
+
+    /// Get the session service
+    fn session_service(&self) -> &SessionService<Self::SessionRepo, Self::SessionUserRepo>;
+
+    /// Get the JWT manager for token verification
+    fn jwt_manager(&self) -> &JwtManager;
+}
+
+/// Trait for states that provide WebAuthn services
+pub trait HasWebAuthn: Clone + Send + Sync + 'static {
+    /// Get the WebAuthn service
+    fn webauthn_service(&self) -> &WebAuthnService;
+
+    /// Get the JWT manager for token verification
+    fn jwt_manager(&self) -> &JwtManager;
+}
+
+/// Trait for states that provide identity provider services
+pub trait HasIdentityProviders: Clone + Send + Sync + 'static {
+    /// The linked identity repository type
+    type LinkedIdentityRepo: LinkedIdentityRepository;
+    /// The user repository type
+    type IdpUserRepo: UserRepository;
+
+    /// Get the identity provider service
+    fn identity_provider_service(
+        &self,
+    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo>;
+
+    /// Get the JWT manager for token verification
+    fn jwt_manager(&self) -> &JwtManager;
+}
+
+/// Trait for states that provide analytics services
+pub trait HasAnalytics: Clone + Send + Sync + 'static {
+    /// The login event repository type
+    type LoginEventRepo: LoginEventRepository;
+
+    /// Get the analytics service
+    fn analytics_service(&self) -> &AnalyticsService<Self::LoginEventRepo>;
+}
+
+/// Trait for states that provide webhook services
+pub trait HasWebhooks: Clone + Send + Sync + 'static {
+    /// The webhook repository type
+    type WebhookRepo: WebhookRepository;
+
+    /// Get the webhook service
+    fn webhook_service(&self) -> &WebhookService<Self::WebhookRepo>;
+}
+
+/// Trait for states that provide security alert services
+pub trait HasSecurityAlerts: Clone + Send + Sync + 'static {
+    /// The login event repository type
+    type SecurityLoginEventRepo: LoginEventRepository;
+    /// The security alert repository type
+    type SecurityAlertRepo: SecurityAlertRepository;
+    /// The webhook repository type
+    type SecurityWebhookRepo: WebhookRepository;
+
+    /// Get the security detection service
+    fn security_detection_service(
+        &self,
+    ) -> &SecurityDetectionService<
+        Self::SecurityLoginEventRepo,
+        Self::SecurityAlertRepo,
+        Self::SecurityWebhookRepo,
+    >;
+
+    /// Get the JWT manager for token verification
+    fn jwt_manager(&self) -> &JwtManager;
 }

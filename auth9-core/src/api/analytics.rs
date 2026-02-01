@@ -1,0 +1,113 @@
+//! Analytics API handlers
+
+use crate::api::{PaginatedResponse, PaginationQuery, SuccessResponse};
+use crate::domain::{LoginEvent, LoginStats, StringUuid};
+use crate::error::AppError;
+use crate::state::HasAnalytics;
+use axum::{
+    extract::{Path, Query, State},
+    Json,
+};
+use serde::Deserialize;
+
+/// Get login statistics
+pub async fn get_stats<S: HasAnalytics>(
+    State(state): State<S>,
+    Query(params): Query<StatsQuery>,
+) -> Result<Json<SuccessResponse<LoginStats>>, AppError> {
+    let stats = match params.period.as_deref() {
+        Some("daily") | Some("day") => state.analytics_service().get_daily_stats().await?,
+        Some("weekly") | Some("week") => state.analytics_service().get_weekly_stats().await?,
+        Some("monthly") | Some("month") => state.analytics_service().get_monthly_stats().await?,
+        _ => {
+            // Default to weekly
+            let days = params.days.unwrap_or(7);
+            state.analytics_service().get_stats_for_days(days).await?
+        }
+    };
+
+    Ok(Json(SuccessResponse::new(stats)))
+}
+
+/// Query parameters for stats endpoint
+#[derive(Debug, Deserialize)]
+pub struct StatsQuery {
+    /// Predefined period: "daily", "weekly", or "monthly"
+    pub period: Option<String>,
+    /// Custom number of days (overrides period)
+    pub days: Option<i64>,
+}
+
+/// List login events with pagination
+pub async fn list_events<S: HasAnalytics>(
+    State(state): State<S>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<Json<PaginatedResponse<LoginEvent>>, AppError> {
+    let (events, total) = state
+        .analytics_service()
+        .list_events(pagination.page, pagination.per_page)
+        .await?;
+
+    Ok(Json(PaginatedResponse::new(
+        events,
+        pagination.page,
+        pagination.per_page,
+        total,
+    )))
+}
+
+/// List login events for a specific user
+pub async fn list_user_events<S: HasAnalytics>(
+    State(state): State<S>,
+    Path(user_id): Path<StringUuid>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<Json<PaginatedResponse<LoginEvent>>, AppError> {
+    let (events, total) = state
+        .analytics_service()
+        .list_user_events(user_id, pagination.page, pagination.per_page)
+        .await?;
+
+    Ok(Json(PaginatedResponse::new(
+        events,
+        pagination.page,
+        pagination.per_page,
+        total,
+    )))
+}
+
+/// List login events for a specific tenant
+pub async fn list_tenant_events<S: HasAnalytics>(
+    State(state): State<S>,
+    Path(tenant_id): Path<StringUuid>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<Json<PaginatedResponse<LoginEvent>>, AppError> {
+    let (events, total) = state
+        .analytics_service()
+        .list_tenant_events(tenant_id, pagination.page, pagination.per_page)
+        .await?;
+
+    Ok(Json(PaginatedResponse::new(
+        events,
+        pagination.page,
+        pagination.per_page,
+        total,
+    )))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stats_query_deserialization() {
+        let query: StatsQuery = serde_json::from_str(r#"{"period": "weekly"}"#).unwrap();
+        assert_eq!(query.period, Some("weekly".to_string()));
+        assert_eq!(query.days, None);
+    }
+
+    #[test]
+    fn test_stats_query_with_days() {
+        let query: StatsQuery = serde_json::from_str(r#"{"days": 30}"#).unwrap();
+        assert_eq!(query.days, Some(30));
+    }
+}
