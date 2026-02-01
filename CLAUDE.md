@@ -28,6 +28,9 @@ npm run build                  # Build
 npm run test                   # Unit tests (Vitest)
 npm run lint                   # ESLint (flat config)
 npm run typecheck              # TypeScript check
+npm run test:e2e               # E2E tests - frontend isolation (fast)
+npm run test:e2e:full          # E2E tests - full-stack (requires Docker)
+npm run test:e2e:full:reset    # Reset env + full-stack E2E tests
 ```
 
 ### Local Development with Docker
@@ -195,3 +198,68 @@ it("action validates input", async () => {
   expect(response.status).toBe(302);
 });
 ```
+
+### E2E Testing (Playwright)
+
+**Hybrid Strategy**: Frontend isolation tests (fast, no Docker) + Full-stack integration tests (requires Docker).
+
+```
+tests/
+├── e2e/                    # Frontend isolation tests (快速, 无 Docker)
+│   └── login.spec.ts       # UI rendering, navigation
+└── e2e-integration/        # Full-stack integration tests (需要 Docker)
+    ├── setup/
+    │   ├── test-config.ts      # Test configuration (URLs, credentials)
+    │   └── keycloak-admin.ts   # Keycloak Admin API client
+    ├── global-setup.ts         # Wait for services, create test users
+    └── auth-flow.spec.ts       # Scenario-based tests
+```
+
+| Type | Directory | Target URL | Requirements | Purpose |
+|------|-----------|------------|--------------|---------|
+| Frontend isolation | `tests/e2e/` | localhost:5173 | Vite dev only | UI/navigation |
+| Full-stack integration | `tests/e2e-integration/` | localhost:3000 | Docker + all services | Login/API |
+
+**Commands**:
+```bash
+npm run test:e2e              # Frontend isolation tests (fast)
+npm run test:e2e:full         # Full-stack tests (requires Docker)
+npm run test:e2e:full:reset   # Reset environment + full-stack tests
+```
+
+**Test Data Preparation**: Use Keycloak Admin API in `global-setup.ts`:
+```typescript
+// tests/e2e-integration/setup/keycloak-admin.ts
+const keycloak = new KeycloakAdminClient();
+await keycloak.authenticate();  // Master realm admin
+await keycloak.createUser({
+  username: "e2e-test-user",
+  email: "e2e-test@example.com",
+  password: "Test123!",
+  firstName: "E2E",
+  lastName: "TestUser",
+});
+```
+
+**Scenario-based Test Pattern**:
+```typescript
+test.describe("Scenario: User Authentication Flow", () => {
+  const testUser = TEST_CONFIG.testUsers.standard;
+
+  test("1. Login page should be accessible", async ({ page }) => { ... });
+  test("2. Clicking sign in should redirect to Keycloak", async ({ page }) => { ... });
+  test("3. User can login with valid credentials", async ({ page }) => { ... });
+});
+
+test.describe("Scenario: Auth9 Core API Integration", () => {
+  test("1. Health endpoint should be accessible", async ({ request }) => {
+    const response = await request.get(`${TEST_CONFIG.auth9CoreUrl}/health`);
+    expect(response.ok()).toBeTruthy();
+  });
+});
+```
+
+**Test Configuration** (`tests/e2e-integration/setup/test-config.ts`):
+- Fixed test user credentials (environment is reset before each test run)
+- Service URLs: Portal (3000), Auth9 Core (8080), Keycloak (8081)
+- Keycloak Admin credentials for test data setup
