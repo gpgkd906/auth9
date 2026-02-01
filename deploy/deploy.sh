@@ -361,8 +361,10 @@ collect_keycloak_db_password() {
 
 collect_jwt_issuer() {
     print_info "JWT Issuer Configuration"
+    echo "  Note: JWT_ISSUER must be the Core API URL (used for OAuth callback)"
 
-    local current="${CONFIGMAP_VALUES[JWT_ISSUER]:-https://auth9.gitski.work}"
+    # Default to Core API URL, not portal URL
+    local current="${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}}"
     echo "  Current JWT Issuer: $current"
 
     if confirm_action "  Change JWT Issuer?"; then
@@ -512,7 +514,8 @@ create_or_patch_secret() {
 }
 
 apply_configmap() {
-    local jwt_issuer="${CONFIGMAP_VALUES[JWT_ISSUER]:-https://auth9.gitski.work}"
+    # JWT_ISSUER must be the Core API URL (used for OAuth callback)
+    local jwt_issuer="${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}}"
 
     cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -622,7 +625,7 @@ print_summary() {
     echo -e "${BOLD}Configuration Summary:${NC}"
     echo "  Database: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password
     echo "  Redis: ${AUTH9_SECRETS[REDIS_URL]}"
-    echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-https://auth9.gitski.work}"
+    echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}}"
     echo "  Core Public URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api-auth9.gitski.work}"
     echo "  Portal URL: ${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.gitski.work}"
     echo "  Init job: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "will run" || echo "will skip (client secret exists)")"
