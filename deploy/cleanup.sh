@@ -245,7 +245,7 @@ reset_tidb_database() {
 
     echo ""
     print_warning "此操作将删除 auth9 数据库中的所有数据！"
-    print_warning "同时会删除 auth9-secrets（因为 Keycloak client secret 需要重新生成）"
+    print_warning "KEYCLOAK_ADMIN_CLIENT_SECRET 将被删除（下次部署重新生成）"
     echo ""
 
     if [ -n "$DRY_RUN" ]; then
@@ -266,33 +266,57 @@ reset_tidb_database() {
 
     print_info "正在运行数据库重置..."
 
-    # 使用 auth9-core 镜像运行 reset 命令
-    kubectl run auth9-reset --rm -i --restart=Never \
-        --image=ghcr.io/gpgkd906/auth9-core:latest \
-        --overrides='{
-          "spec": {
-            "containers": [{
-              "name": "auth9-reset",
-              "image": "ghcr.io/gpgkd906/auth9-core:latest",
-              "args": ["reset"],
-              "envFrom": [{"secretRef": {"name": "auth9-secrets"}}]
-            }]
-          }
-        }' \
-        --namespace="$NAMESPACE" 2>&1
+    # 删除旧的 reset job（如果存在）
+    kubectl delete job auth9-reset -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null
 
-    local exit_code=$?
-    if [ $exit_code -eq 0 ]; then
+    # 创建 reset job
+    cat <<EOF | kubectl apply -f -
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: auth9-reset
+  namespace: $NAMESPACE
+spec:
+  ttlSecondsAfterFinished: 60
+  template:
+    spec:
+      restartPolicy: Never
+      imagePullSecrets:
+        - name: ghcr-secret
+      containers:
+        - name: auth9-reset
+          image: ghcr.io/gpgkd906/auth9-core:latest
+          command: ["auth9-core", "reset"]
+          envFrom:
+            - secretRef:
+                name: auth9-secrets
+EOF
+
+    # 等待 Job 完成
+    print_info "等待数据库重置完成（超时: 120秒）..."
+    if kubectl wait --for=condition=complete job/auth9-reset -n "$NAMESPACE" --timeout=120s 2>/dev/null; then
+        # 显示日志
+        echo ""
+        kubectl logs job/auth9-reset -n "$NAMESPACE" 2>/dev/null || true
+        echo ""
+
+        # 清理 job
+        kubectl delete job auth9-reset -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null
         print_success "数据库已重置"
 
-        # 重置数据库后必须删除 secret
-        print_info "正在删除 auth9-secrets..."
-        kubectl delete secret auth9-secrets -n "$NAMESPACE" --ignore-not-found=true
-        print_success "auth9-secrets 已删除（下次部署将重新生成）"
+        # 只删除 KEYCLOAK_ADMIN_CLIENT_SECRET（需要重新生成），保留其他配置
+        print_info "正在删除 KEYCLOAK_ADMIN_CLIENT_SECRET..."
+        kubectl patch secret auth9-secrets -n "$NAMESPACE" \
+            --type='json' \
+            -p='[{"op": "remove", "path": "/data/KEYCLOAK_ADMIN_CLIENT_SECRET"}]' 2>/dev/null || true
+        print_success "KEYCLOAK_ADMIN_CLIENT_SECRET 已删除（下次部署将重新生成）"
 
         return 0
     else
-        print_error "数据库重置失败（退出码: $exit_code）"
+        print_error "数据库重置失败或超时"
+        echo ""
+        echo "  查看日志: kubectl logs job/auth9-reset -n $NAMESPACE"
+        kubectl logs job/auth9-reset -n "$NAMESPACE" --tail=10 2>/dev/null || true
         return 1
     fi
 }
@@ -300,9 +324,9 @@ reset_tidb_database() {
 interactive_delete_secrets() {
     print_progress "7/9" "Secrets"
 
-    # 如果数据库重置时已删除 auth9-secrets，显示提示
+    # 如果数据库重置成功，提示 client secret 已删除
     if [ -n "$DB_RESET_DONE" ]; then
-        print_info "auth9-secrets 已在数据库重置步骤中删除"
+        print_info "KEYCLOAK_ADMIN_CLIENT_SECRET 已在数据库重置步骤中删除"
         echo ""
     fi
 
