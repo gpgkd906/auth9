@@ -11,16 +11,23 @@
 pub mod auth_http_test;
 pub mod branding_http_test;
 pub mod email_template_http_test;
+pub mod identity_provider_http_test;
 pub mod mock_keycloak;
+pub mod password_http_test;
 pub mod role_http_test;
 pub mod service_http_test;
+pub mod session_http_test;
 pub mod system_settings_http_test;
 pub mod tenant_http_test;
 pub mod user_http_test;
+pub mod webauthn_http_test;
+pub mod webhook_http_test;
 
 use crate::api::{
-    create_test_jwt_manager, TestAuditRepository, TestRbacRepository, TestServiceRepository,
-    TestSystemSettingsRepository, TestTenantRepository, TestUserRepository,
+    create_test_jwt_manager, TestAuditRepository, TestLinkedIdentityRepository,
+    TestLoginEventRepository, TestPasswordResetRepository, TestRbacRepository,
+    TestSecurityAlertRepository, TestServiceRepository, TestSessionRepository,
+    TestSystemSettingsRepository, TestTenantRepository, TestUserRepository, TestWebhookRepository,
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
@@ -31,10 +38,14 @@ use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::server::build_router;
 use auth9_core::service::{
-    BrandingService, ClientService, EmailService, EmailTemplateService, RbacService,
-    SystemSettingsService, TenantService, UserService,
+    AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
+    IdentityProviderService, PasswordService, RbacService, SessionService, SystemSettingsService,
+    TenantService, UserService, WebAuthnService, WebhookService,
 };
-use auth9_core::state::{HasBranding, HasEmailTemplates, HasServices, HasSystemSettings};
+use auth9_core::state::{
+    HasAnalytics, HasBranding, HasEmailTemplates, HasIdentityProviders, HasPasswordManagement,
+    HasServices, HasSessionManagement, HasSystemSettings, HasWebAuthn, HasWebhooks,
+};
 use axum::{
     body::Body,
     http::{Method, Request, StatusCode},
@@ -103,6 +114,15 @@ pub struct TestAppState {
     pub email_service: Arc<EmailService<TestSystemSettingsRepository>>,
     pub email_template_service: Arc<EmailTemplateService<TestSystemSettingsRepository>>,
     pub branding_service: Arc<BrandingService<TestSystemSettingsRepository>>,
+    pub password_service: Arc<
+        PasswordService<TestPasswordResetRepository, TestUserRepository, TestSystemSettingsRepository>,
+    >,
+    pub session_service: Arc<SessionService<TestSessionRepository, TestUserRepository>>,
+    pub identity_provider_service:
+        Arc<IdentityProviderService<TestLinkedIdentityRepository, TestUserRepository>>,
+    pub webauthn_service: Arc<WebAuthnService>,
+    pub webhook_service: Arc<WebhookService<TestWebhookRepository>>,
+    pub analytics_service: Arc<AnalyticsService<TestLoginEventRepository>>,
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
     pub keycloak_client: KeycloakClient,
@@ -114,6 +134,11 @@ pub struct TestAppState {
     pub service_repo: Arc<TestServiceRepository>,
     pub rbac_repo: Arc<TestRbacRepository>,
     pub system_settings_repo: Arc<TestSystemSettingsRepository>,
+    pub password_reset_repo: Arc<TestPasswordResetRepository>,
+    pub session_repo: Arc<TestSessionRepository>,
+    pub linked_identity_repo: Arc<TestLinkedIdentityRepository>,
+    pub webhook_repo: Arc<TestWebhookRepository>,
+    pub login_event_repo: Arc<TestLoginEventRepository>,
 }
 
 impl TestAppState {
@@ -126,6 +151,11 @@ impl TestAppState {
         let rbac_repo = Arc::new(TestRbacRepository::new());
         let audit_repo = Arc::new(TestAuditRepository::new());
         let system_settings_repo = Arc::new(TestSystemSettingsRepository::new());
+        let password_reset_repo = Arc::new(TestPasswordResetRepository::new());
+        let session_repo = Arc::new(TestSessionRepository::new());
+        let linked_identity_repo = Arc::new(TestLinkedIdentityRepository::new());
+        let webhook_repo = Arc::new(TestWebhookRepository::new());
+        let login_event_repo = Arc::new(TestLoginEventRepository::new());
 
         let tenant_service = Arc::new(TenantService::new(tenant_repo.clone(), None));
         let user_service = Arc::new(UserService::new(user_repo.clone()));
@@ -144,6 +174,28 @@ impl TestAppState {
         let keycloak_client = KeycloakClient::new(config.keycloak.clone());
         let cache_manager = NoOpCacheManager::new();
 
+        // Create new services
+        let password_service = Arc::new(PasswordService::new(
+            password_reset_repo.clone(),
+            user_repo.clone(),
+            email_service.clone(),
+            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+        ));
+        let session_service = Arc::new(SessionService::new(
+            session_repo.clone(),
+            user_repo.clone(),
+            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+        ));
+        let identity_provider_service = Arc::new(IdentityProviderService::new(
+            linked_identity_repo.clone(),
+            user_repo.clone(),
+            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+        ));
+        let webauthn_service =
+            Arc::new(WebAuthnService::new(Arc::new(KeycloakClient::new(config.keycloak.clone()))));
+        let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
+        let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
+
         Self {
             config,
             tenant_service,
@@ -154,6 +206,12 @@ impl TestAppState {
             email_service,
             email_template_service,
             branding_service,
+            password_service,
+            session_service,
+            identity_provider_service,
+            webauthn_service,
+            webhook_service,
+            analytics_service,
             audit_repo,
             jwt_manager,
             keycloak_client,
@@ -163,6 +221,11 @@ impl TestAppState {
             service_repo,
             rbac_repo,
             system_settings_repo,
+            password_reset_repo,
+            session_repo,
+            linked_identity_repo,
+            webhook_repo,
+            login_event_repo,
         }
     }
 
@@ -245,6 +308,83 @@ impl HasBranding for TestAppState {
 
     fn branding_service(&self) -> &BrandingService<Self::BrandingRepo> {
         &self.branding_service
+    }
+}
+
+/// Implement HasPasswordManagement trait for TestAppState
+impl HasPasswordManagement for TestAppState {
+    type PasswordResetRepo = TestPasswordResetRepository;
+    type PasswordUserRepo = TestUserRepository;
+    type PasswordSystemSettingsRepo = TestSystemSettingsRepository;
+
+    fn password_service(
+        &self,
+    ) -> &PasswordService<Self::PasswordResetRepo, Self::PasswordUserRepo, Self::PasswordSystemSettingsRepo>
+    {
+        &self.password_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasSessionManagement trait for TestAppState
+impl HasSessionManagement for TestAppState {
+    type SessionRepo = TestSessionRepository;
+    type SessionUserRepo = TestUserRepository;
+
+    fn session_service(&self) -> &SessionService<Self::SessionRepo, Self::SessionUserRepo> {
+        &self.session_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasIdentityProviders trait for TestAppState
+impl HasIdentityProviders for TestAppState {
+    type LinkedIdentityRepo = TestLinkedIdentityRepository;
+    type IdpUserRepo = TestUserRepository;
+
+    fn identity_provider_service(
+        &self,
+    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo> {
+        &self.identity_provider_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasWebAuthn trait for TestAppState
+impl HasWebAuthn for TestAppState {
+    fn webauthn_service(&self) -> &WebAuthnService {
+        &self.webauthn_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasWebhooks trait for TestAppState
+impl HasWebhooks for TestAppState {
+    type WebhookRepo = TestWebhookRepository;
+
+    fn webhook_service(&self) -> &WebhookService<Self::WebhookRepo> {
+        &self.webhook_service
+    }
+}
+
+/// Implement HasAnalytics trait for TestAppState
+impl HasAnalytics for TestAppState {
+    type LoginEventRepo = TestLoginEventRepository;
+
+    fn analytics_service(&self) -> &AnalyticsService<Self::LoginEventRepo> {
+        &self.analytics_service
     }
 }
 
@@ -475,6 +615,36 @@ pub async fn delete_json<R: DeserializeOwned>(app: &Router, path: &str) -> (Stat
     let request = Request::builder()
         .method(Method::DELETE)
         .uri(path)
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_default();
+
+    if body_bytes.is_empty() {
+        return (status, None);
+    }
+
+    match serde_json::from_slice(&body_bytes) {
+        Ok(data) => (status, Some(data)),
+        Err(_) => (status, None),
+    }
+}
+
+/// Make a DELETE request with Authorization header and parse JSON response
+pub async fn delete_json_with_auth<R: DeserializeOwned>(
+    app: &Router,
+    path: &str,
+    token: &str,
+) -> (StatusCode, Option<R>) {
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(path)
+        .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())
         .unwrap();
 
