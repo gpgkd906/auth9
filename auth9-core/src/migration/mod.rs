@@ -166,7 +166,12 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
     Ok(())
 }
 
-/// Seed portal service in the database (idempotent - only creates if not exists)
+/// Seed portal service in the database (idempotent - uses INSERT IGNORE to prevent duplicates)
+///
+/// This function is safe to call multiple times, even concurrently, due to:
+/// 1. Unique constraint on clients.client_id
+/// 2. Unique constraint on services(tenant_id_key, name) from migration
+/// 3. Use of INSERT IGNORE to gracefully handle constraint violations
 async fn seed_portal_service(config: &Config) -> Result<()> {
     let pool: Pool<MySql> = MySqlPoolOptions::new()
         .max_connections(1)
@@ -190,7 +195,7 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
         return Ok(());
     }
 
-    // Create portal service first
+    // Build URIs for portal service
     let redirect_uris = build_db_redirect_uris(
         config.keycloak.core_public_url.as_deref(),
         config.keycloak.portal_url.as_deref(),
@@ -204,12 +209,16 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
         .as_deref()
         .unwrap_or("http://localhost:3000");
 
-    // Generate a UUID for the service
+    // Generate UUIDs for service and client
     let service_id = uuid::Uuid::new_v4().to_string();
+    let client_id_record = uuid::Uuid::new_v4().to_string();
+    let placeholder_hash = "public-client-no-secret";
 
-    sqlx::query(
+    // Use INSERT IGNORE to prevent duplicate key errors from race conditions
+    // The unique constraint on services(tenant_id_key, name) prevents duplicates
+    let service_result = sqlx::query(
         r#"
-        INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
+        INSERT IGNORE INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
         VALUES (?, NULL, ?, ?, ?, ?, 'active', NOW(), NOW())
         "#,
     )
@@ -222,18 +231,29 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     .await
     .context("Failed to create portal service")?;
 
-    // Create a client for the portal service (public client - no secret)
-    let client_id_record = uuid::Uuid::new_v4().to_string();
-    let placeholder_hash = "public-client-no-secret";
+    // If service was not inserted (already exists), get the existing service_id
+    let actual_service_id = if service_result.rows_affected() == 0 {
+        info!("Portal service already exists, using existing record");
+        let row: (String,) =
+            sqlx::query_as("SELECT id FROM services WHERE tenant_id IS NULL AND name = ?")
+                .bind(DEFAULT_PORTAL_NAME)
+                .fetch_one(&pool)
+                .await
+                .context("Failed to get existing portal service")?;
+        row.0
+    } else {
+        service_id
+    };
 
-    sqlx::query(
+    // Create client using INSERT IGNORE (client_id has UNIQUE constraint)
+    let client_result = sqlx::query(
         r#"
-        INSERT INTO clients (id, service_id, client_id, client_secret_hash, name, created_at)
+        INSERT IGNORE INTO clients (id, service_id, client_id, client_secret_hash, name, created_at)
         VALUES (?, ?, ?, ?, 'Portal Client', NOW())
         "#,
     )
     .bind(&client_id_record)
-    .bind(&service_id)
+    .bind(&actual_service_id)
     .bind(DEFAULT_PORTAL_CLIENT_ID)
     .bind(placeholder_hash)
     .execute(&pool)
@@ -241,9 +261,18 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     .context("Failed to create portal client")?;
 
     pool.close().await;
-    info!(
-        "Created portal service and client '{}' in database",
-        DEFAULT_PORTAL_CLIENT_ID
-    );
+
+    if client_result.rows_affected() > 0 {
+        info!(
+            "Created portal service and client '{}' in database",
+            DEFAULT_PORTAL_CLIENT_ID
+        );
+    } else {
+        info!(
+            "Portal client '{}' already exists (created by concurrent process)",
+            DEFAULT_PORTAL_CLIENT_ID
+        );
+    }
+
     Ok(())
 }
