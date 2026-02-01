@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -48,7 +48,7 @@ describe("Tenants Page", () => {
     it("renders tenant list from loader", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/tenants",
                 Component: TenantsPage,
@@ -56,7 +56,7 @@ describe("Tenants Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/tenants"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Acme Corp")).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("Tenants Page", () => {
     it("displays create tenant dialog when button clicked", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/tenants",
                 Component: TenantsPage,
@@ -76,7 +76,7 @@ describe("Tenants Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/tenants"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         // Wait for the button to be rendered
         const createButton = await screen.findByText("Create Tenant");
@@ -92,7 +92,7 @@ describe("Tenants Page", () => {
             pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 }
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/tenants",
                 Component: TenantsPage,
@@ -100,7 +100,7 @@ describe("Tenants Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/tenants"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("No tenants found")).toBeInTheDocument();

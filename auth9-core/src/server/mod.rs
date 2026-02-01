@@ -367,7 +367,7 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
             get(api::tenant::list::<S>).post(api::tenant::create::<S>),
         )
         .route(
-            "/api/v1/tenants/:id",
+            "/api/v1/tenants/{id}",
             get(api::tenant::get::<S>)
                 .put(api::tenant::update::<S>)
                 .delete(api::tenant::delete::<S>),
@@ -378,25 +378,25 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
             get(api::user::list::<S>).post(api::user::create::<S>),
         )
         .route(
-            "/api/v1/users/:id",
+            "/api/v1/users/{id}",
             get(api::user::get::<S>)
                 .put(api::user::update::<S>)
                 .delete(api::user::delete::<S>),
         )
         .route(
-            "/api/v1/users/:id/mfa",
+            "/api/v1/users/{id}/mfa",
             post(api::user::enable_mfa::<S>).delete(api::user::disable_mfa::<S>),
         )
         .route(
-            "/api/v1/users/:id/tenants",
+            "/api/v1/users/{id}/tenants",
             get(api::user::get_tenants::<S>).post(api::user::add_to_tenant::<S>),
         )
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}",
             delete(api::user::remove_from_tenant::<S>),
         )
         .route(
-            "/api/v1/tenants/:tenant_id/users",
+            "/api/v1/tenants/{tenant_id}/users",
             get(api::user::list_by_tenant::<S>),
         )
         // Service endpoints
@@ -405,7 +405,7 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
             get(api::service::list::<S>).post(api::service::create::<S>),
         )
         .route(
-            "/api/v1/services/:id",
+            "/api/v1/services/{id}",
             get(api::service::get::<S>)
                 .put(api::service::update::<S>)
                 .delete(api::service::delete::<S>),
@@ -415,15 +415,15 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
         //     post(api::service::regenerate_secret),
         // )
         .route(
-            "/api/v1/services/:id/clients",
+            "/api/v1/services/{id}/clients",
             get(api::service::list_clients::<S>).post(api::service::create_client::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/clients/:client_id",
+            "/api/v1/services/{service_id}/clients/{client_id}",
             delete(api::service::delete_client::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/clients/:client_id/regenerate-secret",
+            "/api/v1/services/{service_id}/clients/{client_id}/regenerate-secret",
             post(api::service::regenerate_client_secret::<S>),
         )
         // Permission endpoints
@@ -432,45 +432,45 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
             post(api::role::create_permission::<S>),
         )
         .route(
-            "/api/v1/permissions/:id",
+            "/api/v1/permissions/{id}",
             delete(api::role::delete_permission::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/permissions",
+            "/api/v1/services/{service_id}/permissions",
             get(api::role::list_permissions::<S>),
         )
         // Role endpoints
         .route("/api/v1/roles", post(api::role::create_role::<S>))
         .route(
-            "/api/v1/roles/:id",
+            "/api/v1/roles/{id}",
             get(api::role::get_role::<S>)
                 .put(api::role::update_role::<S>)
                 .delete(api::role::delete_role::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/roles",
+            "/api/v1/services/{service_id}/roles",
             get(api::role::list_roles::<S>),
         )
         .route(
-            "/api/v1/roles/:role_id/permissions",
+            "/api/v1/roles/{role_id}/permissions",
             post(api::role::assign_permission::<S>),
         )
         .route(
-            "/api/v1/roles/:role_id/permissions/:permission_id",
+            "/api/v1/roles/{role_id}/permissions/{permission_id}",
             delete(api::role::remove_permission::<S>),
         )
         // RBAC assignment
         .route("/api/v1/rbac/assign", post(api::role::assign_roles::<S>))
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id/roles",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles",
             get(api::role::get_user_roles::<S>),
         )
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id/assigned-roles",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/assigned-roles",
             get(api::role::get_user_assigned_roles::<S>),
         )
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id/roles/:role_id",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}",
             delete(api::role::unassign_role::<S>),
         )
         // Audit logs
@@ -517,7 +517,7 @@ where
             get(api::tenant::list::<S>).post(api::tenant::create::<S>),
         )
         .route(
-            "/api/v1/tenants/:id",
+            "/api/v1/tenants/{id}",
             get(api::tenant::get::<S>)
                 .put(api::tenant::update::<S>)
                 .delete(api::tenant::delete::<S>),
@@ -528,25 +528,25 @@ where
             get(api::user::list::<S>).post(api::user::create::<S>),
         )
         .route(
-            "/api/v1/users/:id",
+            "/api/v1/users/{id}",
             get(api::user::get::<S>)
                 .put(api::user::update::<S>)
                 .delete(api::user::delete::<S>),
         )
         .route(
-            "/api/v1/users/:id/mfa",
+            "/api/v1/users/{id}/mfa",
             post(api::user::enable_mfa::<S>).delete(api::user::disable_mfa::<S>),
         )
         .route(
-            "/api/v1/users/:id/tenants",
+            "/api/v1/users/{id}/tenants",
             get(api::user::get_tenants::<S>).post(api::user::add_to_tenant::<S>),
         )
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}",
             delete(api::user::remove_from_tenant::<S>),
         )
         .route(
-            "/api/v1/tenants/:tenant_id/users",
+            "/api/v1/tenants/{tenant_id}/users",
             get(api::user::list_by_tenant::<S>),
         )
         // Service endpoints
@@ -555,21 +555,21 @@ where
             get(api::service::list::<S>).post(api::service::create::<S>),
         )
         .route(
-            "/api/v1/services/:id",
+            "/api/v1/services/{id}",
             get(api::service::get::<S>)
                 .put(api::service::update::<S>)
                 .delete(api::service::delete::<S>),
         )
         .route(
-            "/api/v1/services/:id/clients",
+            "/api/v1/services/{id}/clients",
             get(api::service::list_clients::<S>).post(api::service::create_client::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/clients/:client_id",
+            "/api/v1/services/{service_id}/clients/{client_id}",
             delete(api::service::delete_client::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/clients/:client_id/regenerate-secret",
+            "/api/v1/services/{service_id}/clients/{client_id}/regenerate-secret",
             post(api::service::regenerate_client_secret::<S>),
         )
         // Permission endpoints
@@ -578,45 +578,45 @@ where
             post(api::role::create_permission::<S>),
         )
         .route(
-            "/api/v1/permissions/:id",
+            "/api/v1/permissions/{id}",
             delete(api::role::delete_permission::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/permissions",
+            "/api/v1/services/{service_id}/permissions",
             get(api::role::list_permissions::<S>),
         )
         // Role endpoints
         .route("/api/v1/roles", post(api::role::create_role::<S>))
         .route(
-            "/api/v1/roles/:id",
+            "/api/v1/roles/{id}",
             get(api::role::get_role::<S>)
                 .put(api::role::update_role::<S>)
                 .delete(api::role::delete_role::<S>),
         )
         .route(
-            "/api/v1/services/:service_id/roles",
+            "/api/v1/services/{service_id}/roles",
             get(api::role::list_roles::<S>),
         )
         .route(
-            "/api/v1/roles/:role_id/permissions",
+            "/api/v1/roles/{role_id}/permissions",
             post(api::role::assign_permission::<S>),
         )
         .route(
-            "/api/v1/roles/:role_id/permissions/:permission_id",
+            "/api/v1/roles/{role_id}/permissions/{permission_id}",
             delete(api::role::remove_permission::<S>),
         )
         // RBAC assignment
         .route("/api/v1/rbac/assign", post(api::role::assign_roles::<S>))
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id/roles",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles",
             get(api::role::get_user_roles::<S>),
         )
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id/assigned-roles",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/assigned-roles",
             get(api::role::get_user_assigned_roles::<S>),
         )
         .route(
-            "/api/v1/users/:user_id/tenants/:tenant_id/roles/:role_id",
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}",
             delete(api::role::unassign_role::<S>),
         )
         // Audit logs
@@ -641,34 +641,34 @@ where
             get(api::email_template::list_templates::<S>),
         )
         .route(
-            "/api/v1/system/email-templates/:type",
+            "/api/v1/system/email-templates/{type}",
             get(api::email_template::get_template::<S>)
                 .put(api::email_template::update_template::<S>)
                 .delete(api::email_template::reset_template::<S>),
         )
         .route(
-            "/api/v1/system/email-templates/:type/preview",
+            "/api/v1/system/email-templates/{type}/preview",
             post(api::email_template::preview_template::<S>),
         )
         .route(
-            "/api/v1/system/email-templates/:type/send-test",
+            "/api/v1/system/email-templates/{type}/send-test",
             post(api::email_template::send_test_email::<S>),
         )
         // Invitation endpoints
         .route(
-            "/api/v1/tenants/:tenant_id/invitations",
+            "/api/v1/tenants/{tenant_id}/invitations",
             get(api::invitation::list::<S>).post(api::invitation::create::<S>),
         )
         .route(
-            "/api/v1/invitations/:id",
+            "/api/v1/invitations/{id}",
             get(api::invitation::get::<S>).delete(api::invitation::delete::<S>),
         )
         .route(
-            "/api/v1/invitations/:id/revoke",
+            "/api/v1/invitations/{id}/revoke",
             post(api::invitation::revoke::<S>),
         )
         .route(
-            "/api/v1/invitations/:id/resend",
+            "/api/v1/invitations/{id}/resend",
             post(api::invitation::resend::<S>),
         )
         // Public endpoint for accepting invitations

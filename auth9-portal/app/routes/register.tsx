@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useNavigation } from "@remix-run/react";
+import type { MetaFunction, ActionFunctionArgs } from "react-router";
+import { redirect, Form, Link, useActionData, useNavigation } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -17,7 +16,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const displayName = formData.get("display_name");
 
   if (!email || !password) {
-    return json({ error: "Email and password are required" }, { status: 400 });
+    return Response.json({ error: "Email and password are required" }, { status: 400 });
   }
 
   try {
@@ -28,7 +27,7 @@ export async function action({ request }: ActionFunctionArgs) {
     });
     return redirect("/login");
   } catch (error) {
-    return json(
+    return Response.json(
       { error: error instanceof Error ? error.message : "Registration failed" },
       { status: 400 }
     );
@@ -36,7 +35,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function Register() {
-  const actionData = useActionData<typeof action>();
+  const actionData = useActionData<{ error?: string }>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 

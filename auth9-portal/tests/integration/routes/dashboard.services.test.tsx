@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -25,7 +25,7 @@ describe("Services Page", () => {
     it("renders service registry list", async () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -33,7 +33,7 @@ describe("Services Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("My App")).toBeInTheDocument();
@@ -44,7 +44,7 @@ describe("Services Page", () => {
     it("displays register service dialog", async () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -53,7 +53,7 @@ describe("Services Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         const registerButton = await screen.findByRole("button", { name: /Register Service/i });
         await user.click(registerButton);
@@ -68,7 +68,7 @@ describe("Services Page", () => {
             pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -76,7 +76,7 @@ describe("Services Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("No services found")).toBeInTheDocument();
@@ -89,7 +89,7 @@ describe("Services Page", () => {
             pagination: { total: 25, page: 2, per_page: 20, total_pages: 3 },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -97,7 +97,7 @@ describe("Services Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
             expect(screen.getByText(/25 services/)).toBeInTheDocument();
@@ -108,7 +108,7 @@ describe("Services Page", () => {
     it("displays page header and description", async () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -116,7 +116,7 @@ describe("Services Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Services")).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("Services Page", () => {
     it("displays table headers", async () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -135,7 +135,7 @@ describe("Services Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Name")).toBeInTheDocument();
@@ -151,7 +151,7 @@ describe("Services Page", () => {
             pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: ServicesPage,
@@ -159,7 +159,7 @@ describe("Services Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Test App")).toBeInTheDocument();

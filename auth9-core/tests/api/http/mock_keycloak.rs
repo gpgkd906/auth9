@@ -13,6 +13,7 @@ pub struct MockKeycloakServer {
     server: MockServer,
 }
 
+#[allow(dead_code)]
 impl MockKeycloakServer {
     /// Create and start a new mock Keycloak server
     pub async fn new() -> Self {

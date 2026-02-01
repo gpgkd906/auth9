@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -71,7 +71,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -79,7 +79,7 @@ describe("Users Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Alice")).toBeInTheDocument();
@@ -92,7 +92,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -101,7 +101,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         // Wait for the button
         const createButton = await screen.findByRole("button", { name: /\+ Create User/i });
@@ -116,7 +116,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -124,7 +124,7 @@ describe("Users Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
             // Alice has MFA disabled, Bob has MFA enabled
@@ -141,7 +141,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -149,7 +149,7 @@ describe("Users Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("No users found")).toBeInTheDocument();
@@ -161,7 +161,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -169,7 +169,7 @@ describe("Users Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("User Directory")).toBeInTheDocument();
@@ -182,7 +182,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -190,7 +190,7 @@ describe("Users Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Email")).toBeInTheDocument();
@@ -205,7 +205,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -214,7 +214,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         // Wait for user list to load
         await waitFor(() => {
@@ -240,7 +240,7 @@ describe("Users Page", () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
         vi.mocked(userApi.getTenants).mockResolvedValue({ data: [] });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -249,7 +249,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         // Wait for user list
         await waitFor(() => {
@@ -284,7 +284,7 @@ describe("Users Page", () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
         vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -293,7 +293,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
@@ -313,7 +313,7 @@ describe("Users Page", () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
         vi.mocked(userApi.getTenants).mockResolvedValue({ data: [] });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -322,7 +322,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
@@ -340,7 +340,7 @@ describe("Users Page", () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -348,7 +348,7 @@ describe("Users Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Users")).toBeInTheDocument();
@@ -372,7 +372,7 @@ describe("Users Page", () => {
         vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
         vi.mocked(rbacApi.getUserAssignedRoles).mockResolvedValue({ data: [] });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -381,7 +381,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
@@ -417,7 +417,7 @@ describe("Users Page", () => {
         vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
         vi.mocked(rbacApi.getUserAssignedRoles).mockResolvedValue({ data: [] });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -426,7 +426,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
@@ -463,7 +463,7 @@ describe("Users Page", () => {
         vi.mocked(userApi.getTenants).mockResolvedValue({ data: userTenantsData });
         vi.mocked(rbacApi.getUserAssignedRoles).mockResolvedValue({ data: assignedRoles });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/users",
                 Component: UsersPage,
@@ -472,7 +472,7 @@ describe("Users Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/users"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 

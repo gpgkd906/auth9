@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -42,7 +42,7 @@ describe("Service Detail Page", () => {
         vi.mocked(serviceApi.get).mockResolvedValue({ data: mockService });
         vi.mocked(serviceApi.listClients).mockResolvedValue(mockClients);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services/:id",
                 Component: ServiceDetailPage,
@@ -50,7 +50,7 @@ describe("Service Detail Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/services/s1"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services/s1"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("My App")).toBeInTheDocument();
@@ -66,7 +66,7 @@ describe("Service Detail Page", () => {
             data: { client_id: "client-id-1", client_secret: "new-secret-123" },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services/:id",
                 Component: ServiceDetailPage,
@@ -76,7 +76,7 @@ describe("Service Detail Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/services/s1"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/services/s1"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("client-id-1")).toBeInTheDocument();

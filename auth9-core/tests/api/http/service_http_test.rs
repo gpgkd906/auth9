@@ -31,6 +31,7 @@ pub struct TestServiceWithClient {
 }
 
 /// Local struct for deserializing ClientWithSecret in tests
+#[allow(dead_code)]
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct TestClientWithSecret {
     // Client fields (flattened)

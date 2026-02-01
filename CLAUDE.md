@@ -19,14 +19,14 @@ make coverage                  # Coverage report (excludes repository/migration 
 make coverage-html             # Coverage HTML report
 ```
 
-### auth9-portal (TypeScript/Remix)
+### auth9-portal (TypeScript/React Router 7)
 ```bash
 cd auth9-portal
 npm install                    # Install dependencies
 npm run dev                    # Dev server
 npm run build                  # Build
 npm run test                   # Unit tests (Vitest)
-npm run lint                   # ESLint
+npm run lint                   # ESLint (flat config)
 npm run typecheck              # TypeScript check
 ```
 
@@ -51,7 +51,7 @@ Auth9 is a self-hosted identity and access management service (Auth0 alternative
 | Component | Stack | Purpose |
 |-----------|-------|---------|
 | auth9-core | Rust (axum, tonic, sqlx) | Backend API & gRPC |
-| auth9-portal | Remix + TypeScript + Vite | Admin dashboard |
+| auth9-portal | React Router 7 + TypeScript + Vite | Admin dashboard |
 | Database | TiDB (MySQL compatible) | Tenant, user, RBAC data |
 | Cache | Redis | Session, token caching |
 | Auth Engine | Keycloak | OIDC provider |
@@ -139,4 +139,59 @@ gRPC tests (use NoOpCacheManager):
 fn create_test_cache() -> NoOpCacheManager {
     NoOpCacheManager::new()
 }
+```
+
+### auth9-portal Testing
+
+**Test Environment**: Use `happy-dom` (not `jsdom`) for better React Router 7 compatibility.
+
+```typescript
+// vitest.config.ts
+export default defineConfig({
+  test: {
+    environment: "happy-dom",  // Required for React Router 7 form actions
+    // ...
+  },
+});
+```
+
+**Route Testing Pattern**: Use `createRoutesStub` from `react-router`:
+```typescript
+import { createRoutesStub } from "react-router";
+
+it("renders page with loader data", async () => {
+  const RoutesStub = createRoutesStub([
+    {
+      path: "/dashboard/users",
+      Component: UsersPage,
+      loader,
+    },
+  ]);
+
+  render(<RoutesStub initialEntries={["/dashboard/users"]} />);
+  await waitFor(() => {
+    expect(screen.getByText("Users")).toBeInTheDocument();
+  });
+});
+```
+
+**Action Testing Pattern**: Use `FormData` for form submissions:
+```typescript
+// Helper to create form requests
+function createFormRequest(url: string, data: Record<string, string>): Request {
+  const formData = new FormData();
+  for (const [key, value] of Object.entries(data)) {
+    formData.append(key, value);
+  }
+  return new Request(url, { method: "POST", body: formData });
+}
+
+it("action validates input", async () => {
+  const request = createFormRequest("http://localhost/register", {
+    email: "test@example.com",
+    password: "password123",
+  });
+  const response = await action({ request, params: {}, context: {} });
+  expect(response.status).toBe(302);
+});
 ```

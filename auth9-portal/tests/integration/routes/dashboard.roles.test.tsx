@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -42,7 +42,7 @@ describe("Roles Page", () => {
         vi.mocked(rbacApi.listRoles).mockResolvedValue(mockRoles);
         vi.mocked(rbacApi.listPermissions).mockResolvedValue(mockPermissions);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/roles",
                 Component: RolesPage,
@@ -50,7 +50,7 @@ describe("Roles Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/roles"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/roles"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Service A")).toBeInTheDocument();
@@ -64,7 +64,7 @@ describe("Roles Page", () => {
         vi.mocked(rbacApi.listRoles).mockResolvedValue(mockRoles);
         vi.mocked(rbacApi.listPermissions).mockResolvedValue(mockPermissions);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/roles",
                 Component: RolesPage,
@@ -73,7 +73,7 @@ describe("Roles Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/roles"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/roles"]} />);
 
         // Add Role button
         const addButton = await screen.findByRole("button", { name: /Add Role/i });

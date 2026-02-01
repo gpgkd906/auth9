@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, EnvelopeClosedIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -35,7 +34,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
   const tenants = await tenantApi.list(page, perPage);
-  return json(tenants);
+  return tenants;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -49,7 +48,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const logo_url = formData.get("logo_url") as string;
 
       await tenantApi.create({ name, slug, logo_url: logo_url || undefined });
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "update") {
@@ -59,20 +58,20 @@ export async function action({ request }: ActionFunctionArgs) {
       const logo_url = formData.get("logo_url") as string;
 
       await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined });
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await tenantApi.delete(id);
-      return json({ success: true });
+      return { success: true };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 export default function TenantsPage() {
@@ -128,7 +127,7 @@ export default function TenantsPage() {
                 <Input id="create-logo" name="logo_url" placeholder="https://..." />
               </div>
               {actionData && "error" in actionData && (
-                <p className="text-sm text-red-500">{actionData.error}</p>
+                <p className="text-sm text-red-500">{String(actionData.error)}</p>
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -265,7 +264,7 @@ export default function TenantsPage() {
               />
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{actionData.error}</p>
+              <p className="text-sm text-red-500">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>

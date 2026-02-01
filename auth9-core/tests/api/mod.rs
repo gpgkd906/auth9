@@ -54,6 +54,7 @@ pub fn create_test_jwt_manager() -> JwtManager {
     JwtManager::new(test_jwt_config())
 }
 
+#[allow(dead_code)]
 pub fn create_test_cache() -> NoOpCacheManager {
     NoOpCacheManager::new()
 }
@@ -78,10 +79,12 @@ impl TestTenantRepository {
         self.tenants.write().await.push(tenant);
     }
 
+    #[allow(dead_code)]
     pub async fn set_tenants(&self, tenants: Vec<Tenant>) {
         *self.tenants.write().await = tenants;
     }
 
+    #[allow(dead_code)]
     pub async fn clear(&self) {
         self.tenants.write().await.clear();
     }
@@ -188,6 +191,7 @@ impl TestUserRepository {
         self.users.write().await.push(user);
     }
 
+    #[allow(dead_code)]
     pub async fn set_users(&self, users: Vec<User>) {
         *self.users.write().await = users;
     }
@@ -832,6 +836,7 @@ impl TestAuditRepository {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn get_logs(&self) -> Vec<AuditLog> {
         self.logs.read().await.clone()
     }
@@ -916,6 +921,7 @@ impl TestSystemSettingsRepository {
         self.settings.write().await.push(setting);
     }
 
+    #[allow(dead_code)]
     pub async fn clear(&self) {
         self.settings.write().await.clear();
     }
@@ -1056,6 +1062,7 @@ pub fn create_test_permission(id: Option<Uuid>, service_id: Uuid) -> Permission 
 // ============================================================================
 
 /// Builder for creating test services with mocked repositories
+#[allow(dead_code)]
 pub struct TestServicesBuilder {
     pub tenant_repo: Arc<TestTenantRepository>,
     pub user_repo: Arc<TestUserRepository>,
@@ -1064,6 +1071,7 @@ pub struct TestServicesBuilder {
     pub audit_repo: Arc<TestAuditRepository>,
 }
 
+#[allow(dead_code)]
 impl TestServicesBuilder {
     pub fn new() -> Self {
         Self {

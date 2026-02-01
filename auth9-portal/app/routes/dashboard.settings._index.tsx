@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Pencil2Icon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -30,7 +29,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "10");
   const tenants = await tenantApi.list(page, perPage);
-  return json(tenants);
+  return tenants;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -52,14 +51,14 @@ export async function action({ request }: ActionFunctionArgs) {
       };
 
       await tenantApi.update(id, { settings });
-      return json({ success: true });
+      return { success: true };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 export default function OrganizationSettingsPage() {
@@ -182,7 +181,7 @@ export default function OrganizationSettingsPage() {
             </div>
 
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{actionData.error}</p>
+              <p className="text-sm text-red-500">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>

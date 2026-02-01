@@ -1,6 +1,66 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+@theme {
+  /* Fonts */
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", Inter, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+
+  /* Apple-inspired color palette */
+  --color-apple-blue: #007AFF;
+  --color-apple-green: #34C759;
+  --color-apple-indigo: #5856D6;
+  --color-apple-orange: #FF9500;
+  --color-apple-pink: #FF2D55;
+  --color-apple-purple: #AF52DE;
+  --color-apple-red: #FF3B30;
+  --color-apple-teal: #5AC8FA;
+  --color-apple-yellow: #FFCC00;
+
+  /* Neutral grays (Apple-style) */
+  --color-gray-50: #F9FAFB;
+  --color-gray-100: #F2F2F7;
+  --color-gray-200: #E5E5EA;
+  --color-gray-300: #D1D1D6;
+  --color-gray-400: #AEAEB2;
+  --color-gray-500: #8E8E93;
+  --color-gray-600: #636366;
+  --color-gray-700: #48484A;
+  --color-gray-800: #3A3A3C;
+  --color-gray-900: #1C1C1E;
+
+  /* Border radius */
+  --radius-apple: 12px;
+  --radius-apple-lg: 16px;
+  --radius-apple-xl: 20px;
+  --radius-apple-2xl: 24px;
+
+  /* Box shadows */
+  --shadow-apple: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  --shadow-apple-md: 0 10px 15px -3px rgba(0, 0, 0, 0.08), 0 4px 6px -2px rgba(0, 0, 0, 0.04);
+  --shadow-apple-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+
+  /* Backdrop blur */
+  --backdrop-blur-apple: 20px;
+
+  /* Animations */
+  --animate-fade-in: fadeIn 0.2s ease-out;
+  --animate-slide-up: slideUp 0.3s ease-out;
+  --animate-slide-down: slideDown 0.3s ease-out;
+
+  @keyframes fadeIn {
+    0% { opacity: 0; }
+    100% { opacity: 1; }
+  }
+
+  @keyframes slideUp {
+    0% { transform: translateY(10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+
+  @keyframes slideDown {
+    0% { transform: translateY(-10px); opacity: 0; }
+    100% { transform: translateY(0); opacity: 1; }
+  }
+}
 
 @layer base {
   /* Apple-style smooth scrolling */
@@ -25,32 +85,32 @@
 @layer components {
   /* Apple-style glass card */
   .glass-card {
-    @apply bg-white/80 backdrop-blur-apple border border-gray-200/50 rounded-apple-xl shadow-apple;
+    @apply bg-white/80 backdrop-blur-[20px] border border-gray-200/50 rounded-[20px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05),0_2px_4px_-1px_rgba(0,0,0,0.03)];
   }
 
   /* Apple-style button */
   .btn-primary {
-    @apply px-6 py-3 bg-apple-blue text-white font-medium rounded-apple 
+    @apply px-6 py-3 bg-apple-blue text-white font-medium rounded-[12px]
            hover:bg-blue-600 active:bg-blue-700
            transition-all duration-200 ease-out
-           shadow-apple hover:shadow-apple-md;
+           shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05),0_2px_4px_-1px_rgba(0,0,0,0.03)] hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.08),0_4px_6px_-2px_rgba(0,0,0,0.04)];
   }
 
   .btn-secondary {
-    @apply px-6 py-3 bg-gray-100 text-gray-900 font-medium rounded-apple 
+    @apply px-6 py-3 bg-gray-100 text-gray-900 font-medium rounded-[12px]
            hover:bg-gray-200 active:bg-gray-300
            transition-all duration-200 ease-out;
   }
 
   .btn-ghost {
-    @apply px-4 py-2 text-gray-600 font-medium rounded-apple 
+    @apply px-4 py-2 text-gray-600 font-medium rounded-[12px]
            hover:bg-gray-100 active:bg-gray-200
            transition-all duration-200 ease-out;
   }
 
   /* Apple-style input */
   .input-apple {
-    @apply w-full px-4 py-3 bg-gray-100 border-0 rounded-apple
+    @apply w-full px-4 py-3 bg-gray-100 border-0 rounded-[12px]
            placeholder:text-gray-400
            focus:bg-white focus:ring-2 focus:ring-apple-blue
            transition-all duration-200;
@@ -58,14 +118,14 @@
 
   /* Apple-style card */
   .card-apple {
-    @apply bg-white rounded-apple-xl shadow-apple p-6
+    @apply bg-white rounded-[20px] shadow-[0_4px_6px_-1px_rgba(0,0,0,0.05),0_2px_4px_-1px_rgba(0,0,0,0.03)] p-6
            border border-gray-100
-           hover:shadow-apple-md transition-shadow duration-200;
+           hover:shadow-[0_10px_15px_-3px_rgba(0,0,0,0.08),0_4px_6px_-2px_rgba(0,0,0,0.04)] transition-shadow duration-200;
   }
 
   /* Apple-style sidebar item */
   .sidebar-item {
-    @apply flex items-center gap-3 px-4 py-2.5 rounded-apple
+    @apply flex items-center gap-3 px-4 py-2.5 rounded-[12px]
            text-gray-600 font-medium
            hover:bg-gray-100 active:bg-gray-200
            transition-colors duration-150;

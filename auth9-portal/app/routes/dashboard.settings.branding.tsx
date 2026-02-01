@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import type { MetaFunction, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useEffect } from "react";
 import { CheckCircledIcon, ResetIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -26,10 +25,10 @@ export const meta: MetaFunction = () => {
 export async function loader() {
   try {
     const result = await brandingApi.get();
-    return json({ config: result.data, error: null });
-  } catch (error) {
+    return { config: result.data, error: null };
+  } catch {
     // If no config exists yet, return defaults
-    return json({ config: DEFAULT_BRANDING, error: null });
+    return { config: DEFAULT_BRANDING, error: null };
   }
 }
 
@@ -52,19 +51,19 @@ export async function action({ request }: ActionFunctionArgs) {
       };
 
       await brandingApi.update(config);
-      return json({ success: true, message: "Branding settings saved successfully" });
+      return { success: true, message: "Branding settings saved successfully" };
     }
 
     if (intent === "reset") {
       await brandingApi.update(DEFAULT_BRANDING);
-      return json({ success: true, message: "Branding reset to defaults", reset: true });
+      return { success: true, message: "Branding reset to defaults", reset: true };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 // Color picker component
@@ -170,7 +169,7 @@ export default function BrandingSettingsPage() {
 
       {actionData && "error" in actionData && (
         <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-          {actionData.error}
+          {String(actionData.error)}
         </div>
       )}
 

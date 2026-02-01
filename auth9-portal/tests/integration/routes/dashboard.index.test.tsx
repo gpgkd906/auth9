@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import DashboardIndex, { loader } from "~/routes/dashboard._index";
@@ -48,7 +48,7 @@ describe("Dashboard Index Page", () => {
     it("renders dashboard with stats cards", async () => {
         mockApiResponses();
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
@@ -56,7 +56,7 @@ describe("Dashboard Index Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard"]} />);
+        render(<RoutesStub initialEntries={["/dashboard"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Dashboard")).toBeInTheDocument();
@@ -69,7 +69,7 @@ describe("Dashboard Index Page", () => {
     it("displays stats values from loader data", async () => {
         mockApiResponses();
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
@@ -77,7 +77,7 @@ describe("Dashboard Index Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard"]} />);
+        render(<RoutesStub initialEntries={["/dashboard"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("5")).toBeInTheDocument(); // tenants
@@ -89,7 +89,7 @@ describe("Dashboard Index Page", () => {
     it("renders recent activity list", async () => {
         mockApiResponses();
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
@@ -97,7 +97,7 @@ describe("Dashboard Index Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard"]} />);
+        render(<RoutesStub initialEntries={["/dashboard"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Recent Activity")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("Dashboard Index Page", () => {
             pagination: { total: 0, page: 1, per_page: 50, total_pages: 1 },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
@@ -132,7 +132,7 @@ describe("Dashboard Index Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard"]} />);
+        render(<RoutesStub initialEntries={["/dashboard"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("No recent activity")).toBeInTheDocument();

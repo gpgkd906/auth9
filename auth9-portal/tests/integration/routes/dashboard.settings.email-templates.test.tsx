@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import EmailTemplatesPage, { loader } from "~/routes/dashboard.settings.email-templates._index";
@@ -84,7 +84,7 @@ describe("Email Templates Page", () => {
   it("renders email templates list", async () => {
     vi.mocked(emailTemplateApi.list).mockResolvedValue(mockTemplates);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -92,7 +92,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Email Templates")).toBeInTheDocument();
@@ -103,7 +103,7 @@ describe("Email Templates Page", () => {
   it("renders template table with names and descriptions", async () => {
     vi.mocked(emailTemplateApi.list).mockResolvedValue(mockTemplates);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -111,7 +111,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("User Invitation")).toBeInTheDocument();
@@ -124,7 +124,7 @@ describe("Email Templates Page", () => {
   it("shows Custom badge for customized templates", async () => {
     vi.mocked(emailTemplateApi.list).mockResolvedValue(mockTemplates);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -132,7 +132,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Custom")).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe("Email Templates Page", () => {
   it("renders Edit buttons for each template", async () => {
     vi.mocked(emailTemplateApi.list).mockResolvedValue(mockTemplates);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -151,7 +151,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       const editButtons = screen.getAllByText("Edit");
@@ -162,7 +162,7 @@ describe("Email Templates Page", () => {
   it("shows template variables info card", async () => {
     vi.mocked(emailTemplateApi.list).mockResolvedValue(mockTemplates);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -170,7 +170,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Template Variables")).toBeInTheDocument();
@@ -181,7 +181,7 @@ describe("Email Templates Page", () => {
   it("handles API error gracefully", async () => {
     vi.mocked(emailTemplateApi.list).mockRejectedValue(new Error("API Error"));
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -189,7 +189,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("API Error")).toBeInTheDocument();
@@ -199,7 +199,7 @@ describe("Email Templates Page", () => {
   it("renders empty state when no templates", async () => {
     vi.mocked(emailTemplateApi.list).mockResolvedValue({ data: [] });
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
         Component: EmailTemplatesPage,
@@ -207,7 +207,7 @@ describe("Email Templates Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Email Templates")).toBeInTheDocument();

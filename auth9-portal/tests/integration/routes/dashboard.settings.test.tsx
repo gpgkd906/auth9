@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -52,7 +52,7 @@ describe("Settings Page", () => {
     it("renders settings page with tenant list", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/settings",
                 Component: SettingsLayout,
@@ -66,7 +66,7 @@ describe("Settings Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/settings"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/settings"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Settings")).toBeInTheDocument();
@@ -79,7 +79,7 @@ describe("Settings Page", () => {
     it("displays branding info for tenants with settings", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/settings",
                 Component: SettingsLayout,
@@ -93,7 +93,7 @@ describe("Settings Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/settings"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/settings"]} />);
 
         await waitFor(() => {
             // Tenant with branding shows logo URL
@@ -106,7 +106,7 @@ describe("Settings Page", () => {
     it("shows edit dialog when edit button clicked", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/settings",
                 Component: SettingsLayout,
@@ -121,7 +121,7 @@ describe("Settings Page", () => {
         ]);
 
         const user = userEvent.setup();
-        render(<RemixStub initialEntries={["/dashboard/settings"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/settings"]} />);
 
         // Wait for content and find all edit buttons
         await waitFor(() => {
@@ -147,7 +147,7 @@ describe("Settings Page", () => {
             pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/settings",
                 Component: SettingsLayout,
@@ -161,7 +161,7 @@ describe("Settings Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/settings"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/settings"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("No tenant settings found")).toBeInTheDocument();
@@ -171,7 +171,7 @@ describe("Settings Page", () => {
     it("displays pagination info", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/settings",
                 Component: SettingsLayout,
@@ -185,7 +185,7 @@ describe("Settings Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/settings"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/settings"]} />);
 
         await waitFor(() => {
             expect(screen.getByText(/2 tenants/)).toBeInTheDocument();

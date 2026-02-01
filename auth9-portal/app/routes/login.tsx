@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { redirect } from "@remix-run/node";
-import { Form, Link, useNavigation } from "@remix-run/react";
+import type { MetaFunction, ActionFunctionArgs } from "react-router";
+import { redirect, Form, Link, useNavigation } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 

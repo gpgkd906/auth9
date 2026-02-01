@@ -1,11 +1,11 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import Login, { action } from "~/routes/login";
 
 describe("Login Page", () => {
     it("renders login form", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
@@ -13,48 +13,48 @@ describe("Login Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/login"]} />);
+        render(<RoutesStub initialEntries={["/login"]} />);
 
         expect(screen.getByText("Welcome back")).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
     });
 
     it("displays Auth9 branding", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
             },
         ]);
 
-        render(<RemixStub initialEntries={["/login"]} />);
+        render(<RoutesStub initialEntries={["/login"]} />);
 
         expect(screen.getByText("Sign in to your Auth9 account")).toBeInTheDocument();
     });
 
     it("has link to registration page", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
             },
         ]);
 
-        render(<RemixStub initialEntries={["/login"]} />);
+        render(<RoutesStub initialEntries={["/login"]} />);
 
         expect(screen.getByText("Sign up")).toBeInTheDocument();
         expect(screen.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/register");
     });
 
     it("renders sign in button with correct text", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
             },
         ]);
 
-        render(<RemixStub initialEntries={["/login"]} />);
+        render(<RoutesStub initialEntries={["/login"]} />);
 
         const submitButton = screen.getByRole("button", { name: /sign in with sso/i });
         expect(submitButton).toBeInTheDocument();
@@ -62,28 +62,28 @@ describe("Login Page", () => {
     });
 
     it("displays Auth9 logo with letter A", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
             },
         ]);
 
-        render(<RemixStub initialEntries={["/login"]} />);
+        render(<RoutesStub initialEntries={["/login"]} />);
 
         // Logo container has letter "A"
         expect(screen.getByText("A")).toBeInTheDocument();
     });
 
     it("displays 'Don't have an account?' text", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
             },
         ]);
 
-        render(<RemixStub initialEntries={["/login"]} />);
+        render(<RoutesStub initialEntries={["/login"]} />);
 
         expect(screen.getByText(/Don't have an account\?/i)).toBeInTheDocument();
     });

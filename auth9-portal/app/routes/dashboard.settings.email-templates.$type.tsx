@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json, redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useLoaderData, useNavigation } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { redirect, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -50,7 +49,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
 
   try {
     const result = await emailTemplateApi.get(templateType);
-    return json({ template: result.data, error: null });
+    return { template: result.data, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load template";
     throw new Response(message, { status: 404 });
@@ -71,7 +70,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       };
 
       await emailTemplateApi.update(templateType, content);
-      return json({ success: true, message: "Template saved successfully" });
+      return { success: true, message: "Template saved successfully" };
     }
 
     if (intent === "reset") {
@@ -87,7 +86,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
       };
 
       const result = await emailTemplateApi.preview(templateType, content);
-      return json({ preview: result.data });
+      return { preview: result.data };
     }
 
     if (intent === "sendTest") {
@@ -110,23 +109,23 @@ export async function action({ request, params }: ActionFunctionArgs) {
       });
 
       if (result.success) {
-        return json({
+        return {
           testEmailSuccess: true,
           testEmailMessage: result.message,
-        });
+        };
       } else {
-        return json({
+        return {
           testEmailSuccess: false,
           testEmailError: result.message,
-        });
+        };
       }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 export default function EmailTemplateEditorPage() {
@@ -157,8 +156,8 @@ export default function EmailTemplateEditorPage() {
 
   // Update preview from action data
   useEffect(() => {
-    if (actionData && "preview" in actionData) {
-      setPreview(actionData.preview);
+    if (actionData && "preview" in actionData && actionData.preview) {
+      setPreview(actionData.preview as RenderedEmailPreview);
     }
   }, [actionData]);
 
@@ -243,7 +242,7 @@ export default function EmailTemplateEditorPage() {
       )}
       {actionData && "error" in actionData && (
         <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-          {actionData.error}
+          {String(actionData.error)}
         </div>
       )}
 

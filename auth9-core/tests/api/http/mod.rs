@@ -23,7 +23,10 @@ use crate::api::{
     TestSystemSettingsRepository, TestTenantRepository, TestUserRepository,
 };
 use auth9_core::cache::NoOpCacheManager;
-use auth9_core::config::{Config, DatabaseConfig, JwtConfig, KeycloakConfig, RedisConfig};
+use auth9_core::config::{
+    Config, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RateLimitConfig,
+    RedisConfig,
+};
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::server::build_router;
@@ -79,6 +82,8 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             core_public_url: None,
             portal_url: None,
         },
+        grpc_security: GrpcSecurityConfig::default(),
+        rate_limit: RateLimitConfig::default(),
     }
 }
 
@@ -101,6 +106,7 @@ pub struct TestAppState {
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
     pub keycloak_client: KeycloakClient,
+    #[allow(dead_code)]
     pub cache_manager: NoOpCacheManager,
     // Keep references to raw repositories for test setup
     pub tenant_repo: Arc<TestTenantRepository>,
@@ -262,7 +268,7 @@ pub fn build_test_router(state: TestAppState) -> Router {
 /// allowing us to test them without implementing all traits required by build_full_router.
 pub fn build_email_template_test_router(state: TestAppState) -> Router {
     use auth9_core::api::email_template;
-    use axum::routing::{delete, get, post, put};
+    use axum::routing::{get, post};
 
     Router::new()
         .route(
@@ -270,13 +276,13 @@ pub fn build_email_template_test_router(state: TestAppState) -> Router {
             get(email_template::list_templates::<TestAppState>),
         )
         .route(
-            "/api/v1/system/email-templates/:type",
+            "/api/v1/system/email-templates/{type}",
             get(email_template::get_template::<TestAppState>)
                 .put(email_template::update_template::<TestAppState>)
                 .delete(email_template::reset_template::<TestAppState>),
         )
         .route(
-            "/api/v1/system/email-templates/:type/preview",
+            "/api/v1/system/email-templates/{type}/preview",
             post(email_template::preview_template::<TestAppState>),
         )
         .with_state(state)
@@ -287,7 +293,7 @@ pub fn build_email_template_test_router(state: TestAppState) -> Router {
 /// This creates a minimal router that includes the system settings handlers.
 pub fn build_system_settings_test_router(state: TestAppState) -> Router {
     use auth9_core::api::system_settings;
-    use axum::routing::{get, post, put};
+    use axum::routing::{get, post};
 
     Router::new()
         .route(
@@ -311,7 +317,7 @@ pub fn build_system_settings_test_router(state: TestAppState) -> Router {
 /// This creates a minimal router that includes the branding handlers.
 pub fn build_branding_test_router(state: TestAppState) -> Router {
     use auth9_core::api::branding;
-    use axum::routing::{get, put};
+    use axum::routing::get;
 
     Router::new()
         .route(

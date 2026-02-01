@@ -1,6 +1,5 @@
-import type { LoaderFunctionArgs } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { useLoaderData } from "@remix-run/react";
+import { useLoaderData } from "react-router";
+import type { LoaderFunctionArgs } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { auditApi, serviceApi, tenantApi, userApi } from "~/services/api";
 
@@ -16,14 +15,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
     auditApi.list(page, perPage),
   ]);
 
-  return json({
+  return {
     totals: {
       tenants: tenants.pagination.total,
       users: users.pagination.total,
       services: services.pagination.total,
     },
     audits: audits.data,
-  });
+  };
 }
 
 export default function DashboardIndex() {

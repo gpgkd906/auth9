@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import type { MetaFunction, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useState, useEffect } from "react";
 import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -66,10 +65,10 @@ export async function loader() {
     // The API returns { data: { category, setting_key, value, ... } }
     // The actual config is in result.data.value
     const config = result.data.value as EmailProviderConfig;
-    return json({ config, error: null });
-  } catch (error) {
+    return { config, error: null };
+  } catch {
     // If no config exists yet, return none
-    return json({ config: { type: "none" } as EmailProviderConfig, error: null });
+    return { config: { type: "none" } as EmailProviderConfig, error: null };
   }
 }
 
@@ -117,40 +116,40 @@ export async function action({ request }: ActionFunctionArgs) {
           from_name: (formData.get("from_name") as string) || undefined,
         };
       } else {
-        return json({ error: "Invalid provider type" }, { status: 400 });
+        return Response.json({ error: "Invalid provider type" }, { status: 400 });
       }
 
       await systemApi.updateEmailSettings(config);
-      return json({ success: true, message: "Email settings saved successfully" });
+      return { success: true, message: "Email settings saved successfully" };
     }
 
     if (intent === "test_connection") {
       const result = await systemApi.testEmailConnection();
       if (result.success) {
-        return json({ success: true, message: "Connection test successful" });
+        return { success: true, message: "Connection test successful" };
       } else {
-        return json({ error: result.message }, { status: 400 });
+        return Response.json({ error: result.message }, { status: 400 });
       }
     }
 
     if (intent === "send_test") {
       const toEmail = formData.get("test_email") as string;
       if (!toEmail || !toEmail.includes("@")) {
-        return json({ error: "Please enter a valid email address" }, { status: 400 });
+        return Response.json({ error: "Please enter a valid email address" }, { status: 400 });
       }
       const result = await systemApi.sendTestEmail(toEmail);
       if (result.success) {
-        return json({ success: true, message: `Test email sent to ${toEmail}` });
+        return { success: true, message: `Test email sent to ${toEmail}` };
       } else {
-        return json({ error: result.message }, { status: 400 });
+        return Response.json({ error: result.message }, { status: 400 });
       }
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 export default function EmailSettingsPage() {
@@ -216,7 +215,7 @@ export default function EmailSettingsPage() {
 
       {actionData && "error" in actionData && (
         <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-          {actionData.error}
+          {String(actionData.error)}
         </div>
       )}
 

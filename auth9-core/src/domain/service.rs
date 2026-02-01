@@ -38,7 +38,10 @@ impl<'r> sqlx::Decode<'r, sqlx::MySql> for ServiceStatus {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::MySql> for ServiceStatus {
-    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut Vec<u8>,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         let s = match self {
             ServiceStatus::Active => "active",
             ServiceStatus::Inactive => "inactive",
