@@ -31,29 +31,8 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      initContainers:
-        - name: init-migrate
-          image: ghcr.io/gpgkd906/auth9-core:latest
-          imagePullPolicy: Always
-          command: ["auth9-core", "init"]
-          envFrom:
-            - configMapRef:
-                name: auth9-config
-            - secretRef:
-                name: auth9-secrets
-          resources:
-            requests:
-              cpu: 100m
-              memory: 128Mi
-            limits:
-              cpu: 500m
-              memory: 512Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: true
-            capabilities:
-              drop:
-                - ALL
+      # NOTE: init/migration is handled by init-job.yaml (runs once)
+      # Do NOT add initContainers here - it causes race conditions with multiple replicas
       containers:
         - name: auth9-core
           image: ghcr.io/gpgkd906/auth9-core:latest
