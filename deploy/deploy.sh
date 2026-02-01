@@ -228,11 +228,13 @@ detect_existing_configmap() {
     local jwt_issuer=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.JWT_ISSUER}' 2>/dev/null || echo "")
     local core_public_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_CORE_PUBLIC_URL}' 2>/dev/null || echo "")
     local portal_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_PORTAL_URL}' 2>/dev/null || echo "")
+    local keycloak_public_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.KEYCLOAK_PUBLIC_URL}' 2>/dev/null || echo "")
 
     if [ -n "$jwt_issuer" ]; then
         CONFIGMAP_VALUES[JWT_ISSUER]="$jwt_issuer"
         [ -n "$core_public_url" ] && CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$core_public_url"
         [ -n "$portal_url" ] && CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$portal_url"
+        [ -n "$keycloak_public_url" ] && CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$keycloak_public_url"
         print_info "auth9-config ConfigMap found"
         return 0
     fi
@@ -305,10 +307,33 @@ collect_redis_config() {
     print_success "REDIS_URL configured"
 }
 
+collect_keycloak_public_url() {
+    print_info "Keycloak Public URL Configuration"
+
+    local current="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
+    echo "  Current: $current"
+    echo "  This is the cloudflared tunnel URL for Keycloak (browser login)"
+
+    if confirm_action "  Change Keycloak Public URL?"; then
+        local new_url
+        while true; do
+            new_url=$(prompt_user "  Keycloak Public URL (cloudflared tunnel)" "$current")
+            if validate_url "$new_url"; then
+                CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$new_url"
+                break
+            fi
+        done
+    else
+        CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$current"
+    fi
+
+    print_success "Keycloak Public URL configured"
+}
+
 collect_keycloak_config() {
     print_info "Keycloak Configuration"
 
-    # KEYCLOAK_URL
+    # KEYCLOAK_URL (internal)
     if [ -z "${AUTH9_SECRETS[KEYCLOAK_URL]}" ]; then
         AUTH9_SECRETS[KEYCLOAK_URL]="http://keycloak:8080"
     fi
@@ -537,6 +562,7 @@ data:
   KEYCLOAK_REALM: "auth9"
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
   KEYCLOAK_SSL_REQUIRED: "none"
+  KEYCLOAK_PUBLIC_URL: "${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
   AUTH9_CORE_URL: "http://auth9-core:8080"
   AUTH9_CORE_PUBLIC_URL: "${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
   AUTH9_PORTAL_URL: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
@@ -592,6 +618,7 @@ run_interactive_setup() {
     collect_jwt_issuer
     collect_core_public_url
     collect_portal_url
+    collect_keycloak_public_url
 
     # Step 4/6: Generate secrets
     print_progress "4/6" "Generating secure secrets"
@@ -628,6 +655,7 @@ print_summary() {
     echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}}"
     echo "  Core Public URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
     echo "  Portal URL: ${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
+    echo "  Keycloak Public URL: ${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
     echo "  Init job: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "will run" || echo "will skip (client secret exists)")"
     echo ""
 }
@@ -937,9 +965,11 @@ print_deployment_complete() {
         echo -e "    Public URL:   ${YELLOW}${core_url}${NC}"
         echo -e "    Internal:     auth9-core.$NAMESPACE.svc.cluster.local:8080"
         echo ""
+        local keycloak_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
         echo -e "  ${GREEN}keycloak (OIDC Provider):${NC}"
+        echo -e "    Public URL:   ${YELLOW}${keycloak_url}${NC}"
         echo -e "    Internal:     keycloak.$NAMESPACE.svc.cluster.local:8080"
-        echo -e "    ${DIM}(Keycloak is accessed internally by auth9-core)${NC}"
+        echo -e "    ${DIM}(Browser redirects to Keycloak for login)${NC}"
         echo ""
 
         # Display admin credentials if extracted
