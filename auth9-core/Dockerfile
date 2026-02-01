@@ -30,7 +30,7 @@ COPY . .
 RUN cargo build --release
 
 # ==================== Runtime Stage ====================
-FROM debian:bookworm-slim
+FROM debian:trixie-slim
 
 # Install runtime dependencies
 RUN apt-get update && \
