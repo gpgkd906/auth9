@@ -211,6 +211,33 @@ impl MockKeycloakServer {
             .await;
     }
 
+    /// Mock successful user logout (for force logout)
+    pub async fn mock_logout_user_success(&self) {
+        Mock::given(method("POST"))
+            .and(path_regex(r"/admin/realms/test/users/[^/]+/logout$"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock user logout not found
+    pub async fn mock_logout_user_not_found(&self) {
+        Mock::given(method("POST"))
+            .and(path_regex(r"/admin/realms/test/users/[^/]+/logout$"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock successful federated identity removal
+    pub async fn mock_remove_federated_identity_success(&self) {
+        Mock::given(method("DELETE"))
+            .and(path_regex(r"/admin/realms/test/users/[^/]+/federated-identity/[^/]+$"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&self.server)
+            .await;
+    }
+
     // ========================================================================
     // User Credentials Endpoints
     // ========================================================================

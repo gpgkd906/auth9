@@ -15,11 +15,14 @@ use async_trait::async_trait;
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
-    AddUserToTenantInput, AssignRolesInput, Client, CreatePermissionInput, CreateRoleInput,
-    CreateServiceInput, CreateTenantInput, CreateUserInput, Permission, Role, Service,
-    ServiceStatus, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
-    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput,
-    UpsertSystemSettingInput, User, UserRolesInTenant,
+    AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateLinkedIdentityInput,
+    CreateLoginEventInput, CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
+    CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput,
+    CreateUserInput, CreateWebhookInput, LinkedIdentity, LoginEvent, LoginEventType, LoginStats,
+    PasswordResetToken, Permission, Role, SecurityAlert, SecurityAlertType, Service, ServiceStatus,
+    Session, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
+    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
+    UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
@@ -27,10 +30,13 @@ use auth9_core::repository::audit::{
     AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput,
 };
 use auth9_core::repository::{
-    RbacRepository, ServiceRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+    LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository, RbacRepository,
+    SecurityAlertRepository, ServiceRepository, SessionRepository, SystemSettingsRepository,
+    TenantRepository, UserRepository, WebhookRepository,
 };
+use chrono::{DateTime, Utc};
+use std::collections::HashMap;
 use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
-use chrono::Utc;
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -988,6 +994,781 @@ impl SystemSettingsRepository for TestSystemSettingsRepository {
         let mut settings = self.settings.write().await;
         settings.retain(|s| !(s.category == category && s.setting_key == key));
         Ok(())
+    }
+}
+
+// ============================================================================
+// Test Password Reset Repository
+// ============================================================================
+
+/// Configurable test password reset repository
+pub struct TestPasswordResetRepository {
+    tokens: RwLock<Vec<PasswordResetToken>>,
+}
+
+impl TestPasswordResetRepository {
+    pub fn new() -> Self {
+        Self {
+            tokens: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_token(&self, token: PasswordResetToken) {
+        self.tokens.write().await.push(token);
+    }
+}
+
+impl Default for TestPasswordResetRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl PasswordResetRepository for TestPasswordResetRepository {
+    async fn create(&self, input: &CreatePasswordResetTokenInput) -> Result<PasswordResetToken> {
+        let token = PasswordResetToken {
+            id: StringUuid::new_v4(),
+            user_id: input.user_id,
+            token_hash: input.token_hash.clone(),
+            expires_at: input.expires_at,
+            used_at: None,
+            created_at: Utc::now(),
+        };
+        self.tokens.write().await.push(token.clone());
+        Ok(token)
+    }
+
+    async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<PasswordResetToken>> {
+        let tokens = self.tokens.read().await;
+        let now = Utc::now();
+        Ok(tokens
+            .iter()
+            .find(|t| t.token_hash == token_hash && t.used_at.is_none() && t.expires_at > now)
+            .cloned())
+    }
+
+    async fn find_valid_by_user(&self, user_id: StringUuid) -> Result<Option<PasswordResetToken>> {
+        let tokens = self.tokens.read().await;
+        let now = Utc::now();
+        Ok(tokens
+            .iter()
+            .find(|t| t.user_id == user_id && t.used_at.is_none() && t.expires_at > now)
+            .cloned())
+    }
+
+    async fn mark_used(&self, id: StringUuid) -> Result<()> {
+        let mut tokens = self.tokens.write().await;
+        let token = tokens
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| AppError::NotFound("Password reset token not found".to_string()))?;
+        token.used_at = Some(Utc::now());
+        Ok(())
+    }
+
+    async fn delete_expired(&self) -> Result<u64> {
+        let mut tokens = self.tokens.write().await;
+        let now = Utc::now();
+        let before = tokens.len();
+        tokens.retain(|t| t.expires_at > now && t.used_at.is_none());
+        Ok((before - tokens.len()) as u64)
+    }
+
+    async fn delete_by_user(&self, user_id: StringUuid) -> Result<()> {
+        let mut tokens = self.tokens.write().await;
+        tokens.retain(|t| t.user_id != user_id);
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Test Session Repository
+// ============================================================================
+
+/// Configurable test session repository
+pub struct TestSessionRepository {
+    sessions: RwLock<Vec<Session>>,
+}
+
+impl TestSessionRepository {
+    pub fn new() -> Self {
+        Self {
+            sessions: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_session(&self, session: Session) {
+        self.sessions.write().await.push(session);
+    }
+}
+
+impl Default for TestSessionRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SessionRepository for TestSessionRepository {
+    async fn create(&self, input: &CreateSessionInput) -> Result<Session> {
+        let now = Utc::now();
+        let session = Session {
+            id: StringUuid::new_v4(),
+            user_id: input.user_id,
+            keycloak_session_id: input.keycloak_session_id.clone(),
+            device_type: input.device_type.clone(),
+            device_name: input.device_name.clone(),
+            ip_address: input.ip_address.clone(),
+            location: input.location.clone(),
+            user_agent: input.user_agent.clone(),
+            last_active_at: now,
+            created_at: now,
+            revoked_at: None,
+        };
+        self.sessions.write().await.push(session.clone());
+        Ok(session)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Session>> {
+        let sessions = self.sessions.read().await;
+        Ok(sessions.iter().find(|s| s.id == id).cloned())
+    }
+
+    async fn find_by_keycloak_session(&self, keycloak_session_id: &str) -> Result<Option<Session>> {
+        let sessions = self.sessions.read().await;
+        Ok(sessions
+            .iter()
+            .find(|s| s.keycloak_session_id.as_deref() == Some(keycloak_session_id))
+            .cloned())
+    }
+
+    async fn list_by_user(&self, user_id: StringUuid) -> Result<Vec<Session>> {
+        let sessions = self.sessions.read().await;
+        Ok(sessions
+            .iter()
+            .filter(|s| s.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_active_by_user(&self, user_id: StringUuid) -> Result<Vec<Session>> {
+        let sessions = self.sessions.read().await;
+        Ok(sessions
+            .iter()
+            .filter(|s| s.user_id == user_id && s.revoked_at.is_none())
+            .cloned()
+            .collect())
+    }
+
+    async fn update_last_active(&self, id: StringUuid) -> Result<()> {
+        let mut sessions = self.sessions.write().await;
+        if let Some(session) = sessions.iter_mut().find(|s| s.id == id) {
+            session.last_active_at = Utc::now();
+        }
+        Ok(())
+    }
+
+    async fn revoke(&self, id: StringUuid) -> Result<()> {
+        let mut sessions = self.sessions.write().await;
+        let session = sessions
+            .iter_mut()
+            .find(|s| s.id == id && s.revoked_at.is_none())
+            .ok_or_else(|| AppError::NotFound("Session not found or already revoked".to_string()))?;
+        session.revoked_at = Some(Utc::now());
+        Ok(())
+    }
+
+    async fn revoke_all_by_user(&self, user_id: StringUuid) -> Result<u64> {
+        let mut sessions = self.sessions.write().await;
+        let now = Utc::now();
+        let mut count = 0u64;
+        for session in sessions.iter_mut() {
+            if session.user_id == user_id && session.revoked_at.is_none() {
+                session.revoked_at = Some(now);
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    async fn revoke_all_except(&self, user_id: StringUuid, except_id: StringUuid) -> Result<u64> {
+        let mut sessions = self.sessions.write().await;
+        let now = Utc::now();
+        let mut count = 0u64;
+        for session in sessions.iter_mut() {
+            if session.user_id == user_id && session.id != except_id && session.revoked_at.is_none()
+            {
+                session.revoked_at = Some(now);
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    async fn delete_old(&self, days: i64) -> Result<u64> {
+        let mut sessions = self.sessions.write().await;
+        let cutoff = Utc::now() - chrono::Duration::days(days);
+        let before = sessions.len();
+        sessions.retain(|s| s.created_at > cutoff);
+        Ok((before - sessions.len()) as u64)
+    }
+}
+
+// ============================================================================
+// Test Linked Identity Repository
+// ============================================================================
+
+/// Configurable test linked identity repository
+pub struct TestLinkedIdentityRepository {
+    identities: RwLock<Vec<LinkedIdentity>>,
+}
+
+impl TestLinkedIdentityRepository {
+    pub fn new() -> Self {
+        Self {
+            identities: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_identity(&self, identity: LinkedIdentity) {
+        self.identities.write().await.push(identity);
+    }
+}
+
+impl Default for TestLinkedIdentityRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl LinkedIdentityRepository for TestLinkedIdentityRepository {
+    async fn create(&self, input: &CreateLinkedIdentityInput) -> Result<LinkedIdentity> {
+        let identity = LinkedIdentity {
+            id: StringUuid::new_v4(),
+            user_id: input.user_id,
+            provider_type: input.provider_type.clone(),
+            provider_alias: input.provider_alias.clone(),
+            external_user_id: input.external_user_id.clone(),
+            external_email: input.external_email.clone(),
+            linked_at: Utc::now(),
+        };
+        self.identities.write().await.push(identity.clone());
+        Ok(identity)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<LinkedIdentity>> {
+        let identities = self.identities.read().await;
+        Ok(identities.iter().find(|i| i.id == id).cloned())
+    }
+
+    async fn find_by_provider(
+        &self,
+        provider_alias: &str,
+        external_user_id: &str,
+    ) -> Result<Option<LinkedIdentity>> {
+        let identities = self.identities.read().await;
+        Ok(identities
+            .iter()
+            .find(|i| i.provider_alias == provider_alias && i.external_user_id == external_user_id)
+            .cloned())
+    }
+
+    async fn list_by_user(&self, user_id: StringUuid) -> Result<Vec<LinkedIdentity>> {
+        let identities = self.identities.read().await;
+        Ok(identities
+            .iter()
+            .filter(|i| i.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut identities = self.identities.write().await;
+        let pos = identities
+            .iter()
+            .position(|i| i.id == id)
+            .ok_or_else(|| AppError::NotFound("Linked identity not found".to_string()))?;
+        identities.remove(pos);
+        Ok(())
+    }
+
+    async fn delete_by_user(&self, user_id: StringUuid) -> Result<u64> {
+        let mut identities = self.identities.write().await;
+        let before = identities.len();
+        identities.retain(|i| i.user_id != user_id);
+        Ok((before - identities.len()) as u64)
+    }
+}
+
+// ============================================================================
+// Test Webhook Repository
+// ============================================================================
+
+/// Configurable test webhook repository
+pub struct TestWebhookRepository {
+    webhooks: RwLock<Vec<Webhook>>,
+}
+
+impl TestWebhookRepository {
+    pub fn new() -> Self {
+        Self {
+            webhooks: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_webhook(&self, webhook: Webhook) {
+        self.webhooks.write().await.push(webhook);
+    }
+}
+
+impl Default for TestWebhookRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl WebhookRepository for TestWebhookRepository {
+    async fn create(&self, tenant_id: StringUuid, input: &CreateWebhookInput) -> Result<Webhook> {
+        let now = Utc::now();
+        let webhook = Webhook {
+            id: StringUuid::new_v4(),
+            tenant_id,
+            name: input.name.clone(),
+            url: input.url.clone(),
+            secret: input.secret.clone(),
+            events: input.events.clone(),
+            enabled: input.enabled,
+            last_triggered_at: None,
+            failure_count: 0,
+            created_at: now,
+            updated_at: now,
+        };
+        self.webhooks.write().await.push(webhook.clone());
+        Ok(webhook)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Webhook>> {
+        let webhooks = self.webhooks.read().await;
+        Ok(webhooks.iter().find(|w| w.id == id).cloned())
+    }
+
+    async fn list_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<Webhook>> {
+        let webhooks = self.webhooks.read().await;
+        Ok(webhooks
+            .iter()
+            .filter(|w| w.tenant_id == tenant_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_enabled_for_event(&self, event: &str) -> Result<Vec<Webhook>> {
+        let webhooks = self.webhooks.read().await;
+        Ok(webhooks
+            .iter()
+            .filter(|w| w.enabled && w.events.contains(&event.to_string()))
+            .cloned()
+            .collect())
+    }
+
+    async fn update(&self, id: StringUuid, input: &UpdateWebhookInput) -> Result<Webhook> {
+        let mut webhooks = self.webhooks.write().await;
+        let webhook = webhooks
+            .iter_mut()
+            .find(|w| w.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Webhook {} not found", id)))?;
+
+        if let Some(name) = &input.name {
+            webhook.name = name.clone();
+        }
+        if let Some(url) = &input.url {
+            webhook.url = url.clone();
+        }
+        if let Some(secret) = &input.secret {
+            webhook.secret = Some(secret.clone());
+        }
+        if let Some(events) = &input.events {
+            webhook.events = events.clone();
+        }
+        if let Some(enabled) = input.enabled {
+            webhook.enabled = enabled;
+        }
+        webhook.updated_at = Utc::now();
+        Ok(webhook.clone())
+    }
+
+    async fn update_triggered(&self, id: StringUuid, success: bool) -> Result<()> {
+        let mut webhooks = self.webhooks.write().await;
+        if let Some(webhook) = webhooks.iter_mut().find(|w| w.id == id) {
+            webhook.last_triggered_at = Some(Utc::now());
+            if success {
+                webhook.failure_count = 0;
+            } else {
+                webhook.failure_count += 1;
+            }
+        }
+        Ok(())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut webhooks = self.webhooks.write().await;
+        let pos = webhooks
+            .iter()
+            .position(|w| w.id == id)
+            .ok_or_else(|| AppError::NotFound("Webhook not found".to_string()))?;
+        webhooks.remove(pos);
+        Ok(())
+    }
+}
+
+// ============================================================================
+// Test Login Event Repository
+// ============================================================================
+
+/// Configurable test login event repository
+pub struct TestLoginEventRepository {
+    events: RwLock<Vec<LoginEvent>>,
+    next_id: RwLock<i64>,
+}
+
+impl TestLoginEventRepository {
+    pub fn new() -> Self {
+        Self {
+            events: RwLock::new(vec![]),
+            next_id: RwLock::new(1),
+        }
+    }
+
+    pub async fn add_event(&self, event: LoginEvent) {
+        self.events.write().await.push(event);
+    }
+}
+
+impl Default for TestLoginEventRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl LoginEventRepository for TestLoginEventRepository {
+    async fn create(&self, input: &CreateLoginEventInput) -> Result<i64> {
+        let mut next_id = self.next_id.write().await;
+        let event = LoginEvent {
+            id: *next_id,
+            user_id: input.user_id,
+            email: input.email.clone(),
+            tenant_id: input.tenant_id,
+            event_type: input.event_type.clone(),
+            ip_address: input.ip_address.clone(),
+            user_agent: input.user_agent.clone(),
+            device_type: input.device_type.clone(),
+            location: input.location.clone(),
+            session_id: input.session_id,
+            failure_reason: input.failure_reason.clone(),
+            created_at: Utc::now(),
+        };
+        self.events.write().await.push(event);
+        let id = *next_id;
+        *next_id += 1;
+        Ok(id)
+    }
+
+    async fn list(&self, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_user(
+        &self,
+        user_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| e.user_id == Some(user_id))
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| e.tenant_id == Some(tenant_id))
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn count(&self) -> Result<i64> {
+        Ok(self.events.read().await.len() as i64)
+    }
+
+    async fn count_by_user(&self, user_id: StringUuid) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events.iter().filter(|e| e.user_id == Some(user_id)).count() as i64)
+    }
+
+    async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| e.tenant_id == Some(tenant_id))
+            .count() as i64)
+    }
+
+    async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats> {
+        let events = self.events.read().await;
+        let filtered: Vec<_> = events
+            .iter()
+            .filter(|e| e.created_at >= start && e.created_at <= end)
+            .collect();
+
+        let total_logins = filtered.len() as i64;
+        let successful_logins = filtered
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e.event_type,
+                    LoginEventType::Success | LoginEventType::Social
+                )
+            })
+            .count() as i64;
+        let failed_logins = filtered
+            .iter()
+            .filter(|e| {
+                matches!(
+                    e.event_type,
+                    LoginEventType::FailedPassword
+                        | LoginEventType::FailedMfa
+                        | LoginEventType::Locked
+                )
+            })
+            .count() as i64;
+
+        let unique_users: std::collections::HashSet<_> =
+            filtered.iter().filter_map(|e| e.user_id).collect();
+
+        let mut by_event_type: HashMap<String, i64> = HashMap::new();
+        let mut by_device_type: HashMap<String, i64> = HashMap::new();
+
+        for event in &filtered {
+            *by_event_type
+                .entry(format!("{:?}", event.event_type).to_lowercase())
+                .or_insert(0) += 1;
+            let device = event
+                .device_type
+                .clone()
+                .unwrap_or_else(|| "unknown".to_string());
+            *by_device_type.entry(device).or_insert(0) += 1;
+        }
+
+        Ok(LoginStats {
+            total_logins,
+            successful_logins,
+            failed_logins,
+            unique_users: unique_users.len() as i64,
+            by_event_type,
+            by_device_type,
+            period_start: start,
+            period_end: end,
+        })
+    }
+
+    async fn count_failed_by_ip(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| {
+                e.ip_address.as_deref() == Some(ip_address)
+                    && e.created_at >= since
+                    && matches!(
+                        e.event_type,
+                        LoginEventType::FailedPassword | LoginEventType::FailedMfa
+                    )
+            })
+            .count() as i64)
+    }
+
+    async fn count_failed_by_ip_multi_user(
+        &self,
+        ip_address: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let events = self.events.read().await;
+        let unique_users: std::collections::HashSet<_> = events
+            .iter()
+            .filter(|e| {
+                e.ip_address.as_deref() == Some(ip_address)
+                    && e.created_at >= since
+                    && matches!(
+                        e.event_type,
+                        LoginEventType::FailedPassword | LoginEventType::FailedMfa
+                    )
+            })
+            .filter_map(|e| e.user_id.or_else(|| e.email.as_ref().map(|_| StringUuid::new_v4())))
+            .collect();
+        Ok(unique_users.len() as i64)
+    }
+
+    async fn delete_old(&self, days: i64) -> Result<u64> {
+        let mut events = self.events.write().await;
+        let cutoff = Utc::now() - chrono::Duration::days(days);
+        let before = events.len();
+        events.retain(|e| e.created_at > cutoff);
+        Ok((before - events.len()) as u64)
+    }
+}
+
+// ============================================================================
+// Test Security Alert Repository
+// ============================================================================
+
+/// Configurable test security alert repository
+pub struct TestSecurityAlertRepository {
+    alerts: RwLock<Vec<SecurityAlert>>,
+}
+
+impl TestSecurityAlertRepository {
+    pub fn new() -> Self {
+        Self {
+            alerts: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_alert(&self, alert: SecurityAlert) {
+        self.alerts.write().await.push(alert);
+    }
+}
+
+impl Default for TestSecurityAlertRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SecurityAlertRepository for TestSecurityAlertRepository {
+    async fn create(&self, input: &CreateSecurityAlertInput) -> Result<SecurityAlert> {
+        let alert = SecurityAlert {
+            id: StringUuid::new_v4(),
+            user_id: input.user_id,
+            tenant_id: input.tenant_id,
+            alert_type: input.alert_type.clone(),
+            severity: input.severity.clone(),
+            details: input.details.clone(),
+            resolved_at: None,
+            resolved_by: None,
+            created_at: Utc::now(),
+        };
+        self.alerts.write().await.push(alert.clone());
+        Ok(alert)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<SecurityAlert>> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts.iter().find(|a| a.id == id).cloned())
+    }
+
+    async fn list(&self, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts
+            .iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_unresolved(&self, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts
+            .iter()
+            .filter(|a| a.resolved_at.is_none())
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_user(
+        &self,
+        user_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SecurityAlert>> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts
+            .iter()
+            .filter(|a| a.user_id == Some(user_id))
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_severity(
+        &self,
+        severity: AlertSeverity,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SecurityAlert>> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts
+            .iter()
+            .filter(|a| a.severity == severity)
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn count(&self) -> Result<i64> {
+        Ok(self.alerts.read().await.len() as i64)
+    }
+
+    async fn count_unresolved(&self) -> Result<i64> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts.iter().filter(|a| a.resolved_at.is_none()).count() as i64)
+    }
+
+    async fn resolve(&self, id: StringUuid, resolved_by: StringUuid) -> Result<SecurityAlert> {
+        let mut alerts = self.alerts.write().await;
+        let alert = alerts
+            .iter_mut()
+            .find(|a| a.id == id && a.resolved_at.is_none())
+            .ok_or_else(|| {
+                AppError::NotFound("Security alert not found or already resolved".to_string())
+            })?;
+        alert.resolved_at = Some(Utc::now());
+        alert.resolved_by = Some(resolved_by);
+        Ok(alert.clone())
+    }
+
+    async fn delete_old(&self, days: i64) -> Result<u64> {
+        let mut alerts = self.alerts.write().await;
+        let cutoff = Utc::now() - chrono::Duration::days(days);
+        let before = alerts.len();
+        alerts.retain(|a| a.resolved_at.is_none() || a.created_at > cutoff);
+        Ok((before - alerts.len()) as u64)
     }
 }
 
