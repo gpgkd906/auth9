@@ -1,6 +1,7 @@
 //! Configuration management for Auth9 Core
 
 use anyhow::{Context, Result};
+use std::collections::HashMap;
 use std::env;
 
 /// Application configuration
@@ -22,6 +23,10 @@ pub struct Config {
     pub jwt: JwtConfig,
     /// Keycloak configuration
     pub keycloak: KeycloakConfig,
+    /// gRPC security configuration
+    pub grpc_security: GrpcSecurityConfig,
+    /// Rate limiting configuration
+    pub rate_limit: RateLimitConfig,
 }
 
 #[derive(Debug, Clone)]
@@ -64,6 +69,69 @@ pub struct KeycloakConfig {
     pub core_public_url: Option<String>,
     /// Public URL for Auth9 Portal (e.g., https://auth9.example.com)
     pub portal_url: Option<String>,
+}
+
+/// gRPC security configuration
+#[derive(Debug, Clone)]
+pub struct GrpcSecurityConfig {
+    /// Authentication mode: "none", "api_key", or "mtls"
+    pub auth_mode: String,
+    /// API keys for api_key mode (comma-separated in env var)
+    pub api_keys: Vec<String>,
+    /// Path to TLS certificate for mTLS mode
+    pub tls_cert_path: Option<String>,
+    /// Path to TLS private key for mTLS mode
+    pub tls_key_path: Option<String>,
+    /// Path to CA certificate for client verification in mTLS mode
+    pub tls_ca_cert_path: Option<String>,
+}
+
+impl Default for GrpcSecurityConfig {
+    fn default() -> Self {
+        Self {
+            auth_mode: "none".to_string(),
+            api_keys: vec![],
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_cert_path: None,
+        }
+    }
+}
+
+/// Rate limiting configuration
+#[derive(Debug, Clone)]
+pub struct RateLimitConfig {
+    /// Whether rate limiting is enabled
+    pub enabled: bool,
+    /// Default requests per window
+    pub default_requests: u64,
+    /// Default window size in seconds
+    pub default_window_secs: u64,
+    /// Per-endpoint overrides (JSON format in env var)
+    pub endpoints: HashMap<String, RateLimitEndpointConfig>,
+    /// Per-tenant multipliers (JSON format in env var)
+    pub tenant_multipliers: HashMap<String, f64>,
+}
+
+impl Default for RateLimitConfig {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            default_requests: 100,
+            default_window_secs: 60,
+            endpoints: HashMap::new(),
+            tenant_multipliers: HashMap::new(),
+        }
+    }
+}
+
+/// Rate limit configuration for a specific endpoint
+#[derive(Debug, Clone, serde::Deserialize)]
+pub struct RateLimitEndpointConfig {
+    /// Maximum requests allowed
+    pub requests: u64,
+    /// Time window in seconds
+    pub window_secs: u64,
 }
 
 impl Config {
@@ -137,6 +205,44 @@ impl Config {
                     portal_url,
                 }
             },
+            grpc_security: GrpcSecurityConfig {
+                auth_mode: env::var("GRPC_AUTH_MODE").unwrap_or_else(|_| "none".to_string()),
+                api_keys: env::var("GRPC_API_KEYS")
+                    .map(|s| s.split(',').map(|k| k.trim().to_string()).collect())
+                    .unwrap_or_default(),
+                tls_cert_path: env::var("GRPC_TLS_CERT_PATH").ok(),
+                tls_key_path: env::var("GRPC_TLS_KEY_PATH").ok(),
+                tls_ca_cert_path: env::var("GRPC_TLS_CA_CERT_PATH").ok(),
+            },
+            rate_limit: {
+                let endpoints: HashMap<String, RateLimitEndpointConfig> =
+                    env::var("RATE_LIMIT_ENDPOINTS")
+                        .ok()
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default();
+
+                let tenant_multipliers: HashMap<String, f64> =
+                    env::var("RATE_LIMIT_TENANT_MULTIPLIERS")
+                        .ok()
+                        .and_then(|s| serde_json::from_str(&s).ok())
+                        .unwrap_or_default();
+
+                RateLimitConfig {
+                    enabled: env::var("RATE_LIMIT_ENABLED")
+                        .map(|s| s.to_lowercase() == "true")
+                        .unwrap_or(false),
+                    default_requests: env::var("RATE_LIMIT_DEFAULT_REQUESTS")
+                        .unwrap_or_else(|_| "100".to_string())
+                        .parse()
+                        .unwrap_or(100),
+                    default_window_secs: env::var("RATE_LIMIT_DEFAULT_WINDOW_SECS")
+                        .unwrap_or_else(|_| "60".to_string())
+                        .parse()
+                        .unwrap_or(60),
+                    endpoints,
+                    tenant_multipliers,
+                }
+            },
         })
     }
 
@@ -187,6 +293,8 @@ mod tests {
                 core_public_url: None,
                 portal_url: None,
             },
+            grpc_security: GrpcSecurityConfig::default(),
+            rate_limit: RateLimitConfig::default(),
         }
     }
 
@@ -424,9 +532,65 @@ mod tests {
                 core_public_url: None,
                 portal_url: None,
             },
+            grpc_security: GrpcSecurityConfig::default(),
+            rate_limit: RateLimitConfig::default(),
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
         assert_eq!(config.grpc_addr(), "192.168.1.100:4000");
+    }
+
+    #[test]
+    fn test_grpc_security_config_default() {
+        let config = GrpcSecurityConfig::default();
+        assert_eq!(config.auth_mode, "none");
+        assert!(config.api_keys.is_empty());
+        assert!(config.tls_cert_path.is_none());
+    }
+
+    #[test]
+    fn test_rate_limit_config_default() {
+        let config = RateLimitConfig::default();
+        assert!(!config.enabled);
+        assert_eq!(config.default_requests, 100);
+        assert_eq!(config.default_window_secs, 60);
+    }
+
+    #[test]
+    fn test_grpc_security_config_with_api_keys() {
+        let config = GrpcSecurityConfig {
+            auth_mode: "api_key".to_string(),
+            api_keys: vec!["key1".to_string(), "key2".to_string()],
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_cert_path: None,
+        };
+
+        assert_eq!(config.auth_mode, "api_key");
+        assert_eq!(config.api_keys.len(), 2);
+    }
+
+    #[test]
+    fn test_grpc_security_config_with_mtls() {
+        let config = GrpcSecurityConfig {
+            auth_mode: "mtls".to_string(),
+            api_keys: vec![],
+            tls_cert_path: Some("/path/to/server.crt".to_string()),
+            tls_key_path: Some("/path/to/server.key".to_string()),
+            tls_ca_cert_path: Some("/path/to/ca.crt".to_string()),
+        };
+
+        assert_eq!(config.auth_mode, "mtls");
+        assert!(config.tls_cert_path.is_some());
+        assert!(config.tls_key_path.is_some());
+        assert!(config.tls_ca_cert_path.is_some());
+    }
+
+    #[test]
+    fn test_rate_limit_endpoint_config_deserialize() {
+        let json = r#"{"requests": 10, "window_secs": 60}"#;
+        let config: RateLimitEndpointConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.requests, 10);
+        assert_eq!(config.window_secs, 60);
     }
 }

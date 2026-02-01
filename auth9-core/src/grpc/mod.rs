@@ -1,7 +1,9 @@
 //! gRPC services
 
+pub mod interceptor;
 pub mod token_exchange;
 
+pub use interceptor::{ApiKeyAuthenticator, AuthContext, AuthInterceptor, GrpcAuthenticator};
 pub use token_exchange::TokenExchangeService;
 
 // Include generated protobuf code

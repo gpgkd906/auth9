@@ -292,6 +292,18 @@ export interface Permission {
   code: string;
   name: string;
   description?: string;
+  created_at?: string;
+}
+
+export interface CreatePermissionInput {
+  service_id: string;
+  code: string;
+  name: string;
+  description?: string;
+}
+
+export interface RoleWithPermissions extends Role {
+  permissions: Permission[];
 }
 
 export const rbacApi = {
@@ -331,6 +343,49 @@ export const rbacApi = {
   listPermissions: async (serviceId: string): Promise<{ data: Permission[] }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/permissions`);
     return handleResponse(response);
+  },
+
+  createPermission: async (input: CreatePermissionInput): Promise<{ data: Permission }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  deletePermission: async (permissionId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/permissions/${permissionId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
+
+  getRole: async (roleId: string): Promise<{ data: RoleWithPermissions }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`);
+    return handleResponse(response);
+  },
+
+  assignPermissionToRole: async (roleId: string, permissionId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}/permissions`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ permission_id: permissionId }),
+    });
+    return handleResponse(response);
+  },
+
+  removePermissionFromRole: async (roleId: string, permissionId: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}/permissions/${permissionId}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
   },
 
   assignRoles: async (input: AssignRolesInput): Promise<void> => {

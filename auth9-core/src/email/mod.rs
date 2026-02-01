@@ -6,9 +6,11 @@
 //! - Oracle Email Delivery (via SMTP)
 
 pub mod provider;
+pub mod ses;
 pub mod smtp;
 pub mod templates;
 
 pub use provider::{EmailProvider, EmailProviderError};
+pub use ses::SesEmailProvider;
 pub use smtp::SmtpEmailProvider;
 pub use templates::{EmailTemplate, TemplateEngine};

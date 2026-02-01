@@ -13,6 +13,7 @@ pub mod error;
 pub mod grpc;
 pub mod jwt;
 pub mod keycloak;
+pub mod middleware;
 pub mod migration;
 pub mod repository;
 pub mod server;

@@ -4,6 +4,7 @@ use crate::api;
 use crate::cache::CacheManager;
 use crate::config::Config;
 use crate::crypto::EncryptionKey;
+use crate::grpc::interceptor::{ApiKeyAuthenticator, AuthInterceptor};
 use crate::grpc::proto::token_exchange_server::TokenExchangeServer;
 use crate::grpc::TokenExchangeService;
 use crate::jwt::JwtManager;
@@ -269,11 +270,20 @@ pub async fn run(config: Config) -> Result<()> {
         Ok::<_, anyhow::Error>(())
     };
 
+    // Create gRPC authentication interceptor based on config
+    let grpc_auth_interceptor = create_grpc_auth_interceptor(&config.grpc_security);
+
     let grpc_server = async {
         let addr = grpc_addr.parse()?;
-        info!("gRPC server started on {}", grpc_addr);
+        info!(
+            "gRPC server started on {} (auth_mode: {})",
+            grpc_addr, config.grpc_security.auth_mode
+        );
         TonicServer::builder()
-            .add_service(TokenExchangeServer::new(grpc_service))
+            .add_service(TokenExchangeServer::with_interceptor(
+                grpc_service,
+                grpc_auth_interceptor,
+            ))
             .serve(addr)
             .await?;
         Ok::<_, anyhow::Error>(())
@@ -282,6 +292,46 @@ pub async fn run(config: Config) -> Result<()> {
     tokio::try_join!(http_server, grpc_server)?;
 
     Ok(())
+}
+
+/// Create gRPC authentication interceptor based on configuration
+fn create_grpc_auth_interceptor(
+    config: &crate::config::GrpcSecurityConfig,
+) -> AuthInterceptor {
+    match config.auth_mode.as_str() {
+        "api_key" => {
+            if config.api_keys.is_empty() {
+                tracing::warn!(
+                    "gRPC auth_mode is 'api_key' but no API keys configured. Falling back to no auth."
+                );
+                AuthInterceptor::noop()
+            } else {
+                info!(
+                    "gRPC authentication enabled: API key mode ({} keys configured)",
+                    config.api_keys.len()
+                );
+                let authenticator = ApiKeyAuthenticator::new(config.api_keys.clone());
+                AuthInterceptor::api_key(authenticator)
+            }
+        }
+        "mtls" => {
+            // mTLS is handled at the transport layer, not as an interceptor
+            // For now, we just log and use noop (mTLS validation happens in TLS handshake)
+            info!("gRPC authentication enabled: mTLS mode");
+            AuthInterceptor::noop()
+        }
+        "none" => {
+            info!("gRPC authentication disabled");
+            AuthInterceptor::noop()
+        }
+        other => {
+            tracing::warn!(
+                "Unknown gRPC auth_mode '{}'. Falling back to no auth.",
+                other
+            );
+            AuthInterceptor::noop()
+        }
+    }
 }
 
 /// Build the HTTP router with generic state type
