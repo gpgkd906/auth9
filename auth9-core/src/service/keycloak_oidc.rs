@@ -494,6 +494,1150 @@ fn decode_state(state: Option<&str>) -> Result<CallbackState> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::config::JwtConfig;
+    use crate::domain::{Service, ServiceStatus};
+    use crate::repository::service::MockServiceRepository;
+    use crate::repository::user::MockUserRepository;
+    use chrono::Utc;
+    use serde_json::json;
+    use wiremock::matchers::{body_string_contains, method, path, query_param};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
+
+    fn create_test_keycloak_config(base_url: &str) -> KeycloakConfig {
+        KeycloakConfig {
+            url: base_url.to_string(),
+            public_url: base_url.to_string(),
+            realm: "test-realm".to_string(),
+            admin_client_id: "auth9-admin".to_string(),
+            admin_client_secret: "admin-secret".to_string(),
+            ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
+        }
+    }
+
+    fn create_test_jwt_manager() -> JwtManager {
+        let config = JwtConfig {
+            secret: "test-secret-key-for-jwt-signing-minimum-32-chars".to_string(),
+            issuer: "https://auth9.example.com".to_string(),
+            access_token_ttl_secs: 3600,
+            refresh_token_ttl_secs: 86400,
+            private_key_pem: None,
+            public_key_pem: None,
+        };
+        JwtManager::new(config)
+    }
+
+    fn create_test_service(_client_id: &str, redirect_uris: Vec<String>) -> Service {
+        let now = Utc::now();
+        Service {
+            id: crate::domain::StringUuid::new_v4(),
+            tenant_id: None,
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris,
+            logout_uris: vec!["https://app.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    fn create_test_user(keycloak_id: &str, email: &str) -> crate::domain::User {
+        let now = Utc::now();
+        crate::domain::User {
+            id: crate::domain::StringUuid::new_v4(),
+            keycloak_id: keycloak_id.to_string(),
+            email: email.to_string(),
+            display_name: Some("Test User".to_string()),
+            avatar_url: None,
+            mfa_enabled: false,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    async fn setup_admin_token_mock(mock_server: &MockServer) {
+        Mock::given(method("POST"))
+            .and(path("/realms/master/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "mock-admin-token",
+                "expires_in": 300
+            })))
+            .mount(mock_server)
+            .await;
+    }
+
+    // ============================================================================
+    // build_authorize_url tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_build_authorize_url_success() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        let mut mock_service_repo = MockServiceRepository::new();
+        mock_service_repo
+            .expect_find_by_client_id()
+            .withf(|client_id| client_id == "my-app")
+            .returning(|_| {
+                Ok(Some(create_test_service(
+                    "my-app",
+                    vec!["https://app.example.com/callback".to_string()],
+                )))
+            });
+
+        let mock_user_repo = MockUserRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "my-app".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            scope: "openid profile email".to_string(),
+            state: Some("user-state-123".to_string()),
+            nonce: Some("nonce-abc".to_string()),
+        };
+
+        let result = service.build_authorize_url(&params).await;
+        assert!(result.is_ok());
+
+        let url = result.unwrap();
+        assert!(url.contains("/realms/test-realm/protocol/openid-connect/auth"));
+        assert!(url.contains("response_type=code"));
+        assert!(url.contains("client_id=my-app"));
+        assert!(url.contains("scope=openid+profile+email"));
+        assert!(url.contains("nonce=nonce-abc"));
+        // State is encoded, so we just check state param exists
+        assert!(url.contains("state="));
+    }
+
+    #[tokio::test]
+    async fn test_build_authorize_url_without_optional_params() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        let mut mock_service_repo = MockServiceRepository::new();
+        mock_service_repo
+            .expect_find_by_client_id()
+            .returning(|_| {
+                Ok(Some(create_test_service(
+                    "minimal-app",
+                    vec!["https://app.example.com/cb".to_string()],
+                )))
+            });
+
+        let mock_user_repo = MockUserRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "minimal-app".to_string(),
+            redirect_uri: "https://app.example.com/cb".to_string(),
+            scope: "openid".to_string(),
+            state: None,
+            nonce: None,
+        };
+
+        let result = service.build_authorize_url(&params).await;
+        assert!(result.is_ok());
+
+        let url = result.unwrap();
+        assert!(url.contains("response_type=code"));
+        assert!(!url.contains("nonce="));
+    }
+
+    #[tokio::test]
+    async fn test_build_authorize_url_client_not_found() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        let mut mock_service_repo = MockServiceRepository::new();
+        mock_service_repo
+            .expect_find_by_client_id()
+            .returning(|_| Ok(None));
+
+        let mock_user_repo = MockUserRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "nonexistent-app".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            scope: "openid".to_string(),
+            state: None,
+            nonce: None,
+        };
+
+        let result = service.build_authorize_url(&params).await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_build_authorize_url_invalid_redirect_uri() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        let mut mock_service_repo = MockServiceRepository::new();
+        mock_service_repo
+            .expect_find_by_client_id()
+            .returning(|_| {
+                Ok(Some(create_test_service(
+                    "my-app",
+                    vec!["https://allowed.example.com/callback".to_string()],
+                )))
+            });
+
+        let mock_user_repo = MockUserRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "my-app".to_string(),
+            redirect_uri: "https://malicious.example.com/callback".to_string(),
+            scope: "openid".to_string(),
+            state: None,
+            nonce: None,
+        };
+
+        let result = service.build_authorize_url(&params).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    // ============================================================================
+    // build_logout_url tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_build_logout_url_with_all_params() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service.build_logout_url(
+            Some("id-token-hint"),
+            Some("https://app.example.com/logged-out"),
+            Some("logout-state"),
+        );
+
+        assert!(result.is_ok());
+        let url = result.unwrap();
+        assert!(url.contains("/realms/test-realm/protocol/openid-connect/logout"));
+        assert!(url.contains("id_token_hint=id-token-hint"));
+        assert!(url.contains("post_logout_redirect_uri="));
+        assert!(url.contains("state=logout-state"));
+    }
+
+    #[tokio::test]
+    async fn test_build_logout_url_minimal() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service.build_logout_url(None, None, None);
+
+        assert!(result.is_ok());
+        let url = result.unwrap();
+        assert!(url.contains("/realms/test-realm/protocol/openid-connect/logout"));
+        assert!(!url.contains("id_token_hint"));
+        assert!(!url.contains("post_logout_redirect_uri"));
+        assert!(!url.contains("state="));
+    }
+
+    #[tokio::test]
+    async fn test_build_logout_url_with_id_token_only() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service.build_logout_url(Some("my-id-token"), None, None);
+
+        assert!(result.is_ok());
+        let url = result.unwrap();
+        assert!(url.contains("id_token_hint=my-id-token"));
+        assert!(!url.contains("post_logout_redirect_uri"));
+    }
+
+    // ============================================================================
+    // handle_callback tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_handle_callback_existing_user() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        // Setup admin token mock
+        setup_admin_token_mock(&mock_server).await;
+
+        // Mock get client by client_id
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .and(query_param("clientId", "test-client"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid-123",
+                "clientId": "test-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        // Mock get client secret
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid-123/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "client-secret-value"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Mock token exchange
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .and(body_string_contains("grant_type=authorization_code"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "keycloak-access-token",
+                "refresh_token": "keycloak-refresh-token",
+                "id_token": "keycloak-id-token"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Mock userinfo
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "sub": "keycloak-user-id",
+                "email": "user@example.com",
+                "name": "Test User"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let existing_user = create_test_user("keycloak-user-id", "user@example.com");
+        let mut mock_user_repo = MockUserRepository::new();
+        mock_user_repo
+            .expect_find_by_keycloak_id()
+            .withf(|kc_id| kc_id == "keycloak-user-id")
+            .returning(move |_| Ok(Some(existing_user.clone())));
+
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        // Create encoded state
+        let state_payload = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: Some("original-user-state".to_string()),
+        };
+        let encoded_state = encode_state(&state_payload).unwrap();
+
+        let result = service
+            .handle_callback("auth-code-123", Some(&encoded_state))
+            .await;
+
+        assert!(result.is_ok());
+        let callback_result = result.unwrap();
+        assert!(!callback_result.identity_token.is_empty());
+        assert!(callback_result.redirect_url.contains("access_token="));
+        assert!(callback_result.redirect_url.contains("state=original-user-state"));
+        assert_eq!(callback_result.expires_in, 3600);
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_new_user_created() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .and(query_param("clientId", "test-client"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid-123",
+                "clientId": "test-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid-123/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "client-secret-value"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .and(body_string_contains("grant_type=authorization_code"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "keycloak-access-token",
+                "refresh_token": "keycloak-refresh-token",
+                "id_token": "keycloak-id-token"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "sub": "new-keycloak-user-id",
+                "email": "newuser@example.com",
+                "name": "New User"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let created_user = create_test_user("new-keycloak-user-id", "newuser@example.com");
+        let mut mock_user_repo = MockUserRepository::new();
+        mock_user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None));
+        mock_user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(created_user.clone()));
+
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let state_payload = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded_state = encode_state(&state_payload).unwrap();
+
+        let result = service
+            .handle_callback("auth-code-456", Some(&encoded_state))
+            .await;
+
+        assert!(result.is_ok());
+        let callback_result = result.unwrap();
+        assert!(!callback_result.identity_token.is_empty());
+        assert!(callback_result
+            .redirect_url
+            .starts_with("https://app.example.com/callback"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_missing_state() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service.handle_callback("auth-code", None).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_token_exchange_error() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid-123",
+                "clientId": "test-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid-123/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "client-secret-value"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Token exchange fails
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+                "error": "invalid_grant",
+                "error_description": "Code not valid"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let state_payload = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded_state = encode_state(&state_payload).unwrap();
+
+        let result = service
+            .handle_callback("invalid-code", Some(&encoded_state))
+            .await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    // ============================================================================
+    // exchange_authorization_code tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_exchange_authorization_code_success() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid-abc",
+                "clientId": "api-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid-abc/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "api-client-secret"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "kc-access-token",
+                "refresh_token": "kc-refresh-token",
+                "id_token": "kc-id-token"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "sub": "user-sub-id",
+                "email": "api-user@example.com",
+                "name": "API User"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let existing_user = create_test_user("user-sub-id", "api-user@example.com");
+        let mut mock_user_repo = MockUserRepository::new();
+        mock_user_repo
+            .expect_find_by_keycloak_id()
+            .returning(move |_| Ok(Some(existing_user.clone())));
+
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service
+            .exchange_authorization_code(
+                "auth-code-xyz",
+                "api-client",
+                "https://api.example.com/callback",
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let token_response = result.unwrap();
+        assert!(!token_response.access_token.is_empty());
+        assert_eq!(token_response.token_type, "Bearer");
+        assert_eq!(token_response.expires_in, 3600);
+        assert!(token_response.refresh_token.is_some());
+        assert!(token_response.id_token.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_exchange_authorization_code_creates_new_user() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid-new",
+                "clientId": "new-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid-new/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "new-client-secret"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "new-kc-access-token",
+                "refresh_token": "new-kc-refresh-token",
+                "id_token": null
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "sub": "brand-new-user-id",
+                "email": "brandnew@example.com",
+                "name": null
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let created_user = create_test_user("brand-new-user-id", "brandnew@example.com");
+        let mut mock_user_repo = MockUserRepository::new();
+        mock_user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None));
+        mock_user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(created_user.clone()));
+
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service
+            .exchange_authorization_code(
+                "new-auth-code",
+                "new-client",
+                "https://newapp.example.com/callback",
+            )
+            .await;
+
+        assert!(result.is_ok());
+        let token_response = result.unwrap();
+        assert!(!token_response.access_token.is_empty());
+    }
+
+    // ============================================================================
+    // refresh_token tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_refresh_token_success() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "refresh-client-uuid",
+                "clientId": "refresh-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/refresh-client-uuid/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "refresh-client-secret"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .and(body_string_contains("grant_type=refresh_token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "new-access-token-after-refresh",
+                "refresh_token": "new-refresh-token",
+                "id_token": "new-id-token"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "sub": "refresh-user-id",
+                "email": "refresh-user@example.com",
+                "name": "Refresh User"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let existing_user = create_test_user("refresh-user-id", "refresh-user@example.com");
+        let mut mock_user_repo = MockUserRepository::new();
+        mock_user_repo
+            .expect_find_by_keycloak_id()
+            .returning(move |_| Ok(Some(existing_user.clone())));
+
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service
+            .refresh_token("old-refresh-token", "refresh-client")
+            .await;
+
+        assert!(result.is_ok());
+        let token_response = result.unwrap();
+        assert!(!token_response.access_token.is_empty());
+        assert_eq!(token_response.token_type, "Bearer");
+        assert!(token_response.refresh_token.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_invalid_token() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid",
+                "clientId": "test-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "client-secret"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .and(body_string_contains("grant_type=refresh_token"))
+            .respond_with(ResponseTemplate::new(400).set_body_json(json!({
+                "error": "invalid_grant",
+                "error_description": "Token is not active"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service
+            .refresh_token("invalid-refresh-token", "test-client")
+            .await;
+
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_creates_new_user() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "refresh-client-uuid",
+                "clientId": "refresh-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/refresh-client-uuid/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "refresh-client-secret"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .and(body_string_contains("grant_type=refresh_token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "refreshed-access-token",
+                "refresh_token": "new-refresh-token",
+                "id_token": null
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "sub": "new-user-from-refresh",
+                "email": "newrefresh@example.com",
+                "name": "New Refresh User"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let created_user = create_test_user("new-user-from-refresh", "newrefresh@example.com");
+        let mut mock_user_repo = MockUserRepository::new();
+        mock_user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None));
+        mock_user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(created_user.clone()));
+
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let result = service
+            .refresh_token("valid-refresh-token", "refresh-client")
+            .await;
+
+        assert!(result.is_ok());
+        let token_response = result.unwrap();
+        assert!(!token_response.access_token.is_empty());
+    }
+
+    // ============================================================================
+    // Error handling tests
+    // ============================================================================
+
+    #[tokio::test]
+    async fn test_handle_callback_userinfo_error() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([{
+                "id": "client-uuid-123",
+                "clientId": "test-client",
+                "enabled": true,
+                "protocol": "openid-connect",
+                "publicClient": false,
+                "redirectUris": [],
+                "webOrigins": []
+            }])))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients/client-uuid-123/client-secret"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "value": "client-secret-value"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("POST"))
+            .and(path("/realms/test-realm/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "valid-access-token",
+                "refresh_token": "valid-refresh-token",
+                "id_token": "valid-id-token"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Userinfo endpoint returns error
+        Mock::given(method("GET"))
+            .and(path("/realms/test-realm/protocol/openid-connect/userinfo"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+                "error": "invalid_token"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let state_payload = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded_state = encode_state(&state_payload).unwrap();
+
+        let result = service
+            .handle_callback("auth-code", Some(&encoded_state))
+            .await;
+
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_client_not_found_in_keycloak() {
+        let mock_server = MockServer::start().await;
+        let config = create_test_keycloak_config(&mock_server.uri());
+        let jwt_manager = Arc::new(create_test_jwt_manager());
+        let keycloak = Arc::new(KeycloakClient::new(config.clone()));
+
+        setup_admin_token_mock(&mock_server).await;
+
+        // Client query returns empty array
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test-realm/clients"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .mount(&mock_server)
+            .await;
+
+        let mock_user_repo = MockUserRepository::new();
+        let mock_service_repo = MockServiceRepository::new();
+
+        let service = KeycloakOidcService::new(
+            keycloak,
+            jwt_manager,
+            Arc::new(mock_user_repo),
+            Arc::new(mock_service_repo),
+            config.clone(),
+            "https://auth9.example.com".to_string(),
+        );
+
+        let state_payload = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "nonexistent-client".to_string(),
+            original_state: None,
+        };
+        let encoded_state = encode_state(&state_payload).unwrap();
+
+        let result = service
+            .handle_callback("auth-code", Some(&encoded_state))
+            .await;
+
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ============================================================================
+    // Original helper function tests
+    // ============================================================================
 
     #[test]
     fn test_encode_decode_state_roundtrip() {
@@ -596,5 +1740,91 @@ mod tests {
 
         assert!(decoded.redirect_uri.contains("foo=bar"));
         assert_eq!(decoded.client_id, "client-with-dashes");
+    }
+
+    #[test]
+    fn test_oidc_token_response_without_optional_fields() {
+        let response = OidcTokenResponse {
+            access_token: "access-token".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 1800,
+            refresh_token: None,
+            id_token: None,
+        };
+
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("access_token"));
+        assert!(json.contains("1800"));
+        assert!(!json.contains("refresh_token\":\""));
+    }
+
+    #[test]
+    fn test_authorize_params_minimal() {
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "minimal-app".to_string(),
+            redirect_uri: "https://app.com/cb".to_string(),
+            scope: "openid".to_string(),
+            state: None,
+            nonce: None,
+        };
+
+        assert_eq!(params.response_type, "code");
+        assert!(params.state.is_none());
+        assert!(params.nonce.is_none());
+    }
+
+    #[test]
+    fn test_callback_state_serialization() {
+        let state = CallbackState {
+            redirect_uri: "https://app.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: Some("original".to_string()),
+        };
+
+        let json = serde_json::to_string(&state).unwrap();
+        assert!(json.contains("redirect_uri"));
+        assert!(json.contains("client_id"));
+        assert!(json.contains("original_state"));
+
+        let decoded: CallbackState = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.redirect_uri, state.redirect_uri);
+    }
+
+    #[test]
+    fn test_decode_state_invalid_json() {
+        // Valid base64 but invalid JSON
+        let invalid_json_base64 =
+            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode("not json at all");
+        let result = decode_state(Some(&invalid_json_base64));
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_encode_state_empty_strings() {
+        let state = CallbackState {
+            redirect_uri: "".to_string(),
+            client_id: "".to_string(),
+            original_state: None,
+        };
+
+        let encoded = encode_state(&state).unwrap();
+        let decoded = decode_state(Some(&encoded)).unwrap();
+
+        assert_eq!(decoded.redirect_uri, "");
+        assert_eq!(decoded.client_id, "");
+    }
+
+    #[test]
+    fn test_callback_result_construction() {
+        let result = CallbackResult {
+            identity_token: "eyJ...".to_string(),
+            redirect_url: "https://app.com/callback?access_token=xyz".to_string(),
+            expires_in: 7200,
+        };
+
+        assert!(result.identity_token.starts_with("eyJ"));
+        assert!(result.redirect_url.contains("access_token="));
+        assert_eq!(result.expires_in, 7200);
     }
 }

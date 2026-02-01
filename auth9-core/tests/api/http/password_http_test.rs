@@ -2,7 +2,7 @@
 //!
 //! Tests for password reset and password change endpoints.
 
-use super::{post_json, put_json, MockKeycloakServer, TestAppState};
+use super::{post_json, post_json_with_auth, put_json, MockKeycloakServer, TestAppState};
 use crate::api::create_test_user;
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{PasswordPolicy, StringUuid};
@@ -198,6 +198,127 @@ async fn test_update_password_policy_invalid_min_length() {
 }
 
 // ============================================================================
+// Change Password Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_change_password_unauthorized() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_password_test_router(state);
+
+    // No auth header
+    let input = serde_json::json!({
+        "current_password": "OldPassword123!",
+        "new_password": "NewPassword123!"
+    });
+    let (status, _): (StatusCode, Option<MessageResponse>) =
+        post_json(&app, "/api/v1/password/change", &input).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_change_password_invalid_token() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "current_password": "OldPassword123!",
+        "new_password": "NewPassword123!"
+    });
+    let (status, _): (StatusCode, Option<MessageResponse>) =
+        post_json_with_auth(&app, "/api/v1/password/change", &input, "invalid-token").await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_change_password_user_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create a token for a user that doesn't exist in the repository
+    let user_id = StringUuid::new_v4();
+    let token = state
+        .jwt_manager
+        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "current_password": "OldPassword123!",
+        "new_password": "NewPassword123!"
+    });
+    let (status, _): (StatusCode, Option<MessageResponse>) =
+        post_json_with_auth(&app, "/api/v1/password/change", &input, &token).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_change_password_validation_error_short_password() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Add a test user
+    let user = create_test_user(None);
+    let user_id = user.id;
+    state.user_repo.add_user(user).await;
+
+    // Create a valid token
+    let token = state
+        .jwt_manager
+        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "current_password": "OldPassword123!",
+        "new_password": "short"  // Too short (less than 8 chars)
+    });
+    let (status, _): (StatusCode, Option<MessageResponse>) =
+        post_json_with_auth(&app, "/api/v1/password/change", &input, &token).await;
+
+    // 422 UNPROCESSABLE_ENTITY for validation errors
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn test_change_password_validation_error_empty_current() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Add a test user
+    let user = create_test_user(None);
+    let user_id = user.id;
+    state.user_repo.add_user(user).await;
+
+    // Create a valid token
+    let token = state
+        .jwt_manager
+        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "current_password": "",  // Empty current password
+        "new_password": "NewPassword123!"
+    });
+    let (status, _): (StatusCode, Option<MessageResponse>) =
+        post_json_with_auth(&app, "/api/v1/password/change", &input, &token).await;
+
+    // 422 UNPROCESSABLE_ENTITY for validation errors
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+// ============================================================================
 // Test Router Builder
 // ============================================================================
 
@@ -213,6 +334,10 @@ fn build_password_test_router(state: TestAppState) -> axum::Router {
         .route(
             "/api/v1/password/reset",
             post(password::reset_password::<TestAppState>),
+        )
+        .route(
+            "/api/v1/password/change",
+            post(password::change_password::<TestAppState>),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/password-policy",

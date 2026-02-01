@@ -406,4 +406,453 @@ mod tests {
         assert!(alert.resolved_at.is_some());
         assert_eq!(alert.resolved_by, Some(resolved_by));
     }
+
+    #[tokio::test]
+    async fn test_analyze_login_event_brute_force_detected() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+
+        // Mock failed attempts exceeding threshold
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(10)); // Above threshold of 5
+
+        // No password spray
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(1));
+
+        // Expect alert creation for brute force
+        alert_mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                user_id: input.user_id,
+                tenant_id: input.tenant_id,
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                details: input.details.clone(),
+                ..Default::default()
+            })
+        });
+
+        // Mock webhook - no webhooks configured
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: Some(StringUuid::new_v4()),
+            email: Some("test@example.com".to_string()),
+            tenant_id: None,
+            event_type: LoginEventType::FailedPassword,
+            ip_address: Some("192.168.1.100".to_string()),
+            user_agent: Some("Mozilla/5.0".to_string()),
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: Some("invalid_password".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].alert_type, SecurityAlertType::BruteForce);
+        assert_eq!(alerts[0].severity, AlertSeverity::High);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_login_event_password_spray_detected() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+
+        // No brute force
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(2));
+
+        // Password spray detected - multiple accounts from same IP
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(10)); // Above threshold of 5
+
+        // Expect alert creation for password spray
+        alert_mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                ..Default::default()
+            })
+        });
+
+        // Mock webhook - no webhooks configured
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: None,
+            email: None,
+            tenant_id: None,
+            event_type: LoginEventType::FailedPassword,
+            ip_address: Some("10.0.0.1".to_string()),
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: None,
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].alert_type, SecurityAlertType::SuspiciousIp);
+        assert_eq!(alerts[0].severity, AlertSeverity::Critical);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_login_event_new_device_detected() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+
+        let user_id = StringUuid::new_v4();
+
+        // For success events, still check brute force first (no IP in this case)
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(0));
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(0));
+
+        // For new device check - return existing logins with different user agent
+        login_mock.expect_list_by_user().returning(move |_, _, _| {
+            Ok(vec![LoginEvent {
+                id: 2,
+                user_id: Some(user_id),
+                email: Some("test@example.com".to_string()),
+                tenant_id: None,
+                event_type: LoginEventType::Success,
+                ip_address: Some("192.168.1.1".to_string()),
+                user_agent: Some("OldBrowser/1.0".to_string()), // Different from new event
+                device_type: None,
+                location: None,
+                session_id: None,
+                failure_reason: None,
+                created_at: Utc::now() - Duration::hours(1),
+            }])
+        });
+
+        // Expect new device alert creation
+        alert_mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                ..Default::default()
+            })
+        });
+
+        // Mock webhook - no webhooks configured
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: Some(user_id),
+            email: Some("test@example.com".to_string()),
+            tenant_id: None,
+            event_type: LoginEventType::Success,
+            ip_address: Some("192.168.1.1".to_string()),
+            user_agent: Some("NewBrowser/2.0".to_string()), // New user agent
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: None,
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].alert_type, SecurityAlertType::NewDevice);
+        assert_eq!(alerts[0].severity, AlertSeverity::Medium);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_login_event_impossible_travel_detected() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+
+        let user_id = StringUuid::new_v4();
+
+        // For success events, still check brute force first
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(0));
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(0));
+
+        // For impossible travel check - return recent login from different location
+        login_mock.expect_list_by_user().returning(move |_, _, _| {
+            Ok(vec![LoginEvent {
+                id: 2,
+                user_id: Some(user_id),
+                email: Some("test@example.com".to_string()),
+                tenant_id: None,
+                event_type: LoginEventType::Success,
+                ip_address: Some("192.168.1.1".to_string()),
+                user_agent: Some("Mozilla/5.0".to_string()),
+                device_type: None,
+                location: Some("New York, US".to_string()), // Different location
+                session_id: None,
+                failure_reason: None,
+                created_at: Utc::now() - Duration::minutes(30), // Only 30 minutes ago
+            }])
+        });
+
+        // Expect impossible travel alert creation
+        alert_mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                ..Default::default()
+            })
+        });
+
+        // Mock webhook - no webhooks configured
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: Some(user_id),
+            email: Some("test@example.com".to_string()),
+            tenant_id: None,
+            event_type: LoginEventType::Success,
+            ip_address: Some("10.0.0.1".to_string()),
+            user_agent: Some("Mozilla/5.0".to_string()),
+            device_type: None,
+            location: Some("Tokyo, Japan".to_string()), // Very different location
+            session_id: None,
+            failure_reason: None,
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        // Should have impossible travel alert (same user agent passes device check)
+        assert!(alerts.iter().any(|a| a.alert_type == SecurityAlertType::ImpossibleTravel));
+    }
+
+    #[tokio::test]
+    async fn test_analyze_login_event_no_alerts() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let alert_mock = MockSecurityAlertRepository::new();
+        let webhook_mock = MockWebhookRepository::new();
+
+        // Below thresholds
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(2));
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(1));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: None,
+            email: None,
+            tenant_id: None,
+            event_type: LoginEventType::FailedPassword,
+            ip_address: Some("192.168.1.1".to_string()),
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: None,
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        assert_eq!(alerts.len(), 0);
+    }
+
+    #[tokio::test]
+    async fn test_list_alerts_pagination() {
+        let login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let webhook_mock = MockWebhookRepository::new();
+
+        // Page 2 with 5 per page = offset 5
+        alert_mock
+            .expect_list()
+            .with(eq(5), eq(5))
+            .returning(|_, _| {
+                Ok(vec![
+                    SecurityAlert {
+                        alert_type: SecurityAlertType::BruteForce,
+                        ..Default::default()
+                    },
+                    SecurityAlert {
+                        alert_type: SecurityAlertType::NewDevice,
+                        ..Default::default()
+                    },
+                ])
+            });
+
+        alert_mock.expect_count().returning(|| Ok(12));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let (alerts, total) = service.list(2, 5).await.unwrap();
+        assert_eq!(alerts.len(), 2);
+        assert_eq!(total, 12);
+    }
+
+    #[tokio::test]
+    async fn test_get_alert_success() {
+        let login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let webhook_mock = MockWebhookRepository::new();
+
+        let alert_id = StringUuid::new_v4();
+
+        alert_mock.expect_find_by_id().with(eq(alert_id)).returning(
+            move |id| {
+                Ok(Some(SecurityAlert {
+                    id,
+                    alert_type: SecurityAlertType::BruteForce,
+                    severity: AlertSeverity::High,
+                    ..Default::default()
+                }))
+            },
+        );
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let alert = service.get(alert_id).await.unwrap();
+        assert_eq!(alert.id, alert_id);
+        assert_eq!(alert.alert_type, SecurityAlertType::BruteForce);
+    }
+
+    #[tokio::test]
+    async fn test_get_alert_not_found() {
+        let login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let webhook_mock = MockWebhookRepository::new();
+
+        let alert_id = StringUuid::new_v4();
+
+        alert_mock
+            .expect_find_by_id()
+            .with(eq(alert_id))
+            .returning(|_| Ok(None));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let result = service.get(alert_id).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_cleanup_old_alerts() {
+        let login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let webhook_mock = MockWebhookRepository::new();
+
+        alert_mock.expect_delete_old().with(eq(30)).returning(|_| Ok(5));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let deleted = service.cleanup_old_alerts(30).await.unwrap();
+        assert_eq!(deleted, 5);
+    }
+
+    #[test]
+    fn test_custom_config() {
+        let config = SecurityDetectionConfig {
+            brute_force_threshold: 10,
+            brute_force_window_mins: 5,
+            password_spray_threshold: 3,
+            password_spray_window_mins: 15,
+            impossible_travel_distance_km: 1000.0,
+        };
+
+        assert_eq!(config.brute_force_threshold, 10);
+        assert_eq!(config.password_spray_threshold, 3);
+        assert_eq!(config.impossible_travel_distance_km, 1000.0);
+    }
 }

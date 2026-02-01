@@ -2,11 +2,13 @@
 //!
 //! Tests for identity provider management endpoints.
 
-use super::{get_json, MockKeycloakServer, TestAppState};
+use super::{
+    delete_json, get_json, post_json, put_json, MockKeycloakServer, TestAppState,
+};
 use crate::api::create_test_user;
-use auth9_core::api::SuccessResponse;
+use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{
-    IdentityProviderTemplate, LinkedIdentity, LinkedIdentityInfo, StringUuid,
+    IdentityProvider, IdentityProviderTemplate, LinkedIdentity, LinkedIdentityInfo, StringUuid,
 };
 use auth9_core::repository::LinkedIdentityRepository;
 use axum::http::StatusCode;
@@ -228,17 +230,264 @@ async fn test_unlink_identity_success() {
 }
 
 // ============================================================================
+// List Providers Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_list_providers_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc
+        .mock_list_identity_providers(vec![("google", "google"), ("github", "github")])
+        .await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<IdentityProvider>>>) =
+        get_json(&app, "/api/v1/identity-providers").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let providers = body.unwrap().data;
+    assert_eq!(providers.len(), 2);
+}
+
+#[tokio::test]
+async fn test_list_providers_empty() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_list_identity_providers_empty().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<IdentityProvider>>>) =
+        get_json(&app, "/api/v1/identity-providers").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let providers = body.unwrap().data;
+    assert!(providers.is_empty());
+}
+
+// ============================================================================
+// Get Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_provider_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc
+        .mock_get_identity_provider("google", "google")
+        .await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        get_json(&app, "/api/v1/identity-providers/google").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let provider = body.unwrap().data;
+    assert_eq!(provider.alias, "google");
+}
+
+#[tokio::test]
+async fn test_get_provider_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_get_identity_provider_not_found().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let (status, _): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        get_json(&app, "/api/v1/identity-providers/nonexistent").await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ============================================================================
+// Create Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_create_provider_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_create_identity_provider_success().await;
+    mock_kc
+        .mock_get_identity_provider("google", "google")
+        .await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let input = serde_json::json!({
+        "alias": "google",
+        "display_name": "Google",
+        "provider_id": "google",
+        "enabled": true,
+        "trust_email": false,
+        "store_token": false,
+        "link_only": false,
+        "config": {
+            "clientId": "test-client-id",
+            "clientSecret": "test-secret"
+        }
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        post_json(&app, "/api/v1/identity-providers", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let provider = body.unwrap().data;
+    assert_eq!(provider.alias, "google");
+}
+
+#[tokio::test]
+async fn test_create_provider_conflict() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_create_identity_provider_conflict().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let input = serde_json::json!({
+        "alias": "google",
+        "display_name": "Google",
+        "provider_id": "google",
+        "enabled": true,
+        "config": {}
+    });
+
+    let (status, _): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        post_json(&app, "/api/v1/identity-providers", &input).await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_create_provider_validation_error() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    // Missing required field 'alias'
+    let input = serde_json::json!({
+        "display_name": "Google",
+        "provider_id": "google"
+    });
+
+    let (status, _): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        post_json(&app, "/api/v1/identity-providers", &input).await;
+
+    // Bad request due to missing required field
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+// ============================================================================
+// Update Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_update_provider_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc
+        .mock_get_identity_provider("google", "google")
+        .await;
+    mock_kc.mock_update_identity_provider_success().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let input = serde_json::json!({
+        "display_name": "Updated Google",
+        "enabled": false
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        put_json(&app, "/api/v1/identity-providers/google", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+}
+
+#[tokio::test]
+async fn test_update_provider_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_get_identity_provider_not_found().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let input = serde_json::json!({
+        "enabled": false
+    });
+
+    let (status, _): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
+        put_json(&app, "/api/v1/identity-providers/nonexistent", &input).await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ============================================================================
+// Delete Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_delete_provider_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_delete_identity_provider_success().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let (status, body): (StatusCode, Option<MessageResponse>) =
+        delete_json(&app, "/api/v1/identity-providers/google").await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    assert!(body.unwrap().message.contains("deleted"));
+}
+
+#[tokio::test]
+async fn test_delete_provider_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_delete_identity_provider_not_found().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    let (status, _): (StatusCode, Option<MessageResponse>) =
+        delete_json(&app, "/api/v1/identity-providers/nonexistent").await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ============================================================================
 // Test Router Builder
 // ============================================================================
 
 fn build_idp_test_router(state: TestAppState) -> axum::Router {
     use auth9_core::api::identity_provider;
-    use axum::routing::{delete, get};
+    use axum::routing::{delete, get, post, put};
 
     axum::Router::new()
         .route(
+            "/api/v1/identity-providers",
+            get(identity_provider::list_providers::<TestAppState>)
+                .post(identity_provider::create_provider::<TestAppState>),
+        )
+        .route(
             "/api/v1/identity-providers/templates",
             get(identity_provider::get_templates::<TestAppState>),
+        )
+        .route(
+            "/api/v1/identity-providers/{alias}",
+            get(identity_provider::get_provider::<TestAppState>)
+                .put(identity_provider::update_provider::<TestAppState>)
+                .delete(identity_provider::delete_provider::<TestAppState>),
         )
         .route(
             "/api/v1/me/linked-identities",

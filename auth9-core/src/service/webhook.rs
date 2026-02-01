@@ -206,6 +206,8 @@ mod tests {
     use super::*;
     use crate::repository::webhook::MockWebhookRepository;
     use mockall::predicate::*;
+    use wiremock::matchers::{header, method, path};
+    use wiremock::{Mock, MockServer, ResponseTemplate};
 
     #[test]
     fn test_compute_signature() {
@@ -259,6 +261,67 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_create_webhook_validation_error() {
+        let mock = MockWebhookRepository::new();
+        let tenant_id = StringUuid::new_v4();
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        // Invalid URL
+        let input = CreateWebhookInput {
+            name: "Test Webhook".to_string(),
+            url: "not-a-valid-url".to_string(),
+            secret: None,
+            events: vec!["login.success".to_string()],
+            enabled: true,
+        };
+
+        let result = service.create(tenant_id, input).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_get_webhook_success() {
+        let mut mock = MockWebhookRepository::new();
+        let webhook_id = StringUuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(webhook_id))
+            .returning(|id| {
+                Ok(Some(Webhook {
+                    id,
+                    name: "Found Webhook".to_string(),
+                    ..Default::default()
+                }))
+            });
+
+        let service = WebhookService::new(Arc::new(mock));
+        let webhook = service.get(webhook_id).await.unwrap();
+
+        assert_eq!(webhook.id, webhook_id);
+        assert_eq!(webhook.name, "Found Webhook");
+    }
+
+    #[tokio::test]
+    async fn test_get_webhook_not_found() {
+        let mut mock = MockWebhookRepository::new();
+        let webhook_id = StringUuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(webhook_id))
+            .returning(|_| Ok(None));
+
+        let service = WebhookService::new(Arc::new(mock));
+        let result = service.get(webhook_id).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::NotFound(msg) => assert!(msg.contains("not found")),
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[tokio::test]
     async fn test_list_by_tenant() {
         let mut mock = MockWebhookRepository::new();
         let tenant_id = StringUuid::new_v4();
@@ -285,6 +348,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn test_list_by_tenant_empty() {
+        let mut mock = MockWebhookRepository::new();
+        let tenant_id = StringUuid::new_v4();
+
+        mock.expect_list_by_tenant()
+            .with(eq(tenant_id))
+            .returning(|_| Ok(vec![]));
+
+        let service = WebhookService::new(Arc::new(mock));
+        let webhooks = service.list_by_tenant(tenant_id).await.unwrap();
+
+        assert!(webhooks.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_update_webhook() {
+        let mut mock = MockWebhookRepository::new();
+        let webhook_id = StringUuid::new_v4();
+
+        mock.expect_update().returning(|id, input| {
+            Ok(Webhook {
+                id,
+                name: input.name.clone().unwrap_or_default(),
+                url: input.url.clone().unwrap_or_default(),
+                enabled: input.enabled.unwrap_or(true),
+                ..Default::default()
+            })
+        });
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        let input = UpdateWebhookInput {
+            name: Some("Updated Webhook".to_string()),
+            url: Some("https://example.com/updated".to_string()),
+            secret: None,
+            events: None,
+            enabled: Some(false),
+        };
+
+        let webhook = service.update(webhook_id, input).await.unwrap();
+        assert_eq!(webhook.name, "Updated Webhook");
+        assert!(!webhook.enabled);
+    }
+
+    #[tokio::test]
     async fn test_delete_webhook() {
         let mut mock = MockWebhookRepository::new();
         let id = StringUuid::new_v4();
@@ -295,5 +403,244 @@ mod tests {
         let result = service.delete(id).await;
 
         assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_trigger_event_success() {
+        // Start a mock HTTP server
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .and(header("Content-Type", "application/json"))
+            .and(header("X-Webhook-Event", "login.success"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_id = StringUuid::new_v4();
+        let tenant_id = StringUuid::new_v4();
+
+        let mut mock = MockWebhookRepository::new();
+        mock.expect_list_enabled_for_event().returning({
+            let url = format!("{}/webhook", mock_server.uri());
+            move |_| {
+                Ok(vec![Webhook {
+                    id: webhook_id,
+                    tenant_id,
+                    name: "Test Webhook".to_string(),
+                    url: url.clone(),
+                    events: vec!["login.success".to_string()],
+                    enabled: true,
+                    secret: None,
+                    ..Default::default()
+                }])
+            }
+        });
+        mock.expect_update_triggered().returning(|_, _| Ok(()));
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        let event = WebhookEvent {
+            event_type: "login.success".to_string(),
+            timestamp: Utc::now(),
+            data: serde_json::json!({"user_id": "user-123"}),
+        };
+
+        let result = service.trigger_event(event).await;
+        assert!(result.is_ok());
+
+        // Wait a bit for the spawned task to complete
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_trigger_event_no_webhooks() {
+        let mut mock = MockWebhookRepository::new();
+        mock.expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        let event = WebhookEvent {
+            event_type: "login.success".to_string(),
+            timestamp: Utc::now(),
+            data: serde_json::json!({"user_id": "user-123"}),
+        };
+
+        let result = service.trigger_event(event).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_trigger_event_with_signature() {
+        let mock_server = MockServer::start().await;
+
+        // Verify that signature header is present
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .and(header("Content-Type", "application/json"))
+            .and(header("X-Webhook-Event", "user.created"))
+            .and(wiremock::matchers::header_exists("X-Webhook-Signature"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_id = StringUuid::new_v4();
+        let tenant_id = StringUuid::new_v4();
+
+        let mut mock = MockWebhookRepository::new();
+        mock.expect_list_enabled_for_event().returning({
+            let url = format!("{}/webhook", mock_server.uri());
+            move |_| {
+                Ok(vec![Webhook {
+                    id: webhook_id,
+                    tenant_id,
+                    name: "Signed Webhook".to_string(),
+                    url: url.clone(),
+                    events: vec!["user.created".to_string()],
+                    enabled: true,
+                    secret: Some("webhook-secret".to_string()),
+                    ..Default::default()
+                }])
+            }
+        });
+        mock.expect_update_triggered().returning(|_, _| Ok(()));
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        let event = WebhookEvent {
+            event_type: "user.created".to_string(),
+            timestamp: Utc::now(),
+            data: serde_json::json!({"user_id": "user-456"}),
+        };
+
+        let result = service.trigger_event(event).await;
+        assert!(result.is_ok());
+
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+
+    #[tokio::test]
+    async fn test_test_webhook_success() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .and(header("X-Webhook-Event", "test"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("Success"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_id = StringUuid::new_v4();
+
+        let mut mock = MockWebhookRepository::new();
+        mock.expect_find_by_id().returning({
+            let url = format!("{}/webhook", mock_server.uri());
+            move |id| {
+                Ok(Some(Webhook {
+                    id,
+                    name: "Test Webhook".to_string(),
+                    url: url.clone(),
+                    enabled: true,
+                    secret: None,
+                    ..Default::default()
+                }))
+            }
+        });
+
+        let service = WebhookService::new(Arc::new(mock));
+        let result = service.test(webhook_id).await.unwrap();
+
+        assert!(result.success);
+        assert_eq!(result.status_code, Some(200));
+        assert_eq!(result.response_body, Some("Success".to_string()));
+        assert!(result.error.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_test_webhook_failure_http_error() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("POST"))
+            .and(path("/webhook"))
+            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
+            .expect(1)
+            .mount(&mock_server)
+            .await;
+
+        let webhook_id = StringUuid::new_v4();
+
+        let mut mock = MockWebhookRepository::new();
+        mock.expect_find_by_id().returning({
+            let url = format!("{}/webhook", mock_server.uri());
+            move |id| {
+                Ok(Some(Webhook {
+                    id,
+                    name: "Test Webhook".to_string(),
+                    url: url.clone(),
+                    enabled: true,
+                    secret: None,
+                    ..Default::default()
+                }))
+            }
+        });
+
+        let service = WebhookService::new(Arc::new(mock));
+        let result = service.test(webhook_id).await.unwrap();
+
+        assert!(!result.success);
+        assert!(result.status_code.is_none());
+        assert!(result.error.is_some());
+        assert!(result.error.unwrap().contains("500"));
+    }
+
+    #[tokio::test]
+    async fn test_test_webhook_not_found() {
+        let mut mock = MockWebhookRepository::new();
+        let webhook_id = StringUuid::new_v4();
+
+        mock.expect_find_by_id()
+            .with(eq(webhook_id))
+            .returning(|_| Ok(None));
+
+        let service = WebhookService::new(Arc::new(mock));
+        let result = service.test(webhook_id).await;
+
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::NotFound(msg) => assert!(msg.contains("not found")),
+            _ => panic!("Expected NotFound error"),
+        }
+    }
+
+    #[test]
+    fn test_webhook_test_result_serialization() {
+        let result = WebhookTestResult {
+            success: true,
+            status_code: Some(200),
+            response_body: Some("ok".to_string()),
+            error: None,
+        };
+
+        let json = serde_json::to_string(&result).unwrap();
+        assert!(json.contains("\"success\":true"));
+        assert!(json.contains("\"status_code\":200"));
+    }
+
+    #[test]
+    fn test_signature_format() {
+        let signature = compute_signature("test payload", "secret").unwrap();
+
+        // Verify format: sha256=<hex>
+        assert!(signature.starts_with("sha256="));
+        let hex_part = &signature[7..];
+        // SHA256 produces 32 bytes = 64 hex characters
+        assert_eq!(hex_part.len(), 64);
+        // All characters should be valid hex
+        assert!(hex_part.chars().all(|c| c.is_ascii_hexdigit()));
     }
 }
