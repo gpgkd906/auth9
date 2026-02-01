@@ -24,9 +24,9 @@ pub mod webauthn_http_test;
 pub mod webhook_http_test;
 
 use crate::api::{
-    create_test_jwt_manager, TestAuditRepository, TestLinkedIdentityRepository,
-    TestLoginEventRepository, TestPasswordResetRepository, TestRbacRepository,
-    TestSecurityAlertRepository, TestServiceRepository, TestSessionRepository,
+    create_test_jwt_manager, TestAuditRepository, TestInvitationRepository,
+    TestLinkedIdentityRepository, TestLoginEventRepository, TestPasswordResetRepository,
+    TestRbacRepository, TestSecurityAlertRepository, TestServiceRepository, TestSessionRepository,
     TestSystemSettingsRepository, TestTenantRepository, TestUserRepository, TestWebhookRepository,
 };
 use auth9_core::cache::NoOpCacheManager;
@@ -106,9 +106,31 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
 #[derive(Clone)]
 pub struct TestAppState {
     pub config: Arc<Config>,
-    pub tenant_service: Arc<TenantService<TestTenantRepository>>,
-    pub user_service: Arc<UserService<TestUserRepository>>,
-    pub client_service: Arc<ClientService<TestServiceRepository>>,
+    pub tenant_service: Arc<
+        TenantService<
+            TestTenantRepository,
+            TestServiceRepository,
+            TestWebhookRepository,
+            TestInvitationRepository,
+            TestUserRepository,
+            TestRbacRepository,
+            TestLoginEventRepository,
+            TestSecurityAlertRepository,
+        >,
+    >,
+    pub user_service: Arc<
+        UserService<
+            TestUserRepository,
+            TestSessionRepository,
+            TestPasswordResetRepository,
+            TestLinkedIdentityRepository,
+            TestLoginEventRepository,
+            TestSecurityAlertRepository,
+            TestAuditRepository,
+            TestRbacRepository,
+        >,
+    >,
+    pub client_service: Arc<ClientService<TestServiceRepository, TestRbacRepository>>,
     pub rbac_service: Arc<RbacService<TestRbacRepository>>,
     pub system_settings_service: Arc<SystemSettingsService<TestSystemSettingsRepository>>,
     pub email_service: Arc<EmailService<TestSystemSettingsRepository>>,
@@ -139,6 +161,8 @@ pub struct TestAppState {
     pub linked_identity_repo: Arc<TestLinkedIdentityRepository>,
     pub webhook_repo: Arc<TestWebhookRepository>,
     pub login_event_repo: Arc<TestLoginEventRepository>,
+    pub security_alert_repo: Arc<TestSecurityAlertRepository>,
+    pub invitation_repo: Arc<TestInvitationRepository>,
 }
 
 impl TestAppState {
@@ -156,10 +180,36 @@ impl TestAppState {
         let linked_identity_repo = Arc::new(TestLinkedIdentityRepository::new());
         let webhook_repo = Arc::new(TestWebhookRepository::new());
         let login_event_repo = Arc::new(TestLoginEventRepository::new());
+        let security_alert_repo = Arc::new(TestSecurityAlertRepository::new());
+        let invitation_repo = Arc::new(TestInvitationRepository::new());
 
-        let tenant_service = Arc::new(TenantService::new(tenant_repo.clone(), None));
-        let user_service = Arc::new(UserService::new(user_repo.clone()));
-        let client_service = Arc::new(ClientService::new(service_repo.clone(), None));
+        let tenant_service = Arc::new(TenantService::new(
+            tenant_repo.clone(),
+            service_repo.clone(),
+            webhook_repo.clone(),
+            invitation_repo.clone(),
+            user_repo.clone(),
+            rbac_repo.clone(),
+            login_event_repo.clone(),
+            security_alert_repo.clone(),
+            None,
+        ));
+        let user_service = Arc::new(UserService::new(
+            user_repo.clone(),
+            session_repo.clone(),
+            password_reset_repo.clone(),
+            linked_identity_repo.clone(),
+            login_event_repo.clone(),
+            security_alert_repo.clone(),
+            audit_repo.clone(),
+            rbac_repo.clone(),
+            None,
+        ));
+        let client_service = Arc::new(ClientService::new(
+            service_repo.clone(),
+            rbac_repo.clone(),
+            None,
+        ));
         let rbac_service = Arc::new(RbacService::new(rbac_repo.clone(), None));
         let system_settings_service = Arc::new(SystemSettingsService::new(
             system_settings_repo.clone(),
@@ -226,6 +276,8 @@ impl TestAppState {
             linked_identity_repo,
             webhook_repo,
             login_event_repo,
+            security_alert_repo,
+            invitation_repo,
         }
     }
 
@@ -243,20 +295,49 @@ impl HasServices for TestAppState {
     type ServiceRepo = TestServiceRepository;
     type RbacRepo = TestRbacRepository;
     type AuditRepo = TestAuditRepository;
+    type SessionRepo = TestSessionRepository;
+    type PasswordResetRepo = TestPasswordResetRepository;
+    type LinkedIdentityRepo = TestLinkedIdentityRepository;
+    type LoginEventRepo = TestLoginEventRepository;
+    type SecurityAlertRepo = TestSecurityAlertRepository;
+    type WebhookRepo = TestWebhookRepository;
+    type CascadeInvitationRepo = TestInvitationRepository;
 
     fn config(&self) -> &Config {
         &self.config
     }
 
-    fn tenant_service(&self) -> &TenantService<Self::TenantRepo> {
+    fn tenant_service(
+        &self,
+    ) -> &TenantService<
+        Self::TenantRepo,
+        Self::ServiceRepo,
+        Self::WebhookRepo,
+        Self::CascadeInvitationRepo,
+        Self::UserRepo,
+        Self::RbacRepo,
+        Self::LoginEventRepo,
+        Self::SecurityAlertRepo,
+    > {
         &self.tenant_service
     }
 
-    fn user_service(&self) -> &UserService<Self::UserRepo> {
+    fn user_service(
+        &self,
+    ) -> &UserService<
+        Self::UserRepo,
+        Self::SessionRepo,
+        Self::PasswordResetRepo,
+        Self::LinkedIdentityRepo,
+        Self::LoginEventRepo,
+        Self::SecurityAlertRepo,
+        Self::AuditRepo,
+        Self::RbacRepo,
+    > {
         &self.user_service
     }
 
-    fn client_service(&self) -> &ClientService<Self::ServiceRepo> {
+    fn client_service(&self) -> &ClientService<Self::ServiceRepo, Self::RbacRepo> {
         &self.client_service
     }
 

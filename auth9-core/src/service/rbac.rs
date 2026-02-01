@@ -92,9 +92,22 @@ impl<R: RbacRepository> RbacService<R> {
         Ok(role)
     }
 
+    /// Delete a role with cascade handling.
+    ///
+    /// Cascade order:
+    /// 1. Clear parent_role_id references (other roles pointing to this one)
+    /// 2. Delete role (repository handles role_permissions and user_tenant_roles)
+    /// 3. Invalidate cache
     pub async fn delete_role(&self, id: StringUuid) -> Result<()> {
         let _ = self.get_role(id).await?;
+
+        // 1. Clear parent_role_id references from other roles
+        self.repo.clear_parent_role_reference_by_id(id).await?;
+
+        // 2. Delete role (repository handles role_permissions and user_tenant_roles)
         self.repo.delete_role(id).await?;
+
+        // 3. Invalidate cache
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_all_user_roles().await;
         }
@@ -555,6 +568,11 @@ mod tests {
         mock.expect_find_role_by_id()
             .with(eq(id))
             .returning(move |_| Ok(Some(role_clone.clone())));
+
+        // Clear parent_role_id references
+        mock.expect_clear_parent_role_reference_by_id()
+            .with(eq(id))
+            .returning(|_| Ok(0));
 
         mock.expect_delete_role().with(eq(id)).returning(|_| Ok(()));
 

@@ -188,11 +188,25 @@ impl<
         self.repo.add_to_tenant(&input).await
     }
 
+    /// Remove a user from a tenant with cascade delete of role assignments.
+    ///
+    /// Cascade order:
+    /// 1. Delete user_tenant_roles for this tenant membership
+    /// 2. Delete tenant_users record
     pub async fn remove_from_tenant(
         &self,
         user_id: StringUuid,
         tenant_id: StringUuid,
     ) -> Result<()> {
+        // 1. Find tenant_user_id and delete role assignments
+        if let Some(tenant_user_id) = self.rbac_repo.find_tenant_user_id(user_id, tenant_id).await?
+        {
+            self.rbac_repo
+                .delete_user_roles_by_tenant_user(tenant_user_id)
+                .await?;
+        }
+
+        // 2. Delete tenant_users record
         self.repo.remove_from_tenant(user_id, tenant_id).await
     }
 
@@ -815,15 +829,76 @@ mod tests {
 
     #[tokio::test]
     async fn test_remove_from_tenant_success() {
-        let mut mock = MockUserRepository::new();
+        let mut mock_user = MockUserRepository::new();
+        let mut mock_rbac = MockRbacRepository::new();
         let user_id = StringUuid::new_v4();
         let tenant_id = StringUuid::new_v4();
+        let tenant_user_id = StringUuid::new_v4();
 
-        mock.expect_remove_from_tenant()
+        // Find tenant_user_id
+        mock_rbac
+            .expect_find_tenant_user_id()
+            .with(eq(user_id), eq(tenant_id))
+            .returning(move |_, _| Ok(Some(tenant_user_id)));
+
+        // Delete user_tenant_roles
+        mock_rbac
+            .expect_delete_user_roles_by_tenant_user()
+            .with(eq(tenant_user_id))
+            .returning(|_| Ok(2));
+
+        // Delete tenant_users record
+        mock_user
+            .expect_remove_from_tenant()
             .with(eq(user_id), eq(tenant_id))
             .returning(|_, _| Ok(()));
 
-        let service = create_test_service(mock);
+        let service = UserService::new(
+            Arc::new(mock_user),
+            Arc::new(MockSessionRepository::new()),
+            Arc::new(MockPasswordResetRepository::new()),
+            Arc::new(MockLinkedIdentityRepository::new()),
+            Arc::new(MockLoginEventRepository::new()),
+            Arc::new(MockSecurityAlertRepository::new()),
+            Arc::new(MockAuditRepository::new()),
+            Arc::new(mock_rbac),
+            None,
+        );
+
+        let result = service.remove_from_tenant(user_id, tenant_id).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_remove_from_tenant_no_roles() {
+        let mut mock_user = MockUserRepository::new();
+        let mut mock_rbac = MockRbacRepository::new();
+        let user_id = StringUuid::new_v4();
+        let tenant_id = StringUuid::new_v4();
+
+        // User not found in tenant (no tenant_user record)
+        mock_rbac
+            .expect_find_tenant_user_id()
+            .with(eq(user_id), eq(tenant_id))
+            .returning(|_, _| Ok(None));
+
+        // Should still delete tenant_users record (idempotent)
+        mock_user
+            .expect_remove_from_tenant()
+            .with(eq(user_id), eq(tenant_id))
+            .returning(|_, _| Ok(()));
+
+        let service = UserService::new(
+            Arc::new(mock_user),
+            Arc::new(MockSessionRepository::new()),
+            Arc::new(MockPasswordResetRepository::new()),
+            Arc::new(MockLinkedIdentityRepository::new()),
+            Arc::new(MockLoginEventRepository::new()),
+            Arc::new(MockSecurityAlertRepository::new()),
+            Arc::new(MockAuditRepository::new()),
+            Arc::new(mock_rbac),
+            None,
+        );
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());

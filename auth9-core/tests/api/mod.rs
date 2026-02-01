@@ -15,13 +15,14 @@ use async_trait::async_trait;
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
-    AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateLinkedIdentityInput,
-    CreateLoginEventInput, CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
-    CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput,
-    CreateUserInput, CreateWebhookInput, LinkedIdentity, LoginEvent, LoginEventType, LoginStats,
-    PasswordResetToken, Permission, Role, SecurityAlert, SecurityAlertType, Service, ServiceStatus,
-    Session, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
-    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
+    AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateInvitationInput,
+    CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasswordResetTokenInput,
+    CreatePermissionInput, CreateRoleInput, CreateSecurityAlertInput, CreateServiceInput,
+    CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput, Invitation,
+    InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats, PasswordResetToken,
+    Permission, Role, SecurityAlert, SecurityAlertType, Service, ServiceStatus, Session,
+    StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser, UpdateRoleInput,
+    UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
     UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
 };
 use auth9_core::error::{AppError, Result};
@@ -30,9 +31,9 @@ use auth9_core::repository::audit::{
     AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput,
 };
 use auth9_core::repository::{
-    LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository, RbacRepository,
-    SecurityAlertRepository, ServiceRepository, SessionRepository, SystemSettingsRepository,
-    TenantRepository, UserRepository, WebhookRepository,
+    InvitationRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
+    RbacRepository, SecurityAlertRepository, ServiceRepository, SessionRepository,
+    SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -352,6 +353,38 @@ impl UserRepository for TestUserRepository {
             .cloned()
             .collect())
     }
+
+    async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64> {
+        let mut tenant_users = self.tenant_users.write().await;
+        let before = tenant_users.len();
+        tenant_users.retain(|tu| tu.user_id != user_id);
+        Ok((before - tenant_users.len()) as u64)
+    }
+
+    async fn list_tenant_user_ids(&self, user_id: StringUuid) -> Result<Vec<StringUuid>> {
+        let tenant_users = self.tenant_users.read().await;
+        Ok(tenant_users
+            .iter()
+            .filter(|tu| tu.user_id == user_id)
+            .map(|tu| tu.id)
+            .collect())
+    }
+
+    async fn list_tenant_user_ids_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<StringUuid>> {
+        let tenant_users = self.tenant_users.read().await;
+        Ok(tenant_users
+            .iter()
+            .filter(|tu| tu.tenant_id == tenant_id)
+            .map(|tu| tu.id)
+            .collect())
+    }
+
+    async fn delete_tenant_memberships_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut tenant_users = self.tenant_users.write().await;
+        let before = tenant_users.len();
+        tenant_users.retain(|tu| tu.tenant_id != tenant_id);
+        Ok((before - tenant_users.len()) as u64)
+    }
 }
 
 /// Configurable test service repository
@@ -538,6 +571,22 @@ impl ServiceRepository for TestServiceRepository {
             .ok_or_else(|| AppError::NotFound(format!("Client {} not found", client_id)))?;
         client.client_secret_hash = new_secret_hash.to_string();
         Ok(())
+    }
+
+    async fn list_by_tenant(&self, tenant_id: Uuid) -> Result<Vec<Service>> {
+        let services = self.services.read().await;
+        Ok(services
+            .iter()
+            .filter(|s| s.tenant_id.map(|t| t.0) == Some(tenant_id))
+            .cloned()
+            .collect())
+    }
+
+    async fn delete_clients_by_service(&self, service_id: Uuid) -> Result<u64> {
+        let mut clients = self.clients.write().await;
+        let before = clients.len();
+        clients.retain(|c| c.service_id.0 != service_id);
+        Ok((before - clients.len()) as u64)
     }
 }
 
@@ -826,6 +875,71 @@ impl RbacRepository for TestRbacRepository {
     ) -> Result<Vec<Role>> {
         Ok(self.roles.read().await.clone())
     }
+
+    async fn delete_permissions_by_service(&self, service_id: StringUuid) -> Result<u64> {
+        let mut permissions = self.permissions.write().await;
+        let before = permissions.len();
+        permissions.retain(|p| p.service_id != service_id);
+        Ok((before - permissions.len()) as u64)
+    }
+
+    async fn delete_roles_by_service(&self, service_id: StringUuid) -> Result<u64> {
+        let mut roles = self.roles.write().await;
+        let before = roles.len();
+        // First, collect role IDs to delete
+        let role_ids_to_delete: Vec<StringUuid> = roles
+            .iter()
+            .filter(|r| r.service_id == service_id)
+            .map(|r| r.id)
+            .collect();
+
+        // Remove role_permissions for these roles
+        {
+            let mut role_permissions = self.role_permissions.write().await;
+            role_permissions.retain(|(rid, _)| !role_ids_to_delete.contains(rid));
+        }
+
+        // Remove tenant_user_roles for these roles
+        {
+            let mut tenant_user_roles = self.tenant_user_roles.write().await;
+            tenant_user_roles.retain(|(_, rid)| !role_ids_to_delete.contains(rid));
+        }
+
+        // Remove the roles
+        roles.retain(|r| r.service_id != service_id);
+        Ok((before - roles.len()) as u64)
+    }
+
+    async fn clear_parent_role_references(&self, service_id: StringUuid) -> Result<u64> {
+        let mut roles = self.roles.write().await;
+        let mut count = 0u64;
+        for role in roles.iter_mut() {
+            if role.service_id == service_id && role.parent_role_id.is_some() {
+                role.parent_role_id = None;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    async fn delete_user_roles_by_tenant_user(&self, tenant_user_id: StringUuid) -> Result<u64> {
+        let mut tenant_user_roles = self.tenant_user_roles.write().await;
+        let before = tenant_user_roles.len();
+        tenant_user_roles.retain(|(tuid, _)| *tuid != tenant_user_id);
+        Ok((before - tenant_user_roles.len()) as u64)
+    }
+
+    async fn clear_parent_role_reference_by_id(&self, role_id: StringUuid) -> Result<u64> {
+        let mut roles = self.roles.write().await;
+        let mut count = 0u64;
+        for role in roles.iter_mut() {
+            if role.parent_role_id == Some(role_id) {
+                role.parent_role_id = None;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
 }
 
 /// Configurable test audit repository
@@ -906,6 +1020,19 @@ impl AuditRepository for TestAuditRepository {
     async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
         let logs = self.find(query).await?;
         Ok(logs.len() as i64)
+    }
+
+    async fn nullify_actor_id(&self, user_id: StringUuid) -> Result<u64> {
+        let mut logs = self.logs.write().await;
+        let user_id_str = user_id.to_string();
+        let mut count = 0u64;
+        for log in logs.iter_mut() {
+            if log.actor_id.as_ref() == Some(&user_id_str) {
+                log.actor_id = None;
+                count += 1;
+            }
+        }
+        Ok(count)
     }
 }
 
@@ -1213,6 +1340,13 @@ impl SessionRepository for TestSessionRepository {
         sessions.retain(|s| s.created_at > cutoff);
         Ok((before - sessions.len()) as u64)
     }
+
+    async fn delete_by_user(&self, user_id: StringUuid) -> Result<u64> {
+        let mut sessions = self.sessions.write().await;
+        let before = sessions.len();
+        sessions.retain(|s| s.user_id != user_id);
+        Ok((before - sessions.len()) as u64)
+    }
 }
 
 // ============================================================================
@@ -1420,6 +1554,174 @@ impl WebhookRepository for TestWebhookRepository {
             .ok_or_else(|| AppError::NotFound("Webhook not found".to_string()))?;
         webhooks.remove(pos);
         Ok(())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut webhooks = self.webhooks.write().await;
+        let before = webhooks.len();
+        webhooks.retain(|w| w.tenant_id != tenant_id);
+        Ok((before - webhooks.len()) as u64)
+    }
+}
+
+// ============================================================================
+// Test Invitation Repository
+// ============================================================================
+
+/// Configurable test invitation repository
+pub struct TestInvitationRepository {
+    invitations: RwLock<HashMap<StringUuid, Invitation>>,
+}
+
+impl TestInvitationRepository {
+    pub fn new() -> Self {
+        Self {
+            invitations: RwLock::new(HashMap::new()),
+        }
+    }
+
+    pub async fn add_invitation(&self, invitation: Invitation) {
+        self.invitations
+            .write()
+            .await
+            .insert(invitation.id, invitation);
+    }
+}
+
+impl Default for TestInvitationRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl InvitationRepository for TestInvitationRepository {
+    async fn create(
+        &self,
+        tenant_id: StringUuid,
+        invited_by: StringUuid,
+        input: &CreateInvitationInput,
+        token_hash: &str,
+    ) -> Result<Invitation> {
+        let now = Utc::now();
+        let expires_in = input.expires_in_hours.unwrap_or(72);
+        let invitation = Invitation {
+            id: StringUuid::new_v4(),
+            tenant_id,
+            email: input.email.clone(),
+            role_ids: input.role_ids.clone(),
+            invited_by,
+            token_hash: token_hash.to_string(),
+            status: InvitationStatus::Pending,
+            expires_at: now + chrono::Duration::hours(expires_in),
+            accepted_at: None,
+            created_at: now,
+            updated_at: now,
+        };
+        self.invitations
+            .write()
+            .await
+            .insert(invitation.id, invitation.clone());
+        Ok(invitation)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Invitation>> {
+        let invitations = self.invitations.read().await;
+        Ok(invitations.get(&id).cloned())
+    }
+
+    async fn find_by_email_and_tenant(
+        &self,
+        email: &str,
+        tenant_id: StringUuid,
+    ) -> Result<Option<Invitation>> {
+        let invitations = self.invitations.read().await;
+        Ok(invitations
+            .values()
+            .find(|i| {
+                i.email == email
+                    && i.tenant_id == tenant_id
+                    && i.status == InvitationStatus::Pending
+            })
+            .cloned())
+    }
+
+    async fn list_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<Invitation>> {
+        let invitations = self.invitations.read().await;
+        let mut filtered: Vec<_> = invitations
+            .values()
+            .filter(|i| i.tenant_id == tenant_id)
+            .cloned()
+            .collect();
+        filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
+        Ok(filtered
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect())
+    }
+
+    async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64> {
+        let invitations = self.invitations.read().await;
+        Ok(invitations
+            .values()
+            .filter(|i| i.tenant_id == tenant_id)
+            .count() as i64)
+    }
+
+    async fn update_status(&self, id: StringUuid, status: InvitationStatus) -> Result<Invitation> {
+        let mut invitations = self.invitations.write().await;
+        let invitation = invitations
+            .get_mut(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
+        invitation.status = status;
+        invitation.updated_at = Utc::now();
+        Ok(invitation.clone())
+    }
+
+    async fn mark_accepted(&self, id: StringUuid) -> Result<Invitation> {
+        let mut invitations = self.invitations.write().await;
+        let invitation = invitations
+            .get_mut(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
+        invitation.status = InvitationStatus::Accepted;
+        invitation.accepted_at = Some(Utc::now());
+        invitation.updated_at = Utc::now();
+        Ok(invitation.clone())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut invitations = self.invitations.write().await;
+        invitations
+            .remove(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
+        Ok(())
+    }
+
+    async fn expire_pending(&self) -> Result<u64> {
+        let mut invitations = self.invitations.write().await;
+        let now = Utc::now();
+        let mut count = 0u64;
+        for invitation in invitations.values_mut() {
+            if invitation.status == InvitationStatus::Pending && invitation.expires_at <= now {
+                invitation.status = InvitationStatus::Expired;
+                invitation.updated_at = now;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut invitations = self.invitations.write().await;
+        let before = invitations.len();
+        invitations.retain(|_, i| i.tenant_id != tenant_id);
+        Ok((before - invitations.len()) as u64)
     }
 }
 
@@ -1636,6 +1938,25 @@ impl LoginEventRepository for TestLoginEventRepository {
         events.retain(|e| e.created_at > cutoff);
         Ok((before - events.len()) as u64)
     }
+
+    async fn nullify_user_id(&self, user_id: StringUuid) -> Result<u64> {
+        let mut events = self.events.write().await;
+        let mut count = 0u64;
+        for event in events.iter_mut() {
+            if event.user_id == Some(user_id) {
+                event.user_id = None;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut events = self.events.write().await;
+        let before = events.len();
+        events.retain(|e| e.tenant_id != Some(tenant_id));
+        Ok((before - events.len()) as u64)
+    }
 }
 
 // ============================================================================
@@ -1770,6 +2091,25 @@ impl SecurityAlertRepository for TestSecurityAlertRepository {
         alerts.retain(|a| a.resolved_at.is_none() || a.created_at > cutoff);
         Ok((before - alerts.len()) as u64)
     }
+
+    async fn nullify_user_id(&self, user_id: StringUuid) -> Result<u64> {
+        let mut alerts = self.alerts.write().await;
+        let mut count = 0u64;
+        for alert in alerts.iter_mut() {
+            if alert.user_id == Some(user_id) {
+                alert.user_id = None;
+                count += 1;
+            }
+        }
+        Ok(count)
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut alerts = self.alerts.write().await;
+        let before = alerts.len();
+        alerts.retain(|a| a.tenant_id != Some(tenant_id));
+        Ok((before - alerts.len()) as u64)
+    }
 }
 
 // ============================================================================
@@ -1850,6 +2190,13 @@ pub struct TestServicesBuilder {
     pub service_repo: Arc<TestServiceRepository>,
     pub rbac_repo: Arc<TestRbacRepository>,
     pub audit_repo: Arc<TestAuditRepository>,
+    pub webhook_repo: Arc<TestWebhookRepository>,
+    pub invitation_repo: Arc<TestInvitationRepository>,
+    pub session_repo: Arc<TestSessionRepository>,
+    pub password_reset_repo: Arc<TestPasswordResetRepository>,
+    pub linked_identity_repo: Arc<TestLinkedIdentityRepository>,
+    pub login_event_repo: Arc<TestLoginEventRepository>,
+    pub security_alert_repo: Arc<TestSecurityAlertRepository>,
 }
 
 #[allow(dead_code)]
@@ -1861,19 +2208,68 @@ impl TestServicesBuilder {
             service_repo: Arc::new(TestServiceRepository::new()),
             rbac_repo: Arc::new(TestRbacRepository::new()),
             audit_repo: Arc::new(TestAuditRepository::new()),
+            webhook_repo: Arc::new(TestWebhookRepository::new()),
+            invitation_repo: Arc::new(TestInvitationRepository::new()),
+            session_repo: Arc::new(TestSessionRepository::new()),
+            password_reset_repo: Arc::new(TestPasswordResetRepository::new()),
+            linked_identity_repo: Arc::new(TestLinkedIdentityRepository::new()),
+            login_event_repo: Arc::new(TestLoginEventRepository::new()),
+            security_alert_repo: Arc::new(TestSecurityAlertRepository::new()),
         }
     }
 
-    pub fn build_tenant_service(&self) -> TenantService<TestTenantRepository> {
-        TenantService::new(self.tenant_repo.clone(), None)
+    pub fn build_tenant_service(
+        &self,
+    ) -> TenantService<
+        TestTenantRepository,
+        TestServiceRepository,
+        TestWebhookRepository,
+        TestInvitationRepository,
+        TestUserRepository,
+        TestRbacRepository,
+        TestLoginEventRepository,
+        TestSecurityAlertRepository,
+    > {
+        TenantService::new(
+            self.tenant_repo.clone(),
+            self.service_repo.clone(),
+            self.webhook_repo.clone(),
+            self.invitation_repo.clone(),
+            self.user_repo.clone(),
+            self.rbac_repo.clone(),
+            self.login_event_repo.clone(),
+            self.security_alert_repo.clone(),
+            None,
+        )
     }
 
-    pub fn build_user_service(&self) -> UserService<TestUserRepository> {
-        UserService::new(self.user_repo.clone())
+    pub fn build_user_service(
+        &self,
+    ) -> UserService<
+        TestUserRepository,
+        TestSessionRepository,
+        TestPasswordResetRepository,
+        TestLinkedIdentityRepository,
+        TestLoginEventRepository,
+        TestSecurityAlertRepository,
+        TestAuditRepository,
+        TestRbacRepository,
+    > {
+        UserService::new(
+            self.user_repo.clone(),
+            self.session_repo.clone(),
+            self.password_reset_repo.clone(),
+            self.linked_identity_repo.clone(),
+            self.login_event_repo.clone(),
+            self.security_alert_repo.clone(),
+            self.audit_repo.clone(),
+            self.rbac_repo.clone(),
+            None,
+        )
     }
 
-    pub fn build_client_service(&self) -> ClientService<TestServiceRepository> {
-        ClientService::new(self.service_repo.clone(), None)
+    pub fn build_client_service(&self) -> ClientService<TestServiceRepository, TestRbacRepository> {
+        ClientService::new(self.service_repo.clone(), self.rbac_repo.clone(), None)
     }
 
     pub fn build_rbac_service(&self) -> RbacService<TestRbacRepository> {

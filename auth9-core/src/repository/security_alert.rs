@@ -1,5 +1,6 @@
 //! Security alert repository
 
+#[allow(unused_imports)]
 use crate::domain::{AlertSeverity, CreateSecurityAlertInput, SecurityAlert, SecurityAlertType, StringUuid};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;

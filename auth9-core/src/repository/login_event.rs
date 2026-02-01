@@ -1,5 +1,6 @@
 //! Login event repository
 
+#[allow(unused_imports)]
 use crate::domain::{CreateLoginEventInput, LoginEvent, LoginEventType, LoginStats, StringUuid};
 use crate::error::Result;
 use async_trait::async_trait;
