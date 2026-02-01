@@ -218,10 +218,7 @@ impl IdentityProviderTemplate {
             provider_id: "saml".to_string(),
             name: "SAML 2.0".to_string(),
             description: "Enterprise SSO via SAML".to_string(),
-            required_config: vec![
-                "entityId".to_string(),
-                "singleSignOnServiceUrl".to_string(),
-            ],
+            required_config: vec!["entityId".to_string(), "singleSignOnServiceUrl".to_string()],
             optional_config: vec![
                 "signingCertificate".to_string(),
                 "singleLogoutServiceUrl".to_string(),
@@ -313,7 +310,9 @@ mod tests {
         let template = IdentityProviderTemplate::google();
         assert_eq!(template.provider_id, "google");
         assert!(template.required_config.contains(&"clientId".to_string()));
-        assert!(template.required_config.contains(&"clientSecret".to_string()));
+        assert!(template
+            .required_config
+            .contains(&"clientSecret".to_string()));
     }
 
     #[test]

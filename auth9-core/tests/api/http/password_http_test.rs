@@ -126,8 +126,11 @@ async fn test_get_password_policy_default() {
     let app = build_password_test_router(state);
 
     let tenant_id = StringUuid::new_v4();
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        super::get_json(&app, &format!("/api/v1/tenants/{}/password-policy", tenant_id)).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = super::get_json(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

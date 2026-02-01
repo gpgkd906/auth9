@@ -164,9 +164,9 @@ impl PasswordPolicy {
         }
 
         if self.require_symbols
-            && !password.chars().any(|c| {
-                !c.is_alphanumeric() && !c.is_whitespace()
-            })
+            && !password
+                .chars()
+                .any(|c| !c.is_alphanumeric() && !c.is_whitespace())
         {
             errors.push("Password must contain at least one symbol".to_string());
         }

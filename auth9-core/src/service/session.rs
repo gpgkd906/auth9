@@ -13,11 +13,7 @@ pub struct SessionService<S: SessionRepository, U: UserRepository> {
 }
 
 impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
-    pub fn new(
-        session_repo: Arc<S>,
-        user_repo: Arc<U>,
-        keycloak: Arc<KeycloakClient>,
-    ) -> Self {
+    pub fn new(session_repo: Arc<S>, user_repo: Arc<U>, keycloak: Arc<KeycloakClient>) -> Self {
         Self {
             session_repo,
             user_repo,
@@ -74,11 +70,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
     }
 
     /// Revoke a specific session
-    pub async fn revoke_session(
-        &self,
-        session_id: StringUuid,
-        user_id: StringUuid,
-    ) -> Result<()> {
+    pub async fn revoke_session(&self, session_id: StringUuid, user_id: StringUuid) -> Result<()> {
         // Get the session to verify ownership
         let session = self
             .session_repo
@@ -88,7 +80,9 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
 
         // Verify the session belongs to the user
         if session.user_id != user_id {
-            return Err(AppError::Forbidden("Cannot revoke another user's session".to_string()));
+            return Err(AppError::Forbidden(
+                "Cannot revoke another user's session".to_string(),
+            ));
         }
 
         // Revoke in Keycloak if session ID exists
@@ -149,10 +143,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
     }
 
     /// Get admin view of user sessions
-    pub async fn get_user_sessions_admin(
-        &self,
-        user_id: StringUuid,
-    ) -> Result<Vec<SessionInfo>> {
+    pub async fn get_user_sessions_admin(&self, user_id: StringUuid) -> Result<Vec<SessionInfo>> {
         // Verify user exists
         let _ = self
             .user_repo
@@ -162,10 +153,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
 
         let sessions = self.session_repo.list_active_by_user(user_id).await?;
 
-        let session_infos: Vec<SessionInfo> = sessions
-            .into_iter()
-            .map(|s| s.into())
-            .collect();
+        let session_infos: Vec<SessionInfo> = sessions.into_iter().map(|s| s.into()).collect();
 
         Ok(session_infos)
     }
@@ -206,7 +194,7 @@ mod tests {
     #[test]
     fn test_parse_user_agent() {
         let (device_type, device_name) = parse_user_agent(
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 Chrome/120.0.0.0",
         );
 
         assert_eq!(device_type, Some("desktop".to_string()));
@@ -227,9 +215,8 @@ mod tests {
 
     #[test]
     fn test_parse_user_agent_tablet() {
-        let (device_type, device_name) = parse_user_agent(
-            "Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15"
-        );
+        let (device_type, device_name) =
+            parse_user_agent("Mozilla/5.0 (iPad; CPU OS 14_0 like Mac OS X) AppleWebKit/605.1.15");
 
         assert_eq!(device_type, Some("tablet".to_string()));
         assert!(device_name.is_some());
@@ -239,7 +226,7 @@ mod tests {
     fn test_parse_user_agent_ios_safari() {
         // iPhone without "Mobile" keyword in UA still detected as desktop by current implementation
         let (device_type, device_name) = parse_user_agent(
-            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15"
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/605.1.15",
         );
 
         // Note: Current implementation doesn't detect iPhone as mobile

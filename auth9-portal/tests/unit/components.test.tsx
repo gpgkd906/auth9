@@ -13,63 +13,63 @@ describe('UI Components', () => {
 
       const button = screen.getByRole('button', { name: /click me/i });
       expect(button).toBeInTheDocument();
-      expect(button).toHaveClass('bg-apple-blue');
+      expect(button).toHaveClass('bg-[var(--accent-blue)]');
     });
 
     it('should render with destructive variant', () => {
       render(<Button variant="destructive">Delete</Button>);
 
       const button = screen.getByRole('button', { name: /delete/i });
-      expect(button).toHaveClass('bg-apple-red');
+      expect(button).toHaveClass('bg-[var(--accent-red)]');
     });
 
     it('should render with outline variant', () => {
       render(<Button variant="outline">Cancel</Button>);
 
       const button = screen.getByRole('button', { name: /cancel/i });
-      expect(button).toHaveClass('border-gray-200');
+      expect(button).toHaveClass('border-[var(--glass-border-subtle)]');
     });
 
     it('should render with secondary variant', () => {
       render(<Button variant="secondary">Secondary</Button>);
 
       const button = screen.getByRole('button', { name: /secondary/i });
-      expect(button).toHaveClass('bg-gray-100');
+      expect(button).toHaveClass('bg-[var(--sidebar-item-hover)]');
     });
 
     it('should render with ghost variant', () => {
       render(<Button variant="ghost">Ghost</Button>);
 
       const button = screen.getByRole('button', { name: /ghost/i });
-      expect(button).toHaveClass('hover:bg-gray-100');
+      expect(button).toHaveClass('hover:bg-[var(--sidebar-item-hover)]');
     });
 
     it('should render with link variant', () => {
       render(<Button variant="link">Link</Button>);
 
       const button = screen.getByRole('button', { name: /link/i });
-      expect(button).toHaveClass('text-apple-blue');
+      expect(button).toHaveClass('text-[var(--accent-blue)]');
     });
 
     it('should render with small size', () => {
       render(<Button size="sm">Small</Button>);
 
       const button = screen.getByRole('button', { name: /small/i });
-      expect(button).toHaveClass('h-9');
+      expect(button).toHaveClass('h-8');
     });
 
     it('should render with large size', () => {
       render(<Button size="lg">Large</Button>);
 
       const button = screen.getByRole('button', { name: /large/i });
-      expect(button).toHaveClass('h-12');
+      expect(button).toHaveClass('h-11');
     });
 
     it('should render with icon size', () => {
       render(<Button size="icon">+</Button>);
 
       const button = screen.getByRole('button', { name: /\+/i });
-      expect(button).toHaveClass('h-10', 'w-10');
+      expect(button).toHaveClass('h-9', 'w-9');
     });
 
     it('should be disabled when disabled prop is true', () => {
@@ -125,7 +125,7 @@ describe('UI Components', () => {
 
       const input = screen.getByPlaceholderText('Enter text');
       expect(input).toBeInTheDocument();
-      expect(input).toHaveClass('rounded-apple');
+      expect(input).toHaveClass('rounded-[10px]');
     });
 
     it('should accept text input', async () => {

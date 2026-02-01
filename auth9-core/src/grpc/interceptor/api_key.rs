@@ -59,9 +59,7 @@ impl GrpcAuthenticator for ApiKeyAuthenticator {
         // Get the API key from the request header
         let api_key = metadata
             .get(API_KEY_HEADER)
-            .ok_or_else(|| {
-                Status::unauthenticated("Missing API key. Provide 'x-api-key' header.")
-            })?
+            .ok_or_else(|| Status::unauthenticated("Missing API key. Provide 'x-api-key' header."))?
             .to_str()
             .map_err(|_| Status::unauthenticated("Invalid API key format"))?;
 
@@ -104,10 +102,7 @@ mod tests {
 
     #[test]
     fn test_api_key_authenticator_new() {
-        let auth = ApiKeyAuthenticator::new(vec![
-            "key1".to_string(),
-            "key2".to_string(),
-        ]);
+        let auth = ApiKeyAuthenticator::new(vec!["key1".to_string(), "key2".to_string()]);
 
         assert!(auth.has_keys());
         assert_eq!(auth.valid_key_hashes.len(), 2);
@@ -121,11 +116,8 @@ mod tests {
 
     #[test]
     fn test_api_key_authenticator_filters_empty_keys() {
-        let auth = ApiKeyAuthenticator::new(vec![
-            "key1".to_string(),
-            "".to_string(),
-            "key2".to_string(),
-        ]);
+        let auth =
+            ApiKeyAuthenticator::new(vec!["key1".to_string(), "".to_string(), "key2".to_string()]);
 
         assert_eq!(auth.valid_key_hashes.len(), 2);
     }

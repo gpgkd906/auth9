@@ -5,7 +5,9 @@
 use super::{get_json, MockKeycloakServer, TestAppState};
 use crate::api::create_test_user;
 use auth9_core::api::SuccessResponse;
-use auth9_core::domain::{IdentityProviderTemplate, LinkedIdentity, LinkedIdentityInfo, StringUuid};
+use auth9_core::domain::{
+    IdentityProviderTemplate, LinkedIdentity, LinkedIdentityInfo, StringUuid,
+};
 use auth9_core::repository::LinkedIdentityRepository;
 use axum::http::StatusCode;
 use chrono::Utc;
@@ -21,8 +23,10 @@ async fn test_get_templates() {
 
     let app = build_idp_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<IdentityProviderTemplate>>>) =
-        get_json(&app, "/api/v1/identity-providers/templates").await;
+    let (status, body): (
+        StatusCode,
+        Option<SuccessResponse<Vec<IdentityProviderTemplate>>>,
+    ) = get_json(&app, "/api/v1/identity-providers/templates").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -68,11 +72,10 @@ async fn test_list_linked_identities_empty() {
     state.user_repo.add_user(user).await;
 
     // Create a valid JWT token for the test
-    let token = state.jwt_manager.create_identity_token(
-        *user_id,
-        "test@example.com",
-        Some("Test User"),
-    ).unwrap();
+    let token = state
+        .jwt_manager
+        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .unwrap();
 
     let app = build_idp_test_router(state);
 
@@ -104,7 +107,10 @@ async fn test_list_linked_identities_with_data() {
         external_email: Some("user@gmail.com".to_string()),
         linked_at: Utc::now(),
     };
-    state.linked_identity_repo.add_identity(google_identity).await;
+    state
+        .linked_identity_repo
+        .add_identity(google_identity)
+        .await;
 
     let github_identity = LinkedIdentity {
         id: StringUuid::new_v4(),
@@ -115,14 +121,16 @@ async fn test_list_linked_identities_with_data() {
         external_email: Some("user@github.com".to_string()),
         linked_at: Utc::now(),
     };
-    state.linked_identity_repo.add_identity(github_identity).await;
+    state
+        .linked_identity_repo
+        .add_identity(github_identity)
+        .await;
 
     // Create a valid JWT token
-    let token = state.jwt_manager.create_identity_token(
-        *user_id,
-        "test@example.com",
-        Some("Test User"),
-    ).unwrap();
+    let token = state
+        .jwt_manager
+        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .unwrap();
 
     let app = build_idp_test_router(state);
 
@@ -191,11 +199,10 @@ async fn test_unlink_identity_success() {
     state.linked_identity_repo.add_identity(identity).await;
 
     // Create a valid JWT token
-    let token = state.jwt_manager.create_identity_token(
-        *user_id,
-        "test@example.com",
-        Some("Test User"),
-    ).unwrap();
+    let token = state
+        .jwt_manager
+        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .unwrap();
 
     let app = build_idp_test_router(state.clone());
 
@@ -212,7 +219,11 @@ async fn test_unlink_identity_success() {
     assert!(body.unwrap().message.contains("unlinked"));
 
     // Verify identity is gone
-    let identities = state.linked_identity_repo.list_by_user(user_id).await.unwrap();
+    let identities = state
+        .linked_identity_repo
+        .list_by_user(user_id)
+        .await
+        .unwrap();
     assert!(identities.is_empty());
 }
 

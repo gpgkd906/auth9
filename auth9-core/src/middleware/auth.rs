@@ -113,7 +113,9 @@ impl IntoResponse for AuthError {
     fn into_response(self) -> Response {
         let (status, message) = match self {
             AuthError::MissingToken => (StatusCode::UNAUTHORIZED, "Missing authorization token"),
-            AuthError::InvalidHeader(_) => (StatusCode::UNAUTHORIZED, "Invalid authorization header"),
+            AuthError::InvalidHeader(_) => {
+                (StatusCode::UNAUTHORIZED, "Invalid authorization header")
+            }
             AuthError::InvalidToken(_) => (StatusCode::UNAUTHORIZED, "Invalid token"),
             AuthError::TokenExpired => (StatusCode::UNAUTHORIZED, "Token has expired"),
         };
@@ -352,10 +354,7 @@ mod tests {
     #[test]
     fn test_extract_bearer_token() {
         let mut headers = axum::http::HeaderMap::new();
-        headers.insert(
-            AUTHORIZATION,
-            "Bearer test-token-123".parse().unwrap(),
-        );
+        headers.insert(AUTHORIZATION, "Bearer test-token-123".parse().unwrap());
 
         let token = extract_bearer_token(&headers).unwrap();
         assert_eq!(token, "test-token-123");

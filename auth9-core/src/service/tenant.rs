@@ -223,7 +223,10 @@ impl<
         }
 
         // 5. Delete tenant_users (membership records, not the users themselves)
-        let deleted_memberships = self.user_repo.delete_tenant_memberships_by_tenant(id).await?;
+        let deleted_memberships = self
+            .user_repo
+            .delete_tenant_memberships_by_tenant(id)
+            .await?;
         warn!(tenant_id = %id, deleted_memberships = deleted_memberships, "Deleted tenant memberships");
 
         // 6. Delete login_events for this tenant
@@ -677,7 +680,10 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(tenant_clone.clone())));
 
-        tenant_repo.expect_delete().with(eq(id)).returning(|_| Ok(()));
+        tenant_repo
+            .expect_delete()
+            .with(eq(id))
+            .returning(|_| Ok(()));
 
         // No services for this tenant
         service_repo
@@ -742,19 +748,20 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(tenant_clone.clone())));
 
-        tenant_repo.expect_delete().with(eq(id)).returning(|_| Ok(()));
+        tenant_repo
+            .expect_delete()
+            .with(eq(id))
+            .returning(|_| Ok(()));
 
         // One service for this tenant
-        service_repo
-            .expect_list_by_tenant()
-            .returning(move |_| {
-                Ok(vec![crate::domain::Service {
-                    id: service_id,
-                    tenant_id: Some(id),
-                    name: "Test Service".to_string(),
-                    ..Default::default()
-                }])
-            });
+        service_repo.expect_list_by_tenant().returning(move |_| {
+            Ok(vec![crate::domain::Service {
+                id: service_id,
+                tenant_id: Some(id),
+                name: "Test Service".to_string(),
+                ..Default::default()
+            }])
+        });
 
         service_repo
             .expect_delete_clients_by_service()

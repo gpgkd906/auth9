@@ -21,8 +21,8 @@ use auth9_core::domain::{
     CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput, Invitation,
     InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats, PasswordResetToken,
     Permission, Role, SecurityAlert, SecurityAlertType, Service, ServiceStatus, Session,
-    StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser, UpdateRoleInput,
-    UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
+    StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
+    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
     UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
 };
 use auth9_core::error::{AppError, Result};
@@ -35,9 +35,9 @@ use auth9_core::repository::{
     RbacRepository, SecurityAlertRepository, ServiceRepository, SessionRepository,
     SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
 };
+use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
-use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -370,7 +370,10 @@ impl UserRepository for TestUserRepository {
             .collect())
     }
 
-    async fn list_tenant_user_ids_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<StringUuid>> {
+    async fn list_tenant_user_ids_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+    ) -> Result<Vec<StringUuid>> {
         let tenant_users = self.tenant_users.read().await;
         Ok(tenant_users
             .iter()
@@ -1301,7 +1304,9 @@ impl SessionRepository for TestSessionRepository {
         let session = sessions
             .iter_mut()
             .find(|s| s.id == id && s.revoked_at.is_none())
-            .ok_or_else(|| AppError::NotFound("Session not found or already revoked".to_string()))?;
+            .ok_or_else(|| {
+                AppError::NotFound("Session not found or already revoked".to_string())
+            })?;
         session.revoked_at = Some(Utc::now());
         Ok(())
     }
@@ -1926,7 +1931,10 @@ impl LoginEventRepository for TestLoginEventRepository {
                         LoginEventType::FailedPassword | LoginEventType::FailedMfa
                     )
             })
-            .filter_map(|e| e.user_id.or_else(|| e.email.as_ref().map(|_| StringUuid::new_v4())))
+            .filter_map(|e| {
+                e.user_id
+                    .or_else(|| e.email.as_ref().map(|_| StringUuid::new_v4()))
+            })
             .collect();
         Ok(unique_users.len() as i64)
     }

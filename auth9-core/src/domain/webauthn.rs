@@ -30,9 +30,9 @@ pub struct KeycloakCredential {
 
 impl From<KeycloakCredential> for WebAuthnCredential {
     fn from(cred: KeycloakCredential) -> Self {
-        let created_at = cred.created_date.map(|ts| {
-            DateTime::from_timestamp_millis(ts).unwrap_or_else(Utc::now)
-        });
+        let created_at = cred
+            .created_date
+            .map(|ts| DateTime::from_timestamp_millis(ts).unwrap_or_else(Utc::now));
 
         Self {
             id: cred.id,
@@ -52,7 +52,9 @@ impl WebAuthnCredential {
 
     /// Check if this is a passwordless WebAuthn credential
     pub fn is_passwordless(&self) -> bool {
-        self.credential_type.to_lowercase().contains("webauthn-passwordless")
+        self.credential_type
+            .to_lowercase()
+            .contains("webauthn-passwordless")
     }
 }
 

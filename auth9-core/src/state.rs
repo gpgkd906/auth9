@@ -166,7 +166,11 @@ pub trait HasPasswordManagement: Clone + Send + Sync + 'static {
     /// Get the password service
     fn password_service(
         &self,
-    ) -> &PasswordService<Self::PasswordResetRepo, Self::PasswordUserRepo, Self::PasswordSystemSettingsRepo>;
+    ) -> &PasswordService<
+        Self::PasswordResetRepo,
+        Self::PasswordUserRepo,
+        Self::PasswordSystemSettingsRepo,
+    >;
 
     /// Get the JWT manager for token verification
     fn jwt_manager(&self) -> &JwtManager;

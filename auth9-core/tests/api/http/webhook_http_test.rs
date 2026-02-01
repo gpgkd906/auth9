@@ -202,8 +202,12 @@ async fn test_create_webhook_success() {
         "enabled": true
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Webhook>>) =
-        post_json(&app, &format!("/api/v1/tenants/{}/webhooks", tenant_id), &input).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks", tenant_id),
+        &input,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -232,8 +236,12 @@ async fn test_create_webhook_validation_error_empty_name() {
         "enabled": true
     });
 
-    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) =
-        post_json(&app, &format!("/api/v1/tenants/{}/webhooks", tenant_id), &input).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks", tenant_id),
+        &input,
+    )
+    .await;
 
     // 422 UNPROCESSABLE_ENTITY for validation errors
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -257,8 +265,12 @@ async fn test_create_webhook_validation_error_invalid_url() {
         "enabled": true
     });
 
-    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) =
-        post_json(&app, &format!("/api/v1/tenants/{}/webhooks", tenant_id), &input).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks", tenant_id),
+        &input,
+    )
+    .await;
 
     // 422 UNPROCESSABLE_ENTITY for validation errors
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);

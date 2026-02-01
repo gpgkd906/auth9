@@ -8,6 +8,7 @@
 //! - Uses production `build_router()` with `TestAppState` for actual handler coverage
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
+pub mod analytics_http_test;
 pub mod auth_http_test;
 pub mod branding_http_test;
 pub mod email_template_http_test;
@@ -15,6 +16,7 @@ pub mod identity_provider_http_test;
 pub mod mock_keycloak;
 pub mod password_http_test;
 pub mod role_http_test;
+pub mod security_alert_http_test;
 pub mod service_http_test;
 pub mod session_http_test;
 pub mod system_settings_http_test;
@@ -39,12 +41,14 @@ use auth9_core::keycloak::KeycloakClient;
 use auth9_core::server::build_router;
 use auth9_core::service::{
     AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
-    IdentityProviderService, PasswordService, RbacService, SessionService, SystemSettingsService,
-    TenantService, UserService, WebAuthnService, WebhookService,
+    IdentityProviderService, PasswordService, RbacService, SecurityDetectionService,
+    SessionService, SystemSettingsService, TenantService, UserService, WebAuthnService,
+    WebhookService,
 };
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasEmailTemplates, HasIdentityProviders, HasPasswordManagement,
-    HasServices, HasSessionManagement, HasSystemSettings, HasWebAuthn, HasWebhooks,
+    HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings, HasWebAuthn,
+    HasWebhooks,
 };
 use axum::{
     body::Body,
@@ -137,7 +141,11 @@ pub struct TestAppState {
     pub email_template_service: Arc<EmailTemplateService<TestSystemSettingsRepository>>,
     pub branding_service: Arc<BrandingService<TestSystemSettingsRepository>>,
     pub password_service: Arc<
-        PasswordService<TestPasswordResetRepository, TestUserRepository, TestSystemSettingsRepository>,
+        PasswordService<
+            TestPasswordResetRepository,
+            TestUserRepository,
+            TestSystemSettingsRepository,
+        >,
     >,
     pub session_service: Arc<SessionService<TestSessionRepository, TestUserRepository>>,
     pub identity_provider_service:
@@ -145,6 +153,13 @@ pub struct TestAppState {
     pub webauthn_service: Arc<WebAuthnService>,
     pub webhook_service: Arc<WebhookService<TestWebhookRepository>>,
     pub analytics_service: Arc<AnalyticsService<TestLoginEventRepository>>,
+    pub security_detection_service: Arc<
+        SecurityDetectionService<
+            TestLoginEventRepository,
+            TestSecurityAlertRepository,
+            TestWebhookRepository,
+        >,
+    >,
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
     pub keycloak_client: KeycloakClient,
@@ -241,10 +256,17 @@ impl TestAppState {
             user_repo.clone(),
             Arc::new(KeycloakClient::new(config.keycloak.clone())),
         ));
-        let webauthn_service =
-            Arc::new(WebAuthnService::new(Arc::new(KeycloakClient::new(config.keycloak.clone()))));
+        let webauthn_service = Arc::new(WebAuthnService::new(Arc::new(KeycloakClient::new(
+            config.keycloak.clone(),
+        ))));
         let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
         let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
+        let security_detection_service = Arc::new(SecurityDetectionService::new(
+            login_event_repo.clone(),
+            security_alert_repo.clone(),
+            webhook_service.clone(),
+            Default::default(),
+        ));
 
         Self {
             config,
@@ -262,6 +284,7 @@ impl TestAppState {
             webauthn_service,
             webhook_service,
             analytics_service,
+            security_detection_service,
             audit_repo,
             jwt_manager,
             keycloak_client,
@@ -400,8 +423,11 @@ impl HasPasswordManagement for TestAppState {
 
     fn password_service(
         &self,
-    ) -> &PasswordService<Self::PasswordResetRepo, Self::PasswordUserRepo, Self::PasswordSystemSettingsRepo>
-    {
+    ) -> &PasswordService<
+        Self::PasswordResetRepo,
+        Self::PasswordUserRepo,
+        Self::PasswordSystemSettingsRepo,
+    > {
         &self.password_service
     }
 
@@ -466,6 +492,27 @@ impl HasAnalytics for TestAppState {
 
     fn analytics_service(&self) -> &AnalyticsService<Self::LoginEventRepo> {
         &self.analytics_service
+    }
+}
+
+/// Implement HasSecurityAlerts trait for TestAppState
+impl HasSecurityAlerts for TestAppState {
+    type SecurityLoginEventRepo = TestLoginEventRepository;
+    type SecurityAlertRepo = TestSecurityAlertRepository;
+    type SecurityWebhookRepo = TestWebhookRepository;
+
+    fn security_detection_service(
+        &self,
+    ) -> &SecurityDetectionService<
+        Self::SecurityLoginEventRepo,
+        Self::SecurityAlertRepo,
+        Self::SecurityWebhookRepo,
+    > {
+        &self.security_detection_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
     }
 }
 

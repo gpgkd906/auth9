@@ -155,7 +155,9 @@ impl SessionRepository for SessionRepositoryImpl {
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(AppError::NotFound("Session not found or already revoked".to_string()));
+            return Err(AppError::NotFound(
+                "Session not found or already revoked".to_string(),
+            ));
         }
 
         Ok(())
@@ -243,9 +245,7 @@ mod tests {
 
         mock.expect_list_active_by_user()
             .with(eq(user_id))
-            .returning(|_| {
-                Ok(vec![Session::default(), Session::default()])
-            });
+            .returning(|_| Ok(vec![Session::default(), Session::default()]));
 
         let sessions = mock.list_active_by_user(user_id).await.unwrap();
         assert_eq!(sessions.len(), 2);
@@ -256,9 +256,7 @@ mod tests {
         let mut mock = MockSessionRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_revoke()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_revoke().with(eq(id)).returning(|_| Ok(()));
 
         let result = mock.revoke(id).await;
         assert!(result.is_ok());
@@ -283,14 +281,13 @@ mod tests {
         let mut mock = MockSessionRepository::new();
         let user_id = StringUuid::new_v4();
 
-        mock.expect_create()
-            .returning(|input| {
-                Ok(Session {
-                    user_id: input.user_id,
-                    device_type: input.device_type.clone(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|input| {
+            Ok(Session {
+                user_id: input.user_id,
+                device_type: input.device_type.clone(),
+                ..Default::default()
+            })
+        });
 
         let input = CreateSessionInput {
             user_id,

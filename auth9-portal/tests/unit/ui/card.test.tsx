@@ -26,9 +26,8 @@ describe("Card", () => {
             </Card>
         );
 
-        const card = screen.getByText("Content").closest(".rounded-apple-xl");
+        const card = screen.getByText("Content").closest(".liquid-glass");
         expect(card).toHaveClass("custom-card");
-        expect(card).toHaveClass("bg-white");
 
         expect(screen.getByText("Card Title")).toBeInTheDocument();
         expect(screen.getByText("Card Description")).toBeInTheDocument();

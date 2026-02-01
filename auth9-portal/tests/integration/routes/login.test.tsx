@@ -71,8 +71,8 @@ describe("Login Page", () => {
 
         render(<RoutesStub initialEntries={["/login"]} />);
 
-        // Logo container has letter "A"
-        expect(screen.getByText("A")).toBeInTheDocument();
+        // Logo container has "A9"
+        expect(screen.getByText("A9")).toBeInTheDocument();
     });
 
     it("displays 'Don't have an account?' text", async () => {

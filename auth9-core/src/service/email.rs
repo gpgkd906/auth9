@@ -3,7 +3,9 @@
 use crate::domain::{
     EmailAddress, EmailMessage, EmailProviderConfig, EmailSendResult, TenantEmailSettings,
 };
-use crate::email::{EmailProvider, EmailProviderError, SesEmailProvider, SmtpEmailProvider, TemplateEngine};
+use crate::email::{
+    EmailProvider, EmailProviderError, SesEmailProvider, SmtpEmailProvider, TemplateEngine,
+};
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
 use crate::service::SystemSettingsService;
@@ -104,7 +106,8 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         let display_name = user_name.unwrap_or("User");
         let reset_url = format!(
             "{}/reset-password?token={}",
-            std::env::var("AUTH9_PORTAL_URL").unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            std::env::var("AUTH9_PORTAL_URL")
+                .unwrap_or_else(|_| "http://localhost:3000".to_string()),
             reset_token
         );
 
@@ -282,9 +285,11 @@ impl<R: SystemSettingsRepository> EmailService<R> {
                 Ok(Box::new(provider))
             }
             EmailProviderConfig::Ses(ses_config) => {
-                let provider = SesEmailProvider::from_config(ses_config).await.map_err(|e| {
-                    AppError::Internal(anyhow::anyhow!("Failed to create SES provider: {}", e))
-                })?;
+                let provider = SesEmailProvider::from_config(ses_config)
+                    .await
+                    .map_err(|e| {
+                        AppError::Internal(anyhow::anyhow!("Failed to create SES provider: {}", e))
+                    })?;
                 Ok(Box::new(provider))
             }
             EmailProviderConfig::Oracle(oracle_config) => {

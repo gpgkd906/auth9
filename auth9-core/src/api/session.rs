@@ -33,7 +33,10 @@ pub async fn revoke_session<S: HasSessionManagement>(
 ) -> Result<Json<MessageResponse>, AppError> {
     let (user_id, _) = extract_session_info(&state, &headers)?;
 
-    state.session_service().revoke_session(session_id, user_id).await?;
+    state
+        .session_service()
+        .revoke_session(session_id, user_id)
+        .await?;
 
     Ok(Json(MessageResponse::new("Session revoked successfully.")))
 }
@@ -116,7 +119,9 @@ fn extract_session_info<S: HasSessionManagement>(
         return Ok((user_id, session_id));
     }
 
-    Err(AppError::Unauthorized("Invalid or expired token".to_string()))
+    Err(AppError::Unauthorized(
+        "Invalid or expired token".to_string(),
+    ))
 }
 
 #[cfg(test)]

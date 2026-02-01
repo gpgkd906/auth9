@@ -95,7 +95,9 @@ fn extract_keycloak_user_id<S: HasWebAuthn>(
         return Ok(claims.sub);
     }
 
-    Err(AppError::Unauthorized("Invalid or expired token".to_string()))
+    Err(AppError::Unauthorized(
+        "Invalid or expired token".to_string(),
+    ))
 }
 
 #[cfg(test)]

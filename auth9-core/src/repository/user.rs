@@ -38,7 +38,10 @@ pub trait UserRepository: Send + Sync {
     async fn list_tenant_user_ids(&self, user_id: StringUuid) -> Result<Vec<StringUuid>>;
 
     /// List all tenant_user IDs for a tenant (for cascade delete)
-    async fn list_tenant_user_ids_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<StringUuid>>;
+    async fn list_tenant_user_ids_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+    ) -> Result<Vec<StringUuid>>;
 
     /// Delete all tenant memberships for a tenant
     async fn delete_tenant_memberships_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
@@ -317,7 +320,10 @@ impl UserRepository for UserRepositoryImpl {
         Ok(ids.into_iter().map(|(id,)| id).collect())
     }
 
-    async fn list_tenant_user_ids_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<StringUuid>> {
+    async fn list_tenant_user_ids_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+    ) -> Result<Vec<StringUuid>> {
         let ids: Vec<(StringUuid,)> =
             sqlx::query_as("SELECT id FROM tenant_users WHERE tenant_id = ?")
                 .bind(tenant_id)

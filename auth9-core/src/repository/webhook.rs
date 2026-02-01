@@ -234,13 +234,11 @@ mod tests {
         mock.expect_list_enabled_for_event()
             .with(eq("login.success"))
             .returning(|_| {
-                Ok(vec![
-                    Webhook {
-                        enabled: true,
-                        events: vec!["login.success".to_string()],
-                        ..Default::default()
-                    },
-                ])
+                Ok(vec![Webhook {
+                    enabled: true,
+                    events: vec!["login.success".to_string()],
+                    ..Default::default()
+                }])
             });
 
         let webhooks = mock.list_enabled_for_event("login.success").await.unwrap();
@@ -253,18 +251,17 @@ mod tests {
         let mut mock = MockWebhookRepository::new();
         let tenant_id = StringUuid::new_v4();
 
-        mock.expect_create()
-            .returning(|tenant_id, input| {
-                Ok(Webhook {
-                    tenant_id,
-                    name: input.name.clone(),
-                    url: input.url.clone(),
-                    secret: input.secret.clone(),
-                    events: input.events.clone(),
-                    enabled: input.enabled,
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|tenant_id, input| {
+            Ok(Webhook {
+                tenant_id,
+                name: input.name.clone(),
+                url: input.url.clone(),
+                secret: input.secret.clone(),
+                events: input.events.clone(),
+                enabled: input.enabled,
+                ..Default::default()
+            })
+        });
 
         let input = CreateWebhookInput {
             name: "New Webhook".to_string(),
@@ -297,9 +294,7 @@ mod tests {
         let mut mock = MockWebhookRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let result = mock.delete(id).await;
         assert!(result.is_ok());

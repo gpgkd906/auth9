@@ -153,22 +153,20 @@ mod tests {
         let mut mock = MockLinkedIdentityRepository::new();
         let user_id = StringUuid::new_v4();
 
-        mock.expect_list_by_user()
-            .with(eq(user_id))
-            .returning(|_| {
-                Ok(vec![
-                    LinkedIdentity {
-                        provider_type: "google".to_string(),
-                        provider_alias: "google".to_string(),
-                        ..Default::default()
-                    },
-                    LinkedIdentity {
-                        provider_type: "github".to_string(),
-                        provider_alias: "github".to_string(),
-                        ..Default::default()
-                    },
-                ])
-            });
+        mock.expect_list_by_user().with(eq(user_id)).returning(|_| {
+            Ok(vec![
+                LinkedIdentity {
+                    provider_type: "google".to_string(),
+                    provider_alias: "google".to_string(),
+                    ..Default::default()
+                },
+                LinkedIdentity {
+                    provider_type: "github".to_string(),
+                    provider_alias: "github".to_string(),
+                    ..Default::default()
+                },
+            ])
+        });
 
         let identities = mock.list_by_user(user_id).await.unwrap();
         assert_eq!(identities.len(), 2);
@@ -197,17 +195,16 @@ mod tests {
     async fn test_mock_create() {
         let mut mock = MockLinkedIdentityRepository::new();
 
-        mock.expect_create()
-            .returning(|input| {
-                Ok(LinkedIdentity {
-                    user_id: input.user_id,
-                    provider_type: input.provider_type.clone(),
-                    provider_alias: input.provider_alias.clone(),
-                    external_user_id: input.external_user_id.clone(),
-                    external_email: input.external_email.clone(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|input| {
+            Ok(LinkedIdentity {
+                user_id: input.user_id,
+                provider_type: input.provider_type.clone(),
+                provider_alias: input.provider_alias.clone(),
+                external_user_id: input.external_user_id.clone(),
+                external_email: input.external_email.clone(),
+                ..Default::default()
+            })
+        });
 
         let input = CreateLinkedIdentityInput {
             user_id: StringUuid::new_v4(),
@@ -227,9 +224,7 @@ mod tests {
         let mut mock = MockLinkedIdentityRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let result = mock.delete(id).await;
         assert!(result.is_ok());

@@ -29,3 +29,10 @@ data:
 
   # Logging
   KC_LOG_LEVEL: INFO
+
+  # Cluster configuration for Kubernetes
+  # Use Infinispan with Kubernetes-based discovery
+  KC_CACHE: ispn
+  KC_CACHE_STACK: kubernetes
+  # JGroups DNS_PING configuration for cluster discovery
+  JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-headless.auth9.svc.cluster.local"
