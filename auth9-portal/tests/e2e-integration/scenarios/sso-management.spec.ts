@@ -104,7 +104,6 @@ test.describe("Scenario: Identity Provider Configuration", () => {
 
         // Check for OIDC-specific fields
         const authUrlInput = page.getByLabel(/authorization url|auth url/i);
-        const tokenUrlInput = page.getByLabel(/token url/i);
 
         if (await authUrlInput.isVisible({ timeout: 2000 }).catch(() => false)) {
           await expect(authUrlInput).toBeVisible();
@@ -132,7 +131,6 @@ test.describe("Scenario: Identity Provider Configuration", () => {
 
         // Check for SAML-specific fields
         const entityIdInput = page.getByLabel(/entity id|issuer/i);
-        const ssoUrlInput = page.getByLabel(/sso url|login url/i);
 
         if (await entityIdInput.isVisible({ timeout: 2000 }).catch(() => false)) {
           await expect(entityIdInput).toBeVisible();

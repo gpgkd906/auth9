@@ -74,7 +74,7 @@ Auth9 is a self-hosted identity and access management service (Auth0 alternative
 | Tenant | tenant_users, services, webhooks, invitations |
 | User | tenant_users, sessions, password_reset_tokens, linked_identities |
 | Service | permissions, roles, clients |
-| Role | role_permissions, user_tenant_roles |
+| Role | role_permissions, user_tenant_roles, parent_role_id references |
 | TenantUser | user_tenant_roles |
 
 ### Code Organization (auth9-core)

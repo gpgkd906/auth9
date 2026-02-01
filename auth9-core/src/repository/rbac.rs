@@ -86,6 +86,9 @@ pub trait RbacRepository: Send + Sync {
 
     /// Delete all user role assignments for a tenant_user
     async fn delete_user_roles_by_tenant_user(&self, tenant_user_id: StringUuid) -> Result<u64>;
+
+    /// Clear parent_role_id references for a specific role (SET NULL before deleting the role)
+    async fn clear_parent_role_reference_by_id(&self, role_id: StringUuid) -> Result<u64>;
 }
 
 pub struct RbacRepositoryImpl {
@@ -550,6 +553,15 @@ impl RbacRepository for RbacRepositoryImpl {
     async fn delete_user_roles_by_tenant_user(&self, tenant_user_id: StringUuid) -> Result<u64> {
         let result = sqlx::query("DELETE FROM user_tenant_roles WHERE tenant_user_id = ?")
             .bind(tenant_user_id)
+            .execute(&self.pool)
+            .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn clear_parent_role_reference_by_id(&self, role_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("UPDATE roles SET parent_role_id = NULL WHERE parent_role_id = ?")
+            .bind(role_id)
             .execute(&self.pool)
             .await?;
 
