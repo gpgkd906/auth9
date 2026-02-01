@@ -5,6 +5,7 @@
 //!   init    - Run migrations and seed default data
 //!   migrate - Run database migrations only
 //!   seed    - Seed Keycloak with default data only
+//!   reset   - Reset database (drop all tables)
 
 use anyhow::Result;
 use auth9_core::{config::Config, migration, server};
@@ -30,6 +31,8 @@ enum Commands {
     Migrate,
     /// Seed Keycloak with default data only
     Seed,
+    /// Reset database (drop all tables)
+    Reset,
 }
 
 fn init_tracing() {
@@ -68,6 +71,11 @@ async fn main() -> Result<()> {
             info!("Seeding Keycloak with default data...");
             migration::seed_keycloak(&config).await?;
             info!("Seed completed successfully");
+        }
+        Some(Commands::Reset) => {
+            info!("Resetting database (dropping all tables)...");
+            migration::reset_database(&config).await?;
+            info!("Database reset completed");
         }
         Some(Commands::Serve) | None => {
             info!("Starting Auth9 Core Service");

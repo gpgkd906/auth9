@@ -87,6 +87,37 @@ async fn ensure_database_exists(config: &Config) -> Result<()> {
     Ok(())
 }
 
+/// Reset database by dropping and recreating it
+pub async fn reset_database(config: &Config) -> Result<()> {
+    let db_name =
+        extract_db_name(&config.database.url).context("Invalid DATABASE_URL: no database name")?;
+
+    let base_url = get_base_url(&config.database.url);
+
+    info!("Connecting to MySQL server...");
+    let pool: Pool<MySql> = MySqlPoolOptions::new()
+        .max_connections(1)
+        .connect(&base_url)
+        .await
+        .context("Failed to connect to MySQL server")?;
+
+    info!("Dropping database '{}'...", db_name);
+    let drop_query = format!("DROP DATABASE IF EXISTS `{}`", db_name);
+    pool.execute(drop_query.as_str())
+        .await
+        .context("Failed to drop database")?;
+
+    info!("Creating database '{}'...", db_name);
+    let create_query = format!("CREATE DATABASE `{}`", db_name);
+    pool.execute(create_query.as_str())
+        .await
+        .context("Failed to create database")?;
+
+    pool.close().await;
+    info!("Database '{}' has been reset", db_name);
+    Ok(())
+}
+
 /// Run database migrations
 pub async fn run_migrations(config: &Config) -> Result<()> {
     // First ensure database exists

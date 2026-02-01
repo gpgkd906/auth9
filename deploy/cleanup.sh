@@ -1,14 +1,14 @@
 #!/usr/bin/env zsh
-# Auth9 Cleanup Script
+# Auth9 清理脚本
 #
-# This script cleans up Auth9 resources from the Kubernetes cluster.
+# 本脚本用于从 Kubernetes 集群中清理 Auth9 资源。
 #
-# Usage:
-#   ./cleanup.sh [options]
+# 用法:
+#   ./cleanup.sh [选项]
 #
-# Options:
-#   --namespace NS       Use a different namespace (default: auth9)
-#   --dry-run            Show what would be deleted without executing
+# 选项:
+#   --namespace NS       使用其他命名空间（默认: auth9）
+#   --dry-run            仅显示将要删除的内容，不实际执行
 
 set -e
 
@@ -66,7 +66,7 @@ confirm_action() {
         case "$response" in
             [Yy]* ) return 0 ;;
             [Nn]* | "" ) return 1 ;;
-            * ) echo "Please answer yes or no." ;;
+            * ) echo "请回答 yes 或 no。" ;;
         esac
     done
 }
@@ -83,17 +83,17 @@ parse_arguments() {
                 shift
                 ;;
             -h|--help)
-                echo "Usage: $0 [options]"
+                echo "用法: $0 [选项]"
                 echo ""
-                echo "Options:"
-                echo "  --namespace NS       Use a different namespace (default: auth9)"
-                echo "  --dry-run            Show what would be deleted without executing"
-                echo "  -h, --help           Show this help"
+                echo "选项:"
+                echo "  --namespace NS       使用其他命名空间（默认: auth9）"
+                echo "  --dry-run            仅显示将要删除的内容，不实际执行"
+                echo "  -h, --help           显示帮助信息"
                 exit 0
                 ;;
             *)
-                echo -e "${RED}Unknown option: $1${NC}"
-                echo "Use --help for usage information"
+                echo -e "${RED}未知选项: $1${NC}"
+                echo "使用 --help 查看用法信息"
                 exit 1
                 ;;
         esac
@@ -102,296 +102,366 @@ parse_arguments() {
 
 check_namespace() {
     if ! kubectl get namespace "$NAMESPACE" &>/dev/null; then
-        print_warning "Namespace '$NAMESPACE' does not exist"
+        print_warning "命名空间 '$NAMESPACE' 不存在"
         exit 0
     fi
 }
 
 show_resources() {
-    echo -e "${BOLD}Current resources in namespace '$NAMESPACE':${NC}"
+    echo -e "${BOLD}命名空间 '$NAMESPACE' 中的当前资源:${NC}"
     echo ""
 
     echo -e "${YELLOW}Deployments:${NC}"
-    kubectl get deployments -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    kubectl get deployments -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  （无）"
     echo ""
 
     echo -e "${YELLOW}StatefulSets:${NC}"
-    kubectl get statefulsets -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    kubectl get statefulsets -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  （无）"
     echo ""
 
     echo -e "${YELLOW}Jobs:${NC}"
-    kubectl get jobs -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    kubectl get jobs -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  （无）"
     echo ""
 
     echo -e "${YELLOW}HorizontalPodAutoscalers:${NC}"
-    kubectl get hpa -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    kubectl get hpa -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  （无）"
     echo ""
 
     echo -e "${YELLOW}Services:${NC}"
-    kubectl get services -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    kubectl get services -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  （无）"
     echo ""
 
     echo -e "${YELLOW}Secrets:${NC}"
-    kubectl get secrets -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "default-token\|service-account" || echo "  (none)"
+    kubectl get secrets -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "default-token\|service-account" || echo "  （无）"
     echo ""
 
     echo -e "${YELLOW}ConfigMaps:${NC}"
-    kubectl get configmaps -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "kube-root-ca" || echo "  (none)"
+    kubectl get configmaps -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "kube-root-ca" || echo "  （无）"
     echo ""
 
-    echo -e "${YELLOW}PVCs (Database Data):${NC}"
-    kubectl get pvc -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    echo -e "${YELLOW}PVCs（数据库数据）:${NC}"
+    kubectl get pvc -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  （无）"
     echo ""
 }
 
 delete_jobs() {
     local job_count=$(kubectl get jobs -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$job_count" -eq 0 ]; then
-        print_info "No jobs to delete"
+        print_info "没有 Job 需要删除"
         return
     fi
 
-    print_info "Deleting $job_count job(s)..."
+    print_info "正在删除 $job_count 个 Job..."
     if [ -n "$DRY_RUN" ]; then
         kubectl get jobs -n "$NAMESPACE" -o name 2>/dev/null || true
     else
         kubectl delete jobs --all -n "$NAMESPACE" --ignore-not-found=true
-        print_success "Jobs deleted"
+        print_success "Jobs 已删除"
     fi
 }
 
 delete_deployments() {
     local deploy_count=$(kubectl get deployments -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$deploy_count" -eq 0 ]; then
-        print_info "No deployments to delete"
+        print_info "没有 Deployment 需要删除"
         return
     fi
 
-    print_info "Deleting $deploy_count deployment(s)..."
+    print_info "正在删除 $deploy_count 个 Deployment..."
     if [ -n "$DRY_RUN" ]; then
         kubectl get deployments -n "$NAMESPACE" -o name 2>/dev/null || true
     else
         kubectl delete deployments --all -n "$NAMESPACE" --ignore-not-found=true
-        print_success "Deployments deleted"
+        print_success "Deployments 已删除"
     fi
 }
 
 delete_statefulsets() {
     local sts_count=$(kubectl get statefulsets -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$sts_count" -eq 0 ]; then
-        print_info "No statefulsets to delete"
+        print_info "没有 StatefulSet 需要删除"
         return
     fi
 
-    print_info "Deleting $sts_count statefulset(s)..."
+    print_info "正在删除 $sts_count 个 StatefulSet..."
     if [ -n "$DRY_RUN" ]; then
         kubectl get statefulsets -n "$NAMESPACE" -o name 2>/dev/null || true
     else
         kubectl delete statefulsets --all -n "$NAMESPACE" --ignore-not-found=true
-        print_success "StatefulSets deleted"
+        print_success "StatefulSets 已删除"
     fi
 }
 
 delete_services() {
     local svc_count=$(kubectl get services -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$svc_count" -eq 0 ]; then
-        print_info "No services to delete"
+        print_info "没有 Service 需要删除"
         return
     fi
 
-    print_info "Deleting $svc_count service(s)..."
+    print_info "正在删除 $svc_count 个 Service..."
     if [ -n "$DRY_RUN" ]; then
         kubectl get services -n "$NAMESPACE" -o name 2>/dev/null || true
     else
         kubectl delete services --all -n "$NAMESPACE" --ignore-not-found=true
-        print_success "Services deleted"
+        print_success "Services 已删除"
     fi
 }
 
 delete_hpas() {
     local hpa_count=$(kubectl get hpa -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$hpa_count" -eq 0 ]; then
-        print_info "No HPAs to delete"
+        print_info "没有 HPA 需要删除"
         return
     fi
 
-    print_info "Deleting $hpa_count HPA(s)..."
+    print_info "正在删除 $hpa_count 个 HPA..."
     if [ -n "$DRY_RUN" ]; then
         kubectl get hpa -n "$NAMESPACE" -o name 2>/dev/null || true
     else
         kubectl delete hpa --all -n "$NAMESPACE" --ignore-not-found=true
-        print_success "HPAs deleted"
+        print_success "HPAs 已删除"
     fi
 }
 
 delete_configmaps() {
     local cm_count=$(kubectl get configmaps -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "kube-root-ca" | wc -l | tr -d ' ')
     if [ "$cm_count" -eq 0 ]; then
-        print_info "No configmaps to delete"
+        print_info "没有 ConfigMap 需要删除"
         return
     fi
 
-    print_info "Deleting $cm_count configmap(s)..."
+    print_info "正在删除 $cm_count 个 ConfigMap..."
     if [ -n "$DRY_RUN" ]; then
         kubectl get configmaps -n "$NAMESPACE" -o name 2>/dev/null | grep -v "kube-root-ca" || true
     else
         kubectl delete configmap auth9-config -n "$NAMESPACE" --ignore-not-found=true
-        print_success "ConfigMaps deleted"
+        print_success "ConfigMaps 已删除"
+    fi
+}
+
+reset_tidb_database() {
+    print_progress "6/9" "重置 TiDB 数据库"
+
+    echo ""
+    print_warning "此操作将删除 auth9 数据库中的所有数据！"
+    print_warning "同时会删除 auth9-secrets（因为 Keycloak client secret 需要重新生成）"
+    echo ""
+
+    if [ -n "$DRY_RUN" ]; then
+        print_info "[预演] 将询问是否重置数据库"
+        return 1
+    fi
+
+    if ! confirm_action "  确定要重置数据库吗？"; then
+        print_info "跳过数据库重置"
+        return 1
+    fi
+
+    # 检查 secret 是否存在（需要从中获取 DATABASE_URL）
+    if ! kubectl get secret auth9-secrets -n "$NAMESPACE" &>/dev/null; then
+        print_error "auth9-secrets 不存在，无法获取数据库连接信息"
+        return 1
+    fi
+
+    print_info "正在运行数据库重置..."
+
+    # 使用 auth9-core 镜像运行 reset 命令
+    kubectl run auth9-reset --rm -i --restart=Never \
+        --image=ghcr.io/gpgkd906/auth9-core:latest \
+        --overrides='{
+          "spec": {
+            "containers": [{
+              "name": "auth9-reset",
+              "image": "ghcr.io/gpgkd906/auth9-core:latest",
+              "args": ["reset"],
+              "envFrom": [{"secretRef": {"name": "auth9-secrets"}}]
+            }]
+          }
+        }' \
+        --namespace="$NAMESPACE" 2>&1
+
+    local exit_code=$?
+    if [ $exit_code -eq 0 ]; then
+        print_success "数据库已重置"
+
+        # 重置数据库后必须删除 secret
+        print_info "正在删除 auth9-secrets..."
+        kubectl delete secret auth9-secrets -n "$NAMESPACE" --ignore-not-found=true
+        print_success "auth9-secrets 已删除（下次部署将重新生成）"
+
+        return 0
+    else
+        print_error "数据库重置失败（退出码: $exit_code）"
+        return 1
     fi
 }
 
 interactive_delete_secrets() {
-    print_progress "6/8" "Secrets"
+    print_progress "7/9" "Secrets"
+
+    # 如果数据库重置时已删除 auth9-secrets，显示提示
+    if [ -n "$DB_RESET_DONE" ]; then
+        print_info "auth9-secrets 已在数据库重置步骤中删除"
+        echo ""
+    fi
 
     echo ""
-    echo -e "  ${YELLOW}Current secrets:${NC}"
+    echo -e "  ${YELLOW}当前密钥:${NC}"
     kubectl get secrets -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "default-token\|service-account" | while read line; do
         echo "    $line"
-    done || echo "    (none)"
+    done || echo "    （无）"
     echo ""
 
-    print_warning "Secrets contain sensitive data:"
-    echo "    - DATABASE_URL (database connection string)"
+    print_warning "密钥包含敏感数据:"
+    echo "    - DATABASE_URL（数据库连接字符串）"
     echo "    - REDIS_URL"
-    echo "    - JWT_SECRET, SESSION_SECRET"
+    echo "    - JWT_SECRET、SESSION_SECRET"
     echo "    - KEYCLOAK_ADMIN_PASSWORD"
     echo "    - KEYCLOAK_ADMIN_CLIENT_SECRET"
     echo ""
 
     if [ -n "$DRY_RUN" ]; then
-        print_info "[Dry Run] Would ask to delete secrets"
+        print_info "[预演] 将询问是否删除密钥"
         return
     fi
 
-    if confirm_action "  Delete secrets? (You will need to reconfigure on next deploy)"; then
-        print_info "Deleting secrets..."
+    if confirm_action "  删除剩余密钥？（下次部署需要重新配置）"; then
+        print_info "正在删除密钥..."
         kubectl delete secret auth9-secrets -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete secret keycloak-secrets -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete secret ghcr-secret -n "$NAMESPACE" --ignore-not-found=true
-        print_success "Secrets deleted"
+        print_success "密钥已删除"
     else
-        print_info "Keeping secrets"
+        print_info "保留密钥"
     fi
 }
 
 interactive_delete_pvcs() {
-    print_progress "7/8" "Persistent Volume Claims (Database Data)"
+    print_progress "8/9" "持久卷声明（数据库数据）"
 
     local pvc_count=$(kubectl get pvc -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$pvc_count" -eq 0 ]; then
-        print_info "No PVCs to delete"
+        print_info "没有 PVC 需要删除"
         return
     fi
 
     echo ""
-    echo -e "  ${YELLOW}Current PVCs:${NC}"
+    echo -e "  ${YELLOW}当前 PVCs:${NC}"
     kubectl get pvc -n "$NAMESPACE" --no-headers 2>/dev/null | while read line; do
         echo "    $line"
     done
     echo ""
 
-    print_warning "PVCs contain database data:"
-    echo "    - Keycloak PostgreSQL data"
-    echo "    - User accounts, realm configuration, etc."
+    print_warning "PVCs 包含数据库数据:"
+    echo "    - Keycloak PostgreSQL 数据"
+    echo "    - 用户账户、Realm 配置等"
     echo ""
-    echo -e "  ${RED}WARNING: Deleting PVCs will permanently destroy all database data!${NC}"
+    echo -e "  ${RED}警告: 删除 PVCs 将永久销毁所有数据库数据！${NC}"
     echo ""
 
     if [ -n "$DRY_RUN" ]; then
-        print_info "[Dry Run] Would ask to delete PVCs"
+        print_info "[预演] 将询问是否删除 PVCs"
         return
     fi
 
-    if confirm_action "  Delete PVCs? (THIS WILL DESTROY ALL DATABASE DATA)"; then
-        print_info "Deleting PVCs..."
+    if confirm_action "  删除 PVCs？（这将销毁所有数据库数据）"; then
+        print_info "正在删除 PVCs..."
         kubectl delete pvc --all -n "$NAMESPACE" --ignore-not-found=true
-        print_success "PVCs deleted"
+        print_success "PVCs 已删除"
     else
-        print_info "Keeping PVCs (database data preserved)"
+        print_info "保留 PVCs（数据库数据已保留）"
     fi
 }
 
 interactive_delete_namespace() {
-    print_progress "8/8" "Namespace"
+    print_progress "9/9" "命名空间"
 
     echo ""
-    print_info "Deleting namespace will remove any remaining resources"
+    print_info "删除命名空间将移除所有剩余资源"
     echo ""
 
     if [ -n "$DRY_RUN" ]; then
-        print_info "[Dry Run] Would delete namespace '$NAMESPACE'"
+        print_info "[预演] 将删除命名空间 '$NAMESPACE'"
         return
     fi
 
-    if confirm_action "  Delete namespace '$NAMESPACE'?"; then
-        print_info "Deleting namespace..."
+    if confirm_action "  删除命名空间 '$NAMESPACE'？"; then
+        print_info "正在删除命名空间..."
         kubectl delete namespace "$NAMESPACE" --ignore-not-found=true
-        print_success "Namespace deleted"
+        print_success "命名空间已删除"
     else
-        print_info "Keeping namespace"
+        print_info "保留命名空间"
     fi
 }
 
 main() {
     parse_arguments "$@"
 
-    print_header "Auth9 Cleanup"
+    print_header "Auth9 清理"
 
-    echo -e "${YELLOW}Namespace:${NC} $NAMESPACE"
-    echo -e "${YELLOW}Mode:${NC} $([ -n "$DRY_RUN" ] && echo "Dry Run (no changes)" || echo "Interactive")"
+    echo -e "${YELLOW}命名空间:${NC} $NAMESPACE"
+    echo -e "${YELLOW}模式:${NC} $([ -n "$DRY_RUN" ] && echo "预演模式（不做实际更改）" || echo "交互式")"
     echo ""
 
     check_namespace
     show_resources
 
     if [ -n "$DRY_RUN" ]; then
-        print_warning "Dry run mode - showing what would happen"
+        print_warning "预演模式 - 仅显示将要执行的操作"
     fi
 
-    if ! confirm_action "Start cleanup process?"; then
-        print_info "Cleanup cancelled"
+    if ! confirm_action "开始清理？"; then
+        print_info "清理已取消"
         exit 0
     fi
 
-    print_header "Cleaning up resources"
+    print_header "正在清理资源"
 
     # Step 1-5: Delete workloads (no confirmation needed)
-    print_progress "1/8" "Jobs"
+    print_progress "1/9" "Jobs"
     delete_jobs
 
-    print_progress "2/8" "Deployments"
+    print_progress "2/9" "Deployments"
     delete_deployments
 
-    print_progress "3/8" "StatefulSets"
+    print_progress "3/9" "StatefulSets"
     delete_statefulsets
 
-    print_progress "4/8" "HorizontalPodAutoscalers"
+    print_progress "4/9" "HorizontalPodAutoscalers"
     delete_hpas
 
-    print_progress "5/8" "Services & ConfigMaps"
+    print_progress "5/9" "Services 和 ConfigMaps"
     delete_services
     delete_configmaps
 
-    # Step 6-7: Interactive confirmation for sensitive data
+    # Step 6: Reset TiDB database (optional, before deleting secrets)
+    # Track if database was reset (secrets deleted as part of reset)
+    DB_RESET_DONE=""
+    if reset_tidb_database; then
+        DB_RESET_DONE="true"
+    fi
+
+    # Step 7: Interactive confirmation for sensitive data
     interactive_delete_secrets
     interactive_delete_pvcs
 
-    # Step 8: Namespace (only if --all)
+    # Step 8-9: Namespace
     interactive_delete_namespace
 
-    print_header "Cleanup Complete"
+    print_header "清理完成"
 
     if [ -z "$DRY_RUN" ]; then
-        echo -e "${YELLOW}Remaining resources in '$NAMESPACE':${NC}"
+        echo -e "${YELLOW}'$NAMESPACE' 中的剩余资源:${NC}"
         if kubectl get namespace "$NAMESPACE" &>/dev/null; then
-            kubectl get all,secrets,configmaps,pvc -n "$NAMESPACE" 2>/dev/null || echo "  (namespace deleted)"
+            kubectl get all,secrets,configmaps,pvc -n "$NAMESPACE" 2>/dev/null || echo "  （命名空间已删除）"
         else
-            echo "  Namespace has been deleted"
+            echo "  命名空间已删除"
         fi
     fi
 
     echo ""
-    print_info "To redeploy, run: ./deploy/deploy.sh"
+    print_info "重新部署请运行: ./deploy/deploy.sh"
 }
 
 main "$@"
