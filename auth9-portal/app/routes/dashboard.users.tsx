@@ -1,6 +1,5 @@
-import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, type User, type Tenant, type Service, type Role } from "~/services/api";
 
@@ -48,7 +47,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     tenantApi.list(1, 100), // List first 100 tenants for now
     serviceApi.list(undefined, 1, 100) // List first 100 services
   ]);
-  return json({ users, tenants, services });
+  return { users, tenants, services };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -60,7 +59,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const id = formData.get("id") as string;
       const display_name = formData.get("display_name") as string;
       await userApi.update(id, { display_name });
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
     if (intent === "add_to_tenant") {
@@ -68,14 +67,14 @@ export async function action({ request }: ActionFunctionArgs) {
       const tenant_id = formData.get("tenant_id") as string;
       const role_in_tenant = formData.get("role_in_tenant") as string;
       await userApi.addToTenant(user_id, tenant_id, role_in_tenant);
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
     if (intent === "remove_from_tenant") {
       const user_id = formData.get("user_id") as string;
       const tenant_id = formData.get("tenant_id") as string;
       await userApi.removeFromTenant(user_id, tenant_id);
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
     if (intent === "assign_roles") {
@@ -89,7 +88,7 @@ export async function action({ request }: ActionFunctionArgs) {
         tenant_id,
         roles
       });
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
     if (intent === "create_user") {
@@ -97,7 +96,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const display_name = formData.get("display_name") as string;
       const password = formData.get("password") as string;
       await userApi.create({ email, display_name, password });
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
     if (intent === "unassign_role") {
@@ -105,15 +104,15 @@ export async function action({ request }: ActionFunctionArgs) {
       const tenant_id = formData.get("tenant_id") as string;
       const role_id = formData.get("role_id") as string;
       await rbacApi.unassignRole(user_id, tenant_id, role_id);
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message, intent }, { status: 400 });
+    return Response.json({ error: message, intent }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent", intent }, { status: 400 });
+  return Response.json({ error: "Invalid intent", intent }, { status: 400 });
 }
 
 export default function UsersPage() {

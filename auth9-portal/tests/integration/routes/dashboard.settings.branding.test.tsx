@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
@@ -45,7 +45,7 @@ describe("Branding Settings Page", () => {
   it("renders branding settings page with default values", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -53,7 +53,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Login Page Branding")).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("Branding Settings Page", () => {
   it("loads and displays custom branding configuration", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockCustomBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -75,7 +75,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("Test Company")).toBeInTheDocument();
@@ -91,7 +91,7 @@ describe("Branding Settings Page", () => {
   it("displays color pickers for all color fields", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -99,7 +99,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Primary Color")).toBeInTheDocument();
@@ -113,7 +113,7 @@ describe("Branding Settings Page", () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
     const user = userEvent.setup();
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -121,7 +121,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Company Name")).toBeInTheDocument();
@@ -138,7 +138,7 @@ describe("Branding Settings Page", () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
     const user = userEvent.setup();
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -146,7 +146,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Logo URL")).toBeInTheDocument();
@@ -162,7 +162,7 @@ describe("Branding Settings Page", () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
     const user = userEvent.setup();
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -170,7 +170,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Primary Color")).toBeInTheDocument();
@@ -187,7 +187,7 @@ describe("Branding Settings Page", () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
     const user = userEvent.setup();
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -195,7 +195,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByLabelText("Allow Registration")).toBeInTheDocument();
@@ -211,7 +211,7 @@ describe("Branding Settings Page", () => {
   it("allows user to enter custom CSS", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -219,7 +219,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Custom CSS")).toBeInTheDocument();
@@ -235,7 +235,7 @@ describe("Branding Settings Page", () => {
   it("shows logo preview when logo URL is provided", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockCustomBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -243,7 +243,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Logo Preview:")).toBeInTheDocument();
@@ -255,7 +255,7 @@ describe("Branding Settings Page", () => {
   it("shows live preview of branding changes", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockCustomBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -263,7 +263,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Preview")).toBeInTheDocument();
@@ -275,7 +275,7 @@ describe("Branding Settings Page", () => {
   it("displays Save Changes button", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -283,7 +283,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Save Changes")).toBeInTheDocument();
@@ -293,7 +293,7 @@ describe("Branding Settings Page", () => {
   it("displays Reset to Defaults button", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -301,7 +301,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Reset to Defaults")).toBeInTheDocument();
@@ -311,7 +311,7 @@ describe("Branding Settings Page", () => {
   it("disables Reset to Defaults button when using default config", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -319,7 +319,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       const resetButton = screen.getByText("Reset to Defaults").closest("button");
@@ -330,7 +330,7 @@ describe("Branding Settings Page", () => {
   it("enables Reset to Defaults button when using custom config", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockCustomBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -338,7 +338,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       const resetButton = screen.getByText("Reset to Defaults").closest("button");
@@ -349,7 +349,7 @@ describe("Branding Settings Page", () => {
   it("handles loader error by returning default branding", async () => {
     vi.mocked(brandingApi.get).mockRejectedValue(new Error("API Error"));
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -357,7 +357,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     // Should fallback to default branding
     await waitFor(() => {
@@ -368,7 +368,7 @@ describe("Branding Settings Page", () => {
   it("shows all branding sections", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -376,7 +376,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Company Identity")).toBeInTheDocument();
@@ -390,7 +390,7 @@ describe("Branding Settings Page", () => {
   it("displays helper text for form fields", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -398,7 +398,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Displayed on the login page")).toBeInTheDocument();
@@ -419,7 +419,7 @@ describe("Branding Settings Page", () => {
 
     vi.mocked(brandingApi.get).mockResolvedValue(brandingWithCompanyName);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -427,7 +427,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Preview Company")).toBeInTheDocument();
@@ -437,7 +437,7 @@ describe("Branding Settings Page", () => {
   it("renders form with correct input types", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -445,7 +445,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       const logoInput = screen.getByLabelText("Logo URL");
@@ -462,7 +462,7 @@ describe("Branding Settings Page", () => {
   it("has correct page title", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -470,7 +470,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Login Page Branding")).toBeInTheDocument();
@@ -485,7 +485,7 @@ describe("Branding Settings Page", () => {
   it("displays all four color input fields with correct labels", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -493,7 +493,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       const primaryColorInput = screen.getByLabelText("Primary Color");
@@ -513,7 +513,7 @@ describe("Branding Settings Page", () => {
   it("loads custom CSS value correctly", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockCustomBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -521,7 +521,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       const customCssTextarea = screen.getByPlaceholderText(/\.login-form/);
@@ -532,7 +532,7 @@ describe("Branding Settings Page", () => {
   it("loads allow_registration value correctly", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockCustomBranding);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
         Component: BrandingSettingsPage,
@@ -540,7 +540,7 @@ describe("Branding Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/branding"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/branding"]} />);
 
     await waitFor(() => {
       const checkbox = screen.getByLabelText("Allow Registration") as HTMLInputElement;

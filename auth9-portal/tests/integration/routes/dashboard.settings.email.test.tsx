@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
@@ -49,7 +49,7 @@ describe("Email Settings Page", () => {
   it("renders email settings page with provider selection", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -57,7 +57,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Email Provider Configuration")).toBeInTheDocument();
@@ -68,7 +68,7 @@ describe("Email Settings Page", () => {
   it("shows SMTP configuration fields when SMTP is selected", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -76,7 +76,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("SMTP Configuration")).toBeInTheDocument();
@@ -93,7 +93,7 @@ describe("Email Settings Page", () => {
   it("loads existing SMTP configuration values", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -101,7 +101,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("smtp.example.com")).toBeInTheDocument();
@@ -115,7 +115,7 @@ describe("Email Settings Page", () => {
   it("shows action buttons when provider is not none", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -123,7 +123,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Save Settings")).toBeInTheDocument();
@@ -135,7 +135,7 @@ describe("Email Settings Page", () => {
   it("hides test buttons when provider is none", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -143,7 +143,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Save Settings")).toBeInTheDocument();
@@ -155,7 +155,7 @@ describe("Email Settings Page", () => {
   it("has test email button when provider is configured", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -163,7 +163,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       // Verify test email button is rendered
@@ -193,7 +193,7 @@ describe("Email Settings Page", () => {
 
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(sesConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -201,7 +201,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("AWS SES Configuration")).toBeInTheDocument();
@@ -233,7 +233,7 @@ describe("Email Settings Page", () => {
 
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(oracleConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -241,7 +241,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Oracle Email Delivery Configuration")).toBeInTheDocument();
@@ -254,7 +254,7 @@ describe("Email Settings Page", () => {
   it("handles API error gracefully", async () => {
     vi.mocked(systemApi.getEmailSettings).mockRejectedValue(new Error("API Error"));
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -262,7 +262,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     // Should fallback to "none" config
     await waitFor(() => {
@@ -273,7 +273,7 @@ describe("Email Settings Page", () => {
   it("shows status banner for configured provider", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -281,7 +281,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Email Provider Active")).toBeInTheDocument();
@@ -292,7 +292,7 @@ describe("Email Settings Page", () => {
   it("shows unconfigured status banner when no provider", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -300,7 +300,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Email Provider Not Configured")).toBeInTheDocument();
@@ -311,7 +311,7 @@ describe("Email Settings Page", () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
     const user = userEvent.setup();
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -319,7 +319,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Send Test Email")).toBeInTheDocument();
@@ -336,7 +336,7 @@ describe("Email Settings Page", () => {
   it("has provider type select with correct options", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -344,7 +344,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Provider Type")).toBeInTheDocument();
@@ -356,7 +356,7 @@ describe("Email Settings Page", () => {
   it("shows info banner about single provider configuration", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockNoneConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -364,7 +364,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Single Provider Configuration")).toBeInTheDocument();
@@ -375,7 +375,7 @@ describe("Email Settings Page", () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
     const user = userEvent.setup();
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -383,7 +383,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Send Test Email")).toBeInTheDocument();
@@ -407,7 +407,7 @@ describe("Email Settings Page", () => {
   it("displays password hint when SMTP password exists", async () => {
     vi.mocked(systemApi.getEmailSettings).mockResolvedValue(mockSmtpConfig);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
         Component: EmailSettingsPage,
@@ -415,7 +415,7 @@ describe("Email Settings Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Leave blank to keep existing password")).toBeInTheDocument();

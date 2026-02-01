@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import AuditLogsPage, { loader } from "~/routes/dashboard.audit-logs";
@@ -48,7 +48,7 @@ describe("Audit Logs Page", () => {
     it("renders audit logs table with data", async () => {
         vi.mocked(auditApi.list).mockResolvedValue(mockAuditLogs);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/audit-logs",
                 Component: AuditLogsPage,
@@ -56,7 +56,7 @@ describe("Audit Logs Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/audit-logs"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/audit-logs"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("Audit Logs")).toBeInTheDocument();
@@ -67,7 +67,7 @@ describe("Audit Logs Page", () => {
     it("displays pagination info", async () => {
         vi.mocked(auditApi.list).mockResolvedValue(mockAuditLogs);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/audit-logs",
                 Component: AuditLogsPage,
@@ -75,7 +75,7 @@ describe("Audit Logs Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/audit-logs"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/audit-logs"]} />);
 
         await waitFor(() => {
             expect(screen.getByText(/150 events/)).toBeInTheDocument();
@@ -86,7 +86,7 @@ describe("Audit Logs Page", () => {
     it("renders log entries in table", async () => {
         vi.mocked(auditApi.list).mockResolvedValue(mockAuditLogs);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/audit-logs",
                 Component: AuditLogsPage,
@@ -94,7 +94,7 @@ describe("Audit Logs Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/audit-logs"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/audit-logs"]} />);
 
         await waitFor(() => {
             // Check actions
@@ -116,7 +116,7 @@ describe("Audit Logs Page", () => {
             pagination: { total: 0, page: 1, per_page: 50, total_pages: 1 },
         });
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/audit-logs",
                 Component: AuditLogsPage,
@@ -124,7 +124,7 @@ describe("Audit Logs Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/audit-logs"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/audit-logs"]} />);
 
         await waitFor(() => {
             expect(screen.getByText("No audit logs found")).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe("Audit Logs Page", () => {
     it("handles null actor_id gracefully", async () => {
         vi.mocked(auditApi.list).mockResolvedValue(mockAuditLogs);
 
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/audit-logs",
                 Component: AuditLogsPage,
@@ -142,7 +142,7 @@ describe("Audit Logs Page", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard/audit-logs"]} />);
+        render(<RoutesStub initialEntries={["/dashboard/audit-logs"]} />);
 
         await waitFor(() => {
             // The entry with null actor_id should show "-"

@@ -1,5 +1,5 @@
-import type { MetaFunction } from "@remix-run/node";
-import { Link, Outlet, useLocation } from "@remix-run/react";
+import type { MetaFunction } from "react-router";
+import { Link, Outlet, useLocation } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 

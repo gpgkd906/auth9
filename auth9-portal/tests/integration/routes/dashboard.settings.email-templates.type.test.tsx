@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import EmailTemplateEditorPage, { loader, action } from "~/routes/dashboard.settings.email-templates.$type";
@@ -54,7 +54,7 @@ describe("Email Template Editor Page", () => {
   it("renders template editor with header and back button", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -62,7 +62,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("User Invitation")).toBeInTheDocument();
@@ -74,7 +74,7 @@ describe("Email Template Editor Page", () => {
   it("loads template content into form fields", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -82,7 +82,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("You've been invited to join {{tenant_name}}")).toBeInTheDocument();
@@ -94,7 +94,7 @@ describe("Email Template Editor Page", () => {
   it("displays available variables sidebar", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -102,7 +102,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Available Variables")).toBeInTheDocument();
@@ -116,7 +116,7 @@ describe("Email Template Editor Page", () => {
   it("shows Reset to Default button for customized template", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -124,7 +124,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Reset to Default")).toBeInTheDocument();
@@ -134,7 +134,7 @@ describe("Email Template Editor Page", () => {
   it("hides Reset to Default button for default template", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockDefaultTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -142,7 +142,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("User Invitation")).toBeInTheDocument();
@@ -154,7 +154,7 @@ describe("Email Template Editor Page", () => {
   it("renders Save Template and Preview buttons", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -162,7 +162,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Save Template")).toBeInTheDocument();
@@ -173,7 +173,7 @@ describe("Email Template Editor Page", () => {
   it("renders form labels correctly", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -181,7 +181,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Subject Line")).toBeInTheDocument();
@@ -193,7 +193,7 @@ describe("Email Template Editor Page", () => {
   it("allows editing template subject", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -201,7 +201,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByDisplayValue("You've been invited to join {{tenant_name}}")).toBeInTheDocument();
@@ -216,7 +216,7 @@ describe("Email Template Editor Page", () => {
   it("displays help text for plain text body", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -224,7 +224,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Shown to recipients whose email clients don't support HTML/)).toBeInTheDocument();
@@ -234,7 +234,7 @@ describe("Email Template Editor Page", () => {
   it("displays template content card with description", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -242,7 +242,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Template Content")).toBeInTheDocument();
@@ -254,7 +254,7 @@ describe("Email Template Editor Page", () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
     vi.mocked(emailTemplateApi.update).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -263,7 +263,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Save Template")).toBeInTheDocument();
@@ -281,7 +281,7 @@ describe("Email Template Editor Page", () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
     vi.mocked(emailTemplateApi.update).mockRejectedValue(new Error("Save failed"));
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -290,7 +290,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Save Template")).toBeInTheDocument();
@@ -307,7 +307,7 @@ describe("Email Template Editor Page", () => {
   it("opens reset confirmation dialog", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -315,7 +315,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Reset to Default")).toBeInTheDocument();
@@ -340,7 +340,7 @@ describe("Email Template Editor Page", () => {
       },
     });
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -349,7 +349,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Preview")).toBeInTheDocument();
@@ -373,7 +373,7 @@ describe("Email Template Editor Page", () => {
       },
     });
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -382,7 +382,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/invitation"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Preview")).toBeInTheDocument();
@@ -426,7 +426,7 @@ describe("Email Template Editor Page", () => {
 
     vi.mocked(emailTemplateApi.get).mockResolvedValue(passwordResetTemplate);
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
         Component: EmailTemplateEditorPage,
@@ -434,7 +434,7 @@ describe("Email Template Editor Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/settings/email-templates/password_reset"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/settings/email-templates/password_reset"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Password Reset")).toBeInTheDocument();

@@ -44,6 +44,7 @@ pub fn create_test_jwt_manager() -> JwtManager {
     JwtManager::new(test_jwt_config())
 }
 
+#[allow(dead_code)]
 pub fn create_test_cache() -> NoOpCacheManager {
     NoOpCacheManager::new()
 }
@@ -96,10 +97,12 @@ impl MockCacheManager {
             .insert((user_id, tenant_id, service_id), roles);
     }
 
+    #[allow(dead_code)]
     pub fn get_count(&self) -> u32 {
         self.get_count.load(Ordering::Relaxed)
     }
 
+    #[allow(dead_code)]
     pub fn set_count(&self) -> u32 {
         self.set_count.load(Ordering::Relaxed)
     }
@@ -237,6 +240,7 @@ pub fn create_test_role(id: Uuid, service_id: Uuid, name: &str) -> Role {
     }
 }
 
+#[allow(dead_code)]
 pub fn create_test_permission(id: Uuid, service_id: Uuid, name: &str) -> Permission {
     Permission {
         id: StringUuid::from(id),
@@ -282,6 +286,7 @@ impl GrpcTestBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn with_jwt_config(mut self, config: JwtConfig) -> Self {
         self.jwt_manager = JwtManager::new(config);
         self
@@ -315,6 +320,7 @@ impl GrpcTestBuilder {
         self
     }
 
+    #[allow(dead_code)]
     pub async fn with_role_record(self, role: Role) -> Self {
         self.rbac_repo.add_role(role).await;
         self

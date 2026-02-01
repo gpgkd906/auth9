@@ -1,6 +1,5 @@
-import type { MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Link, useLoaderData } from "@remix-run/react";
+import type { MetaFunction } from "react-router";
+import { Link, useLoaderData } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
@@ -22,10 +21,10 @@ export const meta: MetaFunction = () => {
 export async function loader() {
   try {
     const result = await emailTemplateApi.list();
-    return json({ templates: result.data, error: null });
+    return { templates: result.data, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load templates";
-    return json({ templates: [] as EmailTemplateWithContent[], error: message });
+    return { templates: [] as EmailTemplateWithContent[], error: message };
   }
 }
 

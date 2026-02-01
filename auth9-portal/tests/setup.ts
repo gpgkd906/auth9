@@ -1,7 +1,7 @@
 import "@testing-library/jest-dom";
-import { installGlobals } from "@remix-run/node";
 
-installGlobals();
+// Note: installGlobals() from @remix-run/node is no longer needed
+// Node.js 20+ has native support for Web APIs like fetch, Request, Response, etc.
 
 // Polyfill ResizeObserver for Radix UI components in jsdom
 if (typeof window !== "undefined" && !window.ResizeObserver) {

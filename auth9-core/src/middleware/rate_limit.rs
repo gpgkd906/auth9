@@ -478,7 +478,7 @@ mod tests {
             redis: None,
         };
 
-        let rule = state.get_rule("POST", "/api/v1/auth/token");
+        let _rule = state.get_rule("POST", "/api/v1/auth/token");
         // Note: get_rule concatenates method:path, so we need to check the right key
         let rule = state.config.endpoints.get("POST:/api/v1/auth/token").unwrap();
         assert_eq!(rule.requests, 10);

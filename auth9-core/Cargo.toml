@@ -7,20 +7,20 @@ description = "Identity Service Backend - The Brain of Auth9"
 
 [dependencies]
 # Web Framework
-axum = { version = "0.7", features = ["macros", "multipart"] }
-axum-extra = { version = "0.9", features = ["typed-header"] }
-tower = { version = "0.4", features = ["full"] }
-tower-http = { version = "0.5", features = ["cors", "trace", "compression-gzip"] }
+axum = { version = "0.8", features = ["macros", "multipart"] }
+axum-extra = { version = "0.10", features = ["typed-header"] }
+tower = { version = "0.5", features = ["full"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
 
 # Async Runtime
 tokio = { version = "1", features = ["full"] }
 
 # gRPC
-tonic = "0.11"
-prost = "0.12"
+tonic = "0.12"
+prost = "0.13"
 
 # Database
-sqlx = { version = "0.7", features = ["runtime-tokio", "mysql", "uuid", "chrono", "json"] }
+sqlx = { version = "0.8", features = ["runtime-tokio", "mysql", "uuid", "chrono", "json"] }
 
 # Redis
 redis = { version = "1.0", features = ["tokio-comp", "connection-manager"] }
@@ -40,7 +40,7 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
 # HTTP Client (for Keycloak)
-reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
+reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }
 
 # CLI
 clap = { version = "4", features = ["derive"] }
@@ -69,19 +69,19 @@ aes-gcm = "0.10"
 sha2 = "0.10"
 
 # AWS SDK for SES
-aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
-aws-sdk-sesv2 = "1.108"
+aws-config = { version = "1.5", features = ["behavior-version-latest"] }
+aws-sdk-sesv2 = "1.60"
 
 [dev-dependencies]
 # Testing
 tokio-test = "0.4"
-mockall = "0.12"
+mockall = "0.13"
 wiremock = "0.6"
-rstest = "0.18"
+rstest = "0.23"
 pretty_assertions = "1"
 
 [build-dependencies]
-tonic-build = "0.11"
+tonic-build = "0.12"
 
 [[bin]]
 name = "auth9-core"

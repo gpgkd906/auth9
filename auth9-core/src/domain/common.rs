@@ -74,7 +74,10 @@ impl<'r> sqlx::Decode<'r, sqlx::MySql> for StringUuid {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::MySql> for StringUuid {
-    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut Vec<u8>,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         <String as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&self.0.to_string(), buf)
     }
 }

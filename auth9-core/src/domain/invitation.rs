@@ -60,7 +60,10 @@ impl sqlx::Type<sqlx::MySql> for InvitationStatus {
 }
 
 impl<'q> sqlx::Encode<'q, sqlx::MySql> for InvitationStatus {
-    fn encode_by_ref(&self, buf: &mut Vec<u8>) -> sqlx::encode::IsNull {
+    fn encode_by_ref(
+        &self,
+        buf: &mut Vec<u8>,
+    ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         let s = self.to_string();
         <&str as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&s.as_str(), buf)
     }

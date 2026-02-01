@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, TrashIcon, ArrowLeftIcon, CopyIcon, UpdateIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -32,15 +31,15 @@ export async function loader({ params }: LoaderFunctionArgs) {
         serviceApi.listClients(id)
     ]);
 
-    return json({
+    return {
         service: serviceRes.data,
         clients: clientsRes.data
-    });
+    };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
     const { id } = params;
-    if (!id) return json({ error: "Service ID required" }, { status: 400 });
+    if (!id) return Response.json({ error: "Service ID required" }, { status: 400 });
 
     const formData = await request.formData();
     const intent = formData.get("intent");
@@ -58,33 +57,33 @@ export async function action({ request, params }: ActionFunctionArgs) {
                 redirect_uris,
                 logout_uris
             });
-            return json({ success: true, intent });
+            return { success: true, intent };
         }
 
         if (intent === "create_client") {
             const name = formData.get("name") as string;
             const res = await serviceApi.createClient(id, { name: name || undefined });
-            return json({ success: true, intent, secret: res.data.client_secret, client: res.data.client });
+            return { success: true, intent, secret: res.data.client_secret, client: res.data.client };
         }
 
         if (intent === "delete_client") {
             const clientId = formData.get("client_id") as string;
             await serviceApi.deleteClient(id, clientId);
-            return json({ success: true, intent });
+            return { success: true, intent };
         }
 
         if (intent === "regenerate_secret") {
             const clientId = formData.get("client_id") as string;
             const res = await serviceApi.regenerateClientSecret(id, clientId);
-            return json({ success: true, intent, secret: res.data.client_secret, regeneratedClientId: clientId });
+            return { success: true, intent, secret: res.data.client_secret, regeneratedClientId: clientId };
         }
 
     } catch (error) {
         const message = error instanceof Error ? error.message : "Unknown error";
-        return json({ error: message }, { status: 400 });
+        return Response.json({ error: message }, { status: 400 });
     }
 
-    return json({ error: "Invalid intent" }, { status: 400 });
+    return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 // Helper function to copy text to clipboard

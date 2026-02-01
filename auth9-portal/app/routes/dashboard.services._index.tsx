@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -35,7 +34,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
   const services = await serviceApi.list(undefined, page, perPage);
-  return json(services);
+  return services;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -59,22 +58,22 @@ export async function action({ request }: ActionFunctionArgs) {
       });
       // We might want to show the initial secret?
       if (res.data.client) {
-        return json({ success: true, intent, secret: res.data.client.client_secret });
+        return { success: true, intent, secret: res.data.client.client_secret };
       }
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await serviceApi.delete(id);
-      return json({ success: true, intent });
+      return { success: true, intent };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 export default function ServicesPage() {
@@ -141,7 +140,7 @@ export default function ServicesPage() {
                 <Input id="create-logout-uris" name="logout_uris" placeholder="https://myapp.com/logout" />
               </div>
               {actionData && "error" in actionData && (
-                <p className="text-sm text-red-500">{actionData.error}</p>
+                <p className="text-sm text-red-500">{String(actionData.error)}</p>
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>

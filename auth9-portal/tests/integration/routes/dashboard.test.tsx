@@ -1,11 +1,11 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import Dashboard from "~/routes/dashboard";
 
 describe("Dashboard Layout", () => {
     it("renders dashboard sidebar and navigation", async () => {
-        const RemixStub = createRemixStub([
+        const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: Dashboard,
@@ -18,7 +18,7 @@ describe("Dashboard Layout", () => {
             },
         ]);
 
-        render(<RemixStub initialEntries={["/dashboard"]} />);
+        render(<RoutesStub initialEntries={["/dashboard"]} />);
 
         expect(screen.getByText("Auth9")).toBeInTheDocument();
         expect(screen.getByText("Overview")).toBeInTheDocument();

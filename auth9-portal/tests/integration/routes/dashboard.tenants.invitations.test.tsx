@@ -1,4 +1,4 @@
-import { createRemixStub } from "@remix-run/testing";
+import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import InvitationsPage, { loader } from "~/routes/dashboard.tenants.$tenantId.invitations";
@@ -89,7 +89,7 @@ describe("Invitations Page", () => {
   });
 
   it("renders invitations page with tenant info", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -97,7 +97,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Invitations")).toBeInTheDocument();
@@ -106,7 +106,7 @@ describe("Invitations Page", () => {
   });
 
   it("displays invitation list with status badges", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -114,7 +114,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("pending@example.com")).toBeInTheDocument();
@@ -127,7 +127,7 @@ describe("Invitations Page", () => {
   });
 
   it("shows invite user button", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -135,7 +135,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Invite User")).toBeInTheDocument();
@@ -143,7 +143,7 @@ describe("Invitations Page", () => {
   });
 
   it("shows invite user button and dialog trigger", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -151,7 +151,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       // Invite button should be present
@@ -162,7 +162,7 @@ describe("Invitations Page", () => {
   });
 
   it("loader fetches roles for dialog", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -170,7 +170,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Invite User")).toBeInTheDocument();
@@ -182,7 +182,7 @@ describe("Invitations Page", () => {
   });
 
   it("shows role count for each invitation", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -190,7 +190,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     // Wait for the table to be rendered
     await waitFor(() => {
@@ -207,7 +207,7 @@ describe("Invitations Page", () => {
       pagination: { page: 1, per_page: 20, total: 0, total_pages: 1 },
     });
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -215,7 +215,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/No invitations found/)).toBeInTheDocument();
@@ -223,7 +223,7 @@ describe("Invitations Page", () => {
   });
 
   it("shows pagination info", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -231,7 +231,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/3 invitations/)).toBeInTheDocument();
@@ -242,7 +242,7 @@ describe("Invitations Page", () => {
   it("handles empty services list", async () => {
     vi.mocked(serviceApi.list).mockResolvedValue({ data: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 1 } });
 
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -250,7 +250,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Invite User")).toBeInTheDocument();
@@ -261,7 +261,7 @@ describe("Invitations Page", () => {
   });
 
   it("has action menu for each invitation", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -269,7 +269,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       // Look for action menu buttons (sr-only text)
@@ -279,7 +279,7 @@ describe("Invitations Page", () => {
   });
 
   it("has back link to tenants page", async () => {
-    const RemixStub = createRemixStub([
+    const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
         Component: InvitationsPage,
@@ -287,7 +287,7 @@ describe("Invitations Page", () => {
       },
     ]);
 
-    render(<RemixStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
       // Find the back arrow link by its href

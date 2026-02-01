@@ -5,7 +5,6 @@
 //! - `RequireAuth` middleware layer for protecting routes
 
 use axum::{
-    async_trait,
     extract::FromRequestParts,
     http::{header::AUTHORIZATION, request::Parts, StatusCode},
     response::{IntoResponse, Response},
@@ -160,7 +159,6 @@ fn extract_bearer_token(headers: &axum::http::HeaderMap) -> Result<&str, AuthErr
 ///     format!("Hello, {}!", auth.email)
 /// }
 /// ```
-#[async_trait]
 impl<S> FromRequestParts<S> for AuthUser
 where
     S: HasServices + Send + Sync,
@@ -194,7 +192,6 @@ where
 #[derive(Debug, Clone)]
 pub struct OptionalAuth(pub Option<AuthUser>);
 
-#[async_trait]
 impl<S> FromRequestParts<S> for OptionalAuth
 where
     S: HasServices + Send + Sync,

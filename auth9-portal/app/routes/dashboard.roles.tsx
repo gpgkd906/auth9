@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, CheckIcon, GearIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -32,11 +31,6 @@ interface EditableRole extends Role {
   service_id: string;
 }
 
-// Extended permission type with service_id for editing
-interface EditablePermission extends Permission {
-  service_id: string;
-}
-
 export const meta: MetaFunction = () => {
   return [{ title: "Roles & Permissions - Auth9" }];
 };
@@ -57,7 +51,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     })
   );
 
-  return json({ entries, pagination: services.pagination });
+  return { entries, pagination: services.pagination };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -77,7 +71,7 @@ export async function action({ request }: ActionFunctionArgs) {
         description: description || undefined,
         parent_role_id: parentRoleId || undefined,
       });
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "update_role") {
@@ -92,14 +86,14 @@ export async function action({ request }: ActionFunctionArgs) {
         description: description || undefined,
         parent_role_id: parentRoleId || undefined,
       });
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "delete_role") {
       const serviceId = formData.get("service_id") as string;
       const roleId = formData.get("role_id") as string;
       await rbacApi.deleteRole(serviceId, roleId);
-      return json({ success: true });
+      return { success: true };
     }
 
     // Permission actions
@@ -115,13 +109,13 @@ export async function action({ request }: ActionFunctionArgs) {
         name,
         description: description || undefined,
       });
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "delete_permission") {
       const permissionId = formData.get("permission_id") as string;
       await rbacApi.deletePermission(permissionId);
-      return json({ success: true });
+      return { success: true };
     }
 
     // Role-Permission assignment actions
@@ -129,28 +123,28 @@ export async function action({ request }: ActionFunctionArgs) {
       const roleId = formData.get("role_id") as string;
       const permissionId = formData.get("permission_id") as string;
       await rbacApi.assignPermissionToRole(roleId, permissionId);
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "remove_permission") {
       const roleId = formData.get("role_id") as string;
       const permissionId = formData.get("permission_id") as string;
       await rbacApi.removePermissionFromRole(roleId, permissionId);
-      return json({ success: true });
+      return { success: true };
     }
 
     // Get role with permissions
     if (intent === "get_role_permissions") {
       const roleId = formData.get("role_id") as string;
       const result = await rbacApi.getRole(roleId);
-      return json({ success: true, role: result.data });
+      return { success: true, role: result.data };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 export default function RolesPage() {
@@ -553,7 +547,7 @@ export default function RolesPage() {
               </select>
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{actionData.error}</p>
+              <p className="text-sm text-red-500">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateRoleServiceId(null)}>
@@ -601,7 +595,7 @@ export default function RolesPage() {
               </select>
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{actionData.error}</p>
+              <p className="text-sm text-red-500">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingRole(null)}>
@@ -628,7 +622,7 @@ export default function RolesPage() {
             <div className="space-y-2">
               <Label htmlFor="create-perm-code">Permission Code</Label>
               <Input id="create-perm-code" name="code" placeholder="user:read" required />
-              <p className="text-xs text-gray-500">Use format like "resource:action" (e.g., user:read, post:write)</p>
+              <p className="text-xs text-gray-500">Use format like &quot;resource:action&quot; (e.g., user:read, post:write)</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-perm-name">Display Name</Label>
@@ -639,7 +633,7 @@ export default function RolesPage() {
               <Input id="create-perm-description" name="description" placeholder="Allows reading user information" />
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{actionData.error}</p>
+              <p className="text-sm text-red-500">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreatePermissionServiceId(null)}>

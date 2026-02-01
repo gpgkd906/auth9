@@ -1,6 +1,5 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "@remix-run/node";
-import { json } from "@remix-run/node";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useParams, useSubmit } from "@remix-run/react";
+import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useParams, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, TrashIcon, ReloadIcon, Cross2Icon, ArrowLeftIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -80,12 +79,12 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   const roles = await Promise.all(rolesPromises);
 
-  return json<LoaderData>({
+  return {
     tenant: tenantResult.data,
     invitations: invitationsResult.data,
     pagination: invitationsResult.pagination,
     roles,
-  });
+  } satisfies LoaderData;
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
@@ -111,7 +110,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
       }
 
       if (roleIds.length === 0) {
-        return json({ error: "At least one role must be selected" }, { status: 400 });
+        return Response.json({ error: "At least one role must be selected" }, { status: 400 });
       }
 
       await invitationApi.create(tenantId, {
@@ -120,32 +119,32 @@ export async function action({ params, request }: ActionFunctionArgs) {
         expires_in_hours: expiresInHours,
       });
 
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "revoke") {
       const id = formData.get("id") as string;
       await invitationApi.revoke(id);
-      return json({ success: true });
+      return { success: true };
     }
 
     if (intent === "resend") {
       const id = formData.get("id") as string;
       await invitationApi.resend(id);
-      return json({ success: true, message: "Invitation email resent" });
+      return { success: true, message: "Invitation email resent" };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await invitationApi.delete(id);
-      return json({ success: true });
+      return { success: true };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return json({ error: message }, { status: 400 });
+    return Response.json({ error: message }, { status: 400 });
   }
 
-  return json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent" }, { status: 400 });
 }
 
 function getStatusBadge(status: Invitation["status"]) {
@@ -325,7 +324,7 @@ export default function InvitationsPage() {
               </div>
 
               {actionData && "error" in actionData && (
-                <p className="text-sm text-red-500">{actionData.error}</p>
+                <p className="text-sm text-red-500">{String(actionData.error)}</p>
               )}
 
               <DialogFooter>
