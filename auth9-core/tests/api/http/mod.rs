@@ -708,6 +708,38 @@ pub async fn post_json<T: Serialize, R: DeserializeOwned>(
     }
 }
 
+/// Make a POST request with Authorization header, JSON body and parse JSON response
+pub async fn post_json_with_auth<T: Serialize, R: DeserializeOwned>(
+    app: &Router,
+    path: &str,
+    body: &T,
+    token: &str,
+) -> (StatusCode, Option<R>) {
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri(path)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_string(body).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_default();
+
+    if body_bytes.is_empty() {
+        return (status, None);
+    }
+
+    match serde_json::from_slice(&body_bytes) {
+        Ok(data) => (status, Some(data)),
+        Err(_) => (status, None),
+    }
+}
+
 /// Make a PUT request with JSON body and parse JSON response
 pub async fn put_json<T: Serialize, R: DeserializeOwned>(
     app: &Router,

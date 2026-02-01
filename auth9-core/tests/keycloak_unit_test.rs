@@ -1298,3 +1298,1117 @@ async fn test_seed_admin_client_in_configured_realm() {
 
     std::env::remove_var("KEYCLOAK_ADMIN_CLIENT_SECRET");
 }
+
+// ============================================================================
+// Password Management Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_reset_user_password_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock reset password endpoint
+    Mock::given(method("PUT"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/reset-password",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client
+        .reset_user_password(user_id, "NewPassword123!", false)
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_reset_user_password_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "nonexistent-user";
+    // Mock 404 response
+    Mock::given(method("PUT"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/reset-password",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client
+        .reset_user_password(user_id, "NewPassword123!", false)
+        .await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_validate_user_password_valid() {
+    let mock_server = MockServer::start().await;
+
+    // Mock admin token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock get user endpoint
+    Mock::given(method("GET"))
+        .and(path(format!("/admin/realms/test/users/{}", user_id)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": user_id,
+            "username": "testuser",
+            "email": "test@example.com",
+            "enabled": true
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock user authentication token endpoint (successful)
+    Mock::given(method("POST"))
+        .and(path("/realms/test/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "user-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client
+        .validate_user_password(user_id, "CorrectPassword123!")
+        .await;
+    assert!(result.is_ok());
+    assert!(result.unwrap()); // Password is valid
+}
+
+#[tokio::test]
+async fn test_validate_user_password_invalid() {
+    let mock_server = MockServer::start().await;
+
+    // Mock admin token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock get user endpoint
+    Mock::given(method("GET"))
+        .and(path(format!("/admin/realms/test/users/{}", user_id)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": user_id,
+            "username": "testuser",
+            "email": "test@example.com",
+            "enabled": true
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock user authentication token endpoint (failed - wrong password)
+    Mock::given(method("POST"))
+        .and(path("/realms/test/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+            "error": "invalid_grant",
+            "error_description": "Invalid user credentials"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client
+        .validate_user_password(user_id, "WrongPassword!")
+        .await;
+    assert!(result.is_ok());
+    assert!(!result.unwrap()); // Password is invalid
+}
+
+// ============================================================================
+// Session Management Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_user_sessions_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock get user sessions endpoint
+    Mock::given(method("GET"))
+        .and(path(format!("/admin/realms/test/users/{}/sessions", user_id)))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "id": "session-1",
+                "username": "testuser",
+                "userId": user_id,
+                "ipAddress": "192.168.1.1",
+                "start": 1704067200000_i64,
+                "lastAccess": 1704070800000_i64,
+                "clients": {
+                    "client-uuid": "my-app"
+                }
+            },
+            {
+                "id": "session-2",
+                "username": "testuser",
+                "userId": user_id,
+                "ipAddress": "10.0.0.1",
+                "start": 1704067200000_i64,
+                "lastAccess": 1704070800000_i64,
+                "clients": {}
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_user_sessions(user_id).await;
+    assert!(result.is_ok());
+    let sessions = result.unwrap();
+    assert_eq!(sessions.len(), 2);
+    assert_eq!(sessions[0].ip_address, Some("192.168.1.1".to_string()));
+}
+
+#[tokio::test]
+async fn test_get_user_sessions_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "nonexistent-user";
+    // Mock 404 response
+    Mock::given(method("GET"))
+        .and(path(format!("/admin/realms/test/users/{}/sessions", user_id)))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_user_sessions(user_id).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_delete_user_session_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let session_id = "session-uuid-12345";
+    // Mock delete session endpoint
+    Mock::given(method("DELETE"))
+        .and(path(format!("/admin/realms/test/sessions/{}", session_id)))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.delete_user_session(session_id).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_delete_user_session_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let session_id = "nonexistent-session";
+    // Mock 404 response
+    Mock::given(method("DELETE"))
+        .and(path(format!("/admin/realms/test/sessions/{}", session_id)))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.delete_user_session(session_id).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_logout_user_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock logout endpoint
+    Mock::given(method("POST"))
+        .and(path(format!("/admin/realms/test/users/{}/logout", user_id)))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.logout_user(user_id).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_logout_user_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "nonexistent-user";
+    // Mock 404 response
+    Mock::given(method("POST"))
+        .and(path(format!("/admin/realms/test/users/{}/logout", user_id)))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.logout_user(user_id).await;
+    assert!(result.is_err());
+}
+
+// ============================================================================
+// Identity Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_list_identity_providers_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock list identity providers endpoint
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test/identity-provider/instances"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "alias": "google",
+                "displayName": "Google",
+                "providerId": "google",
+                "enabled": true,
+                "config": {
+                    "clientId": "google-client-id",
+                    "clientSecret": "google-secret"
+                }
+            },
+            {
+                "alias": "github",
+                "displayName": "GitHub",
+                "providerId": "github",
+                "enabled": true,
+                "config": {
+                    "clientId": "github-client-id",
+                    "clientSecret": "github-secret"
+                }
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.list_identity_providers().await;
+    assert!(result.is_ok());
+    let providers = result.unwrap();
+    assert_eq!(providers.len(), 2);
+    assert_eq!(providers[0].alias, "google");
+    assert_eq!(providers[1].alias, "github");
+}
+
+#[tokio::test]
+async fn test_list_identity_providers_empty() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock empty list
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test/identity-provider/instances"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.list_identity_providers().await;
+    assert!(result.is_ok());
+    let providers = result.unwrap();
+    assert_eq!(providers.len(), 0);
+}
+
+#[tokio::test]
+async fn test_create_identity_provider_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock create identity provider endpoint
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/test/identity-provider/instances"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    use auth9_core::keycloak::KeycloakIdentityProvider;
+    let provider = KeycloakIdentityProvider {
+        alias: "google".to_string(),
+        display_name: Some("Google".to_string()),
+        provider_id: "google".to_string(),
+        enabled: true,
+        trust_email: false,
+        store_token: false,
+        link_only: false,
+        first_broker_login_flow_alias: None,
+        config: std::collections::HashMap::new(),
+    };
+
+    let result = client.create_identity_provider(&provider).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_create_identity_provider_conflict() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock conflict response
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/test/identity-provider/instances"))
+        .respond_with(ResponseTemplate::new(409).set_body_json(json!({
+            "errorMessage": "Identity provider already exists"
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    use auth9_core::keycloak::KeycloakIdentityProvider;
+    let provider = KeycloakIdentityProvider {
+        alias: "google".to_string(),
+        display_name: Some("Google".to_string()),
+        provider_id: "google".to_string(),
+        enabled: true,
+        trust_email: false,
+        store_token: false,
+        link_only: false,
+        first_broker_login_flow_alias: None,
+        config: std::collections::HashMap::new(),
+    };
+
+    let result = client.create_identity_provider(&provider).await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_delete_identity_provider_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock delete identity provider endpoint
+    Mock::given(method("DELETE"))
+        .and(path("/admin/realms/test/identity-provider/instances/google"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.delete_identity_provider("google").await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_delete_identity_provider_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock 404 response
+    Mock::given(method("DELETE"))
+        .and(path("/admin/realms/test/identity-provider/instances/nonexistent"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.delete_identity_provider("nonexistent").await;
+    assert!(result.is_err());
+}
+
+// ============================================================================
+// WebAuthn Credentials Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_list_webauthn_credentials_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock list credentials endpoint - includes both webauthn and other credentials
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "id": "cred-1",
+                "type": "password"
+            },
+            {
+                "id": "cred-2",
+                "type": "webauthn"
+            },
+            {
+                "id": "cred-3",
+                "type": "webauthn-passwordless"
+            },
+            {
+                "id": "cred-4",
+                "type": "totp"
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.list_webauthn_credentials(user_id).await;
+    assert!(result.is_ok());
+    let creds = result.unwrap();
+    // Should only include webauthn credentials (cred-2 and cred-3)
+    assert_eq!(creds.len(), 2);
+    assert!(creds.iter().all(|c| c.credential_type.contains("webauthn")));
+}
+
+#[tokio::test]
+async fn test_list_webauthn_credentials_empty() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock list credentials endpoint - no webauthn credentials
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/credentials",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "id": "cred-1",
+                "type": "password"
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.list_webauthn_credentials(user_id).await;
+    assert!(result.is_ok());
+    let creds = result.unwrap();
+    assert_eq!(creds.len(), 0);
+}
+
+// ============================================================================
+// Realm Management Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_realm_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock get realm endpoint
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": "test-realm-id",
+            "realm": "test",
+            "displayName": "Test Realm",
+            "enabled": true,
+            "registrationAllowed": false,
+            "resetPasswordAllowed": true,
+            "loginWithEmailAllowed": true
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_realm().await;
+    assert!(result.is_ok());
+    let realm = result.unwrap();
+    assert_eq!(realm.realm, "test");
+}
+
+#[tokio::test]
+async fn test_get_realm_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock 404 response
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_realm().await;
+    assert!(result.is_err());
+}
+
+#[tokio::test]
+async fn test_update_realm_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock update realm endpoint
+    Mock::given(method("PUT"))
+        .and(path("/admin/realms/test"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    use auth9_core::keycloak::RealmUpdate;
+    let update = RealmUpdate {
+        registration_allowed: Some(true),
+        reset_password_allowed: Some(true),
+        ssl_required: Some("none".to_string()),
+    };
+
+    let result = client.update_realm(&update).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_update_realm_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock 404 response
+    Mock::given(method("PUT"))
+        .and(path("/admin/realms/test"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    use auth9_core::keycloak::RealmUpdate;
+    let update = RealmUpdate {
+        registration_allowed: Some(true),
+        reset_password_allowed: None,
+        ssl_required: None,
+    };
+
+    let result = client.update_realm(&update).await;
+    assert!(result.is_err());
+}
+
+// ============================================================================
+// Federated Identity Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_user_federated_identities_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock get federated identities endpoint
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/federated-identity",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
+            {
+                "identityProvider": "google",
+                "userId": "google-user-id-123",
+                "userName": "test@gmail.com"
+            },
+            {
+                "identityProvider": "github",
+                "userId": "github-user-id-456",
+                "userName": "testuser"
+            }
+        ])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_user_federated_identities(user_id).await;
+    assert!(result.is_ok());
+    let identities = result.unwrap();
+    assert_eq!(identities.len(), 2);
+    assert_eq!(identities[0].identity_provider, "google");
+    assert_eq!(identities[1].identity_provider, "github");
+}
+
+#[tokio::test]
+async fn test_get_user_federated_identities_empty() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock empty response
+    Mock::given(method("GET"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/federated-identity",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_user_federated_identities(user_id).await;
+    assert!(result.is_ok());
+    let identities = result.unwrap();
+    assert_eq!(identities.len(), 0);
+}
+
+#[tokio::test]
+async fn test_remove_user_federated_identity_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock remove federated identity endpoint
+    Mock::given(method("DELETE"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/federated-identity/google",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client
+        .remove_user_federated_identity(user_id, "google")
+        .await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_remove_user_federated_identity_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let user_id = "user-uuid-12345";
+    // Mock 404 response
+    Mock::given(method("DELETE"))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/federated-identity/nonexistent",
+            user_id
+        )))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client
+        .remove_user_federated_identity(user_id, "nonexistent")
+        .await;
+    assert!(result.is_err());
+}
+
+// ============================================================================
+// Get Identity Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_identity_provider_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock get identity provider endpoint
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test/identity-provider/instances/google"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "alias": "google",
+            "displayName": "Google",
+            "providerId": "google",
+            "enabled": true,
+            "config": {
+                "clientId": "google-client-id",
+                "clientSecret": "google-secret"
+            }
+        })))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_identity_provider("google").await;
+    assert!(result.is_ok());
+    let provider = result.unwrap();
+    assert_eq!(provider.alias, "google");
+    assert_eq!(provider.provider_id, "google");
+}
+
+#[tokio::test]
+async fn test_get_identity_provider_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock 404 response
+    Mock::given(method("GET"))
+        .and(path("/admin/realms/test/identity-provider/instances/nonexistent"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    let result = client.get_identity_provider("nonexistent").await;
+    assert!(result.is_err());
+}
+
+// ============================================================================
+// Update Identity Provider Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_update_identity_provider_success() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock update identity provider endpoint
+    Mock::given(method("PUT"))
+        .and(path("/admin/realms/test/identity-provider/instances/google"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    use auth9_core::keycloak::KeycloakIdentityProvider;
+    let provider = KeycloakIdentityProvider {
+        alias: "google".to_string(),
+        display_name: Some("Updated Google".to_string()),
+        provider_id: "google".to_string(),
+        enabled: false,
+        trust_email: false,
+        store_token: false,
+        link_only: false,
+        first_broker_login_flow_alias: None,
+        config: std::collections::HashMap::new(),
+    };
+
+    let result = client.update_identity_provider("google", &provider).await;
+    assert!(result.is_ok());
+}
+
+#[tokio::test]
+async fn test_update_identity_provider_not_found() {
+    let mock_server = MockServer::start().await;
+
+    // Mock token endpoint
+    Mock::given(method("POST"))
+        .and(path("/realms/master/protocol/openid-connect/token"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "access_token": "mock-token",
+            "expires_in": 300
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock 404 response
+    Mock::given(method("PUT"))
+        .and(path("/admin/realms/test/identity-provider/instances/nonexistent"))
+        .respond_with(ResponseTemplate::new(404))
+        .mount(&mock_server)
+        .await;
+
+    let client = create_test_client(&mock_server.uri());
+
+    use auth9_core::keycloak::KeycloakIdentityProvider;
+    let provider = KeycloakIdentityProvider {
+        alias: "nonexistent".to_string(),
+        display_name: None,
+        provider_id: "oidc".to_string(),
+        enabled: true,
+        trust_email: false,
+        store_token: false,
+        link_only: false,
+        first_broker_login_flow_alias: None,
+        config: std::collections::HashMap::new(),
+    };
+
+    let result = client
+        .update_identity_provider("nonexistent", &provider)
+        .await;
+    assert!(result.is_err());
+}

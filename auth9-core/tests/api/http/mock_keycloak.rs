@@ -241,6 +241,182 @@ impl MockKeycloakServer {
     }
 
     // ========================================================================
+    // Identity Provider Endpoints
+    // ========================================================================
+
+    /// Mock list identity providers
+    pub async fn mock_list_identity_providers(&self, providers: Vec<(&str, &str)>) {
+        let providers_json: Vec<serde_json::Value> = providers
+            .into_iter()
+            .map(|(alias, provider_id)| {
+                json!({
+                    "alias": alias,
+                    "displayName": alias.to_uppercase(),
+                    "providerId": provider_id,
+                    "enabled": true,
+                    "trustEmail": false,
+                    "storeToken": false,
+                    "linkOnly": false,
+                    "config": {}
+                })
+            })
+            .collect();
+
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test/identity-provider/instances"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(providers_json))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock list identity providers - empty
+    pub async fn mock_list_identity_providers_empty(&self) {
+        Mock::given(method("GET"))
+            .and(path("/admin/realms/test/identity-provider/instances"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock get identity provider success
+    pub async fn mock_get_identity_provider(&self, alias: &str, provider_id: &str) {
+        Mock::given(method("GET"))
+            .and(path(format!(
+                "/admin/realms/test/identity-provider/instances/{}",
+                alias
+            )))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "alias": alias,
+                "displayName": alias.to_uppercase(),
+                "providerId": provider_id,
+                "enabled": true,
+                "trustEmail": false,
+                "storeToken": false,
+                "linkOnly": false,
+                "config": {
+                    "clientId": "test-client-id",
+                    "clientSecret": "test-secret"
+                }
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock get identity provider not found
+    pub async fn mock_get_identity_provider_not_found(&self) {
+        Mock::given(method("GET"))
+            .and(path_regex(
+                r"/admin/realms/test/identity-provider/instances/[^/]+$",
+            ))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock create identity provider success
+    pub async fn mock_create_identity_provider_success(&self) {
+        Mock::given(method("POST"))
+            .and(path("/admin/realms/test/identity-provider/instances"))
+            .respond_with(ResponseTemplate::new(201))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock create identity provider conflict
+    pub async fn mock_create_identity_provider_conflict(&self) {
+        Mock::given(method("POST"))
+            .and(path("/admin/realms/test/identity-provider/instances"))
+            .respond_with(ResponseTemplate::new(409).set_body_json(json!({
+                "errorMessage": "Identity provider already exists"
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock update identity provider success
+    pub async fn mock_update_identity_provider_success(&self) {
+        Mock::given(method("PUT"))
+            .and(path_regex(
+                r"/admin/realms/test/identity-provider/instances/[^/]+$",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock update identity provider not found
+    pub async fn mock_update_identity_provider_not_found(&self) {
+        Mock::given(method("PUT"))
+            .and(path_regex(
+                r"/admin/realms/test/identity-provider/instances/[^/]+$",
+            ))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock delete identity provider success
+    pub async fn mock_delete_identity_provider_success(&self) {
+        Mock::given(method("DELETE"))
+            .and(path_regex(
+                r"/admin/realms/test/identity-provider/instances/[^/]+$",
+            ))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock delete identity provider not found
+    pub async fn mock_delete_identity_provider_not_found(&self) {
+        Mock::given(method("DELETE"))
+            .and(path_regex(
+                r"/admin/realms/test/identity-provider/instances/[^/]+$",
+            ))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&self.server)
+            .await;
+    }
+
+    // ========================================================================
+    // Password Management Endpoints
+    // ========================================================================
+
+    /// Mock successful password reset
+    pub async fn mock_reset_password_success(&self) {
+        Mock::given(method("PUT"))
+            .and(path_regex(r"/admin/realms/test/users/[^/]+/reset-password$"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock successful password validation (simulates valid password)
+    /// Note: This uses the token endpoint to validate password
+    pub async fn mock_validate_password_valid(&self) {
+        Mock::given(method("POST"))
+            .and(path("/realms/test/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+                "access_token": "mock-access-token",
+                "token_type": "Bearer",
+                "expires_in": 300
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock failed password validation (simulates invalid password)
+    pub async fn mock_validate_password_invalid(&self) {
+        Mock::given(method("POST"))
+            .and(path("/realms/test/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(401).set_body_json(json!({
+                "error": "invalid_grant",
+                "error_description": "Invalid user credentials"
+            })))
+            .mount(&self.server)
+            .await;
+    }
+
+    // ========================================================================
     // User Credentials Endpoints
     // ========================================================================
 
@@ -290,6 +466,15 @@ impl MockKeycloakServer {
         Mock::given(method("DELETE"))
             .and(path_regex(r"/admin/realms/test/users/.*/credentials/.*"))
             .respond_with(ResponseTemplate::new(204))
+            .mount(&self.server)
+            .await;
+    }
+
+    /// Mock delete user credential not found
+    pub async fn mock_delete_user_credential_not_found(&self) {
+        Mock::given(method("DELETE"))
+            .and(path_regex(r"/admin/realms/test/users/.*/credentials/.*"))
+            .respond_with(ResponseTemplate::new(404))
             .mount(&self.server)
             .await;
     }
