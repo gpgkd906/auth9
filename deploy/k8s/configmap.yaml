@@ -30,6 +30,9 @@ data:
   KEYCLOAK_REALM: "auth9"
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
   KEYCLOAK_SSL_REQUIRED: "none"
+  # IMPORTANT: KEYCLOAK_PUBLIC_URL is the browser-accessible URL for Keycloak login
+  # Must be exposed via cloudflared tunnel
+  KEYCLOAK_PUBLIC_URL: "https://idp-auth9.gitski.work"
   
   # Portal configuration
   AUTH9_CORE_URL: "http://auth9-core:8080"

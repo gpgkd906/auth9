@@ -123,6 +123,10 @@ show_resources() {
     kubectl get jobs -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
     echo ""
 
+    echo -e "${YELLOW}HorizontalPodAutoscalers:${NC}"
+    kubectl get hpa -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
+    echo ""
+
     echo -e "${YELLOW}Services:${NC}"
     kubectl get services -n "$NAMESPACE" --no-headers 2>/dev/null || echo "  (none)"
     echo ""
@@ -204,6 +208,22 @@ delete_services() {
     fi
 }
 
+delete_hpas() {
+    local hpa_count=$(kubectl get hpa -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$hpa_count" -eq 0 ]; then
+        print_info "No HPAs to delete"
+        return
+    fi
+
+    print_info "Deleting $hpa_count HPA(s)..."
+    if [ -n "$DRY_RUN" ]; then
+        kubectl get hpa -n "$NAMESPACE" -o name 2>/dev/null || true
+    else
+        kubectl delete hpa --all -n "$NAMESPACE" --ignore-not-found=true
+        print_success "HPAs deleted"
+    fi
+}
+
 delete_configmaps() {
     local cm_count=$(kubectl get configmaps -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "kube-root-ca" | wc -l | tr -d ' ')
     if [ "$cm_count" -eq 0 ]; then
@@ -221,7 +241,7 @@ delete_configmaps() {
 }
 
 interactive_delete_secrets() {
-    print_progress "5/7" "Secrets"
+    print_progress "6/8" "Secrets"
 
     echo ""
     echo -e "  ${YELLOW}Current secrets:${NC}"
@@ -255,7 +275,7 @@ interactive_delete_secrets() {
 }
 
 interactive_delete_pvcs() {
-    print_progress "6/7" "Persistent Volume Claims (Database Data)"
+    print_progress "7/8" "Persistent Volume Claims (Database Data)"
 
     local pvc_count=$(kubectl get pvc -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$pvc_count" -eq 0 ]; then
@@ -292,7 +312,7 @@ interactive_delete_pvcs() {
 }
 
 interactive_delete_namespace() {
-    print_progress "7/7" "Namespace"
+    print_progress "8/8" "Namespace"
 
     echo ""
     print_info "Deleting namespace will remove any remaining resources"
@@ -335,25 +355,28 @@ main() {
 
     print_header "Cleaning up resources"
 
-    # Step 1-4: Delete workloads (no confirmation needed)
-    print_progress "1/7" "Jobs"
+    # Step 1-5: Delete workloads (no confirmation needed)
+    print_progress "1/8" "Jobs"
     delete_jobs
 
-    print_progress "2/7" "Deployments"
+    print_progress "2/8" "Deployments"
     delete_deployments
 
-    print_progress "3/7" "StatefulSets"
+    print_progress "3/8" "StatefulSets"
     delete_statefulsets
 
-    print_progress "4/7" "Services & ConfigMaps"
+    print_progress "4/8" "HorizontalPodAutoscalers"
+    delete_hpas
+
+    print_progress "5/8" "Services & ConfigMaps"
     delete_services
     delete_configmaps
 
-    # Step 5-6: Interactive confirmation for sensitive data
+    # Step 6-7: Interactive confirmation for sensitive data
     interactive_delete_secrets
     interactive_delete_pvcs
 
-    # Step 7: Namespace (only if --all)
+    # Step 8: Namespace (only if --all)
     interactive_delete_namespace
 
     print_header "Cleanup Complete"
