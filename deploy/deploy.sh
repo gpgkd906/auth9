@@ -1,23 +1,23 @@
 #!/usr/bin/env zsh
-# Auth9 Interactive Deployment Script
+# Auth9 交互式部署脚本
 #
-# This script deploys Auth9 to a Kubernetes cluster with interactive configuration setup.
+# 本脚本将 Auth9 部署到 Kubernetes 集群，支持交互式配置。
 #
-# Usage:
-#   ./deploy.sh [options]
+# 用法:
+#   ./deploy.sh [选项]
 #
-# Options:
-#   --interactive       Enable interactive mode (default)
-#   --non-interactive   Disable interactive mode, use original behavior
-#   --dry-run           Print what would be applied without executing
-#   --skip-init         Skip the auth9-init job (use if already initialized)
-#   --namespace NS      Use a different namespace (default: auth9)
-#   --config-file FILE  Load configuration from file (JSON or env format)
+# 选项:
+#   --interactive       启用交互模式（默认）
+#   --non-interactive   禁用交互模式，使用原始行为
+#   --dry-run           仅打印将要执行的操作，不实际执行
+#   --skip-init         跳过 auth9-init 作业（已初始化时使用）
+#   --namespace NS      使用其他命名空间（默认: auth9）
+#   --config-file FILE  从文件加载配置（JSON 或 env 格式）
 #
-# Prerequisites:
-#   - kubectl configured with cluster access
-#   - openssl (for secret generation)
-#   - base64 (for secret encoding)
+# 前提条件:
+#   - kubectl 已配置集群访问权限
+#   - openssl（用于生成密钥）
+#   - base64（用于密钥编码）
 
 set -e
 
@@ -50,7 +50,7 @@ DIM='\033[2m'
 NC='\033[0m' # No Color
 
 # Signal handling
-trap 'print_error "Setup interrupted"; exit 130' INT TERM
+trap 'print_error "安装被中断"; exit 130' INT TERM
 
 ################################################################################
 # Phase 1: Basic Utility Functions
@@ -110,7 +110,7 @@ prompt_password() {
     while true; do
         read -s "pass1?$message: "
         echo "" >&2  # Output to stderr, not stdout (avoid capture by $())
-        read -s "pass2?Confirm password: "
+        read -s "pass2?确认密码: "
         echo "" >&2  # Output to stderr, not stdout
 
         if [ "$pass1" = "$pass2" ] && [ -n "$pass1" ]; then
@@ -118,7 +118,7 @@ prompt_password() {
             return 0
         fi
 
-        print_error "Passwords don't match or empty. Please try again."
+        print_error "密码不匹配或为空，请重试。"
     done
 }
 
@@ -131,7 +131,7 @@ confirm_action() {
         case "$response" in
             [Yy]* ) return 0 ;;
             [Nn]* | "" ) return 1 ;;
-            * ) echo "Please answer yes or no." ;;
+            * ) echo "请回答 yes 或 no。" ;;
         esac
     done
 }
@@ -139,7 +139,7 @@ confirm_action() {
 validate_url() {
     local url="$1"
     if [[ ! "$url" =~ ^https?:// ]]; then
-        print_error "Invalid URL format. Must start with http:// or https://"
+        print_error "URL 格式无效，必须以 http:// 或 https:// 开头"
         return 1
     fi
     return 0
@@ -148,7 +148,7 @@ validate_url() {
 validate_port() {
     local port="$1"
     if [[ ! "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
-        print_error "Invalid port number. Must be between 1 and 65535."
+        print_error "端口号无效，必须在 1 到 65535 之间"
         return 1
     fi
     return 0
@@ -157,10 +157,10 @@ validate_port() {
 check_command() {
     local cmd="$1"
     if ! command -v "$cmd" &> /dev/null; then
-        print_error "$cmd is not installed"
+        print_error "$cmd 未安装"
         return 1
     fi
-    print_success "$cmd installed"
+    print_success "$cmd 已安装"
     return 0
 }
 
@@ -177,9 +177,9 @@ check_prerequisites() {
 
     # Check cluster access
     if kubectl cluster-info &> /dev/null; then
-        print_success "Cluster connected"
+        print_success "集群已连接"
     else
-        print_error "Cannot connect to Kubernetes cluster"
+        print_error "无法连接到 Kubernetes 集群"
         all_ok=false
     fi
 
@@ -196,7 +196,7 @@ detect_existing_secrets() {
     local keys=("$@")
 
     if ! kubectl get secret "$secret_name" -n "$namespace" &>/dev/null; then
-        print_warning "$secret_name not found (will create)"
+        print_warning "$secret_name 未找到（将创建）"
         return 1
     fi
 
@@ -210,17 +210,17 @@ detect_existing_secrets() {
     done
 
     if [ $found_count -gt 0 ]; then
-        print_info "$secret_name found ($found_count/${#keys[@]} keys)"
+        print_info "$secret_name 已找到（${found_count}/${#keys[@]} 个密钥）"
         return 0
     else
-        print_warning "$secret_name exists but is empty"
+        print_warning "$secret_name 存在但为空"
         return 1
     fi
 }
 
 detect_existing_configmap() {
     if ! kubectl get configmap auth9-config -n "$NAMESPACE" &>/dev/null; then
-        print_warning "auth9-config ConfigMap not found (will create)"
+        print_warning "auth9-config ConfigMap 未找到（将创建）"
         return 1
     fi
 
@@ -235,11 +235,11 @@ detect_existing_configmap() {
         [ -n "$core_public_url" ] && CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$core_public_url"
         [ -n "$portal_url" ] && CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$portal_url"
         [ -n "$keycloak_public_url" ] && CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$keycloak_public_url"
-        print_info "auth9-config ConfigMap found"
+        print_info "auth9-config ConfigMap 已找到"
         return 0
     fi
 
-    print_warning "auth9-config ConfigMap exists but JWT_ISSUER not found"
+    print_warning "auth9-config ConfigMap 存在但未找到 JWT_ISSUER"
     return 1
 }
 
@@ -247,10 +247,10 @@ should_run_init_job() {
     # If KEYCLOAK_ADMIN_CLIENT_SECRET already exists and is not empty, skip init
     if [ -n "${AUTH9_SECRETS[KEYCLOAK_ADMIN_CLIENT_SECRET]}" ]; then
         NEEDS_INIT_JOB="false"
-        print_info "Admin client secret exists, init job may not be needed"
+        print_info "管理员客户端密钥已存在，可能不需要运行初始化作业"
     else
         NEEDS_INIT_JOB="true"
-        print_info "Admin client secret missing, init job will be required"
+        print_info "管理员客户端密钥缺失，需要运行初始化作业"
     fi
 }
 
@@ -259,65 +259,65 @@ should_run_init_job() {
 ################################################################################
 
 collect_database_config() {
-    print_info "Database Configuration"
+    print_info "数据库配置"
 
     # Check if DATABASE_URL already exists
     if [ -n "${AUTH9_SECRETS[DATABASE_URL]}" ]; then
-        echo "  Current: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password in URL
-        if confirm_action "  Keep existing database config?"; then
+        echo "  当前: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password in URL
+        if confirm_action "  保留现有数据库配置？"; then
             return 0
         fi
     fi
 
     # Collect components
-    local db_host=$(prompt_user "  Database host" "advanced-tidb-tidb.tidb-system")
-    local db_port=$(prompt_user "  Database port" "4000")
+    local db_host=$(prompt_user "  数据库主机" "advanced-tidb-tidb.tidb-system")
+    local db_port=$(prompt_user "  数据库端口" "4000")
 
     while ! validate_port "$db_port"; do
-        db_port=$(prompt_user "  Database port" "4000")
+        db_port=$(prompt_user "  数据库端口" "4000")
     done
 
-    local db_username=$(prompt_user "  Database username" "root")
-    local db_password=$(prompt_password "  Database password")
-    local db_name=$(prompt_user "  Database name" "auth9")
+    local db_username=$(prompt_user "  数据库用户名" "root")
+    local db_password=$(prompt_password "  数据库密码")
+    local db_name=$(prompt_user "  数据库名" "auth9")
 
     # Assemble URL
     AUTH9_SECRETS[DATABASE_URL]="mysql://${db_username}:${db_password}@${db_host}:${db_port}/${db_name}"
-    print_success "DATABASE_URL configured"
+    print_success "DATABASE_URL 已配置"
 }
 
 collect_redis_config() {
-    print_info "Redis Configuration"
+    print_info "Redis 配置"
 
     if [ -n "${AUTH9_SECRETS[REDIS_URL]}" ]; then
-        echo "  Current: ${AUTH9_SECRETS[REDIS_URL]}"
-        if confirm_action "  Keep existing Redis config?"; then
+        echo "  当前: ${AUTH9_SECRETS[REDIS_URL]}"
+        if confirm_action "  保留现有 Redis 配置？"; then
             return 0
         fi
     fi
 
-    local redis_host=$(prompt_user "  Redis host" "redis")
-    local redis_port=$(prompt_user "  Redis port" "6379")
+    local redis_host=$(prompt_user "  Redis 主机" "redis")
+    local redis_port=$(prompt_user "  Redis 端口" "6379")
 
     while ! validate_port "$redis_port"; do
-        redis_port=$(prompt_user "  Redis port" "6379")
+        redis_port=$(prompt_user "  Redis 端口" "6379")
     done
 
     AUTH9_SECRETS[REDIS_URL]="redis://${redis_host}:${redis_port}"
-    print_success "REDIS_URL configured"
+    print_success "REDIS_URL 已配置"
 }
 
 collect_keycloak_public_url() {
-    print_info "Keycloak Public URL Configuration"
+    print_info "Keycloak 公网 URL 配置"
 
     local current="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
-    echo "  Current: $current"
-    echo "  This is the cloudflared tunnel URL for Keycloak (browser login)"
+    echo "  当前: $current"
+    echo "  这是 Keycloak 的 cloudflared 隧道 URL（用于浏览器登录）"
 
-    if confirm_action "  Change Keycloak Public URL?"; then
+    if confirm_action "  修改 Keycloak 公网 URL？"; then
         local new_url
         while true; do
-            new_url=$(prompt_user "  Keycloak Public URL (cloudflared tunnel)" "$current")
+            new_url=$(prompt_user "  Keycloak 公网 URL（cloudflared 隧道）" "$current")
             if validate_url "$new_url"; then
                 CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$new_url"
                 break
@@ -327,11 +327,11 @@ collect_keycloak_public_url() {
         CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$current"
     fi
 
-    print_success "Keycloak Public URL configured"
+    print_success "Keycloak 公网 URL 已配置"
 }
 
 collect_keycloak_config() {
-    print_info "Keycloak Configuration"
+    print_info "Keycloak 配置"
 
     # KEYCLOAK_URL (internal)
     if [ -z "${AUTH9_SECRETS[KEYCLOAK_URL]}" ]; then
@@ -346,25 +346,25 @@ collect_keycloak_config() {
 
     # KEYCLOAK_ADMIN_PASSWORD (shared between both secrets)
     if [ -n "${AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]}" ]; then
-        echo "  Keycloak admin password: (already configured)"
-        if confirm_action "  Change Keycloak admin password?"; then
-            local keycloak_password=$(prompt_password "  New Keycloak admin password")
+        echo "  Keycloak 管理员密码: （已配置）"
+        if confirm_action "  修改 Keycloak 管理员密码？"; then
+            local keycloak_password=$(prompt_password "  新 Keycloak 管理员密码")
             AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
             KEYCLOAK_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
         else
             KEYCLOAK_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="${AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]}"
         fi
     else
-        local keycloak_password=$(prompt_password "  Keycloak admin password")
+        local keycloak_password=$(prompt_password "  Keycloak 管理员密码")
         AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
         KEYCLOAK_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
     fi
 
-    print_success "Keycloak admin configured"
+    print_success "Keycloak 管理员已配置"
 }
 
 collect_keycloak_db_password() {
-    print_info "Keycloak Database Configuration"
+    print_info "Keycloak 数据库配置"
 
     # KC_DB_USERNAME (default value)
     if [ -z "${KEYCLOAK_SECRETS[KC_DB_USERNAME]}" ]; then
@@ -373,26 +373,26 @@ collect_keycloak_db_password() {
 
     # KC_DB_PASSWORD
     if [ -n "${KEYCLOAK_SECRETS[KC_DB_PASSWORD]}" ]; then
-        echo "  Keycloak DB password: (already configured)"
-        if confirm_action "  Change Keycloak DB password?"; then
-            KEYCLOAK_SECRETS[KC_DB_PASSWORD]=$(prompt_password "  New Keycloak DB password")
+        echo "  Keycloak 数据库密码: （已配置）"
+        if confirm_action "  修改 Keycloak 数据库密码？"; then
+            KEYCLOAK_SECRETS[KC_DB_PASSWORD]=$(prompt_password "  新 Keycloak 数据库密码")
         fi
     else
-        KEYCLOAK_SECRETS[KC_DB_PASSWORD]=$(prompt_password "  Keycloak DB password")
+        KEYCLOAK_SECRETS[KC_DB_PASSWORD]=$(prompt_password "  Keycloak 数据库密码")
     fi
 
-    print_success "Keycloak DB configured"
+    print_success "Keycloak 数据库已配置"
 }
 
 collect_jwt_issuer() {
-    print_info "JWT Issuer Configuration"
-    echo "  Note: JWT_ISSUER must be the Core API URL (used for OAuth callback)"
+    print_info "JWT Issuer 配置"
+    echo "  注意: JWT_ISSUER 必须是 Core API URL（用于 OAuth 回调）"
 
     # Default to Core API URL, not portal URL
     local current="${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}}"
-    echo "  Current JWT Issuer: $current"
+    echo "  当前 JWT Issuer: $current"
 
-    if confirm_action "  Change JWT Issuer?"; then
+    if confirm_action "  修改 JWT Issuer？"; then
         local new_issuer
         while true; do
             new_issuer=$(prompt_user "  JWT Issuer URL" "$current")
@@ -405,20 +405,20 @@ collect_jwt_issuer() {
         CONFIGMAP_VALUES[JWT_ISSUER]="$current"
     fi
 
-    print_success "JWT Issuer configured"
+    print_success "JWT Issuer 已配置"
 }
 
 collect_core_public_url() {
-    print_info "Auth9 Core Public URL Configuration"
+    print_info "Auth9 Core 公网 URL 配置"
 
     local current="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
-    echo "  Current: $current"
-    echo "  This is the cloudflared tunnel URL for browser-side OAuth redirects"
+    echo "  当前: $current"
+    echo "  这是用于浏览器端 OAuth 重定向的 cloudflared 隧道 URL"
 
-    if confirm_action "  Change Auth9 Core Public URL?"; then
+    if confirm_action "  修改 Auth9 Core 公网 URL？"; then
         local new_url
         while true; do
-            new_url=$(prompt_user "  Auth9 Core Public URL (cloudflared tunnel)" "$current")
+            new_url=$(prompt_user "  Auth9 Core 公网 URL（cloudflared 隧道）" "$current")
             if validate_url "$new_url"; then
                 CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$new_url"
                 break
@@ -428,20 +428,20 @@ collect_core_public_url() {
         CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$current"
     fi
 
-    print_success "Auth9 Core Public URL configured"
+    print_success "Auth9 Core 公网 URL 已配置"
 }
 
 collect_portal_url() {
-    print_info "Auth9 Portal URL Configuration"
+    print_info "Auth9 Portal URL 配置"
 
     local current="${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
-    echo "  Current: $current"
-    echo "  This is the cloudflared tunnel URL for Portal"
+    echo "  当前: $current"
+    echo "  这是 Portal 的 cloudflared 隧道 URL"
 
-    if confirm_action "  Change Auth9 Portal URL?"; then
+    if confirm_action "  修改 Auth9 Portal URL？"; then
         local new_url
         while true; do
-            new_url=$(prompt_user "  Auth9 Portal URL (cloudflared tunnel)" "$current")
+            new_url=$(prompt_user "  Auth9 Portal URL（cloudflared 隧道）" "$current")
             if validate_url "$new_url"; then
                 CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$new_url"
                 break
@@ -451,7 +451,7 @@ collect_portal_url() {
         CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$current"
     fi
 
-    print_success "Auth9 Portal URL configured"
+    print_success "Auth9 Portal URL 已配置"
 }
 
 generate_secrets() {
@@ -459,24 +459,24 @@ generate_secrets() {
     if [ -z "${AUTH9_SECRETS[JWT_SECRET]}" ]; then
         AUTH9_SECRETS[JWT_SECRET]=$(openssl rand -hex 32)
         echo ""
-        print_warning "Generated JWT_SECRET - SAVE THIS SECURELY:"
+        print_warning "已生成 JWT_SECRET - 请安全保存："
         echo -e "${GREEN}${AUTH9_SECRETS[JWT_SECRET]}${NC}"
         echo ""
-        read "?Press Enter after saving..."
+        read "?保存后按 Enter 继续..."
     else
-        print_info "JWT_SECRET already exists (not regenerating)"
+        print_info "JWT_SECRET 已存在（不会重新生成）"
     fi
 
     # SESSION_SECRET
     if [ -z "${AUTH9_SECRETS[SESSION_SECRET]}" ]; then
         AUTH9_SECRETS[SESSION_SECRET]=$(openssl rand -hex 32)
         echo ""
-        print_warning "Generated SESSION_SECRET - SAVE THIS SECURELY:"
+        print_warning "已生成 SESSION_SECRET - 请安全保存："
         echo -e "${GREEN}${AUTH9_SECRETS[SESSION_SECRET]}${NC}"
         echo ""
-        read "?Press Enter after saving..."
+        read "?保存后按 Enter 继续..."
     else
-        print_info "SESSION_SECRET already exists (not regenerating)"
+        print_info "SESSION_SECRET 已存在（不会重新生成）"
     fi
 }
 
@@ -496,7 +496,7 @@ create_or_patch_secret() {
 
     if kubectl get secret "$secret_name" -n "$namespace" &>/dev/null; then
         # Secret exists, use patch
-        print_info "Updating existing $secret_name..."
+        print_info "正在更新 $secret_name..."
 
         for key in "${keys[@]}"; do
             local value
@@ -508,16 +508,16 @@ create_or_patch_secret() {
             # Try add first, if it fails try replace
             if ! kubectl patch secret "$secret_name" -n "$namespace" --type=json -p="$patch_add" 2>/dev/null; then
                 kubectl patch secret "$secret_name" -n "$namespace" --type=json -p="$patch_replace" 2>/dev/null || {
-                    print_error "Failed to patch $key in $secret_name"
+                    print_error "更新 $secret_name 中的 $key 失败"
                     return 1
                 }
             fi
         done
 
-        print_success "$secret_name updated ($key_count keys)"
+        print_success "$secret_name 已更新（${key_count} 个密钥）"
     else
         # Secret doesn't exist, create it
-        print_info "Creating $secret_name..."
+        print_info "正在创建 $secret_name..."
 
         local create_cmd="kubectl create secret generic $secret_name"
         for key in "${keys[@]}"; do
@@ -530,9 +530,9 @@ create_or_patch_secret() {
         create_cmd+=" -n $namespace"
 
         if eval "$create_cmd"; then
-            print_success "$secret_name created ($key_count keys)"
+            print_success "$secret_name 已创建（${key_count} 个密钥）"
         else
-            print_error "Failed to create $secret_name"
+            print_error "创建 $secret_name 失败"
             return 1
         fi
     fi
@@ -570,9 +570,9 @@ data:
 EOF
 
     if [ $? -eq 0 ]; then
-        print_success "ConfigMap applied"
+        print_success "ConfigMap 已应用"
     else
-        print_error "Failed to apply ConfigMap"
+        print_error "应用 ConfigMap 失败"
         return 1
     fi
 }
@@ -582,14 +582,14 @@ EOF
 ################################################################################
 
 run_interactive_setup() {
-    print_header "Auth9 Interactive Setup"
+    print_header "Auth9 交互式配置"
 
     # Step 1/6: Check prerequisites
-    print_progress "1/6" "Checking prerequisites"
+    print_progress "1/6" "检查前提条件"
     check_prerequisites
 
     # Step 2/6: Detect existing configuration
-    print_progress "2/6" "Detecting existing configuration"
+    print_progress "2/6" "检测现有配置"
 
     # Detect auth9-secrets
     detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
@@ -607,10 +607,10 @@ run_interactive_setup() {
     should_run_init_job
 
     echo ""
-    print_info "Init job needed: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "yes" || echo "no (client secret exists)")"
+    print_info "是否需要初始化作业: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "是" || echo "否（客户端密钥已存在）")"
 
     # Step 3/6: Collect missing configuration
-    print_progress "3/6" "Collecting configuration"
+    print_progress "3/6" "收集配置信息"
     collect_database_config
     collect_redis_config
     collect_keycloak_config
@@ -621,11 +621,11 @@ run_interactive_setup() {
     collect_keycloak_public_url
 
     # Step 4/6: Generate secrets
-    print_progress "4/6" "Generating secure secrets"
+    print_progress "4/6" "生成安全密钥"
     generate_secrets
 
     # Step 5/6: Apply configuration
-    print_progress "5/6" "Applying configuration to cluster"
+    print_progress "5/6" "应用配置到集群"
 
     # Create namespace if it doesn't exist
     kubectl create namespace "$NAMESPACE" 2>/dev/null || true
@@ -638,25 +638,25 @@ run_interactive_setup() {
     apply_configmap
 
     # Step 6/6: Confirm deployment
-    print_progress "6/6" "Ready to deploy"
+    print_progress "6/6" "准备部署"
     print_summary
 
-    if ! confirm_action "Proceed with deployment?"; then
-        print_info "Configuration saved. Run deploy.sh again to deploy."
+    if ! confirm_action "继续部署？"; then
+        print_info "配置已保存。再次运行 deploy.sh 以部署。"
         exit 0
     fi
 }
 
 print_summary() {
     echo ""
-    echo -e "${BOLD}Configuration Summary:${NC}"
-    echo "  Database: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password
+    echo -e "${BOLD}配置摘要:${NC}"
+    echo "  数据库: ${AUTH9_SECRETS[DATABASE_URL]%%\?*}"  # Hide password
     echo "  Redis: ${AUTH9_SECRETS[REDIS_URL]}"
     echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}}"
-    echo "  Core Public URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
+    echo "  Core 公网 URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
     echo "  Portal URL: ${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
-    echo "  Keycloak Public URL: ${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
-    echo "  Init job: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "will run" || echo "will skip (client secret exists)")"
+    echo "  Keycloak 公网 URL: ${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
+    echo "  初始化作业: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "将运行" || echo "将跳过（客户端密钥已存在）")"
     echo ""
 }
 
@@ -665,63 +665,63 @@ print_summary() {
 ################################################################################
 
 deploy_auth9() {
-    print_header "Auth9 Deployment"
+    print_header "Auth9 部署"
 
     # Step 1: Create namespace and service account
-    print_progress "1/10" "Creating namespace and service account"
+    print_progress "1/10" "创建命名空间和服务账户"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/ghcr-secret.yaml" $DRY_RUN
 
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "2/10" "Applying ConfigMap"
+        print_progress "2/10" "应用 ConfigMap"
         kubectl apply -f "$K8S_DIR/configmap.yaml" $DRY_RUN
     else
-        print_progress "2/10" "ConfigMap already applied"
+        print_progress "2/10" "ConfigMap 已应用"
     fi
 
     # Step 3: Secrets already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "3/10" "Checking secrets"
+        print_progress "3/10" "检查密钥"
         check_secrets_non_interactive
     else
-        print_progress "3/10" "Secrets already applied"
+        print_progress "3/10" "密钥已应用"
     fi
 
     # Step 4: Deploy infrastructure (keycloak, redis, postgres)
-    print_progress "4/10" "Deploying infrastructure"
+    print_progress "4/10" "部署基础设施"
     deploy_infrastructure
 
     # Step 5-6: Wait for dependencies
-    print_progress "5/10" "Waiting for keycloak-postgres to be ready"
+    print_progress "5/10" "等待 keycloak-postgres 就绪"
     wait_for_postgres
 
-    print_progress "6/10" "Waiting for keycloak to be ready"
+    print_progress "6/10" "等待 keycloak 就绪"
     wait_for_keycloak
 
     # Step 7-8: Init job (conditional execution) - runs AFTER keycloak is ready
     if [ "$NEEDS_INIT_JOB" = "true" ] && [ -z "$SKIP_INIT" ]; then
-        print_progress "7/10" "Running auth9-init job"
+        print_progress "7/10" "运行 auth9-init 初始化作业"
         run_init_job
 
-        print_progress "8/10" "Extracting Keycloak admin client secret"
+        print_progress "8/10" "提取 Keycloak 管理员客户端密钥"
         extract_client_secret
     else
-        print_progress "7/10" "Skipping auth9-init job"
-        print_progress "8/10" "Skipping secret extraction"
+        print_progress "7/10" "跳过 auth9-init 初始化作业"
+        print_progress "8/10" "跳过密钥提取"
     fi
 
     # Step 9: Deploy auth9 applications
-    print_progress "9/10" "Deploying auth9 applications"
+    print_progress "9/10" "部署 auth9 应用"
     deploy_auth9_apps
 
     # Step 10: Wait for auth9 apps to be ready
     if [ -z "$DRY_RUN" ]; then
-        print_progress "10/10" "Waiting for auth9 applications"
+        print_progress "10/10" "等待 auth9 应用就绪"
         wait_for_auth9_apps
     else
-        print_progress "10/10" "Skipping wait (dry-run)"
+        print_progress "10/10" "跳过等待（预演模式）"
     fi
 
     print_deployment_complete
@@ -729,9 +729,9 @@ deploy_auth9() {
 
 check_secrets_non_interactive() {
     if kubectl get secret auth9-secrets -n "$NAMESPACE" &> /dev/null; then
-        print_success "auth9-secrets exist"
+        print_success "auth9-secrets 存在"
     else
-        print_warning "auth9-secrets not found. Please create them:"
+        print_warning "auth9-secrets 未找到，请创建："
         echo "    kubectl create secret generic auth9-secrets \\"
         echo "      --from-literal=DATABASE_URL='...' \\"
         echo "      --from-literal=REDIS_URL='...' \\"
@@ -739,19 +739,19 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_URL='...' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN='admin' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
-        echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<will-be-auto-generated>' \\"
+        echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
         echo "      -n $NAMESPACE"
         echo ""
         if [ -z "$DRY_RUN" ]; then
-            print_warning "Continuing anyway (deployment may fail without secrets)"
+            print_warning "继续执行（缺少密钥可能导致部署失败）"
         fi
     fi
 
     if kubectl get secret keycloak-secrets -n "$NAMESPACE" &> /dev/null; then
-        print_success "keycloak-secrets exist"
+        print_success "keycloak-secrets 存在"
     else
-        print_warning "keycloak-secrets not found. Please create them:"
+        print_warning "keycloak-secrets 未找到，请创建："
         echo "    kubectl create secret generic keycloak-secrets \\"
         echo "      --from-literal=KEYCLOAK_ADMIN='admin' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
@@ -760,7 +760,7 @@ check_secrets_non_interactive() {
         echo "      -n $NAMESPACE"
         echo ""
         if [ -z "$DRY_RUN" ]; then
-            print_warning "Continuing anyway (deployment may fail without secrets)"
+            print_warning "继续执行（缺少密钥可能导致部署失败）"
         fi
     fi
 }
@@ -769,48 +769,48 @@ run_init_job() {
     if [ -z "$DRY_RUN" ]; then
         # Check if required secrets exist
         if ! kubectl get secret auth9-secrets -n "$NAMESPACE" &> /dev/null; then
-            print_error "auth9-secrets not found. Init job requires:"
+            print_error "auth9-secrets 未找到。初始化作业需要："
             echo "    - KEYCLOAK_ADMIN"
             echo "    - KEYCLOAK_ADMIN_PASSWORD"
             echo "    - DATABASE_URL"
             echo "    - REDIS_URL"
-            echo "  Please create the secret first, then run this script again."
+            echo "  请先创建密钥，然后重新运行此脚本。"
             exit 1
         fi
 
         # Delete old job if exists
         if kubectl get job auth9-init -n "$NAMESPACE" &> /dev/null; then
-            print_info "Deleting existing auth9-init job..."
+            print_info "正在删除现有的 auth9-init 作业..."
             kubectl delete job auth9-init -n "$NAMESPACE" --ignore-not-found=true
             sleep 2
         fi
 
         # Apply init job
-        print_info "Creating auth9-init job..."
+        print_info "正在创建 auth9-init 作业..."
         kubectl apply -f "$K8S_DIR/auth9-core/init-job.yaml"
 
         # Wait for job to complete
-        print_info "Waiting for init job to complete (timeout: 300s)..."
+        print_info "等待初始化作业完成（超时: 300秒）..."
         if kubectl wait --for=condition=complete job/auth9-init -n "$NAMESPACE" --timeout=300s 2>/dev/null; then
-            print_success "Init job completed successfully"
+            print_success "初始化作业已成功完成"
         else
-            print_error "Init job failed or timed out"
+            print_error "初始化作业失败或超时"
             echo ""
-            echo "  Recent logs:"
+            echo "  最近的日志:"
             kubectl logs job/auth9-init -n "$NAMESPACE" --tail=20 2>/dev/null || true
             echo ""
-            echo "  Full logs: kubectl logs job/auth9-init -n $NAMESPACE"
+            echo "  完整日志: kubectl logs job/auth9-init -n $NAMESPACE"
             exit 1
         fi
     else
-        print_info "Skipping init job (dry-run)"
+        print_info "跳过初始化作业（预演模式）"
     fi
 }
 
 extract_client_secret() {
     if [ -z "$DRY_RUN" ]; then
         # Get the secret from init job logs
-        print_info "Reading auth9-init job logs..."
+        print_info "正在读取 auth9-init 作业日志..."
         local init_logs=$(kubectl logs job/auth9-init -n "$NAMESPACE" 2>/dev/null || echo "")
 
         # Extract admin credentials if present
@@ -818,7 +818,7 @@ extract_client_secret() {
             AUTH9_ADMIN_USERNAME=$(echo "$init_logs" | grep "AUTH9_ADMIN_USERNAME=" | sed 's/.*AUTH9_ADMIN_USERNAME=//' | head -1)
             AUTH9_ADMIN_PASSWORD=$(echo "$init_logs" | grep "AUTH9_ADMIN_PASSWORD=" | sed 's/.*AUTH9_ADMIN_PASSWORD=//' | head -1)
             if [ -n "$AUTH9_ADMIN_PASSWORD" ]; then
-                print_success "Extracted admin credentials"
+                print_success "已提取管理员凭据"
             fi
         fi
 
@@ -826,7 +826,7 @@ extract_client_secret() {
             local client_secret=$(echo "$init_logs" | grep "KEYCLOAK_ADMIN_CLIENT_SECRET=" | sed 's/.*KEYCLOAK_ADMIN_CLIENT_SECRET=//' | head -1)
 
             if [ -n "$client_secret" ]; then
-                print_success "Extracted client secret: ${client_secret:0:8}..."
+                print_success "已提取客户端密钥: ${client_secret:0:8}..."
                 echo ""
                 echo -e "  ${BLUE}KEYCLOAK_ADMIN_CLIENT_SECRET:${NC}"
                 echo "  $client_secret"
@@ -834,98 +834,98 @@ extract_client_secret() {
 
                 # Update auth9-secrets with the new client secret
                 if kubectl get secret auth9-secrets -n "$NAMESPACE" &> /dev/null; then
-                    print_info "Updating auth9-secrets with new KEYCLOAK_ADMIN_CLIENT_SECRET..."
+                    print_info "正在使用新的 KEYCLOAK_ADMIN_CLIENT_SECRET 更新 auth9-secrets..."
                     local client_secret_b64=$(echo -n "$client_secret" | base64 | tr -d '\n')
 
                     if kubectl patch secret auth9-secrets -n "$NAMESPACE" \
                         --type='json' \
                         -p="[{\"op\": \"add\", \"path\": \"/data/KEYCLOAK_ADMIN_CLIENT_SECRET\", \"value\": \"$client_secret_b64\"}]" 2>/dev/null; then
-                        print_success "Secret updated successfully"
+                        print_success "密钥更新成功"
                     else
                         # Try replace if add fails
                         kubectl patch secret auth9-secrets -n "$NAMESPACE" \
                             --type='json' \
                             -p="[{\"op\": \"replace\", \"path\": \"/data/KEYCLOAK_ADMIN_CLIENT_SECRET\", \"value\": \"$client_secret_b64\"}]" 2>/dev/null || {
-                            print_warning "Failed to patch secret (it may already exist)"
-                            echo "  To update manually:"
+                            print_warning "更新密钥失败（可能已存在）"
+                            echo "  手动更新命令:"
                             echo "    kubectl patch secret auth9-secrets -n $NAMESPACE --type='json' \\"
                             echo "      -p='[{\"op\": \"replace\", \"path\": \"/data/KEYCLOAK_ADMIN_CLIENT_SECRET\", \"value\": \"$client_secret_b64\"}]'"
                         }
                     fi
                 else
-                    print_warning "auth9-secrets not found, cannot update"
-                    echo "  Please manually add: KEYCLOAK_ADMIN_CLIENT_SECRET=$client_secret"
+                    print_warning "auth9-secrets 未找到，无法更新"
+                    echo "  请手动添加: KEYCLOAK_ADMIN_CLIENT_SECRET=$client_secret"
                 fi
             else
-                print_warning "Could not extract client secret from logs"
+                print_warning "无法从日志中提取客户端密钥"
             fi
         else
             # Check if client already exists (idempotent operation)
             if echo "$init_logs" | grep -q "auth9-admin client already exists"; then
-                print_info "auth9-admin client already exists (skipped creation)"
-                echo "  If you need the secret, retrieve it manually from Keycloak Admin Console"
+                print_info "auth9-admin 客户端已存在（跳过创建）"
+                echo "  如需密钥，请从 Keycloak 管理控制台手动获取"
             else
-                print_warning "No client secret found in init logs"
-                echo "  This may be expected if using a preset secret or if the client already existed"
+                print_warning "在初始化日志中未找到客户端密钥"
+                echo "  如果使用预设密钥或客户端已存在，这是预期行为"
             fi
         fi
     else
-        print_info "Skipping secret extraction (dry-run)"
+        print_info "跳过密钥提取（预演模式）"
     fi
 }
 
 deploy_infrastructure() {
     if [ -z "$DRY_RUN" ]; then
-        print_info "Deploying keycloak..."
+        print_info "正在部署 keycloak..."
         kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
 
-        print_info "Deploying redis..."
+        print_info "正在部署 redis..."
         kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN
 
-        print_success "Infrastructure deployed"
+        print_success "基础设施已部署"
     else
-        print_info "Skipping infrastructure deployment (dry-run)"
+        print_info "跳过基础设施部署（预演模式）"
     fi
 }
 
 deploy_auth9_apps() {
     if [ -z "$DRY_RUN" ]; then
-        print_info "Deploying auth9-core..."
+        print_info "正在部署 auth9-core..."
         kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
 
-        print_info "Deploying auth9-portal..."
+        print_info "正在部署 auth9-portal..."
         kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
 
-        print_success "Auth9 applications deployed"
+        print_success "Auth9 应用已部署"
     else
-        print_info "Skipping auth9 deployment (dry-run)"
+        print_info "跳过 auth9 部署（预演模式）"
     fi
 }
 
 wait_for_keycloak() {
     if [ -z "$DRY_RUN" ]; then
-        print_info "Waiting for keycloak deployment..."
+        print_info "等待 keycloak 部署..."
         kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=300s || true
 
         # Wait for all keycloak pods to be ready (using kubectl wait)
-        print_info "Waiting for keycloak pods to be ready..."
+        print_info "等待 keycloak Pod 就绪..."
         if kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=keycloak -n "$NAMESPACE" --timeout=150s 2>/dev/null; then
-            print_success "Keycloak is ready"
+            print_success "Keycloak 已就绪"
             return 0
         else
-            print_warning "Keycloak readiness check timed out, continuing anyway..."
+            print_warning "Keycloak 就绪检查超时，继续执行..."
         fi
     fi
 }
 
 wait_for_auth9_apps() {
-    print_info "Waiting for auth9-core..."
+    print_info "等待 auth9-core..."
     kubectl rollout status deployment/auth9-core -n "$NAMESPACE" --timeout=300s || true
 
-    print_info "Waiting for auth9-portal..."
+    print_info "等待 auth9-portal..."
     kubectl rollout status deployment/auth9-portal -n "$NAMESPACE" --timeout=300s || true
 
-    print_info "Waiting for redis..."
+    print_info "等待 redis..."
     kubectl rollout status deployment/redis -n "$NAMESPACE" --timeout=300s || true
 }
 
@@ -938,52 +938,52 @@ wait_for_postgres() {
 
 print_deployment_complete() {
     echo ""
-    print_header "Deployment Complete!"
+    print_header "部署完成！"
 
     if [ -z "$DRY_RUN" ]; then
-        echo -e "${YELLOW}Current pod status:${NC}"
+        echo -e "${YELLOW}当前 Pod 状态:${NC}"
         kubectl get pods -n "$NAMESPACE" -l app.kubernetes.io/part-of=auth9
         echo ""
-        echo -e "${YELLOW}Services:${NC}"
+        echo -e "${YELLOW}服务:${NC}"
         kubectl get svc -n "$NAMESPACE"
         echo ""
-        echo -e "${YELLOW}Note:${NC} Use cloudflared to expose services. See wiki/安装部署.md"
+        echo -e "${YELLOW}注意:${NC} 使用 cloudflared 暴露服务。详见 wiki/安装部署.md"
         echo ""
         echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-        echo -e "${CYAN}║  Cloudflared Configuration                                      ║${NC}"
+        echo -e "${CYAN}║  Cloudflared 配置                                               ║${NC}"
         echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
         echo ""
-        echo -e "${BOLD}Service URLs:${NC}"
+        echo -e "${BOLD}服务 URL:${NC}"
         echo ""
         local portal_url="${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
         local core_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
-        echo -e "  ${GREEN}auth9-portal (Admin Dashboard):${NC}"
-        echo -e "    Public URL:   ${YELLOW}${portal_url}${NC}"
-        echo -e "    Internal:     auth9-portal.$NAMESPACE.svc.cluster.local:3000"
+        echo -e "  ${GREEN}auth9-portal（管理后台）:${NC}"
+        echo -e "    公网 URL:     ${YELLOW}${portal_url}${NC}"
+        echo -e "    内部地址:     auth9-portal.$NAMESPACE.svc.cluster.local:3000"
         echo ""
-        echo -e "  ${GREEN}auth9-core (Backend API):${NC}"
-        echo -e "    Public URL:   ${YELLOW}${core_url}${NC}"
-        echo -e "    Internal:     auth9-core.$NAMESPACE.svc.cluster.local:8080"
+        echo -e "  ${GREEN}auth9-core（后端 API）:${NC}"
+        echo -e "    公网 URL:     ${YELLOW}${core_url}${NC}"
+        echo -e "    内部地址:     auth9-core.$NAMESPACE.svc.cluster.local:8080"
         echo ""
         local keycloak_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
-        echo -e "  ${GREEN}keycloak (OIDC Provider):${NC}"
-        echo -e "    Public URL:   ${YELLOW}${keycloak_url}${NC}"
-        echo -e "    Internal:     keycloak.$NAMESPACE.svc.cluster.local:8080"
-        echo -e "    ${DIM}(Browser redirects to Keycloak for login)${NC}"
+        echo -e "  ${GREEN}keycloak（OIDC 提供者）:${NC}"
+        echo -e "    公网 URL:     ${YELLOW}${keycloak_url}${NC}"
+        echo -e "    内部地址:     keycloak.$NAMESPACE.svc.cluster.local:8080"
+        echo -e "    ${DIM}（浏览器会重定向到 Keycloak 进行登录）${NC}"
         echo ""
 
         # Display admin credentials if extracted
         if [ -n "$AUTH9_ADMIN_PASSWORD" ]; then
             echo -e "${CYAN}╔════════════════════════════════════════════════════════════════╗${NC}"
-            echo -e "${CYAN}║  Auth9 Admin Credentials                                        ║${NC}"
+            echo -e "${CYAN}║  Auth9 管理员凭据                                               ║${NC}"
             echo -e "${CYAN}╚════════════════════════════════════════════════════════════════╝${NC}"
             echo ""
-            echo -e "  ${RED}${BOLD}IMPORTANT: Save these credentials securely!${NC}"
+            echo -e "  ${RED}${BOLD}重要: 请安全保存这些凭据！${NC}"
             echo ""
-            echo -e "  ${GREEN}Username:${NC}  ${YELLOW}${AUTH9_ADMIN_USERNAME}${NC}"
-            echo -e "  ${GREEN}Password:${NC}  ${YELLOW}${AUTH9_ADMIN_PASSWORD}${NC}"
+            echo -e "  ${GREEN}用户名:${NC}  ${YELLOW}${AUTH9_ADMIN_USERNAME}${NC}"
+            echo -e "  ${GREEN}密码:${NC}    ${YELLOW}${AUTH9_ADMIN_PASSWORD}${NC}"
             echo ""
-            echo -e "  ${DIM}Login at: ${portal_url}${NC}"
+            echo -e "  ${DIM}登录地址: ${portal_url}${NC}"
             echo ""
         fi
     fi
@@ -1021,17 +1021,17 @@ parse_arguments() {
                 shift 2
                 ;;
             *)
-                echo -e "${RED}Unknown option: $1${NC}"
+                echo -e "${RED}未知选项: $1${NC}"
                 echo ""
-                echo "Usage: $0 [options]"
+                echo "用法: $0 [选项]"
                 echo ""
-                echo "Options:"
-                echo "  --interactive       Enable interactive mode (default)"
-                echo "  --non-interactive   Disable interactive mode"
-                echo "  --dry-run           Print what would be applied without executing"
-                echo "  --skip-init         Skip the auth9-init job"
-                echo "  --namespace NS      Use a different namespace (default: auth9)"
-                echo "  --config-file FILE  Load configuration from file"
+                echo "选项:"
+                echo "  --interactive       启用交互模式（默认）"
+                echo "  --non-interactive   禁用交互模式"
+                echo "  --dry-run           仅打印将要执行的操作，不实际执行"
+                echo "  --skip-init         跳过 auth9-init 初始化作业"
+                echo "  --namespace NS      使用其他命名空间（默认: auth9）"
+                echo "  --config-file FILE  从文件加载配置"
                 exit 1
                 ;;
         esac
@@ -1043,14 +1043,14 @@ main() {
 
     # Show mode
     echo -e "${BLUE}╔════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║         Auth9 Deployment Script            ║${NC}"
+    echo -e "${BLUE}║         Auth9 部署脚本                      ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "${YELLOW}Namespace:${NC} $NAMESPACE"
-    echo -e "${YELLOW}K8s manifests:${NC} $K8S_DIR"
-    echo -e "${YELLOW}Mode:${NC} $([ "$INTERACTIVE" = "true" ] && echo "Interactive" || echo "Non-Interactive")"
+    echo -e "${YELLOW}命名空间:${NC} $NAMESPACE"
+    echo -e "${YELLOW}K8s 配置文件:${NC} $K8S_DIR"
+    echo -e "${YELLOW}模式:${NC} $([ "$INTERACTIVE" = "true" ] && echo "交互式" || echo "非交互式")"
     if [ -n "$DRY_RUN" ]; then
-        echo -e "${YELLOW}Dry Run:${NC} Yes"
+        echo -e "${YELLOW}预演模式:${NC} 是"
     fi
     echo ""
 
