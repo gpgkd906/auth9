@@ -34,7 +34,7 @@ export default function EmailTemplatesPage() {
   return (
     <div className="space-y-6">
       {error && (
-        <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
           {error}
         </div>
       )}
@@ -62,7 +62,7 @@ export default function EmailTemplatesPage() {
                   <TableCell className="font-medium">
                     {template.metadata.name}
                   </TableCell>
-                  <TableCell className="text-gray-500">
+                  <TableCell className="text-[var(--text-secondary)]">
                     {template.metadata.description}
                   </TableCell>
                   <TableCell>
@@ -99,11 +99,11 @@ export default function EmailTemplatesPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="text-sm text-gray-600">
+          <div className="text-sm text-[var(--text-secondary)]">
             <p className="mb-2">Common variables available in all templates:</p>
-            <ul className="list-disc list-inside space-y-1 text-gray-500">
-              <li><code className="bg-gray-100 px-1 rounded">{"{{app_name}}"}</code> - Application name (Auth9)</li>
-              <li><code className="bg-gray-100 px-1 rounded">{"{{year}}"}</code> - Current year</li>
+            <ul className="list-disc list-inside space-y-1 text-[var(--text-secondary)]">
+              <li><code className="bg-[var(--sidebar-item-hover)] px-1 rounded">{"{{app_name}}"}</code> - Application name (Auth9)</li>
+              <li><code className="bg-[var(--sidebar-item-hover)] px-1 rounded">{"{{year}}"}</code> - Current year</li>
             </ul>
           </div>
         </CardContent>

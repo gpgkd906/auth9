@@ -208,36 +208,36 @@ export default function EmailSettingsPage() {
   return (
     <div className="space-y-6">
       {actionData && "success" in actionData && actionData.success && (
-        <div className="rounded-apple bg-green-50 border border-green-200 p-4 text-sm text-green-700">
+        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">
           {actionData.message}
         </div>
       )}
 
       {actionData && "error" in actionData && (
-        <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
           {String(actionData.error)}
         </div>
       )}
 
       {/* Current Status Card */}
-      <Card className={isConfigured ? "border-green-200 bg-green-50/50" : "border-yellow-200 bg-yellow-50/50"}>
+      <Card className={isConfigured ? "border-[var(--accent-green)]/20 bg-[var(--accent-green)]/5" : "border-yellow-200 bg-yellow-50/50"}>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
             {isConfigured ? (
-              <CheckCircledIcon className="h-5 w-5 text-green-600" />
+              <CheckCircledIcon className="h-5 w-5 text-[var(--accent-green)]" />
             ) : (
               <CrossCircledIcon className="h-5 w-5 text-yellow-600" />
             )}
             <div>
-              <p className="text-sm font-medium text-gray-900">
+              <p className="text-sm font-medium text-[var(--text-primary)]">
                 {isConfigured ? "Email Provider Active" : "Email Provider Not Configured"}
               </p>
               {currentProviderInfo ? (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-[var(--text-secondary)]">
                   Using <span className="font-medium">{currentProviderInfo.name}</span> ({currentProviderInfo.details})
                 </p>
               ) : (
-                <p className="text-sm text-gray-600">
+                <p className="text-sm text-[var(--text-secondary)]">
                   System emails are disabled. Configure a provider below to enable email functionality.
                 </p>
               )}
@@ -247,7 +247,7 @@ export default function EmailSettingsPage() {
       </Card>
 
       {/* Info Banner */}
-      <div className="rounded-apple bg-blue-50 border border-blue-200 p-4 text-sm text-blue-700 flex items-start gap-3">
+      <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 text-sm text-blue-700 flex items-start gap-3">
         <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
         <div>
           <p className="font-medium">Single Provider Configuration</p>
@@ -295,7 +295,7 @@ export default function EmailSettingsPage() {
             {/* SMTP Configuration */}
             {providerType === "smtp" && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="text-sm font-medium text-gray-900">SMTP Configuration</h3>
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">SMTP Configuration</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="host">Server Host</Label>
@@ -337,7 +337,7 @@ export default function EmailSettingsPage() {
                       defaultValue=""
                     />
                     {config.type === "smtp" && config.password && (
-                      <p className="text-xs text-gray-500">Leave blank to keep existing password</p>
+                      <p className="text-xs text-[var(--text-secondary)]">Leave blank to keep existing password</p>
                     )}
                   </div>
                   <div className="space-y-2">
@@ -377,7 +377,7 @@ export default function EmailSettingsPage() {
             {/* AWS SES Configuration */}
             {providerType === "ses" && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="text-sm font-medium text-gray-900">AWS SES Configuration</h3>
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">AWS SES Configuration</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="region">AWS Region</Label>
@@ -397,7 +397,7 @@ export default function EmailSettingsPage() {
                       placeholder="AKIA..."
                       defaultValue={config.type === "ses" ? config.access_key_id || "" : ""}
                     />
-                    <p className="text-xs text-gray-500">Optional if using IAM role</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Optional if using IAM role</p>
                   </div>
                   <div className="space-y-2">
                     <Label htmlFor="secret_access_key">Secret Access Key</Label>
@@ -445,7 +445,7 @@ export default function EmailSettingsPage() {
             {/* Oracle Email Delivery Configuration */}
             {providerType === "oracle" && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="text-sm font-medium text-gray-900">Oracle Email Delivery Configuration</h3>
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">Oracle Email Delivery Configuration</h3>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div className="space-y-2">
                     <Label htmlFor="smtp_endpoint">SMTP Endpoint</Label>
@@ -489,7 +489,7 @@ export default function EmailSettingsPage() {
                       required={config.type !== "oracle"}
                     />
                     {config.type === "oracle" && config.password && (
-                      <p className="text-xs text-gray-500">Leave blank to keep existing password</p>
+                      <p className="text-xs text-[var(--text-secondary)]">Leave blank to keep existing password</p>
                     )}
                   </div>
                   <div className="space-y-2">

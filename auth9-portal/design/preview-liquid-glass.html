@@ -1,0 +1,1704 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auth9 Portal - Liquid Glass Design Preview</title>
+  <link href="https://fonts.googleapis.com/css2?family=SF+Pro+Display:wght@300;400;500;600;700&family=SF+Pro+Text:wght@400;500;600&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      /* ================================================
+         LIGHT MODE (Default Apple-style)
+         ================================================ */
+      --bg-primary: #F2F2F7;
+      --bg-secondary: #FFFFFF;
+      --bg-tertiary: #E5E5EA;
+
+      /* Glass colors - Light mode */
+      --glass-bg: rgba(255, 255, 255, 0.72);
+      --glass-bg-hover: rgba(255, 255, 255, 0.85);
+      --glass-border: rgba(255, 255, 255, 0.5);
+      --glass-border-subtle: rgba(0, 0, 0, 0.06);
+      --glass-shadow: rgba(0, 0, 0, 0.08);
+      --glass-shadow-strong: rgba(0, 0, 0, 0.15);
+      --glass-highlight: rgba(255, 255, 255, 0.9);
+      --glass-illumination: rgba(255, 255, 255, 0.4);
+
+      /* Text colors */
+      --text-primary: #1D1D1F;
+      --text-secondary: #86868B;
+      --text-tertiary: #AEAEB2;
+      --text-inverse: #FFFFFF;
+
+      /* Accent colors */
+      --accent-blue: #007AFF;
+      --accent-blue-light: rgba(0, 122, 255, 0.12);
+      --accent-green: #34C759;
+      --accent-green-light: rgba(52, 199, 89, 0.12);
+      --accent-orange: #FF9500;
+      --accent-orange-light: rgba(255, 149, 0, 0.12);
+      --accent-red: #FF3B30;
+      --accent-red-light: rgba(255, 59, 48, 0.12);
+      --accent-purple: #AF52DE;
+      --accent-purple-light: rgba(175, 82, 222, 0.12);
+      --accent-cyan: #32ADE6;
+      --accent-cyan-light: rgba(50, 173, 230, 0.12);
+
+      /* Sidebar - Light mode uses subtle glass */
+      --sidebar-bg: rgba(255, 255, 255, 0.7);
+      --sidebar-border: rgba(0, 0, 0, 0.08);
+      --sidebar-item-hover: rgba(0, 0, 0, 0.04);
+      --sidebar-item-active-bg: var(--accent-blue-light);
+      --sidebar-item-active-text: var(--accent-blue);
+
+      /* Backdrop for dynamic wallpaper effect */
+      --backdrop-gradient: linear-gradient(135deg,
+        rgba(255, 204, 128, 0.3) 0%,
+        rgba(255, 182, 193, 0.25) 25%,
+        rgba(173, 216, 230, 0.3) 50%,
+        rgba(221, 160, 221, 0.25) 75%,
+        rgba(255, 218, 185, 0.3) 100%);
+
+      /* Blur intensity */
+      --blur-glass: 24px;
+      --blur-glass-heavy: 40px;
+      --saturate-glass: 180%;
+    }
+
+    /* ================================================
+       DARK MODE
+       ================================================ */
+    [data-theme="dark"] {
+      --bg-primary: #000000;
+      --bg-secondary: #1C1C1E;
+      --bg-tertiary: #2C2C2E;
+
+      /* Glass colors - Dark mode */
+      --glass-bg: rgba(44, 44, 46, 0.65);
+      --glass-bg-hover: rgba(58, 58, 60, 0.75);
+      --glass-border: rgba(255, 255, 255, 0.1);
+      --glass-border-subtle: rgba(255, 255, 255, 0.05);
+      --glass-shadow: rgba(0, 0, 0, 0.4);
+      --glass-shadow-strong: rgba(0, 0, 0, 0.6);
+      --glass-highlight: rgba(255, 255, 255, 0.15);
+      --glass-illumination: rgba(255, 255, 255, 0.05);
+
+      /* Text colors */
+      --text-primary: #FFFFFF;
+      --text-secondary: #98989D;
+      --text-tertiary: #636366;
+      --text-inverse: #000000;
+
+      /* Accent colors remain vibrant */
+      --accent-blue-light: rgba(0, 122, 255, 0.2);
+      --accent-green-light: rgba(52, 199, 89, 0.2);
+      --accent-orange-light: rgba(255, 149, 0, 0.2);
+      --accent-red-light: rgba(255, 59, 48, 0.2);
+      --accent-purple-light: rgba(175, 82, 222, 0.2);
+      --accent-cyan-light: rgba(50, 173, 230, 0.2);
+
+      /* Sidebar - Dark mode */
+      --sidebar-bg: rgba(28, 28, 30, 0.75);
+      --sidebar-border: rgba(255, 255, 255, 0.08);
+      --sidebar-item-hover: rgba(255, 255, 255, 0.06);
+      --sidebar-item-active-bg: var(--accent-blue-light);
+      --sidebar-item-active-text: var(--accent-blue);
+
+      /* Dark backdrop */
+      --backdrop-gradient: linear-gradient(135deg,
+        rgba(99, 102, 241, 0.15) 0%,
+        rgba(168, 85, 247, 0.12) 25%,
+        rgba(6, 182, 212, 0.1) 50%,
+        rgba(236, 72, 153, 0.08) 75%,
+        rgba(34, 211, 238, 0.12) 100%);
+    }
+
+    /* ================================================
+       BASE STYLES
+       ================================================ */
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html {
+      scroll-behavior: smooth;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+    }
+
+    body {
+      font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      transition: background 0.4s ease, color 0.3s ease;
+    }
+
+    ::selection {
+      background-color: rgba(0, 122, 255, 0.3);
+    }
+
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--text-tertiary);
+      border-radius: 999px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-secondary);
+    }
+
+    /* ================================================
+       LIQUID GLASS FOUNDATION
+       ================================================ */
+    .liquid-glass {
+      position: relative;
+      background: var(--glass-bg);
+      backdrop-filter: blur(var(--blur-glass)) saturate(var(--saturate-glass));
+      -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(var(--saturate-glass));
+      border: 1px solid var(--glass-border);
+      border-radius: 20px;
+      box-shadow:
+        0 8px 32px var(--glass-shadow),
+        inset 0 1px 0 var(--glass-highlight),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .liquid-glass::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(
+        135deg,
+        var(--glass-illumination) 0%,
+        transparent 50%
+      );
+      pointer-events: none;
+    }
+
+    .liquid-glass:hover {
+      background: var(--glass-bg-hover);
+      box-shadow:
+        0 12px 40px var(--glass-shadow-strong),
+        inset 0 1px 0 var(--glass-highlight),
+        inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+      transform: translateY(-2px);
+    }
+
+    /* Pill-shaped glass (for buttons, badges) */
+    .liquid-glass-pill {
+      position: relative;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px) saturate(var(--saturate-glass));
+      -webkit-backdrop-filter: blur(16px) saturate(var(--saturate-glass));
+      border: 1px solid var(--glass-border);
+      border-radius: 100px;
+      box-shadow:
+        0 4px 16px var(--glass-shadow),
+        inset 0 1px 0 var(--glass-highlight);
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    /* ================================================
+       DYNAMIC BACKGROUND
+       ================================================ */
+    .page-backdrop {
+      position: fixed;
+      inset: 0;
+      z-index: -1;
+      background: var(--bg-primary);
+      overflow: hidden;
+    }
+
+    .page-backdrop::before {
+      content: '';
+      position: absolute;
+      inset: -50%;
+      background: var(--backdrop-gradient);
+      animation: backdrop-shift 20s ease-in-out infinite alternate;
+    }
+
+    @keyframes backdrop-shift {
+      0% { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(5%, 5%) scale(1.1); }
+    }
+
+    /* ================================================
+       SIDEBAR
+       ================================================ */
+    .sidebar {
+      position: fixed;
+      inset: 16px auto 16px 16px;
+      width: 260px;
+      z-index: 40;
+      background: var(--sidebar-bg);
+      backdrop-filter: blur(var(--blur-glass-heavy)) saturate(var(--saturate-glass));
+      -webkit-backdrop-filter: blur(var(--blur-glass-heavy)) saturate(var(--saturate-glass));
+      border: 1px solid var(--sidebar-border);
+      border-radius: 24px;
+      display: flex;
+      flex-direction: column;
+      box-shadow:
+        0 8px 40px var(--glass-shadow),
+        inset 0 1px 0 var(--glass-highlight);
+      transition: background 0.3s ease, border-color 0.3s ease;
+    }
+
+    .sidebar::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: inherit;
+      background: linear-gradient(
+        180deg,
+        var(--glass-illumination) 0%,
+        transparent 30%
+      );
+      pointer-events: none;
+    }
+
+    .sidebar-header {
+      height: 64px;
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      border-bottom: 1px solid var(--glass-border-subtle);
+    }
+
+    .logo {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+    }
+
+    .logo-icon {
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 14px;
+      color: white;
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+    }
+
+    .logo-text {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .sidebar-nav {
+      flex: 1;
+      padding: 16px 12px;
+      overflow-y: auto;
+    }
+
+    .nav-section {
+      margin-bottom: 20px;
+    }
+
+    .nav-section-title {
+      padding: 0 12px;
+      margin-bottom: 8px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--text-tertiary);
+    }
+
+    .sidebar-item {
+      position: relative;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      margin: 2px 0;
+      border-radius: 12px;
+      color: var(--text-secondary);
+      font-weight: 500;
+      font-size: 14px;
+      text-decoration: none;
+      transition: all 0.2s ease;
+      cursor: pointer;
+    }
+
+    .sidebar-item:hover {
+      color: var(--text-primary);
+      background: var(--sidebar-item-hover);
+    }
+
+    .sidebar-item.active {
+      color: var(--sidebar-item-active-text);
+      background: var(--sidebar-item-active-bg);
+    }
+
+    .sidebar-item svg {
+      width: 20px;
+      height: 20px;
+      opacity: 0.7;
+      transition: opacity 0.2s ease;
+    }
+
+    .sidebar-item:hover svg,
+    .sidebar-item.active svg {
+      opacity: 1;
+    }
+
+    .sidebar-footer {
+      padding: 12px;
+      border-top: 1px solid var(--glass-border-subtle);
+    }
+
+    .user-card {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 12px;
+      border-radius: 14px;
+      background: var(--sidebar-item-hover);
+      border: 1px solid var(--glass-border-subtle);
+    }
+
+    .avatar {
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 13px;
+      color: white;
+    }
+
+    .user-info {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .user-name {
+      font-weight: 600;
+      font-size: 13px;
+      color: var(--text-primary);
+    }
+
+    .user-email {
+      font-size: 11px;
+      color: var(--text-tertiary);
+    }
+
+    /* ================================================
+       MAIN CONTENT
+       ================================================ */
+    .main-content {
+      margin-left: 292px;
+      min-height: 100vh;
+      padding: 24px 24px 24px 0;
+    }
+
+    .content-wrapper {
+      max-width: 1400px;
+    }
+
+    .header-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 28px;
+      gap: 24px;
+    }
+
+    .page-header {
+      flex: 1;
+    }
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+      margin-bottom: 4px;
+    }
+
+    .page-description {
+      font-size: 15px;
+      color: var(--text-secondary);
+    }
+
+    .header-actions {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* ================================================
+       SEARCH BOX
+       ================================================ */
+    .search-box {
+      position: relative;
+      width: 280px;
+    }
+
+    .search-input {
+      width: 100%;
+      padding: 10px 16px 10px 40px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border-subtle);
+      border-radius: 12px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    .search-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .search-input:focus {
+      outline: none;
+      background: var(--glass-bg-hover);
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--accent-blue-light);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-tertiary);
+      pointer-events: none;
+    }
+
+    .search-icon svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    /* ================================================
+       BUTTONS
+       ================================================ */
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 20px;
+      border-radius: 12px;
+      font-weight: 600;
+      font-size: 14px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+      border: none;
+      text-decoration: none;
+    }
+
+    .btn svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .btn-primary {
+      background: var(--accent-blue);
+      color: white;
+      box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: #0066D6;
+      box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+      transform: translateY(-1px);
+    }
+
+    .btn-glass {
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      color: var(--text-primary);
+      border: 1px solid var(--glass-border);
+      box-shadow:
+        0 4px 12px var(--glass-shadow),
+        inset 0 1px 0 var(--glass-highlight);
+    }
+
+    .btn-glass:hover {
+      background: var(--glass-bg-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-icon {
+      padding: 10px;
+      border-radius: 10px;
+    }
+
+    /* ================================================
+       STATS GRID
+       ================================================ */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .stat-card {
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::after {
+      content: '';
+      position: absolute;
+      top: -20px;
+      right: -20px;
+      width: 100px;
+      height: 100px;
+      background: var(--stat-glow, var(--accent-blue-light));
+      border-radius: 50%;
+      filter: blur(30px);
+      pointer-events: none;
+    }
+
+    .stat-card.blue::after { --stat-glow: var(--accent-blue-light); }
+    .stat-card.purple::after { --stat-glow: var(--accent-purple-light); }
+    .stat-card.green::after { --stat-glow: var(--accent-green-light); }
+    .stat-card.orange::after { --stat-glow: var(--accent-orange-light); }
+
+    .stat-icon {
+      width: 40px;
+      height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 12px;
+    }
+
+    .stat-icon svg {
+      width: 20px;
+      height: 20px;
+    }
+
+    .stat-icon.blue { background: var(--accent-blue-light); color: var(--accent-blue); }
+    .stat-icon.purple { background: var(--accent-purple-light); color: var(--accent-purple); }
+    .stat-icon.green { background: var(--accent-green-light); color: var(--accent-green); }
+    .stat-icon.orange { background: var(--accent-orange-light); color: var(--accent-orange); }
+
+    .stat-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+      margin-bottom: 4px;
+    }
+
+    .stat-value {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--text-primary);
+      letter-spacing: -0.02em;
+    }
+
+    .stat-change {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      margin-top: 8px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .stat-change.positive {
+      background: var(--accent-green-light);
+      color: var(--accent-green);
+    }
+
+    .stat-change.negative {
+      background: var(--accent-red-light);
+      color: var(--accent-red);
+    }
+
+    /* ================================================
+       CONTENT GRID
+       ================================================ */
+    .content-grid {
+      display: grid;
+      grid-template-columns: 1.5fr 1fr;
+      gap: 16px;
+    }
+
+    /* ================================================
+       CARDS
+       ================================================ */
+    .card {
+      padding: 0;
+    }
+
+    .card-header {
+      padding: 20px 20px 0;
+    }
+
+    .card-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 4px;
+    }
+
+    .card-description {
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .card-content {
+      padding: 16px 20px 20px;
+    }
+
+    /* ================================================
+       TABLE
+       ================================================ */
+    .table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .table thead {
+      background: var(--glass-border-subtle);
+    }
+
+    .table th {
+      padding: 12px 20px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      color: var(--text-tertiary);
+    }
+
+    .table td {
+      padding: 14px 20px;
+      font-size: 14px;
+      color: var(--text-secondary);
+      border-top: 1px solid var(--glass-border-subtle);
+    }
+
+    .table tbody tr {
+      transition: background 0.15s ease;
+    }
+
+    .table tbody tr:hover {
+      background: var(--sidebar-item-hover);
+    }
+
+    .table-user {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    .table-avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent-cyan), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 600;
+      font-size: 11px;
+      color: white;
+    }
+
+    .table-name {
+      font-weight: 500;
+      color: var(--text-primary);
+    }
+
+    .table-email {
+      font-size: 12px;
+      color: var(--text-tertiary);
+    }
+
+    /* ================================================
+       BADGES
+       ================================================ */
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      padding: 4px 10px;
+      border-radius: 100px;
+      font-size: 11px;
+      font-weight: 600;
+    }
+
+    .badge-success {
+      background: var(--accent-green-light);
+      color: var(--accent-green);
+    }
+
+    .badge-warning {
+      background: var(--accent-orange-light);
+      color: var(--accent-orange);
+    }
+
+    .badge-danger {
+      background: var(--accent-red-light);
+      color: var(--accent-red);
+    }
+
+    /* ================================================
+       ACTIVITY LIST
+       ================================================ */
+    .activity-list {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .activity-item {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 12px 0;
+      border-bottom: 1px solid var(--glass-border-subtle);
+    }
+
+    .activity-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .activity-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      margin-top: 6px;
+      flex-shrink: 0;
+    }
+
+    .activity-dot.blue { background: var(--accent-blue); }
+    .activity-dot.green { background: var(--accent-green); }
+    .activity-dot.purple { background: var(--accent-purple); }
+    .activity-dot.orange { background: var(--accent-orange); }
+
+    .activity-content {
+      flex: 1;
+    }
+
+    .activity-text {
+      font-size: 13px;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    .activity-text strong {
+      color: var(--text-primary);
+      font-weight: 600;
+    }
+
+    .activity-time {
+      font-size: 11px;
+      color: var(--text-tertiary);
+      margin-top: 2px;
+    }
+
+    /* ================================================
+       THEME TOGGLE
+       ================================================ */
+    .theme-toggle {
+      position: fixed;
+      top: 24px;
+      right: 24px;
+      z-index: 100;
+      display: flex;
+      padding: 4px;
+      gap: 4px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 14px;
+      box-shadow: 0 4px 20px var(--glass-shadow);
+    }
+
+    .theme-btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 10px;
+      border: none;
+      background: transparent;
+      color: var(--text-tertiary);
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .theme-btn:hover {
+      color: var(--text-primary);
+      background: var(--sidebar-item-hover);
+    }
+
+    .theme-btn.active {
+      background: var(--accent-blue-light);
+      color: var(--accent-blue);
+    }
+
+    .theme-btn svg {
+      width: 18px;
+      height: 18px;
+    }
+
+    /* ================================================
+       PREVIEW TABS
+       ================================================ */
+    .preview-tabs {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      z-index: 100;
+      display: flex;
+      gap: 4px;
+      padding: 6px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border: 1px solid var(--glass-border);
+      border-radius: 16px;
+      box-shadow: 0 8px 32px var(--glass-shadow);
+    }
+
+    .preview-tab {
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      background: transparent;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .preview-tab:hover {
+      color: var(--text-primary);
+      background: var(--sidebar-item-hover);
+    }
+
+    .preview-tab.active {
+      background: var(--accent-blue);
+      color: white;
+    }
+
+    .preview-section {
+      display: none;
+    }
+
+    .preview-section.active {
+      display: block;
+    }
+
+    /* ================================================
+       LANDING PAGE
+       ================================================ */
+    .landing-page {
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .landing-header {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      padding: 16px 32px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(var(--blur-glass-heavy));
+      -webkit-backdrop-filter: blur(var(--blur-glass-heavy));
+      border-bottom: 1px solid var(--glass-border-subtle);
+    }
+
+    .landing-nav {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .landing-nav-links {
+      display: flex;
+      align-items: center;
+      gap: 32px;
+    }
+
+    .landing-nav-link {
+      color: var(--text-secondary);
+      text-decoration: none;
+      font-weight: 500;
+      font-size: 14px;
+      transition: color 0.2s ease;
+    }
+
+    .landing-nav-link:hover {
+      color: var(--text-primary);
+    }
+
+    .landing-hero {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 140px 32px 100px;
+      position: relative;
+    }
+
+    .landing-hero-content {
+      max-width: 720px;
+      text-align: center;
+      position: relative;
+      z-index: 1;
+    }
+
+    .landing-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 16px;
+      margin-bottom: 24px;
+      background: var(--glass-bg);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid var(--glass-border);
+      border-radius: 100px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--accent-blue);
+      box-shadow: 0 4px 12px var(--glass-shadow);
+    }
+
+    .landing-badge svg {
+      width: 16px;
+      height: 16px;
+    }
+
+    .landing-title {
+      font-size: 56px;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      color: var(--text-primary);
+    }
+
+    .text-gradient {
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .landing-description {
+      font-size: 18px;
+      color: var(--text-secondary);
+      line-height: 1.6;
+      max-width: 540px;
+      margin: 0 auto 36px;
+    }
+
+    .landing-cta {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+    }
+
+    .landing-features {
+      padding: 80px 32px;
+      background: var(--bg-secondary);
+    }
+
+    .landing-features-grid {
+      max-width: 1100px;
+      margin: 0 auto;
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+    }
+
+    .feature-card {
+      padding: 28px;
+    }
+
+    .feature-icon {
+      width: 48px;
+      height: 48px;
+      border-radius: 12px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    .feature-icon svg {
+      width: 24px;
+      height: 24px;
+    }
+
+    .feature-title {
+      font-size: 17px;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .feature-description {
+      font-size: 14px;
+      color: var(--text-secondary);
+      line-height: 1.5;
+    }
+
+    .section-title {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-title h2 {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+    }
+
+    .section-title p {
+      font-size: 16px;
+      color: var(--text-secondary);
+    }
+
+    /* ================================================
+       LOGIN PAGE
+       ================================================ */
+    .login-page {
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 32px;
+    }
+
+    .login-card {
+      width: 100%;
+      max-width: 400px;
+      padding: 40px;
+    }
+
+    .login-header {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .login-logo {
+      width: 56px;
+      height: 56px;
+      border-radius: 16px;
+      background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 22px;
+      color: white;
+      margin: 0 auto 20px;
+      box-shadow: 0 8px 24px rgba(0, 122, 255, 0.3);
+    }
+
+    .login-title {
+      font-size: 24px;
+      font-weight: 700;
+      color: var(--text-primary);
+      margin-bottom: 6px;
+    }
+
+    .login-subtitle {
+      font-size: 14px;
+      color: var(--text-secondary);
+    }
+
+    .login-form {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-label {
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--text-secondary);
+    }
+
+    .form-input {
+      padding: 12px 16px;
+      background: var(--sidebar-item-hover);
+      border: 1px solid var(--glass-border-subtle);
+      border-radius: 10px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: inherit;
+      transition: all 0.2s ease;
+    }
+
+    .form-input::placeholder {
+      color: var(--text-tertiary);
+    }
+
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent-blue);
+      box-shadow: 0 0 0 3px var(--accent-blue-light);
+    }
+
+    .login-footer {
+      margin-top: 24px;
+      text-align: center;
+      font-size: 13px;
+      color: var(--text-secondary);
+    }
+
+    .login-footer a {
+      color: var(--accent-blue);
+      text-decoration: none;
+      font-weight: 500;
+    }
+
+    .login-footer a:hover {
+      text-decoration: underline;
+    }
+
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin: 24px 0;
+    }
+
+    .divider::before,
+    .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--glass-border-subtle);
+    }
+
+    .divider span {
+      font-size: 12px;
+      color: var(--text-tertiary);
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+    }
+
+    /* ================================================
+       ANIMATIONS
+       ================================================ */
+    @keyframes fadeInUp {
+      from {
+        opacity: 0;
+        transform: translateY(20px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .animate-in {
+      animation: fadeInUp 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    }
+
+    .delay-1 { animation-delay: 0.1s; opacity: 0; }
+    .delay-2 { animation-delay: 0.15s; opacity: 0; }
+    .delay-3 { animation-delay: 0.2s; opacity: 0; }
+    .delay-4 { animation-delay: 0.25s; opacity: 0; }
+  </style>
+</head>
+<body>
+  <!-- Dynamic Background -->
+  <div class="page-backdrop"></div>
+
+  <!-- Theme Toggle -->
+  <div class="theme-toggle">
+    <button class="theme-btn" id="theme-light" onclick="setTheme('light')" title="Light Mode">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+    </button>
+    <button class="theme-btn active" id="theme-dark" onclick="setTheme('dark')" title="Dark Mode">
+      <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"/></svg>
+    </button>
+  </div>
+
+  <!-- Preview Navigation -->
+  <div class="preview-tabs">
+    <button class="preview-tab active" onclick="showSection('dashboard')">Dashboard</button>
+    <button class="preview-tab" onclick="showSection('landing')">Landing</button>
+    <button class="preview-tab" onclick="showSection('login')">Login</button>
+  </div>
+
+  <!-- Dashboard Section -->
+  <section id="dashboard" class="preview-section active">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <a href="#" class="logo">
+          <div class="logo-icon">A9</div>
+          <span class="logo-text">Auth9</span>
+        </a>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-section">
+          <div class="nav-section-title">Main</div>
+          <a href="#" class="sidebar-item active">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+            Overview
+          </a>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            Tenants
+          </a>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            Users
+          </a>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+            Services
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">Security</div>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            Roles
+          </a>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+            Analytics
+          </a>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            Security
+          </a>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+            Audit Logs
+          </a>
+        </div>
+
+        <div class="nav-section">
+          <div class="nav-section-title">System</div>
+          <a href="#" class="sidebar-item">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/></svg>
+            Settings
+          </a>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="avatar">JD</div>
+          <div class="user-info">
+            <div class="user-name">John Doe</div>
+            <div class="user-email">john@example.com</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="content-wrapper">
+        <!-- Header -->
+        <div class="header-bar">
+          <div class="page-header">
+            <h1 class="page-title">Dashboard</h1>
+            <p class="page-description">Welcome back! Here's an overview of your identity service.</p>
+          </div>
+          <div class="header-actions">
+            <div class="search-box">
+              <span class="search-icon">
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
+              </span>
+              <input type="text" class="search-input" placeholder="Search...">
+            </div>
+            <button class="btn btn-primary">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              Add User
+            </button>
+          </div>
+        </div>
+
+        <!-- Stats Grid -->
+        <div class="stats-grid">
+          <div class="liquid-glass stat-card blue animate-in delay-1">
+            <div class="stat-icon blue">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"/></svg>
+            </div>
+            <div class="stat-label">Total Tenants</div>
+            <div class="stat-value">12</div>
+            <div class="stat-change positive">
+              <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+              +3 this month
+            </div>
+          </div>
+
+          <div class="liquid-glass stat-card purple animate-in delay-2">
+            <div class="stat-icon purple">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </div>
+            <div class="stat-label">Active Users</div>
+            <div class="stat-value">1,847</div>
+            <div class="stat-change positive">
+              <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+              +12%
+            </div>
+          </div>
+
+          <div class="liquid-glass stat-card green animate-in delay-3">
+            <div class="stat-icon green">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 12h14M5 12a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v4a2 2 0 01-2 2M5 12a2 2 0 00-2 2v4a2 2 0 002 2h14a2 2 0 002-2v-4a2 2 0 00-2-2m-2-4h.01M17 16h.01"/></svg>
+            </div>
+            <div class="stat-label">Services</div>
+            <div class="stat-value">8</div>
+            <div class="stat-change positive">
+              <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 10l7-7m0 0l7 7m-7-7v18"/></svg>
+              +2 new
+            </div>
+          </div>
+
+          <div class="liquid-glass stat-card orange animate-in delay-4">
+            <div class="stat-icon orange">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"/></svg>
+            </div>
+            <div class="stat-label">Audit Events</div>
+            <div class="stat-value">2,419</div>
+            <div class="stat-change negative">
+              <svg width="10" height="10" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M19 14l-7 7m0 0l-7-7m7 7V3"/></svg>
+              -5%
+            </div>
+          </div>
+        </div>
+
+        <!-- Content Grid -->
+        <div class="content-grid">
+          <!-- Users Table -->
+          <div class="liquid-glass card">
+            <div class="card-header">
+              <h2 class="card-title">Recent Users</h2>
+              <p class="card-description">Latest user registrations across all tenants</p>
+            </div>
+            <table class="table">
+              <thead>
+                <tr>
+                  <th>User</th>
+                  <th>Tenant</th>
+                  <th>Status</th>
+                  <th>Joined</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr>
+                  <td>
+                    <div class="table-user">
+                      <div class="table-avatar">AS</div>
+                      <div>
+                        <div class="table-name">Alice Smith</div>
+                        <div class="table-email">alice@acme.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>Acme Corp</td>
+                  <td><span class="badge badge-success">Active</span></td>
+                  <td>2 hours ago</td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="table-user">
+                      <div class="table-avatar">BJ</div>
+                      <div>
+                        <div class="table-name">Bob Johnson</div>
+                        <div class="table-email">bob@techstart.io</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>TechStart</td>
+                  <td><span class="badge badge-warning">Pending</span></td>
+                  <td>5 hours ago</td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="table-user">
+                      <div class="table-avatar">CW</div>
+                      <div>
+                        <div class="table-name">Carol Williams</div>
+                        <div class="table-email">carol@designco.com</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>DesignCo</td>
+                  <td><span class="badge badge-success">Active</span></td>
+                  <td>1 day ago</td>
+                </tr>
+                <tr>
+                  <td>
+                    <div class="table-user">
+                      <div class="table-avatar">DM</div>
+                      <div>
+                        <div class="table-name">David Miller</div>
+                        <div class="table-email">david@fintech.io</div>
+                      </div>
+                    </div>
+                  </td>
+                  <td>FinTech Inc</td>
+                  <td><span class="badge badge-danger">Suspended</span></td>
+                  <td>2 days ago</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+
+          <!-- Activity Feed -->
+          <div class="liquid-glass card">
+            <div class="card-header">
+              <h2 class="card-title">Recent Activity</h2>
+              <p class="card-description">Latest events in your system</p>
+            </div>
+            <div class="card-content">
+              <div class="activity-list">
+                <div class="activity-item">
+                  <div class="activity-dot blue"></div>
+                  <div class="activity-content">
+                    <div class="activity-text"><strong>Alice Smith</strong> logged in successfully</div>
+                    <div class="activity-time">2 minutes ago</div>
+                  </div>
+                </div>
+                <div class="activity-item">
+                  <div class="activity-dot green"></div>
+                  <div class="activity-content">
+                    <div class="activity-text">New tenant <strong>CloudSync</strong> was created</div>
+                    <div class="activity-time">15 minutes ago</div>
+                  </div>
+                </div>
+                <div class="activity-item">
+                  <div class="activity-dot purple"></div>
+                  <div class="activity-content">
+                    <div class="activity-text">Role <strong>Admin</strong> permissions updated</div>
+                    <div class="activity-time">1 hour ago</div>
+                  </div>
+                </div>
+                <div class="activity-item">
+                  <div class="activity-dot orange"></div>
+                  <div class="activity-content">
+                    <div class="activity-text">Security alert: Failed login for <strong>bob@tech.io</strong></div>
+                    <div class="activity-time">3 hours ago</div>
+                  </div>
+                </div>
+                <div class="activity-item">
+                  <div class="activity-dot blue"></div>
+                  <div class="activity-content">
+                    <div class="activity-text">API key regenerated for <strong>Mobile App</strong></div>
+                    <div class="activity-time">5 hours ago</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+  </section>
+
+  <!-- Landing Page Section -->
+  <section id="landing" class="preview-section">
+    <div class="landing-page">
+      <!-- Header -->
+      <header class="landing-header">
+        <nav class="landing-nav">
+          <a href="#" class="logo">
+            <div class="logo-icon">A9</div>
+            <span class="logo-text">Auth9</span>
+          </a>
+          <div class="landing-nav-links">
+            <a href="#" class="landing-nav-link">Features</a>
+            <a href="#" class="landing-nav-link">Pricing</a>
+            <a href="#" class="landing-nav-link">Docs</a>
+            <a href="#" class="landing-nav-link">Blog</a>
+          </div>
+          <div style="display: flex; gap: 12px;">
+            <button class="btn btn-glass">Sign In</button>
+            <button class="btn btn-primary">Get Started</button>
+          </div>
+        </nav>
+      </header>
+
+      <!-- Hero -->
+      <div class="landing-hero">
+        <div class="landing-hero-content">
+          <div class="landing-badge">
+            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            Now with Passkey Support
+          </div>
+          <h1 class="landing-title">
+            Identity Management<br>
+            <span class="text-gradient">Made Simple</span>
+          </h1>
+          <p class="landing-description">
+            Secure, scalable authentication and authorization for your applications.
+            Multi-tenant, SSO, and dynamic RBAC out of the box.
+          </p>
+          <div class="landing-cta">
+            <button class="btn btn-primary" style="padding: 14px 28px; font-size: 15px;">
+              Start Free Trial
+              <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 8l4 4m0 0l-4 4m4-4H3"/></svg>
+            </button>
+            <button class="btn btn-glass" style="padding: 14px 28px; font-size: 15px;">
+              Read Documentation
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Features -->
+      <div class="landing-features">
+        <div class="section-title">
+          <h2>Everything you need</h2>
+          <p>Built for modern applications with security in mind</p>
+        </div>
+        <div class="landing-features-grid">
+          <div class="liquid-glass feature-card">
+            <div class="stat-icon blue feature-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+            </div>
+            <h3 class="feature-title">Single Sign-On</h3>
+            <p class="feature-description">One login for all your applications. Supports OIDC, SAML, and more protocols out of the box.</p>
+          </div>
+          <div class="liquid-glass feature-card">
+            <div class="stat-icon purple feature-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+            </div>
+            <h3 class="feature-title">Multi-Tenant</h3>
+            <p class="feature-description">Built for SaaS. Isolate tenants with flexible configuration per organization.</p>
+          </div>
+          <div class="liquid-glass feature-card">
+            <div class="stat-icon green feature-icon">
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+            </div>
+            <h3 class="feature-title">Dynamic RBAC</h3>
+            <p class="feature-description">Fine-grained access control with roles, permissions, and inheritance for complete control.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Login Page Section -->
+  <section id="login" class="preview-section">
+    <div class="login-page">
+      <div class="liquid-glass login-card">
+        <div class="login-header">
+          <div class="login-logo">A9</div>
+          <h1 class="login-title">Welcome back</h1>
+          <p class="login-subtitle">Sign in to your Auth9 account</p>
+        </div>
+
+        <form class="login-form">
+          <div class="form-group">
+            <label class="form-label">Email</label>
+            <input type="email" class="form-input" placeholder="you@example.com">
+          </div>
+          <div class="form-group">
+            <label class="form-label">Password</label>
+            <input type="password" class="form-input" placeholder="Enter your password">
+          </div>
+          <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 8px;">
+            Sign In
+          </button>
+        </form>
+
+        <div class="divider">
+          <span>or continue with</span>
+        </div>
+
+        <button class="btn btn-glass" style="width: 100%;">
+          <svg width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"/><path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+          Sign in with Google
+        </button>
+
+        <div class="login-footer">
+          Don't have an account? <a href="#">Sign up</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <script>
+    function setTheme(theme) {
+      document.documentElement.setAttribute('data-theme', theme);
+      document.querySelectorAll('.theme-btn').forEach(btn => btn.classList.remove('active'));
+      document.getElementById('theme-' + theme).classList.add('active');
+      localStorage.setItem('auth9-theme', theme);
+    }
+
+    function showSection(sectionId) {
+      document.querySelectorAll('.preview-section').forEach(section => {
+        section.classList.remove('active');
+      });
+      document.getElementById(sectionId).classList.add('active');
+
+      document.querySelectorAll('.preview-tab').forEach(tab => {
+        tab.classList.remove('active');
+      });
+      event.target.classList.add('active');
+    }
+
+    // Load saved theme
+    const savedTheme = localStorage.getItem('auth9-theme') || 'dark';
+    setTheme(savedTheme);
+  </script>
+</body>
+</html>

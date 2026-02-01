@@ -86,9 +86,9 @@ export default function OrganizationSettingsPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-apple border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50 text-left text-gray-500">
+          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Tenant</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -96,21 +96,21 @@ export default function OrganizationSettingsPage() {
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {data.data.map((tenant) => {
                   const settings = tenant.settings as TenantSettings;
                   return (
-                    <tr key={tenant.id} className="text-gray-700 hover:bg-gray-50/50">
-                      <td className="px-4 py-3 font-medium text-gray-900">{tenant.name}</td>
+                    <tr key={tenant.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
+                      <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{tenant.name}</td>
                       <td className="px-4 py-3 capitalize">{tenant.status}</td>
-                      <td className="px-4 py-3 text-xs text-gray-600">
+                      <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">
                         {settings?.branding?.logo_url && (
                           <div className="flex items-center gap-2">
-                            <img src={settings.branding.logo_url} alt="Logo" className="h-6 w-6 object-contain rounded-sm bg-gray-100" />
+                            <img src={settings.branding.logo_url} alt="Logo" className="h-6 w-6 object-contain rounded-sm bg-[var(--sidebar-item-hover)]" />
                             <span className="truncate max-w-[150px]">{settings.branding.logo_url}</span>
                           </div>
                         )}
-                        {!settings?.branding?.logo_url && <span className="text-gray-400">No branding</span>}
+                        {!settings?.branding?.logo_url && <span className="text-[var(--text-tertiary)]">No branding</span>}
                       </td>
                       <td className="px-4 py-3">
                         <Button variant="ghost" size="sm" onClick={() => setEditingTenant(tenant)}>
@@ -122,7 +122,7 @@ export default function OrganizationSettingsPage() {
                 })}
                 {data.data.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={4}>
                       No tenant settings found
                     </td>
                   </tr>
@@ -147,7 +147,7 @@ export default function OrganizationSettingsPage() {
             <input type="hidden" name="id" value={editingTenant?.id || ""} />
 
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Branding</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Branding</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="branding_logo_url">Logo URL</Label>
@@ -173,7 +173,7 @@ export default function OrganizationSettingsPage() {
                       defaultValue={(editingTenant?.settings as TenantSettings)?.branding?.primary_color || "#000000"}
                       placeholder="#000000"
                       readOnly
-                      className="flex-1 bg-gray-50"
+                      className="flex-1 bg-[var(--sidebar-item-hover)]"
                     />
                   </div>
                 </div>
@@ -181,7 +181,7 @@ export default function OrganizationSettingsPage() {
             </div>
 
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{String(actionData.error)}</p>
+              <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>

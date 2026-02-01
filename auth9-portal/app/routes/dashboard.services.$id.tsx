@@ -133,8 +133,8 @@ export default function ServiceDetailPage() {
                     <a href="/dashboard/services"><ArrowLeftIcon className="h-4 w-4" /></a>
                 </Button>
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">{service.name}</h1>
-                    <p className="text-sm text-gray-500">Service Configuration and Clients</p>
+                    <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{service.name}</h1>
+                    <p className="text-sm text-[var(--text-secondary)]">Service Configuration and Clients</p>
                 </div>
             </div>
 
@@ -207,33 +207,33 @@ export default function ServiceDetailPage() {
                             </Dialog>
                         </CardHeader>
                         <div className="p-0">
-                            <ul className="divide-y divide-gray-100">
+                            <ul className="divide-y divide-[var(--glass-border-subtle)]">
                                 {clients.map(client => (
-                                    <li key={client.id} className="p-4 hover:bg-gray-50">
+                                    <li key={client.id} className="p-4 hover:bg-[var(--sidebar-item-hover)]">
                                         <div className="flex items-start justify-between mb-2">
                                             <div className="flex-1 min-w-0">
                                                 <div className="flex items-center gap-2">
-                                                    <code className="font-mono text-sm font-medium text-gray-900 truncate">
+                                                    <code className="font-mono text-sm font-medium text-[var(--text-primary)] truncate">
                                                         {client.client_id}
                                                     </code>
                                                     <Button
                                                         variant="ghost"
                                                         size="icon"
-                                                        className="h-6 w-6 text-gray-400 hover:text-gray-600"
+                                                        className="h-6 w-6 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                                                         onClick={() => handleCopy(client.client_id, `client-${client.id}`)}
                                                         title="Copy Client ID"
                                                     >
                                                         {copiedField === `client-${client.id}` ? (
-                                                            <span className="text-xs text-green-600">✓</span>
+                                                            <span className="text-xs text-[var(--accent-green)]">✓</span>
                                                         ) : (
                                                             <CopyIcon className="h-3 w-3" />
                                                         )}
                                                     </Button>
                                                 </div>
-                                                <div className="text-xs text-gray-500 mt-1">
+                                                <div className="text-xs text-[var(--text-secondary)] mt-1">
                                                     {client.name || "No description"}
                                                 </div>
-                                                <div className="text-xs text-gray-400 mt-0.5">
+                                                <div className="text-xs text-[var(--text-tertiary)] mt-0.5">
                                                     Created: {new Date(client.created_at).toLocaleDateString()}
                                                 </div>
                                             </div>
@@ -255,7 +255,7 @@ export default function ServiceDetailPage() {
                                             <Button
                                                 variant="ghost"
                                                 size="sm"
-                                                className="h-7 text-xs text-red-500 hover:text-red-700 hover:bg-red-50"
+                                                className="h-7 text-xs text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
                                                 onClick={() => {
                                                     if (confirm("Delete this client? This action cannot be undone.")) {
                                                         submit({ intent: "delete_client", client_id: client.client_id }, { method: "post" });
@@ -269,7 +269,7 @@ export default function ServiceDetailPage() {
                                     </li>
                                 ))}
                                 {clients.length === 0 && (
-                                    <li className="p-4 text-center text-sm text-gray-500">No clients found.</li>
+                                    <li className="p-4 text-center text-sm text-[var(--text-secondary)]">No clients found.</li>
                                 )}
                             </ul>
                         </div>
@@ -290,9 +290,9 @@ export default function ServiceDetailPage() {
                     </DialogHeader>
                     <div className="space-y-4">
                         <div>
-                            <Label className="text-xs text-gray-500">Client ID</Label>
+                            <Label className="text-xs text-[var(--text-secondary)]">Client ID</Label>
                             <div className="flex items-center gap-2 mt-1">
-                                <div className="flex-1 p-2 bg-gray-50 rounded border font-mono text-sm break-all select-all">
+                                <div className="flex-1 p-2 bg-[var(--sidebar-item-hover)] rounded border font-mono text-sm break-all select-all">
                                     {secretDialog?.clientId}
                                 </div>
                                 <Button
@@ -302,7 +302,7 @@ export default function ServiceDetailPage() {
                                     onClick={() => secretDialog && handleCopy(secretDialog.clientId, 'dialog-id')}
                                 >
                                     {copiedField === 'dialog-id' ? (
-                                        <span className="text-xs text-green-600">✓</span>
+                                        <span className="text-xs text-[var(--accent-green)]">✓</span>
                                     ) : (
                                         <CopyIcon className="h-4 w-4" />
                                     )}
@@ -310,9 +310,9 @@ export default function ServiceDetailPage() {
                             </div>
                         </div>
                         <div>
-                            <Label className="text-xs text-gray-500">Client Secret</Label>
+                            <Label className="text-xs text-[var(--text-secondary)]">Client Secret</Label>
                             <div className="flex items-center gap-2 mt-1">
-                                <div className="flex-1 p-3 bg-green-50 rounded border border-green-200 font-mono text-center break-all select-all font-bold text-green-700">
+                                <div className="flex-1 p-3 bg-[var(--accent-green)]/10 rounded border border-[var(--accent-green)]/20 font-mono text-center break-all select-all font-bold text-[var(--accent-green)]">
                                     {secretDialog?.secret}
                                 </div>
                                 <Button
@@ -322,7 +322,7 @@ export default function ServiceDetailPage() {
                                     onClick={() => secretDialog && handleCopy(secretDialog.secret, 'dialog-secret')}
                                 >
                                     {copiedField === 'dialog-secret' ? (
-                                        <span className="text-xs text-green-600">✓</span>
+                                        <span className="text-xs text-[var(--accent-green)]">✓</span>
                                     ) : (
                                         <CopyIcon className="h-4 w-4" />
                                     )}

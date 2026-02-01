@@ -2,6 +2,7 @@ import type { MetaFunction } from "react-router";
 import { Link, Outlet, useLocation } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { ThemeToggle } from "~/components/ThemeToggle";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Dashboard - Auth9" }];
@@ -23,26 +24,31 @@ export default function Dashboard() {
   const location = useLocation();
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="fixed inset-y-0 left-0 w-64 bg-white border-r border-gray-200">
-        <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="h-16 flex items-center px-6 border-b border-gray-200">
-            <Link to="/dashboard" className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-apple bg-apple-blue flex items-center justify-center">
-                <span className="text-white font-bold text-lg">A</span>
-              </div>
-              <span className="text-xl font-semibold">Auth9</span>
-            </Link>
-          </div>
+    <div className="min-h-screen">
+      {/* Dynamic Background */}
+      <div className="page-backdrop" />
 
-          {/* Navigation */}
-          <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-            {navigation.map((item) => {
+      {/* Theme Toggle */}
+      <ThemeToggle />
+
+      {/* Sidebar - Floating Glass Card */}
+      <aside className="sidebar">
+        {/* Logo */}
+        <div className="sidebar-header">
+          <Link to="/dashboard" className="flex items-center gap-3">
+            <div className="logo-icon">A9</div>
+            <span className="logo-text">Auth9</span>
+          </Link>
+        </div>
+
+        {/* Navigation */}
+        <nav className="sidebar-nav">
+          <div className="nav-section">
+            <div className="nav-section-title">Main</div>
+            {navigation.slice(0, 4).map((item) => {
               const isActive = location.pathname === item.href ||
                 (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
-              
+
               return (
                 <Link
                   key={item.name}
@@ -57,31 +63,75 @@ export default function Dashboard() {
                 </Link>
               );
             })}
-          </nav>
+          </div>
 
-          {/* User */}
-          <div className="p-4 border-t border-gray-200">
-            <div className="flex items-center gap-3">
-              <Avatar>
-                <AvatarImage src="" />
-                <AvatarFallback>JD</AvatarFallback>
-              </Avatar>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-gray-900 truncate">
-                  John Doe
-                </p>
-                <p className="text-xs text-gray-500 truncate">
-                  john@example.com
-                </p>
-              </div>
+          <div className="nav-section">
+            <div className="nav-section-title">Security</div>
+            {navigation.slice(4, 8).map((item) => {
+              const isActive = location.pathname === item.href ||
+                (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
+
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={cn(
+                    "sidebar-item",
+                    isActive && "active"
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+
+          <div className="nav-section">
+            <div className="nav-section-title">System</div>
+            {navigation.slice(8).map((item) => {
+              const isActive = location.pathname === item.href ||
+                (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
+
+              return (
+                <Link
+                  key={item.name}
+                  to={item.href}
+                  className={cn(
+                    "sidebar-item",
+                    isActive && "active"
+                  )}
+                >
+                  <item.icon className="w-5 h-5" />
+                  {item.name}
+                </Link>
+              );
+            })}
+          </div>
+        </nav>
+
+        {/* User */}
+        <div className="sidebar-footer">
+          <div className="user-card">
+            <Avatar>
+              <AvatarImage src="" />
+              <AvatarFallback>JD</AvatarFallback>
+            </Avatar>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                John Doe
+              </p>
+              <p className="text-xs text-[var(--text-tertiary)] truncate">
+                john@example.com
+              </p>
             </div>
           </div>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="pl-64">
-        <div className="p-8">
+      <main className="main-content">
+        <div className="content-wrapper">
           <Outlet />
         </div>
       </main>
@@ -162,4 +212,3 @@ function LockIcon({ className }: { className?: string }) {
     </svg>
   );
 }
-

@@ -29,21 +29,21 @@ export default function DashboardIndex() {
   const data = useLoaderData<typeof loader>();
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Dashboard</h1>
-        <p className="mt-2 text-gray-600">
+      <div className="animate-fade-in-up">
+        <h1 className="text-3xl font-bold text-[var(--text-primary)]">Dashboard</h1>
+        <p className="mt-2 text-[var(--text-secondary)]">
           Welcome to Auth9. Here&apos;s an overview of your identity service.
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} />
-        <StatsCard title="Active Users" value={data.totals.users.toString()} />
-        <StatsCard title="Services" value={data.totals.services.toString()} />
-        <StatsCard title="Audit Events" value={data.audits.length.toString()} />
+        <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} color="blue" delay="delay-1" />
+        <StatsCard title="Active Users" value={data.totals.users.toString()} color="purple" delay="delay-2" />
+        <StatsCard title="Services" value={data.totals.services.toString()} color="green" delay="delay-3" />
+        <StatsCard title="Audit Events" value={data.audits.length.toString()} color="cyan" delay="delay-4" />
       </div>
 
-      <Card>
+      <Card className="animate-fade-in-up delay-5">
         <CardHeader>
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
@@ -52,21 +52,21 @@ export default function DashboardIndex() {
             {data.audits.map((activity) => (
               <div
                 key={activity.id}
-                className="flex items-center gap-4 py-3 border-b border-gray-100 last:border-0"
+                className="flex items-center gap-4 py-3 border-b border-[var(--glass-border-subtle)] last:border-0"
               >
-                <div className="w-2 h-2 rounded-full bg-apple-blue" />
+                <div className="w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
                 <div className="flex-1">
-                  <p className="text-sm text-gray-900">
+                  <p className="text-sm text-[var(--text-primary)]">
                     {activity.action} • {activity.resource_type}
                   </p>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[var(--text-tertiary)]">
                     {new Date(activity.created_at).toLocaleString()}
                   </p>
                 </div>
               </div>
             ))}
             {data.audits.length === 0 && (
-              <div className="py-6 text-center text-sm text-gray-500">
+              <div className="py-6 text-center text-sm text-[var(--text-tertiary)]">
                 No recent activity
               </div>
             )}
@@ -77,12 +77,30 @@ export default function DashboardIndex() {
   );
 }
 
-function StatsCard({ title, value }: { title: string; value: string }) {
+function StatsCard({
+  title,
+  value,
+  color,
+  delay
+}: {
+  title: string;
+  value: string;
+  color: "blue" | "purple" | "green" | "cyan";
+  delay: string;
+}) {
+  const colorClasses = {
+    blue: "from-[var(--accent-blue)]/20 to-transparent",
+    purple: "from-[var(--accent-purple)]/20 to-transparent",
+    green: "from-[var(--accent-green)]/20 to-transparent",
+    cyan: "from-[var(--accent-cyan)]/20 to-transparent",
+  };
+
   return (
-    <Card>
-      <CardContent className="pt-6">
-        <p className="text-sm font-medium text-gray-500">{title}</p>
-        <p className="mt-2 text-3xl font-bold text-gray-900">{value}</p>
+    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden`}>
+      <div className={`absolute inset-0 bg-gradient-to-br ${colorClasses[color]} pointer-events-none`} />
+      <CardContent className="pt-6 relative">
+        <p className="text-sm font-medium text-[var(--text-secondary)]">{title}</p>
+        <p className="mt-2 text-3xl font-bold text-[var(--text-primary)]">{value}</p>
       </CardContent>
     </Card>
   );

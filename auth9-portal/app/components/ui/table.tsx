@@ -18,7 +18,14 @@ const TableHeader = forwardRef<
   HTMLTableSectionElement,
   HTMLAttributes<HTMLTableSectionElement>
 >(({ className, ...props }, ref) => (
-  <thead ref={ref} className={cn("[&_tr]:border-b", className)} {...props} />
+  <thead
+    ref={ref}
+    className={cn(
+      "bg-[var(--glass-border-subtle)] [&_tr]:border-b",
+      className
+    )}
+    {...props}
+  />
 ));
 TableHeader.displayName = "TableHeader";
 
@@ -41,7 +48,7 @@ const TableFooter = forwardRef<
   <tfoot
     ref={ref}
     className={cn(
-      "border-t bg-gray-100/50 font-medium [&>tr]:last:border-b-0",
+      "border-t border-[var(--glass-border-subtle)] bg-[var(--sidebar-item-hover)] font-medium [&>tr]:last:border-b-0",
       className
     )}
     {...props}
@@ -56,7 +63,9 @@ const TableRow = forwardRef<
   <tr
     ref={ref}
     className={cn(
-      "border-b transition-colors hover:bg-gray-50/50 data-[state=selected]:bg-gray-100",
+      "border-b border-[var(--glass-border-subtle)] transition-colors duration-150",
+      "hover:bg-[var(--sidebar-item-hover)]",
+      "data-[state=selected]:bg-[var(--accent-blue-light)]",
       className
     )}
     {...props}
@@ -71,7 +80,10 @@ const TableHead = forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-12 px-4 text-left align-middle font-medium text-gray-500 [&:has([role=checkbox])]:pr-0",
+      "h-12 px-4 text-left align-middle",
+      "text-[11px] font-semibold uppercase tracking-[0.04em]",
+      "text-[var(--text-tertiary)]",
+      "[&:has([role=checkbox])]:pr-0",
       className
     )}
     {...props}
@@ -85,7 +97,11 @@ const TableCell = forwardRef<
 >(({ className, ...props }, ref) => (
   <td
     ref={ref}
-    className={cn("p-4 align-middle [&:has([role=checkbox])]:pr-0", className)}
+    className={cn(
+      "p-4 align-middle text-[14px] text-[var(--text-secondary)]",
+      "[&:has([role=checkbox])]:pr-0",
+      className
+    )}
     {...props}
   />
 ));
@@ -97,7 +113,7 @@ const TableCaption = forwardRef<
 >(({ className, ...props }, ref) => (
   <caption
     ref={ref}
-    className={cn("mt-4 text-sm text-gray-500", className)}
+    className={cn("mt-4 text-sm text-[var(--text-tertiary)]", className)}
     {...props}
   />
 ));

@@ -125,7 +125,7 @@ export default function SecuritySettingsPage() {
                 minLength={8}
                 required
               />
-              <p className="text-xs text-gray-500">Must be at least 8 characters</p>
+              <p className="text-xs text-[var(--text-secondary)]">Must be at least 8 characters</p>
             </div>
 
             <div className="space-y-2">
@@ -139,13 +139,13 @@ export default function SecuritySettingsPage() {
             </div>
 
             {actionData?.error && navigation.formData?.get("intent") === "change_password" && (
-              <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
                 {actionData.error}
               </div>
             )}
 
             {actionData?.success && navigation.formData?.get("intent") === "change_password" && (
-              <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+              <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
                 {actionData.message}
               </div>
             )}
@@ -185,7 +185,7 @@ export default function SecuritySettingsPage() {
             </div>
 
             {loadingPolicy && (
-              <p className="text-sm text-gray-500">Loading policy...</p>
+              <p className="text-sm text-[var(--text-secondary)]">Loading policy...</p>
             )}
 
             {selectedTenant && policy && (
@@ -216,7 +216,7 @@ export default function SecuritySettingsPage() {
                       max={365}
                       defaultValue={policy.max_age_days}
                     />
-                    <p className="text-xs text-gray-500">0 = never expires</p>
+                    <p className="text-xs text-[var(--text-secondary)]">0 = never expires</p>
                   </div>
 
                   <div className="space-y-2">
@@ -229,7 +229,7 @@ export default function SecuritySettingsPage() {
                       max={24}
                       defaultValue={policy.history_count}
                     />
-                    <p className="text-xs text-gray-500">Previous passwords to remember</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Previous passwords to remember</p>
                   </div>
 
                   <div className="space-y-2">
@@ -242,7 +242,7 @@ export default function SecuritySettingsPage() {
                       max={100}
                       defaultValue={policy.lockout_threshold}
                     />
-                    <p className="text-xs text-gray-500">Failed attempts (0 = disabled)</p>
+                    <p className="text-xs text-[var(--text-secondary)]">Failed attempts (0 = disabled)</p>
                   </div>
 
                   <div className="space-y-2">
@@ -340,13 +340,13 @@ export default function SecuritySettingsPage() {
                 </div>
 
                 {actionData?.error && navigation.formData?.get("intent") === "update_policy" && (
-                  <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+                  <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
                     {actionData.error}
                   </div>
                 )}
 
                 {actionData?.success && navigation.formData?.get("intent") === "update_policy" && (
-                  <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+                  <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
                     {actionData.message}
                   </div>
                 )}

@@ -150,8 +150,8 @@ export async function action({ params, request }: ActionFunctionArgs) {
 function getStatusBadge(status: Invitation["status"]) {
   const styles = {
     pending: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    accepted: "bg-green-50 text-green-700 border-green-200",
-    expired: "bg-gray-50 text-gray-600 border-gray-200",
+    accepted: "bg-[var(--accent-green)]/10 text-[var(--accent-green)] border-[var(--accent-green)]/20",
+    expired: "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] border-[var(--glass-border-subtle)]",
     revoked: "bg-red-50 text-red-700 border-red-200",
   };
 
@@ -224,13 +224,13 @@ export default function InvitationsPage() {
           <div className="flex items-center gap-3 mb-1">
             <Link
               to="/dashboard/tenants"
-              className="text-gray-500 hover:text-gray-700 transition-colors"
+              className="text-[var(--text-secondary)] hover:text-[var(--text-secondary)] transition-colors"
             >
               <ArrowLeftIcon className="h-5 w-5" />
             </Link>
-            <h1 className="text-2xl font-semibold text-gray-900">Invitations</h1>
+            <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Invitations</h1>
           </div>
-          <p className="text-sm text-gray-500 ml-8">
+          <p className="text-sm text-[var(--text-secondary)] ml-8">
             Manage user invitations for <span className="font-medium">{tenant.name}</span>
           </p>
         </div>
@@ -280,18 +280,18 @@ export default function InvitationsPage() {
               <div className="space-y-3">
                 <Label>Assign Roles</Label>
                 {roles.length === 0 ? (
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-[var(--text-secondary)]">
                     No services configured for this tenant. Please create a service first.
                   </p>
                 ) : (
                   <div className="space-y-4 max-h-60 overflow-y-auto border rounded-md p-3">
                     {roles.map((serviceGroup) => (
                       <div key={serviceGroup.serviceId}>
-                        <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+                        <p className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider mb-2">
                           {serviceGroup.serviceName}
                         </p>
                         {serviceGroup.roles.length === 0 ? (
-                          <p className="text-sm text-gray-400 italic">No roles defined</p>
+                          <p className="text-sm text-[var(--text-tertiary)] italic">No roles defined</p>
                         ) : (
                           <div className="space-y-2">
                             {serviceGroup.roles.map((role) => (
@@ -308,7 +308,7 @@ export default function InvitationsPage() {
                                 >
                                   <span className="font-medium">{role.name}</span>
                                   {role.description && (
-                                    <span className="text-gray-500 text-sm ml-2">
+                                    <span className="text-[var(--text-secondary)] text-sm ml-2">
                                       - {role.description}
                                     </span>
                                   )}
@@ -324,7 +324,7 @@ export default function InvitationsPage() {
               </div>
 
               {actionData && "error" in actionData && (
-                <p className="text-sm text-red-500">{String(actionData.error)}</p>
+                <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
               )}
 
               <DialogFooter>
@@ -341,7 +341,7 @@ export default function InvitationsPage() {
       </div>
 
       {actionData && "success" in actionData && actionData.success && "message" in actionData && (
-        <div className="rounded-apple bg-green-50 border border-green-200 p-4 text-sm text-green-700">
+        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">
           {(actionData as { success: boolean; message: string }).message}
         </div>
       )}
@@ -354,9 +354,9 @@ export default function InvitationsPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-apple border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50 text-left text-gray-500">
+          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Email</th>
                   <th className="px-4 py-3 font-medium">Status</th>
@@ -366,22 +366,22 @@ export default function InvitationsPage() {
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {invitations.map((invitation) => (
-                  <tr key={invitation.id} className="text-gray-700 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                  <tr key={invitation.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
                       {invitation.email}
                     </td>
                     <td className="px-4 py-3">
                       {getStatusBadge(invitation.status)}
                     </td>
-                    <td className="px-4 py-3 text-xs text-gray-500">
+                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">
                       {invitation.role_ids.length} role{invitation.role_ids.length !== 1 ? "s" : ""}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-[var(--text-secondary)]">
                       {formatDateTime(invitation.expires_at)}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-[var(--text-secondary)]">
                       {formatDateTime(invitation.created_at)}
                     </td>
                     <td className="px-4 py-3">
@@ -406,7 +406,7 @@ export default function InvitationsPage() {
                             </>
                           )}
                           <DropdownMenuItem
-                            className="text-red-600 focus:text-red-600"
+                            className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
                             onClick={() => handleDelete(invitation.id)}
                           >
                             <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
@@ -418,7 +418,7 @@ export default function InvitationsPage() {
                 ))}
                 {invitations.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={6}>
+                    <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={6}>
                       No invitations found. Click &quot;Invite User&quot; to send an invitation.
                     </td>
                   </tr>
@@ -437,7 +437,7 @@ export default function InvitationsPage() {
                   className={`px-3 py-1 text-sm rounded-md ${
                     page === pagination.page
                       ? "bg-apple-blue text-white"
-                      : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                      : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
                   }`}
                 >
                   {page}

@@ -36,24 +36,24 @@ function StatCard({
   return (
     <Card>
       <CardContent className="pt-6">
-        <div className="text-sm font-medium text-gray-500">{title}</div>
+        <div className="text-sm font-medium text-[var(--text-secondary)]">{title}</div>
         <div className="mt-2 flex items-baseline gap-2">
           <span className="text-3xl font-bold">{value}</span>
           {trend && (
             <span
               className={`text-sm font-medium ${
                 trend === "up"
-                  ? "text-green-600"
+                  ? "text-[var(--accent-green)]"
                   : trend === "down"
-                  ? "text-red-600"
-                  : "text-gray-500"
+                  ? "text-[var(--accent-red)]"
+                  : "text-[var(--text-secondary)]"
               }`}
             >
               {trend === "up" ? "↑" : trend === "down" ? "↓" : "→"}
             </span>
           )}
         </div>
-        {subtitle && <div className="mt-1 text-sm text-gray-500">{subtitle}</div>}
+        {subtitle && <div className="mt-1 text-sm text-[var(--text-secondary)]">{subtitle}</div>}
       </CardContent>
     </Card>
   );
@@ -76,7 +76,7 @@ function BreakdownCard({
       </CardHeader>
       <CardContent>
         {entries.length === 0 ? (
-          <p className="text-gray-500 text-sm">No data available</p>
+          <p className="text-[var(--text-secondary)] text-sm">No data available</p>
         ) : (
           <div className="space-y-3">
             {entries.map(([key, value]) => {
@@ -87,13 +87,13 @@ function BreakdownCard({
                     <span className="font-medium capitalize">
                       {key.replace(/_/g, " ")}
                     </span>
-                    <span className="text-gray-500">
+                    <span className="text-[var(--text-secondary)]">
                       {value} ({percentage.toFixed(1)}%)
                     </span>
                   </div>
-                  <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 bg-[var(--sidebar-item-hover)] rounded-full overflow-hidden">
                     <div
-                      className="h-full bg-blue-500 rounded-full transition-all"
+                      className="h-full bg-[var(--accent-blue)] rounded-full transition-all"
                       style={{ width: `${percentage}%` }}
                     />
                   </div>
@@ -121,7 +121,7 @@ export default function AnalyticsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-gray-500">Login activity and statistics</p>
+          <p className="text-[var(--text-secondary)]">Login activity and statistics</p>
         </div>
         <div className="flex gap-2">
           {[7, 14, 30, 90].map((d) => (
@@ -131,7 +131,7 @@ export default function AnalyticsPage() {
               className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                 days === d
                   ? "bg-blue-600 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                  : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
               }`}
             >
               {d}d
@@ -141,7 +141,7 @@ export default function AnalyticsPage() {
       </div>
 
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{error}</div>
       )}
 
       {stats && (
@@ -182,13 +182,13 @@ export default function AnalyticsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-medium">View Login Events</h3>
-                  <p className="text-sm text-gray-500">
+                  <p className="text-sm text-[var(--text-secondary)]">
                     See detailed login activity and troubleshoot issues
                   </p>
                 </div>
                 <Link
                   to="/dashboard/analytics/events"
-                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-md text-sm font-medium transition-colors"
+                  className="px-4 py-2 bg-[var(--sidebar-item-hover)] hover:bg-[var(--sidebar-item-hover)] rounded-md text-sm font-medium transition-colors"
                 >
                   View events →
                 </Link>

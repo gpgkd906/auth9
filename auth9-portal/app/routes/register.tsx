@@ -2,7 +2,9 @@ import type { MetaFunction, ActionFunctionArgs } from "react-router";
 import { redirect, Form, Link, useActionData, useNavigation } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { ThemeToggle } from "~/components/ThemeToggle";
 import { userApi } from "~/services/api";
 
 export const meta: MetaFunction = () => {
@@ -40,27 +42,29 @@ export default function Register() {
   const isSubmitting = navigation.state === "submitting";
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-6">
-      <Card className="w-full max-w-md">
+    <div className="min-h-screen flex items-center justify-center px-6 relative">
+      {/* Dynamic Background */}
+      <div className="page-backdrop" />
+
+      {/* Theme Toggle */}
+      <ThemeToggle />
+
+      <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
         <CardHeader className="text-center">
-          <div className="w-12 h-12 rounded-apple-lg bg-apple-blue flex items-center justify-center mx-auto mb-4">
-            <span className="text-white font-bold text-xl">A</span>
-          </div>
+          <div className="logo-icon mx-auto mb-4">A9</div>
           <CardTitle className="text-2xl">Create your account</CardTitle>
           <CardDescription>Start managing identity with Auth9</CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-4">
             {actionData?.error && (
-              <div className="p-3 rounded-apple bg-red-50 text-apple-red text-sm">
+              <div className="p-3 rounded-xl bg-[var(--accent-red)]/10 text-[var(--accent-red)] text-sm border border-[var(--accent-red)]/20">
                 {actionData.error}
               </div>
             )}
 
             <div className="space-y-2">
-              <label htmlFor="email" className="text-sm font-medium text-gray-700">
-                Email
-              </label>
+              <Label htmlFor="email">Email</Label>
               <Input
                 id="email"
                 name="email"
@@ -71,15 +75,11 @@ export default function Register() {
               />
             </div>
             <div className="space-y-2">
-              <label htmlFor="display_name" className="text-sm font-medium text-gray-700">
-                Display Name
-              </label>
+              <Label htmlFor="display_name">Display Name</Label>
               <Input id="display_name" name="display_name" placeholder="Jane Doe" />
             </div>
             <div className="space-y-2">
-              <label htmlFor="password" className="text-sm font-medium text-gray-700">
-                Password
-              </label>
+              <Label htmlFor="password">Password</Label>
               <Input
                 id="password"
                 name="password"
@@ -93,9 +93,9 @@ export default function Register() {
               {isSubmitting ? "Creating..." : "Create account"}
             </Button>
           </Form>
-          <div className="mt-6 text-center text-sm text-gray-500">
+          <div className="mt-6 text-center text-sm text-[var(--text-tertiary)]">
             Already have an account?{" "}
-            <Link to="/login" className="text-apple-blue hover:underline font-medium">
+            <Link to="/login" className="text-[var(--accent-blue)] hover:underline font-medium">
               Sign in
             </Link>
           </div>

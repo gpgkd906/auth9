@@ -96,8 +96,8 @@ export default function TenantsPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Tenants</h1>
-          <p className="text-sm text-gray-500">Manage tenant lifecycle and settings</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Tenants</h1>
+          <p className="text-sm text-[var(--text-secondary)]">Manage tenant lifecycle and settings</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
@@ -127,7 +127,7 @@ export default function TenantsPage() {
                 <Input id="create-logo" name="logo_url" placeholder="https://..." />
               </div>
               {actionData && "error" in actionData && (
-                <p className="text-sm text-red-500">{String(actionData.error)}</p>
+                <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
@@ -151,9 +151,9 @@ export default function TenantsPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-apple border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50 text-left text-gray-500">
+          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Name</th>
                   <th className="px-4 py-3 font-medium">Slug</th>
@@ -162,10 +162,10 @@ export default function TenantsPage() {
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {data.data.map((tenant) => (
-                  <tr key={tenant.id} className="text-gray-700 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 font-medium text-gray-900">
+                  <tr key={tenant.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
                       <div className="flex items-center gap-2">
                         {tenant.logo_url && (
                           <img src={tenant.logo_url} alt="" className="h-6 w-6 rounded object-cover" />
@@ -198,7 +198,7 @@ export default function TenantsPage() {
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
-                            className="text-red-600 focus:text-red-600"
+                            className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
                             onClick={() => {
                               if (confirm("Are you sure you want to delete this tenant?")) {
                                 submit({ intent: "delete", id: tenant.id }, { method: "post" });
@@ -214,7 +214,7 @@ export default function TenantsPage() {
                 ))}
                 {data.data.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                    <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
                       No tenants found
                     </td>
                   </tr>
@@ -264,7 +264,7 @@ export default function TenantsPage() {
               />
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{String(actionData.error)}</p>
+              <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>

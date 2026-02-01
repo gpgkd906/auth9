@@ -97,7 +97,7 @@ export default function SessionsPage() {
         <CardContent>
           {currentSession ? (
             <div className="flex items-start gap-4">
-              <div className="p-3 bg-green-100 text-green-700 rounded-full">
+              <div className="p-3 bg-green-100 text-[var(--accent-green)] rounded-full">
                 {getDeviceIcon(currentSession.device_type)}
               </div>
               <div className="flex-1">
@@ -105,12 +105,12 @@ export default function SessionsPage() {
                   <span className="font-medium">
                     {currentSession.device_name || "Unknown Device"}
                   </span>
-                  <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full">
+                  <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-[var(--accent-green)] px-2 py-0.5 rounded-full">
                     <CheckCircledIcon className="h-3 w-3" />
                     Current
                   </span>
                 </div>
-                <div className="text-sm text-gray-500 mt-1 space-y-0.5">
+                <div className="text-sm text-[var(--text-secondary)] mt-1 space-y-0.5">
                   {currentSession.ip_address && (
                     <div className="flex items-center gap-1">
                       <GlobeIcon className="h-3 w-3" />
@@ -125,7 +125,7 @@ export default function SessionsPage() {
               </div>
             </div>
           ) : (
-            <p className="text-gray-500">Unable to identify current session</p>
+            <p className="text-[var(--text-secondary)]">Unable to identify current session</p>
           )}
         </CardContent>
       </Card>
@@ -155,25 +155,25 @@ export default function SessionsPage() {
         </CardHeader>
         <CardContent>
           {loadError && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md mb-4">
+            <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md mb-4">
               {loadError}
             </div>
           )}
 
           {actionData?.error && (
-            <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md mb-4">
+            <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md mb-4">
               {actionData.error}
             </div>
           )}
 
           {actionData?.success && (
-            <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md mb-4">
+            <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md mb-4">
               {actionData.message}
             </div>
           )}
 
           {otherSessions.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">
+            <p className="text-[var(--text-secondary)] text-center py-8">
               No other active sessions
             </p>
           ) : (
@@ -183,14 +183,14 @@ export default function SessionsPage() {
                   key={session.id}
                   className="flex items-start gap-4 py-4 first:pt-0 last:pb-0"
                 >
-                  <div className="p-3 bg-gray-100 text-gray-600 rounded-full">
+                  <div className="p-3 bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] rounded-full">
                     {getDeviceIcon(session.device_type)}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">
                       {session.device_name || "Unknown Device"}
                     </div>
-                    <div className="text-sm text-gray-500 mt-1 space-y-0.5">
+                    <div className="text-sm text-[var(--text-secondary)] mt-1 space-y-0.5">
                       {session.ip_address && (
                         <div className="flex items-center gap-1">
                           <GlobeIcon className="h-3 w-3" />
@@ -201,7 +201,7 @@ export default function SessionsPage() {
                       <div>
                         Last active: {formatDate(session.last_active_at)}
                       </div>
-                      <div className="text-xs text-gray-400">
+                      <div className="text-xs text-[var(--text-tertiary)]">
                         Started: {new Date(session.created_at).toLocaleDateString()}
                       </div>
                     </div>
@@ -213,7 +213,7 @@ export default function SessionsPage() {
                       type="submit"
                       variant="ghost"
                       size="sm"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
                       disabled={isSubmitting}
                     >
                       <Cross2Icon className="h-4 w-4 mr-1" />
@@ -233,7 +233,7 @@ export default function SessionsPage() {
           <CardTitle>Security Tips</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="text-sm text-gray-600 space-y-2">
+          <ul className="text-sm text-[var(--text-secondary)] space-y-2">
             <li>• Sign out of sessions you do not recognize</li>
             <li>• Do not stay signed in on shared or public devices</li>
             <li>• Enable two-factor authentication for extra security</li>

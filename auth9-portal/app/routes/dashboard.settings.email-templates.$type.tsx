@@ -193,8 +193,8 @@ export default function EmailTemplateEditorPage() {
             </Link>
           </Button>
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">{template.metadata.name}</h2>
-            <p className="text-sm text-gray-500">{template.metadata.description}</p>
+            <h2 className="text-lg font-semibold text-[var(--text-primary)]">{template.metadata.name}</h2>
+            <p className="text-sm text-[var(--text-secondary)]">{template.metadata.description}</p>
           </div>
         </div>
         {template.is_customized && (
@@ -226,22 +226,22 @@ export default function EmailTemplateEditorPage() {
 
       {/* Success/Error Messages */}
       {actionData && "success" in actionData && actionData.success && (
-        <div className="rounded-apple bg-green-50 border border-green-200 p-4 text-sm text-green-700">
+        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">
           {actionData.message}
         </div>
       )}
       {actionData && "testEmailSuccess" in actionData && actionData.testEmailSuccess && "testEmailMessage" in actionData && (
-        <div className="rounded-apple bg-green-50 border border-green-200 p-4 text-sm text-green-700">
+        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">
           {actionData.testEmailMessage}
         </div>
       )}
       {actionData && "testEmailSuccess" in actionData && !actionData.testEmailSuccess && "testEmailError" in actionData && (
-        <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
           {actionData.testEmailError}
         </div>
       )}
       {actionData && "error" in actionData && (
-        <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
           {String(actionData.error)}
         </div>
       )}
@@ -293,7 +293,7 @@ export default function EmailTemplateEditorPage() {
                     placeholder="Enter plain text content..."
                     className="font-mono text-sm min-h-[150px]"
                   />
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[var(--text-secondary)]">
                     Shown to recipients whose email clients don&apos;t support HTML
                   </p>
                 </div>
@@ -370,7 +370,7 @@ export default function EmailTemplateEditorPage() {
                             <div className="space-y-2 max-h-[200px] overflow-y-auto">
                               {template.metadata.variables.map((variable) => (
                                 <div key={variable.name} className="space-y-1">
-                                  <Label htmlFor={`var_${variable.name}`} className="text-xs text-gray-500">
+                                  <Label htmlFor={`var_${variable.name}`} className="text-xs text-[var(--text-secondary)]">
                                     {variable.name}
                                   </Label>
                                   <Input
@@ -427,11 +427,11 @@ export default function EmailTemplateEditorPage() {
               <div className="space-y-3">
                 {template.metadata.variables.map((variable) => (
                   <div key={variable.name} className="text-sm">
-                    <code className="bg-gray-100 px-1.5 py-0.5 rounded text-xs font-mono">
+                    <code className="bg-[var(--sidebar-item-hover)] px-1.5 py-0.5 rounded text-xs font-mono">
                       {`{{${variable.name}}}`}
                     </code>
-                    <p className="text-gray-500 mt-0.5 text-xs">{variable.description}</p>
-                    <p className="text-gray-400 text-xs">Example: {variable.example}</p>
+                    <p className="text-[var(--text-secondary)] mt-0.5 text-xs">{variable.description}</p>
+                    <p className="text-[var(--text-tertiary)] text-xs">Example: {variable.example}</p>
                   </div>
                 ))}
               </div>
@@ -449,7 +449,7 @@ export default function EmailTemplateEditorPage() {
               </CardHeader>
               <CardContent className="space-y-4">
                 <div>
-                  <Label className="text-xs text-gray-500">Subject</Label>
+                  <Label className="text-xs text-[var(--text-secondary)]">Subject</Label>
                   <p className="text-sm font-medium">{preview.subject}</p>
                 </div>
                 <Tabs value={previewTab} onValueChange={(v) => setPreviewTab(v as "html" | "text")}>
@@ -468,7 +468,7 @@ export default function EmailTemplateEditorPage() {
                     </div>
                   </TabsContent>
                   <TabsContent value="text" className="mt-2">
-                    <pre className="text-xs bg-gray-50 p-3 rounded-md overflow-auto max-h-[300px] whitespace-pre-wrap">
+                    <pre className="text-xs bg-[var(--sidebar-item-hover)] p-3 rounded-md overflow-auto max-h-[300px] whitespace-pre-wrap">
                       {preview.text_body}
                     </pre>
                   </TabsContent>
