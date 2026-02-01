@@ -66,6 +66,11 @@ lettre = { version = "0.11", default-features = false, features = ["tokio1-rustl
 
 # Encryption
 aes-gcm = "0.10"
+sha2 = "0.10"
+
+# AWS SDK for SES
+aws-config = { version = "1.1.7", features = ["behavior-version-latest"] }
+aws-sdk-sesv2 = "1.108"
 
 [dev-dependencies]
 # Testing

@@ -3,7 +3,7 @@
 use crate::domain::{
     EmailAddress, EmailMessage, EmailProviderConfig, EmailSendResult, TenantEmailSettings,
 };
-use crate::email::{EmailProvider, EmailProviderError, SmtpEmailProvider, TemplateEngine};
+use crate::email::{EmailProvider, EmailProviderError, SesEmailProvider, SmtpEmailProvider, TemplateEngine};
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
 use crate::service::SystemSettingsService;
@@ -39,7 +39,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         }
 
         // Create the appropriate provider
-        let provider = self.create_provider(&config)?;
+        let provider = self.create_provider(&config).await?;
 
         // Send the email
         provider
@@ -78,7 +78,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
             ));
         }
 
-        let provider = self.create_provider(&config)?;
+        let provider = self.create_provider(&config).await?;
 
         provider.test_connection().await.map_err(|e| match e {
             EmailProviderError::AuthenticationFailed(msg) => {
@@ -158,7 +158,10 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         self.settings_service.get_email_config().await
     }
 
-    fn create_provider(&self, config: &EmailProviderConfig) -> Result<Box<dyn EmailProvider>> {
+    async fn create_provider(
+        &self,
+        config: &EmailProviderConfig,
+    ) -> Result<Box<dyn EmailProvider>> {
         match config {
             EmailProviderConfig::None => Err(AppError::BadRequest(
                 "Email provider not configured".to_string(),
@@ -169,12 +172,11 @@ impl<R: SystemSettingsRepository> EmailService<R> {
                 })?;
                 Ok(Box::new(provider))
             }
-            EmailProviderConfig::Ses(_ses_config) => {
-                // SES support would be added here
-                // For now, return an error indicating it's not yet implemented
-                Err(AppError::BadRequest(
-                    "AWS SES provider is not yet implemented. Use SMTP instead.".to_string(),
-                ))
+            EmailProviderConfig::Ses(ses_config) => {
+                let provider = SesEmailProvider::from_config(ses_config).await.map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("Failed to create SES provider: {}", e))
+                })?;
+                Ok(Box::new(provider))
             }
             EmailProviderConfig::Oracle(oracle_config) => {
                 let provider =
@@ -296,7 +298,7 @@ mod tests {
             from_name: None,
         });
 
-        let provider = email_service.create_provider(&config);
+        let provider = email_service.create_provider(&config).await;
         assert!(provider.is_ok());
         assert_eq!(provider.unwrap().provider_name(), "smtp");
     }
@@ -308,7 +310,7 @@ mod tests {
         let email_service = EmailService::new(settings_service);
 
         let config = EmailProviderConfig::None;
-        let result = email_service.create_provider(&config);
+        let result = email_service.create_provider(&config).await;
 
         assert!(result.is_err());
     }
@@ -330,34 +332,34 @@ mod tests {
             from_name: None,
         });
 
-        let provider = email_service.create_provider(&config);
+        let provider = email_service.create_provider(&config).await;
         assert!(provider.is_ok());
         // Oracle uses SMTP protocol but identifies as "oracle" provider
         assert_eq!(provider.unwrap().provider_name(), "oracle");
     }
 
     #[tokio::test]
-    async fn test_create_ses_provider_not_implemented() {
+    async fn test_create_ses_provider() {
         use crate::domain::SesConfig;
 
         let mock = MockSystemSettingsRepository::new();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let email_service = EmailService::new(settings_service);
 
+        // Use explicit credentials for testing
         let config = EmailProviderConfig::Ses(SesConfig {
             region: "us-east-1".to_string(),
-            access_key_id: None,
-            secret_access_key: None,
+            access_key_id: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
+            secret_access_key: Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()),
             from_email: "test@example.com".to_string(),
             from_name: None,
             configuration_set: None,
         });
 
-        let result = email_service.create_provider(&config);
-        assert!(result.is_err());
-        if let Err(AppError::BadRequest(msg)) = result {
-            assert!(msg.contains("not yet implemented"));
-        }
+        // Provider creation should succeed (it doesn't validate credentials at creation time)
+        let result = email_service.create_provider(&config).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().provider_name(), "ses");
     }
 
     #[tokio::test]
