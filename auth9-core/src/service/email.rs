@@ -94,6 +94,115 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         })
     }
 
+    /// Send a password reset email
+    pub async fn send_password_reset(
+        &self,
+        to_email: &str,
+        reset_token: &str,
+        user_name: Option<&str>,
+    ) -> Result<EmailSendResult> {
+        let display_name = user_name.unwrap_or("User");
+        let reset_url = format!(
+            "{}/reset-password?token={}",
+            std::env::var("AUTH9_PORTAL_URL").unwrap_or_else(|_| "http://localhost:3000".to_string()),
+            reset_token
+        );
+
+        let html_body = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head><title>Password Reset</title></head>
+<body style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+    <h1 style="color: #2563eb;">Password Reset Request</h1>
+    <p>Hello {},</p>
+    <p>We received a request to reset your password. Click the button below to set a new password:</p>
+    <p style="text-align: center; margin: 30px 0;">
+        <a href="{}" style="display: inline-block; padding: 12px 24px; background: #2563eb; color: white; text-decoration: none; border-radius: 6px; font-weight: bold;">
+            Reset Password
+        </a>
+    </p>
+    <p>If you didn't request this, you can safely ignore this email. The link will expire in 1 hour.</p>
+    <p style="color: #666; font-size: 12px;">
+        If the button doesn't work, copy and paste this link into your browser:<br>
+        <a href="{}" style="color: #2563eb;">{}</a>
+    </p>
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+    <p style="color: #666; font-size: 12px;">
+        &copy; {} Auth9
+    </p>
+</body>
+</html>"#,
+            display_name,
+            reset_url,
+            reset_url,
+            reset_url,
+            chrono::Utc::now().format("%Y")
+        );
+
+        let text_body = format!(
+            "Password Reset Request\n\nHello {},\n\nWe received a request to reset your password. Visit the link below to set a new password:\n\n{}\n\nIf you didn't request this, you can safely ignore this email. The link will expire in 1 hour.",
+            display_name,
+            reset_url
+        );
+
+        self.send_with_from(
+            EmailAddress::new(to_email),
+            "Password Reset Request",
+            &html_body,
+            Some(&text_body),
+            None,
+        )
+        .await
+    }
+
+    /// Send a password changed notification
+    pub async fn send_password_changed(
+        &self,
+        to_email: &str,
+        user_name: Option<&str>,
+    ) -> Result<EmailSendResult> {
+        let display_name = user_name.unwrap_or("User");
+        let now = chrono::Utc::now();
+
+        let html_body = format!(
+            r#"<!DOCTYPE html>
+<html>
+<head><title>Password Changed</title></head>
+<body style="font-family: sans-serif; padding: 20px; max-width: 600px; margin: 0 auto;">
+    <h1 style="color: #2563eb;">Password Changed Successfully</h1>
+    <p>Hello {},</p>
+    <p>Your password was changed on {}.</p>
+    <p>If you made this change, you can safely ignore this email.</p>
+    <p style="color: #dc2626; font-weight: bold;">
+        If you did not make this change, please contact support immediately and secure your account.
+    </p>
+    <hr style="margin: 20px 0; border: none; border-top: 1px solid #eee;">
+    <p style="color: #666; font-size: 12px;">
+        &copy; {} Auth9
+    </p>
+</body>
+</html>"#,
+            display_name,
+            now.format("%Y-%m-%d %H:%M:%S UTC"),
+            now.format("%Y")
+        );
+
+        let text_body = format!(
+            "Password Changed Successfully\n\nHello {},\n\nYour password was changed on {}.\n\nIf you made this change, you can safely ignore this email.\n\nIf you did not make this change, please contact support immediately and secure your account.",
+            display_name,
+            now.format("%Y-%m-%d %H:%M:%S UTC")
+        );
+
+        self.send_with_from(
+            EmailAddress::new(to_email),
+            "Password Changed Successfully",
+            &html_body,
+            Some(&text_body),
+            None,
+        )
+        .await
+    }
+
     /// Send a test email to verify configuration works end-to-end
     pub async fn send_test_email(
         &self,

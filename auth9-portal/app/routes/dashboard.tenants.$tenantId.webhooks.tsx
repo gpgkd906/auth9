@@ -1,0 +1,452 @@
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { useState, useEffect } from "react";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Label } from "~/components/ui/label";
+import { Switch } from "~/components/ui/switch";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "~/components/ui/dialog";
+import { webhookApi, type Webhook, type CreateWebhookInput } from "~/services/api";
+import {
+  PlusIcon,
+  Pencil2Icon,
+  TrashIcon,
+  RocketIcon,
+  
+  
+} from "@radix-ui/react-icons";
+
+const WEBHOOK_EVENTS = [
+  { id: "login.success", label: "Login Success" },
+  { id: "login.failed", label: "Login Failed" },
+  { id: "user.created", label: "User Created" },
+  { id: "user.updated", label: "User Updated" },
+  { id: "user.deleted", label: "User Deleted" },
+  { id: "password.changed", label: "Password Changed" },
+  { id: "mfa.enabled", label: "MFA Enabled" },
+  { id: "mfa.disabled", label: "MFA Disabled" },
+  { id: "session.revoked", label: "Session Revoked" },
+  { id: "security.alert", label: "Security Alert" },
+];
+
+export async function loader({ params }: LoaderFunctionArgs) {
+  const { tenantId } = params;
+  if (!tenantId) {
+    return { webhooks: [], error: "Tenant ID is required" };
+  }
+
+  try {
+    const response = await webhookApi.list(tenantId);
+    return { webhooks: response.data, tenantId };
+  } catch {
+    return { webhooks: [], tenantId, error: "Failed to load webhooks" };
+  }
+}
+
+export async function action({ request, params }: ActionFunctionArgs) {
+  const { tenantId } = params;
+  if (!tenantId) {
+    return { error: "Tenant ID is required" };
+  }
+
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  try {
+    if (intent === "create") {
+      const input: CreateWebhookInput = {
+        name: formData.get("name") as string,
+        url: formData.get("url") as string,
+        secret: (formData.get("secret") as string) || undefined,
+        events: JSON.parse(formData.get("events") as string || "[]"),
+        enabled: formData.get("enabled") === "true",
+      };
+      await webhookApi.create(tenantId, input);
+      return { success: true, message: "Webhook created" };
+    }
+
+    if (intent === "update") {
+      const id = formData.get("id") as string;
+      const input: Partial<CreateWebhookInput> = {
+        name: formData.get("name") as string,
+        url: formData.get("url") as string,
+        secret: (formData.get("secret") as string) || undefined,
+        events: JSON.parse(formData.get("events") as string || "[]"),
+        enabled: formData.get("enabled") === "true",
+      };
+      await webhookApi.update(tenantId, id, input);
+      return { success: true, message: "Webhook updated" };
+    }
+
+    if (intent === "delete") {
+      const id = formData.get("id") as string;
+      await webhookApi.delete(tenantId, id);
+      return { success: true, message: "Webhook deleted" };
+    }
+
+    if (intent === "test") {
+      const id = formData.get("id") as string;
+      const result = await webhookApi.test(tenantId, id);
+      if (result.data.success) {
+        return {
+          success: true,
+          message: `Test successful (${result.data.status_code}, ${result.data.response_time_ms}ms)`,
+        };
+      } else {
+        return { error: `Test failed: ${result.data.error}` };
+      }
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Operation failed";
+    return { error: message };
+  }
+
+  return { error: "Invalid action" };
+}
+
+export default function WebhooksPage() {
+  const { webhooks, error: loadError } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
+  const [formData, setFormData] = useState({
+    name: "",
+    url: "",
+    secret: "",
+    events: [] as string[],
+    enabled: true,
+  });
+
+  const isSubmitting = navigation.state === "submitting";
+
+  // Close dialog on success
+  useEffect(() => {
+    if (actionData?.success && (showDialog || editingWebhook)) {
+      setShowDialog(false);
+      setEditingWebhook(null);
+      resetForm();
+    }
+  }, [actionData, showDialog, editingWebhook]);
+
+  function resetForm() {
+    setFormData({
+      name: "",
+      url: "",
+      secret: "",
+      events: [],
+      enabled: true,
+    });
+  }
+
+  function openEditDialog(webhook: Webhook) {
+    setEditingWebhook(webhook);
+    setFormData({
+      name: webhook.name,
+      url: webhook.url,
+      secret: webhook.secret || "",
+      events: webhook.events,
+      enabled: webhook.enabled,
+    });
+  }
+
+  function openCreateDialog() {
+    resetForm();
+    setShowDialog(true);
+  }
+
+  function toggleEvent(eventId: string) {
+    setFormData((prev) => ({
+      ...prev,
+      events: prev.events.includes(eventId)
+        ? prev.events.filter((e) => e !== eventId)
+        : [...prev.events, eventId],
+    }));
+  }
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Webhooks</CardTitle>
+              <CardDescription>
+                Receive real-time notifications for events in your application.
+              </CardDescription>
+            </div>
+            <Button onClick={openCreateDialog}>
+              <PlusIcon className="h-4 w-4 mr-2" />
+              Add webhook
+            </Button>
+          </div>
+        </CardHeader>
+      </Card>
+
+      {/* Messages */}
+      {loadError && (
+        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+          {loadError}
+        </div>
+      )}
+
+      {actionData?.error && (
+        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+          {actionData.error}
+        </div>
+      )}
+
+      {actionData?.success && actionData.message && (
+        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+          {actionData.message}
+        </div>
+      )}
+
+      {/* Webhooks List */}
+      <Card>
+        <CardContent className="pt-6">
+          {webhooks.length === 0 ? (
+            <div className="text-center py-12">
+              <RocketIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                No webhooks configured
+              </h3>
+              <p className="text-gray-500 mb-4">
+                Add a webhook to receive real-time event notifications.
+              </p>
+              <Button onClick={openCreateDialog}>
+                <PlusIcon className="h-4 w-4 mr-2" />
+                Add your first webhook
+              </Button>
+            </div>
+          ) : (
+            <div className="divide-y">
+              {webhooks.map((webhook: Webhook) => (
+                <div
+                  key={webhook.id}
+                  className="flex items-center gap-4 py-4 first:pt-0 last:pb-0"
+                >
+                  <div
+                    className={`w-3 h-3 rounded-full ${
+                      webhook.enabled ? "bg-green-500" : "bg-gray-300"
+                    }`}
+                  />
+                  <div className="flex-1 min-w-0">
+                    <div className="font-medium">{webhook.name}</div>
+                    <div className="text-sm text-gray-500 truncate">
+                      {webhook.url}
+                    </div>
+                    <div className="text-xs text-gray-400 mt-1">
+                      {webhook.events.length} events •{" "}
+                      {webhook.failure_count > 0 && (
+                        <span className="text-red-500">
+                          {webhook.failure_count} failures •{" "}
+                        </span>
+                      )}
+                      {webhook.last_triggered_at
+                        ? `Last triggered: ${new Date(
+                            webhook.last_triggered_at
+                          ).toLocaleString()}`
+                        : "Never triggered"}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="test" />
+                      <input type="hidden" name="id" value={webhook.id} />
+                      <Button
+                        type="submit"
+                        variant="outline"
+                        size="sm"
+                        disabled={isSubmitting || !webhook.enabled}
+                      >
+                        Test
+                      </Button>
+                    </Form>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => openEditDialog(webhook)}
+                    >
+                      <Pencil2Icon className="h-4 w-4" />
+                    </Button>
+                    <Form method="post">
+                      <input type="hidden" name="intent" value="delete" />
+                      <input type="hidden" name="id" value={webhook.id} />
+                      <Button
+                        type="submit"
+                        variant="ghost"
+                        size="sm"
+                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        disabled={isSubmitting}
+                      >
+                        <TrashIcon className="h-4 w-4" />
+                      </Button>
+                    </Form>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Create/Edit Dialog */}
+      <Dialog
+        open={showDialog || !!editingWebhook}
+        onOpenChange={(open) => {
+          if (!open) {
+            setShowDialog(false);
+            setEditingWebhook(null);
+            resetForm();
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {editingWebhook ? "Edit Webhook" : "Add Webhook"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingWebhook
+                ? "Update the webhook configuration."
+                : "Configure a new webhook endpoint."}
+            </DialogDescription>
+          </DialogHeader>
+
+          <Form method="post" className="space-y-4">
+            <input
+              type="hidden"
+              name="intent"
+              value={editingWebhook ? "update" : "create"}
+            />
+            {editingWebhook && (
+              <input type="hidden" name="id" value={editingWebhook.id} />
+            )}
+            <input
+              type="hidden"
+              name="events"
+              value={JSON.stringify(formData.events)}
+            />
+            <input
+              type="hidden"
+              name="enabled"
+              value={formData.enabled ? "true" : "false"}
+            />
+
+            <div className="space-y-2">
+              <Label htmlFor="name">Name</Label>
+              <Input
+                id="name"
+                name="name"
+                value={formData.name}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, name: e.target.value }))
+                }
+                placeholder="My Webhook"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="url">Endpoint URL</Label>
+              <Input
+                id="url"
+                name="url"
+                type="url"
+                value={formData.url}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, url: e.target.value }))
+                }
+                placeholder="https://example.com/webhook"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="secret">Secret (optional)</Label>
+              <Input
+                id="secret"
+                name="secret"
+                type="password"
+                value={formData.secret}
+                onChange={(e) =>
+                  setFormData((prev) => ({ ...prev, secret: e.target.value }))
+                }
+                placeholder="For HMAC signature verification"
+              />
+              <p className="text-xs text-gray-500">
+                Used to sign webhook payloads for verification.
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label>Events</Label>
+              <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
+                {WEBHOOK_EVENTS.map((event) => (
+                  <label
+                    key={event.id}
+                    className="flex items-center gap-2 text-sm cursor-pointer"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={formData.events.includes(event.id)}
+                      onChange={() => toggleEvent(event.id)}
+                      className="rounded border-gray-300"
+                    />
+                    {event.label}
+                  </label>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="enabled">Enabled</Label>
+              <Switch
+                id="enabled"
+                checked={formData.enabled}
+                onCheckedChange={(checked: boolean) =>
+                  setFormData((prev) => ({ ...prev, enabled: checked }))
+                }
+              />
+            </div>
+
+            <DialogFooter>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setShowDialog(false);
+                  setEditingWebhook(null);
+                  resetForm();
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="submit"
+                disabled={isSubmitting || formData.events.length === 0}
+              >
+                {isSubmitting
+                  ? "Saving..."
+                  : editingWebhook
+                  ? "Save changes"
+                  : "Add webhook"}
+              </Button>
+            </DialogFooter>
+          </Form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}

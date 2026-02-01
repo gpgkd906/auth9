@@ -1,16 +1,23 @@
 //! REST API handlers
 
+pub mod analytics;
 pub mod audit;
 pub mod auth;
 pub mod branding;
 pub mod email_template;
 pub mod health;
+pub mod identity_provider;
 pub mod invitation;
+pub mod password;
 pub mod role;
+pub mod security_alert;
 pub mod service;
+pub mod session;
 pub mod system_settings;
 pub mod tenant;
 pub mod user;
+pub mod webauthn;
+pub mod webhook;
 
 use crate::error::Result;
 use crate::repository::audit::CreateAuditLogInput;

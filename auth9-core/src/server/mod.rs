@@ -10,16 +10,23 @@ use crate::grpc::TokenExchangeService;
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
-    audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl, rbac::RbacRepositoryImpl,
-    service::ServiceRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
-    tenant::TenantRepositoryImpl, user::UserRepositoryImpl,
+    audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl,
+    linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
+    password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
+    security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
+    session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
+    tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
 use crate::service::{
-    BrandingService, ClientService, EmailService, EmailTemplateService, InvitationService,
-    RbacService, SystemSettingsService, TenantService, UserService,
+    security_detection::SecurityDetectionConfig, AnalyticsService, BrandingService, ClientService,
+    EmailService, EmailTemplateService, IdentityProviderService, InvitationService, PasswordService,
+    RbacService, SecurityDetectionService, SessionService, SystemSettingsService, TenantService,
+    UserService, WebAuthnService, WebhookService,
 };
 use crate::state::{
-    HasBranding, HasEmailTemplates, HasInvitations, HasServices, HasSystemSettings,
+    HasAnalytics, HasBranding, HasEmailTemplates, HasIdentityProviders, HasInvitations,
+    HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
+    HasSystemSettings, HasWebAuthn, HasWebhooks,
 };
 use anyhow::Result;
 use axum::{
@@ -60,6 +67,23 @@ pub struct AppState {
         >,
     >,
     pub branding_service: Arc<BrandingService<SystemSettingsRepositoryImpl>>,
+    // New services for 5 features
+    pub password_service: Arc<
+        PasswordService<PasswordResetRepositoryImpl, UserRepositoryImpl, SystemSettingsRepositoryImpl>,
+    >,
+    pub session_service: Arc<SessionService<SessionRepositoryImpl, UserRepositoryImpl>>,
+    pub webauthn_service: Arc<WebAuthnService>,
+    pub identity_provider_service:
+        Arc<IdentityProviderService<LinkedIdentityRepositoryImpl, UserRepositoryImpl>>,
+    pub analytics_service: Arc<AnalyticsService<LoginEventRepositoryImpl>>,
+    pub webhook_service: Arc<WebhookService<WebhookRepositoryImpl>>,
+    pub security_detection_service: Arc<
+        SecurityDetectionService<
+            LoginEventRepositoryImpl,
+            SecurityAlertRepositoryImpl,
+            WebhookRepositoryImpl,
+        >,
+    >,
 }
 
 /// Implement HasServices trait for production AppState
@@ -149,6 +173,104 @@ impl HasBranding for AppState {
     }
 }
 
+/// Implement HasPasswordManagement trait for production AppState
+impl HasPasswordManagement for AppState {
+    type PasswordResetRepo = PasswordResetRepositoryImpl;
+    type PasswordUserRepo = UserRepositoryImpl;
+    type PasswordSystemSettingsRepo = SystemSettingsRepositoryImpl;
+
+    fn password_service(
+        &self,
+    ) -> &PasswordService<Self::PasswordResetRepo, Self::PasswordUserRepo, Self::PasswordSystemSettingsRepo>
+    {
+        &self.password_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasSessionManagement trait for production AppState
+impl HasSessionManagement for AppState {
+    type SessionRepo = SessionRepositoryImpl;
+    type SessionUserRepo = UserRepositoryImpl;
+
+    fn session_service(&self) -> &SessionService<Self::SessionRepo, Self::SessionUserRepo> {
+        &self.session_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasWebAuthn trait for production AppState
+impl HasWebAuthn for AppState {
+    fn webauthn_service(&self) -> &WebAuthnService {
+        &self.webauthn_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasIdentityProviders trait for production AppState
+impl HasIdentityProviders for AppState {
+    type LinkedIdentityRepo = LinkedIdentityRepositoryImpl;
+    type IdpUserRepo = UserRepositoryImpl;
+
+    fn identity_provider_service(
+        &self,
+    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo> {
+        &self.identity_provider_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
+/// Implement HasAnalytics trait for production AppState
+impl HasAnalytics for AppState {
+    type LoginEventRepo = LoginEventRepositoryImpl;
+
+    fn analytics_service(&self) -> &AnalyticsService<Self::LoginEventRepo> {
+        &self.analytics_service
+    }
+}
+
+/// Implement HasWebhooks trait for production AppState
+impl HasWebhooks for AppState {
+    type WebhookRepo = WebhookRepositoryImpl;
+
+    fn webhook_service(&self) -> &WebhookService<Self::WebhookRepo> {
+        &self.webhook_service
+    }
+}
+
+/// Implement HasSecurityAlerts trait for production AppState
+impl HasSecurityAlerts for AppState {
+    type SecurityLoginEventRepo = LoginEventRepositoryImpl;
+    type SecurityAlertRepo = SecurityAlertRepositoryImpl;
+    type SecurityWebhookRepo = WebhookRepositoryImpl;
+
+    fn security_detection_service(
+        &self,
+    ) -> &SecurityDetectionService<
+        Self::SecurityLoginEventRepo,
+        Self::SecurityAlertRepo,
+        Self::SecurityWebhookRepo,
+    > {
+        &self.security_detection_service
+    }
+
+    fn jwt_manager(&self) -> &JwtManager {
+        &self.jwt_manager
+    }
+}
+
 /// Run the server
 pub async fn run(config: Config) -> Result<()> {
     // Create database connection pool
@@ -172,6 +294,13 @@ pub async fn run(config: Config) -> Result<()> {
     let audit_repo = Arc::new(AuditRepositoryImpl::new(db_pool.clone()));
     let system_settings_repo = Arc::new(SystemSettingsRepositoryImpl::new(db_pool.clone()));
     let invitation_repo = Arc::new(InvitationRepositoryImpl::new(db_pool.clone()));
+    // New repositories for 5 features
+    let password_reset_repo = Arc::new(PasswordResetRepositoryImpl::new(db_pool.clone()));
+    let session_repo = Arc::new(SessionRepositoryImpl::new(db_pool.clone()));
+    let linked_identity_repo = Arc::new(LinkedIdentityRepositoryImpl::new(db_pool.clone()));
+    let login_event_repo = Arc::new(LoginEventRepositoryImpl::new(db_pool.clone()));
+    let webhook_repo = Arc::new(WebhookRepositoryImpl::new(db_pool.clone()));
+    let security_alert_repo = Arc::new(SecurityAlertRepositoryImpl::new(db_pool.clone()));
 
     // Create services
     let tenant_service = Arc::new(TenantService::new(
@@ -224,7 +353,43 @@ pub async fn run(config: Config) -> Result<()> {
         invitation_repo,
         tenant_repo.clone(),
         email_service.clone(),
-        app_base_url,
+        app_base_url.clone(),
+    ));
+
+    // Create Arc-wrapped Keycloak client for new services
+    let keycloak_arc = Arc::new(keycloak_client.clone());
+
+    // Create new services for 5 features
+    let password_service = Arc::new(PasswordService::new(
+        password_reset_repo,
+        user_repo.clone(),
+        email_service.clone(),
+        keycloak_arc.clone(),
+    ));
+
+    let session_service = Arc::new(SessionService::new(
+        session_repo,
+        user_repo.clone(),
+        keycloak_arc.clone(),
+    ));
+
+    let webauthn_service = Arc::new(WebAuthnService::new(keycloak_arc.clone()));
+
+    let identity_provider_service = Arc::new(IdentityProviderService::new(
+        linked_identity_repo,
+        user_repo.clone(),
+        keycloak_arc,
+    ));
+
+    let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
+
+    let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
+
+    let security_detection_service = Arc::new(SecurityDetectionService::new(
+        login_event_repo,
+        security_alert_repo,
+        webhook_service.clone(),
+        SecurityDetectionConfig::default(),
     ));
 
     // Create app state
@@ -244,6 +409,14 @@ pub async fn run(config: Config) -> Result<()> {
         email_template_service,
         invitation_service,
         branding_service,
+        // New services for 5 features
+        password_service,
+        session_service,
+        webauthn_service,
+        identity_provider_service,
+        analytics_service,
+        webhook_service,
+        security_detection_service,
     };
 
     // Create gRPC service
@@ -486,7 +659,18 @@ pub fn build_router<S: HasServices>(state: S) -> Router {
 /// This function requires the state to implement both HasServices and the new traits.
 pub fn build_full_router<S>(state: S) -> Router
 where
-    S: HasServices + HasSystemSettings + HasInvitations + HasEmailTemplates + HasBranding,
+    S: HasServices
+        + HasSystemSettings
+        + HasInvitations
+        + HasEmailTemplates
+        + HasBranding
+        + HasPasswordManagement
+        + HasSessionManagement
+        + HasWebAuthn
+        + HasIdentityProviders
+        + HasAnalytics
+        + HasWebhooks
+        + HasSecurityAlerts,
 {
     // CORS configuration
     let cors = CorsLayer::new()
@@ -686,6 +870,102 @@ where
         .route(
             "/api/v1/system/branding",
             get(api::branding::get_branding::<S>).put(api::branding::update_branding::<S>),
+        )
+        // === Password Management endpoints ===
+        .route(
+            "/api/v1/auth/forgot-password",
+            post(api::password::forgot_password::<S>),
+        )
+        .route(
+            "/api/v1/auth/reset-password",
+            post(api::password::reset_password::<S>),
+        )
+        .route(
+            "/api/v1/users/me/password",
+            post(api::password::change_password::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{id}/password-policy",
+            get(api::password::get_password_policy::<S>)
+                .put(api::password::update_password_policy::<S>),
+        )
+        // === Session Management endpoints ===
+        .route(
+            "/api/v1/users/me/sessions",
+            get(api::session::list_my_sessions::<S>).delete(api::session::revoke_other_sessions::<S>),
+        )
+        .route(
+            "/api/v1/users/me/sessions/{id}",
+            delete(api::session::revoke_session::<S>),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/logout",
+            post(api::session::force_logout_user::<S>),
+        )
+        // === WebAuthn/Passkey endpoints ===
+        .route(
+            "/api/v1/users/me/passkeys",
+            get(api::webauthn::list_passkeys::<S>),
+        )
+        .route(
+            "/api/v1/users/me/passkeys/{id}",
+            delete(api::webauthn::delete_passkey::<S>),
+        )
+        .route(
+            "/api/v1/auth/webauthn/register",
+            get(api::webauthn::get_register_url::<S>),
+        )
+        // === Identity Provider endpoints ===
+        .route(
+            "/api/v1/identity-providers",
+            get(api::identity_provider::list_providers::<S>).post(api::identity_provider::create_provider::<S>),
+        )
+        .route(
+            "/api/v1/identity-providers/{alias}",
+            get(api::identity_provider::get_provider::<S>)
+                .put(api::identity_provider::update_provider::<S>)
+                .delete(api::identity_provider::delete_provider::<S>),
+        )
+        .route(
+            "/api/v1/users/me/linked-identities",
+            get(api::identity_provider::list_my_linked_identities::<S>),
+        )
+        .route(
+            "/api/v1/users/me/linked-identities/{id}",
+            delete(api::identity_provider::unlink_identity::<S>),
+        )
+        // === Analytics endpoints ===
+        .route(
+            "/api/v1/analytics/login-stats",
+            get(api::analytics::get_stats::<S>),
+        )
+        .route(
+            "/api/v1/analytics/login-events",
+            get(api::analytics::list_events::<S>),
+        )
+        // === Webhook endpoints ===
+        .route(
+            "/api/v1/tenants/{tenant_id}/webhooks",
+            get(api::webhook::list_webhooks::<S>).post(api::webhook::create_webhook::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/webhooks/{id}",
+            get(api::webhook::get_webhook::<S>)
+                .put(api::webhook::update_webhook::<S>)
+                .delete(api::webhook::delete_webhook::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/webhooks/{id}/test",
+            post(api::webhook::test_webhook::<S>),
+        )
+        // === Security Alert endpoints ===
+        .route(
+            "/api/v1/security/alerts",
+            get(api::security_alert::list_alerts::<S>),
+        )
+        .route(
+            "/api/v1/security/alerts/{id}/resolve",
+            post(api::security_alert::resolve_alert::<S>),
         )
         // Add middleware
         .layer(TraceLayer::new_for_http())

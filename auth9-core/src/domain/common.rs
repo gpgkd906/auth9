@@ -21,6 +21,11 @@ impl StringUuid {
     pub fn is_nil(&self) -> bool {
         self.0.is_nil()
     }
+
+    /// Parse a UUID string
+    pub fn parse_str(s: &str) -> Result<Self, uuid::Error> {
+        Ok(StringUuid(Uuid::parse_str(s)?))
+    }
 }
 
 impl From<Uuid> for StringUuid {

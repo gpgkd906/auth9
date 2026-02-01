@@ -172,7 +172,7 @@ export class KeycloakAdminClient {
   async setupTestUsers(): Promise<void> {
     console.log("Setting up test users in Keycloak...");
 
-    for (const [key, user] of Object.entries(TEST_CONFIG.testUsers)) {
+    for (const [, user] of Object.entries(TEST_CONFIG.testUsers)) {
       await this.createUser(user);
     }
 
@@ -185,7 +185,7 @@ export class KeycloakAdminClient {
   async cleanupTestUsers(): Promise<void> {
     console.log("Cleaning up test users from Keycloak...");
 
-    for (const [key, user] of Object.entries(TEST_CONFIG.testUsers)) {
+    for (const [, user] of Object.entries(TEST_CONFIG.testUsers)) {
       await this.deleteUserByUsername(user.username);
     }
 

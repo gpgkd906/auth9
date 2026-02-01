@@ -1,21 +1,35 @@
 //! Business logic layer
 
+pub mod analytics;
 pub mod branding;
 pub mod client;
 pub mod email;
 pub mod email_template;
+pub mod identity_provider;
 pub mod invitation;
+pub mod password;
 pub mod rbac;
+pub mod security_detection;
+pub mod session;
 pub mod system_settings;
 pub mod tenant;
 pub mod user;
+pub mod webauthn;
+pub mod webhook;
 
+pub use analytics::AnalyticsService;
 pub use branding::BrandingService;
 pub use client::ClientService;
 pub use email::EmailService;
 pub use email_template::EmailTemplateService;
+pub use identity_provider::IdentityProviderService;
 pub use invitation::InvitationService;
+pub use password::PasswordService;
 pub use rbac::RbacService;
+pub use security_detection::{SecurityDetectionConfig, SecurityDetectionService};
+pub use session::SessionService;
 pub use system_settings::SystemSettingsService;
 pub use tenant::TenantService;
 pub use user::UserService;
+pub use webauthn::WebAuthnService;
+pub use webhook::{WebhookService, WebhookTestResult};

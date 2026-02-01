@@ -374,7 +374,6 @@ test.describe("Scenario: RBAC UI", () => {
     await page.goto("/dashboard/roles");
 
     // Should have tabs or selector for different services
-    const tabs = page.locator('[role="tab"], [role="tablist"]');
     // Page should render without error
     await expect(page.getByText(/roles|permissions/i).first()).toBeVisible();
   });

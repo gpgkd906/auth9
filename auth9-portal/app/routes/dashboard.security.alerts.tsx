@@ -1,0 +1,294 @@
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-router";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
+import { securityAlertApi, type SecurityAlert, type AlertSeverity } from "~/services/api";
+import {
+  ExclamationTriangleIcon,
+  CheckCircledIcon,
+} from "@radix-ui/react-icons";
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const page = Number(url.searchParams.get("page") || "1");
+  const unresolvedOnly = url.searchParams.get("unresolved") === "true";
+
+  try {
+    const response = await securityAlertApi.list(page, 50, unresolvedOnly);
+    return { alerts: response.data, pagination: response.pagination, unresolvedOnly };
+  } catch {
+    return {
+      alerts: [],
+      pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+      unresolvedOnly,
+      error: "Failed to load security alerts",
+    };
+  }
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  try {
+    if (intent === "resolve") {
+      const alertId = formData.get("alertId") as string;
+      await securityAlertApi.resolve(alertId);
+      return { success: true, message: "Alert resolved" };
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Operation failed";
+    return { error: message };
+  }
+
+  return { error: "Invalid action" };
+}
+
+function getSeverityColor(severity: AlertSeverity) {
+  switch (severity) {
+    case "critical":
+      return "bg-red-100 text-red-800 border-red-200";
+    case "high":
+      return "bg-orange-100 text-orange-800 border-orange-200";
+    case "medium":
+      return "bg-yellow-100 text-yellow-800 border-yellow-200";
+    case "low":
+      return "bg-blue-100 text-blue-800 border-blue-200";
+    default:
+      return "bg-gray-100 text-gray-800 border-gray-200";
+  }
+}
+
+function getSeverityIcon(severity: AlertSeverity) {
+  switch (severity) {
+    case "critical":
+    case "high":
+      return <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />;
+    case "medium":
+      return <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />;
+    default:
+      return <ExclamationTriangleIcon className="h-5 w-5 text-blue-600" />;
+  }
+}
+
+function getAlertTypeLabel(type: string) {
+  switch (type) {
+    case "brute_force":
+      return "Brute Force Attack";
+    case "new_device":
+      return "New Device Login";
+    case "impossible_travel":
+      return "Impossible Travel";
+    case "suspicious_ip":
+      return "Suspicious IP";
+    default:
+      return type.replace(/_/g, " ");
+  }
+}
+
+function formatDate(dateString: string) {
+  const date = new Date(dateString);
+  return date.toLocaleString();
+}
+
+export default function SecurityAlertsPage() {
+  const { alerts, pagination, unresolvedOnly, error } = useLoaderData<typeof loader>();
+  const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+
+  const isSubmitting = navigation.state === "submitting";
+
+  const unresolvedCount = alerts.filter((a: SecurityAlert) => !a.resolved_at).length;
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Security Alerts</h1>
+          <p className="text-gray-500">
+            Monitor and respond to security threats
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <Link
+            to="?unresolved=false"
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              !unresolvedOnly
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            All
+          </Link>
+          <Link
+            to="?unresolved=true"
+            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+              unresolvedOnly
+                ? "bg-blue-600 text-white"
+                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+            }`}
+          >
+            Unresolved ({unresolvedCount})
+          </Link>
+        </div>
+      </div>
+
+      {/* Messages */}
+      {error && (
+        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
+      )}
+
+      {actionData?.error && (
+        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+          {actionData.error}
+        </div>
+      )}
+
+      {actionData?.success && (
+        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+          {actionData.message}
+        </div>
+      )}
+
+      {/* Alerts List */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">
+            Alerts
+            <span className="ml-2 text-sm font-normal text-gray-500">
+              {pagination.total.toLocaleString()} total
+            </span>
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {alerts.length === 0 ? (
+            <div className="text-center py-12">
+              <CheckCircledIcon className="h-12 w-12 text-green-500 mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                All clear!
+              </h3>
+              <p className="text-gray-500">
+                {unresolvedOnly
+                  ? "No unresolved security alerts."
+                  : "No security alerts found."}
+              </p>
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {alerts.map((alert: SecurityAlert) => (
+                <div
+                  key={alert.id}
+                  className={`border rounded-lg p-4 ${
+                    alert.resolved_at ? "opacity-60" : ""
+                  }`}
+                >
+                  <div className="flex items-start gap-4">
+                    <div className="flex-shrink-0 mt-0.5">
+                      {getSeverityIcon(alert.severity)}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span
+                          className={`px-2 py-0.5 text-xs font-medium rounded border ${getSeverityColor(
+                            alert.severity
+                          )}`}
+                        >
+                          {alert.severity.toUpperCase()}
+                        </span>
+                        <span className="font-medium">
+                          {getAlertTypeLabel(alert.alert_type)}
+                        </span>
+                        {alert.resolved_at && (
+                          <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                            <CheckCircledIcon className="h-3 w-3" />
+                            Resolved
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-500 mb-2">
+                        {formatDate(alert.created_at)}
+                        {alert.user_id && ` • User: ${alert.user_id.slice(0, 8)}...`}
+                      </div>
+                      {alert.details && (
+                        <div className="text-sm bg-gray-50 p-2 rounded mt-2">
+                          <pre className="whitespace-pre-wrap text-xs text-gray-600">
+                            {JSON.stringify(alert.details, null, 2)}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                    {!alert.resolved_at && (
+                      <Form method="post">
+                        <input type="hidden" name="intent" value="resolve" />
+                        <input type="hidden" name="alertId" value={alert.id} />
+                        <Button
+                          type="submit"
+                          variant="outline"
+                          size="sm"
+                          disabled={isSubmitting}
+                        >
+                          <CheckCircledIcon className="h-4 w-4 mr-1" />
+                          Resolve
+                        </Button>
+                      </Form>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Pagination */}
+          {pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t">
+              <div className="text-sm text-gray-500">
+                Page {pagination.page} of {pagination.total_pages}
+              </div>
+              <div className="flex gap-2">
+                {pagination.page > 1 && (
+                  <Link
+                    to={`?page=${pagination.page - 1}${
+                      unresolvedOnly ? "&unresolved=true" : ""
+                    }`}
+                  >
+                    <Button variant="outline" size="sm">
+                      Previous
+                    </Button>
+                  </Link>
+                )}
+                {pagination.page < pagination.total_pages && (
+                  <Link
+                    to={`?page=${pagination.page + 1}${
+                      unresolvedOnly ? "&unresolved=true" : ""
+                    }`}
+                  >
+                    <Button variant="outline" size="sm">
+                      Next
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Security Recommendations */}
+      <Card>
+        <CardHeader>
+          <CardTitle className="text-lg">Security Recommendations</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="text-sm text-gray-600 space-y-2">
+            <li>• Review and resolve critical alerts within 24 hours</li>
+            <li>• Enable MFA for all admin accounts</li>
+            <li>• Configure rate limiting to prevent brute force attacks</li>
+            <li>• Set up webhooks to receive real-time security notifications</li>
+            <li>• Regularly review user sessions and revoke suspicious ones</li>
+          </ul>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}

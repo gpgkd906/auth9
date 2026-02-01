@@ -755,3 +755,420 @@ export const emailTemplateApi = {
     return handleResponse(response);
   },
 };
+
+// ==================== Password Management API ====================
+
+export interface PasswordPolicy {
+  min_length: number;
+  require_uppercase: boolean;
+  require_lowercase: boolean;
+  require_numbers: boolean;
+  require_symbols: boolean;
+  max_age_days: number;
+  history_count: number;
+  lockout_threshold: number;
+  lockout_duration_mins: number;
+}
+
+export const passwordApi = {
+  forgotPassword: async (email: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/forgot-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ email }),
+    });
+    return handleResponse(response);
+  },
+
+  resetPassword: async (token: string, newPassword: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/auth/reset-password`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+    return handleResponse(response);
+  },
+
+  changePassword: async (
+    currentPassword: string,
+    newPassword: string,
+    accessToken: string
+  ): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/password`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${accessToken}`,
+      },
+      body: JSON.stringify({
+        current_password: currentPassword,
+        new_password: newPassword,
+      }),
+    });
+    return handleResponse(response);
+  },
+
+  getPasswordPolicy: async (tenantId: string): Promise<{ data: PasswordPolicy }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/password-policy`);
+    return handleResponse(response);
+  },
+
+  updatePasswordPolicy: async (
+    tenantId: string,
+    policy: Partial<PasswordPolicy>
+  ): Promise<{ data: PasswordPolicy }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/password-policy`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(policy),
+    });
+    return handleResponse(response);
+  },
+};
+
+// ==================== Session Management API ====================
+
+export interface SessionInfo {
+  id: string;
+  device_type?: string;
+  device_name?: string;
+  ip_address?: string;
+  location?: string;
+  last_active_at: string;
+  created_at: string;
+  is_current: boolean;
+}
+
+export const sessionApi = {
+  listMySessions: async (accessToken: string): Promise<{ data: SessionInfo[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/sessions`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+
+  revokeSession: async (sessionId: string, accessToken: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/sessions/${sessionId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+
+  revokeOtherSessions: async (accessToken: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/sessions`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+
+  forceLogoutUser: async (userId: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/users/${userId}/logout`, {
+      method: "POST",
+    });
+    return handleResponse(response);
+  },
+};
+
+// ==================== WebAuthn/Passkey API ====================
+
+export interface WebAuthnCredential {
+  id: string;
+  credential_type: string;
+  user_label?: string;
+  created_at: string;
+}
+
+export const webauthnApi = {
+  listPasskeys: async (accessToken: string): Promise<{ data: WebAuthnCredential[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/passkeys`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+
+  deletePasskey: async (credentialId: string, accessToken: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/passkeys/${credentialId}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+
+  getRegisterUrl: async (
+    redirectUri: string,
+    accessToken: string
+  ): Promise<{ data: { url: string } }> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/auth/webauthn/register?redirect_uri=${encodeURIComponent(redirectUri)}`,
+      { headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+    return handleResponse(response);
+  },
+};
+
+// ==================== Identity Provider API ====================
+
+export interface IdentityProvider {
+  alias: string;
+  provider_id: string;
+  display_name?: string;
+  enabled: boolean;
+  config: Record<string, string>;
+}
+
+export interface CreateIdentityProviderInput {
+  alias: string;
+  provider_id: string;
+  display_name?: string;
+  enabled?: boolean;
+  config: Record<string, string>;
+}
+
+export interface LinkedIdentity {
+  id: string;
+  provider_type: string;
+  provider_alias: string;
+  external_user_id: string;
+  external_email?: string;
+  linked_at: string;
+}
+
+export interface IdpTemplate {
+  provider_id: string;
+  name: string;
+  required_fields: string[];
+  optional_fields: string[];
+}
+
+export const identityProviderApi = {
+  list: async (): Promise<{ data: IdentityProvider[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers`);
+    return handleResponse(response);
+  },
+
+  get: async (alias: string): Promise<{ data: IdentityProvider }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`);
+    return handleResponse(response);
+  },
+
+  create: async (input: CreateIdentityProviderInput): Promise<{ data: IdentityProvider }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (
+    alias: string,
+    input: Partial<CreateIdentityProviderInput>
+  ): Promise<{ data: IdentityProvider }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (alias: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
+
+  listMyLinkedIdentities: async (accessToken: string): Promise<{ data: LinkedIdentity[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/linked-identities`, {
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+
+  unlinkIdentity: async (id: string, accessToken: string): Promise<{ message: string }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/linked-identities/${id}`, {
+      method: "DELETE",
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    return handleResponse(response);
+  },
+};
+
+// ==================== Analytics API ====================
+
+export interface LoginStats {
+  total_logins: number;
+  successful_logins: number;
+  failed_logins: number;
+  unique_users: number;
+  by_event_type: Record<string, number>;
+  by_device_type: Record<string, number>;
+  period_start: string;
+  period_end: string;
+}
+
+export interface LoginEvent {
+  id: number;
+  user_id?: string;
+  email?: string;
+  tenant_id?: string;
+  event_type: string;
+  ip_address?: string;
+  user_agent?: string;
+  device_type?: string;
+  location?: string;
+  session_id?: string;
+  failure_reason?: string;
+  created_at: string;
+}
+
+export const analyticsApi = {
+  getStats: async (
+    startDate?: string,
+    endDate?: string
+  ): Promise<{ data: LoginStats }> => {
+    let url = `${API_BASE_URL}/api/v1/analytics/login-stats`;
+    const params = new URLSearchParams();
+    if (startDate) params.set("start", startDate);
+    if (endDate) params.set("end", endDate);
+    if (params.toString()) url += `?${params}`;
+    const response = await fetch(url);
+    return handleResponse(response);
+  },
+
+  listEvents: async (
+    page = 1,
+    perPage = 50
+  ): Promise<PaginatedResponse<LoginEvent>> => {
+    const offset = (page - 1) * perPage;
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/analytics/login-events?limit=${perPage}&offset=${offset}`
+    );
+    return handleResponse(response);
+  },
+};
+
+// ==================== Webhook API ====================
+
+export interface Webhook {
+  id: string;
+  tenant_id: string;
+  name: string;
+  url: string;
+  secret?: string;
+  events: string[];
+  enabled: boolean;
+  last_triggered_at?: string;
+  failure_count: number;
+  created_at: string;
+}
+
+export interface CreateWebhookInput {
+  name: string;
+  url: string;
+  secret?: string;
+  events: string[];
+  enabled?: boolean;
+}
+
+export interface WebhookTestResult {
+  success: boolean;
+  status_code?: number;
+  response_time_ms?: number;
+  error?: string;
+}
+
+export const webhookApi = {
+  list: async (tenantId: string): Promise<{ data: Webhook[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks`);
+    return handleResponse(response);
+  },
+
+  get: async (tenantId: string, id: string): Promise<{ data: Webhook }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`);
+    return handleResponse(response);
+  },
+
+  create: async (tenantId: string, input: CreateWebhookInput): Promise<{ data: Webhook }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (
+    tenantId: string,
+    id: string,
+    input: Partial<CreateWebhookInput>
+  ): Promise<{ data: Webhook }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (tenantId: string, id: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
+  },
+
+  test: async (tenantId: string, id: string): Promise<{ data: WebhookTestResult }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}/test`, {
+      method: "POST",
+    });
+    return handleResponse(response);
+  },
+};
+
+// ==================== Security Alert API ====================
+
+export type AlertSeverity = "low" | "medium" | "high" | "critical";
+export type SecurityAlertType = "brute_force" | "new_device" | "impossible_travel" | "suspicious_ip";
+
+export interface SecurityAlert {
+  id: string;
+  user_id?: string;
+  tenant_id?: string;
+  alert_type: SecurityAlertType;
+  severity: AlertSeverity;
+  details?: Record<string, unknown>;
+  resolved_at?: string;
+  resolved_by?: string;
+  created_at: string;
+}
+
+export const securityAlertApi = {
+  list: async (
+    page = 1,
+    perPage = 50,
+    unresolvedOnly = false
+  ): Promise<PaginatedResponse<SecurityAlert>> => {
+    const offset = (page - 1) * perPage;
+    let url = `${API_BASE_URL}/api/v1/security/alerts?limit=${perPage}&offset=${offset}`;
+    if (unresolvedOnly) url += "&unresolved=true";
+    const response = await fetch(url);
+    return handleResponse(response);
+  },
+
+  resolve: async (id: string): Promise<{ data: SecurityAlert }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/security/alerts/${id}/resolve`, {
+      method: "POST",
+    });
+    return handleResponse(response);
+  },
+};
