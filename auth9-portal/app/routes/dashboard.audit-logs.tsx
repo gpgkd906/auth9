@@ -20,8 +20,8 @@ export default function AuditLogsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Audit Logs</h1>
-        <p className="text-sm text-gray-500">Track administrative changes across tenants</p>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Audit Logs</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Track administrative changes across tenants</p>
       </div>
       <Card>
         <CardHeader>
@@ -32,9 +32,9 @@ export default function AuditLogsPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-apple border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50 text-left text-gray-500">
+          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Action</th>
                   <th className="px-4 py-3 font-medium">Resource</th>
@@ -42,10 +42,10 @@ export default function AuditLogsPage() {
                   <th className="px-4 py-3 font-medium">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {data.data.map((log) => (
-                  <tr key={log.id} className="text-gray-700">
-                    <td className="px-4 py-3 font-medium text-gray-900">{log.action}</td>
+                  <tr key={log.id} className="text-[var(--text-secondary)]">
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{log.action}</td>
                     <td className="px-4 py-3">
                       {log.resource_type}
                       {log.resource_id ? `:${log.resource_id}` : ""}
@@ -58,7 +58,7 @@ export default function AuditLogsPage() {
                 ))}
                 {data.data.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={4}>
+                    <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={4}>
                       No audit logs found
                     </td>
                   </tr>

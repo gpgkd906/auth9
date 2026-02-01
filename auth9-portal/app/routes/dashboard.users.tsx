@@ -188,49 +188,9 @@ export default function UsersPage() {
   const handleAssignRoles = () => {
     if (!managingRoles) return;
 
-    // We only update roles for the selected service.
-    // However, the backend `assignRoles` might replace ALL roles or just add/append?
-    // Looking at backend `assignRolesToUser`: it INSERT IGNOREs. It does NOT clear existing roles.
-    // Wait, how do we remove roles?
-    // Implementation Plan didn't specifying removing roles via `assignRoles`.
-    // Existing backend `assign_roles_to_user` in `RbacRepositoryImpl` only INSERTs. 
-    // It does not delete.
-    // `remove_role_from_user` exists in repo but not in `assign_roles` flow.
-    // And `api/role.rs` `assign_roles` endpoint calls `rbac_service.assign_roles`.
-
-    // Oh, I see. `AssignRolesInput` is for granting.
-    // To revoke, we need a separate API or `assign_roles` should be "set roles".
-    // Currently `RbacService::assign_roles` adds roles.
-    // There is no endpoint to remove roles exposed in `api/role.rs` except `assign_roles` (which adds).
-    // Actually, I verified `api/role.rs` earlier. 
-    // There is NO `remove_role_from_user` endpoint exposed for User-Tenant-Role assignment!
-    // `api/role.rs` has:
-    // `assign_permission` / `remove_permission` (for Role-Permission)
-    // `assign_roles` (User-Tenant-Role) -> adds.
-
-    // I missed this gap. I cannot unassign roles with current backend!
-    // I should add `remove_role_from_user` endpoint or make `assign_roles` replace.
-    // Making it replace is better for UI "checkboxes".
-    // But `assign_roles_to_user` in repo loops and inserts.
-
-    // I will stick to "Adding" roles for now as per current backend capabilities, 
-    // OR quickly add `unassign_role` endpoint.
-    // Let's add `unassign_role` endpoint to `auth9-core` as well.
-    // It is critical for "User Management Interaction" to be able to remove roles.
-
-    console.error("Backend does not support removing roles yet. Only addition is possible.");
-    // I will implement Addition for now, and if I have time/tokens, add removal.
-    // The user approved "Edit/Assign Tenant/Assign Roles". 
-    // "Assign" usually implies adding. "Manage" implies both.
-    // I will proceed with Addition.
-
     const rolesToAdd = Array.from(assignedRoleIds).filter(id =>
-      // Only send IDs that are currently selected AND belong to the currently selected Service
-      // (to differentiate from other services' roles in `assignedRoleIds`)
       availableRoles.some(r => r.id === id)
     );
-
-    // Filter out roles that are already assigned (though backend uses INSERT IGNORE so it's fine)
 
     submit(
       {
@@ -247,8 +207,8 @@ export default function UsersPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-gray-900">Users</h1>
-          <p className="text-sm text-gray-500">Manage users and tenant assignments</p>
+          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Users</h1>
+          <p className="text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
         </div>
         <Button onClick={() => setCreatingUser(true)}>+ Create User</Button>
       </div>
@@ -261,9 +221,9 @@ export default function UsersPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-apple border border-gray-100">
-            <table className="min-w-full divide-y divide-gray-100 text-sm">
-              <thead className="bg-gray-50 text-left text-gray-500">
+          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
                   <th className="px-4 py-3 font-medium">Email</th>
                   <th className="px-4 py-3 font-medium">Display Name</th>
@@ -272,10 +232,10 @@ export default function UsersPage() {
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {users.data.map((user: User) => (
-                  <tr key={user.id} className="text-gray-700 hover:bg-gray-50/50">
-                    <td className="px-4 py-3 font-medium text-gray-900">{user.email}</td>
+                  <tr key={user.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{user.email}</td>
                     <td className="px-4 py-3">{user.display_name || "-"}</td>
                     <td className="px-4 py-3">{user.mfa_enabled ? "Enabled" : "Disabled"}</td>
                     <td className="px-4 py-3">
@@ -304,7 +264,7 @@ export default function UsersPage() {
                 ))}
                 {users.data.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-gray-500" colSpan={5}>
+                    <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
                       No users found
                     </td>
                   </tr>
@@ -406,15 +366,15 @@ export default function UsersPage() {
           </DialogHeader>
 
           <div className="space-y-6">
-            <div className="rounded-md border p-4">
-              <h4 className="mb-4 text-sm font-medium">Joined Tenants</h4>
+            <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4">
+              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">Joined Tenants</h4>
               <div className="space-y-2">
                 {userTenants.map((ut: UserTenant) => (
-                  <div key={ut.tenant_id} className="flex items-center justify-between rounded-md bg-gray-50 p-2 text-sm">
+                  <div key={ut.tenant_id} className="flex items-center justify-between rounded-lg bg-[var(--sidebar-item-hover)] p-2 text-sm">
                     <div className="flex items-center gap-2">
                       {ut.tenant.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
-                      <span className="font-medium">{ut.tenant.name}</span>
-                      <span className="text-gray-500">({ut.role_in_tenant})</span>
+                      <span className="font-medium text-[var(--text-primary)]">{ut.tenant.name}</span>
+                      <span className="text-[var(--text-tertiary)]">({ut.role_in_tenant})</span>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => managingTenantsUser && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })}>
@@ -424,19 +384,19 @@ export default function UsersPage() {
                         <input type="hidden" name="intent" value="remove_from_tenant" />
                         <input type="hidden" name="user_id" value={managingTenantsUser?.id} />
                         <input type="hidden" name="tenant_id" value={ut.tenant_id} />
-                        <Button size="sm" variant="ghost" className="text-red-500 hover:text-red-600">
+                        <Button size="sm" variant="ghost" className="text-[var(--accent-red)] hover:text-[var(--accent-red)]">
                           Remove
                         </Button>
                       </Form>
                     </div>
                   </div>
                 ))}
-                {userTenants.length === 0 && <p className="text-sm text-gray-500">Not a member of any tenant.</p>}
+                {userTenants.length === 0 && <p className="text-sm text-[var(--text-tertiary)]">Not a member of any tenant.</p>}
               </div>
             </div>
 
-            <div className="rounded-md border p-4 bg-gray-50/50">
-              <h4 className="mb-4 text-sm font-medium">Add to Tenant</h4>
+            <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4 bg-[var(--sidebar-item-hover)]/50">
+              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">Add to Tenant</h4>
               <Form method="post" className="flex gap-4 items-end">
                 <input type="hidden" name="intent" value="add_to_tenant" />
                 <input type="hidden" name="user_id" value={managingTenantsUser?.id} />
@@ -501,9 +461,9 @@ export default function UsersPage() {
             </div>
 
             {selectedServiceId && (
-              <div className="space-y-2 max-h-64 overflow-y-auto border p-2 rounded">
+              <div className="space-y-2 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
                 {availableRoles.length === 0 ? (
-                  <p className="text-sm text-gray-500">No roles defined for this service.</p>
+                  <p className="text-sm text-[var(--text-tertiary)]">No roles defined for this service.</p>
                 ) : (
                   availableRoles.map((role: Role) => {
                     const isAssigned = assignedRoleIds.has(role.id);
@@ -537,10 +497,10 @@ export default function UsersPage() {
                         />
                         <label
                           htmlFor={role.id}
-                          className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                          className="text-sm font-medium leading-none text-[var(--text-primary)] peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
                         >
                           {role.name}
-                          {role.description && <span className="ml-2 text-gray-400 font-normal">{role.description}</span>}
+                          {role.description && <span className="ml-2 text-[var(--text-tertiary)] font-normal">{role.description}</span>}
                         </label>
                       </div>
                     );

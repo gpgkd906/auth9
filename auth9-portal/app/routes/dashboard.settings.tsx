@@ -23,8 +23,8 @@ export default function SettingsLayout() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Settings</h1>
-        <p className="text-sm text-gray-500">Manage system and organization preferences</p>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Settings</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Manage system and organization preferences</p>
       </div>
 
       <div className="flex gap-6">
@@ -38,10 +38,10 @@ export default function SettingsLayout() {
                   <Link
                     to={item.href}
                     className={cn(
-                      "block px-3 py-2 rounded-apple text-sm transition-colors",
+                      "block px-3 py-2 rounded-xl text-sm transition-colors",
                       isActive
-                        ? "bg-apple-blue text-white"
-                        : "text-gray-700 hover:bg-gray-100"
+                        ? "bg-[var(--accent-blue)] text-white"
+                        : "text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
                     )}
                   >
                     {item.name}

@@ -55,7 +55,7 @@ function getSeverityColor(severity: AlertSeverity) {
     case "low":
       return "bg-blue-100 text-blue-800 border-blue-200";
     default:
-      return "bg-gray-100 text-gray-800 border-gray-200";
+      return "bg-[var(--sidebar-item-hover)] text-[var(--text-primary)] border-[var(--glass-border-subtle)]";
   }
 }
 
@@ -63,11 +63,11 @@ function getSeverityIcon(severity: AlertSeverity) {
   switch (severity) {
     case "critical":
     case "high":
-      return <ExclamationTriangleIcon className="h-5 w-5 text-red-600" />;
+      return <ExclamationTriangleIcon className="h-5 w-5 text-[var(--accent-red)]" />;
     case "medium":
       return <ExclamationTriangleIcon className="h-5 w-5 text-yellow-600" />;
     default:
-      return <ExclamationTriangleIcon className="h-5 w-5 text-blue-600" />;
+      return <ExclamationTriangleIcon className="h-5 w-5 text-[var(--accent-blue)]" />;
   }
 }
 
@@ -106,7 +106,7 @@ export default function SecurityAlertsPage() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">Security Alerts</h1>
-          <p className="text-gray-500">
+          <p className="text-[var(--text-secondary)]">
             Monitor and respond to security threats
           </p>
         </div>
@@ -116,7 +116,7 @@ export default function SecurityAlertsPage() {
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               !unresolvedOnly
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
             }`}
           >
             All
@@ -126,7 +126,7 @@ export default function SecurityAlertsPage() {
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               unresolvedOnly
                 ? "bg-blue-600 text-white"
-                : "bg-gray-100 text-gray-700 hover:bg-gray-200"
+                : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
             }`}
           >
             Unresolved ({unresolvedCount})
@@ -136,17 +136,17 @@ export default function SecurityAlertsPage() {
 
       {/* Messages */}
       {error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">{error}</div>
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{error}</div>
       )}
 
       {actionData?.error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {actionData.error}
         </div>
       )}
 
       {actionData?.success && (
-        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
           {actionData.message}
         </div>
       )}
@@ -156,7 +156,7 @@ export default function SecurityAlertsPage() {
         <CardHeader>
           <CardTitle className="text-lg">
             Alerts
-            <span className="ml-2 text-sm font-normal text-gray-500">
+            <span className="ml-2 text-sm font-normal text-[var(--text-secondary)]">
               {pagination.total.toLocaleString()} total
             </span>
           </CardTitle>
@@ -164,11 +164,11 @@ export default function SecurityAlertsPage() {
         <CardContent>
           {alerts.length === 0 ? (
             <div className="text-center py-12">
-              <CheckCircledIcon className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <CheckCircledIcon className="h-12 w-12 text-[var(--accent-green)] mx-auto mb-4" />
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
                 All clear!
               </h3>
-              <p className="text-gray-500">
+              <p className="text-[var(--text-secondary)]">
                 {unresolvedOnly
                   ? "No unresolved security alerts."
                   : "No security alerts found."}
@@ -200,19 +200,19 @@ export default function SecurityAlertsPage() {
                           {getAlertTypeLabel(alert.alert_type)}
                         </span>
                         {alert.resolved_at && (
-                          <span className="inline-flex items-center gap-1 text-xs text-green-600">
+                          <span className="inline-flex items-center gap-1 text-xs text-[var(--accent-green)]">
                             <CheckCircledIcon className="h-3 w-3" />
                             Resolved
                           </span>
                         )}
                       </div>
-                      <div className="text-sm text-gray-500 mb-2">
+                      <div className="text-sm text-[var(--text-secondary)] mb-2">
                         {formatDate(alert.created_at)}
                         {alert.user_id && ` • User: ${alert.user_id.slice(0, 8)}...`}
                       </div>
                       {alert.details && (
-                        <div className="text-sm bg-gray-50 p-2 rounded mt-2">
-                          <pre className="whitespace-pre-wrap text-xs text-gray-600">
+                        <div className="text-sm bg-[var(--sidebar-item-hover)] p-2 rounded mt-2">
+                          <pre className="whitespace-pre-wrap text-xs text-[var(--text-secondary)]">
                             {JSON.stringify(alert.details, null, 2)}
                           </pre>
                         </div>
@@ -242,7 +242,7 @@ export default function SecurityAlertsPage() {
           {/* Pagination */}
           {pagination.total_pages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
-              <div className="text-sm text-gray-500">
+              <div className="text-sm text-[var(--text-secondary)]">
                 Page {pagination.page} of {pagination.total_pages}
               </div>
               <div className="flex gap-2">
@@ -280,7 +280,7 @@ export default function SecurityAlertsPage() {
           <CardTitle className="text-lg">Security Recommendations</CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="text-sm text-gray-600 space-y-2">
+          <ul className="text-sm text-[var(--text-secondary)] space-y-2">
             <li>• Review and resolve critical alerts within 24 hours</li>
             <li>• Enable MFA for all admin accounts</li>
             <li>• Configure rate limiting to prevent brute force attacks</li>

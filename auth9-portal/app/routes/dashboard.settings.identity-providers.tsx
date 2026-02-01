@@ -197,19 +197,19 @@ export default function IdentityProvidersPage() {
 
       {/* Messages */}
       {loadError && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {loadError}
         </div>
       )}
 
       {actionData?.error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {actionData.error}
         </div>
       )}
 
       {actionData?.success && actionData.message && (
-        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
           {actionData.message}
         </div>
       )}
@@ -219,10 +219,10 @@ export default function IdentityProvidersPage() {
         <CardContent className="pt-6">
           {providers.length === 0 ? (
             <div className="text-center py-12">
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
                 No identity providers configured
               </h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-[var(--text-secondary)] mb-4">
                 Add social logins like Google or GitHub to make sign-in easier for your users.
               </p>
               <Button onClick={openCreateDialog}>
@@ -250,7 +250,7 @@ export default function IdentityProvidersPage() {
                       <div className="font-medium">
                         {provider.display_name || tmpl?.name || provider.alias}
                       </div>
-                      <div className="text-sm text-gray-500">
+                      <div className="text-sm text-[var(--text-secondary)]">
                         {provider.alias} • {provider.provider_id}
                       </div>
                     </div>
@@ -292,7 +292,7 @@ export default function IdentityProvidersPage() {
                           type="submit"
                           variant="ghost"
                           size="sm"
-                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                          className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
                           disabled={isSubmitting}
                         >
                           <TrashIcon className="h-4 w-4" />
@@ -368,7 +368,7 @@ export default function IdentityProvidersPage() {
                       className={`p-3 rounded-lg border-2 text-center transition-colors ${
                         selectedTemplate === tmpl.provider_id
                           ? "border-blue-500 bg-blue-50"
-                          : "border-gray-200 hover:border-gray-300"
+                          : "border-[var(--glass-border-subtle)] hover:border-gray-300"
                       }`}
                     >
                       <div

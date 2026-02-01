@@ -106,19 +106,19 @@ export default function PasskeysPage() {
 
       {/* Error/Success Messages */}
       {loadError && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {loadError}
         </div>
       )}
 
       {actionData?.error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {actionData.error}
         </div>
       )}
 
       {actionData?.success && (
-        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
           {actionData.message}
         </div>
       )}
@@ -131,13 +131,13 @@ export default function PasskeysPage() {
         <CardContent>
           {passkeys.length === 0 ? (
             <div className="text-center py-12">
-              <div className="mx-auto w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center mb-4">
-                <LockClosedIcon className="h-6 w-6 text-gray-400" />
+              <div className="mx-auto w-12 h-12 bg-[var(--sidebar-item-hover)] rounded-full flex items-center justify-center mb-4">
+                <LockClosedIcon className="h-6 w-6 text-[var(--text-tertiary)]" />
               </div>
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
                 No passkeys yet
               </h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-[var(--text-secondary)] mb-4">
                 Add a passkey to sign in faster and more securely.
               </p>
               <Form method="post">
@@ -167,8 +167,8 @@ export default function PasskeysPage() {
                     <div className="font-medium">
                       {passkey.user_label || "Passkey"}
                     </div>
-                    <div className="text-sm text-gray-500 mt-0.5">
-                      <span className="inline-block bg-gray-100 px-2 py-0.5 rounded text-xs mr-2">
+                    <div className="text-sm text-[var(--text-secondary)] mt-0.5">
+                      <span className="inline-block bg-[var(--sidebar-item-hover)] px-2 py-0.5 rounded text-xs mr-2">
                         {getCredentialTypeLabel(passkey.credential_type)}
                       </span>
                       Added {formatDate(passkey.created_at)}
@@ -181,7 +181,7 @@ export default function PasskeysPage() {
                       type="submit"
                       variant="ghost"
                       size="sm"
-                      className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                      className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
                       disabled={isSubmitting}
                     >
                       <TrashIcon className="h-4 w-4 mr-1" />
@@ -201,31 +201,31 @@ export default function PasskeysPage() {
           <CardTitle className="text-lg">About Passkeys</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4 text-sm text-gray-600">
+          <div className="space-y-4 text-sm text-[var(--text-secondary)]">
             <div className="flex gap-3">
               <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 font-bold">1</span>
+                <span className="text-[var(--accent-green)] font-bold">1</span>
               </div>
               <div>
-                <h4 className="font-medium text-gray-900">More secure</h4>
+                <h4 className="font-medium text-[var(--text-primary)]">More secure</h4>
                 <p>Passkeys are resistant to phishing and cannot be stolen like passwords.</p>
               </div>
             </div>
             <div className="flex gap-3">
               <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 font-bold">2</span>
+                <span className="text-[var(--accent-green)] font-bold">2</span>
               </div>
               <div>
-                <h4 className="font-medium text-gray-900">Fast & easy</h4>
+                <h4 className="font-medium text-[var(--text-primary)]">Fast & easy</h4>
                 <p>Sign in with a quick touch or glance using your device&apos;s biometrics.</p>
               </div>
             </div>
             <div className="flex gap-3">
               <div className="flex-shrink-0 w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <span className="text-green-600 font-bold">3</span>
+                <span className="text-[var(--accent-green)] font-bold">3</span>
               </div>
               <div>
-                <h4 className="font-medium text-gray-900">Works everywhere</h4>
+                <h4 className="font-medium text-[var(--text-primary)]">Works everywhere</h4>
                 <p>Passkeys sync across your devices when signed into the same account.</p>
               </div>
             </div>

@@ -11,7 +11,10 @@ const TabsList = forwardRef<
   <TabsPrimitive.List
     ref={ref}
     className={cn(
-      "inline-flex h-10 items-center justify-center rounded-md bg-gray-100 p-1 text-gray-500",
+      "inline-flex h-10 items-center justify-center gap-1 p-1 rounded-[12px]",
+      "bg-[var(--glass-bg)] backdrop-blur-[16px]",
+      "border border-[var(--glass-border-subtle)]",
+      "text-[var(--text-secondary)]",
       className
     )}
     {...props}
@@ -26,7 +29,13 @@ const TabsTrigger = forwardRef<
   <TabsPrimitive.Trigger
     ref={ref}
     className={cn(
-      "inline-flex items-center justify-center whitespace-nowrap rounded-sm px-3 py-1.5 text-sm font-medium ring-offset-white transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-gray-950 data-[state=active]:shadow-sm",
+      "inline-flex items-center justify-center whitespace-nowrap px-3 py-1.5 rounded-[8px]",
+      "text-[13px] font-medium",
+      "ring-offset-transparent transition-all duration-200",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2",
+      "disabled:pointer-events-none disabled:opacity-50",
+      "data-[state=active]:bg-[var(--sidebar-item-hover)] data-[state=active]:text-[var(--text-primary)] data-[state=active]:shadow-sm",
+      "hover:text-[var(--text-primary)]",
       className
     )}
     {...props}
@@ -41,7 +50,8 @@ const TabsContent = forwardRef<
   <TabsPrimitive.Content
     ref={ref}
     className={cn(
-      "mt-2 ring-offset-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-950 focus-visible:ring-offset-2",
+      "mt-2 ring-offset-transparent",
+      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent-blue)] focus-visible:ring-offset-2",
       className
     )}
     {...props}

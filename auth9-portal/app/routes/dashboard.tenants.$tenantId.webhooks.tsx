@@ -195,19 +195,19 @@ export default function WebhooksPage() {
 
       {/* Messages */}
       {loadError && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {loadError}
         </div>
       )}
 
       {actionData?.error && (
-        <div className="text-sm text-red-600 bg-red-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {actionData.error}
         </div>
       )}
 
       {actionData?.success && actionData.message && (
-        <div className="text-sm text-green-600 bg-green-50 p-3 rounded-md">
+        <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
           {actionData.message}
         </div>
       )}
@@ -218,10 +218,10 @@ export default function WebhooksPage() {
           {webhooks.length === 0 ? (
             <div className="text-center py-12">
               <RocketIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
                 No webhooks configured
               </h3>
-              <p className="text-gray-500 mb-4">
+              <p className="text-[var(--text-secondary)] mb-4">
                 Add a webhook to receive real-time event notifications.
               </p>
               <Button onClick={openCreateDialog}>
@@ -238,18 +238,18 @@ export default function WebhooksPage() {
                 >
                   <div
                     className={`w-3 h-3 rounded-full ${
-                      webhook.enabled ? "bg-green-500" : "bg-gray-300"
+                      webhook.enabled ? "bg-[var(--accent-green)]/100" : "bg-gray-300"
                     }`}
                   />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium">{webhook.name}</div>
-                    <div className="text-sm text-gray-500 truncate">
+                    <div className="text-sm text-[var(--text-secondary)] truncate">
                       {webhook.url}
                     </div>
-                    <div className="text-xs text-gray-400 mt-1">
+                    <div className="text-xs text-[var(--text-tertiary)] mt-1">
                       {webhook.events.length} events •{" "}
                       {webhook.failure_count > 0 && (
-                        <span className="text-red-500">
+                        <span className="text-[var(--accent-red)]">
                           {webhook.failure_count} failures •{" "}
                         </span>
                       )}
@@ -287,7 +287,7 @@ export default function WebhooksPage() {
                         type="submit"
                         variant="ghost"
                         size="sm"
-                        className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
                         disabled={isSubmitting}
                       >
                         <TrashIcon className="h-4 w-4" />
@@ -385,7 +385,7 @@ export default function WebhooksPage() {
                 }
                 placeholder="For HMAC signature verification"
               />
-              <p className="text-xs text-gray-500">
+              <p className="text-xs text-[var(--text-secondary)]">
                 Used to sign webhook payloads for verification.
               </p>
             </div>

@@ -161,14 +161,14 @@ export default function BrandingSettingsPage() {
   return (
     <div className="space-y-6">
       {actionData && "success" in actionData && actionData.success && (
-        <div className="rounded-apple bg-green-50 border border-green-200 p-4 text-sm text-green-700 flex items-center gap-2">
+        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)] flex items-center gap-2">
           <CheckCircledIcon className="h-4 w-4" />
           {actionData.message}
         </div>
       )}
 
       {actionData && "error" in actionData && (
-        <div className="rounded-apple bg-red-50 border border-red-200 p-4 text-sm text-red-700">
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
           {String(actionData.error)}
         </div>
       )}
@@ -186,7 +186,7 @@ export default function BrandingSettingsPage() {
 
             {/* Company Identity */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Company Identity</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Company Identity</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="company_name">Company Name</Label>
@@ -198,7 +198,7 @@ export default function BrandingSettingsPage() {
                     onChange={(e) => setCompanyName(e.target.value)}
                     maxLength={100}
                   />
-                  <p className="text-xs text-gray-500">Displayed on the login page</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Displayed on the login page</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="logo_url">Logo URL</Label>
@@ -210,7 +210,7 @@ export default function BrandingSettingsPage() {
                     value={logoUrl}
                     onChange={(e) => setLogoUrl(e.target.value)}
                   />
-                  <p className="text-xs text-gray-500">Recommended size: 200x50 pixels</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Recommended size: 200x50 pixels</p>
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="favicon_url">Favicon URL</Label>
@@ -222,14 +222,14 @@ export default function BrandingSettingsPage() {
                     value={faviconUrl}
                     onChange={(e) => setFaviconUrl(e.target.value)}
                   />
-                  <p className="text-xs text-gray-500">Browser tab icon (ICO or PNG)</p>
+                  <p className="text-xs text-[var(--text-secondary)]">Browser tab icon (ICO or PNG)</p>
                 </div>
               </div>
 
               {/* Logo Preview */}
               {logoUrl && (
-                <div className="mt-4 p-4 bg-gray-50 rounded-lg">
-                  <p className="text-sm text-gray-600 mb-2">Logo Preview:</p>
+                <div className="mt-4 p-4 bg-[var(--sidebar-item-hover)] rounded-lg">
+                  <p className="text-sm text-[var(--text-secondary)] mb-2">Logo Preview:</p>
                   <img
                     src={logoUrl}
                     alt="Logo preview"
@@ -244,11 +244,11 @@ export default function BrandingSettingsPage() {
 
             {/* Login Options */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Login Options</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Login Options</h3>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
                   <Label htmlFor="allow_registration">Allow Registration</Label>
-                  <p className="text-xs text-gray-500">
+                  <p className="text-xs text-[var(--text-secondary)]">
                     Show &quot;Create account&quot; link on the login page
                   </p>
                 </div>
@@ -270,7 +270,7 @@ export default function BrandingSettingsPage() {
 
             {/* Colors */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Colors</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Colors</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <ColorPicker
                   id="primary_color"
@@ -305,7 +305,7 @@ export default function BrandingSettingsPage() {
 
             {/* Preview */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">Preview</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Preview</h3>
               <div
                 className="rounded-lg p-8 flex items-center justify-center min-h-[300px]"
                 style={{ backgroundColor }}
@@ -369,9 +369,9 @@ export default function BrandingSettingsPage() {
 
             {/* Custom CSS */}
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-gray-900 border-b pb-2">
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">
                 Custom CSS
-                <span className="font-normal text-gray-500 ml-2">(Advanced)</span>
+                <span className="font-normal text-[var(--text-secondary)] ml-2">(Advanced)</span>
               </h3>
               <div className="space-y-2">
                 <Textarea
@@ -382,7 +382,7 @@ export default function BrandingSettingsPage() {
                   onChange={(e) => setCustomCss(e.target.value)}
                   className="font-mono text-sm min-h-[120px]"
                 />
-                <p className="text-xs text-gray-500">
+                <p className="text-xs text-[var(--text-secondary)]">
                   Add custom CSS rules to further customize the login page. Maximum 50KB.
                 </p>
               </div>

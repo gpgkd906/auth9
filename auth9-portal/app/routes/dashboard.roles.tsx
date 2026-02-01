@@ -258,8 +258,8 @@ export default function RolesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-gray-900">Roles & Permissions</h1>
-        <p className="text-sm text-gray-500">Manage roles, permissions, and role hierarchy per service</p>
+        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Roles & Permissions</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Manage roles, permissions, and role hierarchy per service</p>
       </div>
 
       <Tabs defaultValue="roles" className="w-full">
@@ -282,10 +282,10 @@ export default function RolesPage() {
               {data.entries.map((entry) => (
                 <div
                   key={entry.service.id}
-                  className="rounded-apple border border-gray-100 p-4"
+                  className="rounded-xl border border-[var(--glass-border-subtle)] p-4"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-base font-semibold text-gray-900">
+                    <div className="text-base font-semibold text-[var(--text-primary)]">
                       {entry.service.name}
                     </div>
                     <Button size="sm" variant="outline" onClick={() => setCreateRoleServiceId(entry.service.id)}>
@@ -293,16 +293,16 @@ export default function RolesPage() {
                     </Button>
                   </div>
 
-                  <div className="divide-y divide-gray-100 border-t border-gray-100">
+                  <div className="divide-y divide-[var(--glass-border-subtle)] border-t border-[var(--glass-border-subtle)]">
                     {entry.roles.map((role) => (
                       <div key={role.id} className="flex items-center justify-between py-2 text-sm">
                         <div className="flex-1">
-                          <span className="font-medium text-gray-900">{role.name}</span>
+                          <span className="font-medium text-[var(--text-primary)]">{role.name}</span>
                           {role.description && (
-                            <span className="ml-2 text-gray-500">- {role.description}</span>
+                            <span className="ml-2 text-[var(--text-secondary)]">- {role.description}</span>
                           )}
                           {role.parent_role_id && (
-                            <span className="ml-2 text-xs text-blue-600">
+                            <span className="ml-2 text-xs text-[var(--accent-blue)]">
                               (inherits from {entry.roles.find(r => r.id === role.parent_role_id)?.name || "parent"})
                             </span>
                           )}
@@ -330,7 +330,7 @@ export default function RolesPage() {
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
-                                className="text-red-600 focus:text-red-600"
+                                className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
                                 onClick={() => {
                                   if (confirm("Are you sure you want to delete this role?")) {
                                     submit({
@@ -349,7 +349,7 @@ export default function RolesPage() {
                       </div>
                     ))}
                     {entry.roles.length === 0 && (
-                      <div className="py-4 text-center text-xs text-gray-500">
+                      <div className="py-4 text-center text-xs text-[var(--text-secondary)]">
                         No roles created yet for this service
                       </div>
                     )}
@@ -357,7 +357,7 @@ export default function RolesPage() {
                 </div>
               ))}
               {data.entries.length === 0 && (
-                <div className="py-8 text-center text-sm text-gray-500">No services found</div>
+                <div className="py-8 text-center text-sm text-[var(--text-secondary)]">No services found</div>
               )}
             </div>
           </Card>
@@ -376,10 +376,10 @@ export default function RolesPage() {
               {data.entries.map((entry) => (
                 <div
                   key={entry.service.id}
-                  className="rounded-apple border border-gray-100 p-4"
+                  className="rounded-xl border border-[var(--glass-border-subtle)] p-4"
                 >
                   <div className="flex items-center justify-between mb-4">
-                    <div className="text-base font-semibold text-gray-900">
+                    <div className="text-base font-semibold text-[var(--text-primary)]">
                       {entry.service.name}
                     </div>
                     <Button size="sm" variant="outline" onClick={() => setCreatePermissionServiceId(entry.service.id)}>
@@ -389,25 +389,25 @@ export default function RolesPage() {
 
                   <div className="border rounded-md overflow-hidden">
                     <table className="w-full text-sm">
-                      <thead className="bg-gray-50">
+                      <thead className="bg-[var(--sidebar-item-hover)]">
                         <tr>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Code</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Name</th>
-                          <th className="px-4 py-2 text-left font-medium text-gray-700">Description</th>
-                          <th className="px-4 py-2 text-right font-medium text-gray-700">Actions</th>
+                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">Code</th>
+                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">Name</th>
+                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">Description</th>
+                          <th className="px-4 py-2 text-right font-medium text-[var(--text-secondary)]">Actions</th>
                         </tr>
                       </thead>
-                      <tbody className="divide-y divide-gray-100">
+                      <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                         {entry.permissions.map((permission) => (
-                          <tr key={permission.id} className="hover:bg-gray-50">
-                            <td className="px-4 py-2 font-mono text-xs text-gray-700">{permission.code}</td>
-                            <td className="px-4 py-2 text-gray-900">{permission.name}</td>
-                            <td className="px-4 py-2 text-gray-500">{permission.description || "-"}</td>
+                          <tr key={permission.id} className="hover:bg-[var(--sidebar-item-hover)]">
+                            <td className="px-4 py-2 font-mono text-xs text-[var(--text-secondary)]">{permission.code}</td>
+                            <td className="px-4 py-2 text-[var(--text-primary)]">{permission.name}</td>
+                            <td className="px-4 py-2 text-[var(--text-secondary)]">{permission.description || "-"}</td>
                             <td className="px-4 py-2 text-right">
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                className="text-red-600 hover:text-red-700 h-7 px-2"
+                                className="text-[var(--accent-red)] hover:text-[var(--accent-red)] h-7 px-2"
                                 onClick={() => {
                                   if (confirm("Are you sure you want to delete this permission?")) {
                                     submit({
@@ -425,7 +425,7 @@ export default function RolesPage() {
                       </tbody>
                     </table>
                     {entry.permissions.length === 0 && (
-                      <div className="py-4 text-center text-xs text-gray-500">
+                      <div className="py-4 text-center text-xs text-[var(--text-secondary)]">
                         No permissions created yet for this service
                       </div>
                     )}
@@ -460,13 +460,13 @@ export default function RolesPage() {
                         style={{ paddingLeft: `${level * 24 + 16}px` }}
                       >
                         {level > 0 && (
-                          <span className="absolute left-0 h-full border-l-2 border-gray-200" style={{ left: `${(level - 1) * 24 + 24}px` }} />
+                          <span className="absolute left-0 h-full border-l-2 border-[var(--glass-border-subtle)]" style={{ left: `${(level - 1) * 24 + 24}px` }} />
                         )}
                         <div className="flex items-center gap-2">
-                          <span className={`w-2 h-2 rounded-full ${level === 0 ? 'bg-blue-500' : 'bg-gray-400'}`} />
-                          <span className="font-medium text-gray-900">{role.name}</span>
+                          <span className={`w-2 h-2 rounded-full ${level === 0 ? 'bg-[var(--accent-blue)]' : 'bg-gray-400'}`} />
+                          <span className="font-medium text-[var(--text-primary)]">{role.name}</span>
                           {role.description && (
-                            <span className="text-gray-500 text-xs">({role.description})</span>
+                            <span className="text-[var(--text-secondary)] text-xs">({role.description})</span>
                           )}
                         </div>
                       </div>
@@ -478,29 +478,29 @@ export default function RolesPage() {
                 return (
                   <div
                     key={entry.service.id}
-                    className="rounded-apple border border-gray-100 p-4"
+                    className="rounded-xl border border-[var(--glass-border-subtle)] p-4"
                   >
-                    <div className="text-base font-semibold text-gray-900 mb-4">
+                    <div className="text-base font-semibold text-[var(--text-primary)] mb-4">
                       {entry.service.name}
                     </div>
 
-                    <div className="border-t border-gray-100">
+                    <div className="border-t border-[var(--glass-border-subtle)]">
                       {rootRoles.length > 0 ? (
                         rootRoles.map(role => renderRoleTree(role))
                       ) : (
-                        <div className="py-4 text-center text-xs text-gray-500">
+                        <div className="py-4 text-center text-xs text-[var(--text-secondary)]">
                           No roles defined for this service
                         </div>
                       )}
                     </div>
 
                     {childRoles.filter(r => !entry.roles.some(p => p.id === r.parent_role_id)).length > 0 && (
-                      <div className="mt-4 pt-4 border-t border-gray-100">
-                        <div className="text-xs text-orange-600 mb-2">Orphaned Roles (invalid parent):</div>
+                      <div className="mt-4 pt-4 border-t border-[var(--glass-border-subtle)]">
+                        <div className="text-xs text-[var(--accent-orange)] mb-2">Orphaned Roles (invalid parent):</div>
                         {childRoles
                           .filter(r => !entry.roles.some(p => p.id === r.parent_role_id))
                           .map(role => (
-                            <div key={role.id} className="text-sm text-gray-500 pl-4">
+                            <div key={role.id} className="text-sm text-[var(--text-secondary)] pl-4">
                               {role.name}
                             </div>
                           ))
@@ -538,7 +538,7 @@ export default function RolesPage() {
               <select
                 id="create-parent"
                 name="parent_role_id"
-                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+                className="w-full px-3 py-2 border border-[var(--glass-border-subtle)] rounded-md text-sm"
               >
                 <option value="">No parent (root role)</option>
                 {createRoleServiceId && getParentRoleOptions(createRoleServiceId).map(role => (
@@ -547,7 +547,7 @@ export default function RolesPage() {
               </select>
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{String(actionData.error)}</p>
+              <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateRoleServiceId(null)}>
@@ -586,7 +586,7 @@ export default function RolesPage() {
                 id="edit-parent"
                 name="parent_role_id"
                 defaultValue={editingRole?.parent_role_id || ""}
-                className="w-full px-3 py-2 border border-gray-200 rounded-md text-sm"
+                className="w-full px-3 py-2 border border-[var(--glass-border-subtle)] rounded-md text-sm"
               >
                 <option value="">No parent (root role)</option>
                 {editingRole && getParentRoleOptions(editingRole.service_id, editingRole.id).map(role => (
@@ -595,7 +595,7 @@ export default function RolesPage() {
               </select>
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{String(actionData.error)}</p>
+              <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingRole(null)}>
@@ -622,7 +622,7 @@ export default function RolesPage() {
             <div className="space-y-2">
               <Label htmlFor="create-perm-code">Permission Code</Label>
               <Input id="create-perm-code" name="code" placeholder="user:read" required />
-              <p className="text-xs text-gray-500">Use format like &quot;resource:action&quot; (e.g., user:read, post:write)</p>
+              <p className="text-xs text-[var(--text-secondary)]">Use format like &quot;resource:action&quot; (e.g., user:read, post:write)</p>
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-perm-name">Display Name</Label>
@@ -633,7 +633,7 @@ export default function RolesPage() {
               <Input id="create-perm-description" name="description" placeholder="Allows reading user information" />
             </div>
             {actionData && "error" in actionData && (
-              <p className="text-sm text-red-500">{String(actionData.error)}</p>
+              <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreatePermissionServiceId(null)}>
@@ -661,7 +661,7 @@ export default function RolesPage() {
           </DialogHeader>
           <div className="max-h-[400px] overflow-y-auto">
             {managingPermissionsRole?.permissions.length === 0 ? (
-              <div className="py-8 text-center text-sm text-gray-500">
+              <div className="py-8 text-center text-sm text-[var(--text-secondary)]">
                 No permissions defined for this service.
                 <br />
                 Create permissions in the Permissions tab first.
@@ -673,7 +673,7 @@ export default function RolesPage() {
                   return (
                     <label
                       key={permission.id}
-                      className="flex items-start gap-3 p-3 rounded-lg border border-gray-100 hover:bg-gray-50 cursor-pointer"
+                      className="flex items-start gap-3 p-3 rounded-lg border border-[var(--glass-border-subtle)] hover:bg-[var(--sidebar-item-hover)] cursor-pointer"
                     >
                       <Checkbox
                         checked={isAssigned}
@@ -682,17 +682,17 @@ export default function RolesPage() {
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded">
+                          <span className="font-mono text-xs bg-[var(--sidebar-item-hover)] px-1.5 py-0.5 rounded">
                             {permission.code}
                           </span>
-                          <span className="font-medium text-sm text-gray-900">{permission.name}</span>
+                          <span className="font-medium text-sm text-[var(--text-primary)]">{permission.name}</span>
                         </div>
                         {permission.description && (
-                          <p className="text-xs text-gray-500 mt-1">{permission.description}</p>
+                          <p className="text-xs text-[var(--text-secondary)] mt-1">{permission.description}</p>
                         )}
                       </div>
                       {isAssigned && (
-                        <CheckIcon className="h-4 w-4 text-green-600 mt-0.5" />
+                        <CheckIcon className="h-4 w-4 text-[var(--accent-green)] mt-0.5" />
                       )}
                     </label>
                   );
