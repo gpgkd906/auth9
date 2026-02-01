@@ -99,7 +99,7 @@ export default function ServicesPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Services</h1>
+          <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Services</h1>
           <p className="text-sm text-[var(--text-secondary)]">Register and manage OIDC clients</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>

@@ -133,7 +133,7 @@ export default function ServiceDetailPage() {
                     <a href="/dashboard/services"><ArrowLeftIcon className="h-4 w-4" /></a>
                 </Button>
                 <div>
-                    <h1 className="text-2xl font-semibold text-[var(--text-primary)]">{service.name}</h1>
+                    <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{service.name}</h1>
                     <p className="text-sm text-[var(--text-secondary)]">Service Configuration and Clients</p>
                 </div>
             </div>

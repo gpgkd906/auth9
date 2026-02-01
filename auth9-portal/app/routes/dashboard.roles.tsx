@@ -258,7 +258,7 @@ export default function RolesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold text-[var(--text-primary)]">Roles & Permissions</h1>
+        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Roles & Permissions</h1>
         <p className="text-sm text-[var(--text-secondary)]">Manage roles, permissions, and role hierarchy per service</p>
       </div>
 

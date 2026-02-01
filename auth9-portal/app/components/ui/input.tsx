@@ -9,7 +9,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
       <input
         type={type}
         className={cn(
-          "flex h-11 w-full rounded-[10px] px-4 py-2 text-[14px]",
+          "flex h-10 w-full rounded-[10px] px-4 py-2.5 text-[14px]",
           "bg-[var(--sidebar-item-hover)] text-[var(--text-primary)]",
           "border border-[var(--glass-border-subtle)]",
           "placeholder:text-[var(--text-tertiary)]",

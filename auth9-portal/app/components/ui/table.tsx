@@ -80,7 +80,7 @@ const TableHead = forwardRef<
   <th
     ref={ref}
     className={cn(
-      "h-12 px-4 text-left align-middle",
+      "h-10 px-4 text-left align-middle",
       "text-[11px] font-semibold uppercase tracking-[0.04em]",
       "text-[var(--text-tertiary)]",
       "[&:has([role=checkbox])]:pr-0",
@@ -98,7 +98,7 @@ const TableCell = forwardRef<
   <td
     ref={ref}
     className={cn(
-      "p-4 align-middle text-[14px] text-[var(--text-secondary)]",
+      "px-4 py-3 align-middle text-[13px] text-[var(--text-secondary)]",
       "[&:has([role=checkbox])]:pr-0",
       className
     )}

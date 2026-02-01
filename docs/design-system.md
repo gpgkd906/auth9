@@ -94,17 +94,23 @@ Auth9 Portal uses the **Liquid Glass** design language, inspired by Apple's WWDC
 
 ## Spacing & Layout
 
-### Spacing Scale
+### Spacing Scale (Compact)
 
 | Size | Value | Usage |
 |------|-------|-------|
 | `xs` | 4px | Inline spacing, icon gaps |
 | `sm` | 8px | Compact element spacing |
 | `md` | 12px | Default element spacing |
-| `lg` | 16px | Section padding |
+| `lg` | 16px | Section padding, grid gaps |
 | `xl` | 20px | Card padding |
-| `2xl` | 24px | Large section spacing |
-| `3xl` | 32px | Page-level spacing |
+| `2xl` | 24px | Page section spacing |
+
+### Layout Guidelines
+
+- **Grid gaps**: Use `gap-4` (16px) for stat cards, content grids
+- **Section spacing**: Use `space-y-6` (24px) between major page sections
+- **Card padding**: `p-5` (20px) for card headers/content
+- **Table cells**: `px-4 py-3` (16px horizontal, 12px vertical)
 
 ### Border Radius
 
@@ -433,16 +439,19 @@ font-family: "Inter", -apple-system, BlinkMacSystemFont,
              "SF Pro Display", "SF Pro Text", sans-serif;
 ```
 
-### Type Scale
+### Type Scale (Compact)
 
-| Element | Size | Weight | Line Height |
-|---------|------|--------|-------------|
-| Page Title | 28px | 700 | 1.2 |
-| Card Title | 17px | 600 | 1.3 |
-| Body | 14px | 400 | 1.5 |
-| Small | 13px | 400 | 1.4 |
-| Caption | 11px | 500 | 1.3 |
-| Nav Section | 11px | 600 | 1.0 |
+| Element | Size | Weight | Line Height | Notes |
+|---------|------|--------|-------------|-------|
+| Dashboard Title | 28px | 700 | 1.2 | Main dashboard heading |
+| Page Title | 24px | 600 | 1.2 | Sub-page headings |
+| Stat Value | 26-28px | 700 | 1.0 | Numeric stats |
+| Card Title | 16-17px | 600 | 1.3 | Card headers |
+| Body | 13-14px | 400 | 1.5 | General text |
+| Small/Label | 13px | 500 | 1.4 | Form labels, descriptions |
+| Caption | 11-12px | 500 | 1.3 | Timestamps, metadata |
+| Table Header | 11px | 600 | 1.0 | Uppercase table headers |
+| Nav Section | 11px | 600 | 1.0 | Sidebar section titles |
 
 ### Letter Spacing
 

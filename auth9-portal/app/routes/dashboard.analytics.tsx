@@ -35,10 +35,10 @@ function StatCard({
 }) {
   return (
     <Card>
-      <CardContent className="pt-6">
+      <CardContent className="pt-5">
         <div className="text-sm font-medium text-[var(--text-secondary)]">{title}</div>
-        <div className="mt-2 flex items-baseline gap-2">
-          <span className="text-3xl font-bold">{value}</span>
+        <div className="mt-1 flex items-baseline gap-2">
+          <span className="text-[26px] font-bold tracking-tight">{value}</span>
           {trend && (
             <span
               className={`text-sm font-medium ${
@@ -178,7 +178,7 @@ export default function AnalyticsPage() {
 
           {/* Quick Links */}
           <Card>
-            <CardContent className="pt-6">
+            <CardContent className="pt-5">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-medium">View Login Events</h3>
