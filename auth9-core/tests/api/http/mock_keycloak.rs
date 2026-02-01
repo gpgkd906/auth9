@@ -232,7 +232,9 @@ impl MockKeycloakServer {
     /// Mock successful federated identity removal
     pub async fn mock_remove_federated_identity_success(&self) {
         Mock::given(method("DELETE"))
-            .and(path_regex(r"/admin/realms/test/users/[^/]+/federated-identity/[^/]+$"))
+            .and(path_regex(
+                r"/admin/realms/test/users/[^/]+/federated-identity/[^/]+$",
+            ))
             .respond_with(ResponseTemplate::new(204))
             .mount(&self.server)
             .await;

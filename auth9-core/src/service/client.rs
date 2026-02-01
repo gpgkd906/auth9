@@ -281,7 +281,10 @@ impl<R: ServiceRepository, RR: RbacRepository> ClientService<R, RR> {
         );
 
         // 2. Clear parent_role_id references before deleting roles
-        let cleared_refs = self.rbac_repo.clear_parent_role_references(service_id).await?;
+        let cleared_refs = self
+            .rbac_repo
+            .clear_parent_role_references(service_id)
+            .await?;
         warn!(
             service_id = %id,
             cleared_refs = cleared_refs,
@@ -297,7 +300,10 @@ impl<R: ServiceRepository, RR: RbacRepository> ClientService<R, RR> {
         );
 
         // 4. Delete permissions for this service
-        let deleted_perms = self.rbac_repo.delete_permissions_by_service(service_id).await?;
+        let deleted_perms = self
+            .rbac_repo
+            .delete_permissions_by_service(service_id)
+            .await?;
         warn!(
             service_id = %id,
             deleted_perms = deleted_perms,
@@ -1069,7 +1075,9 @@ mod tests {
             .expect_clear_parent_role_references()
             .returning(|_| Ok(0));
 
-        rbac_repo.expect_delete_roles_by_service().returning(|_| Ok(3));
+        rbac_repo
+            .expect_delete_roles_by_service()
+            .returning(|_| Ok(3));
 
         rbac_repo
             .expect_delete_permissions_by_service()

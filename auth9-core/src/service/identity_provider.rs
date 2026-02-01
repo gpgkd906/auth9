@@ -51,7 +51,10 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
     }
 
     /// Create an identity provider
-    pub async fn create_provider(&self, input: CreateIdentityProviderInput) -> Result<IdentityProvider> {
+    pub async fn create_provider(
+        &self,
+        input: CreateIdentityProviderInput,
+    ) -> Result<IdentityProvider> {
         input.validate()?;
 
         let kc_provider = KeycloakIdentityProvider {
@@ -96,7 +99,9 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             config: input.config.unwrap_or(existing.config),
         };
 
-        self.keycloak.update_identity_provider(alias, &updated).await?;
+        self.keycloak
+            .update_identity_provider(alias, &updated)
+            .await?;
 
         // Fetch the updated provider
         self.get_provider(alias).await
@@ -117,7 +122,10 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
     // ========================================================================
 
     /// Get linked identities for a user
-    pub async fn get_user_identities(&self, user_id: StringUuid) -> Result<Vec<LinkedIdentityInfo>> {
+    pub async fn get_user_identities(
+        &self,
+        user_id: StringUuid,
+    ) -> Result<Vec<LinkedIdentityInfo>> {
         let identities = self.linked_identity_repo.list_by_user(user_id).await?;
         Ok(identities.into_iter().map(Into::into).collect())
     }
@@ -137,7 +145,9 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
 
         // Verify the identity belongs to the user
         if identity.user_id != user_id {
-            return Err(AppError::Forbidden("Cannot unlink another user's identity".to_string()));
+            return Err(AppError::Forbidden(
+                "Cannot unlink another user's identity".to_string(),
+            ));
         }
 
         // Get the user to get their Keycloak ID
@@ -234,7 +244,9 @@ mod tests {
         let oidc = templates.iter().find(|t| t.provider_id == "oidc");
         assert!(oidc.is_some());
         let oidc = oidc.unwrap();
-        assert!(oidc.required_config.contains(&"authorizationUrl".to_string()));
+        assert!(oidc
+            .required_config
+            .contains(&"authorizationUrl".to_string()));
         assert!(oidc.required_config.contains(&"tokenUrl".to_string()));
     }
 

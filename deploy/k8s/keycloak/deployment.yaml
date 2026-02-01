@@ -65,6 +65,9 @@ spec:
             - name: http
               containerPort: 8080
               protocol: TCP
+            - name: jgroups
+              containerPort: 7800
+              protocol: TCP
           envFrom:
             - configMapRef:
                 name: keycloak-config

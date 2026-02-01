@@ -1,7 +1,9 @@
 //! Security alert repository
 
 #[allow(unused_imports)]
-use crate::domain::{AlertSeverity, CreateSecurityAlertInput, SecurityAlert, SecurityAlertType, StringUuid};
+use crate::domain::{
+    AlertSeverity, CreateSecurityAlertInput, SecurityAlert, SecurityAlertType, StringUuid,
+};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
@@ -13,8 +15,18 @@ pub trait SecurityAlertRepository: Send + Sync {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<SecurityAlert>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>>;
     async fn list_unresolved(&self, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>>;
-    async fn list_by_user(&self, user_id: StringUuid, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>>;
-    async fn list_by_severity(&self, severity: AlertSeverity, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>>;
+    async fn list_by_user(
+        &self,
+        user_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SecurityAlert>>;
+    async fn list_by_severity(
+        &self,
+        severity: AlertSeverity,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SecurityAlert>>;
     async fn count(&self) -> Result<i64>;
     async fn count_unresolved(&self) -> Result<i64>;
     async fn resolve(&self, id: StringUuid, resolved_by: StringUuid) -> Result<SecurityAlert>;
@@ -44,7 +56,7 @@ impl SecurityAlertRepository for SecurityAlertRepositoryImpl {
         let details_json = input
             .details
             .as_ref()
-            .map(|d| serde_json::to_string(d))
+            .map(serde_json::to_string)
             .transpose()
             .map_err(|e| AppError::Internal(e.into()))?;
 
@@ -129,7 +141,12 @@ impl SecurityAlertRepository for SecurityAlertRepositoryImpl {
         Ok(alerts)
     }
 
-    async fn list_by_user(&self, user_id: StringUuid, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>> {
+    async fn list_by_user(
+        &self,
+        user_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SecurityAlert>> {
         let alerts = sqlx::query_as::<_, SecurityAlert>(
             r#"
             SELECT id, user_id, tenant_id, alert_type, severity, details,
@@ -149,7 +166,12 @@ impl SecurityAlertRepository for SecurityAlertRepositoryImpl {
         Ok(alerts)
     }
 
-    async fn list_by_severity(&self, severity: AlertSeverity, offset: i64, limit: i64) -> Result<Vec<SecurityAlert>> {
+    async fn list_by_severity(
+        &self,
+        severity: AlertSeverity,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<SecurityAlert>> {
         let alerts = sqlx::query_as::<_, SecurityAlert>(
             r#"
             SELECT id, user_id, tenant_id, alert_type, severity, details,
@@ -177,11 +199,10 @@ impl SecurityAlertRepository for SecurityAlertRepositoryImpl {
     }
 
     async fn count_unresolved(&self) -> Result<i64> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM security_alerts WHERE resolved_at IS NULL",
-        )
-        .fetch_one(&self.pool)
-        .await?;
+        let row: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM security_alerts WHERE resolved_at IS NULL")
+                .fetch_one(&self.pool)
+                .await?;
         Ok(row.0)
     }
 
@@ -252,8 +273,7 @@ mod tests {
     async fn test_mock_security_alert_repository() {
         let mut mock = MockSecurityAlertRepository::new();
 
-        mock.expect_count_unresolved()
-            .returning(|| Ok(5));
+        mock.expect_count_unresolved().returning(|| Ok(5));
 
         let count = mock.count_unresolved().await.unwrap();
         assert_eq!(count, 5);
@@ -263,17 +283,16 @@ mod tests {
     async fn test_mock_create() {
         let mut mock = MockSecurityAlertRepository::new();
 
-        mock.expect_create()
-            .returning(|input| {
-                Ok(SecurityAlert {
-                    user_id: input.user_id,
-                    tenant_id: input.tenant_id,
-                    alert_type: input.alert_type.clone(),
-                    severity: input.severity.clone(),
-                    details: input.details.clone(),
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                user_id: input.user_id,
+                tenant_id: input.tenant_id,
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                details: input.details.clone(),
+                ..Default::default()
+            })
+        });
 
         let input = CreateSecurityAlertInput {
             user_id: Some(StringUuid::new_v4()),
@@ -348,7 +367,10 @@ mod tests {
                 }])
             });
 
-        let alerts = mock.list_by_severity(AlertSeverity::Critical, 0, 10).await.unwrap();
+        let alerts = mock
+            .list_by_severity(AlertSeverity::Critical, 0, 10)
+            .await
+            .unwrap();
         assert_eq!(alerts.len(), 1);
         assert_eq!(alerts[0].severity, AlertSeverity::Critical);
     }

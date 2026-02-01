@@ -20,3 +20,25 @@ spec:
       port: 9000
       targetPort: 9000
       protocol: TCP
+---
+# Headless Service for JGroups cluster discovery (DNS_PING)
+# This allows Keycloak pods to discover each other via DNS
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-headless
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: auth-engine
+    app.kubernetes.io/part-of: auth9
+spec:
+  clusterIP: None
+  publishNotReadyAddresses: true
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: jgroups
+      port: 7800
+      targetPort: 7800
+      protocol: TCP

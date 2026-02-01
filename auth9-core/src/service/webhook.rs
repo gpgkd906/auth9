@@ -84,19 +84,16 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
 
             // Fire and forget - don't block on webhook delivery
             tokio::spawn(async move {
-                let result =
-                    deliver_webhook(&http_client, &webhook_clone, &event_clone).await;
+                let result = deliver_webhook(&http_client, &webhook_clone, &event_clone).await;
 
                 // Update the webhook status
                 let success = result.is_ok();
-                let _ = webhook_repo.update_triggered(webhook_clone.id, success).await;
+                let _ = webhook_repo
+                    .update_triggered(webhook_clone.id, success)
+                    .await;
 
                 if let Err(e) = result {
-                    tracing::warn!(
-                        "Webhook delivery failed for {}: {}",
-                        webhook_clone.id,
-                        e
-                    );
+                    tracing::warn!("Webhook delivery failed for {}: {}", webhook_clone.id, e);
                 }
             });
         }
@@ -155,8 +152,7 @@ async fn deliver_webhook(
     webhook: &Webhook,
     event: &WebhookEvent,
 ) -> Result<WebhookResponse> {
-    let payload = serde_json::to_string(event)
-        .map_err(|e| AppError::Internal(e.into()))?;
+    let payload = serde_json::to_string(event).map_err(|e| AppError::Internal(e.into()))?;
 
     let mut request = client
         .post(&webhook.url)
@@ -235,18 +231,17 @@ mod tests {
         let mut mock = MockWebhookRepository::new();
         let tenant_id = StringUuid::new_v4();
 
-        mock.expect_create()
-            .returning(|tenant_id, input| {
-                Ok(Webhook {
-                    id: StringUuid::new_v4(),
-                    tenant_id,
-                    name: input.name.clone(),
-                    url: input.url.clone(),
-                    events: input.events.clone(),
-                    enabled: input.enabled,
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|tenant_id, input| {
+            Ok(Webhook {
+                id: StringUuid::new_v4(),
+                tenant_id,
+                name: input.name.clone(),
+                url: input.url.clone(),
+                events: input.events.clone(),
+                enabled: input.enabled,
+                ..Default::default()
+            })
+        });
 
         let service = WebhookService::new(Arc::new(mock));
 
@@ -294,9 +289,7 @@ mod tests {
         let mut mock = MockWebhookRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let service = WebhookService::new(Arc::new(mock));
         let result = service.delete(id).await;

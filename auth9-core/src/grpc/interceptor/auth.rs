@@ -84,7 +84,10 @@ pub trait GrpcAuthenticator: Send + Sync {
 pub struct NoOpAuthenticator;
 
 impl GrpcAuthenticator for NoOpAuthenticator {
-    fn authenticate(&self, _metadata: &tonic::metadata::MetadataMap) -> Result<AuthContext, Status> {
+    fn authenticate(
+        &self,
+        _metadata: &tonic::metadata::MetadataMap,
+    ) -> Result<AuthContext, Status> {
         Ok(AuthContext::none())
     }
 
@@ -107,7 +110,10 @@ pub enum AuthenticatorMode {
 
 impl AuthenticatorMode {
     /// Authenticate a request
-    pub fn authenticate(&self, metadata: &tonic::metadata::MetadataMap) -> Result<AuthContext, Status> {
+    pub fn authenticate(
+        &self,
+        metadata: &tonic::metadata::MetadataMap,
+    ) -> Result<AuthContext, Status> {
         match self {
             AuthenticatorMode::None => Ok(AuthContext::none()),
             AuthenticatorMode::ApiKey(auth) => auth.authenticate(metadata),
@@ -189,7 +195,10 @@ mod tests {
             .with_metadata("tenant_id", "tenant-123")
             .with_metadata("service", "my-service");
 
-        assert_eq!(ctx.metadata.get("tenant_id"), Some(&"tenant-123".to_string()));
+        assert_eq!(
+            ctx.metadata.get("tenant_id"),
+            Some(&"tenant-123".to_string())
+        );
         assert_eq!(ctx.metadata.get("service"), Some(&"my-service".to_string()));
     }
 
@@ -258,7 +267,8 @@ mod tests {
 
     #[test]
     fn test_auth_interceptor_api_key() {
-        let authenticator = super::super::api_key::ApiKeyAuthenticator::new(vec!["test-key".to_string()]);
+        let authenticator =
+            super::super::api_key::ApiKeyAuthenticator::new(vec!["test-key".to_string()]);
         let interceptor = AuthInterceptor::api_key(authenticator);
 
         // Should fail without API key

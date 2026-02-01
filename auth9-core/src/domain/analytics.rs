@@ -46,9 +46,7 @@ impl std::fmt::Display for LoginEventType {
 }
 
 impl<'r> sqlx::Decode<'r, sqlx::MySql> for LoginEventType {
-    fn decode(
-        value: sqlx::mysql::MySqlValueRef<'r>,
-    ) -> Result<Self, sqlx::error::BoxDynError> {
+    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s: String = sqlx::Decode::<'r, sqlx::MySql>::decode(value)?;
         s.parse().map_err(|e: String| e.into())
     }
@@ -142,9 +140,7 @@ impl std::fmt::Display for SecurityAlertType {
 }
 
 impl<'r> sqlx::Decode<'r, sqlx::MySql> for SecurityAlertType {
-    fn decode(
-        value: sqlx::mysql::MySqlValueRef<'r>,
-    ) -> Result<Self, sqlx::error::BoxDynError> {
+    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s: String = sqlx::Decode::<'r, sqlx::MySql>::decode(value)?;
         s.parse().map_err(|e: String| e.into())
     }
@@ -206,9 +202,7 @@ impl std::fmt::Display for AlertSeverity {
 }
 
 impl<'r> sqlx::Decode<'r, sqlx::MySql> for AlertSeverity {
-    fn decode(
-        value: sqlx::mysql::MySqlValueRef<'r>,
-    ) -> Result<Self, sqlx::error::BoxDynError> {
+    fn decode(value: sqlx::mysql::MySqlValueRef<'r>) -> Result<Self, sqlx::error::BoxDynError> {
         let s: String = sqlx::Decode::<'r, sqlx::MySql>::decode(value)?;
         s.parse().map_err(|e: String| e.into())
     }
@@ -400,14 +394,23 @@ mod tests {
     #[test]
     fn test_login_event_type_display() {
         assert_eq!(format!("{}", LoginEventType::Success), "success");
-        assert_eq!(format!("{}", LoginEventType::FailedPassword), "failed_password");
+        assert_eq!(
+            format!("{}", LoginEventType::FailedPassword),
+            "failed_password"
+        );
         assert_eq!(format!("{}", LoginEventType::FailedMfa), "failed_mfa");
     }
 
     #[test]
     fn test_login_event_type_from_str() {
-        assert_eq!("success".parse::<LoginEventType>().unwrap(), LoginEventType::Success);
-        assert_eq!("failed_password".parse::<LoginEventType>().unwrap(), LoginEventType::FailedPassword);
+        assert_eq!(
+            "success".parse::<LoginEventType>().unwrap(),
+            LoginEventType::Success
+        );
+        assert_eq!(
+            "failed_password".parse::<LoginEventType>().unwrap(),
+            LoginEventType::FailedPassword
+        );
         assert!("invalid".parse::<LoginEventType>().is_err());
     }
 
@@ -415,7 +418,10 @@ mod tests {
     fn test_security_alert_type_display() {
         assert_eq!(format!("{}", SecurityAlertType::BruteForce), "brute_force");
         assert_eq!(format!("{}", SecurityAlertType::NewDevice), "new_device");
-        assert_eq!(format!("{}", SecurityAlertType::ImpossibleTravel), "impossible_travel");
+        assert_eq!(
+            format!("{}", SecurityAlertType::ImpossibleTravel),
+            "impossible_travel"
+        );
     }
 
     #[test]

@@ -3,6 +3,7 @@
 use crate::domain::{BrandingConfig, SettingCategory, SystemSettingRow, UpsertSystemSettingInput};
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
+use crate::service::KeycloakSyncService;
 use std::sync::Arc;
 use validator::Validate;
 
@@ -12,12 +13,24 @@ const BRANDING_CONFIG_KEY: &str = "config";
 /// Service for managing branding configuration
 pub struct BrandingService<R: SystemSettingsRepository> {
     repo: Arc<R>,
+    sync_service: Option<Arc<KeycloakSyncService>>,
 }
 
 impl<R: SystemSettingsRepository> BrandingService<R> {
     /// Create a new branding service
     pub fn new(repo: Arc<R>) -> Self {
-        Self { repo }
+        Self {
+            repo,
+            sync_service: None,
+        }
+    }
+
+    /// Create a new branding service with Keycloak sync
+    pub fn with_sync_service(repo: Arc<R>, sync_service: Arc<KeycloakSyncService>) -> Self {
+        Self {
+            repo,
+            sync_service: Some(sync_service),
+        }
     }
 
     /// Get branding configuration
@@ -37,7 +50,8 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
 
     /// Update branding configuration
     ///
-    /// Validates and stores the new configuration
+    /// Validates and stores the new configuration. If a Keycloak sync service
+    /// is configured, the relevant settings will also be synchronized to Keycloak.
     pub async fn update_branding(&self, config: BrandingConfig) -> Result<BrandingConfig> {
         // Validate the configuration
         self.validate_branding(&config)?;
@@ -55,6 +69,11 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         };
 
         self.repo.upsert(&input).await?;
+
+        // Sync to Keycloak (non-blocking - errors are logged but don't fail the update)
+        if let Some(sync) = &self.sync_service {
+            sync.sync_branding_config(&config).await;
+        }
 
         // Return the updated config
         Ok(config)

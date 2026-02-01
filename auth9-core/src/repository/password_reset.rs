@@ -44,9 +44,9 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
         .execute(&self.pool)
         .await?;
 
-        self.find_by_id(id)
-            .await?
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create password reset token")))
+        self.find_by_id(id).await?.ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Failed to create password reset token"))
+        })
     }
 
     async fn find_by_token_hash(&self, token_hash: &str) -> Result<Option<PasswordResetToken>> {
@@ -94,7 +94,9 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
         .await?;
 
         if result.rows_affected() == 0 {
-            return Err(AppError::NotFound("Password reset token not found".to_string()));
+            return Err(AppError::NotFound(
+                "Password reset token not found".to_string(),
+            ));
         }
 
         Ok(())
@@ -148,8 +150,8 @@ impl PasswordResetRepositoryImpl {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use mockall::predicate::*;
     use chrono::Utc;
+    use mockall::predicate::*;
 
     #[tokio::test]
     async fn test_mock_password_reset_repository() {
@@ -184,9 +186,7 @@ mod tests {
         let mut mock = MockPasswordResetRepository::new();
         let id = StringUuid::new_v4();
 
-        mock.expect_mark_used()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_mark_used().with(eq(id)).returning(|_| Ok(()));
 
         let result = mock.mark_used(id).await;
         assert!(result.is_ok());
@@ -196,8 +196,7 @@ mod tests {
     async fn test_mock_delete_expired() {
         let mut mock = MockPasswordResetRepository::new();
 
-        mock.expect_delete_expired()
-            .returning(|| Ok(5));
+        mock.expect_delete_expired().returning(|| Ok(5));
 
         let count = mock.delete_expired().await.unwrap();
         assert_eq!(count, 5);
@@ -208,15 +207,14 @@ mod tests {
         let mut mock = MockPasswordResetRepository::new();
         let user_id = StringUuid::new_v4();
 
-        mock.expect_create()
-            .returning(|input| {
-                Ok(PasswordResetToken {
-                    user_id: input.user_id,
-                    token_hash: input.token_hash.clone(),
-                    expires_at: input.expires_at,
-                    ..Default::default()
-                })
-            });
+        mock.expect_create().returning(|input| {
+            Ok(PasswordResetToken {
+                user_id: input.user_id,
+                token_hash: input.token_hash.clone(),
+                expires_at: input.expires_at,
+                ..Default::default()
+            })
+        });
 
         let input = CreatePasswordResetTokenInput {
             user_id,

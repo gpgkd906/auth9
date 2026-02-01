@@ -127,7 +127,7 @@ describe("Register Page", () => {
 
         render(<RoutesStub initialEntries={["/register"]} />);
 
-        expect(screen.getByText("A")).toBeInTheDocument();
+        expect(screen.getByText("A9")).toBeInTheDocument();
     });
 
     it("action returns error when email is missing", async () => {

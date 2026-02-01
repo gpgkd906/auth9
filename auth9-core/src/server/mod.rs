@@ -19,14 +19,14 @@ use crate::repository::{
 };
 use crate::service::{
     security_detection::SecurityDetectionConfig, AnalyticsService, BrandingService, ClientService,
-    EmailService, EmailTemplateService, IdentityProviderService, InvitationService, PasswordService,
-    RbacService, SecurityDetectionService, SessionService, SystemSettingsService, TenantService,
-    UserService, WebAuthnService, WebhookService,
+    EmailService, EmailTemplateService, IdentityProviderService, InvitationService,
+    KeycloakSyncService, PasswordService, RbacService, SecurityDetectionService, SessionService,
+    SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasEmailTemplates, HasIdentityProviders, HasInvitations,
-    HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
-    HasSystemSettings, HasWebAuthn, HasWebhooks,
+    HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings,
+    HasWebAuthn, HasWebhooks,
 };
 use anyhow::Result;
 use axum::{
@@ -91,7 +91,11 @@ pub struct AppState {
     pub branding_service: Arc<BrandingService<SystemSettingsRepositoryImpl>>,
     // New services for 5 features
     pub password_service: Arc<
-        PasswordService<PasswordResetRepositoryImpl, UserRepositoryImpl, SystemSettingsRepositoryImpl>,
+        PasswordService<
+            PasswordResetRepositoryImpl,
+            UserRepositoryImpl,
+            SystemSettingsRepositoryImpl,
+        >,
     >,
     pub session_service: Arc<SessionService<SessionRepositoryImpl, UserRepositoryImpl>>,
     pub webauthn_service: Arc<WebAuthnService>,
@@ -232,8 +236,11 @@ impl HasPasswordManagement for AppState {
 
     fn password_service(
         &self,
-    ) -> &PasswordService<Self::PasswordResetRepo, Self::PasswordUserRepo, Self::PasswordSystemSettingsRepo>
-    {
+    ) -> &PasswordService<
+        Self::PasswordResetRepo,
+        Self::PasswordUserRepo,
+        Self::PasswordSystemSettingsRepo,
+    > {
         &self.password_service
     }
 
@@ -413,8 +420,14 @@ pub async fn run(config: Config) -> Result<()> {
     // Create email template service
     let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
 
-    // Create branding service
-    let branding_service = Arc::new(BrandingService::new(system_settings_repo.clone()));
+    // Create Keycloak sync service for branding sync
+    let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_arc.clone()));
+
+    // Create branding service with Keycloak sync
+    let branding_service = Arc::new(BrandingService::with_sync_service(
+        system_settings_repo.clone(),
+        keycloak_sync_service,
+    ));
 
     // Get app base URL for invitation links
     let app_base_url =
@@ -537,9 +550,7 @@ pub async fn run(config: Config) -> Result<()> {
 }
 
 /// Create gRPC authentication interceptor based on configuration
-fn create_grpc_auth_interceptor(
-    config: &crate::config::GrpcSecurityConfig,
-) -> AuthInterceptor {
+fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> AuthInterceptor {
     match config.auth_mode.as_str() {
         "api_key" => {
             if config.api_keys.is_empty() {
@@ -961,7 +972,8 @@ where
         // === Session Management endpoints ===
         .route(
             "/api/v1/users/me/sessions",
-            get(api::session::list_my_sessions::<S>).delete(api::session::revoke_other_sessions::<S>),
+            get(api::session::list_my_sessions::<S>)
+                .delete(api::session::revoke_other_sessions::<S>),
         )
         .route(
             "/api/v1/users/me/sessions/{id}",
@@ -987,7 +999,8 @@ where
         // === Identity Provider endpoints ===
         .route(
             "/api/v1/identity-providers",
-            get(api::identity_provider::list_providers::<S>).post(api::identity_provider::create_provider::<S>),
+            get(api::identity_provider::list_providers::<S>)
+                .post(api::identity_provider::create_provider::<S>),
         )
         .route(
             "/api/v1/identity-providers/{alias}",

@@ -99,11 +99,7 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
     }
 
     /// Get login statistics for a time period
-    pub async fn get_stats(
-        &self,
-        start: DateTime<Utc>,
-        end: DateTime<Utc>,
-    ) -> Result<LoginStats> {
+    pub async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats> {
         self.login_event_repo.get_stats(start, end).await
     }
 

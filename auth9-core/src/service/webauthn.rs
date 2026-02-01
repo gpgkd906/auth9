@@ -18,8 +18,14 @@ impl WebAuthnService {
     }
 
     /// List WebAuthn credentials for a user
-    pub async fn list_credentials(&self, keycloak_user_id: &str) -> Result<Vec<WebAuthnCredential>> {
-        let credentials = self.keycloak.list_webauthn_credentials(keycloak_user_id).await?;
+    pub async fn list_credentials(
+        &self,
+        keycloak_user_id: &str,
+    ) -> Result<Vec<WebAuthnCredential>> {
+        let credentials = self
+            .keycloak
+            .list_webauthn_credentials(keycloak_user_id)
+            .await?;
 
         let webauthn_creds: Vec<WebAuthnCredential> = credentials
             .into_iter()
@@ -59,7 +65,8 @@ impl WebAuthnService {
             std::env::var("KEYCLOAK_ACCOUNT_URL").unwrap_or_else(|_| {
                 format!(
                     "{}/realms/{}/account",
-                    std::env::var("KEYCLOAK_URL").unwrap_or_else(|_| "http://localhost:8081".to_string()),
+                    std::env::var("KEYCLOAK_URL")
+                        .unwrap_or_else(|_| "http://localhost:8081".to_string()),
                     std::env::var("KEYCLOAK_REALM").unwrap_or_else(|_| "auth9".to_string())
                 )
             }),

@@ -26,7 +26,10 @@ pub async fn get_provider<S: HasIdentityProviders>(
     State(state): State<S>,
     Path(alias): Path<String>,
 ) -> Result<Json<SuccessResponse<IdentityProvider>>, AppError> {
-    let provider = state.identity_provider_service().get_provider(&alias).await?;
+    let provider = state
+        .identity_provider_service()
+        .get_provider(&alias)
+        .await?;
     Ok(Json(SuccessResponse::new(provider)))
 }
 
@@ -35,7 +38,10 @@ pub async fn create_provider<S: HasIdentityProviders>(
     State(state): State<S>,
     Json(input): Json<CreateIdentityProviderInput>,
 ) -> Result<Json<SuccessResponse<IdentityProvider>>, AppError> {
-    let provider = state.identity_provider_service().create_provider(input).await?;
+    let provider = state
+        .identity_provider_service()
+        .create_provider(input)
+        .await?;
     Ok(Json(SuccessResponse::new(provider)))
 }
 
@@ -57,8 +63,13 @@ pub async fn delete_provider<S: HasIdentityProviders>(
     State(state): State<S>,
     Path(alias): Path<String>,
 ) -> Result<Json<MessageResponse>, AppError> {
-    state.identity_provider_service().delete_provider(&alias).await?;
-    Ok(Json(MessageResponse::new("Identity provider deleted successfully.")))
+    state
+        .identity_provider_service()
+        .delete_provider(&alias)
+        .await?;
+    Ok(Json(MessageResponse::new(
+        "Identity provider deleted successfully.",
+    )))
 }
 
 /// Get available identity provider templates
@@ -97,7 +108,9 @@ pub async fn unlink_identity<S: HasIdentityProviders>(
         .unlink_identity(user_id, identity_id)
         .await?;
 
-    Ok(Json(MessageResponse::new("Identity unlinked successfully.")))
+    Ok(Json(MessageResponse::new(
+        "Identity unlinked successfully.",
+    )))
 }
 
 /// Extract user ID from JWT token
@@ -127,7 +140,9 @@ fn extract_user_id<S: HasIdentityProviders>(
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    Err(AppError::Unauthorized("Invalid or expired token".to_string()))
+    Err(AppError::Unauthorized(
+        "Invalid or expired token".to_string(),
+    ))
 }
 
 #[cfg(test)]

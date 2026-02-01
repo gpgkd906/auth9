@@ -17,8 +17,11 @@ use rand::Rng;
 use std::sync::Arc;
 use validator::Validate;
 
-pub struct PasswordService<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
-{
+pub struct PasswordService<
+    P: PasswordResetRepository,
+    U: UserRepository,
+    S: SystemSettingsRepository,
+> {
     password_reset_repo: Arc<P>,
     user_repo: Arc<U>,
     email_service: Arc<EmailService<S>>,
@@ -140,7 +143,9 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
             .await?;
 
         if !is_valid {
-            return Err(AppError::BadRequest("Current password is incorrect".to_string()));
+            return Err(AppError::BadRequest(
+                "Current password is incorrect".to_string(),
+            ));
         }
 
         // Set new password in Keycloak
@@ -157,11 +162,7 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
     }
 
     /// Validate a password against a policy
-    pub fn validate_against_policy(
-        &self,
-        password: &str,
-        policy: &PasswordPolicy,
-    ) -> Result<()> {
+    pub fn validate_against_policy(&self, password: &str, policy: &PasswordPolicy) -> Result<()> {
         match policy.validate_password(password) {
             Ok(()) => Ok(()),
             Err(errors) => Err(AppError::Validation(errors.join("; "))),

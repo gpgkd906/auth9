@@ -46,7 +46,7 @@ const CardDescription = forwardRef<
 >(({ className, children, ...props }, ref) => (
   <p
     ref={ref}
-    className={cn("text-[13px] text-[var(--text-secondary)]", className)}
+    className={cn("text-[13px] leading-snug text-[var(--text-secondary)]", className)}
     {...props}
   >
     {children}

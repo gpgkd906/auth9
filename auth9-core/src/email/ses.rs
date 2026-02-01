@@ -128,10 +128,7 @@ impl EmailProvider for SesEmailProvider {
 
         let body = body_builder.build();
 
-        let ses_message = Message::builder()
-            .subject(subject)
-            .body(body)
-            .build();
+        let ses_message = Message::builder().subject(subject).body(body).build();
 
         let email_content = EmailContent::builder().simple(ses_message).build();
 

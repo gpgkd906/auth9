@@ -139,7 +139,10 @@ impl RateLimitState {
     /// Get the rate limit rule for an endpoint
     pub fn get_rule(&self, method: &str, path: &str) -> &RateLimitRule {
         let key = format!("{}:{}", method, path);
-        self.config.endpoints.get(&key).unwrap_or(&self.config.default)
+        self.config
+            .endpoints
+            .get(&key)
+            .unwrap_or(&self.config.default)
     }
 
     /// Get the tenant multiplier (1.0 if not configured)
@@ -168,10 +171,7 @@ impl RateLimitState {
             });
         }
 
-        let redis = self
-            .redis
-            .as_ref()
-            .ok_or(RateLimitError::NotConfigured)?;
+        let redis = self.redis.as_ref().ok_or(RateLimitError::NotConfigured)?;
 
         let rule = self.get_rule("", endpoint);
         let multiplier = tenant_id
@@ -285,10 +285,9 @@ impl IntoResponse for RateLimitExceededResponse {
         response
             .headers_mut()
             .insert("Retry-After", self.retry_after.to_string().parse().unwrap());
-        response.headers_mut().insert(
-            "Content-Type",
-            "application/json".parse().unwrap(),
-        );
+        response
+            .headers_mut()
+            .insert("Content-Type", "application/json".parse().unwrap());
         response
     }
 }
@@ -480,7 +479,11 @@ mod tests {
 
         let _rule = state.get_rule("POST", "/api/v1/auth/token");
         // Note: get_rule concatenates method:path, so we need to check the right key
-        let rule = state.config.endpoints.get("POST:/api/v1/auth/token").unwrap();
+        let rule = state
+            .config
+            .endpoints
+            .get("POST:/api/v1/auth/token")
+            .unwrap();
         assert_eq!(rule.requests, 10);
     }
 

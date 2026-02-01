@@ -136,7 +136,9 @@ impl<
         // 1. Get all tenant_user IDs and delete their role assignments
         let tenant_user_ids = self.repo.list_tenant_user_ids(id).await?;
         for tu_id in tenant_user_ids {
-            self.rbac_repo.delete_user_roles_by_tenant_user(tu_id).await?;
+            self.rbac_repo
+                .delete_user_roles_by_tenant_user(tu_id)
+                .await?;
         }
 
         // 2. Delete tenant memberships
@@ -199,7 +201,10 @@ impl<
         tenant_id: StringUuid,
     ) -> Result<()> {
         // 1. Find tenant_user_id and delete role assignments
-        if let Some(tenant_user_id) = self.rbac_repo.find_tenant_user_id(user_id, tenant_id).await?
+        if let Some(tenant_user_id) = self
+            .rbac_repo
+            .find_tenant_user_id(user_id, tenant_id)
+            .await?
         {
             self.rbac_repo
                 .delete_user_roles_by_tenant_user(tenant_user_id)
@@ -618,10 +623,7 @@ mod tests {
             .returning(|_| Ok(0));
 
         // Delete user record
-        mock_user
-            .expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock_user.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let service = UserService::new(
             Arc::new(mock_user),
@@ -732,10 +734,7 @@ mod tests {
             .returning(|_| Ok(10));
 
         // Delete user record
-        mock_user
-            .expect_delete()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock_user.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
         let service = UserService::new(
             Arc::new(mock_user),

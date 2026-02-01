@@ -99,6 +99,7 @@ Project documentation is in `docs/`. Read the relevant doc before related tasks:
 - `architecture.md` - System architecture overview
 - `api-access-control.md` - API access control design
 - `keycloak-theme.md` - Keycloak theme customization
+- `keycloak-service-refactor.md` - Keycloak service layer refactoring plan (KeycloakSyncService, KeycloakOidcService)
 
 ## Skills
 

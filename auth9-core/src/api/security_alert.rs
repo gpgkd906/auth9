@@ -110,7 +110,9 @@ fn extract_user_id<S: HasSecurityAlerts>(
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    Err(AppError::Unauthorized("Invalid or expired token".to_string()))
+    Err(AppError::Unauthorized(
+        "Invalid or expired token".to_string(),
+    ))
 }
 
 #[cfg(test)]
@@ -137,7 +139,9 @@ mod tests {
 
     #[test]
     fn test_unresolved_count_response() {
-        let response = UnresolvedCountResponse { unresolved_count: 5 };
+        let response = UnresolvedCountResponse {
+            unresolved_count: 5,
+        };
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("\"unresolved_count\":5"));
     }

@@ -30,7 +30,9 @@ pub async fn reset_password<S: HasPasswordManagement>(
 ) -> Result<Json<MessageResponse>, AppError> {
     state.password_service().reset_password(input).await?;
 
-    Ok(Json(MessageResponse::new("Password has been reset successfully.")))
+    Ok(Json(MessageResponse::new(
+        "Password has been reset successfully.",
+    )))
 }
 
 /// Change password for authenticated user
@@ -42,9 +44,14 @@ pub async fn change_password<S: HasPasswordManagement>(
     // Extract user ID from JWT token
     let user_id = extract_user_id(&state, &headers)?;
 
-    state.password_service().change_password(user_id, input).await?;
+    state
+        .password_service()
+        .change_password(user_id, input)
+        .await?;
 
-    Ok(Json(MessageResponse::new("Password has been changed successfully.")))
+    Ok(Json(MessageResponse::new(
+        "Password has been changed successfully.",
+    )))
 }
 
 /// Get password policy for a tenant
@@ -62,7 +69,10 @@ pub async fn update_password_policy<S: HasPasswordManagement>(
     Path(tenant_id): Path<StringUuid>,
     Json(input): Json<crate::domain::UpdatePasswordPolicyInput>,
 ) -> Result<Json<SuccessResponse<crate::domain::PasswordPolicy>>, AppError> {
-    let policy = state.password_service().update_policy(tenant_id, input).await?;
+    let policy = state
+        .password_service()
+        .update_policy(tenant_id, input)
+        .await?;
     Ok(Json(SuccessResponse::new(policy)))
 }
 
@@ -94,7 +104,9 @@ fn extract_user_id<S: HasPasswordManagement>(
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    Err(AppError::Unauthorized("Invalid or expired token".to_string()))
+    Err(AppError::Unauthorized(
+        "Invalid or expired token".to_string(),
+    ))
 }
 
 #[cfg(test)]

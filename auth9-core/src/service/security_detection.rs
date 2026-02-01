@@ -5,9 +5,9 @@ use crate::domain::{
     SecurityAlertType, StringUuid, WebhookEvent,
 };
 use crate::error::Result;
+use crate::repository::WebhookRepository;
 use crate::repository::{LoginEventRepository, SecurityAlertRepository};
 use crate::service::WebhookService;
-use crate::repository::WebhookRepository;
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -40,8 +40,11 @@ impl Default for SecurityDetectionConfig {
 }
 
 /// Security detection service
-pub struct SecurityDetectionService<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository>
-{
+pub struct SecurityDetectionService<
+    L: LoginEventRepository,
+    S: SecurityAlertRepository,
+    W: WebhookRepository,
+> {
     login_event_repo: Arc<L>,
     security_alert_repo: Arc<S>,
     webhook_service: Arc<WebhookService<W>>,
@@ -189,10 +192,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         event: &LoginEvent,
     ) -> Result<Option<SecurityAlert>> {
         // Get recent successful logins for this user
-        let recent_events = self
-            .login_event_repo
-            .list_by_user(user_id, 0, 100)
-            .await?;
+        let recent_events = self.login_event_repo.list_by_user(user_id, 0, 100).await?;
 
         // Build a set of known device fingerprints
         let mut known_devices: HashMap<String, bool> = HashMap::new();
@@ -235,10 +235,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         event: &LoginEvent,
     ) -> Result<Option<SecurityAlert>> {
         // Get the user's last successful login
-        let recent_events = self
-            .login_event_repo
-            .list_by_user(user_id, 0, 10)
-            .await?;
+        let recent_events = self.login_event_repo.list_by_user(user_id, 0, 10).await?;
 
         let last_login = recent_events
             .iter()
@@ -306,7 +303,9 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         alert_id: StringUuid,
         resolved_by: StringUuid,
     ) -> Result<SecurityAlert> {
-        self.security_alert_repo.resolve(alert_id, resolved_by).await
+        self.security_alert_repo
+            .resolve(alert_id, resolved_by)
+            .await
     }
 
     /// Get a security alert by ID
@@ -314,7 +313,9 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         self.security_alert_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| crate::error::AppError::NotFound(format!("Security alert {} not found", id)))
+            .ok_or_else(|| {
+                crate::error::AppError::NotFound(format!("Security alert {} not found", id))
+            })
     }
 
     /// Clean up old resolved alerts

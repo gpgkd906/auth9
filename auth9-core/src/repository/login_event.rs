@@ -13,14 +13,28 @@ use std::collections::HashMap;
 pub trait LoginEventRepository: Send + Sync {
     async fn create(&self, input: &CreateLoginEventInput) -> Result<i64>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<LoginEvent>>;
-    async fn list_by_user(&self, user_id: StringUuid, offset: i64, limit: i64) -> Result<Vec<LoginEvent>>;
-    async fn list_by_tenant(&self, tenant_id: StringUuid, offset: i64, limit: i64) -> Result<Vec<LoginEvent>>;
+    async fn list_by_user(
+        &self,
+        user_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>>;
+    async fn list_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>>;
     async fn count(&self) -> Result<i64>;
     async fn count_by_user(&self, user_id: StringUuid) -> Result<i64>;
     async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64>;
     async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats>;
     async fn count_failed_by_ip(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64>;
-    async fn count_failed_by_ip_multi_user(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64>;
+    async fn count_failed_by_ip_multi_user(
+        &self,
+        ip_address: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64>;
     async fn delete_old(&self, days: i64) -> Result<u64>;
 
     /// Nullify user_id for login events (preserve audit trail when user is deleted)
@@ -85,7 +99,12 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         Ok(events)
     }
 
-    async fn list_by_user(&self, user_id: StringUuid, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {
+    async fn list_by_user(
+        &self,
+        user_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>> {
         let events = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
@@ -105,7 +124,12 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         Ok(events)
     }
 
-    async fn list_by_tenant(&self, tenant_id: StringUuid, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {
+    async fn list_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>> {
         let events = sqlx::query_as::<_, LoginEvent>(
             r#"
             SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
@@ -229,7 +253,11 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         Ok(row.0)
     }
 
-    async fn count_failed_by_ip_multi_user(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64> {
+    async fn count_failed_by_ip_multi_user(
+        &self,
+        ip_address: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
         // Count distinct users with failed attempts from this IP
         let row: (i64,) = sqlx::query_as(
             r#"
@@ -289,8 +317,7 @@ mod tests {
     async fn test_mock_login_event_repository() {
         let mut mock = MockLoginEventRepository::new();
 
-        mock.expect_count()
-            .returning(|| Ok(100));
+        mock.expect_count().returning(|| Ok(100));
 
         let count = mock.count().await.unwrap();
         assert_eq!(count, 100);
@@ -300,8 +327,7 @@ mod tests {
     async fn test_mock_create() {
         let mut mock = MockLoginEventRepository::new();
 
-        mock.expect_create()
-            .returning(|_| Ok(1));
+        mock.expect_create().returning(|_| Ok(1));
 
         let input = CreateLoginEventInput {
             user_id: Some(StringUuid::new_v4()),
@@ -326,19 +352,18 @@ mod tests {
         let start = Utc::now() - chrono::Duration::days(7);
         let end = Utc::now();
 
-        mock.expect_get_stats()
-            .returning(|start, end| {
-                Ok(LoginStats {
-                    total_logins: 100,
-                    successful_logins: 80,
-                    failed_logins: 20,
-                    unique_users: 50,
-                    by_event_type: HashMap::new(),
-                    by_device_type: HashMap::new(),
-                    period_start: start,
-                    period_end: end,
-                })
-            });
+        mock.expect_get_stats().returning(|start, end| {
+            Ok(LoginStats {
+                total_logins: 100,
+                successful_logins: 80,
+                failed_logins: 20,
+                unique_users: 50,
+                by_event_type: HashMap::new(),
+                by_device_type: HashMap::new(),
+                period_start: start,
+                period_end: end,
+            })
+        });
 
         let stats = mock.get_stats(start, end).await.unwrap();
         assert_eq!(stats.total_logins, 100);

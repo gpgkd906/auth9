@@ -4,8 +4,8 @@
 
 use super::{get_json, post_json, MockKeycloakServer, TestAppState};
 use crate::api::create_test_user;
-use auth9_core::api::SuccessResponse;
 use auth9_core::api::session::RevokeSessionsResponse;
+use auth9_core::api::SuccessResponse;
 use auth9_core::domain::{Session, SessionInfo, StringUuid};
 use auth9_core::repository::SessionRepository;
 use axum::http::StatusCode;
@@ -111,8 +111,12 @@ async fn test_force_logout_user() {
 
     let app = build_session_test_router(state.clone());
 
-    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) =
-        post_json(&app, &format!("/api/v1/admin/users/{}/logout", user_id), &()).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) = post_json(
+        &app,
+        &format!("/api/v1/admin/users/{}/logout", user_id),
+        &(),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -120,7 +124,11 @@ async fn test_force_logout_user() {
     assert_eq!(response.revoked_count, 3);
 
     // Verify sessions are revoked
-    let remaining = state.session_repo.list_active_by_user(user_id).await.unwrap();
+    let remaining = state
+        .session_repo
+        .list_active_by_user(user_id)
+        .await
+        .unwrap();
     assert_eq!(remaining.len(), 0);
 }
 
@@ -137,8 +145,12 @@ async fn test_force_logout_user_no_sessions() {
 
     let app = build_session_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) =
-        post_json(&app, &format!("/api/v1/admin/users/{}/logout", user_id), &()).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) = post_json(
+        &app,
+        &format!("/api/v1/admin/users/{}/logout", user_id),
+        &(),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -186,7 +198,10 @@ async fn test_session_info_device_details() {
 
     let session_info = &sessions[0];
     assert_eq!(session_info.device_type, Some("mobile".to_string()));
-    assert_eq!(session_info.device_name, Some("Safari on iPhone".to_string()));
+    assert_eq!(
+        session_info.device_name,
+        Some("Safari on iPhone".to_string())
+    );
     assert_eq!(session_info.ip_address, Some("10.0.0.1".to_string()));
     assert_eq!(session_info.location, Some("New York, US".to_string()));
 }

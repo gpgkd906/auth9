@@ -48,18 +48,18 @@ export default function DashboardIndex() {
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="space-y-4">
+          <div className="space-y-0">
             {data.audits.map((activity) => (
               <div
                 key={activity.id}
-                className="flex items-center gap-4 py-3 border-b border-[var(--glass-border-subtle)] last:border-0"
+                className="flex items-start gap-3 py-3 border-b border-[var(--glass-border-subtle)] last:border-0"
               >
-                <div className="w-2 h-2 rounded-full bg-[var(--accent-blue)]" />
-                <div className="flex-1">
-                  <p className="text-sm text-[var(--text-primary)]">
+                <div className="w-2 h-2 rounded-full bg-[var(--accent-blue)] mt-1.5 shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13px] leading-snug text-[var(--text-primary)]">
                     {activity.action} • {activity.resource_type}
                   </p>
-                  <p className="text-xs text-[var(--text-tertiary)]">
+                  <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
                     {new Date(activity.created_at).toLocaleString()}
                   </p>
                 </div>
