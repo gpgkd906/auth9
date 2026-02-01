@@ -10,8 +10,5 @@ CREATE TABLE IF NOT EXISTS roles (
     
     UNIQUE KEY uk_role_service_name (service_id, name),
     INDEX idx_roles_service (service_id),
-    INDEX idx_roles_parent (parent_role_id),
-    
-    CONSTRAINT fk_roles_service FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE,
-    CONSTRAINT fk_roles_parent FOREIGN KEY (parent_role_id) REFERENCES roles(id) ON DELETE SET NULL
+    INDEX idx_roles_parent (parent_role_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

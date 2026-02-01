@@ -13,6 +13,5 @@ CREATE TABLE IF NOT EXISTS webhooks (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 
     INDEX idx_webhooks_tenant_id (tenant_id),
-    INDEX idx_webhooks_enabled (enabled),
-    CONSTRAINT fk_webhooks_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE
+    INDEX idx_webhooks_enabled (enabled)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

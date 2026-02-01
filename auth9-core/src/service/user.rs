@@ -4,17 +4,69 @@ use crate::domain::{
     AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User,
 };
 use crate::error::{AppError, Result};
-use crate::repository::UserRepository;
+use crate::keycloak::KeycloakClient;
+use crate::repository::{
+    AuditRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
+    RbacRepository, SecurityAlertRepository, SessionRepository, UserRepository,
+};
 use std::sync::Arc;
+use tracing::warn;
 use validator::Validate;
 
-pub struct UserService<R: UserRepository> {
+pub struct UserService<
+    R: UserRepository,
+    S: SessionRepository,
+    P: PasswordResetRepository,
+    L: LinkedIdentityRepository,
+    LE: LoginEventRepository,
+    SA: SecurityAlertRepository,
+    A: AuditRepository,
+    Rbac: RbacRepository,
+> {
     repo: Arc<R>,
+    session_repo: Arc<S>,
+    password_reset_repo: Arc<P>,
+    linked_identity_repo: Arc<L>,
+    login_event_repo: Arc<LE>,
+    security_alert_repo: Arc<SA>,
+    audit_repo: Arc<A>,
+    rbac_repo: Arc<Rbac>,
+    keycloak: Option<KeycloakClient>,
 }
 
-impl<R: UserRepository> UserService<R> {
-    pub fn new(repo: Arc<R>) -> Self {
-        Self { repo }
+impl<
+        R: UserRepository,
+        S: SessionRepository,
+        P: PasswordResetRepository,
+        L: LinkedIdentityRepository,
+        LE: LoginEventRepository,
+        SA: SecurityAlertRepository,
+        A: AuditRepository,
+        Rbac: RbacRepository,
+    > UserService<R, S, P, L, LE, SA, A, Rbac>
+{
+    pub fn new(
+        repo: Arc<R>,
+        session_repo: Arc<S>,
+        password_reset_repo: Arc<P>,
+        linked_identity_repo: Arc<L>,
+        login_event_repo: Arc<LE>,
+        security_alert_repo: Arc<SA>,
+        audit_repo: Arc<A>,
+        rbac_repo: Arc<Rbac>,
+        keycloak: Option<KeycloakClient>,
+    ) -> Self {
+        Self {
+            repo,
+            session_repo,
+            password_reset_repo,
+            linked_identity_repo,
+            login_event_repo,
+            security_alert_repo,
+            audit_repo,
+            rbac_repo,
+            keycloak,
+        }
     }
 
     pub async fn create(&self, keycloak_id: &str, input: CreateUserInput) -> Result<User> {
@@ -65,8 +117,64 @@ impl<R: UserRepository> UserService<R> {
         self.repo.update(id, &input).await
     }
 
+    /// Delete a user with cascade delete of all related data.
+    ///
+    /// Cascade order:
+    /// 1. Delete user_tenant_roles for all tenant memberships
+    /// 2. Delete tenant_users (user's tenant memberships)
+    /// 3. Delete sessions
+    /// 4. Delete password_reset_tokens
+    /// 5. Delete linked_identities
+    /// 6. Nullify user_id in login_events (preserve audit trail)
+    /// 7. Nullify user_id in security_alerts (preserve audit trail)
+    /// 8. Nullify actor_id in audit_logs (preserve audit trail)
+    /// 9. Delete user from Keycloak (tolerant of NotFound)
+    /// 10. Delete users record
     pub async fn delete(&self, id: StringUuid) -> Result<()> {
-        let _ = self.get(id).await?;
+        let user = self.get(id).await?;
+
+        // 1. Get all tenant_user IDs and delete their role assignments
+        let tenant_user_ids = self.repo.list_tenant_user_ids(id).await?;
+        for tu_id in tenant_user_ids {
+            self.rbac_repo.delete_user_roles_by_tenant_user(tu_id).await?;
+        }
+
+        // 2. Delete tenant memberships
+        self.repo.delete_all_tenant_memberships(id).await?;
+
+        // 3. Delete sessions
+        self.session_repo.delete_by_user(id).await?;
+
+        // 4. Delete password reset tokens
+        self.password_reset_repo.delete_by_user(id).await?;
+
+        // 5. Delete linked identities
+        self.linked_identity_repo.delete_by_user(id).await?;
+
+        // 6. Nullify user_id in login_events (preserve audit trail)
+        self.login_event_repo.nullify_user_id(id).await?;
+
+        // 7. Nullify user_id in security_alerts (preserve audit trail)
+        self.security_alert_repo.nullify_user_id(id).await?;
+
+        // 8. Nullify actor_id in audit_logs (preserve audit trail)
+        self.audit_repo.nullify_actor_id(id).await?;
+
+        // 9. Delete from Keycloak (tolerant of NotFound - user may not exist in KC)
+        if let Some(ref keycloak) = self.keycloak {
+            match keycloak.delete_user(&user.keycloak_id).await {
+                Ok(_) => {}
+                Err(AppError::NotFound(_)) => {
+                    warn!(
+                        "User {} not found in Keycloak during delete, continuing",
+                        user.keycloak_id
+                    );
+                }
+                Err(e) => return Err(e),
+            }
+        }
+
+        // 10. Delete user record
         self.repo.delete(id).await
     }
 
@@ -108,9 +216,41 @@ impl<R: UserRepository> UserService<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::repository::audit::MockAuditRepository;
+    use crate::repository::linked_identity::MockLinkedIdentityRepository;
+    use crate::repository::login_event::MockLoginEventRepository;
+    use crate::repository::password_reset::MockPasswordResetRepository;
+    use crate::repository::rbac::MockRbacRepository;
+    use crate::repository::security_alert::MockSecurityAlertRepository;
+    use crate::repository::session::MockSessionRepository;
     use crate::repository::user::MockUserRepository;
     use mockall::predicate::*;
     use uuid::Uuid;
+
+    fn create_test_service(
+        mock_user: MockUserRepository,
+    ) -> UserService<
+        MockUserRepository,
+        MockSessionRepository,
+        MockPasswordResetRepository,
+        MockLinkedIdentityRepository,
+        MockLoginEventRepository,
+        MockSecurityAlertRepository,
+        MockAuditRepository,
+        MockRbacRepository,
+    > {
+        UserService::new(
+            Arc::new(mock_user),
+            Arc::new(MockSessionRepository::new()),
+            Arc::new(MockPasswordResetRepository::new()),
+            Arc::new(MockLinkedIdentityRepository::new()),
+            Arc::new(MockLoginEventRepository::new()),
+            Arc::new(MockSecurityAlertRepository::new()),
+            Arc::new(MockAuditRepository::new()),
+            Arc::new(MockRbacRepository::new()),
+            None,
+        )
+    }
 
     #[tokio::test]
     async fn test_create_user_success() {
@@ -129,7 +269,7 @@ mod tests {
             })
         });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let input = CreateUserInput {
             email: "test@example.com".to_string(),
@@ -157,7 +297,7 @@ mod tests {
                 }))
             });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let input = CreateUserInput {
             email: "existing@example.com".to_string(),
@@ -172,7 +312,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_user_invalid_email() {
         let mock = MockUserRepository::new();
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let input = CreateUserInput {
             email: "invalid-email".to_string(),
@@ -198,7 +338,7 @@ mod tests {
             .with(eq(id))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get(id).await;
         assert!(result.is_ok());
@@ -214,7 +354,7 @@ mod tests {
             .with(eq(id))
             .returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get(id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -233,7 +373,7 @@ mod tests {
             .with(eq("test@example.com"))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get_by_email("test@example.com").await;
         assert!(result.is_ok());
@@ -248,7 +388,7 @@ mod tests {
             .with(eq("nonexistent@example.com"))
             .returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get_by_email("nonexistent@example.com").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -267,7 +407,7 @@ mod tests {
             .with(eq("kc-123"))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get_by_keycloak_id("kc-123").await;
         assert!(result.is_ok());
@@ -282,7 +422,7 @@ mod tests {
             .with(eq("nonexistent"))
             .returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get_by_keycloak_id("nonexistent").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -307,7 +447,7 @@ mod tests {
 
         mock.expect_count().returning(|| Ok(2));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.list(1, 10).await;
         assert!(result.is_ok());
@@ -331,7 +471,7 @@ mod tests {
 
         mock.expect_count().returning(|| Ok(21));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.list(3, 10).await;
         assert!(result.is_ok());
@@ -362,7 +502,7 @@ mod tests {
             })
         });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let input = UpdateUserInput {
             display_name: Some("New Name".to_string()),
@@ -383,7 +523,7 @@ mod tests {
             .with(eq(id))
             .returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let input = UpdateUserInput {
             display_name: Some("New Name".to_string()),
@@ -395,19 +535,91 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_delete_user_success() {
-        let mut mock = MockUserRepository::new();
+    async fn test_delete_user_cascade_success() {
+        let mut mock_user = MockUserRepository::new();
+        let mut mock_session = MockSessionRepository::new();
+        let mut mock_password_reset = MockPasswordResetRepository::new();
+        let mut mock_linked_identity = MockLinkedIdentityRepository::new();
+        let mut mock_login_event = MockLoginEventRepository::new();
+        let mut mock_security_alert = MockSecurityAlertRepository::new();
+        let mut mock_audit = MockAuditRepository::new();
+        let mock_rbac = MockRbacRepository::new();
+
         let user = User::default();
         let user_clone = user.clone();
         let id = user.id;
 
-        mock.expect_find_by_id()
+        // User lookup
+        mock_user
+            .expect_find_by_id()
             .with(eq(id))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
-        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
+        // List tenant_user IDs (empty for this test)
+        mock_user
+            .expect_list_tenant_user_ids()
+            .with(eq(id))
+            .returning(|_| Ok(vec![]));
 
-        let service = UserService::new(Arc::new(mock));
+        // Delete tenant memberships
+        mock_user
+            .expect_delete_all_tenant_memberships()
+            .with(eq(id))
+            .returning(|_| Ok(0));
+
+        // Delete sessions
+        mock_session
+            .expect_delete_by_user()
+            .with(eq(id))
+            .returning(|_| Ok(0));
+
+        // Delete password reset tokens
+        mock_password_reset
+            .expect_delete_by_user()
+            .with(eq(id))
+            .returning(|_| Ok(()));
+
+        // Delete linked identities
+        mock_linked_identity
+            .expect_delete_by_user()
+            .with(eq(id))
+            .returning(|_| Ok(0));
+
+        // Nullify login events
+        mock_login_event
+            .expect_nullify_user_id()
+            .with(eq(id))
+            .returning(|_| Ok(0));
+
+        // Nullify security alerts
+        mock_security_alert
+            .expect_nullify_user_id()
+            .with(eq(id))
+            .returning(|_| Ok(0));
+
+        // Nullify audit logs
+        mock_audit
+            .expect_nullify_actor_id()
+            .with(eq(id))
+            .returning(|_| Ok(0));
+
+        // Delete user record
+        mock_user
+            .expect_delete()
+            .with(eq(id))
+            .returning(|_| Ok(()));
+
+        let service = UserService::new(
+            Arc::new(mock_user),
+            Arc::new(mock_session),
+            Arc::new(mock_password_reset),
+            Arc::new(mock_linked_identity),
+            Arc::new(mock_login_event),
+            Arc::new(mock_security_alert),
+            Arc::new(mock_audit),
+            Arc::new(mock_rbac),
+            None,
+        );
 
         let result = service.delete(id).await;
         assert!(result.is_ok());
@@ -422,10 +634,109 @@ mod tests {
             .with(eq(id))
             .returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.delete(id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_delete_user_with_tenant_memberships() {
+        let mut mock_user = MockUserRepository::new();
+        let mut mock_session = MockSessionRepository::new();
+        let mut mock_password_reset = MockPasswordResetRepository::new();
+        let mut mock_linked_identity = MockLinkedIdentityRepository::new();
+        let mut mock_login_event = MockLoginEventRepository::new();
+        let mut mock_security_alert = MockSecurityAlertRepository::new();
+        let mut mock_audit = MockAuditRepository::new();
+        let mut mock_rbac = MockRbacRepository::new();
+
+        let user = User::default();
+        let user_clone = user.clone();
+        let id = user.id;
+        let tu_id1 = StringUuid::new_v4();
+        let tu_id2 = StringUuid::new_v4();
+
+        // User lookup
+        mock_user
+            .expect_find_by_id()
+            .with(eq(id))
+            .returning(move |_| Ok(Some(user_clone.clone())));
+
+        // List tenant_user IDs (2 memberships)
+        mock_user
+            .expect_list_tenant_user_ids()
+            .with(eq(id))
+            .returning(move |_| Ok(vec![tu_id1, tu_id2]));
+
+        // Delete role assignments for each tenant_user
+        mock_rbac
+            .expect_delete_user_roles_by_tenant_user()
+            .times(2)
+            .returning(|_| Ok(0));
+
+        // Delete tenant memberships
+        mock_user
+            .expect_delete_all_tenant_memberships()
+            .with(eq(id))
+            .returning(|_| Ok(2));
+
+        // Delete sessions
+        mock_session
+            .expect_delete_by_user()
+            .with(eq(id))
+            .returning(|_| Ok(3));
+
+        // Delete password reset tokens
+        mock_password_reset
+            .expect_delete_by_user()
+            .with(eq(id))
+            .returning(|_| Ok(()));
+
+        // Delete linked identities
+        mock_linked_identity
+            .expect_delete_by_user()
+            .with(eq(id))
+            .returning(|_| Ok(1));
+
+        // Nullify login events
+        mock_login_event
+            .expect_nullify_user_id()
+            .with(eq(id))
+            .returning(|_| Ok(5));
+
+        // Nullify security alerts
+        mock_security_alert
+            .expect_nullify_user_id()
+            .with(eq(id))
+            .returning(|_| Ok(2));
+
+        // Nullify audit logs
+        mock_audit
+            .expect_nullify_actor_id()
+            .with(eq(id))
+            .returning(|_| Ok(10));
+
+        // Delete user record
+        mock_user
+            .expect_delete()
+            .with(eq(id))
+            .returning(|_| Ok(()));
+
+        let service = UserService::new(
+            Arc::new(mock_user),
+            Arc::new(mock_session),
+            Arc::new(mock_password_reset),
+            Arc::new(mock_linked_identity),
+            Arc::new(mock_login_event),
+            Arc::new(mock_security_alert),
+            Arc::new(mock_audit),
+            Arc::new(mock_rbac),
+            None,
+        );
+
+        let result = service.delete(id).await;
+        assert!(result.is_ok());
     }
 
     #[tokio::test]
@@ -451,7 +762,7 @@ mod tests {
                 })
             });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.set_mfa_enabled(id, true).await;
         assert!(result.is_ok());
@@ -467,7 +778,7 @@ mod tests {
             .with(eq(id))
             .returning(|_| Ok(None));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.set_mfa_enabled(id, true).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -489,7 +800,7 @@ mod tests {
             })
         });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let input = AddUserToTenantInput {
             user_id,
@@ -512,7 +823,7 @@ mod tests {
             .with(eq(user_id), eq(tenant_id))
             .returning(|_, _| Ok(()));
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());
@@ -538,7 +849,7 @@ mod tests {
                 ])
             });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.list_tenant_users(tenant_id, 1, 10).await;
         assert!(result.is_ok());
@@ -562,7 +873,7 @@ mod tests {
                 }])
             });
 
-        let service = UserService::new(Arc::new(mock));
+        let service = create_test_service(mock);
 
         let result = service.get_user_tenants(user_id).await;
         assert!(result.is_ok());

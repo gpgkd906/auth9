@@ -8,8 +8,5 @@ CREATE TABLE IF NOT EXISTS tenant_users (
     
     UNIQUE KEY uk_tenant_user (tenant_id, user_id),
     INDEX idx_tenant_users_tenant (tenant_id),
-    INDEX idx_tenant_users_user (user_id),
-    
-    CONSTRAINT fk_tenant_users_tenant FOREIGN KEY (tenant_id) REFERENCES tenants(id) ON DELETE CASCADE,
-    CONSTRAINT fk_tenant_users_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    INDEX idx_tenant_users_user (user_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

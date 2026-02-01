@@ -7,7 +7,5 @@ CREATE TABLE IF NOT EXISTS permissions (
     description TEXT,
     
     UNIQUE KEY uk_permission_service_code (service_id, code),
-    INDEX idx_permissions_service (service_id),
-    
-    CONSTRAINT fk_permissions_service FOREIGN KEY (service_id) REFERENCES services(id) ON DELETE CASCADE
+    INDEX idx_permissions_service (service_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

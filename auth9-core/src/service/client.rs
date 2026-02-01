@@ -2,28 +2,32 @@
 
 use crate::cache::CacheManager;
 use crate::domain::{
-    Client, ClientWithSecret, CreateServiceInput, Service, ServiceWithClient, UpdateServiceInput,
+    Client, ClientWithSecret, CreateServiceInput, Service, ServiceWithClient, StringUuid,
+    UpdateServiceInput,
 };
 use crate::error::{AppError, Result};
-use crate::repository::ServiceRepository;
+use crate::repository::{RbacRepository, ServiceRepository};
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
     Argon2,
 };
 use rand::Rng;
 use std::sync::Arc;
+use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
-pub struct ClientService<R: ServiceRepository> {
+pub struct ClientService<R: ServiceRepository, RR: RbacRepository> {
     repo: Arc<R>,
+    rbac_repo: Arc<RR>,
     cache_manager: Option<CacheManager>,
 }
 
-impl<R: ServiceRepository> ClientService<R> {
-    pub fn new(repo: Arc<R>, cache_manager: Option<CacheManager>) -> Self {
+impl<R: ServiceRepository, RR: RbacRepository> ClientService<R, RR> {
+    pub fn new(repo: Arc<R>, rbac_repo: Arc<RR>, cache_manager: Option<CacheManager>) -> Self {
         Self {
             repo,
+            rbac_repo,
             cache_manager,
         }
     }
@@ -265,7 +269,45 @@ impl<R: ServiceRepository> ClientService<R> {
 
     pub async fn delete(&self, id: Uuid) -> Result<()> {
         let _ = self.get(id).await?;
+        let service_id = StringUuid(id);
+
+        // CASCADE DELETE:
+        // 1. Delete all clients (API keys) for this service
+        let deleted_clients = self.repo.delete_clients_by_service(id).await?;
+        warn!(
+            service_id = %id,
+            deleted_clients = deleted_clients,
+            "Deleted clients for service"
+        );
+
+        // 2. Clear parent_role_id references before deleting roles
+        let cleared_refs = self.rbac_repo.clear_parent_role_references(service_id).await?;
+        warn!(
+            service_id = %id,
+            cleared_refs = cleared_refs,
+            "Cleared parent role references"
+        );
+
+        // 3. Delete role_permissions, user_tenant_roles, and roles for this service
+        let deleted_roles = self.rbac_repo.delete_roles_by_service(service_id).await?;
+        warn!(
+            service_id = %id,
+            deleted_roles = deleted_roles,
+            "Deleted roles for service"
+        );
+
+        // 4. Delete permissions for this service
+        let deleted_perms = self.rbac_repo.delete_permissions_by_service(service_id).await?;
+        warn!(
+            service_id = %id,
+            deleted_perms = deleted_perms,
+            "Deleted permissions for service"
+        );
+
+        // 5. Delete the service itself
         self.repo.delete(id).await?;
+
+        // 6. Clear cache
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_service_config(id).await;
         }
@@ -349,9 +391,28 @@ fn verify_secret(secret: &str, hash: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::StringUuid;
+    use crate::repository::rbac::MockRbacRepository;
     use crate::repository::service::MockServiceRepository;
     use mockall::predicate::*;
+
+    /// Helper function to create a ClientService with mock repositories
+    fn create_test_service(
+        service_repo: MockServiceRepository,
+    ) -> ClientService<MockServiceRepository, MockRbacRepository> {
+        ClientService::new(
+            Arc::new(service_repo),
+            Arc::new(MockRbacRepository::new()),
+            None,
+        )
+    }
+
+    /// Helper function to create a ClientService with all mock repositories customizable
+    fn create_test_service_full(
+        service_repo: MockServiceRepository,
+        rbac_repo: MockRbacRepository,
+    ) -> ClientService<MockServiceRepository, MockRbacRepository> {
+        ClientService::new(Arc::new(service_repo), Arc::new(rbac_repo), None)
+    }
 
     // ==================== Helper Function Tests ====================
 
@@ -438,7 +499,7 @@ mod tests {
                 })
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let input = CreateServiceInput {
             tenant_id: Some(Uuid::new_v4()),
@@ -473,7 +534,7 @@ mod tests {
                 }))
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let input = CreateServiceInput {
             tenant_id: None,
@@ -491,7 +552,7 @@ mod tests {
     #[tokio::test]
     async fn test_create_service_invalid_input() {
         let mock = MockServiceRepository::new();
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let input = CreateServiceInput {
             tenant_id: None,
@@ -533,7 +594,7 @@ mod tests {
                 })
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let input = CreateServiceInput {
             tenant_id: None,
@@ -590,7 +651,7 @@ mod tests {
                 })
             });
 
-        let service = ClientService::new(Arc::new(mock_repo), None);
+        let service = create_test_service(mock_repo);
 
         let result = service
             .create_client(service_id, Some("Client 1".to_string()))
@@ -611,7 +672,7 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.create_client(service_id, None).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -647,7 +708,7 @@ mod tests {
             })
         });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service
             .create_client_with_secret(
@@ -688,7 +749,7 @@ mod tests {
                 }))
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service
             .create_client_with_secret(
@@ -720,7 +781,7 @@ mod tests {
                 }))
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.get(service_id).await;
         assert!(result.is_ok());
@@ -736,7 +797,7 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.get(service_id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -757,7 +818,7 @@ mod tests {
                 }))
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.get_by_client_id("my-client").await;
         assert!(result.is_ok());
@@ -772,7 +833,7 @@ mod tests {
             .with(eq("nonexistent"))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.get_by_client_id("nonexistent").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -801,7 +862,7 @@ mod tests {
 
         mock.expect_count().with(eq(None)).returning(|_| Ok(2));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.list(None, 1, 10).await;
         assert!(result.is_ok());
@@ -828,7 +889,7 @@ mod tests {
             .with(eq(Some(tenant_id)))
             .returning(|_| Ok(11));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.list(Some(tenant_id), 2, 10).await;
         assert!(result.is_ok());
@@ -855,7 +916,7 @@ mod tests {
                 }])
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.list_clients(service_id).await;
         assert!(result.is_ok());
@@ -891,7 +952,7 @@ mod tests {
             })
         });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let input = UpdateServiceInput {
             name: Some("New Name".to_string()),
@@ -915,7 +976,7 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let input = UpdateServiceInput {
             name: Some("New".to_string()),
@@ -957,7 +1018,7 @@ mod tests {
             .times(1)
             .returning(|_, _| Ok(()));
 
-        let service = ClientService::new(Arc::new(mock_repo), None);
+        let service = create_test_service(mock_repo);
 
         let result = service.regenerate_client_secret(client_id).await;
 
@@ -975,7 +1036,7 @@ mod tests {
             .with(eq("nonexistent"))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.regenerate_client_secret("nonexistent").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -984,11 +1045,13 @@ mod tests {
     // ==================== Delete Tests ====================
 
     #[tokio::test]
-    async fn test_delete_service_success() {
-        let mut mock = MockServiceRepository::new();
+    async fn test_delete_service_cascade_success() {
+        let mut service_repo = MockServiceRepository::new();
+        let mut rbac_repo = MockRbacRepository::new();
         let service_id = Uuid::new_v4();
 
-        mock.expect_find_by_id()
+        service_repo
+            .expect_find_by_id()
             .with(eq(service_id))
             .returning(move |_| {
                 Ok(Some(Service {
@@ -998,11 +1061,26 @@ mod tests {
                 }))
             });
 
-        mock.expect_delete()
+        service_repo
+            .expect_delete_clients_by_service()
+            .returning(|_| Ok(2));
+
+        rbac_repo
+            .expect_clear_parent_role_references()
+            .returning(|_| Ok(0));
+
+        rbac_repo.expect_delete_roles_by_service().returning(|_| Ok(3));
+
+        rbac_repo
+            .expect_delete_permissions_by_service()
+            .returning(|_| Ok(5));
+
+        service_repo
+            .expect_delete()
             .with(eq(service_id))
             .returning(|_| Ok(()));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service_full(service_repo, rbac_repo);
 
         let result = service.delete(service_id).await;
         assert!(result.is_ok());
@@ -1017,7 +1095,7 @@ mod tests {
             .with(eq(service_id))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.delete(service_id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
@@ -1032,7 +1110,7 @@ mod tests {
             .with(eq(service_id), eq("client-to-delete"))
             .returning(|_, _| Ok(()));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.delete_client(service_id, "client-to-delete").await;
         assert!(result.is_ok());
@@ -1070,7 +1148,7 @@ mod tests {
                 }))
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.verify_secret("valid-client", client_secret).await;
         assert!(result.is_ok());
@@ -1084,7 +1162,7 @@ mod tests {
             .with(eq("invalid-client"))
             .returning(|_| Ok(None));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.verify_secret("invalid-client", "secret").await;
         assert!(matches!(result, Err(AppError::Unauthorized(_))));
@@ -1108,7 +1186,7 @@ mod tests {
                 }))
             });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.verify_secret("my-client", "wrong-secret").await;
         assert!(matches!(result, Err(AppError::Unauthorized(_))));
@@ -1140,7 +1218,7 @@ mod tests {
             }))
         });
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service.verify_secret("client", client_secret).await;
         assert!(matches!(result, Err(AppError::Unauthorized(_))));
@@ -1156,7 +1234,7 @@ mod tests {
             .with(eq("my-client"), eq("new-hash"))
             .returning(|_, _| Ok(()));
 
-        let service = ClientService::new(Arc::new(mock), None);
+        let service = create_test_service(mock);
 
         let result = service
             .update_client_secret_hash("my-client", "new-hash")

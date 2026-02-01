@@ -18,6 +18,9 @@ pub trait SessionRepository: Send + Sync {
     async fn revoke_all_by_user(&self, user_id: StringUuid) -> Result<u64>;
     async fn revoke_all_except(&self, user_id: StringUuid, except_id: StringUuid) -> Result<u64>;
     async fn delete_old(&self, days: i64) -> Result<u64>;
+
+    /// Delete all sessions for a user (for cascade delete)
+    async fn delete_by_user(&self, user_id: StringUuid) -> Result<u64>;
 }
 
 pub struct SessionRepositoryImpl {
@@ -199,6 +202,15 @@ impl SessionRepository for SessionRepositoryImpl {
         .bind(days)
         .execute(&self.pool)
         .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_by_user(&self, user_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await?;
 
         Ok(result.rows_affected())
     }
