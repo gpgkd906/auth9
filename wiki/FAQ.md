@@ -114,6 +114,35 @@ curl -X POST /api/v1/users/{user_id}/reset-password \
 
 A: 支持。可以配置要求用户验证邮箱后才能登录。
 
+### Q: 如何邀请用户加入租户？
+
+A: Auth9 提供邀请系统：
+
+```bash
+curl -X POST /api/v1/tenants/{tenant_id}/invitations \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "email": "newuser@example.com",
+    "role_ids": ["role-uuid"],
+    "expires_in_days": 7
+  }'
+```
+
+系统会自动发送邀请邮件，用户点击链接即可加入租户。详见 [多租户管理](多租户管理.md#通过邀请添加用户)。
+
+### Q: 邀请链接有效期多久？
+
+A: 默认 7 天，可以在创建邀请时通过 `expires_in_days` 参数自定义（1-30 天）。
+
+### Q: 如何撤销邀请？
+
+A: 通过 API 删除邀请：
+
+```bash
+curl -X DELETE /api/v1/invitations/{invitation_id} \
+  -H "Authorization: Bearer <token>"
+```
+
 ### Q: 如何启用 MFA？
 
 A: 
@@ -272,6 +301,76 @@ A:
 ### Q: 支持 HTTPS 吗？
 
 A: 支持。生产环境强烈建议启用 HTTPS。
+
+## 品牌定制和邮件
+
+### Q: 如何自定义 Auth9 的外观？
+
+A: Auth9 支持完整的品牌定制：
+
+```bash
+curl -X PUT /api/v1/system/branding \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "config": {
+      "logo_url": "https://example.com/logo.png",
+      "primary_color": "#007AFF",
+      "company_name": "我的公司"
+    }
+  }'
+```
+
+配置会立即应用到：
+- Auth9 管理界面
+- Keycloak 登录页面（动态加载）
+- 邀请邮件
+
+详见 [Keycloak 主题定制](Keycloak主题定制.md)。
+
+### Q: 如何配置邮件服务？
+
+A: 通过 API 配置邮件设置：
+
+```bash
+curl -X PUT /api/v1/system/email-settings \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "config": {
+      "provider": "smtp",
+      "smtp_host": "smtp.gmail.com",
+      "smtp_port": 587,
+      "smtp_username": "your-email@gmail.com",
+      "smtp_password": "app-password"
+    }
+  }'
+```
+
+支持 SMTP 和 AWS SES。详见 [配置说明](配置说明.md#19-邮件配置)。
+
+### Q: 可以自定义邮件模板吗？
+
+A: 可以。Auth9 支持自定义所有邮件模板（邀请、密码重置等）：
+
+```bash
+curl -X PUT /api/v1/email-templates/invitation \
+  -H "Authorization: Bearer <token>" \
+  -d '{
+    "subject": "欢迎加入 {{tenant_name}}",
+    "html_body": "<html>...</html>"
+  }'
+```
+
+支持变量替换，如 `{{user_name}}`、`{{tenant_name}}` 等。
+
+### Q: 如何测试邮件配置？
+
+A: 使用测试邮件功能：
+
+```bash
+curl -X POST /api/v1/system/email-settings/test \
+  -H "Authorization: Bearer <token>" \
+  -d '{"to_email": "test@example.com"}'
+```
 
 ## 监控和维护
 
