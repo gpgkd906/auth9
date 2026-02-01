@@ -10,7 +10,13 @@
     "lint": "eslint --cache --cache-location ./node_modules/.cache/eslint .",
     "typecheck": "tsc",
     "test": "vitest",
-    "test:coverage": "vitest --run --coverage"
+    "test:coverage": "vitest --run --coverage",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug",
+    "test:e2e:full": "playwright test --config=playwright.full.config.ts",
+    "test:e2e:full:reset": "cd .. && ./scripts/reset-docker.sh && cd auth9-portal && npm run test:e2e:full"
   },
   "dependencies": {
     "@conform-to/react": "^1.0.0",
@@ -46,6 +52,7 @@
     "zustand": "^5.0.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.49.0",
     "@eslint/js": "^9.0.0",
     "@react-router/dev": "^7.1.0",
     "@tailwindcss/vite": "^4.0.0",
