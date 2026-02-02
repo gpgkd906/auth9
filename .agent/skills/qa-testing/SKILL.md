@@ -427,6 +427,45 @@ WHERE rp.role_id = '{role_id}';
 - Restart services: `docker-compose restart <service-name>`
 - If persistent, suggest reset environment
 
+## Mailpit 邮件测试服务
+
+Dev 环境提供 Mailpit 用于捕获所有发出的邮件（邀请、密码重置等）：
+- Web UI: http://localhost:8025
+- API: http://localhost:8025/api/v1/
+
+### API 端点
+
+| 端点 | 说明 |
+|------|------|
+| `GET /api/v1/messages` | 获取邮件列表 |
+| `GET /api/v1/message/{id}` | 获取邮件详情（包含完整内容） |
+| `GET /api/v1/search?query=to:user@example.com` | 搜索邮件 |
+| `DELETE /api/v1/messages` | 清空所有邮件 |
+
+### 使用示例
+
+```bash
+# 获取所有邮件
+curl http://localhost:8025/api/v1/messages
+
+# 搜索发送给特定用户的邮件
+curl "http://localhost:8025/api/v1/search?query=to:test@example.com"
+
+# 获取最新邮件的详情（jq 解析 JSON）
+curl -s http://localhost:8025/api/v1/messages | jq '.messages[0]'
+
+# 清空所有邮件（测试前重置）
+curl -X DELETE http://localhost:8025/api/v1/messages
+```
+
+### 邀请测试流程
+
+1. 清空 Mailpit 邮件: `curl -X DELETE http://localhost:8025/api/v1/messages`
+2. 通过 Portal 发送邀请
+3. 查询 Mailpit 获取邀请邮件: `curl http://localhost:8025/api/v1/messages`
+4. 从邮件内容提取邀请链接
+5. 访问邀请链接完成测试
+
 ## Example Usage
 
 **User request**: "按照QA文档进行用户管理测试"

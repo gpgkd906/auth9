@@ -254,3 +254,10 @@ pub trait HasSecurityAlerts: Clone + Send + Sync + 'static {
     /// Get the JWT manager for token verification
     fn jwt_manager(&self) -> &JwtManager;
 }
+
+/// Trait for states that provide direct database access
+/// Used for tenant-service toggles and other direct queries
+pub trait HasDbPool: Clone + Send + Sync + 'static {
+    /// Get the database pool
+    fn db_pool(&self) -> &sqlx::MySqlPool;
+}

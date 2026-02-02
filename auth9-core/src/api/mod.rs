@@ -15,6 +15,7 @@ pub mod service;
 pub mod session;
 pub mod system_settings;
 pub mod tenant;
+pub mod tenant_service;
 pub mod user;
 pub mod webauthn;
 pub mod webhook;

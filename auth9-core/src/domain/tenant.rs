@@ -175,6 +175,34 @@ lazy_static::lazy_static! {
     pub static ref SLUG_REGEX: regex::Regex = regex::Regex::new(r"^[a-z0-9]+(?:-[a-z0-9]+)*$").unwrap();
 }
 
+/// Tenant-Service association entity
+/// Represents which services are enabled for a tenant
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct TenantServiceAssoc {
+    pub tenant_id: StringUuid,
+    pub service_id: StringUuid,
+    pub enabled: bool,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+/// Service with enabled status for a tenant
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+pub struct ServiceWithStatus {
+    pub id: StringUuid,
+    pub name: String,
+    pub base_url: Option<String>,
+    pub status: String,
+    pub enabled: bool,
+}
+
+/// Input for toggling service for a tenant
+#[derive(Debug, Clone, Deserialize)]
+pub struct ToggleServiceInput {
+    pub service_id: uuid::Uuid,
+    pub enabled: bool,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

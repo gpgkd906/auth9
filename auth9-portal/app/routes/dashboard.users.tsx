@@ -28,9 +28,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuLabel,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon } from "@radix-ui/react-icons";
+import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon, TrashIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -105,6 +106,12 @@ export async function action({ request }: ActionFunctionArgs) {
       const tenant_id = formData.get("tenant_id") as string;
       const role_id = formData.get("role_id") as string;
       await rbacApi.unassignRole(user_id, tenant_id, role_id);
+      return { success: true, intent };
+    }
+
+    if (intent === "delete_user") {
+      const id = formData.get("id") as string;
+      await userApi.delete(id);
       return { success: true, intent };
     }
 
@@ -257,6 +264,17 @@ export default function UsersPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingTenantsUser(user)}>
                             <PersonIcon className="mr-2 h-3.5 w-3.5" /> Manage Tenants
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
+                            onClick={() => {
+                              if (confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+                                submit({ intent: "delete_user", id: user.id }, { method: "post" });
+                              }
+                            }}
+                          >
+                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>

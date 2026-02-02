@@ -1,6 +1,6 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, Link, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
-import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, EnvelopeClosedIcon, Link2Icon } from "@radix-ui/react-icons";
+import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, EnvelopeClosedIcon, Link2Icon, MagnifyingGlassIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -34,8 +34,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
-  const tenants = await tenantApi.list(page, perPage);
-  return tenants;
+  const search = url.searchParams.get("search") || undefined;
+  const tenants = await tenantApi.list(page, perPage, search);
+  return { ...tenants, search: search || "" };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -82,6 +83,7 @@ export default function TenantsIndexPage() {
   const submit = useSubmit();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [editingTenant, setEditingTenant] = useState<Tenant | null>(null);
+  const [searchValue, setSearchValue] = useState(data.search || "");
 
   const isSubmitting = navigation.state === "submitting";
 
@@ -145,11 +147,43 @@ export default function TenantsIndexPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Tenant List</CardTitle>
-          <CardDescription>
-            {data.pagination.total} tenants • Page {data.pagination.page} of{" "}
-            {data.pagination.total_pages}
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Tenant List</CardTitle>
+              <CardDescription>
+                {data.pagination.total} tenants • Page {data.pagination.page} of{" "}
+                {data.pagination.total_pages}
+              </CardDescription>
+            </div>
+            <Form method="get" className="flex items-center gap-2">
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
+                <Input
+                  name="search"
+                  placeholder="Search tenants..."
+                  value={searchValue}
+                  onChange={(e) => setSearchValue(e.target.value)}
+                  className="w-[200px] pl-8"
+                />
+              </div>
+              <Button type="submit" variant="outline" size="sm">
+                Search
+              </Button>
+              {data.search && (
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSearchValue("");
+                    window.location.href = "/dashboard/tenants";
+                  }}
+                >
+                  Clear
+                </Button>
+              )}
+            </Form>
+          </div>
         </CardHeader>
         <div className="px-6 pb-6">
           <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
@@ -167,12 +201,15 @@ export default function TenantsIndexPage() {
                 {data.data.map((tenant) => (
                   <tr key={tenant.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
                     <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
-                      <div className="flex items-center gap-2">
+                      <Link
+                        to={`/dashboard/tenants/${tenant.id}`}
+                        className="flex items-center gap-2 hover:underline"
+                      >
                         {tenant.logo_url && (
                           <img src={tenant.logo_url} alt="" className="h-6 w-6 rounded object-cover" />
                         )}
                         {tenant.name}
-                      </div>
+                      </Link>
                     </td>
                     <td className="px-4 py-3">{tenant.slug}</td>
                     <td className="px-4 py-3 capitalize">{tenant.status}</td>

@@ -1,11 +1,10 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
-import RolesPage, { loader } from "~/routes/dashboard.roles";
-import { serviceApi, rbacApi } from "~/services/api";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import RolesPage from "~/routes/dashboard.roles";
 
-// Mock the APIs
+// Mock the APIs (used by the component internally when actions are triggered)
 vi.mock("~/services/api", () => ({
     serviceApi: {
         list: vi.fn(),
@@ -16,6 +15,11 @@ vi.mock("~/services/api", () => ({
         createRole: vi.fn(),
         updateRole: vi.fn(),
         deleteRole: vi.fn(),
+        getRole: vi.fn(),
+        createPermission: vi.fn(),
+        deletePermission: vi.fn(),
+        assignPermissionToRole: vi.fn(),
+        removePermissionFromRole: vi.fn(),
     },
 }));
 
@@ -27,26 +31,33 @@ describe("Roles Page", () => {
         pagination: { total: 1, page: 1, per_page: 20, total_pages: 1 },
     };
 
-    const mockRoles = {
-        data: [
-            { id: "r1", service_id: "s1", name: "Admin", description: "Full access", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    const mockRoles = [
+        { id: "r1", service_id: "s1", name: "Admin", description: "Full access", created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    ];
+
+    const mockPermissions: unknown[] = [];
+
+    const mockLoaderData = {
+        entries: [
+            {
+                service: mockServices.data[0],
+                roles: mockRoles,
+                permissions: mockPermissions,
+            },
         ],
+        pagination: mockServices.pagination,
     };
 
-    const mockPermissions = {
-        data: [],
-    };
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
 
     it("renders roles grouped by service", async () => {
-        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
-        vi.mocked(rbacApi.listRoles).mockResolvedValue(mockRoles);
-        vi.mocked(rbacApi.listPermissions).mockResolvedValue(mockPermissions);
-
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/roles",
                 Component: RolesPage,
-                loader,
+                loader: () => mockLoaderData,
             },
         ]);
 
@@ -60,15 +71,11 @@ describe("Roles Page", () => {
     });
 
     it("opens create role dialog", async () => {
-        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
-        vi.mocked(rbacApi.listRoles).mockResolvedValue(mockRoles);
-        vi.mocked(rbacApi.listPermissions).mockResolvedValue(mockPermissions);
-
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/roles",
                 Component: RolesPage,
-                loader,
+                loader: () => mockLoaderData,
             },
         ]);
 

@@ -146,6 +146,35 @@ impl TenantRepository for TestTenantRepository {
         Ok(self.tenants.read().await.len() as i64)
     }
 
+    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Tenant>> {
+        let tenants = self.tenants.read().await;
+        let query_lower = query.to_lowercase();
+        let filtered: Vec<Tenant> = tenants
+            .iter()
+            .filter(|t| {
+                t.name.to_lowercase().contains(&query_lower)
+                    || t.slug.to_lowercase().contains(&query_lower)
+            })
+            .cloned()
+            .collect();
+        let start = offset as usize;
+        let end = (offset + limit) as usize;
+        Ok(filtered.into_iter().skip(start).take(end - start).collect())
+    }
+
+    async fn count_search(&self, query: &str) -> Result<i64> {
+        let tenants = self.tenants.read().await;
+        let query_lower = query.to_lowercase();
+        let count = tenants
+            .iter()
+            .filter(|t| {
+                t.name.to_lowercase().contains(&query_lower)
+                    || t.slug.to_lowercase().contains(&query_lower)
+            })
+            .count();
+        Ok(count as i64)
+    }
+
     async fn update(&self, id: StringUuid, input: &UpdateTenantInput) -> Result<Tenant> {
         let mut tenants = self.tenants.write().await;
         let tenant = tenants

@@ -69,7 +69,8 @@ describe('API Service', () => {
       await tenantApi.list();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants?page=1&per_page=20')
+        expect.stringContaining('/api/v1/tenants?page=1&per_page=20'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -82,7 +83,8 @@ describe('API Service', () => {
       await tenantApi.list(2, 50);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants?page=2&per_page=50')
+        expect.stringContaining('/api/v1/tenants?page=2&per_page=50'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -171,7 +173,8 @@ describe('API Service', () => {
       await userApi.list();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/users?page=1&per_page=20')
+        expect.stringContaining('/api/v1/users?page=1&per_page=20'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -285,10 +288,12 @@ describe('API Service', () => {
         json: async () => ({ data: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 } }),
       });
 
-      await serviceApi.list();
+      // serviceApi.list(tenantId?, page, perPage, accessToken?)
+      await serviceApi.list(undefined, 1, 20);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/services?page=1&per_page=20')
+        expect.stringContaining('/api/v1/services?page=1&per_page=20'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -298,10 +303,12 @@ describe('API Service', () => {
         json: async () => ({ data: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 } }),
       });
 
-      await serviceApi.list('tenant-123');
+      // serviceApi.list(tenantId?, page, perPage, accessToken?)
+      await serviceApi.list('tenant-123', 1, 20);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('tenant_id=tenant-123')
+        expect.stringContaining('tenant_id=tenant-123'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -549,7 +556,8 @@ describe('API Service', () => {
       await auditApi.list(1, 50);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/audit-logs?limit=50&offset=0')
+        expect.stringContaining('/api/v1/audit-logs?limit=50&offset=0'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -566,7 +574,8 @@ describe('API Service', () => {
 
       // Page 3 with 50 per page = offset of 100
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/audit-logs?limit=50&offset=100')
+        expect.stringContaining('/api/v1/audit-logs?limit=50&offset=100'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
   });

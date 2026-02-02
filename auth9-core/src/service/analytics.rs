@@ -103,6 +103,15 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
         self.login_event_repo.get_stats(start, end).await
     }
 
+    /// Get login statistics for a date range (alias for get_stats)
+    pub async fn get_stats_for_range(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<LoginStats> {
+        self.get_stats(start, end).await
+    }
+
     /// Get login statistics for the last N days
     pub async fn get_stats_for_days(&self, days: i64) -> Result<LoginStats> {
         let end = Utc::now();

@@ -351,10 +351,29 @@ pub struct LogoutRequest {
     pub state: Option<String>,
 }
 
-pub async fn logout<S: HasServices>(
+pub async fn logout<S: HasServices + HasSessionManagement>(
     State(state): State<S>,
+    auth: Option<TypedHeader<Authorization<Bearer>>>,
     Query(params): Query<LogoutRequest>,
 ) -> Result<Response> {
+    // Try to revoke session from token before redirecting to Keycloak
+    if let Some(TypedHeader(Authorization(bearer))) = auth {
+        // Use HasServices::jwt_manager to disambiguate (both traits have jwt_manager)
+        if let Ok(claims) = HasServices::jwt_manager(&state).verify_identity_token(bearer.token()) {
+            if let Some(ref sid) = claims.sid {
+                if let Ok(session_id) = uuid::Uuid::parse_str(sid) {
+                    if let Ok(user_id) = uuid::Uuid::parse_str(&claims.sub) {
+                        // Ignore errors - session may already be revoked or expired
+                        let _ = state
+                            .session_service()
+                            .revoke_session(session_id.into(), user_id.into())
+                            .await;
+                    }
+                }
+            }
+        }
+    }
+
     let logout_url = build_keycloak_logout_url(
         &state.config().keycloak.public_url,
         &state.config().keycloak.realm,

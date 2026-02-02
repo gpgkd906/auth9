@@ -11,6 +11,7 @@ pub mod service;
 pub mod session;
 pub mod system_settings;
 pub mod tenant;
+pub mod tenant_service;
 pub mod user;
 pub mod webhook;
 
@@ -25,6 +26,7 @@ pub use service::ServiceRepository;
 pub use session::SessionRepository;
 pub use system_settings::SystemSettingsRepository;
 pub use tenant::TenantRepository;
+pub use tenant_service::TenantServiceRepository;
 pub use user::UserRepository;
 pub use webhook::WebhookRepository;
 

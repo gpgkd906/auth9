@@ -1,10 +1,9 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
-import { describe, it, expect, vi } from "vitest";
-import DashboardIndex, { loader } from "~/routes/dashboard._index";
-import { tenantApi, userApi, serviceApi, auditApi } from "~/services/api";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import DashboardIndex from "~/routes/dashboard._index";
 
-// Mock APIs
+// Mock APIs (used internally by loader)
 vi.mock("~/services/api", () => ({
     tenantApi: { list: vi.fn() },
     userApi: { list: vi.fn() },
@@ -12,47 +11,44 @@ vi.mock("~/services/api", () => ({
     auditApi: { list: vi.fn() },
 }));
 
+// Mock the session server
+vi.mock("~/services/session.server", () => ({
+    getAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
+}));
+
 describe("Dashboard Index Page", () => {
-    const mockApiResponses = () => {
-        vi.mocked(tenantApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 5, page: 1, per_page: 20, total_pages: 1 },
-        });
-        vi.mocked(userApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 12, page: 1, per_page: 20, total_pages: 1 },
-        });
-        vi.mocked(serviceApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 3, page: 1, per_page: 20, total_pages: 1 },
-        });
-        vi.mocked(auditApi.list).mockResolvedValue({
-            data: [
-                {
-                    id: 1,
-                    action: "CREATE",
-                    resource_type: "tenant",
-                    created_at: new Date().toISOString(),
-                },
-                {
-                    id: 2,
-                    action: "UPDATE",
-                    resource_type: "user",
-                    created_at: new Date().toISOString(),
-                },
-            ],
-            pagination: { total: 2, page: 1, per_page: 50, total_pages: 1 },
-        });
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    const mockLoaderData = {
+        totals: {
+            tenants: 5,
+            users: 12,
+            services: 3,
+        },
+        audits: [
+            {
+                id: 1,
+                action: "CREATE",
+                resource_type: "tenant",
+                created_at: new Date().toISOString(),
+            },
+            {
+                id: 2,
+                action: "UPDATE",
+                resource_type: "user",
+                created_at: new Date().toISOString(),
+            },
+        ],
     };
 
     it("renders dashboard with stats cards", async () => {
-        mockApiResponses();
-
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
-                loader,
+                loader: () => mockLoaderData,
             },
         ]);
 
@@ -67,13 +63,11 @@ describe("Dashboard Index Page", () => {
     });
 
     it("displays stats values from loader data", async () => {
-        mockApiResponses();
-
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
-                loader,
+                loader: () => mockLoaderData,
             },
         ]);
 
@@ -87,13 +81,11 @@ describe("Dashboard Index Page", () => {
     });
 
     it("renders recent activity list", async () => {
-        mockApiResponses();
-
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
-                loader,
+                loader: () => mockLoaderData,
             },
         ]);
 
@@ -107,28 +99,20 @@ describe("Dashboard Index Page", () => {
     });
 
     it("shows empty state when no audit logs", async () => {
-        vi.mocked(tenantApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
-        });
-        vi.mocked(userApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
-        });
-        vi.mocked(serviceApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
-        });
-        vi.mocked(auditApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 0, page: 1, per_page: 50, total_pages: 1 },
-        });
+        const emptyLoaderData = {
+            totals: {
+                tenants: 0,
+                users: 0,
+                services: 0,
+            },
+            audits: [],
+        };
 
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
                 Component: DashboardIndex,
-                loader,
+                loader: () => emptyLoaderData,
             },
         ]);
 

@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { getAccessToken, requireAuth } from "~/services/session.server";
+import { getAccessToken } from "~/services/session.server";
 import { redirect } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -43,12 +43,12 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "revoke") {
       const sessionId = formData.get("sessionId") as string;
       await sessionApi.revokeSession(sessionId, accessToken);
-      return { success: true, message: "Session revoked" };
+      return redirect("/dashboard/settings/sessions");
     }
 
     if (intent === "revoke_all") {
       await sessionApi.revokeOtherSessions(accessToken);
-      return { success: true, message: "All other sessions revoked" };
+      return redirect("/dashboard/settings/sessions");
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Operation failed";
@@ -173,12 +173,6 @@ export default function SessionsPage() {
           {actionData?.error && (
             <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md mb-4">
               {actionData.error}
-            </div>
-          )}
-
-          {actionData?.success && (
-            <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md mb-4">
-              {actionData.message}
             </div>
           )}
 

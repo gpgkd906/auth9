@@ -24,7 +24,7 @@ use crate::service::{
     SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
 };
 use crate::state::{
-    HasAnalytics, HasBranding, HasEmailTemplates, HasIdentityProviders, HasInvitations,
+    HasAnalytics, HasBranding, HasDbPool, HasEmailTemplates, HasIdentityProviders, HasInvitations,
     HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings,
     HasWebAuthn, HasWebhooks,
 };
@@ -326,6 +326,13 @@ impl HasSecurityAlerts for AppState {
 
     fn jwt_manager(&self) -> &JwtManager {
         &self.jwt_manager
+    }
+}
+
+/// Implement HasDbPool trait for production AppState
+impl HasDbPool for AppState {
+    fn db_pool(&self) -> &MySqlPool {
+        &self.db_pool
     }
 }
 
@@ -753,7 +760,8 @@ where
         + HasIdentityProviders
         + HasAnalytics
         + HasWebhooks
-        + HasSecurityAlerts,
+        + HasSecurityAlerts
+        + HasDbPool,
 {
     // CORS configuration
     let cors = CorsLayer::new()
@@ -1051,6 +1059,15 @@ where
         .route(
             "/api/v1/security/alerts/{id}/resolve",
             post(api::security_alert::resolve_alert::<S>),
+        )
+        // === Tenant-Service toggle endpoints ===
+        .route(
+            "/api/v1/tenants/{tenant_id}/services",
+            get(api::tenant_service::list_services::<S>).post(api::tenant_service::toggle_service::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/services/enabled",
+            get(api::tenant_service::get_enabled_services::<S>),
         )
         // Add middleware
         .layer(TraceLayer::new_for_http())

@@ -57,11 +57,10 @@ export interface CreateTenantInput {
 }
 
 export const tenantApi = {
-  list: async (page = 1, perPage = 20, accessToken?: string): Promise<PaginatedResponse<Tenant>> => {
-    const response = await fetch(
-      `${API_BASE_URL}/api/v1/tenants?page=${page}&per_page=${perPage}`,
-      { headers: getHeaders(accessToken) }
-    );
+  list: async (page = 1, perPage = 20, search?: string, accessToken?: string): Promise<PaginatedResponse<Tenant>> => {
+    let url = `${API_BASE_URL}/api/v1/tenants?page=${page}&per_page=${perPage}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
+    const response = await fetch(url, { headers: getHeaders(accessToken) });
     return handleResponse(response);
   },
 
@@ -147,6 +146,16 @@ export const userApi = {
       body: JSON.stringify(input),
     });
     return handleResponse(response);
+  },
+
+  delete: async (id: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}`, {
+      method: "DELETE",
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
   },
 
   getTenants: async (userId: string): Promise<{ data: { id: string; tenant_id: string; role_in_tenant: string; joined_at: string; tenant: Tenant }[] }> => {
@@ -1161,6 +1170,41 @@ export const webhookApi = {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}/test`, {
       method: "POST",
     });
+    return handleResponse(response);
+  },
+};
+
+// ==================== Tenant-Service Toggle API ====================
+
+export interface ServiceWithStatus {
+  id: string;
+  name: string;
+  base_url?: string;
+  status: string;
+  enabled: boolean;
+}
+
+export const tenantServiceApi = {
+  listServices: async (tenantId: string): Promise<{ data: ServiceWithStatus[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services`);
+    return handleResponse(response);
+  },
+
+  toggleService: async (
+    tenantId: string,
+    serviceId: string,
+    enabled: boolean
+  ): Promise<{ data: ServiceWithStatus[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ service_id: serviceId, enabled }),
+    });
+    return handleResponse(response);
+  },
+
+  getEnabledServices: async (tenantId: string): Promise<{ data: ServiceWithStatus[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services/enabled`);
     return handleResponse(response);
   },
 };
