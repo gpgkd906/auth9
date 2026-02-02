@@ -64,16 +64,19 @@ WHERE name = 'User Events Webhook' AND tenant_id = '{tenant_id}';
 验证 Webhook 配置更新功能
 
 ### 测试操作流程
-1. 找到目标 Webhook
-2. 点击「编辑」
-3. 修改：
-   - 添加事件：`session.created`
+1. 进入租户详情 → Webhooks 标签页
+2. 找到目标 Webhook，点击行末的 **✏️ 铅笔图标**（Edit 按钮）
+3. 在弹出的编辑对话框中修改：
+   - 添加事件：`session.revoked`
    - 修改 URL：`https://api.example.com/webhooks/auth9/v2`
-4. 保存
+4. 点击「Update webhook」保存
+
+> **注意**: 编辑功能通过 Modal 弹窗实现，不是独立页面
 
 ### 预期结果
-- 显示更新成功
-- 配置已更新
+- 弹窗关闭
+- 列表中显示更新后的配置
+- Toast 提示更新成功
 
 ### 预期数据状态
 ```sql
@@ -92,12 +95,17 @@ SELECT url, events, updated_at FROM webhooks WHERE id = '{webhook_id}';
 验证 Webhook 禁用功能
 
 ### 测试操作流程
-1. 找到目标 Webhook
-2. 点击「禁用」开关
+1. 进入租户详情 → Webhooks 标签页
+2. 找到目标 Webhook，点击 **✏️ 铅笔图标** 打开编辑弹窗
+3. 找到「Enabled」开关，将其关闭
+4. 点击「Update webhook」保存
+
+> **注意**: 启用/禁用开关在编辑弹窗内，不是列表行上的独立开关
 
 ### 预期结果
-- 状态变为「已禁用」
-- 不再接收事件
+- 弹窗关闭
+- 列表中该 Webhook 状态指示器变为灰色（已禁用）
+- Test 按钮变为禁用状态
 
 ### 预期数据状态
 ```sql
@@ -116,12 +124,15 @@ SELECT enabled FROM webhooks WHERE id = '{webhook_id}';
 验证 Webhook 重新启用功能
 
 ### 测试操作流程
-1. 找到目标 Webhook
-2. 点击「启用」开关
+1. 进入租户详情 → Webhooks 标签页
+2. 找到目标 Webhook，点击 **✏️ 铅笔图标** 打开编辑弹窗
+3. 找到「Enabled」开关，将其开启
+4. 点击「Update webhook」保存
 
 ### 预期结果
-- 状态变为「已启用」
-- 恢复接收事件
+- 弹窗关闭
+- 列表中该 Webhook 状态指示器变为绿色（已启用）
+- Test 按钮变为可用状态
 
 ### 预期数据状态
 ```sql
@@ -156,6 +167,26 @@ SELECT COUNT(*) FROM webhooks WHERE id = '{webhook_id}';
 
 ---
 
+## 通用场景：认证状态检查
+
+### 初始状态
+- 用户已登录管理后台
+- 页面正常显示
+
+### 目的
+验证页面正确检查认证状态，未登录或 session 失效时重定向到登录页
+
+### 测试操作流程
+1. 关闭浏览器
+2. 重新打开浏览器，访问本页面对应的 URL
+
+### 预期结果
+- 页面自动重定向到 `/login`
+- 不显示 dashboard 内容
+- 登录后可正常访问原页面
+
+---
+
 ## 检查清单
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
@@ -165,3 +196,4 @@ SELECT COUNT(*) FROM webhooks WHERE id = '{webhook_id}';
 | 3 | 禁用 Webhook | ☐ | | | |
 | 4 | 启用 Webhook | ☐ | | | |
 | 5 | 删除 Webhook | ☐ | | | |
+| 6 | 认证状态检查 | ☐ | | | |

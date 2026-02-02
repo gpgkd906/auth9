@@ -73,6 +73,8 @@ services:
       SMTP_PORT: 1025
       SMTP_FROM: noreply@auth9.local
       DEV_SMTP_HOST: mailpit
+      # Enable gRPC reflection for dev (grpcurl, grpcui debugging)
+      GRPC_ENABLE_REFLECTION: "true"
     depends_on:
       auth9-init:
         condition: service_completed_successfully

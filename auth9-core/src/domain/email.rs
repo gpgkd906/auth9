@@ -1,7 +1,13 @@
 //! Email provider domain types
 
+use crate::keycloak::SmtpServerConfig;
+use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
+use sha2::Sha256;
 use validator::Validate;
+
+/// Version byte for SES SMTP password calculation
+const SES_SMTP_PASSWORD_VERSION: u8 = 0x04;
 
 /// Email provider configuration - supports multiple provider types
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
@@ -36,6 +42,112 @@ impl EmailProviderConfig {
             Self::Oracle(_) => "oracle",
         }
     }
+
+    /// Convert to Keycloak SmtpServerConfig
+    ///
+    /// Returns None if conversion is not possible (e.g., SES without credentials)
+    pub fn to_keycloak_smtp(&self) -> Option<SmtpServerConfig> {
+        match self {
+            Self::None => {
+                // Return empty config to clear SMTP settings in Keycloak
+                Some(SmtpServerConfig::default())
+            }
+            Self::Smtp(cfg) => Some(SmtpServerConfig {
+                host: Some(cfg.host.clone()),
+                port: Some(cfg.port.to_string()),
+                from: Some(cfg.from_email.clone()),
+                from_display_name: cfg.from_name.clone(),
+                auth: Some(cfg.username.is_some().to_string()),
+                user: cfg.username.clone(),
+                password: cfg.password.clone(),
+                ssl: Some((!cfg.use_tls && cfg.port == 465).to_string()),
+                starttls: Some(cfg.use_tls.to_string()),
+            }),
+            Self::Ses(cfg) => {
+                // SES requires credentials to compute SMTP password
+                let (access_key_id, secret_access_key) =
+                    match (&cfg.access_key_id, &cfg.secret_access_key) {
+                        (Some(key_id), Some(secret)) => (key_id.clone(), secret.clone()),
+                        _ => return None, // Cannot sync without credentials
+                    };
+
+                let smtp_password = compute_ses_smtp_password(&secret_access_key, &cfg.region);
+
+                Some(SmtpServerConfig {
+                    host: Some(format!("email-smtp.{}.amazonaws.com", cfg.region)),
+                    port: Some("587".to_string()),
+                    from: Some(cfg.from_email.clone()),
+                    from_display_name: cfg.from_name.clone(),
+                    auth: Some("true".to_string()),
+                    user: Some(access_key_id),
+                    password: Some(smtp_password),
+                    ssl: Some("false".to_string()),
+                    starttls: Some("true".to_string()),
+                })
+            }
+            Self::Oracle(cfg) => Some(SmtpServerConfig {
+                host: Some(cfg.smtp_endpoint.clone()),
+                port: Some(cfg.port.to_string()),
+                from: Some(cfg.from_email.clone()),
+                from_display_name: cfg.from_name.clone(),
+                auth: Some("true".to_string()),
+                user: Some(cfg.username.clone()),
+                password: Some(cfg.password.clone()),
+                ssl: Some("false".to_string()),
+                starttls: Some("true".to_string()),
+            }),
+        }
+    }
+}
+
+/// Compute AWS SES SMTP password from secret access key
+///
+/// AWS SES uses Signature Version 4 algorithm to derive SMTP credentials.
+/// Reference: https://docs.aws.amazon.com/ses/latest/dg/smtp-credentials.html
+pub fn compute_ses_smtp_password(secret_access_key: &str, region: &str) -> String {
+    use base64::Engine;
+
+    type HmacSha256 = Hmac<Sha256>;
+
+    // Step 1: Create a signature using the secret access key
+    let date = "11111111"; // SES uses a fixed date for SMTP
+    let service = "ses";
+
+    // kDate = HMAC("AWS4" + secret, Date)
+    let key = format!("AWS4{}", secret_access_key);
+    let mut mac = HmacSha256::new_from_slice(key.as_bytes()).expect("HMAC accepts any key size");
+    mac.update(date.as_bytes());
+    let k_date = mac.finalize().into_bytes();
+
+    // kRegion = HMAC(kDate, Region)
+    let mut mac =
+        HmacSha256::new_from_slice(&k_date).expect("HMAC accepts derived key of any size");
+    mac.update(region.as_bytes());
+    let k_region = mac.finalize().into_bytes();
+
+    // kService = HMAC(kRegion, Service)
+    let mut mac =
+        HmacSha256::new_from_slice(&k_region).expect("HMAC accepts derived key of any size");
+    mac.update(service.as_bytes());
+    let k_service = mac.finalize().into_bytes();
+
+    // kSigning = HMAC(kService, "aws4_request")
+    let mut mac =
+        HmacSha256::new_from_slice(&k_service).expect("HMAC accepts derived key of any size");
+    mac.update(b"aws4_request");
+    let k_signing = mac.finalize().into_bytes();
+
+    // signature = HMAC(kSigning, "SendRawEmail")
+    let mut mac =
+        HmacSha256::new_from_slice(&k_signing).expect("HMAC accepts derived key of any size");
+    mac.update(b"SendRawEmail");
+    let signature = mac.finalize().into_bytes();
+
+    // Final SMTP password = Base64(version_byte + signature)
+    let mut password_bytes = vec![SES_SMTP_PASSWORD_VERSION];
+    password_bytes.extend_from_slice(&signature);
+
+    base64::engine::general_purpose::STANDARD.encode(&password_bytes)
 }
 
 /// SMTP configuration for email sending
@@ -358,6 +470,163 @@ mod tests {
         assert!(!failure.success);
         assert!(failure.message_id.is_none());
         assert_eq!(failure.error.unwrap(), "Connection refused");
+    }
+
+    #[test]
+    fn test_compute_ses_smtp_password() {
+        // Test with known values
+        // The algorithm should produce a base64 string starting with version byte 0x04
+        let password = compute_ses_smtp_password("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1");
+
+        // Password should be base64 encoded and start with the version byte
+        assert!(!password.is_empty());
+
+        // Decode and verify version byte
+        use base64::Engine;
+        let decoded = base64::engine::general_purpose::STANDARD
+            .decode(&password)
+            .unwrap();
+        assert_eq!(decoded[0], 0x04); // Version byte
+        assert_eq!(decoded.len(), 33); // 1 version byte + 32 bytes HMAC-SHA256
+    }
+
+    #[test]
+    fn test_compute_ses_smtp_password_deterministic() {
+        // Same input should always produce same output
+        let password1 = compute_ses_smtp_password("secret-key", "us-west-2");
+        let password2 = compute_ses_smtp_password("secret-key", "us-west-2");
+        assert_eq!(password1, password2);
+
+        // Different region should produce different password
+        let password3 = compute_ses_smtp_password("secret-key", "eu-west-1");
+        assert_ne!(password1, password3);
+    }
+
+    #[test]
+    fn test_to_keycloak_smtp_none() {
+        let config = EmailProviderConfig::None;
+        let smtp = config.to_keycloak_smtp().unwrap();
+
+        // Should return empty config to clear SMTP settings
+        assert!(smtp.host.is_none());
+        assert!(smtp.port.is_none());
+        assert!(smtp.from.is_none());
+    }
+
+    #[test]
+    fn test_to_keycloak_smtp_smtp_provider() {
+        let config = EmailProviderConfig::Smtp(SmtpConfig {
+            host: "smtp.example.com".to_string(),
+            port: 587,
+            username: Some("user@example.com".to_string()),
+            password: Some("password123".to_string()),
+            use_tls: true,
+            from_email: "noreply@example.com".to_string(),
+            from_name: Some("Auth9".to_string()),
+        });
+
+        let smtp = config.to_keycloak_smtp().unwrap();
+
+        assert_eq!(smtp.host, Some("smtp.example.com".to_string()));
+        assert_eq!(smtp.port, Some("587".to_string()));
+        assert_eq!(smtp.from, Some("noreply@example.com".to_string()));
+        assert_eq!(smtp.from_display_name, Some("Auth9".to_string()));
+        assert_eq!(smtp.auth, Some("true".to_string()));
+        assert_eq!(smtp.user, Some("user@example.com".to_string()));
+        assert_eq!(smtp.password, Some("password123".to_string()));
+        assert_eq!(smtp.starttls, Some("true".to_string()));
+    }
+
+    #[test]
+    fn test_to_keycloak_smtp_smtp_no_auth() {
+        let config = EmailProviderConfig::Smtp(SmtpConfig {
+            host: "smtp.example.com".to_string(),
+            port: 25,
+            username: None,
+            password: None,
+            use_tls: false,
+            from_email: "noreply@example.com".to_string(),
+            from_name: None,
+        });
+
+        let smtp = config.to_keycloak_smtp().unwrap();
+
+        assert_eq!(smtp.auth, Some("false".to_string()));
+        assert!(smtp.user.is_none());
+        assert!(smtp.password.is_none());
+        assert_eq!(smtp.starttls, Some("false".to_string()));
+    }
+
+    #[test]
+    fn test_to_keycloak_smtp_ses_provider() {
+        let config = EmailProviderConfig::Ses(SesConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
+            secret_access_key: Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()),
+            from_email: "noreply@example.com".to_string(),
+            from_name: Some("Auth9".to_string()),
+            configuration_set: None,
+        });
+
+        let smtp = config.to_keycloak_smtp().unwrap();
+
+        assert_eq!(
+            smtp.host,
+            Some("email-smtp.us-east-1.amazonaws.com".to_string())
+        );
+        assert_eq!(smtp.port, Some("587".to_string()));
+        assert_eq!(smtp.from, Some("noreply@example.com".to_string()));
+        assert_eq!(smtp.auth, Some("true".to_string()));
+        assert_eq!(smtp.user, Some("AKIAIOSFODNN7EXAMPLE".to_string()));
+        // Password should be computed SES SMTP password
+        assert!(smtp.password.is_some());
+        assert_ne!(
+            smtp.password.as_ref().unwrap(),
+            "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY"
+        );
+        assert_eq!(smtp.starttls, Some("true".to_string()));
+    }
+
+    #[test]
+    fn test_to_keycloak_smtp_ses_no_credentials() {
+        let config = EmailProviderConfig::Ses(SesConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: None,
+            secret_access_key: None,
+            from_email: "noreply@example.com".to_string(),
+            from_name: None,
+            configuration_set: None,
+        });
+
+        // Should return None when credentials are missing
+        let smtp = config.to_keycloak_smtp();
+        assert!(smtp.is_none());
+    }
+
+    #[test]
+    fn test_to_keycloak_smtp_oracle_provider() {
+        let config = EmailProviderConfig::Oracle(OracleEmailConfig {
+            smtp_endpoint: "smtp.us-ashburn-1.oraclecloud.com".to_string(),
+            port: 587,
+            username: "ocid1.user.oc1..example".to_string(),
+            password: "oracle-password".to_string(),
+            from_email: "noreply@example.com".to_string(),
+            from_name: Some("Auth9".to_string()),
+        });
+
+        let smtp = config.to_keycloak_smtp().unwrap();
+
+        assert_eq!(
+            smtp.host,
+            Some("smtp.us-ashburn-1.oraclecloud.com".to_string())
+        );
+        assert_eq!(smtp.port, Some("587".to_string()));
+        assert_eq!(smtp.from, Some("noreply@example.com".to_string()));
+        assert_eq!(smtp.from_display_name, Some("Auth9".to_string()));
+        assert_eq!(smtp.auth, Some("true".to_string()));
+        assert_eq!(smtp.user, Some("ocid1.user.oc1..example".to_string()));
+        assert_eq!(smtp.password, Some("oracle-password".to_string()));
+        assert_eq!(smtp.starttls, Some("true".to_string()));
     }
 
     #[test]

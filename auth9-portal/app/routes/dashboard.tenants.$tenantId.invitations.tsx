@@ -31,7 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { invitationApi, tenantApi, serviceApi, rbacApi, type Invitation, type Role, type Tenant } from "~/services/api";
+import { invitationApi, tenantApi, tenantServiceApi, rbacApi, type Invitation, type Role, type Tenant } from "~/services/api";
 import { formatDateTime } from "~/lib/utils";
 import { getAccessToken } from "~/services/session.server";
 
@@ -49,6 +49,7 @@ interface LoaderData {
     total_pages: number;
   };
   roles: { serviceId: string; serviceName: string; roles: Role[] }[];
+  servicesCount: number;
 }
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
@@ -61,11 +62,11 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
 
-  // Fetch tenant, invitations, and available roles in parallel
+  // Fetch tenant, invitations, and enabled services in parallel
   const [tenantResult, invitationsResult, servicesResult] = await Promise.all([
     tenantApi.get(tenantId),
     invitationApi.list(tenantId, page, perPage),
-    serviceApi.list(tenantId), // Get services for this tenant
+    tenantServiceApi.getEnabledServices(tenantId), // Get enabled services for this tenant
   ]);
 
   // Fetch roles for each service
@@ -85,6 +86,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     invitations: invitationsResult.data,
     pagination: invitationsResult.pagination,
     roles,
+    servicesCount: servicesResult.data.length,
   } satisfies LoaderData;
 }
 
@@ -176,7 +178,7 @@ function getStatusBadge(status: Invitation["status"]) {
 }
 
 export default function InvitationsPage() {
-  const { tenant, invitations, pagination, roles } = useLoaderData<LoaderData>();
+  const { tenant, invitations, pagination, roles, servicesCount } = useLoaderData<LoaderData>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -287,7 +289,9 @@ export default function InvitationsPage() {
                 <Label>Assign Roles</Label>
                 {roles.length === 0 ? (
                   <p className="text-sm text-[var(--text-secondary)]">
-                    No services configured for this tenant. Please create a service first.
+                    {servicesCount === 0
+                      ? "No services configured for this tenant. Please create a service first."
+                      : "Services exist but no roles are defined. Please create roles for your services first."}
                   </p>
                 ) : (
                   <div className="space-y-4 max-h-60 overflow-y-auto border rounded-md p-3">

@@ -24,7 +24,7 @@ async fn test_get_stats_daily_period() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/stats?period=daily").await;
+        get_json(&app, "/api/v1/analytics/login-stats?period=daily").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -42,7 +42,7 @@ async fn test_get_stats_weekly_period() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/stats?period=weekly").await;
+        get_json(&app, "/api/v1/analytics/login-stats?period=weekly").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -60,7 +60,7 @@ async fn test_get_stats_monthly_period() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/stats?period=monthly").await;
+        get_json(&app, "/api/v1/analytics/login-stats?period=monthly").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -78,7 +78,7 @@ async fn test_get_stats_custom_days() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/stats?days=14").await;
+        get_json(&app, "/api/v1/analytics/login-stats?days=14").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -97,7 +97,7 @@ async fn test_get_stats_default() {
 
     // No period or days specified - defaults to 7 days
     let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/stats").await;
+        get_json(&app, "/api/v1/analytics/login-stats").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -113,7 +113,7 @@ async fn test_get_stats_empty() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/stats").await;
+        get_json(&app, "/api/v1/analytics/login-stats").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -137,7 +137,7 @@ async fn test_list_events_with_pagination() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<LoginEvent>>) =
-        get_json(&app, "/api/v1/analytics/events?page=1&per_page=10").await;
+        get_json(&app, "/api/v1/analytics/login-events?page=1&per_page=10").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -156,7 +156,7 @@ async fn test_list_events_empty() {
     let app = build_analytics_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<LoginEvent>>) =
-        get_json(&app, "/api/v1/analytics/events").await;
+        get_json(&app, "/api/v1/analytics/login-events").await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -299,11 +299,11 @@ fn build_analytics_test_router(state: TestAppState) -> axum::Router {
 
     axum::Router::new()
         .route(
-            "/api/v1/analytics/stats",
+            "/api/v1/analytics/login-stats",
             get(analytics::get_stats::<TestAppState>),
         )
         .route(
-            "/api/v1/analytics/events",
+            "/api/v1/analytics/login-events",
             get(analytics::list_events::<TestAppState>),
         )
         .route(

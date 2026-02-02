@@ -1,12 +1,19 @@
-import type { MetaFunction } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Link, Outlet, useLocation } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
+import { requireAuth } from "~/services/session.server";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Dashboard - Auth9" }];
 };
+
+// Protect all dashboard routes - redirects to /login if not authenticated
+export async function loader({ request }: LoaderFunctionArgs) {
+  await requireAuth(request);
+  return null;
+}
 
 const navigation = [
   { name: "Overview", href: "/dashboard", icon: HomeIcon },

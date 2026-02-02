@@ -344,7 +344,7 @@ fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
 }
 
 /// Validate optional webhook URL (called by validator macro when Option<String> field has Some value)
-fn validate_webhook_url_option(url: &String) -> Result<(), ValidationError> {
+fn validate_webhook_url_option(url: &str) -> Result<(), ValidationError> {
     validate_webhook_url(url)
 }
 

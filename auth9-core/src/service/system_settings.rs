@@ -7,12 +7,14 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
+use crate::service::KeycloakSyncService;
 use std::sync::Arc;
 
 /// Service for managing system-wide settings
 pub struct SystemSettingsService<R: SystemSettingsRepository> {
     repo: Arc<R>,
     encryption_key: Option<EncryptionKey>,
+    sync_service: Option<Arc<KeycloakSyncService>>,
 }
 
 impl<R: SystemSettingsRepository> SystemSettingsService<R> {
@@ -20,6 +22,20 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
         Self {
             repo,
             encryption_key,
+            sync_service: None,
+        }
+    }
+
+    /// Create a new SystemSettingsService with Keycloak sync support
+    pub fn with_sync_service(
+        repo: Arc<R>,
+        encryption_key: Option<EncryptionKey>,
+        sync_service: Arc<KeycloakSyncService>,
+    ) -> Self {
+        Self {
+            repo,
+            encryption_key,
+            sync_service: Some(sync_service),
         }
     }
 
@@ -75,6 +91,13 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
         };
 
         self.repo.upsert(&input).await?;
+
+        // Sync to Keycloak if sync service is configured
+        if let Some(sync_service) = &self.sync_service {
+            let smtp_config = config.to_keycloak_smtp();
+            sync_service.sync_email_config(smtp_config).await;
+        }
+
         Ok(())
     }
 

@@ -84,6 +84,8 @@ pub struct GrpcSecurityConfig {
     pub tls_key_path: Option<String>,
     /// Path to CA certificate for client verification in mTLS mode
     pub tls_ca_cert_path: Option<String>,
+    /// Whether to enable gRPC reflection (for debugging tools like grpcurl)
+    pub enable_reflection: bool,
 }
 
 impl Default for GrpcSecurityConfig {
@@ -94,6 +96,7 @@ impl Default for GrpcSecurityConfig {
             tls_cert_path: None,
             tls_key_path: None,
             tls_ca_cert_path: None,
+            enable_reflection: false,
         }
     }
 }
@@ -213,6 +216,9 @@ impl Config {
                 tls_cert_path: env::var("GRPC_TLS_CERT_PATH").ok(),
                 tls_key_path: env::var("GRPC_TLS_KEY_PATH").ok(),
                 tls_ca_cert_path: env::var("GRPC_TLS_CA_CERT_PATH").ok(),
+                enable_reflection: env::var("GRPC_ENABLE_REFLECTION")
+                    .map(|s| s.to_lowercase() == "true")
+                    .unwrap_or(false),
             },
             rate_limit: {
                 let endpoints: HashMap<String, RateLimitEndpointConfig> =
@@ -564,6 +570,7 @@ mod tests {
             tls_cert_path: None,
             tls_key_path: None,
             tls_ca_cert_path: None,
+            enable_reflection: false,
         };
 
         assert_eq!(config.auth_mode, "api_key");
@@ -578,12 +585,27 @@ mod tests {
             tls_cert_path: Some("/path/to/server.crt".to_string()),
             tls_key_path: Some("/path/to/server.key".to_string()),
             tls_ca_cert_path: Some("/path/to/ca.crt".to_string()),
+            enable_reflection: false,
         };
 
         assert_eq!(config.auth_mode, "mtls");
         assert!(config.tls_cert_path.is_some());
         assert!(config.tls_key_path.is_some());
         assert!(config.tls_ca_cert_path.is_some());
+    }
+
+    #[test]
+    fn test_grpc_security_config_with_reflection() {
+        let config = GrpcSecurityConfig {
+            auth_mode: "none".to_string(),
+            api_keys: vec![],
+            tls_cert_path: None,
+            tls_key_path: None,
+            tls_ca_cert_path: None,
+            enable_reflection: true,
+        };
+
+        assert!(config.enable_reflection);
     }
 
     #[test]

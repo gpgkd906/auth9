@@ -7,6 +7,9 @@ use crate::crypto::EncryptionKey;
 use crate::grpc::interceptor::{ApiKeyAuthenticator, AuthInterceptor};
 use crate::grpc::proto::token_exchange_server::TokenExchangeServer;
 use crate::grpc::TokenExchangeService;
+
+/// File descriptor set for gRPC reflection
+pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth9_descriptor");
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
@@ -419,10 +422,14 @@ pub async fn run(config: Config) -> Result<()> {
         info!("SETTINGS_ENCRYPTION_KEY not set, sensitive settings will not be encrypted");
     }
 
-    // Create system settings service
-    let system_settings_service = Arc::new(SystemSettingsService::new(
+    // Create Keycloak sync service (shared between branding and system settings)
+    let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_arc.clone()));
+
+    // Create system settings service with Keycloak sync
+    let system_settings_service = Arc::new(SystemSettingsService::with_sync_service(
         system_settings_repo.clone(),
         encryption_key,
+        keycloak_sync_service.clone(),
     ));
 
     // Create email service
@@ -430,9 +437,6 @@ pub async fn run(config: Config) -> Result<()> {
 
     // Create email template service
     let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
-
-    // Create Keycloak sync service for branding sync
-    let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_arc.clone()));
 
     // Create branding service with Keycloak sync
     let branding_service = Arc::new(BrandingService::with_sync_service(
@@ -541,16 +545,37 @@ pub async fn run(config: Config) -> Result<()> {
     let grpc_server = async {
         let addr = grpc_addr.parse()?;
         info!(
-            "gRPC server started on {} (auth_mode: {})",
-            grpc_addr, config.grpc_security.auth_mode
+            "gRPC server started on {} (auth_mode: {}, reflection: {})",
+            grpc_addr, config.grpc_security.auth_mode, config.grpc_security.enable_reflection
         );
-        TonicServer::builder()
-            .add_service(TokenExchangeServer::with_interceptor(
-                grpc_service,
-                grpc_auth_interceptor,
-            ))
-            .serve(addr)
-            .await?;
+
+        let mut builder = TonicServer::builder();
+
+        // Add services based on configuration
+        if config.grpc_security.enable_reflection {
+            let reflection_service = tonic_reflection::server::Builder::configure()
+                .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
+                .build_v1()?;
+            info!("gRPC reflection enabled");
+
+            builder
+                .add_service(reflection_service)
+                .add_service(TokenExchangeServer::with_interceptor(
+                    grpc_service,
+                    grpc_auth_interceptor,
+                ))
+                .serve(addr)
+                .await?;
+        } else {
+            builder
+                .add_service(TokenExchangeServer::with_interceptor(
+                    grpc_service,
+                    grpc_auth_interceptor,
+                ))
+                .serve(addr)
+                .await?;
+        }
+
         Ok::<_, anyhow::Error>(())
     };
 

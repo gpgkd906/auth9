@@ -1,11 +1,10 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, Link, useFetcher, useLoaderData } from "react-router";
+import { Link, useFetcher, useLoaderData } from "react-router";
 import { ArrowLeftIcon, GlobeIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
 import { tenantApi, tenantServiceApi, type ServiceWithStatus } from "~/services/api";
-import { formatErrorMessage } from "~/lib/error-messages";
 
 export const meta: MetaFunction<typeof loader> = ({ data }) => {
   return [{ title: `Services - ${data?.tenant.name || "Tenant"} - Auth9` }];
@@ -43,7 +42,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   }
 }
 
-function ServiceToggleRow({ tenantId, service }: { tenantId: string; service: ServiceWithStatus }) {
+function ServiceToggleRow({ service }: { service: ServiceWithStatus }) {
   const fetcher = useFetcher();
   const isUpdating = fetcher.state !== "idle";
 
@@ -186,7 +185,6 @@ export default function TenantServicesPage() {
               {services.map((service) => (
                 <ServiceToggleRow
                   key={service.id}
-                  tenantId={tenant.id}
                   service={service}
                 />
               ))}

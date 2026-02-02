@@ -1,7 +1,7 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { userApi, tenantApi, rbacApi, serviceApi, type User, type Tenant, type Service, type Role } from "~/services/api";
+import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 
@@ -42,7 +42,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
-import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon, TrashIcon } from "@radix-ui/react-icons";
+import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon, TrashIcon, ExitIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Checkbox } from "~/components/ui/checkbox";
@@ -124,6 +124,12 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "delete_user") {
       const id = formData.get("id") as string;
       await userApi.delete(id);
+      return { success: true, intent };
+    }
+
+    if (intent === "force_logout") {
+      const id = formData.get("id") as string;
+      await sessionApi.forceLogoutUser(id);
       return { success: true, intent };
     }
 
@@ -293,6 +299,15 @@ export default function UsersPage() {
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingTenantsUser(user)}>
                             <PersonIcon className="mr-2 h-3.5 w-3.5" /> Manage Tenants
+                          </DropdownMenuItem>
+                          <DropdownMenuItem
+                            onClick={() => {
+                              if (confirm("Force logout this user from all active sessions?")) {
+                                submit({ intent: "force_logout", id: user.id }, { method: "post" });
+                              }
+                            }}
+                          >
+                            <ExitIcon className="mr-2 h-3.5 w-3.5" /> Force Logout
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem

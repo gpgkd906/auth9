@@ -2069,6 +2069,7 @@ async fn test_update_realm_success() {
         reset_password_allowed: Some(true),
         ssl_required: Some("none".to_string()),
         login_theme: None,
+        smtp_server: None,
     };
 
     let result = client.update_realm(&update).await;
@@ -2104,6 +2105,7 @@ async fn test_update_realm_not_found() {
         reset_password_allowed: None,
         ssl_required: None,
         login_theme: None,
+        smtp_server: None,
     };
 
     let result = client.update_realm(&update).await;

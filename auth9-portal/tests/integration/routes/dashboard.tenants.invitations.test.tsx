@@ -2,7 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import InvitationsPage, { loader } from "~/routes/dashboard.tenants.$tenantId.invitations";
-import { invitationApi, tenantApi, serviceApi, rbacApi } from "~/services/api";
+import { invitationApi, tenantApi, tenantServiceApi, rbacApi } from "~/services/api";
 
 // Mock APIs
 vi.mock("~/services/api", () => ({
@@ -16,8 +16,8 @@ vi.mock("~/services/api", () => ({
   tenantApi: {
     get: vi.fn(),
   },
-  serviceApi: {
-    list: vi.fn(),
+  tenantServiceApi: {
+    getEnabledServices: vi.fn(),
   },
   rbacApi: {
     listRoles: vi.fn(),
@@ -70,7 +70,7 @@ describe("Invitations Page", () => {
   ];
 
   const mockServices = [
-    { id: "service-1", name: "Main App", tenant_id: "tenant-1", redirect_uris: [], logout_uris: [], status: "active" as const, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+    { id: "service-1", name: "Main App", base_url: "https://app.example.com", status: "active", enabled: true },
   ];
 
   const mockRoles = [
@@ -84,7 +84,7 @@ describe("Invitations Page", () => {
       data: mockInvitations,
       pagination: { page: 1, per_page: 20, total: 3, total_pages: 1 },
     });
-    vi.mocked(serviceApi.list).mockResolvedValue({ data: mockServices, pagination: { page: 1, per_page: 20, total: 1, total_pages: 1 } });
+    vi.mocked(tenantServiceApi.getEnabledServices).mockResolvedValue({ data: mockServices });
     vi.mocked(rbacApi.listRoles).mockResolvedValue({ data: mockRoles });
   });
 
@@ -177,7 +177,7 @@ describe("Invitations Page", () => {
     });
 
     // Verify the API calls were made
-    expect(serviceApi.list).toHaveBeenCalledWith("tenant-1");
+    expect(tenantServiceApi.getEnabledServices).toHaveBeenCalledWith("tenant-1");
     expect(rbacApi.listRoles).toHaveBeenCalledWith("service-1");
   });
 
@@ -240,7 +240,7 @@ describe("Invitations Page", () => {
   });
 
   it("handles empty services list", async () => {
-    vi.mocked(serviceApi.list).mockResolvedValue({ data: [], pagination: { page: 1, per_page: 20, total: 0, total_pages: 1 } });
+    vi.mocked(tenantServiceApi.getEnabledServices).mockResolvedValue({ data: [] });
 
     const RoutesStub = createRoutesStub([
       {
@@ -256,8 +256,8 @@ describe("Invitations Page", () => {
       expect(screen.getByText("Invite User")).toBeInTheDocument();
     });
 
-    // Verify service list was called even with no services
-    expect(serviceApi.list).toHaveBeenCalledWith("tenant-1");
+    // Verify enabled services was called even with no services
+    expect(tenantServiceApi.getEnabledServices).toHaveBeenCalledWith("tenant-1");
   });
 
   it("has action menu for each invitation", async () => {

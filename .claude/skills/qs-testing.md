@@ -476,3 +476,116 @@ curl -X DELETE http://localhost:8025/api/v1/messages
 3. List 13 scenarios
 4. Execute each scenario with browser + DB validation
 5. Generate test report with pass/fail counts
+
+## MFA 自动化测试（TOTP）
+
+MFA 测试需要程序化生成 TOTP 验证码。使用 `zbarimg` 和 `oathtool` 命令行工具。
+
+### 工具使用
+
+**1. 截取 QR 码图片**
+
+使用浏览器自动化工具截取 Keycloak TOTP 配置页面的 QR 码，保存为 PNG 文件。
+
+**2. 解析 QR 码获取 TOTP Secret**
+
+```bash
+# 解析 QR 码获取 otpauth:// URL
+zbarimg --raw totp-qr.png
+# 输出: otpauth://totp/auth9:user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=auth9
+
+# 提取 secret 部分
+SECRET=$(zbarimg --raw totp-qr.png | sed -n 's/.*secret=\([^&]*\).*/\1/p')
+```
+
+**3. 生成 TOTP 验证码**
+
+```bash
+# 使用 secret 生成 6 位验证码
+oathtool --totp -b "$SECRET"
+# 输出: 123456
+```
+
+### 测试流程
+
+1. 通过 Auth9 API 为用户启用 MFA：`POST /api/users/{id}/mfa/enable`
+2. 用户登录时 Keycloak 显示 TOTP 配置页面（含 QR 码）
+3. 截取 QR 码图片
+4. 使用 `zbarimg` 解析获取 secret
+5. 使用 `oathtool` 生成验证码
+6. 填入验证码完成 MFA 设置/验证
+
+### 相关 API
+
+| 操作 | 方法 | 端点 |
+|------|------|------|
+| 启用 MFA | POST | `/api/users/{id}/mfa/enable` |
+| 禁用 MFA | POST | `/api/users/{id}/mfa/disable` |
+
+---
+
+## Token Exchange gRPC 测试
+
+Token Exchange 使用 gRPC 协议。使用 `grpcurl` 命令行工具进行测试。
+
+### gRPC 服务信息
+
+- **端口**: 50051
+- **服务**: `auth9.TokenExchange`
+- **方法**: `ExchangeToken`, `ValidateToken`, `IntrospectToken`, `GetUserRoles`
+
+### 工具使用
+
+**列出服务方法**
+
+```bash
+grpcurl -plaintext localhost:50051 list auth9.TokenExchange
+```
+
+**ExchangeToken - 获取租户访问令牌**
+
+```bash
+grpcurl -plaintext \
+  -d '{
+    "identity_token": "<IDENTITY_TOKEN>",
+    "tenant_id": "<TENANT_ID>",
+    "service_id": "<SERVICE_ID>"
+  }' \
+  localhost:50051 auth9.TokenExchange/ExchangeToken
+```
+
+**ValidateToken - 验证令牌**
+
+```bash
+grpcurl -plaintext \
+  -d '{
+    "access_token": "<ACCESS_TOKEN>",
+    "audience": "<SERVICE_ID>"
+  }' \
+  localhost:50051 auth9.TokenExchange/ValidateToken
+```
+
+**IntrospectToken - 令牌内省**
+
+```bash
+grpcurl -plaintext \
+  -d '{
+    "token": "<ACCESS_TOKEN>"
+  }' \
+  localhost:50051 auth9.TokenExchange/IntrospectToken
+```
+
+### 获取测试数据
+
+```bash
+# 查询租户 ID
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;"
+
+# 查询服务 ID
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM services WHERE tenant_id = '<TENANT_ID>' LIMIT 1;"
+```
+
+### Identity Token 获取方式
+
+1. 通过浏览器登录后从 localStorage/cookies 中提取
+2. 使用测试用的 JwtManager 生成（参考: `auth9-core/tests/grpc/exchange_token_test.rs`）
