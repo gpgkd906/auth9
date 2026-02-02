@@ -20,7 +20,7 @@ use auth9_core::domain::{
     CreatePermissionInput, CreateRoleInput, CreateSecurityAlertInput, CreateServiceInput,
     CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput, Invitation,
     InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats, PasswordResetToken,
-    Permission, Role, SecurityAlert, SecurityAlertType, Service, ServiceStatus, Session,
+    Permission, Role, SecurityAlert, Service, ServiceStatus, Session,
     StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
     UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
     UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
@@ -1143,6 +1143,7 @@ impl TestPasswordResetRepository {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn add_token(&self, token: PasswordResetToken) {
         self.tokens.write().await.push(token);
     }
@@ -1585,6 +1586,7 @@ impl TestInvitationRepository {
         }
     }
 
+    #[allow(dead_code)]
     pub async fn add_invitation(&self, invitation: Invitation) {
         self.invitations
             .write()
@@ -1654,13 +1656,17 @@ impl InvitationRepository for TestInvitationRepository {
     async fn list_by_tenant(
         &self,
         tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<Invitation>> {
         let invitations = self.invitations.read().await;
         let mut filtered: Vec<_> = invitations
             .values()
-            .filter(|i| i.tenant_id == tenant_id)
+            .filter(|i| {
+                i.tenant_id == tenant_id
+                    && status.as_ref().map_or(true, |s| &i.status == s)
+            })
             .cloned()
             .collect();
         filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -1671,11 +1677,18 @@ impl InvitationRepository for TestInvitationRepository {
             .collect())
     }
 
-    async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64> {
+    async fn count_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
+    ) -> Result<i64> {
         let invitations = self.invitations.read().await;
         Ok(invitations
             .values()
-            .filter(|i| i.tenant_id == tenant_id)
+            .filter(|i| {
+                i.tenant_id == tenant_id
+                    && status.as_ref().map_or(true, |s| &i.status == s)
+            })
             .count() as i64)
     }
 
@@ -2192,6 +2205,7 @@ pub fn create_test_permission(id: Option<Uuid>, service_id: Uuid) -> Permission 
 
 /// Builder for creating test services with mocked repositories
 #[allow(dead_code)]
+#[allow(dead_code)]
 pub struct TestServicesBuilder {
     pub tenant_repo: Arc<TestTenantRepository>,
     pub user_repo: Arc<TestUserRepository>,
@@ -2199,8 +2213,10 @@ pub struct TestServicesBuilder {
     pub rbac_repo: Arc<TestRbacRepository>,
     pub audit_repo: Arc<TestAuditRepository>,
     pub webhook_repo: Arc<TestWebhookRepository>,
+    #[allow(dead_code)]
     pub invitation_repo: Arc<TestInvitationRepository>,
     pub session_repo: Arc<TestSessionRepository>,
+    #[allow(dead_code)]
     pub password_reset_repo: Arc<TestPasswordResetRepository>,
     pub linked_identity_repo: Arc<TestLinkedIdentityRepository>,
     pub login_event_repo: Arc<TestLoginEventRepository>,
@@ -2273,6 +2289,7 @@ impl TestServicesBuilder {
             self.audit_repo.clone(),
             self.rbac_repo.clone(),
             None,
+            None, // webhook_publisher
         )
     }
 

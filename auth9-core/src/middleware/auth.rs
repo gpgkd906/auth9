@@ -222,6 +222,7 @@ mod tests {
     fn test_auth_user_from_identity_claims() {
         let claims = IdentityClaims {
             sub: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            sid: Some("session-123".to_string()),
             email: "test@example.com".to_string(),
             name: Some("Test User".to_string()),
             iss: "https://auth9.test".to_string(),
@@ -277,6 +278,7 @@ mod tests {
     fn test_auth_user_invalid_user_id() {
         let claims = IdentityClaims {
             sub: "not-a-uuid".to_string(),
+            sid: None,
             email: "test@example.com".to_string(),
             name: None,
             iss: "https://auth9.test".to_string(),

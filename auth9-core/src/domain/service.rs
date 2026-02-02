@@ -4,8 +4,52 @@ use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use url::Url;
 use uuid::Uuid;
 use validator::Validate;
+
+/// Validate a single redirect URI.
+/// HTTP is only allowed for localhost/127.0.0.1, all other hosts must use HTTPS.
+fn validate_single_redirect_uri(uri: &str) -> Result<(), validator::ValidationError> {
+    let parsed = Url::parse(uri).map_err(|_| {
+        let mut err = validator::ValidationError::new("invalid_url");
+        err.message = Some(format!("Invalid URL: {}", uri).into());
+        err
+    })?;
+
+    let scheme = parsed.scheme();
+    let host = parsed.host_str().unwrap_or("");
+
+    // Allow HTTP only for localhost/127.0.0.1
+    if scheme == "http" {
+        let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
+        if !is_localhost {
+            let mut err = validator::ValidationError::new("insecure_redirect_uri");
+            err.message = Some(
+                format!(
+                    "HTTP is only allowed for localhost. Use HTTPS for: {}",
+                    uri
+                )
+                .into(),
+            );
+            return Err(err);
+        }
+    } else if scheme != "https" {
+        let mut err = validator::ValidationError::new("invalid_scheme");
+        err.message = Some(format!("Only HTTP and HTTPS schemes are allowed: {}", uri).into());
+        return Err(err);
+    }
+    Ok(())
+}
+
+/// Validate redirect URIs.
+/// Note: For Option<Vec<String>> fields, validator automatically unwraps the Option.
+fn validate_redirect_uris(uris: &[String]) -> Result<(), validator::ValidationError> {
+    for uri in uris {
+        validate_single_redirect_uri(uri)?;
+    }
+    Ok(())
+}
 
 /// Service status
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -106,7 +150,9 @@ pub struct CreateServiceInput {
     pub client_id: String, // Keep for initial client creation
     #[validate(url)]
     pub base_url: Option<String>,
+    #[validate(custom(function = "validate_redirect_uris"))]
     pub redirect_uris: Vec<String>,
+    #[validate(custom(function = "validate_redirect_uris"))]
     pub logout_uris: Option<Vec<String>>,
 }
 
@@ -124,7 +170,9 @@ pub struct UpdateServiceInput {
     pub name: Option<String>,
     #[validate(url)]
     pub base_url: Option<String>,
+    #[validate(custom(function = "validate_redirect_uris"))]
     pub redirect_uris: Option<Vec<String>>,
+    #[validate(custom(function = "validate_redirect_uris"))]
     pub logout_uris: Option<Vec<String>>,
     pub status: Option<ServiceStatus>,
 }
@@ -495,5 +543,76 @@ mod tests {
         assert_eq!(ServiceStatus::Active, ServiceStatus::Active);
         assert_eq!(ServiceStatus::Inactive, ServiceStatus::Inactive);
         assert_ne!(ServiceStatus::Active, ServiceStatus::Inactive);
+    }
+
+    #[test]
+    fn test_redirect_uri_https_valid() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Test".to_string(),
+            client_id: "test".to_string(),
+            base_url: None,
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: None,
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_redirect_uri_http_localhost_valid() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Test".to_string(),
+            client_id: "test".to_string(),
+            base_url: None,
+            redirect_uris: vec![
+                "http://localhost:3000/callback".to_string(),
+                "http://127.0.0.1:8080/callback".to_string(),
+            ],
+            logout_uris: None,
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_redirect_uri_http_non_localhost_invalid() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Test".to_string(),
+            client_id: "test".to_string(),
+            base_url: None,
+            redirect_uris: vec!["http://app.example.com/callback".to_string()],
+            logout_uris: None,
+        };
+        let result = input.validate();
+        assert!(result.is_err());
+        let errors = result.unwrap_err();
+        let field_errors = errors.field_errors();
+        assert!(field_errors.contains_key("redirect_uris"));
+    }
+
+    #[test]
+    fn test_redirect_uri_invalid_url() {
+        let input = CreateServiceInput {
+            tenant_id: None,
+            name: "Test".to_string(),
+            client_id: "test".to_string(),
+            base_url: None,
+            redirect_uris: vec!["not-a-valid-url".to_string()],
+            logout_uris: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_update_redirect_uri_validation() {
+        let input = UpdateServiceInput {
+            name: None,
+            base_url: None,
+            redirect_uris: Some(vec!["http://evil.com/callback".to_string()]),
+            logout_uris: None,
+            status: None,
+        };
+        assert!(input.validate().is_err());
     }
 }

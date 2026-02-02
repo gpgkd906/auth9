@@ -1,9 +1,7 @@
 //! Invitation API handlers
 
-use crate::api::{
-    extract_actor_id_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
-};
-use crate::domain::{CreateInvitationInput, InvitationResponse, StringUuid};
+use crate::api::{extract_actor_id_generic, MessageResponse, PaginatedResponse, SuccessResponse};
+use crate::domain::{CreateInvitationInput, InvitationResponse, InvitationStatus, StringUuid};
 use crate::error::{AppError, Result};
 use crate::state::HasInvitations;
 use axum::{
@@ -21,17 +19,36 @@ pub struct AcceptInvitationRequest {
     pub token: String,
 }
 
+/// Query parameters for listing invitations
+#[derive(Debug, Clone, Deserialize)]
+pub struct InvitationListQuery {
+    #[serde(default = "default_page")]
+    pub page: i64,
+    #[serde(default = "default_per_page")]
+    pub per_page: i64,
+    /// Optional status filter (pending, accepted, expired, revoked)
+    pub status: Option<InvitationStatus>,
+}
+
+fn default_page() -> i64 {
+    1
+}
+
+fn default_per_page() -> i64 {
+    20
+}
+
 /// List invitations for a tenant
 pub async fn list<S: HasInvitations>(
     State(state): State<S>,
     Path(tenant_id): Path<Uuid>,
-    Query(pagination): Query<PaginationQuery>,
+    Query(query): Query<InvitationListQuery>,
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
 
     let (invitations, total) = state
         .invitation_service()
-        .list_by_tenant(tenant_id, pagination.page, pagination.per_page)
+        .list_by_tenant(tenant_id, query.status, query.page, query.per_page)
         .await?;
 
     // Convert to response type (excludes token_hash)
@@ -39,8 +56,8 @@ pub async fn list<S: HasInvitations>(
 
     Ok(Json(PaginatedResponse::new(
         responses,
-        pagination.page,
-        pagination.per_page,
+        query.page,
+        query.per_page,
         total,
     )))
 }

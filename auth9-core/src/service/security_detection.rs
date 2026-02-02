@@ -7,7 +7,7 @@ use crate::domain::{
 use crate::error::Result;
 use crate::repository::WebhookRepository;
 use crate::repository::{LoginEventRepository, SecurityAlertRepository};
-use crate::service::WebhookService;
+use crate::service::{WebhookEventPublisher, WebhookService};
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;

@@ -24,8 +24,10 @@ data:
   KC_METRICS_ENABLED: "true"
   KC_PROXY: edge
 
-  # Theme configuration
-  KC_SPI_THEME_DEFAULT: auth9
+  # Theme configuration - use auth9 for login, keycloak defaults for others
+  KC_SPI_THEME_LOGIN_DEFAULT: auth9
+  KC_SPI_THEME_EMAIL_DEFAULT: keycloak
+  KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
 
   # Auth9 API URL for theme integration
   AUTH9_API_URL: http://auth9-core:8080

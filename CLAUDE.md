@@ -107,6 +107,7 @@ Project skills are in `.claude/skills/`. Read the relevant skill file before exe
 - `ops.md` - Running tests, Docker/K8s logs, troubleshooting
 - `test-coverage.md` - Coverage analysis, writing tests with mocks
 - `reset-local-env.md` - Resetting local development environment
+- `qs-testing.md` - QA testing, manual testing, verify feature functionality, or test specific modules.
 
 ## Testing Strategy
 

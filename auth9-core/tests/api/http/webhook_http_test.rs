@@ -401,7 +401,7 @@ async fn test_delete_webhook_not_found() {
 
 fn build_webhook_test_router(state: TestAppState) -> axum::Router {
     use auth9_core::api::webhook;
-    use axum::routing::{delete, get, post, put};
+    use axum::routing::{get, post};
 
     axum::Router::new()
         .route(

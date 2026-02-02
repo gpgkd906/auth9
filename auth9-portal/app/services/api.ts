@@ -185,8 +185,8 @@ export interface Client {
   created_at: string;
 }
 
-export interface ClientWithSecret {
-  client: Client;
+// Note: Backend uses #[serde(flatten)] so Client fields are flattened
+export interface ClientWithSecret extends Client {
   client_secret: string;
 }
 
@@ -207,7 +207,8 @@ export const serviceApi = {
     return handleResponse(response);
   },
 
-  create: async (input: CreateServiceInput): Promise<{ data: { service: Service, client: ClientWithSecret } }> => {
+  // Note: Backend uses #[serde(flatten)] on ServiceWithClient, so Service fields are at root level
+  create: async (input: CreateServiceInput): Promise<{ data: Service & { client: ClientWithSecret } }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -567,18 +568,36 @@ export interface CreateInvitationInput {
 }
 
 // Invitation API
+export type InvitationStatusFilter = "pending" | "accepted" | "expired" | "revoked";
+
 export const invitationApi = {
-  list: async (tenantId: string, page = 1, perPage = 20): Promise<PaginatedResponse<Invitation>> => {
+  list: async (
+    tenantId: string,
+    page = 1,
+    perPage = 20,
+    status?: InvitationStatusFilter
+  ): Promise<PaginatedResponse<Invitation>> => {
+    const params = new URLSearchParams({
+      page: page.toString(),
+      per_page: perPage.toString(),
+    });
+    if (status) {
+      params.set("status", status);
+    }
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations?page=${page}&per_page=${perPage}`
+      `${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations?${params.toString()}`
     );
     return handleResponse(response);
   },
 
-  create: async (tenantId: string, input: CreateInvitationInput): Promise<{ data: Invitation }> => {
+  create: async (tenantId: string, input: CreateInvitationInput, accessToken?: string): Promise<{ data: Invitation }> => {
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (accessToken) {
+      headers["Authorization"] = `Bearer ${accessToken}`;
+    }
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers,
       body: JSON.stringify(input),
     });
     return handleResponse(response);

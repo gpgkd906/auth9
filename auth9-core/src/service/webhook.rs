@@ -3,14 +3,37 @@
 use crate::domain::{CreateWebhookInput, StringUuid, UpdateWebhookInput, Webhook, WebhookEvent};
 use crate::error::{AppError, Result};
 use crate::repository::WebhookRepository;
+use async_trait::async_trait;
 use chrono::Utc;
 use hmac::{Hmac, Mac};
+use rand::Rng;
 use sha2::Sha256;
 use std::sync::Arc;
+use std::time::Instant;
 use tokio::time::{timeout, Duration};
 use validator::Validate;
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// Trait for publishing webhook events.
+///
+/// This trait allows services to trigger webhook events without depending
+/// on the concrete WebhookService type.
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait WebhookEventPublisher: Send + Sync {
+    /// Trigger webhooks for an event.
+    ///
+    /// This method finds all enabled webhooks subscribed to the event
+    /// and sends the payload to each one asynchronously.
+    async fn trigger_event(&self, event: WebhookEvent) -> Result<()>;
+}
+
+/// Generate a random webhook secret
+fn generate_webhook_secret() -> String {
+    let bytes: [u8; 32] = rand::thread_rng().gen();
+    format!("whsec_{}", hex::encode(bytes))
+}
 
 /// Webhook service for managing and triggering webhooks
 pub struct WebhookService<W: WebhookRepository> {
@@ -32,12 +55,20 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
     }
 
     /// Create a new webhook
+    ///
+    /// If no secret is provided, a random secret will be auto-generated.
     pub async fn create(
         &self,
         tenant_id: StringUuid,
-        input: CreateWebhookInput,
+        mut input: CreateWebhookInput,
     ) -> Result<Webhook> {
         input.validate()?;
+
+        // Auto-generate secret if not provided
+        if input.secret.is_none() {
+            input.secret = Some(generate_webhook_secret());
+        }
+
         self.webhook_repo.create(tenant_id, &input).await
     }
 
@@ -65,11 +96,56 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
         self.webhook_repo.delete(id).await
     }
 
-    /// Trigger webhooks for an event
-    ///
-    /// This method finds all enabled webhooks subscribed to the event
-    /// and sends the payload to each one asynchronously.
-    pub async fn trigger_event(&self, event: WebhookEvent) -> Result<()> {
+    /// Test a webhook by sending a test event
+    pub async fn test(&self, id: StringUuid) -> Result<WebhookTestResult> {
+        let webhook = self.get(id).await?;
+
+        let test_event = WebhookEvent {
+            event_type: "test".to_string(),
+            timestamp: Utc::now(),
+            data: serde_json::json!({
+                "message": "This is a test webhook event",
+                "webhook_id": id.to_string(),
+            }),
+        };
+
+        let start = Instant::now();
+        match deliver_webhook_with_status(&self.http_client, &webhook, &test_event).await {
+            Ok(response) => Ok(WebhookTestResult {
+                success: true,
+                status_code: Some(response.status_code),
+                response_body: response.body,
+                error: None,
+                response_time_ms: Some(start.elapsed().as_millis() as u64),
+            }),
+            Err((status_code, error_msg)) => Ok(WebhookTestResult {
+                success: false,
+                status_code,
+                response_body: None,
+                error: Some(error_msg),
+                response_time_ms: Some(start.elapsed().as_millis() as u64),
+            }),
+        }
+    }
+
+    /// Regenerate webhook secret
+    pub async fn regenerate_secret(&self, id: StringUuid) -> Result<Webhook> {
+        let new_secret = generate_webhook_secret();
+        self.webhook_repo
+            .update(
+                id,
+                &UpdateWebhookInput {
+                    secret: Some(new_secret),
+                    ..Default::default()
+                },
+            )
+            .await
+    }
+}
+
+#[async_trait]
+impl<W: WebhookRepository + 'static> WebhookEventPublisher for WebhookService<W> {
+    async fn trigger_event(&self, event: WebhookEvent) -> Result<()> {
         let webhooks = self
             .webhook_repo
             .list_enabled_for_event(&event.event_type)
@@ -100,35 +176,6 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
 
         Ok(())
     }
-
-    /// Test a webhook by sending a test event
-    pub async fn test(&self, id: StringUuid) -> Result<WebhookTestResult> {
-        let webhook = self.get(id).await?;
-
-        let test_event = WebhookEvent {
-            event_type: "test".to_string(),
-            timestamp: Utc::now(),
-            data: serde_json::json!({
-                "message": "This is a test webhook event",
-                "webhook_id": id.to_string(),
-            }),
-        };
-
-        match deliver_webhook(&self.http_client, &webhook, &test_event).await {
-            Ok(response) => Ok(WebhookTestResult {
-                success: true,
-                status_code: Some(response.status_code),
-                response_body: response.body,
-                error: None,
-            }),
-            Err(e) => Ok(WebhookTestResult {
-                success: false,
-                status_code: None,
-                response_body: None,
-                error: Some(e.to_string()),
-            }),
-        }
-    }
 }
 
 /// Result of a webhook test
@@ -138,6 +185,7 @@ pub struct WebhookTestResult {
     pub status_code: Option<u16>,
     pub response_body: Option<String>,
     pub error: Option<String>,
+    pub response_time_ms: Option<u64>,
 }
 
 /// Response from a webhook delivery
@@ -152,7 +200,19 @@ async fn deliver_webhook(
     webhook: &Webhook,
     event: &WebhookEvent,
 ) -> Result<WebhookResponse> {
-    let payload = serde_json::to_string(event).map_err(|e| AppError::Internal(e.into()))?;
+    match deliver_webhook_with_status(client, webhook, event).await {
+        Ok(response) => Ok(response),
+        Err((_, msg)) => Err(AppError::Internal(anyhow::anyhow!("{}", msg))),
+    }
+}
+
+/// Deliver a webhook and return status code even on error
+async fn deliver_webhook_with_status(
+    client: &reqwest::Client,
+    webhook: &Webhook,
+    event: &WebhookEvent,
+) -> std::result::Result<WebhookResponse, (Option<u16>, String)> {
+    let payload = serde_json::to_string(event).map_err(|e| (None, e.to_string()))?;
 
     let mut request = client
         .post(&webhook.url)
@@ -162,26 +222,25 @@ async fn deliver_webhook(
 
     // Add signature if secret is configured
     if let Some(secret) = &webhook.secret {
-        let signature = compute_signature(&payload, secret)?;
+        let signature = compute_signature(&payload, secret).map_err(|e| (None, e.to_string()))?;
         request = request.header("X-Webhook-Signature", signature);
     }
 
     // Send the request with a timeout
     let response = timeout(Duration::from_secs(30), request.body(payload).send())
         .await
-        .map_err(|_| AppError::Internal(anyhow::anyhow!("Webhook request timed out")))?
-        .map_err(|e| AppError::Internal(e.into()))?;
+        .map_err(|_| (None, "Webhook request timed out".to_string()))?
+        .map_err(|e| (None, e.to_string()))?;
 
     let status_code = response.status().as_u16();
 
     // Consider 2xx status codes as success
     if !response.status().is_success() {
         let body = response.text().await.ok();
-        return Err(AppError::Internal(anyhow::anyhow!(
-            "Webhook returned error status {}: {:?}",
-            status_code,
-            body
-        )));
+        return Err((
+            Some(status_code),
+            format!("Webhook returned error status {}: {:?}", status_code, body),
+        ));
     }
 
     let body = response.text().await.ok();
@@ -593,9 +652,12 @@ mod tests {
         let result = service.test(webhook_id).await.unwrap();
 
         assert!(!result.success);
-        assert!(result.status_code.is_none());
+        // Now status_code should be returned even on error
+        assert_eq!(result.status_code, Some(500));
         assert!(result.error.is_some());
         assert!(result.error.unwrap().contains("500"));
+        // response_time_ms should be present
+        assert!(result.response_time_ms.is_some());
     }
 
     #[tokio::test]
@@ -624,11 +686,95 @@ mod tests {
             status_code: Some(200),
             response_body: Some("ok".to_string()),
             error: None,
+            response_time_ms: Some(42),
         };
 
         let json = serde_json::to_string(&result).unwrap();
         assert!(json.contains("\"success\":true"));
         assert!(json.contains("\"status_code\":200"));
+        assert!(json.contains("\"response_time_ms\":42"));
+    }
+
+    #[test]
+    fn test_generate_webhook_secret() {
+        let secret = generate_webhook_secret();
+        assert!(secret.starts_with("whsec_"));
+        // 32 bytes = 64 hex chars + "whsec_" prefix
+        assert_eq!(secret.len(), 6 + 64);
+
+        // Two secrets should be different
+        let secret2 = generate_webhook_secret();
+        assert_ne!(secret, secret2);
+    }
+
+    #[tokio::test]
+    async fn test_create_webhook_auto_generates_secret() {
+        let mut mock = MockWebhookRepository::new();
+        let tenant_id = StringUuid::new_v4();
+
+        mock.expect_create().returning(|tenant_id, input| {
+            // Verify secret was auto-generated
+            assert!(input.secret.is_some());
+            let secret = input.secret.as_ref().unwrap();
+            assert!(secret.starts_with("whsec_"));
+
+            Ok(Webhook {
+                id: StringUuid::new_v4(),
+                tenant_id,
+                name: input.name.clone(),
+                url: input.url.clone(),
+                secret: input.secret.clone(),
+                events: input.events.clone(),
+                enabled: input.enabled,
+                ..Default::default()
+            })
+        });
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        let input = CreateWebhookInput {
+            name: "Test Webhook".to_string(),
+            url: "https://example.com/webhook".to_string(),
+            secret: None, // No secret provided
+            events: vec!["login.success".to_string()],
+            enabled: true,
+        };
+
+        let webhook = service.create(tenant_id, input).await.unwrap();
+        assert!(webhook.secret.is_some());
+        assert!(webhook.secret.unwrap().starts_with("whsec_"));
+    }
+
+    #[tokio::test]
+    async fn test_create_webhook_preserves_user_secret() {
+        let mut mock = MockWebhookRepository::new();
+        let tenant_id = StringUuid::new_v4();
+
+        mock.expect_create().returning(|tenant_id, input| {
+            Ok(Webhook {
+                id: StringUuid::new_v4(),
+                tenant_id,
+                name: input.name.clone(),
+                url: input.url.clone(),
+                secret: input.secret.clone(),
+                events: input.events.clone(),
+                enabled: input.enabled,
+                ..Default::default()
+            })
+        });
+
+        let service = WebhookService::new(Arc::new(mock));
+
+        let input = CreateWebhookInput {
+            name: "Test Webhook".to_string(),
+            url: "https://example.com/webhook".to_string(),
+            secret: Some("user-provided-secret".to_string()),
+            events: vec!["login.success".to_string()],
+            enabled: true,
+        };
+
+        let webhook = service.create(tenant_id, input).await.unwrap();
+        assert_eq!(webhook.secret, Some("user-provided-secret".to_string()));
     }
 
     #[test]

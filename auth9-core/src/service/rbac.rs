@@ -27,7 +27,19 @@ impl<R: RbacRepository> RbacService<R> {
 
     pub async fn create_permission(&self, input: CreatePermissionInput) -> Result<Permission> {
         input.validate()?;
-        let permission = self.repo.create_permission(&input).await?;
+        let permission = self.repo.create_permission(&input).await.map_err(|e| {
+            // Convert database unique constraint error to user-friendly message
+            if let AppError::Database(ref db_err) = e {
+                let err_str = db_err.to_string().to_lowercase();
+                if err_str.contains("duplicate") || err_str.contains("unique") {
+                    return AppError::Conflict(format!(
+                        "Permission code '{}' already exists in this service",
+                        input.code
+                    ));
+                }
+            }
+            e
+        })?;
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_all_user_roles().await;
         }
@@ -85,11 +97,64 @@ impl<R: RbacRepository> RbacService<R> {
     pub async fn update_role(&self, id: StringUuid, input: UpdateRoleInput) -> Result<Role> {
         input.validate()?;
         let _ = self.get_role(id).await?;
+
+        // Check for circular inheritance if parent_role_id is being updated
+        if let Some(parent_id) = input.parent_role_id {
+            let parent_uuid = StringUuid::from(parent_id);
+            self.check_circular_inheritance(id, parent_uuid).await?;
+        }
+
         let role = self.repo.update_role(id, &input).await?;
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_all_user_roles().await;
         }
         Ok(role)
+    }
+
+    /// Check for circular inheritance by traversing the parent chain.
+    /// Returns error if setting `new_parent_id` as parent of `role_id` would create a cycle.
+    async fn check_circular_inheritance(
+        &self,
+        role_id: StringUuid,
+        new_parent_id: StringUuid,
+    ) -> Result<()> {
+        // A role cannot be its own parent
+        if role_id == new_parent_id {
+            return Err(AppError::BadRequest(
+                "A role cannot be its own parent".to_string(),
+            ));
+        }
+
+        // Traverse the parent chain from new_parent_id
+        // If we encounter role_id, it means we have a cycle
+        let mut current_id = Some(new_parent_id);
+        let mut visited = std::collections::HashSet::new();
+        visited.insert(role_id); // The role we're updating
+
+        while let Some(parent_id) = current_id {
+            if visited.contains(&parent_id) {
+                return Err(AppError::BadRequest(
+                    "Circular inheritance detected: this would create a cycle in the role hierarchy".to_string(),
+                ));
+            }
+            visited.insert(parent_id);
+
+            // Get the parent role to find its parent
+            match self.repo.find_role_by_id(parent_id).await? {
+                Some(parent_role) => {
+                    current_id = parent_role.parent_role_id;
+                }
+                None => {
+                    // Parent role doesn't exist - this is a validation error
+                    return Err(AppError::NotFound(format!(
+                        "Parent role {} not found",
+                        parent_id
+                    )));
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Delete a role with cascade handling.
@@ -121,8 +186,17 @@ impl<R: RbacRepository> RbacService<R> {
         role_id: StringUuid,
         permission_id: StringUuid,
     ) -> Result<()> {
-        let _ = self.get_role(role_id).await?;
-        let _ = self.get_permission(permission_id).await?;
+        let role = self.get_role(role_id).await?;
+        let permission = self.get_permission(permission_id).await?;
+
+        // Validate that role and permission belong to the same service
+        if role.service_id != permission.service_id {
+            return Err(AppError::BadRequest(format!(
+                "Cannot assign permission from service {} to role in service {}",
+                permission.service_id, role.service_id
+            )));
+        }
+
         self.repo
             .assign_permission_to_role(role_id, permission_id)
             .await?;
@@ -798,5 +872,234 @@ mod tests {
 
         let result = service.unassign_role(user_id, tenant_id, role_id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ==================== Circular Inheritance Tests ====================
+
+    #[tokio::test]
+    async fn test_update_role_circular_inheritance_self_reference() {
+        let mut mock = MockRbacRepository::new();
+        let role_id = StringUuid::new_v4();
+        let role = Role {
+            id: role_id,
+            name: "Editor".to_string(),
+            parent_role_id: None,
+            ..Default::default()
+        };
+        let role_clone = role.clone();
+
+        mock.expect_find_role_by_id()
+            .with(eq(role_id))
+            .returning(move |_| Ok(Some(role_clone.clone())));
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        // Try to set a role as its own parent
+        let input = UpdateRoleInput {
+            name: None,
+            description: None,
+            parent_role_id: Some(*role_id), // Self-reference
+        };
+
+        let result = service.update_role(role_id, input).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        if let Err(AppError::BadRequest(msg)) = result {
+            assert!(msg.contains("own parent"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_role_circular_inheritance_two_level() {
+        let mut mock = MockRbacRepository::new();
+        let viewer_id = StringUuid::new_v4();
+        let editor_id = StringUuid::new_v4();
+
+        // Editor -> Viewer (existing)
+        let editor = Role {
+            id: editor_id,
+            name: "Editor".to_string(),
+            parent_role_id: Some(viewer_id),
+            ..Default::default()
+        };
+        let editor_clone = editor.clone();
+
+        // Viewer (root, no parent)
+        let viewer = Role {
+            id: viewer_id,
+            name: "Viewer".to_string(),
+            parent_role_id: None,
+            ..Default::default()
+        };
+        let viewer_clone = viewer.clone();
+
+        // First call: get the role being updated (Viewer)
+        mock.expect_find_role_by_id()
+            .with(eq(viewer_id))
+            .times(1)
+            .returning(move |_| Ok(Some(viewer_clone.clone())));
+
+        // Second call: get the proposed parent (Editor)
+        mock.expect_find_role_by_id()
+            .with(eq(editor_id))
+            .times(1)
+            .returning(move |_| Ok(Some(editor_clone.clone())));
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        // Try to set Viewer's parent to Editor (would create: Viewer -> Editor -> Viewer)
+        let input = UpdateRoleInput {
+            name: None,
+            description: None,
+            parent_role_id: Some(*editor_id),
+        };
+
+        let result = service.update_role(viewer_id, input).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        if let Err(AppError::BadRequest(msg)) = result {
+            assert!(msg.contains("Circular inheritance"));
+        }
+    }
+
+    // ==================== Cross-Service Permission Assignment Tests ====================
+
+    #[tokio::test]
+    async fn test_assign_permission_cross_service_rejected() {
+        let mut mock = MockRbacRepository::new();
+        let service_a = StringUuid::new_v4();
+        let service_b = StringUuid::new_v4();
+
+        let role = Role {
+            service_id: service_a,
+            name: "Admin".to_string(),
+            ..Default::default()
+        };
+        let permission = Permission {
+            service_id: service_b, // Different service!
+            code: "user:read".to_string(),
+            ..Default::default()
+        };
+        let role_clone = role.clone();
+        let permission_clone = permission.clone();
+        let role_id = role.id;
+        let permission_id = permission.id;
+
+        mock.expect_find_role_by_id()
+            .with(eq(role_id))
+            .returning(move |_| Ok(Some(role_clone.clone())));
+
+        mock.expect_find_permission_by_id()
+            .with(eq(permission_id))
+            .returning(move |_| Ok(Some(permission_clone.clone())));
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let result = service
+            .assign_permission_to_role(role_id, permission_id)
+            .await;
+
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        if let Err(AppError::BadRequest(msg)) = result {
+            assert!(msg.contains("Cannot assign permission"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_assign_permission_same_service_success() {
+        let mut mock = MockRbacRepository::new();
+        let service_id = StringUuid::new_v4();
+
+        let role = Role {
+            service_id,
+            name: "Admin".to_string(),
+            ..Default::default()
+        };
+        let permission = Permission {
+            service_id, // Same service
+            code: "user:read".to_string(),
+            ..Default::default()
+        };
+        let role_clone = role.clone();
+        let permission_clone = permission.clone();
+        let role_id = role.id;
+        let permission_id = permission.id;
+
+        mock.expect_find_role_by_id()
+            .with(eq(role_id))
+            .returning(move |_| Ok(Some(role_clone.clone())));
+
+        mock.expect_find_permission_by_id()
+            .with(eq(permission_id))
+            .returning(move |_| Ok(Some(permission_clone.clone())));
+
+        mock.expect_assign_permission_to_role()
+            .with(eq(role_id), eq(permission_id))
+            .returning(|_, _| Ok(()));
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let result = service
+            .assign_permission_to_role(role_id, permission_id)
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    // ==================== Duplicate Permission Error Message Tests ====================
+
+    #[tokio::test]
+    async fn test_create_permission_duplicate_code_friendly_error() {
+        let mut mock = MockRbacRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_create_permission().returning(|_| {
+            Err(AppError::Database(sqlx::Error::Database(Box::new(
+                TestDbError("Duplicate entry 'user:read' for key 'permissions.idx_permissions_service_code'".to_string()),
+            ))))
+        });
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let input = CreatePermissionInput {
+            service_id,
+            code: "user:read".to_string(),
+            name: "Read Users".to_string(),
+            description: None,
+        };
+
+        let result = service.create_permission(input).await;
+        assert!(matches!(result, Err(AppError::Conflict(_))));
+        if let Err(AppError::Conflict(msg)) = result {
+            assert!(msg.contains("already exists"));
+        }
+    }
+
+    // Helper struct for database error testing
+    #[derive(Debug)]
+    struct TestDbError(String);
+
+    impl std::fmt::Display for TestDbError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+
+    impl std::error::Error for TestDbError {}
+
+    impl sqlx::error::DatabaseError for TestDbError {
+        fn message(&self) -> &str {
+            &self.0
+        }
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::UniqueViolation
+        }
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
     }
 }

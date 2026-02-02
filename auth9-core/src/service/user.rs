@@ -2,6 +2,7 @@
 
 use crate::domain::{
     AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User,
+    WebhookEvent,
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
@@ -9,6 +10,8 @@ use crate::repository::{
     AuditRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
     RbacRepository, SecurityAlertRepository, SessionRepository, UserRepository,
 };
+use crate::service::WebhookEventPublisher;
+use chrono::Utc;
 use std::sync::Arc;
 use tracing::warn;
 use validator::Validate;
@@ -32,6 +35,7 @@ pub struct UserService<
     audit_repo: Arc<A>,
     rbac_repo: Arc<Rbac>,
     keycloak: Option<KeycloakClient>,
+    webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
 }
 
 impl<
@@ -55,6 +59,7 @@ impl<
         audit_repo: Arc<A>,
         rbac_repo: Arc<Rbac>,
         keycloak: Option<KeycloakClient>,
+        webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
     ) -> Self {
         Self {
             repo,
@@ -66,6 +71,7 @@ impl<
             audit_repo,
             rbac_repo,
             keycloak,
+            webhook_publisher,
         }
     }
 
@@ -80,7 +86,24 @@ impl<
             )));
         }
 
-        self.repo.create(keycloak_id, &input).await
+        let user = self.repo.create(keycloak_id, &input).await?;
+
+        // Trigger user.created webhook event
+        if let Some(publisher) = &self.webhook_publisher {
+            let _ = publisher
+                .trigger_event(WebhookEvent {
+                    event_type: "user.created".to_string(),
+                    timestamp: Utc::now(),
+                    data: serde_json::json!({
+                        "user_id": user.id.to_string(),
+                        "email": user.email,
+                        "display_name": user.display_name,
+                    }),
+                })
+                .await;
+        }
+
+        Ok(user)
     }
 
     pub async fn get(&self, id: StringUuid) -> Result<User> {
@@ -114,7 +137,24 @@ impl<
     pub async fn update(&self, id: StringUuid, input: UpdateUserInput) -> Result<User> {
         input.validate()?;
         let _ = self.get(id).await?;
-        self.repo.update(id, &input).await
+        let user = self.repo.update(id, &input).await?;
+
+        // Trigger user.updated webhook event
+        if let Some(publisher) = &self.webhook_publisher {
+            let _ = publisher
+                .trigger_event(WebhookEvent {
+                    event_type: "user.updated".to_string(),
+                    timestamp: Utc::now(),
+                    data: serde_json::json!({
+                        "user_id": user.id.to_string(),
+                        "email": user.email,
+                        "display_name": user.display_name,
+                    }),
+                })
+                .await;
+        }
+
+        Ok(user)
     }
 
     /// Delete a user with cascade delete of all related data.
@@ -177,7 +217,23 @@ impl<
         }
 
         // 10. Delete user record
-        self.repo.delete(id).await
+        self.repo.delete(id).await?;
+
+        // 11. Trigger user.deleted webhook event
+        if let Some(publisher) = &self.webhook_publisher {
+            let _ = publisher
+                .trigger_event(WebhookEvent {
+                    event_type: "user.deleted".to_string(),
+                    timestamp: Utc::now(),
+                    data: serde_json::json!({
+                        "user_id": id.to_string(),
+                        "email": user.email,
+                    }),
+                })
+                .await;
+        }
+
+        Ok(())
     }
 
     pub async fn set_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User> {
@@ -268,6 +324,7 @@ mod tests {
             Arc::new(MockAuditRepository::new()),
             Arc::new(MockRbacRepository::new()),
             None,
+            None, // webhook_publisher
         )
     }
 
@@ -635,6 +692,7 @@ mod tests {
             Arc::new(mock_audit),
             Arc::new(mock_rbac),
             None,
+            None, // webhook_publisher
         );
 
         let result = service.delete(id).await;
@@ -746,6 +804,7 @@ mod tests {
             Arc::new(mock_audit),
             Arc::new(mock_rbac),
             None,
+            None, // webhook_publisher
         );
 
         let result = service.delete(id).await;
@@ -862,6 +921,7 @@ mod tests {
             Arc::new(MockAuditRepository::new()),
             Arc::new(mock_rbac),
             None,
+            None, // webhook_publisher
         );
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
@@ -897,6 +957,7 @@ mod tests {
             Arc::new(MockAuditRepository::new()),
             Arc::new(mock_rbac),
             None,
+            None, // webhook_publisher
         );
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;

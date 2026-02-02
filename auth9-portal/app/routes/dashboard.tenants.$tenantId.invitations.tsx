@@ -87,6 +87,14 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   } satisfies LoaderData;
 }
 
+// TODO: In production, get access token from session/cookie
+function getAccessToken(request: Request): string {
+  // Try to get from cookie or return empty for now
+  const cookie = request.headers.get("cookie") || "";
+  const match = cookie.match(/access_token=([^;]+)/);
+  return match ? match[1] : "";
+}
+
 export async function action({ params, request }: ActionFunctionArgs) {
   const tenantId = params.tenantId;
   if (!tenantId) {
@@ -95,6 +103,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
 
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const accessToken = getAccessToken(request);
 
   try {
     if (intent === "create") {
@@ -117,7 +126,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
         email,
         role_ids: roleIds,
         expires_in_hours: expiresInHours,
-      });
+      }, accessToken);
 
       return { success: true };
     }

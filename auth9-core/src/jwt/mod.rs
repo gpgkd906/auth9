@@ -12,6 +12,9 @@ use uuid::Uuid;
 pub struct IdentityClaims {
     /// Subject (user ID)
     pub sub: String,
+    /// Session ID (for session management)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sid: Option<String>,
     /// Email
     pub email: String,
     /// Display name
@@ -108,11 +111,23 @@ impl JwtManager {
         email: &str,
         name: Option<&str>,
     ) -> Result<String> {
+        self.create_identity_token_with_session(user_id, email, name, None)
+    }
+
+    /// Create an identity token with session ID
+    pub fn create_identity_token_with_session(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        name: Option<&str>,
+        session_id: Option<Uuid>,
+    ) -> Result<String> {
         let now = Utc::now();
         let exp = now + Duration::seconds(self.config.access_token_ttl_secs);
 
         let claims = IdentityClaims {
             sub: user_id.to_string(),
+            sid: session_id.map(|id| id.to_string()),
             email: email.to_string(),
             name: name.map(String::from),
             iss: self.config.issuer.clone(),
@@ -401,6 +416,7 @@ mod tests {
     fn test_identity_claims_serialization() {
         let claims = IdentityClaims {
             sub: "user-123".to_string(),
+            sid: Some("session-456".to_string()),
             email: "test@example.com".to_string(),
             name: Some("Test User".to_string()),
             iss: "https://auth9.test".to_string(),
@@ -413,12 +429,14 @@ mod tests {
         assert!(json.contains("\"sub\":\"user-123\""));
         assert!(json.contains("\"email\":\"test@example.com\""));
         assert!(json.contains("\"name\":\"Test User\""));
+        assert!(json.contains("\"sid\":\"session-456\""));
     }
 
     #[test]
     fn test_identity_claims_serialization_without_name() {
         let claims = IdentityClaims {
             sub: "user-123".to_string(),
+            sid: None,
             email: "test@example.com".to_string(),
             name: None,
             iss: "https://auth9.test".to_string(),
@@ -429,6 +447,7 @@ mod tests {
 
         let json = serde_json::to_string(&claims).unwrap();
         assert!(!json.contains("\"name\""));
+        assert!(!json.contains("\"sid\""));
     }
 
     #[test]

@@ -370,6 +370,9 @@ pub async fn run(config: Config) -> Result<()> {
     // Create Arc-wrapped Keycloak client for services that need it
     let keycloak_arc = Arc::new(keycloak_client.clone());
 
+    // Create webhook service first (needed for webhook event publishing)
+    let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
+
     let tenant_service = Arc::new(TenantService::new(
         tenant_repo.clone(),
         service_repo.clone(),
@@ -391,6 +394,7 @@ pub async fn run(config: Config) -> Result<()> {
         audit_repo.clone(),
         rbac_repo.clone(),
         Some(keycloak_client.clone()),
+        Some(webhook_service.clone()), // webhook event publisher
     ));
     let client_service = Arc::new(ClientService::new(
         service_repo.clone(),
@@ -453,6 +457,7 @@ pub async fn run(config: Config) -> Result<()> {
         session_repo.clone(),
         user_repo.clone(),
         keycloak_arc.clone(),
+        Some(webhook_service.clone()), // webhook event publisher
     ));
 
     let webauthn_service = Arc::new(WebAuthnService::new(keycloak_arc.clone()));
@@ -464,8 +469,6 @@ pub async fn run(config: Config) -> Result<()> {
     ));
 
     let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
-
-    let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
 
     let security_detection_service = Arc::new(SecurityDetectionService::new(
         login_event_repo,
@@ -591,7 +594,7 @@ fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> A
 ///
 /// This function is generic over the state type, allowing it to work with
 /// both production `AppState` and test implementations that implement `HasServices`.
-pub fn build_router<S: HasServices>(state: S) -> Router {
+pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics>(state: S) -> Router {
     // CORS configuration
     let cors = CorsLayer::new()
         .allow_origin(Any)

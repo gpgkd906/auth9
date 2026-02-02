@@ -63,7 +63,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         if (intent === "create_client") {
             const name = formData.get("name") as string;
             const res = await serviceApi.createClient(id, { name: name || undefined });
-            return { success: true, intent, secret: res.data.client_secret, client: res.data.client };
+            // ClientWithSecret is flattened - client fields are at root level
+            return { success: true, intent, secret: res.data.client_secret, clientId: res.data.client_id };
         }
 
         if (intent === "delete_client") {
@@ -105,10 +106,9 @@ export default function ServiceDetailPage() {
 
     useEffect(() => {
         if (actionData && "success" in actionData && actionData.success) {
-            if (actionData.intent === "create_client" && "secret" in actionData && "client" in actionData && actionData.secret && actionData.client) {
+            if (actionData.intent === "create_client" && "secret" in actionData && "clientId" in actionData && actionData.secret && actionData.clientId) {
                 setIsAddClientOpen(false);
-                const newClient = actionData.client as { id: string; client_id: string };
-                setSecretDialog({ clientId: newClient.client_id, secret: actionData.secret as string, isNew: true });
+                setSecretDialog({ clientId: actionData.clientId as string, secret: actionData.secret as string, isNew: true });
             }
             if (actionData.intent === "regenerate_secret" && "secret" in actionData && "regeneratedClientId" in actionData) {
                 setSecretDialog({

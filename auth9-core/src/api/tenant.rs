@@ -93,18 +93,21 @@ pub async fn delete<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
     let before = state.tenant_service().get(id).await?;
-    let tenant = state.tenant_service().disable(id).await?;
+
+    // Perform physical delete with cascade cleanup
+    state.tenant_service().delete(id).await?;
+
     let _ = write_audit_log_generic(
         &state,
         &headers,
-        "tenant.disable",
+        "tenant.delete",
         "tenant",
         Some(*id),
         serde_json::to_value(&before).ok(),
-        serde_json::to_value(&tenant).ok(),
+        None,
     )
     .await;
-    Ok(Json(MessageResponse::new("Tenant disabled successfully")))
+    Ok(Json(MessageResponse::new("Tenant deleted successfully")))
 }
 
 #[cfg(test)]

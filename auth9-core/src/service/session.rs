@@ -1,23 +1,34 @@
 //! Session management business logic
 
-use crate::domain::{parse_user_agent, CreateSessionInput, Session, SessionInfo, StringUuid};
+use crate::domain::{
+    parse_user_agent, CreateSessionInput, Session, SessionInfo, StringUuid, WebhookEvent,
+};
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::{SessionRepository, UserRepository};
+use crate::service::WebhookEventPublisher;
+use chrono::Utc;
 use std::sync::Arc;
 
 pub struct SessionService<S: SessionRepository, U: UserRepository> {
     session_repo: Arc<S>,
     user_repo: Arc<U>,
     keycloak: Arc<KeycloakClient>,
+    webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
 }
 
 impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
-    pub fn new(session_repo: Arc<S>, user_repo: Arc<U>, keycloak: Arc<KeycloakClient>) -> Self {
+    pub fn new(
+        session_repo: Arc<S>,
+        user_repo: Arc<U>,
+        keycloak: Arc<KeycloakClient>,
+        webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
+    ) -> Self {
         Self {
             session_repo,
             user_repo,
             keycloak,
+            webhook_publisher,
         }
     }
 
@@ -92,7 +103,25 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
         }
 
         // Mark session as revoked in our database
-        self.session_repo.revoke(session_id).await
+        self.session_repo.revoke(session_id).await?;
+
+        // Trigger session.revoked webhook event
+        if let Some(publisher) = &self.webhook_publisher {
+            let _ = publisher
+                .trigger_event(WebhookEvent {
+                    event_type: "session.revoked".to_string(),
+                    timestamp: Utc::now(),
+                    data: serde_json::json!({
+                        "session_id": session_id.to_string(),
+                        "user_id": user_id.to_string(),
+                        "device_type": session.device_type,
+                        "device_name": session.device_name,
+                    }),
+                })
+                .await;
+        }
+
+        Ok(())
     }
 
     /// Revoke all sessions except the current one
@@ -252,6 +281,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let sessions = service.get_user_sessions(user_id, None).await.unwrap();
@@ -283,6 +313,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let sessions = service
@@ -310,6 +341,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let result = service.revoke_session(session_id, user_id).await;
@@ -338,6 +370,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let result = service.revoke_session(session_id, user_id).await;
@@ -361,6 +394,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let result = service.update_last_active(session_id).await;
@@ -382,6 +416,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let count = service.cleanup_old_sessions(30).await.unwrap();
@@ -404,6 +439,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let result = service.get_user_sessions_admin(user_id).await;
@@ -451,6 +487,7 @@ mod tests {
             Arc::new(session_mock),
             Arc::new(user_mock),
             Arc::new(keycloak),
+            None, // webhook_publisher
         );
 
         let sessions = service.get_user_sessions_admin(user_id).await.unwrap();

@@ -28,16 +28,21 @@ pub trait InvitationRepository: Send + Sync {
         tenant_id: StringUuid,
     ) -> Result<Option<Invitation>>;
 
-    /// List invitations for a tenant
+    /// List invitations for a tenant with optional status filter
     async fn list_by_tenant(
         &self,
         tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<Invitation>>;
 
-    /// Count invitations for a tenant
-    async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64>;
+    /// Count invitations for a tenant with optional status filter
+    async fn count_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
+    ) -> Result<i64>;
 
     /// Update invitation status
     async fn update_status(&self, id: StringUuid, status: InvitationStatus) -> Result<Invitation>;
@@ -141,32 +146,63 @@ impl InvitationRepository for InvitationRepositoryImpl {
     async fn list_by_tenant(
         &self,
         tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
         offset: i64,
         limit: i64,
     ) -> Result<Vec<Invitation>> {
-        let invitations = sqlx::query_as::<_, Invitation>(
-            r#"
-            SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
-            FROM invitations
-            WHERE tenant_id = ?
-            ORDER BY created_at DESC
-            LIMIT ? OFFSET ?
-            "#,
-        )
-        .bind(tenant_id)
-        .bind(limit)
-        .bind(offset)
-        .fetch_all(&self.pool)
-        .await?;
+        let invitations = if let Some(status) = status {
+            sqlx::query_as::<_, Invitation>(
+                r#"
+                SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+                FROM invitations
+                WHERE tenant_id = ? AND status = ?
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(status.to_string())
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        } else {
+            sqlx::query_as::<_, Invitation>(
+                r#"
+                SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+                FROM invitations
+                WHERE tenant_id = ?
+                ORDER BY created_at DESC
+                LIMIT ? OFFSET ?
+                "#,
+            )
+            .bind(tenant_id)
+            .bind(limit)
+            .bind(offset)
+            .fetch_all(&self.pool)
+            .await?
+        };
 
         Ok(invitations)
     }
 
-    async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64> {
-        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ?")
-            .bind(tenant_id)
-            .fetch_one(&self.pool)
-            .await?;
+    async fn count_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
+    ) -> Result<i64> {
+        let row: (i64,) = if let Some(status) = status {
+            sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ? AND status = ?")
+                .bind(tenant_id)
+                .bind(status.to_string())
+                .fetch_one(&self.pool)
+                .await?
+        } else {
+            sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ?")
+                .bind(tenant_id)
+                .fetch_one(&self.pool)
+                .await?
+        };
         Ok(row.0)
     }
 
@@ -282,8 +318,8 @@ mod tests {
         let tenant_id = StringUuid::new_v4();
 
         mock.expect_list_by_tenant()
-            .with(eq(tenant_id), eq(0), eq(10))
-            .returning(|_, _, _| {
+            .with(eq(tenant_id), eq(None), eq(0), eq(10))
+            .returning(|_, _, _, _| {
                 Ok(vec![
                     Invitation {
                         email: "user1@example.com".to_string(),
@@ -296,7 +332,7 @@ mod tests {
                 ])
             });
 
-        let result = mock.list_by_tenant(tenant_id, 0, 10).await.unwrap();
+        let result = mock.list_by_tenant(tenant_id, None, 0, 10).await.unwrap();
         assert_eq!(result.len(), 2);
     }
 
