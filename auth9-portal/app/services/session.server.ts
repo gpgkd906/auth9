@@ -29,6 +29,7 @@ export async function commitSession(session: SessionData) {
   return sessionCookie.serialize(session);
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export async function destroySession(session: SessionData) {
   return sessionCookie.serialize("", { maxAge: 0 });
 }

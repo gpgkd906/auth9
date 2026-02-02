@@ -1,8 +1,8 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, it, expect, vi } from "vitest";
-import TenantsPage, { loader } from "~/routes/dashboard.tenants";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import TenantsIndexPage from "~/routes/dashboard.tenants._index";
 import { tenantApi } from "~/services/api";
 
 // Mock the tenant API
@@ -45,14 +45,21 @@ describe("Tenants Page", () => {
         },
     };
 
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
     it("renders tenant list from loader", async () => {
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
 
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/tenants",
-                Component: TenantsPage,
-                loader,
+                Component: TenantsIndexPage,
+                loader: () => ({
+                    ...mockTenants,
+                    search: "",
+                }),
             },
         ]);
 
@@ -70,8 +77,11 @@ describe("Tenants Page", () => {
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/tenants",
-                Component: TenantsPage,
-                loader,
+                Component: TenantsIndexPage,
+                loader: () => ({
+                    ...mockTenants,
+                    search: "",
+                }),
             },
         ]);
 
@@ -87,16 +97,15 @@ describe("Tenants Page", () => {
     });
 
     it("renders empty state when no tenants found", async () => {
-        vi.mocked(tenantApi.list).mockResolvedValue({
-            data: [],
-            pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 }
-        });
-
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/tenants",
-                Component: TenantsPage,
-                loader,
+                Component: TenantsIndexPage,
+                loader: () => ({
+                    data: [],
+                    pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
+                    search: "",
+                }),
             },
         ]);
 

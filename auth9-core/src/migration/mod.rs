@@ -20,14 +20,14 @@ const DEFAULT_PORTAL_NAME: &str = "Auth9 Admin Portal";
 fn build_db_redirect_uris(_core_public_url: Option<&str>, portal_url: Option<&str>) -> String {
     let mut uris = vec![
         "http://localhost:3000/dashboard".to_string(),
-        "http://localhost:3000/callback".to_string(),
+        "http://localhost:3000/auth/callback".to_string(),
         "http://127.0.0.1:3000/dashboard".to_string(),
-        "http://127.0.0.1:3000/callback".to_string(),
+        "http://127.0.0.1:3000/auth/callback".to_string(),
     ];
 
     if let Some(portal_url_str) = portal_url {
         uris.push(format!("{}/dashboard", portal_url_str));
-        uris.push(format!("{}/callback", portal_url_str));
+        uris.push(format!("{}/auth/callback", portal_url_str));
     }
 
     serde_json::to_string(&uris).unwrap()
@@ -193,6 +193,9 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed portal service in database")?;
 
+    // Seed dev email config if in dev environment
+    seed_dev_email_config(config).await?;
+
     info!("Keycloak seeding completed");
     Ok(())
 }
@@ -305,5 +308,62 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
         );
     }
 
+    Ok(())
+}
+
+/// Seed dev email config in database when DEV_SMTP_HOST is set
+///
+/// This configures the system to use Mailpit for email testing in dev environment
+async fn seed_dev_email_config(config: &Config) -> Result<()> {
+    let smtp_host = match std::env::var("DEV_SMTP_HOST") {
+        Ok(host) => host,
+        Err(_) => {
+            // Not in dev environment, skip
+            return Ok(());
+        }
+    };
+
+    info!("Dev environment detected, configuring email to use {}...", smtp_host);
+
+    let pool: Pool<MySql> = MySqlPoolOptions::new()
+        .max_connections(1)
+        .connect(&config.database.url)
+        .await
+        .context("Failed to connect to database")?;
+
+    let email_config = serde_json::json!({
+        "type": "smtp",
+        "host": smtp_host,
+        "port": 1025,
+        "from_email": "noreply@auth9.local",
+        "from_name": "Auth9",
+        "use_tls": false
+    });
+
+    // Try to update existing setting first
+    let result = sqlx::query(
+        "UPDATE system_settings SET value = ? WHERE category = 'email' AND setting_key = 'provider'"
+    )
+    .bind(email_config.to_string())
+    .execute(&pool)
+    .await
+    .context("Failed to update email config")?;
+
+    if result.rows_affected() == 0 {
+        // Setting doesn't exist, insert it (id is AUTO_INCREMENT)
+        sqlx::query(
+            "INSERT INTO system_settings (category, setting_key, value, created_at, updated_at) VALUES ('email', 'provider', ?, NOW(), NOW())"
+        )
+        .bind(email_config.to_string())
+        .execute(&pool)
+        .await
+        .context("Failed to insert email config")?;
+
+        info!("Dev email config inserted (SMTP: {}:1025)", smtp_host);
+    } else {
+        info!("Dev email config updated (SMTP: {}:1025)", smtp_host);
+    }
+
+    pool.close().await;
     Ok(())
 }

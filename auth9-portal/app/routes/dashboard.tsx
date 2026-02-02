@@ -28,17 +28,15 @@ export default function Dashboard() {
       {/* Dynamic Background */}
       <div className="page-backdrop" />
 
-      {/* Theme Toggle */}
-      <ThemeToggle />
-
       {/* Sidebar - Floating Glass Card */}
       <aside className="sidebar">
-        {/* Logo */}
+        {/* Logo & Theme Toggle */}
         <div className="sidebar-header">
           <Link to="/dashboard" className="flex items-center gap-3">
             <div className="logo-icon">A9</div>
             <span className="logo-text">Auth9</span>
           </Link>
+          <ThemeToggle />
         </div>
 
         {/* Navigation */}

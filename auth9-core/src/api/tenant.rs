@@ -1,7 +1,7 @@
 //! Tenant API handlers
 
 use crate::api::{
-    write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
+    write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse,
 };
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::Result;
@@ -13,22 +13,48 @@ use axum::{
     response::IntoResponse,
     Json,
 };
+use serde::Deserialize;
 use uuid::Uuid;
+
+/// Query parameters for tenant list endpoint with search
+#[derive(Debug, Deserialize)]
+pub struct TenantListQuery {
+    #[serde(default = "default_page")]
+    pub page: i64,
+    #[serde(default = "default_per_page")]
+    pub per_page: i64,
+    pub search: Option<String>,
+}
+
+fn default_page() -> i64 {
+    1
+}
+
+fn default_per_page() -> i64 {
+    20
+}
 
 /// List tenants
 pub async fn list<S: HasServices>(
     State(state): State<S>,
-    Query(pagination): Query<PaginationQuery>,
+    Query(query): Query<TenantListQuery>,
 ) -> Result<impl IntoResponse> {
-    let (tenants, total) = state
-        .tenant_service()
-        .list(pagination.page, pagination.per_page)
-        .await?;
+    let (tenants, total) = if let Some(ref search) = query.search {
+        state
+            .tenant_service()
+            .search(search, query.page, query.per_page)
+            .await?
+    } else {
+        state
+            .tenant_service()
+            .list(query.page, query.per_page)
+            .await?
+    };
 
     Ok(Json(PaginatedResponse::new(
         tenants,
-        pagination.page,
-        pagination.per_page,
+        query.page,
+        query.per_page,
         total,
     )))
 }

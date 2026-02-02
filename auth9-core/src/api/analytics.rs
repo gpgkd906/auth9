@@ -8,6 +8,7 @@ use axum::{
     extract::{Path, Query, State},
     Json,
 };
+use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 /// Get login statistics
@@ -15,6 +16,21 @@ pub async fn get_stats<S: HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<StatsQuery>,
 ) -> Result<Json<SuccessResponse<LoginStats>>, AppError> {
+    // First check for start/end date parameters (ISO 8601 format)
+    if let (Some(start), Some(end)) = (&params.start, &params.end) {
+        if let (Ok(start_dt), Ok(end_dt)) = (
+            start.parse::<DateTime<Utc>>(),
+            end.parse::<DateTime<Utc>>(),
+        ) {
+            let stats = state
+                .analytics_service()
+                .get_stats_for_range(start_dt, end_dt)
+                .await?;
+            return Ok(Json(SuccessResponse::new(stats)));
+        }
+    }
+
+    // Fallback to period/days parameters
     let stats = match params.period.as_deref() {
         Some("daily") | Some("day") => state.analytics_service().get_daily_stats().await?,
         Some("weekly") | Some("week") => state.analytics_service().get_weekly_stats().await?,
@@ -36,6 +52,10 @@ pub struct StatsQuery {
     pub period: Option<String>,
     /// Custom number of days (overrides period)
     pub days: Option<i64>,
+    /// Start date in ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
+    pub start: Option<String>,
+    /// End date in ISO 8601 format (e.g., "2024-01-31T23:59:59Z")
+    pub end: Option<String>,
 }
 
 /// List login events with pagination
@@ -109,5 +129,15 @@ mod tests {
     fn test_stats_query_with_days() {
         let query: StatsQuery = serde_json::from_str(r#"{"days": 30}"#).unwrap();
         assert_eq!(query.days, Some(30));
+    }
+
+    #[test]
+    fn test_stats_query_with_start_end() {
+        let query: StatsQuery = serde_json::from_str(
+            r#"{"start": "2024-01-01T00:00:00Z", "end": "2024-01-31T23:59:59Z"}"#,
+        )
+        .unwrap();
+        assert_eq!(query.start, Some("2024-01-01T00:00:00Z".to_string()));
+        assert_eq!(query.end, Some("2024-01-31T23:59:59Z".to_string()));
     }
 }

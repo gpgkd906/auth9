@@ -552,28 +552,23 @@
 
   /* Theme Toggle */
   .theme-toggle {
-    position: fixed;
-    top: 24px;
-    right: 24px;
-    z-index: 100;
     display: flex;
-    padding: 4px;
-    gap: 4px;
-    background: var(--glass-bg);
-    backdrop-filter: blur(20px);
-    -webkit-backdrop-filter: blur(20px);
-    border: 1px solid var(--glass-border);
-    border-radius: 14px;
-    box-shadow: 0 4px 20px var(--glass-shadow);
+    padding: 3px;
+    gap: 2px;
+    background: var(--surface-secondary);
+    border: 1px solid var(--glass-border-subtle);
+    border-radius: 8px;
+    margin-left: auto;
+    flex-shrink: 0;
   }
 
   .theme-btn {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 36px;
-    height: 36px;
-    border-radius: 10px;
+    width: 28px;
+    height: 28px;
+    border-radius: 6px;
     border: none;
     background: transparent;
     color: var(--text-tertiary);
@@ -592,8 +587,8 @@
   }
 
   .theme-btn svg {
-    width: 18px;
-    height: 18px;
+    width: 14px;
+    height: 14px;
   }
 
   /* Search Box */
@@ -1140,7 +1135,6 @@
 @supports not (backdrop-filter: blur(24px)) {
   .liquid-glass,
   .sidebar,
-  .theme-toggle,
   .btn-glass {
     background: var(--bg-secondary);
   }

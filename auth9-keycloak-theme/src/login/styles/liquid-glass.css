@@ -1,0 +1,709 @@
+/**
+ * Auth9 Keycloak Theme - Liquid Glass Design System
+ *
+ * Ported from auth9-portal Liquid Glass design system.
+ * Provides CSS-based styling with light/dark mode support.
+ */
+
+/* ================================================
+   LIGHT MODE (Default)
+   ================================================ */
+:root {
+  /* Background colors */
+  --bg-primary: #F2F2F7;
+  --bg-secondary: #FFFFFF;
+  --bg-tertiary: #E5E5EA;
+
+  /* Glass colors - Light mode */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-bg-hover: rgba(255, 255, 255, 0.85);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  --glass-border-subtle: rgba(0, 0, 0, 0.06);
+  --glass-shadow: rgba(0, 0, 0, 0.08);
+  --glass-shadow-strong: rgba(0, 0, 0, 0.15);
+  --glass-highlight: rgba(255, 255, 255, 0.9);
+  --glass-illumination: rgba(255, 255, 255, 0.4);
+
+  /* Text colors */
+  --text-primary: #1D1D1F;
+  --text-secondary: #86868B;
+  --text-tertiary: #AEAEB2;
+  --text-inverse: #FFFFFF;
+
+  /* Accent colors */
+  --accent-blue: #007AFF;
+  --accent-blue-light: rgba(0, 122, 255, 0.12);
+  --accent-green: #34C759;
+  --accent-green-light: rgba(52, 199, 89, 0.12);
+  --accent-orange: #FF9500;
+  --accent-orange-light: rgba(255, 149, 0, 0.12);
+  --accent-red: #FF3B30;
+  --accent-red-light: rgba(255, 59, 48, 0.12);
+  --accent-purple: #AF52DE;
+  --accent-purple-light: rgba(175, 82, 222, 0.12);
+  --accent-cyan: #32ADE6;
+  --accent-cyan-light: rgba(50, 173, 230, 0.12);
+
+  /* Input colors */
+  --input-bg: rgba(0, 0, 0, 0.04);
+  --input-bg-hover: rgba(0, 0, 0, 0.06);
+  --input-border: rgba(0, 0, 0, 0.08);
+
+  /* Backdrop for dynamic wallpaper effect */
+  --backdrop-gradient: linear-gradient(135deg,
+    rgba(255, 204, 128, 0.3) 0%,
+    rgba(255, 182, 193, 0.25) 25%,
+    rgba(173, 216, 230, 0.3) 50%,
+    rgba(221, 160, 221, 0.25) 75%,
+    rgba(255, 218, 185, 0.3) 100%);
+
+  /* Blur intensity */
+  --blur-glass: 24px;
+  --blur-glass-heavy: 40px;
+  --saturate-glass: 180%;
+
+  /* Border radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+
+  /* Animation timings */
+  --duration-fast: 150ms;
+  --duration-normal: 250ms;
+  --duration-slow: 400ms;
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ================================================
+   DARK MODE
+   ================================================ */
+[data-theme="dark"] {
+  --bg-primary: #000000;
+  --bg-secondary: #1C1C1E;
+  --bg-tertiary: #2C2C2E;
+
+  /* Glass colors - Dark mode */
+  --glass-bg: rgba(44, 44, 46, 0.65);
+  --glass-bg-hover: rgba(58, 58, 60, 0.75);
+  --glass-border: rgba(255, 255, 255, 0.1);
+  --glass-border-subtle: rgba(255, 255, 255, 0.05);
+  --glass-shadow: rgba(0, 0, 0, 0.4);
+  --glass-shadow-strong: rgba(0, 0, 0, 0.6);
+  --glass-highlight: rgba(255, 255, 255, 0.15);
+  --glass-illumination: rgba(255, 255, 255, 0.05);
+
+  /* Text colors */
+  --text-primary: #FFFFFF;
+  --text-secondary: #98989D;
+  --text-tertiary: #636366;
+  --text-inverse: #000000;
+
+  /* Accent colors remain vibrant, but light versions are stronger */
+  --accent-blue-light: rgba(0, 122, 255, 0.2);
+  --accent-green-light: rgba(52, 199, 89, 0.2);
+  --accent-orange-light: rgba(255, 149, 0, 0.2);
+  --accent-red-light: rgba(255, 59, 48, 0.2);
+  --accent-purple-light: rgba(175, 82, 222, 0.2);
+  --accent-cyan-light: rgba(50, 173, 230, 0.2);
+
+  /* Input colors - Dark mode */
+  --input-bg: rgba(255, 255, 255, 0.08);
+  --input-bg-hover: rgba(255, 255, 255, 0.12);
+  --input-border: rgba(255, 255, 255, 0.1);
+
+  /* Dark backdrop */
+  --backdrop-gradient: linear-gradient(135deg,
+    rgba(99, 102, 241, 0.15) 0%,
+    rgba(168, 85, 247, 0.12) 25%,
+    rgba(6, 182, 212, 0.1) 50%,
+    rgba(236, 72, 153, 0.08) 75%,
+    rgba(34, 211, 238, 0.12) 100%);
+}
+
+/* ================================================
+   KEYFRAME ANIMATIONS
+   ================================================ */
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
+
+@keyframes fadeInUp {
+  0% {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes backdropShift {
+  0% { transform: translate(0, 0) scale(1); }
+  100% { transform: translate(5%, 5%) scale(1.1); }
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ================================================
+   PAGE LAYOUT
+   ================================================ */
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  background: var(--bg-primary);
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  transition: background 0.4s ease;
+}
+
+/* Page Backdrop (Dynamic Background) */
+.page-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background: var(--bg-primary);
+  overflow: hidden;
+  transition: background 0.4s ease;
+}
+
+.page-backdrop::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  background: var(--backdrop-gradient);
+  animation: backdropShift 20s ease-in-out infinite alternate;
+}
+
+/* ================================================
+   LIQUID GLASS CARD
+   ================================================ */
+.liquid-glass {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--blur-glass)) saturate(var(--saturate-glass));
+  -webkit-backdrop-filter: blur(var(--blur-glass)) saturate(var(--saturate-glass));
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-2xl);
+  box-shadow:
+    0 8px 32px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-highlight),
+    inset 0 -1px 0 rgba(0, 0, 0, 0.05);
+  transition: all 0.3s var(--ease-smooth);
+}
+
+.liquid-glass::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(
+    135deg,
+    var(--glass-illumination) 0%,
+    transparent 50%
+  );
+  pointer-events: none;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 400px;
+  padding: 40px;
+  animation: fadeInUp 0.5s var(--ease-spring) forwards;
+}
+
+/* ================================================
+   HEADER & LOGO
+   ================================================ */
+.login-header {
+  text-align: center;
+  margin-bottom: 32px;
+}
+
+.login-logo {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--radius-xl);
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  font-size: 22px;
+  color: white;
+  margin: 0 auto 20px;
+  box-shadow: 0 8px 24px rgba(0, 122, 255, 0.3);
+}
+
+.login-logo-image {
+  height: 48px;
+  max-width: 200px;
+  object-fit: contain;
+  margin-bottom: 16px;
+}
+
+.login-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 6px;
+  letter-spacing: -0.02em;
+}
+
+.login-subtitle {
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.5;
+}
+
+/* ================================================
+   FORM ELEMENTS
+   ================================================ */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+}
+
+.glass-input {
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-family: inherit;
+  transition: all 0.2s var(--ease-smooth);
+  box-sizing: border-box;
+}
+
+.glass-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.glass-input:focus {
+  outline: none;
+  background: var(--input-bg-hover);
+  border-color: var(--accent-blue);
+  box-shadow: 0 0 0 3px var(--accent-blue-light);
+}
+
+.glass-input:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glass-input--otp {
+  font-size: 1.25rem;
+  font-family: monospace;
+  letter-spacing: 0.25em;
+  text-align: center;
+}
+
+/* ================================================
+   BUTTONS
+   ================================================ */
+.glass-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  padding: 12px 20px;
+  border-radius: var(--radius-lg);
+  font-weight: 600;
+  font-size: 14px;
+  font-family: inherit;
+  cursor: pointer;
+  transition: all 0.25s var(--ease-smooth);
+  border: none;
+  text-decoration: none;
+}
+
+.glass-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.glass-button--primary {
+  background: var(--accent-blue);
+  color: white;
+  box-shadow: 0 4px 12px rgba(0, 122, 255, 0.3);
+}
+
+.glass-button--primary:hover:not(:disabled) {
+  background: #0066D6;
+  box-shadow: 0 6px 20px rgba(0, 122, 255, 0.4);
+  transform: translateY(-1px);
+}
+
+.glass-button--primary:active:not(:disabled) {
+  transform: translateY(0) scale(0.98);
+}
+
+.glass-button--secondary {
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  color: var(--text-primary);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 4px 12px var(--glass-shadow),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-button--secondary:hover:not(:disabled) {
+  background: var(--glass-bg-hover);
+  transform: translateY(-1px);
+}
+
+.glass-button--ghost {
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 12px;
+}
+
+.glass-button--ghost:hover:not(:disabled) {
+  background: var(--input-bg);
+  color: var(--text-primary);
+}
+
+/* Social Provider Button */
+.social-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  width: 100%;
+  padding: 12px 16px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: var(--radius-lg);
+  color: var(--text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  text-decoration: none;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-smooth);
+}
+
+.social-button:hover {
+  background: var(--glass-bg-hover);
+  border-color: var(--glass-border);
+  transform: translateY(-1px);
+}
+
+.social-button svg {
+  width: 20px;
+  height: 20px;
+}
+
+/* ================================================
+   ALERTS
+   ================================================ */
+.glass-alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-lg);
+  font-size: 14px;
+  line-height: 1.5;
+  margin-bottom: 20px;
+}
+
+.glass-alert--error {
+  background: var(--accent-red-light);
+  border: 1px solid rgba(255, 59, 48, 0.2);
+  color: var(--accent-red);
+}
+
+.glass-alert--success {
+  background: var(--accent-green-light);
+  border: 1px solid rgba(52, 199, 89, 0.2);
+  color: var(--accent-green);
+}
+
+.glass-alert--warning {
+  background: var(--accent-orange-light);
+  border: 1px solid rgba(255, 149, 0, 0.2);
+  color: var(--accent-orange);
+}
+
+.glass-alert--info {
+  background: var(--accent-blue-light);
+  border: 1px solid rgba(0, 122, 255, 0.2);
+  color: var(--accent-blue);
+}
+
+/* ================================================
+   DIVIDER
+   ================================================ */
+.divider {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 24px 0;
+}
+
+.divider::before,
+.divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--glass-border-subtle);
+}
+
+.divider span {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* ================================================
+   THEME TOGGLE
+   ================================================ */
+.theme-toggle {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  display: flex;
+  padding: 3px;
+  gap: 2px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 8px;
+  z-index: 10;
+}
+
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  color: var(--text-primary);
+  background: var(--input-bg);
+}
+
+.theme-toggle-btn.active {
+  background: var(--accent-blue-light);
+  color: var(--accent-blue);
+}
+
+.theme-toggle-btn svg {
+  width: 14px;
+  height: 14px;
+}
+
+/* ================================================
+   LOGIN FOOTER
+   ================================================ */
+.login-footer {
+  margin-top: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+.login-footer a {
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.login-footer a:hover {
+  text-decoration: underline;
+}
+
+/* ================================================
+   FORM OPTIONS ROW
+   ================================================ */
+.form-options {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  font-size: 13px;
+}
+
+.form-checkbox {
+  display: flex;
+  align-items: center;
+  color: var(--text-secondary);
+  cursor: pointer;
+  gap: 8px;
+}
+
+.form-checkbox input[type="checkbox"] {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--accent-blue);
+  cursor: pointer;
+}
+
+.form-link {
+  color: var(--accent-blue);
+  text-decoration: none;
+  font-weight: 500;
+  transition: color 0.2s ease;
+}
+
+.form-link:hover {
+  text-decoration: underline;
+}
+
+.form-link--secondary {
+  color: var(--text-secondary);
+}
+
+.form-link--secondary:hover {
+  color: var(--text-primary);
+}
+
+/* ================================================
+   OTP DEVICE SELECTOR
+   ================================================ */
+.otp-devices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 24px;
+}
+
+.otp-device-option {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--input-bg);
+  border: 1px solid var(--input-border);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.otp-device-option:hover {
+  background: var(--input-bg-hover);
+  border-color: var(--glass-border);
+}
+
+.otp-device-option input[type="radio"] {
+  margin-right: 12px;
+  accent-color: var(--accent-blue);
+}
+
+.otp-device-option span {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+/* ================================================
+   SOCIAL PROVIDERS SECTION
+   ================================================ */
+.social-providers {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* ================================================
+   LOADING SPINNER
+   ================================================ */
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid var(--glass-border-subtle);
+  border-top-color: var(--accent-blue);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+/* ================================================
+   ACCESSIBILITY
+   ================================================ */
+:focus-visible {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+/* ================================================
+   REDUCED MOTION
+   ================================================ */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .page-backdrop::before {
+    animation: none;
+  }
+}
+
+/* ================================================
+   PERFORMANCE FALLBACK
+   ================================================ */
+@supports not (backdrop-filter: blur(24px)) {
+  .liquid-glass,
+  .login-card,
+  .glass-button--secondary,
+  .social-button,
+  .theme-toggle {
+    background: var(--bg-secondary);
+  }
+}
+
+/* ================================================
+   ANIMATION UTILITIES
+   ================================================ */
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.5s var(--ease-spring) forwards;
+}
+
+.delay-1 { animation-delay: 50ms; opacity: 0; }
+.delay-2 { animation-delay: 100ms; opacity: 0; }
+.delay-3 { animation-delay: 150ms; opacity: 0; }
+.delay-4 { animation-delay: 200ms; opacity: 0; }
+.delay-5 { animation-delay: 250ms; opacity: 0; }

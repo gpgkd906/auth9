@@ -33,6 +33,7 @@ import {
 } from "~/components/ui/select";
 import { invitationApi, tenantApi, serviceApi, rbacApi, type Invitation, type Role, type Tenant } from "~/services/api";
 import { formatDateTime } from "~/lib/utils";
+import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Invitations - Auth9" }];
@@ -87,14 +88,6 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   } satisfies LoaderData;
 }
 
-// TODO: In production, get access token from session/cookie
-function getAccessToken(request: Request): string {
-  // Try to get from cookie or return empty for now
-  const cookie = request.headers.get("cookie") || "";
-  const match = cookie.match(/access_token=([^;]+)/);
-  return match ? match[1] : "";
-}
-
 export async function action({ params, request }: ActionFunctionArgs) {
   const tenantId = params.tenantId;
   if (!tenantId) {
@@ -103,7 +96,11 @@ export async function action({ params, request }: ActionFunctionArgs) {
 
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const accessToken = getAccessToken(request);
+  const accessToken = await getAccessToken(request);
+
+  if (!accessToken) {
+    return Response.json({ error: "Authentication required" }, { status: 401 });
+  }
 
   try {
     if (intent === "create") {

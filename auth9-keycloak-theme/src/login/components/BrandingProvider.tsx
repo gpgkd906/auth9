@@ -9,8 +9,28 @@ interface BrandingProviderProps {
 }
 
 /**
+ * Converts a hex color to RGB values for use in rgba() functions.
+ */
+function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
+  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+  return result
+    ? {
+        r: parseInt(result[1], 16),
+        g: parseInt(result[2], 16),
+        b: parseInt(result[3], 16),
+      }
+    : null;
+}
+
+/**
  * Provides branding configuration to child components.
  * Fetches configuration from auth9 API and applies CSS variables.
+ *
+ * Maps branding API colors to Liquid Glass CSS variables:
+ * - primary_color → --accent-blue (main action color)
+ * - secondary_color → --accent-purple (secondary actions, links)
+ * - background_color → --bg-primary (page background)
+ * - text_color → --text-primary (main text)
  */
 export function BrandingProvider({ apiUrl, children }: BrandingProviderProps) {
   const { branding, loading } = useBranding(apiUrl);
@@ -30,12 +50,26 @@ export function BrandingProvider({ apiUrl, children }: BrandingProviderProps) {
     }
   }, [branding.favicon_url]);
 
-  // CSS variables for theme colors
+  // Generate light variants of accent colors
+  const primaryRgb = hexToRgb(branding.primary_color);
+  const secondaryRgb = hexToRgb(branding.secondary_color);
+
+  // CSS variables for theme colors - both legacy and Liquid Glass
   const style: CSSProperties = {
+    // Legacy auth9 variables (backward compatibility)
     "--auth9-primary": branding.primary_color,
     "--auth9-secondary": branding.secondary_color,
     "--auth9-bg": branding.background_color,
     "--auth9-text": branding.text_color,
+    // Liquid Glass accent overrides
+    "--accent-blue": branding.primary_color,
+    "--accent-blue-light": primaryRgb
+      ? `rgba(${primaryRgb.r}, ${primaryRgb.g}, ${primaryRgb.b}, 0.12)`
+      : "rgba(0, 122, 255, 0.12)",
+    "--accent-purple": branding.secondary_color,
+    "--accent-purple-light": secondaryRgb
+      ? `rgba(${secondaryRgb.r}, ${secondaryRgb.g}, ${secondaryRgb.b}, 0.12)`
+      : "rgba(175, 82, 222, 0.12)",
   } as CSSProperties;
 
   return (

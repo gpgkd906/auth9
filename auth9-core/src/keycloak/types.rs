@@ -169,6 +169,9 @@ pub struct KeycloakRealm {
     /// SSL requirement: "none", "external", or "all"
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssl_required: Option<String>,
+    /// Login theme name (e.g., "auth9", "keycloak")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_theme: Option<String>,
 }
 
 /// Realm update parameters
@@ -181,6 +184,9 @@ pub struct RealmUpdate {
     pub reset_password_allowed: Option<bool>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub ssl_required: Option<String>,
+    /// Login theme name (e.g., "auth9", "keycloak")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub login_theme: Option<String>,
 }
 
 #[cfg(test)]
@@ -523,6 +529,7 @@ mod tests {
             registration_allowed: Some(true),
             reset_password_allowed: Some(false),
             ssl_required: None,
+            login_theme: None,
         };
 
         let json = serde_json::to_string(&update).unwrap();

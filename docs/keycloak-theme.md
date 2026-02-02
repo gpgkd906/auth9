@@ -402,8 +402,11 @@ Keycloak 会自动使用新版本的主题，因为 realm 配置指向 "auth9"�
 
 ### Q: 新创建的 realm 需要手动选择 auth9 主题吗？
 
-**不需要**。在 `docker-compose.yml` 中配置了 `KC_SPI_THEME_DEFAULT: auth9`，
-所有新创建的 realm 都会自动使用 auth9 作为默认登录主题。
+**不需要**。auth9-core 在初始化时（`auth9-core init` 命令）会通过 Keycloak Admin API
+自动为 realm 设置 `loginTheme: "auth9"`。每次运行初始化命令时，都会确保主题设置正确。
+
+注意：Keycloak 的 `KC_SPI_THEME_LOGIN_DEFAULT` 环境变量只对 Welcome 主题有效，
+登录主题必须在 realm 级别通过 API 设置，这正是 auth9-core 自动处理的。
 
 ### Q: 如何控制登录页面是否显示注册链接？
 

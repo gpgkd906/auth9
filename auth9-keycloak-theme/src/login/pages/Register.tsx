@@ -5,6 +5,10 @@ import type { I18n } from "../i18n";
 import { useBrandingContext } from "../components/BrandingProvider";
 import { getKcClsx } from "keycloakify/login/lib/kcClsx";
 import UserProfileFormFields from "keycloakify/login/UserProfileFormFields";
+import { PageLayout } from "../components/PageLayout";
+import { GlassCard } from "../components/GlassCard";
+import { GlassButton } from "../components/GlassButton";
+import { Logo } from "../components/Logo";
 
 export default function Register(
   props: PageProps<Extract<KcContext, { pageId: "register.ftl" }>, I18n>
@@ -25,107 +29,62 @@ export default function Register(
   };
 
   return (
-    <div
-      style={{
-        minHeight: "100vh",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        padding: "1rem",
-        backgroundColor: branding.background_color,
-        fontFamily:
-          "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      }}
-    >
+    <PageLayout>
+      {/* Custom styles for Keycloakify UserProfileFormFields */}
       <style>{`
         .auth9-register-form input[type="text"],
         .auth9-register-form input[type="email"],
         .auth9-register-form input[type="password"] {
           width: 100%;
-          padding: 0.75rem 1rem;
-          font-size: 1rem;
-          border: 1px solid ${branding.secondary_color}40;
-          border-radius: 0.75rem;
-          outline: none;
-          transition: border-color 0.2s, box-shadow 0.2s;
-          background-color: #fff;
+          padding: 12px 16px;
+          font-size: 14px;
+          background: var(--input-bg);
+          border: 1px solid var(--input-border);
+          border-radius: var(--radius-lg);
+          color: var(--text-primary);
+          font-family: inherit;
+          transition: all 0.2s ease;
           box-sizing: border-box;
         }
         .auth9-register-form input[type="text"]:focus,
         .auth9-register-form input[type="email"]:focus,
         .auth9-register-form input[type="password"]:focus {
-          border-color: ${branding.primary_color};
-          box-shadow: 0 0 0 3px ${branding.primary_color}20;
+          outline: none;
+          background: var(--input-bg-hover);
+          border-color: var(--accent-blue);
+          box-shadow: 0 0 0 3px var(--accent-blue-light);
+        }
+        .auth9-register-form input::placeholder {
+          color: var(--text-tertiary);
         }
         .auth9-register-form label {
           display: block;
-          font-size: 0.875rem;
+          font-size: 13px;
           font-weight: 500;
-          margin-bottom: 0.5rem;
-          color: ${branding.text_color};
+          margin-bottom: 8px;
+          color: var(--text-secondary);
         }
         .auth9-register-form .pf-v5-c-form__group,
         .auth9-register-form .pf-c-form__group {
-          margin-bottom: 1.25rem;
+          margin-bottom: 20px;
         }
         .auth9-register-form .pf-v5-c-form__helper-text,
         .auth9-register-form .pf-c-form__helper-text {
-          color: #dc2626;
-          font-size: 0.8125rem;
-          margin-top: 0.25rem;
+          color: var(--accent-red);
+          font-size: 13px;
+          margin-top: 6px;
         }
       `}</style>
-      <div
-        style={{
-          width: "100%",
-          maxWidth: "480px",
-          backgroundColor: "#fff",
-          borderRadius: "1.5rem",
-          boxShadow:
-            "0 10px 40px rgba(0, 0, 0, 0.08), 0 2px 10px rgba(0, 0, 0, 0.04)",
-          padding: "2.5rem",
-        }}
-      >
+
+      <GlassCard className="login-card" style={{ maxWidth: "480px" }}>
         {/* Header */}
-        <div style={{ textAlign: "center", marginBottom: "2rem" }}>
-          {branding.logo_url ? (
-            <img
-              src={branding.logo_url}
-              alt={branding.company_name || "Logo"}
-              style={{ height: "48px", maxWidth: "200px", objectFit: "contain" }}
-            />
-          ) : branding.company_name ? (
-            <h1
-              style={{
-                fontSize: "1.75rem",
-                fontWeight: 700,
-                color: branding.primary_color,
-                margin: 0,
-              }}
-            >
-              {branding.company_name}
-            </h1>
-          ) : (
-            <h1
-              style={{
-                fontSize: "1.75rem",
-                fontWeight: 700,
-                color: branding.primary_color,
-                margin: 0,
-              }}
-            >
-              {realm.displayName || msg("registerTitle")}
-            </h1>
-          )}
-          <p
-            style={{
-              marginTop: "0.75rem",
-              fontSize: "0.9375rem",
-              color: "#6b7280",
-            }}
-          >
-            {msgStr("registerTitle")}
-          </p>
+        <div className="login-header">
+          <Logo
+            logoUrl={branding.logo_url}
+            companyName={branding.company_name}
+            fallbackText={realm.displayName || msgStr("registerTitle")}
+          />
+          <p className="login-subtitle">{msgStr("registerTitle")}</p>
         </div>
 
         <form
@@ -145,68 +104,28 @@ export default function Register(
 
           {/* reCAPTCHA */}
           {recaptchaRequired && recaptchaSiteKey && (
-            <div style={{ marginBottom: "1.5rem" }}>
+            <div style={{ marginBottom: "24px" }}>
               <div className="g-recaptcha" data-sitekey={recaptchaSiteKey} />
             </div>
           )}
 
           {/* Submit Button */}
-          <button
+          <GlassButton
             disabled={isFormSubmitting || !isFormSubmittable}
             type="submit"
-            style={{
-              width: "100%",
-              padding: "0.875rem 1rem",
-              backgroundColor: branding.primary_color,
-              color: "#fff",
-              fontSize: "1rem",
-              fontWeight: 600,
-              border: "none",
-              borderRadius: "0.75rem",
-              cursor: isFormSubmitting || !isFormSubmittable ? "not-allowed" : "pointer",
-              opacity: isFormSubmitting || !isFormSubmittable ? 0.6 : 1,
-              transition: "opacity 0.2s, transform 0.1s",
-              marginTop: "0.5rem",
-            }}
-            onMouseOver={(e) => {
-              if (!isFormSubmitting && isFormSubmittable) {
-                e.currentTarget.style.opacity = "0.9";
-              }
-            }}
-            onMouseOut={(e) => {
-              if (!isFormSubmitting && isFormSubmittable) {
-                e.currentTarget.style.opacity = "1";
-              }
-            }}
+            variant="primary"
+            loading={isFormSubmitting}
           >
             {msgStr("doRegister")}
-          </button>
+          </GlassButton>
         </form>
 
         {/* Back to Login */}
-        <div
-          style={{
-            marginTop: "1.5rem",
-            textAlign: "center",
-            fontSize: "0.875rem",
-            color: branding.text_color,
-          }}
-        >
+        <div className="login-footer">
           {msgStr("backToLogin") || "Already have an account?"}{" "}
-          <a
-            href={url.loginUrl}
-            style={{
-              color: branding.primary_color,
-              fontWeight: 600,
-              textDecoration: "none",
-            }}
-            onMouseOver={(e) => (e.currentTarget.style.textDecoration = "underline")}
-            onMouseOut={(e) => (e.currentTarget.style.textDecoration = "none")}
-          >
-            {msg("doLogIn")}
-          </a>
+          <a href={url.loginUrl}>{msg("doLogIn")}</a>
         </div>
-      </div>
-    </div>
+      </GlassCard>
+    </PageLayout>
   );
 }

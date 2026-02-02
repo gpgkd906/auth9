@@ -217,6 +217,8 @@ impl KeycloakSeeder {
             registration_allowed: Some(false),
             reset_password_allowed: Some(true),
             ssl_required: Some(self.config.ssl_required.clone()),
+            // Use auth9 custom login theme
+            login_theme: Some("auth9".to_string()),
         };
 
         let response = self
@@ -243,12 +245,13 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Update realm SSL settings based on configuration
-    async fn update_realm_ssl(&self, token: &str) -> anyhow::Result<()> {
+    /// Update realm settings (SSL and login theme) based on configuration
+    async fn update_realm_settings(&self, token: &str) -> anyhow::Result<()> {
         let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
 
         let update = serde_json::json!({
-            "sslRequired": self.config.ssl_required
+            "sslRequired": self.config.ssl_required,
+            "loginTheme": "auth9"
         });
 
         let response = self
@@ -258,16 +261,16 @@ impl KeycloakSeeder {
             .json(&update)
             .send()
             .await
-            .context("Failed to update realm SSL settings")?;
+            .context("Failed to update realm settings")?;
 
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("Failed to update realm SSL: {} - {}", status, body);
+            anyhow::bail!("Failed to update realm settings: {} - {}", status, body);
         }
 
         info!(
-            "Updated realm '{}' SSL requirement to '{}'",
+            "Updated realm '{}': SSL='{}', loginTheme='auth9'",
             self.config.realm, self.config.ssl_required
         );
         Ok(())
@@ -279,8 +282,8 @@ impl KeycloakSeeder {
 
         if self.realm_exists(&token).await? {
             info!("Realm '{}' already exists", self.config.realm);
-            // Update SSL settings for existing realm
-            self.update_realm_ssl(&token).await?;
+            // Update settings (SSL, login theme) for existing realm
+            self.update_realm_settings(&token).await?;
             return Ok(());
         }
 

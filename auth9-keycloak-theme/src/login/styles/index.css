@@ -6,9 +6,18 @@
  * --auth9-secondary: Secondary color
  * --auth9-bg: Background color
  * --auth9-text: Text color
+ *
+ * Liquid Glass CSS variables (mapped from branding):
+ * --accent-blue: Primary color
+ * --accent-purple: Secondary color
+ * --bg-primary: Background color
+ * --text-primary: Text color
  */
 
-/* Default CSS variables */
+/* Import Liquid Glass design system */
+@import "./liquid-glass.css";
+
+/* Legacy default CSS variables (backward compatibility) */
 :root {
   --auth9-primary: #007AFF;
   --auth9-secondary: #5856D6;

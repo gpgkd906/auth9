@@ -13,6 +13,8 @@ pub trait TenantRepository: Send + Sync {
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Tenant>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Tenant>>;
     async fn count(&self) -> Result<i64>;
+    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Tenant>>;
+    async fn count_search(&self, query: &str) -> Result<i64>;
     async fn update(&self, id: StringUuid, input: &UpdateTenantInput) -> Result<Tenant>;
     async fn delete(&self, id: StringUuid) -> Result<()>;
 }
@@ -105,6 +107,39 @@ impl TenantRepository for TenantRepositoryImpl {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tenants")
             .fetch_one(&self.pool)
             .await?;
+        Ok(row.0)
+    }
+
+    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<Tenant>> {
+        let search_pattern = format!("%{}%", query);
+        let tenants = sqlx::query_as::<_, Tenant>(
+            r#"
+            SELECT id, name, slug, logo_url, settings, status, created_at, updated_at
+            FROM tenants
+            WHERE name LIKE ? OR slug LIKE ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(tenants)
+    }
+
+    async fn count_search(&self, query: &str) -> Result<i64> {
+        let search_pattern = format!("%{}%", query);
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM tenants WHERE name LIKE ? OR slug LIKE ?",
+        )
+        .bind(&search_pattern)
+        .bind(&search_pattern)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(row.0)
     }
 

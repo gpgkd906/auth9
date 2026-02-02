@@ -1,10 +1,12 @@
-import type { Route } from "./+types/auth.callback";
+import type { LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { commitSession } from "~/services/session.server";
 
-export async function loader({ request }: Route.LoaderArgs) {
+export async function loader({ request }: LoaderFunctionArgs) {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
+    const accessToken = url.searchParams.get("access_token");
+    const expiresIn = url.searchParams.get("expires_in");
     const error = url.searchParams.get("error");
     const errorDescription = url.searchParams.get("error_description");
 
@@ -13,11 +15,27 @@ export async function loader({ request }: Route.LoaderArgs) {
         return redirect(`/login?error=${error}`);
     }
 
+    // Handle implicit flow (access_token returned directly)
+    if (accessToken) {
+        const session = {
+            accessToken: accessToken,
+            refreshToken: undefined,
+            idToken: undefined,
+            expiresAt: Date.now() + (parseInt(expiresIn || "3600", 10) * 1000),
+        };
+
+        return redirect("/dashboard", {
+            headers: {
+                "Set-Cookie": await commitSession(session),
+            },
+        });
+    }
+
+    // Handle authorization code flow
     if (!code) {
         return redirect("/login");
     }
 
-    // Initial code exchange - in a real app, you might verify state parameter here
     try {
         const tokenUrl = `${process.env.AUTH9_CORE_URL || "http://localhost:8080"}/api/v1/auth/token`;
 
