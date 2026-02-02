@@ -6,7 +6,7 @@ use super::mock_keycloak::MockKeycloakServer;
 use super::{build_test_router, delete_json, get_json, post_json, put_json, TestAppState};
 use crate::api::create_test_user;
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
-use auth9_core::domain::{TenantUser, User};
+use auth9_core::domain::{TenantUser, TenantUserWithTenant, User};
 use axum::http::StatusCode;
 use serde_json::json;
 use uuid::Uuid;
@@ -132,6 +132,7 @@ async fn test_create_user_returns_201() {
     mock_kc.mock_create_user_success(keycloak_user_id).await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state.enable_public_registration().await;
     let app = build_test_router(state);
 
     let input = json!({
@@ -158,6 +159,7 @@ async fn test_create_user_without_password() {
     mock_kc.mock_create_user_success(keycloak_user_id).await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state.enable_public_registration().await;
     let app = build_test_router(state);
 
     let input = json!({
@@ -179,6 +181,7 @@ async fn test_create_user_keycloak_conflict() {
     mock_kc.mock_create_user_conflict().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state.enable_public_registration().await;
     let app = build_test_router(state);
 
     let input = json!({
@@ -432,13 +435,15 @@ async fn test_get_user_tenants() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<TenantUser>>>) =
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<TenantUserWithTenant>>>) =
         get_json(&app, &format!("/api/v1/users/{}/tenants", user_id)).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let response = body.unwrap();
     assert_eq!(response.data.len(), 2);
+    // Verify tenant info is included
+    assert!(response.data.iter().all(|tu| !tu.tenant.name.is_empty()));
 }
 
 #[tokio::test]
@@ -569,6 +574,7 @@ async fn test_create_user_with_special_email() {
     mock_kc.mock_create_user_success("kc-special-email").await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state.enable_public_registration().await;
     let app = build_test_router(state);
 
     let input = json!({
@@ -591,6 +597,7 @@ async fn test_create_user_minimal() {
     mock_kc.mock_create_user_success("kc-minimal").await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state.enable_public_registration().await;
     let app = build_test_router(state);
 
     // Only email, no display_name or password

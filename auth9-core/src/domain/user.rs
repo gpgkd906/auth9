@@ -90,6 +90,27 @@ pub struct UserTenantInfo {
     pub joined_at: DateTime<Utc>,
 }
 
+/// TenantUser with embedded Tenant data (for API responses)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantUserWithTenant {
+    pub id: StringUuid,
+    pub tenant_id: StringUuid,
+    pub user_id: StringUuid,
+    pub role_in_tenant: String,
+    pub joined_at: DateTime<Utc>,
+    pub tenant: TenantInfo,
+}
+
+/// Lightweight Tenant info for embedding in responses
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TenantInfo {
+    pub id: StringUuid,
+    pub name: String,
+    pub slug: String,
+    pub logo_url: Option<String>,
+    pub status: String,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

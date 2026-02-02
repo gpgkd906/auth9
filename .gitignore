@@ -43,3 +43,4 @@ Cargo.lock
 .cache/
 .npm/
 *.tsbuildinfo
+.playwright-mcp

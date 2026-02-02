@@ -383,6 +383,32 @@ impl UserRepository for TestUserRepository {
             .collect())
     }
 
+    async fn find_user_tenants_with_tenant(
+        &self,
+        user_id: StringUuid,
+    ) -> Result<Vec<auth9_core::domain::TenantUserWithTenant>> {
+        // Create mock TenantUserWithTenant from TenantUser data
+        let tenant_users = self.tenant_users.read().await;
+        Ok(tenant_users
+            .iter()
+            .filter(|tu| tu.user_id == user_id)
+            .map(|tu| auth9_core::domain::TenantUserWithTenant {
+                id: tu.id,
+                tenant_id: tu.tenant_id,
+                user_id: tu.user_id,
+                role_in_tenant: tu.role_in_tenant.clone(),
+                joined_at: tu.joined_at,
+                tenant: auth9_core::domain::TenantInfo {
+                    id: tu.tenant_id,
+                    name: format!("Tenant {}", tu.tenant_id),
+                    slug: format!("tenant-{}", tu.tenant_id),
+                    logo_url: None,
+                    status: "active".to_string(),
+                },
+            })
+            .collect())
+    }
+
     async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64> {
         let mut tenant_users = self.tenant_users.write().await;
         let before = tenant_users.len();
@@ -1052,6 +1078,30 @@ impl AuditRepository for TestAuditRepository {
     async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
         let logs = self.find(query).await?;
         Ok(logs.len() as i64)
+    }
+
+    async fn find_with_actor(
+        &self,
+        query: &AuditLogQuery,
+    ) -> Result<Vec<auth9_core::repository::audit::AuditLogWithActor>> {
+        // Convert AuditLog to AuditLogWithActor (without actor email for tests)
+        let logs = self.find(query).await?;
+        Ok(logs
+            .into_iter()
+            .map(|log| auth9_core::repository::audit::AuditLogWithActor {
+                id: log.id,
+                actor_id: log.actor_id,
+                actor_email: None,
+                actor_display_name: None,
+                action: log.action,
+                resource_type: log.resource_type,
+                resource_id: log.resource_id,
+                old_value: log.old_value,
+                new_value: log.new_value,
+                ip_address: log.ip_address,
+                created_at: log.created_at,
+            })
+            .collect())
     }
 
     async fn nullify_actor_id(&self, user_id: StringUuid) -> Result<u64> {

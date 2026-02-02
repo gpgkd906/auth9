@@ -83,20 +83,23 @@ async fn test_openid_configuration_hmac_algorithm() {
     assert!(config
         .id_token_signing_alg_values_supported
         .contains(&"HS256".to_string()));
-    // JWKS URI should be None without RSA keys
-    assert!(config.jwks_uri.is_none());
+    // JWKS URI should always be present (returns empty keys for HS256)
+    assert!(config.jwks_uri.is_some());
 }
 
 #[tokio::test]
-async fn test_jwks_not_found_without_rsa() {
+async fn test_jwks_empty_without_rsa() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
-    let (status, _body) = get_raw(&app, "/.well-known/jwks.json").await;
+    let (status, body) = get_raw(&app, "/.well-known/jwks.json").await;
 
-    // Without RSA keys, JWKS should return 404
-    assert_eq!(status, StatusCode::NOT_FOUND);
+    // Without RSA keys, JWKS should return 200 with empty keys array
+    assert_eq!(status, StatusCode::OK);
+    let body_str = std::str::from_utf8(&body).unwrap();
+    let jwks: serde_json::Value = serde_json::from_str(body_str).unwrap();
+    assert!(jwks["keys"].as_array().unwrap().is_empty());
 }
 
 // ============================================================================
