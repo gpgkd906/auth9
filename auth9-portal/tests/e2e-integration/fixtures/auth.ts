@@ -16,7 +16,7 @@ export async function loginAsTestUser(
   await page.getByLabel(/password/i).fill(user.password);
   await page.getByRole("button", { name: /sign in/i }).click();
 
-  await page.waitForURL(/localhost:3000/, { timeout: 15000 });
+  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
 }
 
 /**

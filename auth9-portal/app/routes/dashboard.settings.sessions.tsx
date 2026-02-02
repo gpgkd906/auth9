@@ -1,4 +1,6 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { getAccessToken, requireAuth } from "~/services/session.server";
+import { redirect } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -11,12 +13,16 @@ import {
   CheckCircledIcon,
 } from "@radix-ui/react-icons";
 
-// Mock access token - in real app, get from session/cookie
-const getAccessToken = () => "";
+// Access token is retrieved from session in loader/action
 
-export async function loader() {
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
+  if (!accessToken) {
+    throw redirect("/login");
+  }
+
   try {
-    const accessToken = getAccessToken();
     const response = await sessionApi.listMySessions(accessToken);
     return { sessions: response.data };
   } catch {
@@ -25,9 +31,13 @@ export async function loader() {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
+  if (!accessToken) {
+    return { error: "Not authenticated" };
+  }
+
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const accessToken = getAccessToken();
 
   try {
     if (intent === "revoke") {
@@ -115,7 +125,7 @@ export default function SessionsPage() {
                     <div className="flex items-center gap-1">
                       <GlobeIcon className="h-3 w-3" />
                       {currentSession.ip_address}
-                      {currentSession.location && ` • ${currentSession.location}`}
+                      {currentSession.location && ` • ${currentSession.location} `}
                     </div>
                   )}
                   <div>
@@ -195,7 +205,7 @@ export default function SessionsPage() {
                         <div className="flex items-center gap-1">
                           <GlobeIcon className="h-3 w-3" />
                           {session.ip_address}
-                          {session.location && ` • ${session.location}`}
+                          {session.location && ` • ${session.location} `}
                         </div>
                       )}
                       <div>

@@ -1,5 +1,6 @@
-import { useLoaderData } from "react-router";
+import { useLoaderData, redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
+import { getAccessToken } from "~/services/session.server";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { auditApi, serviceApi, tenantApi, userApi } from "~/services/api";
 
@@ -8,11 +9,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "5");
 
+  const accessToken = await getAccessToken(request);
+  if (!accessToken) {
+    throw redirect("/login");
+  }
+
   const [tenants, users, services, audits] = await Promise.all([
-    tenantApi.list(1, 1),
-    userApi.list(1, 1),
-    serviceApi.list(undefined, 1, 1),
-    auditApi.list(page, perPage),
+    tenantApi.list(1, 1, accessToken),
+    userApi.list(1, 1, accessToken),
+    serviceApi.list(undefined, 1, 1, accessToken),
+    auditApi.list(page, perPage, accessToken),
   ]);
 
   return {

@@ -852,3 +852,4 @@ mod tests {
         assert!(state.config.keycloak.url.contains("localhost"));
     }
 }
+mod rbac_cross_service_test;

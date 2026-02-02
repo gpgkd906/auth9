@@ -29,6 +29,14 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json();
 }
 
+function getHeaders(accessToken?: string): HeadersInit {
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (accessToken) {
+    headers["Authorization"] = `Bearer ${accessToken}`;
+  }
+  return headers;
+}
+
 // Tenant API
 export interface Tenant {
   id: string;
@@ -49,9 +57,10 @@ export interface CreateTenantInput {
 }
 
 export const tenantApi = {
-  list: async (page = 1, perPage = 20): Promise<PaginatedResponse<Tenant>> => {
+  list: async (page = 1, perPage = 20, accessToken?: string): Promise<PaginatedResponse<Tenant>> => {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/tenants?page=${page}&per_page=${perPage}`
+      `${API_BASE_URL}/api/v1/tenants?page=${page}&per_page=${perPage}`,
+      { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);
   },
@@ -108,9 +117,10 @@ export interface CreateUserInput {
 }
 
 export const userApi = {
-  list: async (page = 1, perPage = 20): Promise<PaginatedResponse<User>> => {
+  list: async (page = 1, perPage = 20, accessToken?: string): Promise<PaginatedResponse<User>> => {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/users?page=${page}&per_page=${perPage}`
+      `${API_BASE_URL}/api/v1/users?page=${page}&per_page=${perPage}`,
+      { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);
   },
@@ -195,10 +205,10 @@ export interface CreateClientInput {
 }
 
 export const serviceApi = {
-  list: async (tenantId?: string, page = 1, perPage = 20): Promise<PaginatedResponse<Service>> => {
+  list: async (tenantId?: string, page = 1, perPage = 20, accessToken?: string): Promise<PaginatedResponse<Service>> => {
     let url = `${API_BASE_URL}/api/v1/services?page=${page}&per_page=${perPage}`;
     if (tenantId) url += `&tenant_id=${tenantId}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getHeaders(accessToken) });
     return handleResponse(response);
   },
 
@@ -451,10 +461,11 @@ export interface AuditLog {
 }
 
 export const auditApi = {
-  list: async (page = 1, perPage = 50): Promise<PaginatedResponse<AuditLog>> => {
+  list: async (page = 1, perPage = 50, accessToken?: string): Promise<PaginatedResponse<AuditLog>> => {
     const offset = (page - 1) * perPage;
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/audit-logs?limit=${perPage}&offset=${offset}`
+      `${API_BASE_URL}/api/v1/audit-logs?limit=${perPage}&offset=${offset}`,
+      { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);
   },
