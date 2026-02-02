@@ -9,7 +9,7 @@ A self-hosted identity and access management service, designed to replace expens
 │                        Client Layer                              │
 ├─────────────────┬─────────────────────┬─────────────────────────┤
 │  auth9-portal   │  Business Services  │      auth9-sdk          │
-│  (Remix SSR)    │                     │      (Optional)         │
+│ (React Router 7)│                     │      (Optional)         │
 └────────┬────────┴──────────┬──────────┴────────────┬────────────┘
          │ REST API          │ gRPC                   │ gRPC
          ▼                   ▼                        ▼
@@ -31,7 +31,7 @@ A self-hosted identity and access management service, designed to replace expens
 | Component | Technology | Description |
 |-----------|------------|-------------|
 | **auth9-core** | Rust (axum, tonic, sqlx) | Backend API & gRPC services |
-| **auth9-portal** | Remix + TypeScript | Admin dashboard UI |
+| **auth9-portal** | React Router 7 + TypeScript + Vite | Admin dashboard UI |
 | **Database** | TiDB (MySQL compatible) | Tenant, user, RBAC data |
 | **Cache** | Redis | Session, token caching |
 | **Auth Engine** | Keycloak | OIDC provider (optional) |

@@ -462,11 +462,12 @@ A:
 - 分布式事务
 - HTAP 能力
 
-### Q: 前端为什么用 Remix？
+### Q: 前端为什么用 React Router 7？
 
 A: 
 - 优秀的 SSR 支持
 - 现代化开发体验
+- 类型安全的 loaders 和 actions
 - 良好的性能
 - 文件系统路由
 
