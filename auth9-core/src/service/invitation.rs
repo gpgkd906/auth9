@@ -131,26 +131,56 @@ where
     }
 
     /// Get an invitation by ID
+    ///
+    /// Dynamically updates expired pending invitations to show "expired" status.
     pub async fn get(&self, id: StringUuid) -> Result<Invitation> {
-        self.invitation_repo
+        let mut invitation = self
+            .invitation_repo
             .find_by_id(id)
             .await?
-            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
+
+        // Dynamically update expired status for display
+        if invitation.status == InvitationStatus::Pending && invitation.is_expired() {
+            invitation.status = InvitationStatus::Expired;
+        }
+
+        Ok(invitation)
     }
 
-    /// List invitations for a tenant
+    /// List invitations for a tenant with optional status filter
+    ///
+    /// Dynamically updates the status of expired invitations to "expired"
+    /// when returning results, ensuring accurate status display without
+    /// requiring a background job.
     pub async fn list_by_tenant(
         &self,
         tenant_id: StringUuid,
+        status: Option<InvitationStatus>,
         page: i64,
         per_page: i64,
     ) -> Result<(Vec<Invitation>, i64)> {
         let offset = (page - 1) * per_page;
         let invitations = self
             .invitation_repo
-            .list_by_tenant(tenant_id, offset, per_page)
+            .list_by_tenant(tenant_id, status.clone(), offset, per_page)
             .await?;
-        let total = self.invitation_repo.count_by_tenant(tenant_id).await?;
+        let total = self
+            .invitation_repo
+            .count_by_tenant(tenant_id, status)
+            .await?;
+
+        // Dynamically update expired invitations' status for display
+        let invitations = invitations
+            .into_iter()
+            .map(|mut inv| {
+                if inv.status == InvitationStatus::Pending && inv.is_expired() {
+                    inv.status = InvitationStatus::Expired;
+                }
+                inv
+            })
+            .collect();
+
         Ok((invitations, total))
     }
 
@@ -574,7 +604,7 @@ mod tests {
 
         invitation_repo
             .expect_list_by_tenant()
-            .returning(|_, _, _| {
+            .returning(|_, _, _, _| {
                 Ok(vec![
                     Invitation {
                         email: "user1@example.com".to_string(),
@@ -589,7 +619,7 @@ mod tests {
 
         invitation_repo
             .expect_count_by_tenant()
-            .returning(|_| Ok(2));
+            .returning(|_, _| Ok(2));
 
         let tenant_repo = Arc::new(MockTenantRepository::new());
         let settings_repo = Arc::new(MockSystemSettingsRepository::new());
@@ -603,7 +633,7 @@ mod tests {
             "https://app.example.com".to_string(),
         );
 
-        let (invitations, total) = service.list_by_tenant(tenant_id, 1, 10).await.unwrap();
+        let (invitations, total) = service.list_by_tenant(tenant_id, None, 1, 10).await.unwrap();
         assert_eq!(invitations.len(), 2);
         assert_eq!(total, 2);
     }

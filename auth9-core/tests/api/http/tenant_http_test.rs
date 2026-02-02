@@ -359,15 +359,14 @@ async fn test_delete_tenant_returns_200() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let response = body.unwrap();
-    assert!(response.message.contains("disabled"));
+    assert!(response.message.contains("deleted"));
 
-    // Verify the tenant is actually disabled (not deleted, per the API behavior)
+    // Verify the tenant is physically deleted (not just disabled)
     let service = state.tenant_service.clone();
-    let updated_tenant = service
+    let result = service
         .get(auth9_core::domain::StringUuid::from(tenant_id))
-        .await
-        .unwrap();
-    assert_eq!(updated_tenant.status, TenantStatus::Inactive);
+        .await;
+    assert!(result.is_err(), "Tenant should be physically deleted");
 }
 
 #[tokio::test]

@@ -1,10 +1,11 @@
 //! Authentication API handlers
 
+use crate::domain::parse_user_agent;
 use crate::error::{AppError, Result};
-use crate::state::HasServices;
+use crate::state::{HasAnalytics, HasServices, HasSessionManagement};
 use axum::{
     extract::{Query, State},
-    http::StatusCode,
+    http::{HeaderMap, StatusCode},
     response::{IntoResponse, Redirect, Response},
     Json,
 };
@@ -80,8 +81,9 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
 }
 
-pub async fn callback<S: HasServices>(
+pub async fn callback<S: HasServices + HasSessionManagement + HasAnalytics>(
     State(state): State<S>,
+    headers: HeaderMap,
     Query(params): Query<CallbackRequest>,
 ) -> Result<Response> {
     let state_payload = decode_state(params.state.as_deref())?;
@@ -102,10 +104,45 @@ pub async fn callback<S: HasServices>(
         Err(e) => return Err(e),
     };
 
-    let identity_token = state.jwt_manager().create_identity_token(
+    // Create session record
+    let ip_address = extract_client_ip(&headers);
+    let user_agent = headers
+        .get(axum::http::header::USER_AGENT)
+        .and_then(|v| v.to_str().ok())
+        .map(String::from);
+
+    let session = state
+        .session_service()
+        .create_session(user.id, None, ip_address.clone(), user_agent.clone())
+        .await?;
+
+    // Record login event
+    let (device_type, _) = user_agent
+        .as_ref()
+        .map(|ua| parse_user_agent(ua))
+        .unwrap_or((None, None));
+
+    // Fire and forget - don't fail login if event recording fails
+    let _ = state
+        .analytics_service()
+        .record_successful_login(
+            user.id,
+            &userinfo.email,
+            None,
+            ip_address,
+            user_agent,
+            device_type,
+            Some(session.id),
+        )
+        .await;
+
+    // Create identity token with session ID
+    let jwt_manager = HasServices::jwt_manager(&state);
+    let identity_token = jwt_manager.create_identity_token_with_session(
         *user.id,
         &userinfo.email,
         userinfo.name.as_deref(),
+        Some(*session.id),
     )?;
 
     let mut redirect_url = Url::parse(&state_payload.redirect_uri)
@@ -117,7 +154,7 @@ pub async fn callback<S: HasServices>(
         pairs.append_pair("token_type", "Bearer");
         pairs.append_pair(
             "expires_in",
-            &state.jwt_manager().access_token_ttl().to_string(),
+            &jwt_manager.access_token_ttl().to_string(),
         );
         if let Some(original_state) = state_payload.original_state {
             pairs.append_pair("state", &original_state);
@@ -138,10 +175,13 @@ pub struct TokenRequest {
     pub refresh_token: Option<String>,
 }
 
-pub async fn token<S: HasServices>(
+pub async fn token<S: HasServices + HasSessionManagement + HasAnalytics>(
     State(state): State<S>,
+    headers: HeaderMap,
     Json(params): Json<TokenRequest>,
 ) -> Result<Response> {
+    let jwt_manager = HasServices::jwt_manager(&state);
+
     match params.grant_type.as_str() {
         "authorization_code" => {
             let code = params
@@ -176,16 +216,50 @@ pub async fn token<S: HasServices>(
                 Err(e) => return Err(e),
             };
 
-            let identity_token = state.jwt_manager().create_identity_token(
+            // Create session record for authorization_code flow
+            let ip_address = extract_client_ip(&headers);
+            let user_agent = headers
+                .get(axum::http::header::USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+
+            let session = state
+                .session_service()
+                .create_session(user.id, None, ip_address.clone(), user_agent.clone())
+                .await?;
+
+            // Record login event
+            let (device_type, _) = user_agent
+                .as_ref()
+                .map(|ua| parse_user_agent(ua))
+                .unwrap_or((None, None));
+
+            // Fire and forget - don't fail login if event recording fails
+            let _ = state
+                .analytics_service()
+                .record_successful_login(
+                    user.id,
+                    &userinfo.email,
+                    None,
+                    ip_address,
+                    user_agent,
+                    device_type,
+                    Some(session.id),
+                )
+                .await;
+
+            // Create identity token with session ID
+            let identity_token = jwt_manager.create_identity_token_with_session(
                 *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
+                Some(*session.id),
             )?;
 
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),
-                expires_in: state.jwt_manager().access_token_ttl(),
+                expires_in: jwt_manager.access_token_ttl(),
                 refresh_token: token_response.refresh_token,
                 id_token: token_response.id_token,
             })
@@ -205,15 +279,12 @@ pub async fn token<S: HasServices>(
                 .await?;
 
             let email = format!("service+{}@auth9.local", client_id);
-            let identity_token =
-                state
-                    .jwt_manager()
-                    .create_identity_token(service.id.0, &email, None)?;
+            let identity_token = jwt_manager.create_identity_token(service.id.0, &email, None)?;
 
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),
-                expires_in: state.jwt_manager().access_token_ttl(),
+                expires_in: jwt_manager.access_token_ttl(),
                 refresh_token: None,
                 id_token: None,
             })
@@ -250,7 +321,7 @@ pub async fn token<S: HasServices>(
                 Err(e) => return Err(e),
             };
 
-            let identity_token = state.jwt_manager().create_identity_token(
+            let identity_token = jwt_manager.create_identity_token(
                 *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
@@ -259,7 +330,7 @@ pub async fn token<S: HasServices>(
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),
-                expires_in: state.jwt_manager().access_token_ttl(),
+                expires_in: jwt_manager.access_token_ttl(),
                 refresh_token: token_response.refresh_token,
                 id_token: token_response.id_token,
             })
@@ -308,6 +379,29 @@ pub async fn userinfo<S: HasServices>(
 // ============================================================================
 // Helper functions (testable without AppState)
 // ============================================================================
+
+/// Extract client IP address from request headers
+/// Checks X-Forwarded-For, X-Real-IP, then falls back to None
+fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
+    // Check X-Forwarded-For first (may contain multiple IPs)
+    if let Some(xff) = headers.get("x-forwarded-for") {
+        if let Ok(xff_str) = xff.to_str() {
+            // Take the first IP (original client)
+            if let Some(ip) = xff_str.split(',').next() {
+                return Some(ip.trim().to_string());
+            }
+        }
+    }
+
+    // Check X-Real-IP
+    if let Some(xri) = headers.get("x-real-ip") {
+        if let Ok(ip) = xri.to_str() {
+            return Some(ip.to_string());
+        }
+    }
+
+    None
+}
 
 #[derive(Debug, Serialize, Deserialize)]
 struct CallbackState {
@@ -525,7 +619,9 @@ async fn exchange_refresh_token<S: HasServices>(
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
         return Err(AppError::Keycloak(format!(
-            "Failed to refresh token: {} - {}",
+            "Token refresh failed ({}). This endpoint requires a Keycloak refresh_token \
+            (obtained from OIDC login), not an Auth9 gRPC refresh_token. \
+            Details: {}",
             status, body
         )));
     }

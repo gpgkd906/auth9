@@ -171,12 +171,14 @@ pub struct TestAppState {
     pub service_repo: Arc<TestServiceRepository>,
     pub rbac_repo: Arc<TestRbacRepository>,
     pub system_settings_repo: Arc<TestSystemSettingsRepository>,
+    #[allow(dead_code)]
     pub password_reset_repo: Arc<TestPasswordResetRepository>,
     pub session_repo: Arc<TestSessionRepository>,
     pub linked_identity_repo: Arc<TestLinkedIdentityRepository>,
     pub webhook_repo: Arc<TestWebhookRepository>,
     pub login_event_repo: Arc<TestLoginEventRepository>,
     pub security_alert_repo: Arc<TestSecurityAlertRepository>,
+    #[allow(dead_code)]
     pub invitation_repo: Arc<TestInvitationRepository>,
 }
 
@@ -197,6 +199,9 @@ impl TestAppState {
         let login_event_repo = Arc::new(TestLoginEventRepository::new());
         let security_alert_repo = Arc::new(TestSecurityAlertRepository::new());
         let invitation_repo = Arc::new(TestInvitationRepository::new());
+
+        // Create webhook service first (needed for webhook event publishing)
+        let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
 
         let tenant_service = Arc::new(TenantService::new(
             tenant_repo.clone(),
@@ -219,6 +224,7 @@ impl TestAppState {
             audit_repo.clone(),
             rbac_repo.clone(),
             None,
+            Some(webhook_service.clone()), // webhook event publisher
         ));
         let client_service = Arc::new(ClientService::new(
             service_repo.clone(),
@@ -250,6 +256,7 @@ impl TestAppState {
             session_repo.clone(),
             user_repo.clone(),
             Arc::new(KeycloakClient::new(config.keycloak.clone())),
+            Some(webhook_service.clone()), // webhook event publisher
         ));
         let identity_provider_service = Arc::new(IdentityProviderService::new(
             linked_identity_repo.clone(),
@@ -259,7 +266,6 @@ impl TestAppState {
         let webauthn_service = Arc::new(WebAuthnService::new(Arc::new(KeycloakClient::new(
             config.keycloak.clone(),
         ))));
-        let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
         let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
         let security_detection_service = Arc::new(SecurityDetectionService::new(
             login_event_repo.clone(),

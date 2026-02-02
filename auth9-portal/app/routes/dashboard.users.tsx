@@ -2,6 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, type User, type Tenant, type Service, type Role } from "~/services/api";
+import { formatErrorMessage } from "~/lib/error-messages";
 
 // Type for user-tenant relationship from userApi.getTenants
 interface UserTenant {
@@ -343,6 +344,9 @@ export default function UsersPage() {
                 placeholder="Enter a strong password"
               />
             </div>
+            {actionData && "error" in actionData && actionData.intent === "create_user" && (
+              <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
+            )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreatingUser(false)}>
                 Cancel
@@ -372,12 +376,12 @@ export default function UsersPage() {
                 {userTenants.map((ut: UserTenant) => (
                   <div key={ut.tenant_id} className="flex items-center justify-between rounded-lg bg-[var(--sidebar-item-hover)] p-2 text-sm">
                     <div className="flex items-center gap-2">
-                      {ut.tenant.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
-                      <span className="font-medium text-[var(--text-primary)]">{ut.tenant.name}</span>
+                      {ut.tenant?.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
+                      <span className="font-medium text-[var(--text-primary)]">{ut.tenant?.name ?? "Unknown Tenant"}</span>
                       <span className="text-[var(--text-tertiary)]">({ut.role_in_tenant})</span>
                     </div>
                     <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => managingTenantsUser && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })}>
+                      <Button size="sm" variant="outline" onClick={() => managingTenantsUser && ut.tenant && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })} disabled={!ut.tenant}>
                         <GearIcon className="mr-2 h-3.5 w-3.5" /> Roles
                       </Button>
                       <Form method="post" className="inline">

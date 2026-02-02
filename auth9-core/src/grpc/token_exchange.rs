@@ -189,6 +189,14 @@ where
             return Err(Status::not_found("User not found"));
         }
 
+        // Verify user is a member of the target tenant (security check)
+        let _tenant_user_id = self
+            .rbac_repo
+            .find_tenant_user_id(user_id, tenant_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to check tenant membership: {}", e)))?
+            .ok_or_else(|| Status::permission_denied("User is not a member of this tenant"))?;
+
         // Verify client exists
         let client = self
             .service_repo

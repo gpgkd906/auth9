@@ -246,10 +246,10 @@ async fn test_list_my_sessions_success() {
         state.session_repo.add_session(session).await;
     }
 
-    // Create a valid JWT token
+    // Create a valid JWT token with session ID
     let token = state
         .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(*current_session_id))
         .unwrap();
 
     let app = build_my_session_test_router(state);
@@ -273,10 +273,11 @@ async fn test_list_my_sessions_empty() {
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Create a valid JWT token
+    // Create a valid JWT token with session ID
+    let current_session_id = uuid::Uuid::new_v4();
     let token = state
         .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(current_session_id))
         .unwrap();
 
     let app = build_my_session_test_router(state);
@@ -328,6 +329,23 @@ async fn test_revoke_session_success() {
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
+    // Add a current session (the one tied to the token)
+    let current_session_id = StringUuid::new_v4();
+    let current_session = Session {
+        id: current_session_id,
+        user_id,
+        keycloak_session_id: Some("kc-current-session".to_string()),
+        device_type: Some("desktop".to_string()),
+        device_name: None,
+        ip_address: None,
+        location: None,
+        user_agent: None,
+        last_active_at: Utc::now(),
+        created_at: Utc::now(),
+        revoked_at: None,
+    };
+    state.session_repo.add_session(current_session).await;
+
     // Add a session to revoke
     let session_id = StringUuid::new_v4();
     let session = Session {
@@ -345,10 +363,10 @@ async fn test_revoke_session_success() {
     };
     state.session_repo.add_session(session).await;
 
-    // Create a valid JWT token
+    // Create a valid JWT token with session ID
     let token = state
         .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(*current_session_id))
         .unwrap();
 
     let app = build_my_session_test_router(state.clone());
@@ -364,9 +382,10 @@ async fn test_revoke_session_success() {
     assert!(body.is_some());
     assert!(body.unwrap().message.contains("revoked"));
 
-    // Verify session is revoked
+    // Verify only the target session is revoked (current session should remain)
     let remaining = state.session_repo.list_active_by_user(user_id).await.unwrap();
-    assert_eq!(remaining.len(), 0);
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, current_session_id);
 }
 
 #[tokio::test]
@@ -379,10 +398,11 @@ async fn test_revoke_session_not_found() {
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Create a valid JWT token
+    // Create a valid JWT token with session ID
+    let current_session_id = uuid::Uuid::new_v4();
     let token = state
         .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(current_session_id))
         .unwrap();
 
     let app = build_my_session_test_router(state);
@@ -423,7 +443,24 @@ async fn test_revoke_other_sessions_success() {
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Add multiple sessions
+    // Add current session (the one tied to the token)
+    let current_session_id = StringUuid::new_v4();
+    let current_session = Session {
+        id: current_session_id,
+        user_id,
+        keycloak_session_id: Some("kc-current-session".to_string()),
+        device_type: Some("desktop".to_string()),
+        device_name: None,
+        ip_address: None,
+        location: None,
+        user_agent: None,
+        last_active_at: Utc::now(),
+        created_at: Utc::now(),
+        revoked_at: None,
+    };
+    state.session_repo.add_session(current_session).await;
+
+    // Add multiple other sessions
     for i in 0..3 {
         let session = Session {
             id: StringUuid::new_v4(),
@@ -441,10 +478,10 @@ async fn test_revoke_other_sessions_success() {
         state.session_repo.add_session(session).await;
     }
 
-    // Create a valid JWT token
+    // Create a valid JWT token with session ID
     let token = state
         .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(*current_session_id))
         .unwrap();
 
     let app = build_my_session_test_router(state.clone());
@@ -454,10 +491,15 @@ async fn test_revoke_other_sessions_success() {
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
-    // The current session is excluded (identified by a new generated session ID in extract_session_info)
-    // so all 3 sessions should be revoked since none match the "current" session
+    // The current session is excluded (identified by session_id in token)
+    // so all 3 other sessions should be revoked
     let response = body.unwrap().data;
-    assert!(response.revoked_count >= 2); // At least 2 others revoked
+    assert_eq!(response.revoked_count, 3);
+
+    // Verify only current session remains
+    let remaining = state.session_repo.list_active_by_user(user_id).await.unwrap();
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].id, current_session_id);
 }
 
 #[tokio::test]
@@ -484,10 +526,11 @@ async fn test_revoke_other_sessions_no_other_sessions() {
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Create a valid JWT token
+    // Create a valid JWT token with session ID
+    let current_session_id = uuid::Uuid::new_v4();
     let token = state
         .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(current_session_id))
         .unwrap();
 
     let app = build_my_session_test_router(state);

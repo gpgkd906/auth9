@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { serviceApi } from "~/services/api";
+import { formatErrorMessage } from "~/lib/error-messages";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Services - Auth9" }];
@@ -140,7 +141,7 @@ export default function ServicesPage() {
                 <Input id="create-logout-uris" name="logout_uris" placeholder="https://myapp.com/logout" />
               </div>
               {actionData && "error" in actionData && (
-                <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
+                <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
               )}
               <DialogFooter>
                 <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>

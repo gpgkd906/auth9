@@ -36,4 +36,4 @@ pub use system_settings::SystemSettingsService;
 pub use tenant::TenantService;
 pub use user::UserService;
 pub use webauthn::WebAuthnService;
-pub use webhook::{WebhookService, WebhookTestResult};
+pub use webhook::{WebhookEventPublisher, WebhookService, WebhookTestResult};

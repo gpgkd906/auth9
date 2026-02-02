@@ -111,10 +111,14 @@ fn extract_session_info<S: HasSessionManagement>(
         let user_id = StringUuid::parse_str(&claims.sub)
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()))?;
 
-        // Session ID should be looked up from our sessions table based on token
-        // For now, generate a placeholder - in production this would be extracted
-        // from a session cookie or token claim
-        let session_id = StringUuid::new_v4();
+        // Extract session ID from token's 'sid' claim
+        let session_id = claims
+            .sid
+            .as_ref()
+            .and_then(|sid| StringUuid::parse_str(sid).ok())
+            .ok_or_else(|| {
+                AppError::Unauthorized("Unable to identify current session".to_string())
+            })?;
 
         return Ok((user_id, session_id));
     }

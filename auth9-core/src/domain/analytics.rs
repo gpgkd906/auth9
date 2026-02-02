@@ -5,7 +5,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
-use validator::Validate;
+use url::Url;
+use validator::{Validate, ValidationError};
 
 /// Login event types
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -305,12 +306,54 @@ impl Default for Webhook {
     }
 }
 
+/// Validate webhook URL - HTTPS required for external URLs, HTTP allowed for localhost only
+fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
+    let parsed = Url::parse(url).map_err(|_| ValidationError::new("invalid_url"))?;
+
+    let scheme = parsed.scheme();
+    let host = parsed.host_str().unwrap_or("");
+
+    // HTTPS is always allowed
+    if scheme == "https" {
+        return Ok(());
+    }
+
+    // HTTP only allowed for localhost/private networks
+    if scheme == "http" {
+        let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
+        let is_private = host.starts_with("192.168.")
+            || host.starts_with("10.")
+            || (host.starts_with("172.")
+                && host
+                    .split('.')
+                    .nth(1)
+                    .and_then(|s| s.parse::<u8>().ok())
+                    .map(|n| (16..=31).contains(&n))
+                    .unwrap_or(false));
+
+        if is_localhost || is_private {
+            return Ok(());
+        }
+
+        let mut err = ValidationError::new("http_not_allowed");
+        err.message = Some("HTTP URLs are only allowed for localhost or private networks. Use HTTPS for external URLs.".into());
+        return Err(err);
+    }
+
+    Err(ValidationError::new("invalid_scheme"))
+}
+
+/// Validate optional webhook URL (called by validator macro when Option<String> field has Some value)
+fn validate_webhook_url_option(url: &String) -> Result<(), ValidationError> {
+    validate_webhook_url(url)
+}
+
 /// Input for creating a webhook
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreateWebhookInput {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
-    #[validate(url)]
+    #[validate(custom(function = "validate_webhook_url"))]
     pub url: String,
     pub secret: Option<String>,
     #[validate(length(min = 1))]
@@ -324,11 +367,11 @@ fn default_true() -> bool {
 }
 
 /// Input for updating a webhook
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Deserialize, Validate)]
 pub struct UpdateWebhookInput {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
-    #[validate(url)]
+    #[validate(custom(function = "validate_webhook_url_option"))]
     pub url: Option<String>,
     pub secret: Option<String>,
     pub events: Option<Vec<String>>,

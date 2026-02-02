@@ -2,7 +2,7 @@
 //!
 //! Tests for security alert listing, retrieval, and resolution endpoints.
 
-use super::{get_json, get_json_with_auth, MockKeycloakServer, TestAppState};
+use super::{get_json, MockKeycloakServer, TestAppState};
 use crate::api::{create_test_jwt_manager, create_test_user};
 use auth9_core::api::security_alert::UnresolvedCountResponse;
 use auth9_core::api::{PaginatedResponse, SuccessResponse};
