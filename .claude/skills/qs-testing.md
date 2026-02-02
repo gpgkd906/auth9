@@ -1,6 +1,6 @@
 ---
 name: qa-testing
-description: Execute manual QA testing for Auth9 features using browser automation. Automatically discovers QA documents in docs/qa/ organized by modules (tenant, user, rbac, service, invitation, session, webhook, auth), verifies scenarios with browser tests, checks Docker logs on errors, validates database state, saves detailed test reports to docs/report/. Use when the user asks to run QA tests, manual testing, verify feature functionality, or test specific modules.
+description: Execute manual QA testing for Auth9 features using browser automation. Automatically discovers QA documents in docs/qa/ organized by modules (tenant, user, rbac, service, invitation, session, webhook, auth), verifies scenarios with browser tests, checks Docker logs on errors, validates database state, creates individual ticket files in docs/ticket/ for each failed scenario. Use when the user asks to run QA tests, manual testing, verify feature functionality, or test specific modules.
 ---
 
 # QA Testing Skill
@@ -36,8 +36,8 @@ Before starting QA tests, verify:
    a. Execute test in browser
    b. If error occurs → Check Docker logs
    c. Validate database state
-   d. Record result
-4. Generate test report
+   d. If FAIL → Create ticket file in docs/ticket/
+4. Report test summary to user
 ```
 
 ## Step 1: Discover and Confirm Test Document
@@ -76,57 +76,6 @@ Exclude `docs/qa/README.md` from the document list (it's just an index).
 - Read `docs/qa/README.md` to get module structure
 - List all modules with document counts
 - Ask user to choose which module or specific document to test
-
-### 1.3 Confirmation Pattern
-
-**Specific request example (single document)**:
-```
-User: "按照QA文档测试用户CRUD @user/01-crud.md"
-
-Agent:
-✅ 已发现QA文档: docs/qa/user/01-crud.md
-📋 文档标题: [从文档第一行提取]
-🔢 场景数: 5
-
-确认开始测试?
-```
-
-**Specific request example (module with multiple documents)**:
-```
-User: "测试用户管理模块"
-
-Agent:
-📂 已发现用户管理模块的QA文档:
-
-1. user/01-crud.md - 创建、更新、租户关联 (5 个场景)
-2. user/02-advanced.md - 删除、MFA、列表 (5 个场景)
-3. user/03-validation.md - 边界测试、验证 (3 个场景)
-
-请选择:
-a) 测试全部 3 个文档
-b) 选择特定文档 (输入编号)
-```
-
-**Vague request example**:
-```
-User: "进行QA测试"
-
-Agent:
-📂 Auth9 QA测试模块概览:
-
-1. 租户管理 (tenant/) - 2 个文档, 10 个场景
-2. 用户管理 (user/) - 3 个文档, 13 个场景
-3. RBAC (rbac/) - 4 个文档, 17 个场景
-4. 服务与客户端 (service/) - 3 个文档, 15 个场景
-5. 邀请管理 (invitation/) - 3 个文档, 15 个场景
-6. 会话与安全 (session/) - 4 个文档, 20 个场景
-7. Webhook (webhook/) - 4 个文档, 17 个场景
-8. 认证流程 (auth/) - 5 个文档, 23 个场景
-
-总计: 28 个文档, 130 个场景
-
-请选择要测试的模块或文档:
-```
 
 ## Step 2: Read and Parse QA Document
 
@@ -240,112 +189,162 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9_db -e "SELECT * FROM users WHERE email=
    - ✅ PASS: Data matches expected state
    - ❌ FAIL: Data mismatch (document differences)
 
-## Step 4: Generate and Save Test Report
+## Step 4: Create Ticket for Failed Scenarios
 
-After all scenarios, generate a comprehensive report and save it to `docs/report/`.
+When a scenario fails, immediately create a ticket file in `docs/ticket/` with detailed information.
 
-### 4.1 Report File Naming
+### 4.1 Ticket File Naming
 
-**Format**: `{qa_document_name}_result_{YYMMDD}.md`
+**Format**: `{module}_{document}_scenario{N}_{YYMMDD_HHMMSS}.md`
 
 **Examples**:
-- Testing `docs/qa/user/01-crud.md` → Save to `docs/report/user_01-crud_result_260202.md`
-- Testing `docs/qa/tenant/01-crud.md` → Save to `docs/report/tenant_01-crud_result_260202.md`
-- Testing `docs/qa/rbac/02-role.md` → Save to `docs/report/rbac_02-role_result_260202.md`
+- Testing `docs/qa/user/01-crud.md` scenario 2 failed → `docs/ticket/user_01-crud_scenario2_260203_143052.md`
+- Testing `docs/qa/tenant/01-crud.md` scenario 5 failed → `docs/ticket/tenant_01-crud_scenario5_260203_143125.md`
+- Testing `docs/qa/rbac/02-role.md` scenario 3 failed → `docs/ticket/rbac_02-role_scenario3_260203_143201.md`
 
 **File path pattern**:
 ```
-docs/report/{module}_{document}_result_{YYMMDD}.md
+docs/ticket/{module}_{document}_scenario{N}_{YYMMDD_HHMMSS}.md
 ```
 
-### 4.2 Report Structure
+### 4.2 Ticket Structure
 
 ```markdown
-# QA Test Report: {Module} - {Document Title}
+# Ticket: {Scenario Title}
 
-**Test Date**: {YYYY-MM-DD HH:mm:ss}
+**Created**: {YYYY-MM-DD HH:mm:ss}
 **QA Document**: `docs/qa/{module}/{document}.md`
-**Environment**: Docker local (all services)
-**Tester**: AI Agent
-**Duration**: {total_time}
-
-## Summary
-
-| Status | Count |
-|--------|-------|
-| ✅ PASS | X |
-| ❌ FAIL | Y |
-| ⏭️ SKIP | Z |
-| **Total** | N |
-
-**Pass Rate**: {pass_rate}%
-
-## Detailed Results
-
-### Scenario 1: {Title}
-**Status**: ✅ PASS / ❌ FAIL
-**Duration**: Xs
-
-**Test Steps**:
-- [Step 1]: ✅ Success
-- [Step 2]: ✅ Success
-
-**Database Validation**: ✅ PASS
-- users table: 1 record created as expected
-- audit_logs: 1 entry with correct action
-
----
-
-### Scenario 2: {Title}
-**Status**: ❌ FAIL
-**Duration**: Xs
-
-**Test Steps**:
-- [Step 1]: ✅ Success
-- [Step 2]: ❌ Failed - Error: "Email already exists"
-
-**Error Details**:
-- UI Error: "Email already exists"
-- Docker Logs (auth9-core):
-  ```
-  [2026-02-02 10:15:32] ERROR: Duplicate key violation: users.email
-  ```
-
-**Database Validation**: ❌ FAIL
-- Expected: COUNT(*) = 1
-- Actual: COUNT(*) = 2 (duplicate created)
-
----
-
-## Issues Summary
-
-### 🐛 Bug 1: {Brief Description}
 **Scenario**: #{number}
-**Severity**: High / Medium / Low
-**Logs**: `{error message}`
-**Recommendation**: {fix suggestion}
-
-## Recommendations
-
-{List of improvements, fixes needed, or test issues}
+**Status**: FAILED
 
 ---
 
-*Report generated by QA Testing Skill*
-*Report saved to: `docs/report/{filename}`*
+## 测试内容
+
+{Brief description of what was being tested}
+
+**Test Location**: {UI path or API endpoint}
+**Test Type**: {UI/API/Integration}
+
+---
+
+## 预期结果
+
+{Expected outcome from QA document}
+
+**Expected UI State**:
+- {Expected UI elements or messages}
+
+**Expected Database State**:
+```sql
+{SQL queries showing expected data state}
 ```
 
-### 4.3 Save Report
+**Expected Results**:
+- {List of expected outcomes}
 
-**CRITICAL**: Always save the report to the `docs/report/` directory with the correct filename format.
+---
+
+## 再现方法
+
+### Prerequisites
+{Initial state requirements or test data setup}
+
+### Steps to Reproduce
+1. {Step 1 with specific details}
+2. {Step 2 with specific details}
+3. {Step 3 with specific details}
+...
+
+### Environment
+- **Portal**: http://localhost:3000
+- **Auth9 Core**: http://localhost:8080
+- **Keycloak**: http://localhost:8081
+- **Test User**: {username/email used}
+
+---
+
+## 实际结果
+
+### Test Execution Failed at Step {N}
+
+**UI Error**:
+```
+{Error message or unexpected UI state}
+```
+
+**Browser Snapshot**:
+{Relevant UI state information}
+
+**Database State**:
+```sql
+-- Actual query results
+{SQL query}
+
+-- Results:
+{Actual data found}
+```
+
+**Data Mismatch**:
+- Expected: {expected value}
+- Actual: {actual value}
+- Difference: {explanation}
+
+### Service Logs
+
+**auth9-core logs**:
+```
+{Relevant log lines from Docker container}
+```
+
+**auth9-portal logs**:
+```
+{Relevant log lines if applicable}
+```
+
+**Keycloak logs**:
+```
+{Relevant log lines if applicable}
+```
+
+---
+
+## Analysis
+
+**Root Cause**: {Brief analysis of what went wrong}
+
+**Severity**: High / Medium / Low
+
+**Impact**:
+- {User impact description}
+- {System impact description}
+
+**Related Components**:
+- [ ] Frontend (auth9-portal)
+- [ ] Backend API (auth9-core)
+- [ ] Database (TiDB)
+- [ ] Keycloak
+- [ ] Cache (Redis)
+
+---
+
+*Ticket generated by QA Testing Skill*
+```
+
+### 4.3 Create Ticket File
+
+**CRITICAL**: Create a ticket file immediately when a scenario fails.
 
 Steps:
-1. Generate the complete report content
-2. Ensure `docs/report/` directory exists (create if needed)
-3. Save with proper filename: `{module}_{document}_result_{YYMMDD}.md`
-4. Confirm to user: "✅ 测试报告已保存到: docs/report/{filename}"
+1. Generate the complete ticket content with all error details
+2. Ensure `docs/ticket/` directory exists (create if needed)
+3. Save with proper filename: `{module}_{document}_scenario{N}_{YYMMDD_HHMMSS}.md`
+4. Continue testing next scenario
 
-Example:
+### 4.4 Test Summary Report to User
+
+After completing all scenarios, report summary to user (DO NOT save as file):
+
 ```markdown
 ✅ 测试完成！
 
@@ -354,13 +353,18 @@ Example:
 - 失败: 2/13 
 - 跳过: 0/13
 
-📄 测试报告已保存到: docs/report/user_01-crud_result_260202.md
+🎫 创建的 Tickets:
+1. docs/ticket/user_01-crud_scenario4_260203_143052.md
+   - Scenario #4: Update user profile
+   - Severity: High
+   - Issue: Connection pool exhausted
 
-❌ 发现的问题:
-1. Bug #4: Connection pool exhausted (高)
-2. Bug #11: Keycloak sync failure (中)
+2. docs/ticket/user_01-crud_scenario11_260203_143225.md
+   - Scenario #11: Delete user with tenant associations
+   - Severity: Medium
+   - Issue: Keycloak sync failure
 
-💡 建议: 修复连接池配置后重新测试失败的场景
+💡 下一步: 请查看 ticket 文件了解详细问题描述和再现方法
 ```
 
 ## Common Database Queries
