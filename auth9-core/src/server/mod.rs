@@ -601,7 +601,7 @@ fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> A
 ///
 /// This function is generic over the state type, allowing it to work with
 /// both production `AppState` and test implementations that implement `HasServices`.
-pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics>(state: S) -> Router {
+pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBranding>(state: S) -> Router {
     // CORS configuration
     let cors = CorsLayer::new()
         .allow_origin(Any)

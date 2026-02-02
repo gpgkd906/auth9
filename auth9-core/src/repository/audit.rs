@@ -23,6 +23,59 @@ pub struct AuditLog {
     pub created_at: DateTime<Utc>,
 }
 
+/// Audit log entry with actor information (for API responses)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AuditLogWithActor {
+    pub id: i64,
+    pub actor_id: Option<String>,
+    pub actor_email: Option<String>,
+    pub actor_display_name: Option<String>,
+    pub action: String,
+    pub resource_type: String,
+    pub resource_id: Option<String>,
+    pub old_value: Option<serde_json::Value>,
+    pub new_value: Option<serde_json::Value>,
+    pub ip_address: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+impl<'r> FromRow<'r, MySqlRow> for AuditLogWithActor {
+    fn from_row(row: &'r MySqlRow) -> sqlx::Result<Self> {
+        let id: i64 = row.try_get("id")?;
+        let actor_id: Option<String> = row.try_get("actor_id")?;
+        let actor_email: Option<String> = row.try_get("actor_email")?;
+        let actor_display_name: Option<String> = row.try_get("actor_display_name")?;
+        let action: String = row.try_get("action")?;
+        let resource_type: String = row.try_get("resource_type")?;
+        let resource_id: Option<String> = row.try_get("resource_id")?;
+
+        let old_value_wrapper: Option<sqlx::types::Json<serde_json::Value>> =
+            row.try_get("old_value")?;
+        let old_value = old_value_wrapper.map(|w| w.0);
+
+        let new_value_wrapper: Option<sqlx::types::Json<serde_json::Value>> =
+            row.try_get("new_value")?;
+        let new_value = new_value_wrapper.map(|w| w.0);
+
+        let ip_address: Option<String> = row.try_get("ip_address")?;
+        let created_at: DateTime<Utc> = row.try_get("created_at")?;
+
+        Ok(AuditLogWithActor {
+            id,
+            actor_id,
+            actor_email,
+            actor_display_name,
+            action,
+            resource_type,
+            resource_id,
+            old_value,
+            new_value,
+            ip_address,
+            created_at,
+        })
+    }
+}
+
 impl<'r> FromRow<'r, MySqlRow> for AuditLog {
     fn from_row(row: &'r MySqlRow) -> sqlx::Result<Self> {
         let id: i64 = row.try_get("id")?;
@@ -95,6 +148,8 @@ pub struct AuditLogQuery {
 pub trait AuditRepository: Send + Sync {
     async fn create(&self, input: &CreateAuditLogInput) -> Result<()>;
     async fn find(&self, query: &AuditLogQuery) -> Result<Vec<AuditLog>>;
+    /// Find audit logs with actor information (email, display_name) for API responses
+    async fn find_with_actor(&self, query: &AuditLogQuery) -> Result<Vec<AuditLogWithActor>>;
     async fn count(&self, query: &AuditLogQuery) -> Result<i64>;
 
     /// Nullify actor_id for audit logs (preserve audit trail when user is deleted)
@@ -172,6 +227,65 @@ impl AuditRepository for AuditRepositoryImpl {
         sql.push_str(" ORDER BY created_at DESC LIMIT ? OFFSET ?");
 
         let mut query_builder = sqlx::query_as::<_, AuditLog>(&sql);
+
+        if let Some(actor_id) = query.actor_id {
+            query_builder = query_builder.bind(actor_id.to_string());
+        }
+        if let Some(ref resource_type) = query.resource_type {
+            query_builder = query_builder.bind(resource_type);
+        }
+        if let Some(resource_id) = query.resource_id {
+            query_builder = query_builder.bind(resource_id.to_string());
+        }
+        if let Some(ref action) = query.action {
+            query_builder = query_builder.bind(action);
+        }
+        if let Some(from_date) = query.from_date {
+            query_builder = query_builder.bind(from_date);
+        }
+        if let Some(to_date) = query.to_date {
+            query_builder = query_builder.bind(to_date);
+        }
+
+        let limit = query.limit.unwrap_or(50).min(100);
+        let offset = query.offset.unwrap_or(0);
+        query_builder = query_builder.bind(limit).bind(offset);
+
+        let logs = query_builder.fetch_all(&self.pool).await?;
+        Ok(logs)
+    }
+
+    async fn find_with_actor(&self, query: &AuditLogQuery) -> Result<Vec<AuditLogWithActor>> {
+        let mut sql = String::from(
+            "SELECT al.id, al.actor_id, u.email as actor_email, u.display_name as actor_display_name, \
+             al.action, al.resource_type, al.resource_id, al.old_value, al.new_value, al.ip_address, al.created_at \
+             FROM audit_logs al \
+             LEFT JOIN users u ON al.actor_id = u.id \
+             WHERE 1=1",
+        );
+
+        if query.actor_id.is_some() {
+            sql.push_str(" AND al.actor_id = ?");
+        }
+        if query.resource_type.is_some() {
+            sql.push_str(" AND al.resource_type = ?");
+        }
+        if query.resource_id.is_some() {
+            sql.push_str(" AND al.resource_id = ?");
+        }
+        if query.action.is_some() {
+            sql.push_str(" AND al.action = ?");
+        }
+        if query.from_date.is_some() {
+            sql.push_str(" AND al.created_at >= ?");
+        }
+        if query.to_date.is_some() {
+            sql.push_str(" AND al.created_at <= ?");
+        }
+
+        sql.push_str(" ORDER BY al.created_at DESC LIMIT ? OFFSET ?");
+
+        let mut query_builder = sqlx::query_as::<_, AuditLogWithActor>(&sql);
 
         if let Some(actor_id) = query.actor_id {
             query_builder = query_builder.bind(actor_id.to_string());

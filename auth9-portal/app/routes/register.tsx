@@ -5,11 +5,24 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { ThemeToggle } from "~/components/ThemeToggle";
-import { userApi } from "~/services/api";
+import { userApi, publicBrandingApi } from "~/services/api";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Sign Up - Auth9" }];
 };
+
+export async function loader() {
+  try {
+    const { data: branding } = await publicBrandingApi.get();
+    if (!branding.allow_registration) {
+      return redirect("/login");
+    }
+    return null;
+  } catch {
+    // If we can't fetch branding config, default to disallowing registration
+    return redirect("/login");
+  }
+}
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
@@ -42,14 +55,17 @@ export default function Register() {
   const isSubmitting = navigation.state === "submitting";
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 relative">
-      {/* Dynamic Background */}
-      <div className="page-backdrop" />
+    <>
+      {/* Theme Toggle - outside flex container to avoid layout issues */}
+      <div className="fixed top-6 right-6 z-20">
+        <ThemeToggle />
+      </div>
 
-      {/* Theme Toggle */}
-      <ThemeToggle />
+      <div className="min-h-screen flex items-center justify-center px-6 relative">
+        {/* Dynamic Background */}
+        <div className="page-backdrop" />
 
-      <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
+        <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
         <CardHeader className="text-center">
           <div className="logo-icon mx-auto mb-4">A9</div>
           <CardTitle className="text-2xl">Create your account</CardTitle>
@@ -99,8 +115,9 @@ export default function Register() {
               Sign in
             </Link>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+          </CardContent>
+        </Card>
+      </div>
+    </>
   );
 }

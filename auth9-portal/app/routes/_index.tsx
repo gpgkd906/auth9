@@ -17,8 +17,10 @@ export default function Index() {
       {/* Dynamic Background */}
       <div className="page-backdrop" />
 
-      {/* Theme Toggle */}
-      <ThemeToggle />
+      {/* Theme Toggle - fixed position */}
+      <div className="fixed top-6 right-6 z-[60]">
+        <ThemeToggle />
+      </div>
 
       {/* Header */}
       <header className="fixed top-0 left-0 right-0 z-50 liquid-glass border-b border-[var(--glass-border-subtle)]">

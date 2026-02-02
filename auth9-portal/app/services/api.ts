@@ -129,11 +129,11 @@ export const userApi = {
     return handleResponse(response);
   },
 
-  create: async (input: CreateUserInput & { password?: string }): Promise<{ data: User }> => {
+  create: async (input: CreateUserInput & { password?: string }, accessToken?: string): Promise<{ data: User }> => {
     const { password, ...user } = input;
     const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ ...user, password }),
     });
     return handleResponse(response);
@@ -158,7 +158,7 @@ export const userApi = {
     }
   },
 
-  getTenants: async (userId: string): Promise<{ data: { id: string; tenant_id: string; role_in_tenant: string; joined_at: string; tenant: Tenant }[] }> => {
+  getTenants: async (userId: string): Promise<{ data: { id: string; tenant_id: string; user_id: string; role_in_tenant: string; joined_at: string; tenant: { id: string; name: string; slug: string; logo_url?: string; status: string } }[] }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants`);
     return handleResponse(response);
   },
@@ -460,6 +460,8 @@ export interface UserRolesInTenant {
 export interface AuditLog {
   id: number;
   actor_id?: string;
+  actor_email?: string;
+  actor_display_name?: string;
   action: string;
   resource_type: string;
   resource_id?: string;
@@ -721,6 +723,14 @@ export interface BrandingConfig {
   favicon_url?: string;
   allow_registration: boolean;
 }
+
+// Public Branding API (no authentication required)
+export const publicBrandingApi = {
+  get: async (): Promise<{ data: BrandingConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/public/branding`);
+    return handleResponse(response);
+  },
+};
 
 // Branding API
 export const brandingApi = {

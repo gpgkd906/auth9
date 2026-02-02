@@ -30,14 +30,17 @@ export default function Login() {
   const isSubmitting = navigation.state === "submitting";
 
   return (
-    <div className="min-h-screen flex items-center justify-center px-6 relative">
-      {/* Dynamic Background */}
-      <div className="page-backdrop" />
+    <>
+      {/* Theme Toggle - outside flex container to avoid layout issues */}
+      <div className="fixed top-6 right-6 z-20">
+        <ThemeToggle />
+      </div>
 
-      {/* Theme Toggle */}
-      <ThemeToggle />
+      <div className="min-h-screen flex items-center justify-center px-6 relative">
+        {/* Dynamic Background */}
+        <div className="page-backdrop" />
 
-      <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
+        <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
         <CardHeader className="text-center">
           <div className="logo-icon mx-auto mb-4">A9</div>
           <CardTitle className="text-2xl">Welcome back</CardTitle>
@@ -59,7 +62,8 @@ export default function Login() {
             </Link>
           </div>
         </CardContent>
-      </Card>
-    </div>
+        </Card>
+      </div>
+    </>
   );
 }

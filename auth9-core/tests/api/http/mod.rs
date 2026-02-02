@@ -314,6 +314,14 @@ impl TestAppState {
     pub fn with_mock_keycloak(mock_server: &MockKeycloakServer) -> Self {
         Self::new(&mock_server.uri())
     }
+
+    /// Enable public registration by setting allow_registration to true in branding config
+    pub async fn enable_public_registration(&self) {
+        use auth9_core::domain::BrandingConfig;
+        let mut config = BrandingConfig::default();
+        config.allow_registration = true;
+        self.branding_service.update_branding(config).await.unwrap();
+    }
 }
 
 /// Implement HasServices trait for TestAppState

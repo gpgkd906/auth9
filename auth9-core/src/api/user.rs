@@ -4,9 +4,9 @@ use crate::api::{
     write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
 use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput};
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
-use crate::state::HasServices;
+use crate::state::{HasBranding, HasServices};
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -54,11 +54,39 @@ pub struct CreateUserRequest {
 }
 
 /// Create user
-pub async fn create<S: HasServices>(
+///
+/// This endpoint supports two modes:
+/// 1. Authenticated (with valid JWT): Admin can always create users
+/// 2. Unauthenticated (public registration): Only allowed if branding.allow_registration is true
+pub async fn create<S: HasServices + HasBranding>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse> {
+    // Check if this is an authenticated request (admin creating user)
+    let is_authenticated = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .and_then(|h| h.to_str().ok())
+        .and_then(|auth_str| auth_str.strip_prefix("Bearer "))
+        .map(|token| {
+            state.jwt_manager().verify_identity_token(token).is_ok()
+                || state
+                    .jwt_manager()
+                    .verify_tenant_access_token(token, None)
+                    .is_ok()
+        })
+        .unwrap_or(false);
+
+    // If not authenticated, check if public registration is allowed
+    if !is_authenticated {
+        let branding = state.branding_service().get_branding().await?;
+        if !branding.allow_registration {
+            return Err(AppError::Forbidden(
+                "Public registration is disabled".to_string(),
+            ));
+        }
+    }
+
     let credentials = input.password.map(|password| {
         vec![KeycloakCredential {
             credential_type: "password".to_string(),
@@ -226,13 +254,17 @@ pub async fn remove_from_tenant<S: HasServices>(
     Ok(Json(MessageResponse::new("User removed from tenant")))
 }
 
-/// Get user's tenants
+/// Get user's tenants (with tenant data for display)
 pub async fn get_tenants<S: HasServices>(
     State(state): State<S>,
     Path(user_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let user_id = StringUuid::from(user_id);
-    let tenants = state.user_service().get_user_tenants(user_id).await?;
+    // Use get_user_tenants_with_tenant to include tenant name, slug, logo_url for UI display
+    let tenants = state
+        .user_service()
+        .get_user_tenants_with_tenant(user_id)
+        .await?;
     Ok(Json(SuccessResponse::new(tenants)))
 }
 

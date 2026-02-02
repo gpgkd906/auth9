@@ -1,8 +1,8 @@
 //! User business logic
 
 use crate::domain::{
-    AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User,
-    WebhookEvent,
+    AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, TenantUserWithTenant,
+    UpdateUserInput, User, WebhookEvent,
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
@@ -285,6 +285,13 @@ impl<
 
     pub async fn get_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
         self.repo.find_user_tenants(user_id).await
+    }
+
+    pub async fn get_user_tenants_with_tenant(
+        &self,
+        user_id: StringUuid,
+    ) -> Result<Vec<TenantUserWithTenant>> {
+        self.repo.find_user_tenants_with_tenant(user_id).await
     }
 }
 

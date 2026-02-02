@@ -1,7 +1,8 @@
 //! User repository
 
 use crate::domain::{
-    AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, UpdateUserInput, User,
+    AddUserToTenantInput, CreateUserInput, StringUuid, TenantInfo, TenantUser,
+    TenantUserWithTenant, UpdateUserInput, User,
 };
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
@@ -30,6 +31,12 @@ pub trait UserRepository: Send + Sync {
         limit: i64,
     ) -> Result<Vec<User>>;
     async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>>;
+
+    /// Find user's tenants with tenant data (for API responses)
+    async fn find_user_tenants_with_tenant(
+        &self,
+        user_id: StringUuid,
+    ) -> Result<Vec<TenantUserWithTenant>>;
 
     /// Delete all tenant memberships for a user (tenant_users records)
     async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64>;
@@ -299,6 +306,62 @@ impl UserRepository for UserRepositoryImpl {
         .await?;
 
         Ok(tenant_users)
+    }
+
+    async fn find_user_tenants_with_tenant(
+        &self,
+        user_id: StringUuid,
+    ) -> Result<Vec<TenantUserWithTenant>> {
+        // Query tenant_users with tenant data joined
+        let rows: Vec<(
+            StringUuid,
+            StringUuid,
+            StringUuid,
+            String,
+            chrono::DateTime<chrono::Utc>,
+            StringUuid,
+            String,
+            String,
+            Option<String>,
+            String,
+        )> = sqlx::query_as(
+            r#"
+            SELECT
+                tu.id, tu.tenant_id, tu.user_id, tu.role_in_tenant, tu.joined_at,
+                t.id as tenant_real_id, t.name as tenant_name, t.slug as tenant_slug, t.logo_url as tenant_logo_url, t.status as tenant_status
+            FROM tenant_users tu
+            INNER JOIN tenants t ON tu.tenant_id = t.id
+            WHERE tu.user_id = ?
+            ORDER BY tu.joined_at DESC
+            "#,
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        let result = rows
+            .into_iter()
+            .map(
+                |(id, tenant_id, user_id, role_in_tenant, joined_at, tenant_real_id, name, slug, logo_url, status)| {
+                    TenantUserWithTenant {
+                        id,
+                        tenant_id,
+                        user_id,
+                        role_in_tenant,
+                        joined_at,
+                        tenant: TenantInfo {
+                            id: tenant_real_id,
+                            name,
+                            slug,
+                            logo_url,
+                            status,
+                        },
+                    }
+                },
+            )
+            .collect();
+
+        Ok(result)
     }
 
     async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64> {

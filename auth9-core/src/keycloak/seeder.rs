@@ -245,13 +245,18 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Update realm settings (SSL and login theme) based on configuration
+    /// Update realm settings (SSL, login theme, and registration) based on configuration
+    ///
+    /// Note: registrationAllowed is set to false because Auth9 controls this
+    /// via BrandingConfig.allow_registration, which syncs to Keycloak when updated.
     async fn update_realm_settings(&self, token: &str) -> anyhow::Result<()> {
         let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
 
         let update = serde_json::json!({
             "sslRequired": self.config.ssl_required,
-            "loginTheme": "auth9"
+            "loginTheme": "auth9",
+            // Default to false - Auth9 controls this via BrandingConfig
+            "registrationAllowed": false
         });
 
         let response = self
@@ -270,7 +275,7 @@ impl KeycloakSeeder {
         }
 
         info!(
-            "Updated realm '{}': SSL='{}', loginTheme='auth9'",
+            "Updated realm '{}': SSL='{}', loginTheme='auth9', registrationAllowed=false",
             self.config.realm, self.config.ssl_required
         );
         Ok(())

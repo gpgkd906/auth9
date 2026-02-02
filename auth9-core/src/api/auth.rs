@@ -359,19 +359,44 @@ pub async fn logout<S: HasServices + HasSessionManagement>(
     // Try to revoke session from token before redirecting to Keycloak
     if let Some(TypedHeader(Authorization(bearer))) = auth {
         // Use HasServices::jwt_manager to disambiguate (both traits have jwt_manager)
-        if let Ok(claims) = HasServices::jwt_manager(&state).verify_identity_token(bearer.token()) {
-            if let Some(ref sid) = claims.sid {
-                if let Ok(session_id) = uuid::Uuid::parse_str(sid) {
-                    if let Ok(user_id) = uuid::Uuid::parse_str(&claims.sub) {
-                        // Ignore errors - session may already be revoked or expired
-                        let _ = state
-                            .session_service()
-                            .revoke_session(session_id.into(), user_id.into())
-                            .await;
+        match HasServices::jwt_manager(&state).verify_identity_token(bearer.token()) {
+            Ok(claims) => {
+                if let Some(ref sid) = claims.sid {
+                    if let Ok(session_id) = uuid::Uuid::parse_str(sid) {
+                        if let Ok(user_id) = uuid::Uuid::parse_str(&claims.sub) {
+                            match state
+                                .session_service()
+                                .revoke_session(session_id.into(), user_id.into())
+                                .await
+                            {
+                                Ok(_) => {
+                                    tracing::info!(
+                                        user_id = %claims.sub,
+                                        session_id = %sid,
+                                        "Session revoked successfully on logout"
+                                    );
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        user_id = %claims.sub,
+                                        session_id = %sid,
+                                        error = %e,
+                                        "Failed to revoke session on logout (may already be revoked)"
+                                    );
+                                }
+                            }
+                        }
                     }
+                } else {
+                    tracing::debug!("Logout request has valid token but no session ID (sid claim)");
                 }
             }
+            Err(e) => {
+                tracing::debug!(error = %e, "Logout request with invalid/expired token");
+            }
         }
+    } else {
+        tracing::debug!("Logout request without authorization header");
     }
 
     let logout_url = build_keycloak_logout_url(
@@ -706,10 +731,8 @@ pub struct OpenIdConfiguration {
 
 pub async fn openid_configuration<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
     let base_url = &state.config().jwt.issuer;
-    let jwks_uri = state
-        .jwt_manager()
-        .public_key_pem()
-        .map(|_| format!("{}/.well-known/jwks.json", base_url));
+    // Always include jwks_uri - it returns empty keys array for HS256 mode
+    let jwks_uri = Some(format!("{}/.well-known/jwks.json", base_url));
     let algs = if state.jwt_manager().uses_rsa() {
         vec!["RS256".to_string()]
     } else {
@@ -775,7 +798,10 @@ struct JwkKey {
 pub async fn jwks<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
     let public_key_pem = match state.jwt_manager().public_key_pem() {
         Some(key) => key,
-        None => return StatusCode::NOT_FOUND.into_response(),
+        None => {
+            // Return empty JWKS for HS256 mode (symmetric keys are not exposed via JWKS)
+            return Json(Jwks { keys: vec![] }).into_response();
+        }
     };
 
     let public_key = match RsaPublicKey::from_public_key_pem(public_key_pem) {

@@ -50,7 +50,7 @@ export default function AuditLogsPage() {
                       {log.resource_type}
                       {log.resource_id ? `:${log.resource_id}` : ""}
                     </td>
-                    <td className="px-4 py-3">{log.actor_id || "-"}</td>
+                    <td className="px-4 py-3">{log.actor_email || log.actor_display_name || "-"}</td>
                     <td className="px-4 py-3">
                       {new Date(log.created_at).toLocaleString()}
                     </td>

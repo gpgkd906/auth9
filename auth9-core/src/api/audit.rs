@@ -11,12 +11,13 @@ use axum::{
     Json,
 };
 
-/// List audit logs
+/// List audit logs with actor information (email, display_name)
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     Query(query): Query<AuditLogQuery>,
 ) -> Result<impl IntoResponse> {
-    let logs = state.audit_repo().find(&query).await?;
+    // Use find_with_actor to include actor email/display_name in response
+    let logs = state.audit_repo().find_with_actor(&query).await?;
     let total = state.audit_repo().count(&query).await?;
 
     let page = calculate_page(query.offset, query.limit);

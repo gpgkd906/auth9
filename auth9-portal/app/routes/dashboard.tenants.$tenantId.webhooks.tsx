@@ -280,7 +280,14 @@ export default function WebhooksPage() {
                     >
                       <Pencil2Icon className="h-4 w-4" />
                     </Button>
-                    <Form method="post">
+                    <Form
+                      method="post"
+                      onSubmit={(e) => {
+                        if (!confirm("Are you sure you want to delete this webhook? This action cannot be undone.")) {
+                          e.preventDefault();
+                        }
+                      }}
+                    >
                       <input type="hidden" name="intent" value="delete" />
                       <input type="hidden" name="id" value={webhook.id} />
                       <Button

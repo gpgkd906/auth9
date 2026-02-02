@@ -2,15 +2,26 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, type User, type Tenant, type Service, type Role } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
+
+// Type for tenant info embedded in user-tenant response
+interface TenantInfo {
+  id: string;
+  name: string;
+  slug: string;
+  logo_url?: string;
+  status: string;
+}
 
 // Type for user-tenant relationship from userApi.getTenants
 interface UserTenant {
   id: string;
   tenant_id: string;
+  user_id: string;
   role_in_tenant: string;
   joined_at: string;
-  tenant: Tenant;
+  tenant: TenantInfo;
 }
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -55,6 +66,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const accessToken = await getAccessToken(request);
 
   try {
     if (intent === "update_user") {
@@ -97,7 +109,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const email = formData.get("email") as string;
       const display_name = formData.get("display_name") as string;
       const password = formData.get("password") as string;
-      await userApi.create({ email, display_name, password });
+      await userApi.create({ email, display_name, password }, accessToken || undefined);
       return { success: true, intent };
     }
 
@@ -132,7 +144,24 @@ export default function UsersPage() {
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [managingTenantsUser, setManagingTenantsUser] = useState<User | null>(null);
-  const [managingRoles, setManagingRoles] = useState<{ user: User, tenant: Tenant } | null>(null);
+  const [managingRoles, setManagingRoles] = useState<{ user: User, tenant: TenantInfo } | null>(null);
+
+  // Email validation state for Create User dialog
+  const [createEmailError, setCreateEmailError] = useState<string | null>(null);
+  const [createEmailValue, setCreateEmailValue] = useState("");
+
+  const validateEmail = (email: string): boolean => {
+    if (!email) {
+      setCreateEmailError("Email is required");
+      return false;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      setCreateEmailError("Please enter a valid email address");
+      return false;
+    }
+    setCreateEmailError(null);
+    return true;
+  };
 
   // State for Manage Roles
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
@@ -324,7 +353,13 @@ export default function UsersPage() {
       </Dialog>
 
       {/* Create User Dialog */}
-      <Dialog open={creatingUser} onOpenChange={(open) => !open && setCreatingUser(false)}>
+      <Dialog open={creatingUser} onOpenChange={(open) => {
+        if (!open) {
+          setCreatingUser(false);
+          setCreateEmailError(null);
+          setCreateEmailValue("");
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
@@ -332,7 +367,11 @@ export default function UsersPage() {
               Create a new user account.
             </DialogDescription>
           </DialogHeader>
-          <Form method="post" className="space-y-4">
+          <Form method="post" className="space-y-4" onSubmit={(e) => {
+            if (!validateEmail(createEmailValue)) {
+              e.preventDefault();
+            }
+          }}>
             <input type="hidden" name="intent" value="create_user" />
             <div className="space-y-2">
               <Label htmlFor="create-email">Email *</Label>
@@ -342,7 +381,17 @@ export default function UsersPage() {
                 type="email"
                 required
                 placeholder="user@example.com"
+                value={createEmailValue}
+                onChange={(e) => {
+                  setCreateEmailValue(e.target.value);
+                  if (createEmailError) validateEmail(e.target.value);
+                }}
+                onBlur={(e) => validateEmail(e.target.value)}
+                className={createEmailError ? "border-[var(--accent-red)]" : ""}
               />
+              {createEmailError && (
+                <p className="text-sm text-[var(--accent-red)]">{createEmailError}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="create-name">Display Name</Label>
@@ -366,7 +415,11 @@ export default function UsersPage() {
               <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreatingUser(false)}>
+              <Button type="button" variant="outline" onClick={() => {
+                setCreatingUser(false);
+                setCreateEmailError(null);
+                setCreateEmailValue("");
+              }}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>

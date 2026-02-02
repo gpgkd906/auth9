@@ -14,15 +14,20 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Use internal URL for server-to-server communication
   if (accessToken) {
     try {
-      await fetch(`${AUTH9_CORE_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}`, {
+      const response = await fetch(`${AUTH9_CORE_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
         },
         redirect: "manual", // Don't follow redirects, we'll handle it ourselves
       });
-    } catch {
-      // Ignore errors - proceed with logout anyway
+      // Log for debugging - session revocation happens on this call
+      if (!response.ok && response.status !== 302) {
+        console.error("[logout] Backend logout API returned non-redirect status:", response.status);
+      }
+    } catch (error) {
+      // Log but proceed with logout anyway
+      console.error("[logout] Backend logout API error:", error);
     }
   }
 
