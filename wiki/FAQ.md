@@ -492,7 +492,7 @@ A:
 - [ ] 插件系统
 - [ ] 更多集成（Slack、Teams 等）
 
-详见：[路线图](路线图.md)
+关注 [GitHub Issues](https://github.com/gpgkd906/auth9/issues) 和 [Discussions](https://github.com/gpgkd906/auth9/discussions) 获取最新规划。
 
 ### Q: 何时发布 1.0 版本？
 
