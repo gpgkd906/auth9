@@ -43,7 +43,15 @@ A self-hosted identity and access management service, designed to replace expens
 - **Dynamic RBAC**: Roles, permissions, inheritance
 - **Token Exchange**: Service-to-service authentication
 - **Audit Logs**: Track all administrative actions
-- **Modern UI**: Apple-inspired design system
+- **Modern UI**: React Router 7-based design system
+- **Password Management**: Password policies, reset, and change
+- **Session Management**: View and revoke active sessions
+- **WebAuthn/Passkey**: Passwordless authentication
+- **Social Login**: Google, GitHub, OIDC, SAML support
+- **Security Alerts**: Real-time threat detection
+- **Login Analytics**: Detailed login statistics and events
+- **Webhooks**: Real-time event notifications
+- **Brand Customization**: Custom logos, colors, and themes
 
 ## Quick Start
 
