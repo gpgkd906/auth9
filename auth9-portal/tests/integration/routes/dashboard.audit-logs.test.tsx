@@ -18,6 +18,8 @@ describe("Audit Logs Page", () => {
                 resource_type: "tenant",
                 resource_id: "tenant-123",
                 actor_id: "user-1",
+                actor_email: "user1@example.com",
+                actor_display_name: "User One",
                 created_at: new Date().toISOString(),
             },
             {
@@ -26,6 +28,8 @@ describe("Audit Logs Page", () => {
                 resource_type: "user",
                 resource_id: "user-456",
                 actor_id: "admin",
+                actor_email: "admin@example.com",
+                actor_display_name: "Admin User",
                 created_at: new Date().toISOString(),
             },
             {
@@ -34,6 +38,8 @@ describe("Audit Logs Page", () => {
                 resource_type: "role",
                 resource_id: undefined,
                 actor_id: undefined,
+                actor_email: undefined,
+                actor_display_name: undefined,
                 created_at: new Date().toISOString(),
             },
         ],
@@ -104,9 +110,9 @@ describe("Audit Logs Page", () => {
             // Check resource types with IDs
             expect(screen.getByText("tenant:tenant-123")).toBeInTheDocument();
             expect(screen.getByText("user:user-456")).toBeInTheDocument();
-            // Check actors
-            expect(screen.getByText("user-1")).toBeInTheDocument();
-            expect(screen.getByText("admin")).toBeInTheDocument();
+            // Check actors (now uses actor_email)
+            expect(screen.getByText("user1@example.com")).toBeInTheDocument();
+            expect(screen.getByText("admin@example.com")).toBeInTheDocument();
         });
     });
 

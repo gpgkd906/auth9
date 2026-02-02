@@ -174,12 +174,13 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
 
     async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats> {
         // Get basic counts
+        // Note: SUM() returns DECIMAL in MySQL/TiDB, must CAST to SIGNED for i64 compatibility
         let counts: (i64, i64, i64, i64) = sqlx::query_as(
             r#"
             SELECT
                 COUNT(*) as total,
-                SUM(CASE WHEN event_type = 'success' OR event_type = 'social' THEN 1 ELSE 0 END) as successful,
-                SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked') THEN 1 ELSE 0 END) as failed,
+                CAST(COALESCE(SUM(CASE WHEN event_type = 'success' OR event_type = 'social' THEN 1 ELSE 0 END), 0) AS SIGNED) as successful,
+                CAST(COALESCE(SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked') THEN 1 ELSE 0 END), 0) AS SIGNED) as failed,
                 COUNT(DISTINCT user_id) as unique_users
             FROM login_events
             WHERE created_at BETWEEN ? AND ?

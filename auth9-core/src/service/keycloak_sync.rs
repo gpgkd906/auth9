@@ -1,12 +1,12 @@
 //! Keycloak sync service for Auth9 ↔ Keycloak state synchronization
 //!
 //! This service manages the synchronization of configuration between Auth9 and Keycloak.
-//! When Auth9 settings change (e.g., branding configuration), this service ensures
-//! the corresponding Keycloak realm settings are updated.
+//! When Auth9 settings change (e.g., branding configuration, email settings), this service
+//! ensures the corresponding Keycloak realm settings are updated.
 
 use crate::domain::BrandingConfig;
 use crate::error::Result;
-use crate::keycloak::{KeycloakClient, RealmUpdate};
+use crate::keycloak::{KeycloakClient, RealmUpdate, SmtpServerConfig};
 use std::sync::Arc;
 use tracing::{error, info};
 
@@ -54,6 +54,28 @@ impl KeycloakSyncService {
         if let Err(e) = self.sync_realm_settings(realm_settings).await {
             error!("Failed to sync realm settings to Keycloak: {}", e);
             // Don't propagate error - Keycloak sync failure shouldn't block branding updates
+        }
+    }
+
+    /// Sync email configuration to Keycloak realm
+    ///
+    /// This method updates the Keycloak realm's SMTP server configuration.
+    /// When smtp_config is None, the sync is skipped (e.g., when SES lacks credentials).
+    /// Errors are logged but not propagated to avoid blocking the main email config update.
+    pub async fn sync_email_config(&self, smtp_config: Option<SmtpServerConfig>) {
+        let Some(smtp) = smtp_config else {
+            info!("Skipping Keycloak email sync - no SMTP config available");
+            return;
+        };
+
+        let realm_update = RealmUpdate {
+            smtp_server: Some(smtp),
+            ..Default::default()
+        };
+
+        if let Err(e) = self.sync_realm_settings(realm_update).await {
+            error!("Failed to sync email config to Keycloak: {}", e);
+            // Don't propagate error - Keycloak sync failure shouldn't block email config updates
         }
     }
 }
@@ -219,5 +241,96 @@ mod tests {
 
         // This should not panic even on error - errors are logged but not propagated
         service.sync_branding_config(&branding).await;
+    }
+
+    #[tokio::test]
+    async fn test_sync_email_config_success() {
+        let mock_server = MockServer::start().await;
+        setup_token_mock(&mock_server).await;
+
+        Mock::given(method("PUT"))
+            .and(path("/admin/realms/test-realm"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = Arc::new(KeycloakClient::new(config));
+        let service = KeycloakSyncService::new(client);
+
+        let smtp = SmtpServerConfig {
+            host: Some("smtp.example.com".to_string()),
+            port: Some("587".to_string()),
+            from: Some("noreply@example.com".to_string()),
+            from_display_name: Some("Auth9".to_string()),
+            auth: Some("true".to_string()),
+            user: Some("user@example.com".to_string()),
+            password: Some("password".to_string()),
+            ssl: Some("false".to_string()),
+            starttls: Some("true".to_string()),
+        };
+
+        // This should not panic
+        service.sync_email_config(Some(smtp)).await;
+    }
+
+    #[tokio::test]
+    async fn test_sync_email_config_none_skips_sync() {
+        let mock_server = MockServer::start().await;
+        // Don't set up any mocks - sync should be skipped entirely
+
+        let config = create_test_config(&mock_server.uri());
+        let client = Arc::new(KeycloakClient::new(config));
+        let service = KeycloakSyncService::new(client);
+
+        // This should not panic and should not make any HTTP requests
+        service.sync_email_config(None).await;
+    }
+
+    #[tokio::test]
+    async fn test_sync_email_config_error_does_not_propagate() {
+        let mock_server = MockServer::start().await;
+        setup_token_mock(&mock_server).await;
+
+        Mock::given(method("PUT"))
+            .and(path("/admin/realms/test-realm"))
+            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
+                "error": "internal_error"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = Arc::new(KeycloakClient::new(config));
+        let service = KeycloakSyncService::new(client);
+
+        let smtp = SmtpServerConfig {
+            host: Some("smtp.example.com".to_string()),
+            port: Some("587".to_string()),
+            ..Default::default()
+        };
+
+        // This should not panic even on error - errors are logged but not propagated
+        service.sync_email_config(Some(smtp)).await;
+    }
+
+    #[tokio::test]
+    async fn test_sync_email_config_empty_clears_smtp() {
+        let mock_server = MockServer::start().await;
+        setup_token_mock(&mock_server).await;
+
+        Mock::given(method("PUT"))
+            .and(path("/admin/realms/test-realm"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let config = create_test_config(&mock_server.uri());
+        let client = Arc::new(KeycloakClient::new(config));
+        let service = KeycloakSyncService::new(client);
+
+        // Empty config should be sent to clear SMTP settings
+        let empty_smtp = SmtpServerConfig::default();
+        service.sync_email_config(Some(empty_smtp)).await;
     }
 }

@@ -13,7 +13,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const response = await analyticsApi.getStats(startDate, endDate);
     return { stats: response.data, days };
-  } catch {
+  } catch (error) {
+    console.error("Analytics API error:", error);
     return {
       stats: null,
       days,

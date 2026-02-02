@@ -244,4 +244,181 @@ describe("Login Events Page", () => {
       expect(screen.getByText("150 total")).toBeInTheDocument();
     });
   });
+
+  // ============================================================================
+  // Pagination Tests
+  // ============================================================================
+
+  it("renders pagination controls when multiple pages", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({
+          events: mockEvents,
+          pagination: { page: 2, per_page: 50, total: 150, total_pages: 3 },
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /previous/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /next/i })).toBeInTheDocument();
+  });
+
+  it("does not render pagination when single page", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({
+          events: mockEvents,
+          pagination: { page: 1, per_page: 50, total: 2, total_pages: 1 },
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("2 total")).toBeInTheDocument();
+    });
+    expect(screen.queryByText(/Page \d+ of \d+/)).not.toBeInTheDocument();
+  });
+
+  // ============================================================================
+  // Event Type Badge Tests
+  // ============================================================================
+
+  it("renders social login event correctly", async () => {
+    const socialEvent = {
+      id: "evt-3",
+      user_id: "user-3",
+      email: "social@example.com",
+      event_type: "social",
+      ip_address: "192.168.1.3",
+      device_type: "mobile",
+      created_at: "2024-01-15T12:00:00Z",
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({
+          events: [socialEvent],
+          pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Social Login")).toBeInTheDocument();
+      expect(screen.getByText("social@example.com")).toBeInTheDocument();
+    });
+  });
+
+  it("renders locked account event correctly", async () => {
+    const lockedEvent = {
+      id: "evt-4",
+      user_id: "user-4",
+      email: "locked@example.com",
+      event_type: "locked",
+      ip_address: "192.168.1.4",
+      device_type: "desktop",
+      created_at: "2024-01-15T13:00:00Z",
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({
+          events: [lockedEvent],
+          pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Account Locked")).toBeInTheDocument();
+      expect(screen.getByText("locked@example.com")).toBeInTheDocument();
+    });
+  });
+
+  it("renders MFA failed event correctly", async () => {
+    const mfaFailedEvent = {
+      id: "evt-5",
+      user_id: "user-5",
+      email: "mfa@example.com",
+      event_type: "failed_mfa",
+      ip_address: "192.168.1.5",
+      device_type: "desktop",
+      failure_reason: "Invalid code",
+      created_at: "2024-01-15T14:00:00Z",
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({
+          events: [mfaFailedEvent],
+          pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("MFA Failed")).toBeInTheDocument();
+      expect(screen.getByText("Invalid code")).toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
+  // Table Card Tests
+  // ============================================================================
+
+  it("renders Recent Events card title", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({ events: mockEvents, pagination: mockPagination }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Recent Events")).toBeInTheDocument();
+    });
+  });
+
+  it("renders device type in table row", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/analytics/events",
+        Component: LoginEventsPage,
+        loader: () => ({ events: mockEvents, pagination: mockPagination }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/analytics/events"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("desktop")).toBeInTheDocument();
+      expect(screen.getByText("mobile")).toBeInTheDocument();
+    });
+  });
 });

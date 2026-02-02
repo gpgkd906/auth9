@@ -174,6 +174,31 @@ pub struct KeycloakRealm {
     pub login_theme: Option<String>,
 }
 
+/// Keycloak SMTP server configuration
+/// Note: All fields in Keycloak Admin API are string types
+#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SmtpServerConfig {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub port: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub from: Option<String>,
+    #[serde(rename = "fromDisplayName", skip_serializing_if = "Option::is_none")]
+    pub from_display_name: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub auth: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub user: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub ssl: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub starttls: Option<String>,
+}
+
 /// Realm update parameters
 #[derive(Debug, Clone, Serialize, Default)]
 #[serde(rename_all = "camelCase")]
@@ -187,6 +212,9 @@ pub struct RealmUpdate {
     /// Login theme name (e.g., "auth9", "keycloak")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub login_theme: Option<String>,
+    /// SMTP server configuration for email sending
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub smtp_server: Option<SmtpServerConfig>,
 }
 
 #[cfg(test)]
@@ -530,11 +558,74 @@ mod tests {
             reset_password_allowed: Some(false),
             ssl_required: None,
             login_theme: None,
+            smtp_server: None,
         };
 
         let json = serde_json::to_string(&update).unwrap();
         assert!(json.contains("registrationAllowed"));
         assert!(json.contains("resetPasswordAllowed"));
         assert!(!json.contains("sslRequired"));
+    }
+
+    #[test]
+    fn test_smtp_server_config_serialization() {
+        let config = SmtpServerConfig {
+            host: Some("smtp.example.com".to_string()),
+            port: Some("587".to_string()),
+            from: Some("noreply@example.com".to_string()),
+            from_display_name: Some("Auth9".to_string()),
+            auth: Some("true".to_string()),
+            user: Some("user@example.com".to_string()),
+            password: Some("secret".to_string()),
+            ssl: Some("false".to_string()),
+            starttls: Some("true".to_string()),
+        };
+
+        let json = serde_json::to_string(&config).unwrap();
+        assert!(json.contains("\"host\":\"smtp.example.com\""));
+        assert!(json.contains("\"port\":\"587\""));
+        assert!(json.contains("\"from\":\"noreply@example.com\""));
+        assert!(json.contains("\"fromDisplayName\":\"Auth9\""));
+        assert!(json.contains("\"auth\":\"true\""));
+        assert!(json.contains("\"starttls\":\"true\""));
+    }
+
+    #[test]
+    fn test_smtp_server_config_default() {
+        let config = SmtpServerConfig::default();
+        assert!(config.host.is_none());
+        assert!(config.port.is_none());
+        assert!(config.from.is_none());
+
+        // Empty config should serialize to empty object
+        let json = serde_json::to_string(&config).unwrap();
+        assert_eq!(json, "{}");
+    }
+
+    #[test]
+    fn test_realm_update_with_smtp_server() {
+        let smtp = SmtpServerConfig {
+            host: Some("smtp.example.com".to_string()),
+            port: Some("587".to_string()),
+            from: Some("noreply@example.com".to_string()),
+            from_display_name: None,
+            auth: Some("true".to_string()),
+            user: Some("user".to_string()),
+            password: Some("pass".to_string()),
+            ssl: None,
+            starttls: Some("true".to_string()),
+        };
+
+        let update = RealmUpdate {
+            registration_allowed: None,
+            reset_password_allowed: None,
+            ssl_required: None,
+            login_theme: None,
+            smtp_server: Some(smtp),
+        };
+
+        let json = serde_json::to_string(&update).unwrap();
+        assert!(json.contains("smtpServer"));
+        assert!(json.contains("smtp.example.com"));
     }
 }

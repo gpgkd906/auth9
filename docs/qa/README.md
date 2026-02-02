@@ -64,6 +64,35 @@
 | [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点 | 5 |
 | [auth/05-boundary.md](./auth/05-boundary.md) | 边界测试 | 3 |
 
+### 系统设置 (3 个文档, 15 个场景)
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [settings/01-branding.md](./settings/01-branding.md) | 登录页品牌设置 | 5 |
+| [settings/02-email-provider.md](./settings/02-email-provider.md) | 邮件服务商配置 | 5 |
+| [settings/03-email-templates.md](./settings/03-email-templates.md) | 邮件模板管理 | 5 |
+
+### 身份提供商 (2 个文档, 10 个场景)
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [identity-provider/01-crud.md](./identity-provider/01-crud.md) | 创建、更新、删除身份提供商 | 5 |
+| [identity-provider/02-toggle-validation.md](./identity-provider/02-toggle-validation.md) | 启用/禁用、验证、登录集成 | 5 |
+
+### Passkeys (1 个文档, 5 个场景)
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [passkeys/01-passkeys.md](./passkeys/01-passkeys.md) | Passkey 注册、列表、删除、登录 | 5 |
+
+### 分析与统计 (2 个文档, 10 个场景)
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [analytics/01-overview.md](./analytics/01-overview.md) | 统计概览、时间范围筛选 | 5 |
+| [analytics/02-events.md](./analytics/02-events.md) | 登录事件列表、分页 | 5 |
+
+### 审计日志 (1 个文档, 5 个场景)
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [audit/01-audit-logs.md](./audit/01-audit-logs.md) | 审计日志查看、验证 | 5 |
+
 ---
 
 ## 统计概览
@@ -78,7 +107,12 @@
 | 会话与安全 | 4 | 20 |
 | Webhook | 4 | 17 |
 | 认证流程 | 5 | 23 |
-| **总计** | **28** | **130** |
+| 系统设置 | 3 | 15 |
+| 身份提供商 | 2 | 10 |
+| Passkeys | 1 | 5 |
+| 分析与统计 | 2 | 10 |
+| 审计日志 | 1 | 5 |
+| **总计** | **37** | **175** |
 
 ---
 
@@ -88,13 +122,18 @@
 
 **建议的执行顺序**（如有依赖）：
 1. 认证流程 (auth/*) - 先确保登录功能正常
-2. 租户管理 (tenant/*) - 创建测试租户
-3. 用户管理 (user/*) - 创建测试用户
-4. 服务与客户端 (service/*) - 配置测试服务
-5. RBAC (rbac/*) - 配置角色和权限
-6. 邀请管理 (invitation/*) - 测试邀请流程
-7. 会话与安全 (session/*) - 测试安全功能
-8. Webhook (webhook/*) - 测试事件通知
+2. 系统设置 (settings/*) - 配置品牌和邮件
+3. 租户管理 (tenant/*) - 创建测试租户
+4. 用户管理 (user/*) - 创建测试用户
+5. 身份提供商 (identity-provider/*) - 配置社交登录
+6. Passkeys (passkeys/*) - 测试无密码登录
+7. 服务与客户端 (service/*) - 配置测试服务
+8. RBAC (rbac/*) - 配置角色和权限
+9. 邀请管理 (invitation/*) - 测试邀请流程
+10. 会话与安全 (session/*) - 测试安全功能
+11. Webhook (webhook/*) - 测试事件通知
+12. 分析与统计 (analytics/*) - 验证登录统计
+13. 审计日志 (audit/*) - 验证操作记录
 
 ---
 
@@ -161,6 +200,16 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 -- 查看未解决的安全告警
 SELECT alert_type, severity, user_id, created_at
 FROM security_alerts WHERE resolved_at IS NULL;
+
+-- 查看登录事件统计
+SELECT event_type, COUNT(*) as count
+FROM login_events
+WHERE created_at >= DATE_SUB(NOW(), INTERVAL 7 DAY)
+GROUP BY event_type;
+
+-- 查看系统设置
+SELECT category, setting_key, JSON_EXTRACT(value, '$.type') as type
+FROM system_settings;
 ```
 
 ---
@@ -187,5 +236,6 @@ FROM security_alerts WHERE resolved_at IS NULL;
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-02 | 3.0.0 | 新增系统设置、身份提供商、Passkeys、分析统计、审计日志模块，共 37 个文档 175 个场景 |
 | 2024-02-02 | 2.0.0 | 细分文档，每个不超过 5 个场景，共 28 个文档 |
 | 2024-02-02 | 1.0.0 | 初始版本 |
