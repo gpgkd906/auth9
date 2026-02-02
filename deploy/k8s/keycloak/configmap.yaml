@@ -16,6 +16,9 @@ data:
 
   # Server configuration
   KC_HTTP_ENABLED: "true"
+  # KC_HOSTNAME ensures token issuer is always the public URL, allowing
+  # auth9-core to use internal URL for API calls while tokens remain valid
+  KC_HOSTNAME: idp-auth9.gitski.work
   KC_HOSTNAME_STRICT: "false"
   KC_HEALTH_ENABLED: "true"
   KC_METRICS_ENABLED: "true"
