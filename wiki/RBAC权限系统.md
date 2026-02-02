@@ -576,6 +576,6 @@ services:
 ## 相关文档
 
 - [多租户管理](多租户管理.md)
-- [用户管理](用户管理.md)
+- [用户操作指南](../userguide/USER_GUIDE.md)
 - [REST API](REST-API.md)
 - [最佳实践](最佳实践.md)
