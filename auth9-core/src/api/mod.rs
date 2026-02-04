@@ -8,6 +8,7 @@ pub mod email_template;
 pub mod health;
 pub mod identity_provider;
 pub mod invitation;
+pub mod keycloak_event;
 pub mod password;
 pub mod role;
 pub mod security_alert;

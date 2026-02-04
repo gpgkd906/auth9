@@ -1094,6 +1094,12 @@ where
             "/api/v1/tenants/{tenant_id}/services/enabled",
             get(api::tenant_service::get_enabled_services::<S>),
         )
+        // === Keycloak Event Webhook ===
+        // Receives login events from Keycloak for security monitoring
+        .route(
+            "/api/v1/keycloak/events",
+            post(api::keycloak_event::receive::<S>),
+        )
         // Add middleware
         .layer(TraceLayer::new_for_http())
         .layer(cors)

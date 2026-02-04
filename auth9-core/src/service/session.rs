@@ -506,6 +506,7 @@ mod tests {
             ssl_required: "none".to_string(),
             core_public_url: None,
             portal_url: None,
+            webhook_secret: None,
         })
     }
 }

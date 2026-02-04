@@ -31,14 +31,35 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      # InitContainer: Extract theme JAR from theme image
+      # InitContainers: Extract theme and events SPI JARs
       initContainers:
         - name: init-theme
           image: ghcr.io/gpgkd906/auth9-keycloak-theme:latest
           imagePullPolicy: Always
+          command: ["sh", "-c", "cp /theme/*.jar /providers/ 2>/dev/null && echo 'Theme JAR copied'"]
           volumeMounts:
-            - name: theme-volume
-              mountPath: /theme-output
+            - name: providers-volume
+              mountPath: /providers
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
+        - name: init-events
+          image: ghcr.io/gpgkd906/auth9-keycloak-events:latest
+          imagePullPolicy: Always
+          command: ["sh", "-c", "cp /events/*.jar /providers/ 2>/dev/null && echo 'Events SPI JAR copied'"]
+          volumeMounts:
+            - name: providers-volume
+              mountPath: /providers
           resources:
             requests:
               cpu: 100m
@@ -74,7 +95,7 @@ spec:
             - secretRef:
                 name: keycloak-secrets
           volumeMounts:
-            - name: theme-volume
+            - name: providers-volume
               mountPath: /opt/keycloak/providers
               readOnly: true
           resources:
@@ -107,7 +128,7 @@ spec:
               drop:
                 - ALL
       volumes:
-        - name: theme-volume
+        - name: providers-volume
           emptyDir: {}
       affinity:
         podAntiAffinity:

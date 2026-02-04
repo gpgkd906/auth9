@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -137,15 +137,23 @@ export default function IdentityProvidersPage() {
   });
 
   const isSubmitting = navigation.state === "submitting";
+  // Track when form submission starts to avoid closing dialog on stale actionData
+  const wasSubmitting = useRef(false);
 
-  // Close dialog on success
+  // Close dialog on success - only after actual form submission
   useEffect(() => {
-    if (actionData?.success && (showDialog || editingProvider)) {
+    // Track submission state
+    if (isSubmitting) {
+      wasSubmitting.current = true;
+    }
+    // Only close dialog if we were submitting and got success
+    if (wasSubmitting.current && !isSubmitting && actionData?.success && (showDialog || editingProvider)) {
       setShowDialog(false);
       setEditingProvider(null);
       resetForm();
+      wasSubmitting.current = false;
     }
-  }, [actionData, showDialog, editingProvider]);
+  }, [actionData, isSubmitting, showDialog, editingProvider]);
 
   function resetForm() {
     setFormData({
@@ -158,6 +166,7 @@ export default function IdentityProvidersPage() {
   }
 
   function openEditDialog(provider: IdentityProvider) {
+    wasSubmitting.current = false; // Reset to avoid stale actionData closing dialog
     setEditingProvider(provider);
     setFormData({
       alias: provider.alias,
@@ -169,6 +178,7 @@ export default function IdentityProvidersPage() {
   }
 
   function openCreateDialog() {
+    wasSubmitting.current = false; // Reset to avoid stale actionData closing dialog
     resetForm();
     setShowDialog(true);
   }

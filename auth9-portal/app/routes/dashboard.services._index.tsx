@@ -50,9 +50,12 @@ export async function action({ request }: ActionFunctionArgs) {
       const redirect_uris = (formData.get("redirect_uris") as string)?.split(",").map(s => s.trim()).filter(Boolean);
       const logout_uris = (formData.get("logout_uris") as string)?.split(",").map(s => s.trim()).filter(Boolean);
 
+      // Auto-generate client_id if not provided (backend requires non-empty client_id)
+      const finalClientId = client_id?.trim() || crypto.randomUUID();
+
       const res = await serviceApi.create({
         name,
-        client_id: client_id || undefined,
+        client_id: finalClientId,
         base_url: base_url || undefined,
         redirect_uris,
         logout_uris
