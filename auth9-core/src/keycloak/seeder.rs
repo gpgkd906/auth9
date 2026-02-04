@@ -245,18 +245,46 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Update realm settings (SSL, login theme, and registration) based on configuration
+    /// Update realm settings (SSL, login theme, registration, and events) based on configuration
     ///
     /// Note: registrationAllowed is set to false because Auth9 controls this
     /// via BrandingConfig.allow_registration, which syncs to Keycloak when updated.
     async fn update_realm_settings(&self, token: &str) -> anyhow::Result<()> {
         let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
 
+        // Build events listeners list
+        // Always include jboss-logging for server logs
+        // Add ext-event-webhook if webhook secret is configured
+        let mut events_listeners = vec!["jboss-logging"];
+        if self.config.webhook_secret.is_some() {
+            events_listeners.push("ext-event-webhook");
+        }
+
         let update = serde_json::json!({
             "sslRequired": self.config.ssl_required,
             "loginTheme": "auth9",
             // Default to false - Auth9 controls this via BrandingConfig
-            "registrationAllowed": false
+            "registrationAllowed": false,
+            // Enable event storage and listeners for login event tracking
+            "eventsEnabled": true,
+            "eventsListeners": events_listeners,
+            // Track login-related events for security monitoring
+            "enabledEventTypes": [
+                "LOGIN",
+                "LOGIN_ERROR",
+                "LOGOUT",
+                "LOGOUT_ERROR",
+                "CODE_TO_TOKEN",
+                "CODE_TO_TOKEN_ERROR",
+                "REFRESH_TOKEN",
+                "REFRESH_TOKEN_ERROR",
+                "IDENTITY_PROVIDER_LOGIN",
+                "IDENTITY_PROVIDER_LOGIN_ERROR",
+                "USER_DISABLED_BY_PERMANENT_LOCKOUT",
+                "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
+            ],
+            // Retain events for 30 days (for troubleshooting)
+            "eventsExpiration": 2592000
         });
 
         let response = self
@@ -275,8 +303,8 @@ impl KeycloakSeeder {
         }
 
         info!(
-            "Updated realm '{}': SSL='{}', loginTheme='auth9', registrationAllowed=false",
-            self.config.realm, self.config.ssl_required
+            "Updated realm '{}': SSL='{}', loginTheme='auth9', registrationAllowed=false, eventsEnabled=true, eventsListeners={:?}",
+            self.config.realm, self.config.ssl_required, events_listeners
         );
         Ok(())
     }

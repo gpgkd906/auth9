@@ -478,6 +478,24 @@ generate_secrets() {
     else
         print_info "SESSION_SECRET 已存在（不会重新生成）"
     fi
+
+    # KEYCLOAK_WEBHOOK_SECRET (shared between auth9-secrets and keycloak-secrets)
+    if [ -z "${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}" ]; then
+        local webhook_secret=$(openssl rand -hex 32)
+        AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]="$webhook_secret"
+        KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET]="$webhook_secret"
+        echo ""
+        print_warning "已生成 KEYCLOAK_WEBHOOK_SECRET - 请安全保存："
+        echo -e "${GREEN}${webhook_secret}${NC}"
+        echo ""
+        read "?保存后按 Enter 继续..."
+    else
+        print_info "KEYCLOAK_WEBHOOK_SECRET 已存在（不会重新生成）"
+        # Sync to keycloak-secrets if not already set
+        if [ -z "${KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET]}" ]; then
+            KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET]="${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}"
+        fi
+    fi
 }
 
 ################################################################################
@@ -594,11 +612,13 @@ run_interactive_setup() {
     # Detect auth9-secrets
     detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "SESSION_SECRET" \
-        "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" || true
+        "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
+        "KEYCLOAK_WEBHOOK_SECRET" || true
 
     # Detect keycloak-secrets
     detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
-        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" || true
+        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" \
+        "KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET" || true
 
     # Detect ConfigMap
     detect_existing_configmap || true

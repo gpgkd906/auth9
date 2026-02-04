@@ -17,6 +17,7 @@ fn create_test_config(base_url: &str) -> KeycloakConfig {
         ssl_required: "none".to_string(),
         core_public_url: None,
         portal_url: None,
+        webhook_secret: None,
     }
 }
 
@@ -1011,6 +1012,7 @@ async fn test_backward_compatibility_without_client_secret() {
         ssl_required: "none".to_string(),
         core_public_url: None,
         portal_url: None,
+        webhook_secret: None,
     };
 
     // Mock token endpoint - should NOT receive client_secret parameter
@@ -1070,6 +1072,7 @@ fn create_seeder_config(base_url: &str) -> KeycloakConfig {
         ssl_required: "none".to_string(),
         core_public_url: None,
         portal_url: None,
+        webhook_secret: None,
     }
 }
 

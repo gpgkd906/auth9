@@ -25,6 +25,7 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
+      KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
       AUTH9_ADMIN_PASSWORD: Admin123!  # Fixed password for local development
       DEV_SMTP_HOST: mailpit  # Enable dev email config seeding
     depends_on:
@@ -68,6 +69,7 @@ services:
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
+      KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
       # SMTP configuration for email sending (invitations, password reset, etc.)
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
@@ -152,6 +154,25 @@ services:
     profiles:
       - build
 
+  # ==================== Keycloak Events SPI Builder ====================
+  # Builds the p2-inc/keycloak-events webhook plugin
+  # Run with: docker-compose --profile build up auth9-keycloak-events-builder
+  auth9-keycloak-events-builder:
+    image: maven:3.9-eclipse-temurin-17
+    container_name: auth9-keycloak-events-builder
+    working_dir: /build
+    command: >
+      sh -c "
+        git clone --depth 1 --branch v0.47 https://github.com/p2-inc/keycloak-events.git /build/keycloak-events &&
+        cd /build/keycloak-events &&
+        mvn clean package -DskipTests -pl jar -am &&
+        cp jar/target/*.jar /output/
+      "
+    volumes:
+      - keycloak-events:/output
+    profiles:
+      - build
+
   # ==================== Keycloak (Auth Engine) ====================
   keycloak:
     image: quay.io/keycloak/keycloak:23.0
@@ -175,8 +196,13 @@ services:
       KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
       # Auth9 API URL for custom theme
       AUTH9_API_URL: http://auth9-core:8080
+      # Keycloak Events Webhook SPI configuration (p2-inc/keycloak-events)
+      # These are read by the ext-event-webhook SPI when events are enabled
+      KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_URI: http://auth9-core:8080/api/v1/keycloak/events
+      KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
     volumes:
       - keycloak-theme:/opt/keycloak/providers:ro
+      - keycloak-events:/opt/keycloak/providers/events:ro
     healthcheck:
       test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/localhost/8080"]
       interval: 10s
@@ -227,3 +253,4 @@ volumes:
   tidb-data:
   redis-data:
   keycloak-theme:
+  keycloak-events:

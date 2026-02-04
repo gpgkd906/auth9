@@ -69,6 +69,9 @@ pub struct KeycloakConfig {
     pub core_public_url: Option<String>,
     /// Public URL for Auth9 Portal (e.g., https://auth9.gitski.work)
     pub portal_url: Option<String>,
+    /// Webhook secret for verifying Keycloak event webhook signatures (HMAC-SHA256)
+    /// Required in production to prevent spoofed events
+    pub webhook_secret: Option<String>,
 }
 
 /// gRPC security configuration
@@ -193,6 +196,9 @@ impl Config {
                 let core_public_url = env::var("AUTH9_CORE_PUBLIC_URL").ok();
                 let portal_url = env::var("AUTH9_PORTAL_URL").ok();
 
+                // Webhook secret for Keycloak event verification
+                let webhook_secret = env::var("KEYCLOAK_WEBHOOK_SECRET").ok();
+
                 KeycloakConfig {
                     url,
                     public_url,
@@ -206,6 +212,7 @@ impl Config {
                         .unwrap_or_else(|_| "external".to_string()),
                     core_public_url,
                     portal_url,
+                    webhook_secret,
                 }
             },
             grpc_security: GrpcSecurityConfig {
@@ -298,6 +305,7 @@ mod tests {
                 ssl_required: "external".to_string(),
                 core_public_url: None,
                 portal_url: None,
+                webhook_secret: None,
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
@@ -460,6 +468,7 @@ mod tests {
             ssl_required: "none".to_string(),
             core_public_url: None,
             portal_url: None,
+            webhook_secret: None,
         };
         let kc2 = kc.clone();
 
@@ -479,6 +488,7 @@ mod tests {
             ssl_required: "external".to_string(),
             core_public_url: None,
             portal_url: None,
+            webhook_secret: None,
         };
         let debug_str = format!("{:?}", kc);
 
@@ -500,6 +510,7 @@ mod tests {
                 ssl_required: opt.to_string(),
                 core_public_url: None,
                 portal_url: None,
+                webhook_secret: None,
             };
             assert_eq!(kc.ssl_required, *opt);
         }
@@ -537,6 +548,7 @@ mod tests {
                 ssl_required: "all".to_string(),
                 core_public_url: None,
                 portal_url: None,
+                webhook_secret: Some("production-webhook-secret".to_string()),
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
