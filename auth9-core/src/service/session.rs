@@ -10,6 +10,10 @@ use crate::service::WebhookEventPublisher;
 use chrono::Utc;
 use std::sync::Arc;
 
+/// Maximum number of concurrent sessions allowed per user.
+/// When this limit is exceeded, the oldest session is automatically revoked.
+const MAX_SESSIONS_PER_USER: i64 = 10;
+
 pub struct SessionService<S: SessionRepository, U: UserRepository> {
     session_repo: Arc<S>,
     user_repo: Arc<U>,
@@ -32,7 +36,10 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
         }
     }
 
-    /// Create a new session after login
+    /// Create a new session after login.
+    ///
+    /// Enforces session concurrency limit: if the user has MAX_SESSIONS_PER_USER or more
+    /// active sessions, the oldest session is automatically revoked before creating the new one.
     pub async fn create_session(
         &self,
         user_id: StringUuid,
@@ -40,6 +47,30 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<Session> {
+        // Enforce session concurrency limit
+        let active_count = self.session_repo.count_active_by_user(user_id).await?;
+        if active_count >= MAX_SESSIONS_PER_USER {
+            // Revoke the oldest session to make room for the new one
+            if let Some(oldest_session) = self
+                .session_repo
+                .find_oldest_active_by_user(user_id)
+                .await?
+            {
+                // Revoke in Keycloak if session ID exists
+                if let Some(kc_session_id) = &oldest_session.keycloak_session_id {
+                    let _ = self.keycloak.delete_user_session(kc_session_id).await;
+                }
+                // Revoke in database
+                let _ = self.session_repo.revoke(oldest_session.id).await;
+
+                tracing::info!(
+                    user_id = %user_id,
+                    session_id = %oldest_session.id,
+                    "Revoked oldest session due to session limit"
+                );
+            }
+        }
+
         let (device_type, device_name) = user_agent
             .as_ref()
             .map(|ua| parse_user_agent(ua))
@@ -492,6 +523,134 @@ mod tests {
 
         let sessions = service.get_user_sessions_admin(user_id).await.unwrap();
         assert_eq!(sessions.len(), 2);
+    }
+
+    #[tokio::test]
+    async fn test_create_session_under_limit() {
+        let mut session_mock = MockSessionRepository::new();
+        let user_mock = MockUserRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        // User has only 5 sessions, under the limit of 10
+        session_mock
+            .expect_count_active_by_user()
+            .with(eq(user_id))
+            .returning(|_| Ok(5));
+
+        // Should create session without revoking anything
+        session_mock.expect_create().returning(|input| {
+            Ok(Session {
+                user_id: input.user_id,
+                device_type: input.device_type.clone(),
+                ..Default::default()
+            })
+        });
+
+        let keycloak = create_test_keycloak_client();
+        let service = SessionService::new(
+            Arc::new(session_mock),
+            Arc::new(user_mock),
+            Arc::new(keycloak),
+            None,
+        );
+
+        let result = service
+            .create_session(user_id, Some("kc-123".to_string()), None, None)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_session_at_limit_revokes_oldest() {
+        let mut session_mock = MockSessionRepository::new();
+        let user_mock = MockUserRepository::new();
+        let user_id = StringUuid::new_v4();
+        let oldest_session_id = StringUuid::new_v4();
+
+        // User has 10 sessions, at the limit
+        session_mock
+            .expect_count_active_by_user()
+            .with(eq(user_id))
+            .returning(|_| Ok(10));
+
+        // Should find and revoke oldest session
+        session_mock
+            .expect_find_oldest_active_by_user()
+            .with(eq(user_id))
+            .returning(move |uid| {
+                Ok(Some(Session {
+                    id: oldest_session_id,
+                    user_id: uid,
+                    keycloak_session_id: Some("old-kc-session".to_string()),
+                    ..Default::default()
+                }))
+            });
+
+        session_mock
+            .expect_revoke()
+            .with(eq(oldest_session_id))
+            .returning(|_| Ok(()));
+
+        // Then create new session
+        session_mock.expect_create().returning(|input| {
+            Ok(Session {
+                user_id: input.user_id,
+                ..Default::default()
+            })
+        });
+
+        let keycloak = create_test_keycloak_client();
+        let service = SessionService::new(
+            Arc::new(session_mock),
+            Arc::new(user_mock),
+            Arc::new(keycloak),
+            None,
+        );
+
+        let result = service
+            .create_session(user_id, Some("new-kc-123".to_string()), None, None)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_create_session_over_limit_no_oldest_found() {
+        let mut session_mock = MockSessionRepository::new();
+        let user_mock = MockUserRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        // User has 12 sessions, over the limit
+        session_mock
+            .expect_count_active_by_user()
+            .with(eq(user_id))
+            .returning(|_| Ok(12));
+
+        // No oldest session found (edge case - shouldn't happen in practice)
+        session_mock
+            .expect_find_oldest_active_by_user()
+            .with(eq(user_id))
+            .returning(|_| Ok(None));
+
+        // Should still create new session
+        session_mock.expect_create().returning(|input| {
+            Ok(Session {
+                user_id: input.user_id,
+                ..Default::default()
+            })
+        });
+
+        let keycloak = create_test_keycloak_client();
+        let service = SessionService::new(
+            Arc::new(session_mock),
+            Arc::new(user_mock),
+            Arc::new(keycloak),
+            None,
+        );
+
+        let result = service
+            .create_session(user_id, Some("kc-123".to_string()), None, None)
+            .await;
+        assert!(result.is_ok());
     }
 
     // Helper to create a test KeycloakClient (won't make actual calls in these tests)

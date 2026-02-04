@@ -27,9 +27,9 @@ use crate::service::{
     SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
 };
 use crate::state::{
-    HasAnalytics, HasBranding, HasDbPool, HasEmailTemplates, HasIdentityProviders, HasInvitations,
-    HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings,
-    HasWebAuthn, HasWebhooks,
+    HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
+    HasInvitations, HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
+    HasSystemSettings, HasWebAuthn, HasWebhooks,
 };
 use anyhow::Result;
 use axum::{
@@ -343,6 +343,12 @@ impl HasDbPool for AppState {
     }
 }
 
+impl HasCache for AppState {
+    fn cache(&self) -> &CacheManager {
+        &self.cache_manager
+    }
+}
+
 /// Run the server
 pub async fn run(config: Config) -> Result<()> {
     // Create database connection pool
@@ -653,7 +659,7 @@ fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> A
 ///
 /// This function is generic over the state type, allowing it to work with
 /// both production `AppState` and test implementations that implement `HasServices`.
-pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBranding>(state: S) -> Router {
+pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBranding + HasCache>(state: S) -> Router {
     // Get CORS configuration from state
     let cors_config = state.config().cors.clone();
     let cors = build_cors_layer(&cors_config);
@@ -857,7 +863,8 @@ where
         + HasAnalytics
         + HasWebhooks
         + HasSecurityAlerts
-        + HasDbPool,
+        + HasDbPool
+        + HasCache,
 {
     // Get CORS configuration from state
     let cors_config = state.config().cors.clone();

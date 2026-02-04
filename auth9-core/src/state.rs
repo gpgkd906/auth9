@@ -4,6 +4,7 @@
 //! enabling the same handler code to work with both production
 //! and test implementations.
 
+use crate::cache::CacheManager;
 use crate::config::Config;
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
@@ -260,4 +261,11 @@ pub trait HasSecurityAlerts: Clone + Send + Sync + 'static {
 pub trait HasDbPool: Clone + Send + Sync + 'static {
     /// Get the database pool
     fn db_pool(&self) -> &sqlx::MySqlPool;
+}
+
+/// Trait for states that provide cache access
+/// Used for token blacklisting and other caching operations
+pub trait HasCache: Clone + Send + Sync + 'static {
+    /// Get the cache manager
+    fn cache(&self) -> &CacheManager;
 }
