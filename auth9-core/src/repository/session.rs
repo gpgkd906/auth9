@@ -21,6 +21,12 @@ pub trait SessionRepository: Send + Sync {
 
     /// Delete all sessions for a user (for cascade delete)
     async fn delete_by_user(&self, user_id: StringUuid) -> Result<u64>;
+
+    /// Count active sessions for a user (for session concurrency limit)
+    async fn count_active_by_user(&self, user_id: StringUuid) -> Result<i64>;
+
+    /// Find the oldest active session for a user (for evicting when limit exceeded)
+    async fn find_oldest_active_by_user(&self, user_id: StringUuid) -> Result<Option<Session>>;
 }
 
 pub struct SessionRepositoryImpl {
@@ -216,6 +222,38 @@ impl SessionRepository for SessionRepositoryImpl {
 
         Ok(result.rows_affected())
     }
+
+    async fn count_active_by_user(&self, user_id: StringUuid) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*) FROM sessions
+            WHERE user_id = ? AND revoked_at IS NULL
+            "#,
+        )
+        .bind(user_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.0)
+    }
+
+    async fn find_oldest_active_by_user(&self, user_id: StringUuid) -> Result<Option<Session>> {
+        let session = sqlx::query_as::<_, Session>(
+            r#"
+            SELECT id, user_id, keycloak_session_id, device_type, device_name,
+                   ip_address, location, user_agent, last_active_at, created_at, revoked_at
+            FROM sessions
+            WHERE user_id = ? AND revoked_at IS NULL
+            ORDER BY last_active_at ASC
+            LIMIT 1
+            "#,
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(session)
+    }
 }
 
 #[cfg(test)]
@@ -302,5 +340,55 @@ mod tests {
         let session = mock.create(&input).await.unwrap();
         assert_eq!(session.user_id, user_id);
         assert_eq!(session.device_type, Some("desktop".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_mock_count_active_by_user() {
+        let mut mock = MockSessionRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_count_active_by_user()
+            .with(eq(user_id))
+            .returning(|_| Ok(5));
+
+        let count = mock.count_active_by_user(user_id).await.unwrap();
+        assert_eq!(count, 5);
+    }
+
+    #[tokio::test]
+    async fn test_mock_find_oldest_active_by_user() {
+        let mut mock = MockSessionRepository::new();
+        let user_id = StringUuid::new_v4();
+        let session_id = StringUuid::new_v4();
+
+        mock.expect_find_oldest_active_by_user()
+            .with(eq(user_id))
+            .returning(move |uid| {
+                Ok(Some(Session {
+                    id: session_id,
+                    user_id: uid,
+                    device_type: Some("desktop".to_string()),
+                    ..Default::default()
+                }))
+            });
+
+        let session = mock.find_oldest_active_by_user(user_id).await.unwrap();
+        assert!(session.is_some());
+        let s = session.unwrap();
+        assert_eq!(s.id, session_id);
+        assert_eq!(s.user_id, user_id);
+    }
+
+    #[tokio::test]
+    async fn test_mock_find_oldest_active_by_user_none() {
+        let mut mock = MockSessionRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_find_oldest_active_by_user()
+            .with(eq(user_id))
+            .returning(|_| Ok(None));
+
+        let session = mock.find_oldest_active_by_user(user_id).await.unwrap();
+        assert!(session.is_none());
     }
 }

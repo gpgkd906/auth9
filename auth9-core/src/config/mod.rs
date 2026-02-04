@@ -3,9 +3,10 @@
 use anyhow::{Context, Result};
 use std::collections::HashMap;
 use std::env;
+use std::fmt;
 
 /// Application configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Config {
     /// HTTP server host
     pub http_host: String,
@@ -31,7 +32,25 @@ pub struct Config {
     pub cors: CorsConfig,
 }
 
-/// CORS configuration
+impl fmt::Debug for Config {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("Config")
+            .field("http_host", &self.http_host)
+            .field("http_port", &self.http_port)
+            .field("grpc_host", &self.grpc_host)
+            .field("grpc_port", &self.grpc_port)
+            .field("database", &self.database)
+            .field("redis", &self.redis)
+            .field("jwt", &self.jwt)
+            .field("keycloak", &self.keycloak)
+            .field("grpc_security", &self.grpc_security)
+            .field("rate_limit", &self.rate_limit)
+            .field("cors", &self.cors)
+            .finish()
+    }
+}
+
+/// CORS configuration (no sensitive fields)
 #[derive(Debug, Clone)]
 pub struct CorsConfig {
     /// Allowed origins (comma-separated in env var, or "*" for any)
@@ -54,19 +73,37 @@ impl Default for CorsConfig {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
     pub min_connections: u32,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Debug for DatabaseConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DatabaseConfig")
+            .field("url", &"<REDACTED>")
+            .field("max_connections", &self.max_connections)
+            .field("min_connections", &self.min_connections)
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 pub struct RedisConfig {
     pub url: String,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Debug for RedisConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RedisConfig")
+            .field("url", &"<REDACTED>")
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 pub struct JwtConfig {
     pub secret: String,
     pub issuer: String,
@@ -76,7 +113,20 @@ pub struct JwtConfig {
     pub public_key_pem: Option<String>,
 }
 
-#[derive(Debug, Clone)]
+impl fmt::Debug for JwtConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("JwtConfig")
+            .field("secret", &"<REDACTED>")
+            .field("issuer", &self.issuer)
+            .field("access_token_ttl_secs", &self.access_token_ttl_secs)
+            .field("refresh_token_ttl_secs", &self.refresh_token_ttl_secs)
+            .field("private_key_pem", &self.private_key_pem.as_ref().map(|_| "<REDACTED>"))
+            .field("public_key_pem", &self.public_key_pem.as_ref().map(|_| "<REDACTED>"))
+            .finish()
+    }
+}
+
+#[derive(Clone)]
 pub struct KeycloakConfig {
     /// Internal URL for server-to-server communication (e.g., http://keycloak:8080)
     pub url: String,
@@ -99,8 +149,24 @@ pub struct KeycloakConfig {
     pub webhook_secret: Option<String>,
 }
 
+impl fmt::Debug for KeycloakConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("KeycloakConfig")
+            .field("url", &self.url)
+            .field("public_url", &self.public_url)
+            .field("realm", &self.realm)
+            .field("admin_client_id", &self.admin_client_id)
+            .field("admin_client_secret", &"<REDACTED>")
+            .field("ssl_required", &self.ssl_required)
+            .field("core_public_url", &self.core_public_url)
+            .field("portal_url", &self.portal_url)
+            .field("webhook_secret", &self.webhook_secret.as_ref().map(|_| "<REDACTED>"))
+            .finish()
+    }
+}
+
 /// gRPC security configuration
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct GrpcSecurityConfig {
     /// Authentication mode: "none", "api_key", or "mtls"
     pub auth_mode: String,
@@ -114,6 +180,19 @@ pub struct GrpcSecurityConfig {
     pub tls_ca_cert_path: Option<String>,
     /// Whether to enable gRPC reflection (for debugging tools like grpcurl)
     pub enable_reflection: bool,
+}
+
+impl fmt::Debug for GrpcSecurityConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GrpcSecurityConfig")
+            .field("auth_mode", &self.auth_mode)
+            .field("api_keys", &format!("[{} keys]", self.api_keys.len()))
+            .field("tls_cert_path", &self.tls_cert_path)
+            .field("tls_key_path", &self.tls_key_path)
+            .field("tls_ca_cert_path", &self.tls_ca_cert_path)
+            .field("enable_reflection", &self.enable_reflection)
+            .finish()
+    }
 }
 
 impl Default for GrpcSecurityConfig {
@@ -454,7 +533,9 @@ mod tests {
         let debug_str = format!("{:?}", redis);
 
         assert!(debug_str.contains("RedisConfig"));
-        assert!(debug_str.contains("redis://localhost:6379"));
+        // URL should be redacted for security
+        assert!(debug_str.contains("<REDACTED>"));
+        assert!(!debug_str.contains("redis://localhost:6379"));
     }
 
     #[test]
@@ -710,5 +791,75 @@ mod tests {
         let config: RateLimitEndpointConfig = serde_json::from_str(json).unwrap();
         assert_eq!(config.requests, 10);
         assert_eq!(config.window_secs, 60);
+    }
+
+    #[test]
+    fn test_sensitive_data_redacted_in_debug() {
+        // Create a config with sensitive data
+        let config = Config {
+            http_host: "127.0.0.1".to_string(),
+            http_port: 8080,
+            grpc_host: "127.0.0.1".to_string(),
+            grpc_port: 50051,
+            database: DatabaseConfig {
+                url: "mysql://user:supersecretpassword@host/db".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+            },
+            redis: RedisConfig {
+                url: "redis://:redispassword@localhost:6379".to_string(),
+            },
+            jwt: JwtConfig {
+                secret: "my-super-secret-jwt-key".to_string(),
+                issuer: "https://auth9.example.com".to_string(),
+                access_token_ttl_secs: 3600,
+                refresh_token_ttl_secs: 604800,
+                private_key_pem: Some("-----BEGIN PRIVATE KEY-----\nsecretkey\n-----END PRIVATE KEY-----".to_string()),
+                public_key_pem: Some("-----BEGIN PUBLIC KEY-----\npublickey\n-----END PUBLIC KEY-----".to_string()),
+            },
+            keycloak: KeycloakConfig {
+                url: "http://keycloak:8080".to_string(),
+                public_url: "http://localhost:8081".to_string(),
+                realm: "auth9".to_string(),
+                admin_client_id: "admin-cli".to_string(),
+                admin_client_secret: "keycloak-admin-secret".to_string(),
+                ssl_required: "external".to_string(),
+                core_public_url: None,
+                portal_url: None,
+                webhook_secret: Some("webhook-secret-key".to_string()),
+            },
+            grpc_security: GrpcSecurityConfig {
+                auth_mode: "api_key".to_string(),
+                api_keys: vec!["api-key-1".to_string(), "api-key-2".to_string()],
+                tls_cert_path: None,
+                tls_key_path: None,
+                tls_ca_cert_path: None,
+                enable_reflection: false,
+            },
+            rate_limit: RateLimitConfig::default(),
+            cors: CorsConfig::default(),
+        };
+
+        let debug_str = format!("{:?}", config);
+
+        // Verify sensitive data is NOT in the debug output
+        assert!(!debug_str.contains("supersecretpassword"), "Database password should be redacted");
+        assert!(!debug_str.contains("redispassword"), "Redis password should be redacted");
+        assert!(!debug_str.contains("my-super-secret-jwt-key"), "JWT secret should be redacted");
+        assert!(!debug_str.contains("secretkey"), "Private key should be redacted");
+        assert!(!debug_str.contains("keycloak-admin-secret"), "Keycloak admin secret should be redacted");
+        assert!(!debug_str.contains("webhook-secret-key"), "Webhook secret should be redacted");
+        assert!(!debug_str.contains("api-key-1"), "API keys should be redacted");
+        assert!(!debug_str.contains("api-key-2"), "API keys should be redacted");
+
+        // Verify non-sensitive data IS present
+        assert!(debug_str.contains("127.0.0.1"), "HTTP host should be visible");
+        assert!(debug_str.contains("8080"), "HTTP port should be visible");
+        assert!(debug_str.contains("auth9"), "Realm should be visible");
+        assert!(debug_str.contains("https://auth9.example.com"), "Issuer should be visible");
+
+        // Verify redaction markers are present
+        assert!(debug_str.contains("<REDACTED>"), "Should contain redaction markers");
+        assert!(debug_str.contains("[2 keys]"), "Should show API key count without values");
     }
 }

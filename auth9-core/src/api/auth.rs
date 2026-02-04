@@ -2,7 +2,8 @@
 
 use crate::domain::parse_user_agent;
 use crate::error::{AppError, Result};
-use crate::state::{HasAnalytics, HasServices, HasSessionManagement};
+use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
+use chrono::Utc;
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
@@ -351,7 +352,7 @@ pub struct LogoutRequest {
     pub state: Option<String>,
 }
 
-pub async fn logout<S: HasServices + HasSessionManagement>(
+pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
     State(state): State<S>,
     auth: Option<TypedHeader<Authorization<Bearer>>>,
     Query(params): Query<LogoutRequest>,
@@ -385,6 +386,32 @@ pub async fn logout<S: HasServices + HasSessionManagement>(
                                     );
                                 }
                             }
+                        }
+                    }
+
+                    // Add session to token blacklist for immediate revocation
+                    // Use remaining token TTL as the blacklist entry's TTL
+                    let now = Utc::now().timestamp();
+                    let remaining_ttl = if claims.exp > now {
+                        (claims.exp - now) as u64
+                    } else {
+                        0
+                    };
+
+                    if remaining_ttl > 0 {
+                        if let Err(e) = state.cache().add_to_token_blacklist(sid, remaining_ttl).await
+                        {
+                            tracing::warn!(
+                                session_id = %sid,
+                                error = %e,
+                                "Failed to add session to token blacklist"
+                            );
+                        } else {
+                            tracing::debug!(
+                                session_id = %sid,
+                                remaining_ttl_secs = remaining_ttl,
+                                "Added session to token blacklist"
+                            );
                         }
                     }
                 } else {

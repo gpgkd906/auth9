@@ -34,6 +34,13 @@ pub trait CacheOperations: Send + Sync {
     async fn invalidate_user_roles(&self, user_id: Uuid, tenant_id: Option<Uuid>) -> Result<()>;
     async fn invalidate_user_roles_for_tenant(&self, user_id: Uuid, tenant_id: Uuid) -> Result<()>;
     async fn invalidate_all_user_roles(&self) -> Result<()>;
+
+    /// Add a token JTI to the blacklist for immediate revocation.
+    /// The TTL should be set to the remaining validity time of the token.
+    async fn add_to_token_blacklist(&self, jti: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Check if a token JTI is in the blacklist.
+    async fn is_token_blacklisted(&self, jti: &str) -> Result<bool>;
 }
 
 /// Cache key prefixes
@@ -42,6 +49,7 @@ mod keys {
     pub const USER_ROLES_SERVICE: &str = "auth9:user_roles_service";
     pub const SERVICE_CONFIG: &str = "auth9:service";
     pub const TENANT_CONFIG: &str = "auth9:tenant";
+    pub const TOKEN_BLACKLIST: &str = "auth9:token_blacklist";
 }
 
 /// Default TTLs
@@ -267,6 +275,26 @@ impl CacheManager {
         let key = format!("{}:{}", keys::TENANT_CONFIG, tenant_id);
         self.delete(&key).await
     }
+
+    // ==================== Token Blacklist ====================
+
+    /// Add a token JTI to the blacklist for immediate revocation.
+    /// The TTL should be set to the remaining validity time of the token.
+    pub async fn add_to_token_blacklist(&self, jti: &str, ttl_secs: u64) -> Result<()> {
+        if ttl_secs == 0 {
+            return Ok(()); // Token already expired, no need to blacklist
+        }
+        let key = format!("{}:{}", keys::TOKEN_BLACKLIST, jti);
+        // Store a simple "1" value to mark as blacklisted
+        self.set(&key, &"1", Duration::from_secs(ttl_secs)).await
+    }
+
+    /// Check if a token JTI is in the blacklist.
+    pub async fn is_token_blacklisted(&self, jti: &str) -> Result<bool> {
+        let key = format!("{}:{}", keys::TOKEN_BLACKLIST, jti);
+        let value: Option<String> = self.get(&key).await?;
+        Ok(value.is_some())
+    }
 }
 
 #[async_trait]
@@ -314,6 +342,14 @@ impl CacheOperations for CacheManager {
 
     async fn invalidate_all_user_roles(&self) -> Result<()> {
         CacheManager::invalidate_all_user_roles(self).await
+    }
+
+    async fn add_to_token_blacklist(&self, jti: &str, ttl_secs: u64) -> Result<()> {
+        CacheManager::add_to_token_blacklist(self, jti, ttl_secs).await
+    }
+
+    async fn is_token_blacklisted(&self, jti: &str) -> Result<bool> {
+        CacheManager::is_token_blacklisted(self, jti).await
     }
 }
 
@@ -377,6 +413,14 @@ impl NoOpCacheManager {
 
     pub async fn invalidate_all_user_roles(&self) -> Result<()> {
         Ok(())
+    }
+
+    pub async fn add_to_token_blacklist(&self, _jti: &str, _ttl_secs: u64) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn is_token_blacklisted(&self, _jti: &str) -> Result<bool> {
+        Ok(false)
     }
 }
 
@@ -550,5 +594,35 @@ mod tests {
         let cache2 = cache1.clone();
         // Just verify cloning works
         let _ = cache2;
+    }
+
+    #[test]
+    fn test_token_blacklist_key_format() {
+        let jti = "abc123-session-id";
+        let key = format!("{}:{}", keys::TOKEN_BLACKLIST, jti);
+        assert_eq!(key, "auth9:token_blacklist:abc123-session-id");
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_add_to_token_blacklist() {
+        let cache = NoOpCacheManager::new();
+        let result = cache.add_to_token_blacklist("test-jti", 3600).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_is_token_blacklisted() {
+        let cache = NoOpCacheManager::new();
+        // NoOp always returns false (token not blacklisted)
+        let result = cache.is_token_blacklisted("test-jti").await.unwrap();
+        assert!(!result);
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_manager_blacklist_zero_ttl() {
+        let cache = NoOpCacheManager::new();
+        // Zero TTL should still be ok (no-op)
+        let result = cache.add_to_token_blacklist("test-jti", 0).await;
+        assert!(result.is_ok());
     }
 }
