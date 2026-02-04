@@ -8,15 +8,18 @@
 2. [服务注册](#2-服务注册-service-registration)
 3. [角色与权限管理](#3-角色与权限管理-rbac)
 4. [用户与权限关联](#4-用户与权限关联-user-provisioning)
-5. [密码管理](#5-密码管理-password-management)
-6. [会话管理](#6-会话管理-session-management)
-7. [Passkey 管理](#7-passkey-管理-webauthn)
-8. [社交登录与企业 SSO](#8-社交登录与企业-sso-identity-providers)
-9. [分析与监控](#9-分析与监控-analytics)
-10. [安全告警](#10-安全告警-security-alerts)
-11. [Webhook 配置](#11-webhook-配置)
-12. [常见问题](#12-常见问题)
-13. [常见工作流程](#常见工作流程)
+5. [邀请系统](#5-邀请系统-invitation-system)
+6. [品牌定制](#6-品牌定制-branding)
+7. [邮件模板](#7-邮件模板-email-templates)
+8. [密码管理](#8-密码管理-password-management)
+9. [会话管理](#9-会话管理-session-management)
+10. [Passkey 管理](#10-passkey-管理-webauthn)
+11. [社交登录与企业 SSO](#11-社交登录与企业-sso-identity-providers)
+12. [分析与监控](#12-分析与监控-analytics)
+13. [安全告警](#13-安全告警-security-alerts)
+14. [Webhook 配置](#14-webhook-配置)
+15. [常见问题](#15-常见问题)
+16. [常见工作流程](#常见工作流程)
 
 ## 快速开始
 
@@ -128,7 +131,209 @@
 
 ---
 
-## 5. 密码管理 (Password Management)
+## 5. 邀请系统 (Invitation System)
+
+Auth9 提供邮件邀请功能，让您可以快速邀请用户加入租户。
+
+### 发送邀请
+
+1. 点击左侧导航栏的 **Users** > **Invitations**。
+2. 点击右上角的 **Send Invitation** 按钮。
+3. 填写邀请信息：
+   - **Email**: 受邀用户的邮箱地址
+   - **Tenant**: 选择目标租户
+   - **Role**: 为用户分配的初始角色
+   - **Expiry**: 邀请过期时间（默认 7 天）
+   - **Custom Message**: 可选的欢迎消息
+4. 点击 **Send** 发送邀请。
+
+系统会自动发送邀请邮件到用户邮箱，包含注册链接。
+
+### 查看邀请列表
+
+在 Invitations 页面可以看到：
+- **Pending**: 已发送但未接受的邀请
+- **Accepted**: 已接受的邀请
+- **Expired**: 已过期的邀请
+- **Revoked**: 已撤销的邀请
+
+### 管理邀请
+
+对于每个邀请，您可以：
+- **Resend**: 重新发送邀请邮件（生成新的链接）
+- **Revoke**: 撤销邀请（使链接失效）
+- **View Details**: 查看邀请详情
+
+### 用户接受邀请
+
+1. 用户收到邮件后，点击邮件中的邀请链接
+2. 如果已有账号，登录即可加入租户
+3. 如果是新用户，需要完成注册：
+   - 设置密码
+   - 填写个人信息
+   - 确认邮箱
+4. 注册完成后自动加入租户并获得指定角色
+
+### 批量邀请
+
+对于需要邀请多个用户的场景：
+1. 准备 CSV 文件，包含邮箱和角色信息
+2. 在 Invitations 页面点击 **Bulk Import**
+3. 上传 CSV 文件
+4. 预览并确认邀请列表
+5. 点击 **Send All** 批量发送
+
+---
+
+## 6. 品牌定制 (Branding)
+
+自定义租户的视觉外观，打造专属品牌体验。
+
+### 配置品牌元素
+
+1. 导航到 **Settings** > **Branding**。
+2. 选择要配置的租户。
+3. 配置以下元素：
+
+#### 上传 Logo
+- **主 Logo**: 用于 Portal 顶部导航栏（推荐 200x60 px）
+- **小 Logo**: 用于移动端和 Favicon（推荐 40x40 px）
+- **登录页 Logo**: 用于 Keycloak 登录页面（推荐 300x100 px）
+
+上传步骤：
+1. 点击对应的 **Upload** 按钮
+2. 选择图片文件（PNG、SVG、JPEG，最大 2MB）
+3. 系统自动裁剪和优化
+4. 点击 **Save**
+
+**提示**: 建议使用透明背景的 PNG 或 SVG 格式
+
+#### 配置颜色主题
+1. 点击颜色选择器
+2. 选择或输入 HEX 颜色码
+3. 可配置的颜色：
+   - **Primary Color**: 主要按钮、链接（默认 #007AFF）
+   - **Secondary Color**: 次要按钮、辅助元素
+   - **Accent Color**: 强调色、提示
+   - **Background Color**: 页面背景
+   - **Text Color**: 主要文字
+   - **Border Color**: 边框、分隔线
+4. 查看右侧实时预览
+5. 点击 **Apply Theme** 应用
+
+**预设主题**：
+- 💙 Auth9 Blue (默认)
+- 🟣 Purple Dream
+- 🟢 Nature Green
+- 🔴 Passionate Red
+- ⚫ Dark Mode
+
+#### 自定义字体
+选择字体系列：
+- Inter (默认)
+- SF Pro (苹果风格)
+- Roboto (Material Design)
+- 思源黑体 (Noto Sans CJK)
+
+### 品牌应用范围
+
+品牌配置会自动应用到：
+- ✅ Auth9 Portal 管理界面
+- ✅ Keycloak 登录页面
+- ✅ 系统邮件模板
+- ✅ 移动端应用（未来支持）
+
+### 重置品牌配置
+
+如需恢复默认设置：
+1. 在 Branding 页面点击 **Reset to Default**
+2. 确认操作
+3. 所有品牌配置将恢复为系统默认值
+
+---
+
+## 7. 邮件模板 (Email Templates)
+
+自定义系统发送的所有邮件的外观和内容。
+
+### 邮件类型
+
+Auth9 支持自定义以下邮件模板：
+
+| 类型 | 触发时机 |
+|------|---------|
+| **Welcome Email** | 用户注册成功 |
+| **Invitation Email** | 发送邀请 |
+| **Password Reset** | 请求重置密码 |
+| **Password Changed** | 密码修改成功 |
+| **Email Verification** | 注册或更改邮箱 |
+| **MFA Setup** | 启用多因素认证 |
+| **Login Alert** | 异常登录检测 |
+| **Session Revoked** | 会话被撤销 |
+| **Account Locked** | 账户被锁定 |
+
+### 编辑邮件模板
+
+1. 导航到 **Settings** > **Email Templates**。
+2. 选择要编辑的邮件类型。
+3. 编辑模板内容：
+   - **Subject**: 邮件主题
+   - **From Name**: 发件人名称
+   - **From Email**: 发件人邮箱
+   - **Reply To**: 回复邮箱（可选）
+   - **HTML Body**: HTML 格式邮件正文
+   - **Text Body**: 纯文本格式邮件正文
+4. 使用右侧预览查看效果。
+
+### 动态变量
+
+邮件模板支持动态变量，用 `{{variable}}` 语法：
+
+**全局变量**（所有邮件可用）：
+- `{{tenant_name}}` - 租户名称
+- `{{tenant_logo_url}}` - 租户 Logo URL
+- `{{portal_url}}` - Portal 访问地址
+- `{{support_email}}` - 支持邮箱
+- `{{current_year}}` - 当前年份
+- `{{primary_color}}` - 品牌主色
+
+**用户变量**：
+- `{{user_name}}` - 用户姓名
+- `{{user_email}}` - 用户邮箱
+- `{{user_first_name}}` - 名
+- `{{user_last_name}}` - 姓
+
+**特定邮件变量**（根据邮件类型不同）：
+- 邀请邮件：`{{invitation_url}}`, `{{sender_name}}`, `{{role_name}}`
+- 密码重置：`{{reset_url}}`, `{{expires_in_minutes}}`
+- 登录告警：`{{login_ip}}`, `{{login_location}}`, `{{login_device}}`
+
+### 测试邮件模板
+
+在保存前测试邮件效果：
+1. 在模板编辑页面点击 **Send Test Email**
+2. 输入测试邮箱地址
+3. 系统发送测试邮件到指定邮箱
+4. 检查邮件显示效果
+
+### 多语言支持
+
+如果需要支持多语言：
+1. 在模板编辑页面选择 **Add Translation**
+2. 选择目标语言（英文、中文、日文等）
+3. 为每种语言编辑独立的内容
+4. 系统会根据用户语言偏好自动选择
+
+### 重置模板
+
+恢复为系统默认模板：
+1. 在模板编辑页面点击 **Reset to Default**
+2. 确认操作
+3. 模板内容将恢复为系统默认版本
+
+---
+
+## 8. 密码管理 (Password Management)
 
 Auth9 提供完整的密码管理功能，包括密码重置、密码修改和密码策略配置。
 
@@ -175,7 +380,7 @@ Auth9 提供完整的密码管理功能，包括密码重置、密码修改和�
 
 ---
 
-## 6. 会话管理 (Session Management)
+## 9. 会话管理 (Session Management)
 
 管理用户的活跃会话，支持查看和撤销会话。
 
@@ -212,7 +417,7 @@ Auth9 提供完整的密码管理功能，包括密码重置、密码修改和�
 
 ---
 
-## 7. Passkey 管理 (WebAuthn)
+## 10. Passkey 管理 (WebAuthn)
 
 Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn 标准。
 
@@ -247,7 +452,7 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 ---
 
-## 8. 社交登录与企业 SSO (Identity Providers)
+## 11. 社交登录与企业 SSO (Identity Providers)
 
 配置第三方身份提供商，支持社交登录和企业 SSO。
 
@@ -305,7 +510,7 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 ---
 
-## 9. 分析与监控 (Analytics)
+## 12. 分析与监控 (Analytics)
 
 查看登录统计和用户活动分析。
 
@@ -345,7 +550,7 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 ---
 
-## 10. 安全告警 (Security Alerts)
+## 13. 安全告警 (Security Alerts)
 
 监控和响应安全威胁。
 
@@ -386,7 +591,7 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 ---
 
-## 11. Webhook 配置
+## 14. Webhook 配置
 
 配置 Webhook 接收实时事件通知。
 
@@ -456,7 +661,7 @@ Webhook 列表显示：
 
 ---
 
-## 12. 常见问题
+## 15. 常见问题
 
 ### 认证问题
 - **无法登录？** 检查 Redirect URI 是否配置正确。
@@ -493,6 +698,9 @@ Webhook 列表显示：
 - [RBAC权限系统](../wiki/RBAC权限系统.md)
 - [认证流程](../wiki/认证流程.md)
 - [REST API](../wiki/REST-API.md)
+- [邀请系统](../wiki/邀请系统.md)
+- [品牌定制](../wiki/品牌定制.md)
+- [邮件模板](../wiki/邮件模板.md)
 - [密码管理](../wiki/密码管理.md)
 - [会话管理](../wiki/会话管理.md)
 - [WebAuthn与Passkey](../wiki/WebAuthn与Passkey.md)
@@ -545,6 +753,12 @@ Webhook 列表显示：
 
 ---
 
-**文档版本**: 1.2.0  
-**最后更新**: 2026-02-02  
+**文档版本**: 1.3.0  
+**最后更新**: 2026-02-04  
 **适用版本**: Auth9 v0.1.0+
+
+**更新内容**:
+- 新增邀请系统操作指南
+- 新增品牌定制操作指南
+- 新增邮件模板操作指南
+- 更新章节编号和目录结构
