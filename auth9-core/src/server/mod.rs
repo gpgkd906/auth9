@@ -41,10 +41,14 @@ use std::sync::Arc;
 use tokio::net::TcpListener;
 use tonic::transport::Server as TonicServer;
 use tower_http::{
-    cors::{Any, CorsLayer},
+    cors::{AllowOrigin, Any, CorsLayer},
     trace::TraceLayer,
 };
 use tracing::info;
+
+use crate::config::CorsConfig;
+use crate::middleware::require_auth::AuthMiddlewareState;
+use crate::middleware::security_headers::security_headers_middleware;
 
 /// Application state shared across handlers
 #[derive(Clone)]
@@ -531,6 +535,29 @@ pub async fn run(config: Config) -> Result<()> {
     let http_addr = config.http_addr();
     let grpc_addr = config.grpc_addr();
 
+    // Log security configuration warnings
+    if !config.rate_limit.enabled {
+        tracing::warn!(
+            "Rate limiting is DISABLED. Enable with RATE_LIMIT_ENABLED=true for production."
+        );
+    } else {
+        info!(
+            "Rate limiting enabled: {} requests per {} seconds",
+            config.rate_limit.default_requests, config.rate_limit.default_window_secs
+        );
+    }
+
+    if config.cors.allowed_origins.len() == 1 && config.cors.allowed_origins[0] == "*" {
+        tracing::warn!(
+            "CORS is configured with wildcard (*). Set CORS_ALLOWED_ORIGINS for production."
+        );
+    } else {
+        info!(
+            "CORS allowed origins: {:?}",
+            config.cors.allowed_origins
+        );
+    }
+
     // Run HTTP and gRPC servers concurrently
     let http_server = async {
         let listener = TcpListener::bind(&http_addr).await?;
@@ -627,11 +654,9 @@ fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> A
 /// This function is generic over the state type, allowing it to work with
 /// both production `AppState` and test implementations that implement `HasServices`.
 pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBranding>(state: S) -> Router {
-    // CORS configuration
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // Get CORS configuration from state
+    let cors_config = state.config().cors.clone();
+    let cors = build_cors_layer(&cors_config);
 
     Router::new()
         // Health endpoints
@@ -763,15 +788,61 @@ pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBr
         )
         // Audit logs
         .route("/api/v1/audit-logs", get(api::audit::list::<S>))
-        // Add middleware
+        // Add middleware (order matters: bottom layer runs first)
+        .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)
 }
 
+/// Build CORS layer from configuration
+fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
+    use axum::http::{header, Method};
+
+    let cors = CorsLayer::new()
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::PUT,
+            Method::DELETE,
+            Method::PATCH,
+            Method::OPTIONS,
+        ])
+        .allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            header::ACCEPT,
+            header::ORIGIN,
+            "x-tenant-id".parse().unwrap(),
+            "x-api-key".parse().unwrap(),
+        ]);
+
+    // Configure allowed origins
+    let cors = if config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*" {
+        // Wildcard: allow any origin
+        cors.allow_origin(Any)
+    } else {
+        // Specific origins
+        let origins: Vec<_> = config
+            .allowed_origins
+            .iter()
+            .filter_map(|o| o.parse().ok())
+            .collect();
+        cors.allow_origin(AllowOrigin::list(origins))
+    };
+
+    // Configure credentials
+    if config.allow_credentials && !(config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*") {
+        cors.allow_credentials(true)
+    } else {
+        cors.allow_credentials(false)
+    }
+}
+
 /// Build the full HTTP router with all features (including system settings and invitations)
 ///
 /// This function requires the state to implement both HasServices and the new traits.
+/// Routes are split into public (no auth) and protected (auth required) groups.
 pub fn build_full_router<S>(state: S) -> Router
 where
     S: HasServices
@@ -788,14 +859,17 @@ where
         + HasSecurityAlerts
         + HasDbPool,
 {
-    // CORS configuration
-    let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+    // Get CORS configuration from state
+    let cors_config = state.config().cors.clone();
+    let cors = build_cors_layer(&cors_config);
 
-    // Start with the base router routes (manually copied since we can't use generic build_router)
-    Router::new()
+    // Create auth middleware state
+    let auth_state = AuthMiddlewareState::new(HasServices::jwt_manager(&state).clone());
+
+    // ============================================================
+    // PUBLIC ROUTES (no authentication required)
+    // ============================================================
+    let public_routes = Router::new()
         // Health endpoints
         .route("/health", get(api::health::health))
         .route("/ready", get(api::health::ready::<S>))
@@ -805,11 +879,46 @@ where
             get(api::auth::openid_configuration::<S>),
         )
         .route("/.well-known/jwks.json", get(api::auth::jwks::<S>))
-        // Auth endpoints
+        // OAuth2/OIDC flow endpoints (used by clients during auth flow)
         .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
         .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
         .route("/api/v1/auth/token", post(api::auth::token::<S>))
         .route("/api/v1/auth/logout", get(api::auth::logout::<S>))
+        // Password reset flow (unauthenticated by design)
+        .route(
+            "/api/v1/auth/forgot-password",
+            post(api::password::forgot_password::<S>),
+        )
+        .route(
+            "/api/v1/auth/reset-password",
+            post(api::password::reset_password::<S>),
+        )
+        // Public branding endpoint (for Keycloak themes, login page)
+        .route(
+            "/api/v1/public/branding",
+            get(api::branding::get_public_branding::<S>),
+        )
+        // Invitation acceptance (uses invitation token, not JWT)
+        .route(
+            "/api/v1/invitations/accept",
+            post(api::invitation::accept::<S>),
+        )
+        // Keycloak event webhook (uses webhook secret for auth)
+        .route(
+            "/api/v1/keycloak/events",
+            post(api::keycloak_event::receive::<S>),
+        )
+        // User creation (has internal check for public registration)
+        .route(
+            "/api/v1/users",
+            post(api::user::create::<S>),
+        );
+
+    // ============================================================
+    // PROTECTED ROUTES (authentication required)
+    // ============================================================
+    let protected_routes = Router::new()
+        // Auth userinfo (requires valid token)
         .route("/api/v1/auth/userinfo", get(api::auth::userinfo::<S>))
         // Tenant endpoints
         .route(
@@ -822,10 +931,10 @@ where
                 .put(api::tenant::update::<S>)
                 .delete(api::tenant::delete::<S>),
         )
-        // User endpoints
+        // User endpoints (except POST which is public for registration)
         .route(
             "/api/v1/users",
-            get(api::user::list::<S>).post(api::user::create::<S>),
+            get(api::user::list::<S>),
         )
         .route(
             "/api/v1/users/{id}",
@@ -954,7 +1063,7 @@ where
             "/api/v1/system/email-templates/{type}/send-test",
             post(api::email_template::send_test_email::<S>),
         )
-        // Invitation endpoints
+        // Invitation endpoints (managing invitations requires auth)
         .route(
             "/api/v1/tenants/{tenant_id}/invitations",
             get(api::invitation::list::<S>).post(api::invitation::create::<S>),
@@ -971,31 +1080,12 @@ where
             "/api/v1/invitations/{id}/resend",
             post(api::invitation::resend::<S>),
         )
-        // Public endpoint for accepting invitations
-        .route(
-            "/api/v1/invitations/accept",
-            post(api::invitation::accept::<S>),
-        )
-        // Branding endpoints
-        // Public endpoint (no auth required) for Keycloak themes
-        .route(
-            "/api/v1/public/branding",
-            get(api::branding::get_public_branding::<S>),
-        )
-        // Admin endpoints (auth required)
+        // Admin branding endpoint
         .route(
             "/api/v1/system/branding",
             get(api::branding::get_branding::<S>).put(api::branding::update_branding::<S>),
         )
-        // === Password Management endpoints ===
-        .route(
-            "/api/v1/auth/forgot-password",
-            post(api::password::forgot_password::<S>),
-        )
-        .route(
-            "/api/v1/auth/reset-password",
-            post(api::password::reset_password::<S>),
-        )
+        // User password change (requires auth)
         .route(
             "/api/v1/users/me/password",
             post(api::password::change_password::<S>),
@@ -1005,7 +1095,7 @@ where
             get(api::password::get_password_policy::<S>)
                 .put(api::password::update_password_policy::<S>),
         )
-        // === Session Management endpoints ===
+        // Session Management endpoints
         .route(
             "/api/v1/users/me/sessions",
             get(api::session::list_my_sessions::<S>)
@@ -1019,7 +1109,7 @@ where
             "/api/v1/admin/users/{id}/logout",
             post(api::session::force_logout_user::<S>),
         )
-        // === WebAuthn/Passkey endpoints ===
+        // WebAuthn/Passkey endpoints
         .route(
             "/api/v1/users/me/passkeys",
             get(api::webauthn::list_passkeys::<S>),
@@ -1032,7 +1122,7 @@ where
             "/api/v1/auth/webauthn/register",
             get(api::webauthn::get_register_url::<S>),
         )
-        // === Identity Provider endpoints ===
+        // Identity Provider endpoints
         .route(
             "/api/v1/identity-providers",
             get(api::identity_provider::list_providers::<S>)
@@ -1052,7 +1142,7 @@ where
             "/api/v1/users/me/linked-identities/{id}",
             delete(api::identity_provider::unlink_identity::<S>),
         )
-        // === Analytics endpoints ===
+        // Analytics endpoints
         .route(
             "/api/v1/analytics/login-stats",
             get(api::analytics::get_stats::<S>),
@@ -1061,7 +1151,7 @@ where
             "/api/v1/analytics/login-events",
             get(api::analytics::list_events::<S>),
         )
-        // === Webhook endpoints ===
+        // Webhook endpoints
         .route(
             "/api/v1/tenants/{tenant_id}/webhooks",
             get(api::webhook::list_webhooks::<S>).post(api::webhook::create_webhook::<S>),
@@ -1076,7 +1166,7 @@ where
             "/api/v1/tenants/{tenant_id}/webhooks/{id}/test",
             post(api::webhook::test_webhook::<S>),
         )
-        // === Security Alert endpoints ===
+        // Security Alert endpoints
         .route(
             "/api/v1/security/alerts",
             get(api::security_alert::list_alerts::<S>),
@@ -1085,7 +1175,7 @@ where
             "/api/v1/security/alerts/{id}/resolve",
             post(api::security_alert::resolve_alert::<S>),
         )
-        // === Tenant-Service toggle endpoints ===
+        // Tenant-Service toggle endpoints
         .route(
             "/api/v1/tenants/{tenant_id}/services",
             get(api::tenant_service::list_services::<S>).post(api::tenant_service::toggle_service::<S>),
@@ -1094,13 +1184,23 @@ where
             "/api/v1/tenants/{tenant_id}/services/enabled",
             get(api::tenant_service::get_enabled_services::<S>),
         )
-        // === Keycloak Event Webhook ===
-        // Receives login events from Keycloak for security monitoring
-        .route(
-            "/api/v1/keycloak/events",
-            post(api::keycloak_event::receive::<S>),
-        )
-        // Add middleware
+        // Apply authentication middleware to all protected routes
+        .layer(axum::middleware::from_fn_with_state(
+            auth_state,
+            crate::middleware::require_auth::require_auth_middleware,
+        ));
+
+    // ============================================================
+    // COMBINE ROUTES AND APPLY GLOBAL MIDDLEWARE
+    // ============================================================
+    Router::new()
+        .merge(public_routes)
+        .merge(protected_routes)
+        // Add global middleware (order matters: bottom layer runs first)
+        // 1. CORS - must be outermost for preflight requests
+        // 2. Tracing - for request logging
+        // 3. Security headers - adds security headers to all responses
+        .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(TraceLayer::new_for_http())
         .layer(cors)
         .with_state(state)

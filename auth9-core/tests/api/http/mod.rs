@@ -33,7 +33,7 @@ use crate::api::{
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
-    Config, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RateLimitConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RateLimitConfig,
     RedisConfig,
 };
 use auth9_core::jwt::JwtManager;
@@ -100,6 +100,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         },
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
+        cors: CorsConfig::default(),
     }
 }
 

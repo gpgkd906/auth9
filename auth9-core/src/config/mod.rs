@@ -27,6 +27,31 @@ pub struct Config {
     pub grpc_security: GrpcSecurityConfig,
     /// Rate limiting configuration
     pub rate_limit: RateLimitConfig,
+    /// CORS configuration
+    pub cors: CorsConfig,
+}
+
+/// CORS configuration
+#[derive(Debug, Clone)]
+pub struct CorsConfig {
+    /// Allowed origins (comma-separated in env var, or "*" for any)
+    /// Default is restrictive (localhost only)
+    pub allowed_origins: Vec<String>,
+    /// Whether to allow credentials
+    pub allow_credentials: bool,
+}
+
+impl Default for CorsConfig {
+    fn default() -> Self {
+        Self {
+            // Default to common local development origins
+            allowed_origins: vec![
+                "http://localhost:3000".to_string(),
+                "http://localhost:5173".to_string(),
+            ],
+            allow_credentials: true,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -256,6 +281,31 @@ impl Config {
                     tenant_multipliers,
                 }
             },
+            cors: {
+                // Parse CORS_ALLOWED_ORIGINS: comma-separated list or "*" for any
+                let allowed_origins = env::var("CORS_ALLOWED_ORIGINS")
+                    .map(|s| {
+                        if s == "*" {
+                            // Special case: wildcard means allow any
+                            vec!["*".to_string()]
+                        } else {
+                            s.split(',')
+                                .map(|origin| origin.trim().to_string())
+                                .filter(|origin| !origin.is_empty())
+                                .collect()
+                        }
+                    })
+                    .unwrap_or_else(|_| CorsConfig::default().allowed_origins);
+
+                let allow_credentials = env::var("CORS_ALLOW_CREDENTIALS")
+                    .map(|s| s.to_lowercase() == "true")
+                    .unwrap_or(true);
+
+                CorsConfig {
+                    allowed_origins,
+                    allow_credentials,
+                }
+            },
         })
     }
 
@@ -309,6 +359,7 @@ mod tests {
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
+            cors: CorsConfig::default(),
         }
     }
 
@@ -552,10 +603,43 @@ mod tests {
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
+            cors: CorsConfig::default(),
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
         assert_eq!(config.grpc_addr(), "192.168.1.100:4000");
+    }
+
+    #[test]
+    fn test_cors_config_default() {
+        let config = CorsConfig::default();
+        assert!(config.allowed_origins.contains(&"http://localhost:3000".to_string()));
+        assert!(config.allowed_origins.contains(&"http://localhost:5173".to_string()));
+        assert!(config.allow_credentials);
+    }
+
+    #[test]
+    fn test_cors_config_custom_origins() {
+        let config = CorsConfig {
+            allowed_origins: vec![
+                "https://app.example.com".to_string(),
+                "https://admin.example.com".to_string(),
+            ],
+            allow_credentials: true,
+        };
+        assert_eq!(config.allowed_origins.len(), 2);
+        assert!(config.allowed_origins.contains(&"https://app.example.com".to_string()));
+    }
+
+    #[test]
+    fn test_cors_config_wildcard() {
+        let config = CorsConfig {
+            allowed_origins: vec!["*".to_string()],
+            allow_credentials: false,
+        };
+        assert_eq!(config.allowed_origins.len(), 1);
+        assert_eq!(config.allowed_origins[0], "*");
+        // Note: wildcard + credentials is a CORS spec violation, hence allow_credentials = false
     }
 
     #[test]
