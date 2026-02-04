@@ -44,6 +44,9 @@ A self-hosted identity and access management service, designed to replace expens
 - **Token Exchange**: Service-to-service authentication
 - **Audit Logs**: Track all administrative actions
 - **Modern UI**: React Router 7-based design system
+- **Invitation System**: Email-based user onboarding with automated workflows
+- **Brand Customization**: Custom logos, colors, themes for tenant branding
+- **Email Templates**: Flexible email template system with multi-language support
 - **Password Management**: Password policies, reset, and change
 - **Session Management**: View and revoke active sessions
 - **WebAuthn/Passkey**: Passwordless authentication
@@ -51,7 +54,6 @@ A self-hosted identity and access management service, designed to replace expens
 - **Security Alerts**: Real-time threat detection
 - **Login Analytics**: Detailed login statistics and events
 - **Webhooks**: Real-time event notifications
-- **Brand Customization**: Custom logos, colors, and themes
 
 ## Quick Start
 
