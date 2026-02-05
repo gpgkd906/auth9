@@ -1,0 +1,293 @@
+# QA Basic Test Data Configuration
+# 基础 QA 测试数据配置
+
+# 租户配置
+tenants:
+  - id: "qa-tenant-acme"
+    slug: "qa-acme-corp"
+    name: "QA Acme Corporation"
+    status: "active"
+    password_policy:
+      min_length: 8
+      require_uppercase: true
+      require_lowercase: true
+      require_number: true
+      require_symbol: false
+      lockout_threshold: 5
+      lockout_duration_mins: 15
+  
+  - id: "qa-tenant-beta"
+    slug: "qa-beta-inc"
+    name: "QA Beta Inc"
+    status: "active"
+    password_policy:
+      min_length: 12
+      require_uppercase: true
+      require_lowercase: true
+      require_number: true
+      require_symbol: true
+      history_count: 3
+      max_age_days: 90
+  
+  - id: "qa-tenant-suspended"
+    slug: "qa-suspended-tenant"
+    name: "QA Suspended Tenant"
+    status: "suspended"
+    password_policy:
+      min_length: 8
+
+# 用户配置
+users:
+  # Acme Corp 租户管理员
+  - username: "qa-acme-admin"
+    email: "admin@qa-acme-corp.local"
+    password: "QaAcmeAdmin123!"
+    first_name: "Acme"
+    last_name: "Admin"
+    email_verified: true
+    tenants:
+      - tenant: "qa-acme-corp"
+        role: "admin"
+  
+  # Acme Corp 普通用户
+  - username: "qa-acme-user1"
+    email: "user1@qa-acme-corp.local"
+    password: "QaUser123!"
+    first_name: "Alice"
+    last_name: "Smith"
+    email_verified: true
+    tenants:
+      - tenant: "qa-acme-corp"
+        role: "member"
+  
+  - username: "qa-acme-user2"
+    email: "user2@qa-acme-corp.local"
+    password: "QaUser123!"
+    first_name: "Bob"
+    last_name: "Jones"
+    email_verified: false  # 未验证邮箱场景
+    tenants:
+      - tenant: "qa-acme-corp"
+        role: "member"
+  
+  # Beta Inc 租户管理员
+  - username: "qa-beta-admin"
+    email: "admin@qa-beta-inc.local"
+    password: "QaBetaAdmin456!"
+    first_name: "Beta"
+    last_name: "Admin"
+    email_verified: true
+    tenants:
+      - tenant: "qa-beta-inc"
+        role: "admin"
+  
+  # 跨租户用户
+  - username: "qa-multi-tenant"
+    email: "multi@qa-test.local"
+    password: "QaMulti123!"
+    first_name: "Multi"
+    last_name: "Tenant"
+    email_verified: true
+    tenants:
+      - tenant: "qa-acme-corp"
+        role: "member"
+      - tenant: "qa-beta-inc"
+        role: "member"
+
+# 服务配置
+services:
+  - slug: "qa-api-service"
+    name: "QA API Service"
+    tenant: "qa-acme-corp"
+    description: "Main API service for QA testing"
+  
+  - slug: "qa-internal-api"
+    name: "QA Internal API"
+    tenant: "qa-beta-inc"
+    description: "Internal API for QA testing"
+
+# 客户端配置
+clients:
+  - name: "QA Web Client"
+    service: "qa-api-service"
+    type: "confidential"
+    redirect_uris:
+      - "http://localhost:3000/callback"
+      - "http://localhost:5173/callback"
+    grants:
+      - "authorization_code"
+      - "refresh_token"
+  
+  - name: "QA Mobile App"
+    service: "qa-api-service"
+    type: "public"
+    redirect_uris:
+      - "myapp://callback"
+    grants:
+      - "authorization_code"
+      - "refresh_token"
+  
+  - name: "QA Backend Service"
+    service: "qa-internal-api"
+    type: "confidential"
+    grants:
+      - "client_credentials"
+
+# 权限配置
+permissions:
+  # Acme Corp 服务权限
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    code: "users:read"
+    description: "Read users"
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    code: "users:write"
+    description: "Create/Update users"
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    code: "users:delete"
+    description: "Delete users"
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    code: "reports:read"
+    description: "Read reports"
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    code: "reports:write"
+    description: "Create reports"
+  
+  # Beta Inc 服务权限
+  - tenant: "qa-beta-inc"
+    service: "qa-internal-api"
+    code: "data:read"
+    description: "Read data"
+  - tenant: "qa-beta-inc"
+    service: "qa-internal-api"
+    code: "data:write"
+    description: "Write data"
+
+# 角色配置
+roles:
+  # Acme Corp 角色
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    name: "Viewer"
+    slug: "viewer"
+    permissions:
+      - "users:read"
+      - "reports:read"
+  
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    name: "Editor"
+    slug: "editor"
+    parent: "viewer"
+    permissions:
+      - "users:write"
+      - "reports:write"
+  
+  - tenant: "qa-acme-corp"
+    service: "qa-api-service"
+    name: "Admin"
+    slug: "admin"
+    parent: "editor"
+    permissions:
+      - "users:delete"
+  
+  # Beta Inc 角色
+  - tenant: "qa-beta-inc"
+    service: "qa-internal-api"
+    name: "Data Reader"
+    slug: "data-reader"
+    permissions:
+      - "data:read"
+  
+  - tenant: "qa-beta-inc"
+    service: "qa-internal-api"
+    name: "Data Writer"
+    slug: "data-writer"
+    parent: "data-reader"
+    permissions:
+      - "data:write"
+
+# 用户角色分配
+user_roles:
+  - user: "user1@qa-acme-corp.local"
+    tenant: "qa-acme-corp"
+    roles:
+      - "viewer"
+  
+  - user: "user2@qa-acme-corp.local"
+    tenant: "qa-acme-corp"
+    roles:
+      - "editor"
+  
+  - user: "multi@qa-test.local"
+    tenant: "qa-acme-corp"
+    roles:
+      - "viewer"
+  
+  - user: "multi@qa-test.local"
+    tenant: "qa-beta-inc"
+    roles:
+      - "data-reader"
+
+# Webhook 配置
+webhooks:
+  - tenant: "qa-acme-corp"
+    url: "https://webhook.qa-test.local/acme"
+    secret: "qa_acme_webhook_secret_123"
+    events:
+      - "user.created"
+      - "user.updated"
+      - "user.deleted"
+    enabled: true
+  
+  - tenant: "qa-beta-inc"
+    url: "https://webhook.qa-test.local/beta"
+    secret: "qa_beta_webhook_secret_456"
+    events:
+      - "user.created"
+    enabled: false
+
+# 邀请配置
+invitations:
+  - tenant: "qa-acme-corp"
+    email: "pending@qa-acme-corp.local"
+    invited_by: "admin@qa-acme-corp.local"
+    status: "pending"
+    expires_in_days: 7
+    roles:
+      - "viewer"
+  
+  - tenant: "qa-acme-corp"
+    email: "expired@qa-acme-corp.local"
+    invited_by: "admin@qa-acme-corp.local"
+    status: "pending"
+    expires_in_days: -1  # 已过期
+  
+  - tenant: "qa-beta-inc"
+    email: "accepted@qa-beta-inc.local"
+    invited_by: "admin@qa-beta-inc.local"
+    status: "accepted"
+    accepted_days_ago: 3
+
+# 系统设置
+system_settings:
+  - category: "email"
+    key: "provider"
+    value:
+      type: "smtp"
+      config:
+        host: "smtp.qa-test.local"
+        port: 587
+        username: "noreply@qa-test.local"
+        encryption: "tls"
+  
+  - category: "branding"
+    key: "login_page"
+    value:
+      logo_url: "https://qa-test.local/logo.png"
+      primary_color: "#007bff"
+      allow_registration: true

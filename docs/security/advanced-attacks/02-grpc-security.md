@@ -1,0 +1,492 @@
+# 高级攻击 - gRPC 安全测试
+
+**模块**: 高级攻击
+**测试范围**: gRPC 认证、授权、协议攻击
+**场景数**: 5
+**风险等级**: 🔴 极高
+
+---
+
+## 背景
+
+Auth9 Core 提供 gRPC API (端口 50051) 供业务服务调用。gRPC 使用 HTTP/2 和 Protocol Buffers，具有独特的安全挑战。
+
+**当前状态**: 根据 `docs/api-access-control.md`，gRPC 端点目前**无认证保护**（P0 待实现）。
+
+**相关标准**:
+- OWASP API Security Top 10: API1 - Broken Object Level Authorization
+- CWE-306: Missing Authentication for Critical Function
+
+---
+
+## 场景 1：未认证的 gRPC 调用（当前已知漏洞）
+
+### 前置条件
+- Auth9 Core gRPC 服务运行在 localhost:50051
+- 安装 grpcurl 工具
+
+### 攻击目标
+验证 gRPC 端点是否允许未认证的访问
+
+### 攻击步骤
+1. 列出可用的 gRPC 服务：
+   ```bash
+   grpcurl -plaintext localhost:50051 list
+   ```
+
+2. 查看服务方法：
+   ```bash
+   grpcurl -plaintext localhost:50051 list auth9.Auth9Service
+   ```
+
+3. 调用敏感方法（无认证）：
+   ```bash
+   # 尝试列出所有租户
+   grpcurl -plaintext -d '{"page": 1, "page_size": 100}' \
+     localhost:50051 auth9.Auth9Service/ListTenants
+   
+   # 尝试获取用户信息
+   grpcurl -plaintext -d '{"user_id": "some-uuid"}' \
+     localhost:50051 auth9.Auth9Service/GetUser
+   
+   # 尝试创建用户（未授权）
+   grpcurl -plaintext -d '{"email": "attacker@evil.com", "password": "Hack123!"}' \
+     localhost:50051 auth9.Auth9Service/CreateUser
+   ```
+
+4. 使用 Python grpc 客户端绕过限制：
+   ```python
+   import grpc
+   from auth9_pb2 import ListTenantsRequest
+   from auth9_pb2_grpc import Auth9ServiceStub
+   
+   channel = grpc.insecure_channel('localhost:50051')
+   stub = Auth9ServiceStub(channel)
+   
+   # 无需凭证即可调用
+   response = stub.ListTenants(ListTenantsRequest(page=1, page_size=100))
+   print(response)
+   ```
+
+### 预期安全行为（修复后）
+- 所有 gRPC 方法都需要有效的身份验证
+- 未认证请求返回 `UNAUTHENTICATED` (gRPC 状态码 16)
+- 错误信息不泄露服务内部细节
+
+### 验证方法
+```bash
+# 修复前：应成功返回数据（漏洞）
+grpcurl -plaintext localhost:50051 list  # 返回服务列表
+
+# 修复后：应返回认证错误
+grpcurl -plaintext localhost:50051 list  # 返回 "authentication required"
+```
+
+### 修复建议
+- 实现 gRPC Interceptor 进行认证：
+  ```rust
+  // auth9-core/src/grpc/interceptor.rs
+  use tonic::{Request, Status};
+  
+  pub fn auth_interceptor(req: Request<()>) -> Result<Request<()>, Status> {
+      // 检查 Authorization header
+      let token = req.metadata()
+          .get("authorization")
+          .ok_or_else(|| Status::unauthenticated("Missing authorization token"))?;
+      
+      // 验证 JWT token
+      validate_jwt(token)?;
+      
+      Ok(req)
+  }
+  ```
+- 使用 mTLS (Mutual TLS) 进行双向认证
+- 实施 IP 白名单限制内部服务调用
+
+---
+
+## 场景 2：mTLS 证书验证绕过
+
+### 前置条件
+- gRPC 服务配置了 mTLS（修复后）
+- 攻击者获取了客户端证书
+
+### 攻击目标
+验证证书链验证的正确性
+
+### 攻击步骤
+1. 尝试使用自签名证书连接：
+   ```bash
+   # 生成自签名证书
+   openssl req -x509 -newkey rsa:4096 -keyout client-key.pem -out client-cert.pem -days 365 -nodes
+   
+   # 尝试连接
+   grpcurl -cert client-cert.pem -key client-key.pem \
+     -cacert ca.pem localhost:50051 list
+   ```
+
+2. 尝试使用过期证书：
+   ```bash
+   # 使用已过期的证书
+   grpcurl -cert expired-cert.pem -key expired-key.pem \
+     -cacert ca.pem localhost:50051 list
+   ```
+
+3. 尝试使用被吊销的证书：
+   ```bash
+   # 使用 CRL (Certificate Revocation List) 中的证书
+   grpcurl -cert revoked-cert.pem -key revoked-key.pem \
+     -cacert ca.pem localhost:50051 list
+   ```
+
+4. 中间人攻击（证书固定测试）：
+   ```bash
+   # 使用不同的 CA 签发的证书
+   grpcurl -cert other-ca-cert.pem -key other-ca-key.pem \
+     -cacert other-ca.pem localhost:50051 list
+   ```
+
+### 预期安全行为
+- 自签名证书被拒绝（除非明确信任）
+- 过期证书被拒绝
+- 被吊销的证书被拒绝（需要 OCSP 或 CRL 检查）
+- 证书固定（Certificate Pinning）防止中间人攻击
+- 错误返回 `UNAVAILABLE` 或 `UNAUTHENTICATED`
+
+### 验证方法
+```bash
+# 测试证书验证
+openssl s_client -connect localhost:50051 -cert invalid-cert.pem -key invalid-key.pem
+
+# 检查 TLS 配置
+openssl s_client -connect localhost:50051 -tls1_2  # 应拒绝 TLS 1.2
+openssl s_client -connect localhost:50051 -tls1_3  # 应接受 TLS 1.3
+```
+
+### 修复建议
+- 使用 `tonic` 的 TLS 配置：
+  ```rust
+  use tonic::transport::ServerTlsConfig;
+  
+  let cert = tokio::fs::read("server-cert.pem").await?;
+  let key = tokio::fs::read("server-key.pem").await?;
+  let ca = tokio::fs::read("ca-cert.pem").await?;
+  
+  let tls_config = ServerTlsConfig::new()
+      .identity(Identity::from_pem(cert, key))
+      .client_ca_root(Certificate::from_pem(ca));  // 验证客户端证书
+  
+  Server::builder()
+      .tls_config(tls_config)?
+      .add_service(service)
+      .serve(addr)
+      .await?;
+  ```
+- 启用 OCSP Stapling 检查证书吊销
+- 实施证书固定（Certificate Pinning）
+
+---
+
+## 场景 3：gRPC 元数据注入攻击
+
+### 前置条件
+- gRPC 服务已实现认证
+- 攻击者可发送自定义 metadata
+
+### 攻击目标
+验证 gRPC metadata 处理的安全性
+
+### 攻击步骤
+1. 注入恶意 metadata 头：
+   ```bash
+   # 尝试注入 SQL 注入 payload
+   grpcurl -plaintext \
+     -H "Authorization: Bearer {valid_token}" \
+     -H "X-Tenant-Id: 1' OR '1'='1" \
+     -d '{"page": 1}' \
+     localhost:50051 auth9.Auth9Service/ListUsers
+   ```
+
+2. 尝试伪造用户身份：
+   ```bash
+   grpcurl -plaintext \
+     -H "Authorization: Bearer {valid_token}" \
+     -H "X-User-Id: admin-user-id" \
+     -H "X-Is-Admin: true" \
+     -d '{"page": 1}' \
+     localhost:50051 auth9.Auth9Service/ListTenants
+   ```
+
+3. Header 注入攻击：
+   ```bash
+   # 尝试注入换行符
+   grpcurl -plaintext \
+     -H "Authorization: Bearer {token}\r\nX-Admin: true" \
+     -d '{"page": 1}' \
+     localhost:50051 auth9.Auth9Service/ListUsers
+   ```
+
+4. Oversized metadata DoS：
+   ```bash
+   # 发送超大 metadata
+   grpcurl -plaintext \
+     -H "X-Large-Header: $(python3 -c 'print("A"*1000000)')" \
+     -d '{"page": 1}' \
+     localhost:50051 auth9.Auth9Service/ListUsers
+   ```
+
+### 预期安全行为
+- metadata 值经过严格验证和清理
+- 不信任客户端提供的身份信息（X-User-Id 等）
+- 拒绝超大 metadata（返回 `RESOURCE_EXHAUSTED`）
+- SQL 注入 payload 被转义或拒绝
+
+### 验证方法
+```bash
+# 检查 gRPC interceptor 代码
+grep -r "metadata" auth9-core/src/grpc/
+
+# 测试 metadata 大小限制
+grpcurl -plaintext -H "X-Test: $(head -c 10M < /dev/zero | tr '\0' 'A')" \
+  localhost:50051 list
+```
+
+### 修复建议
+- 在 Interceptor 中验证 metadata：
+  ```rust
+  fn validate_metadata(req: &Request<()>) -> Result<(), Status> {
+      let metadata = req.metadata();
+      
+      // 限制 header 大小
+      if metadata.len() > 100 {
+          return Err(Status::invalid_argument("Too many headers"));
+      }
+      
+      // 验证关键 header
+      if let Some(tenant_id) = metadata.get("x-tenant-id") {
+          validate_uuid(tenant_id)?;
+      }
+      
+      Ok(())
+  }
+  ```
+- 设置 metadata 大小限制（默认 8KB）
+- 不从 metadata 中提取敏感信息（如用户 ID）
+
+---
+
+## 场景 4：gRPC 拒绝服务 (DoS) 攻击
+
+### 前置条件
+- gRPC 服务对外可访问
+
+### 攻击目标
+验证系统对 gRPC DoS 攻击的抵抗力
+
+### 攻击步骤
+1. **Slowloris 攻击**（慢速连接）：
+   ```python
+   import grpc
+   import time
+   
+   # 打开大量慢速连接
+   channels = []
+   for i in range(1000):
+       channel = grpc.insecure_channel('localhost:50051')
+       channels.append(channel)
+       time.sleep(0.1)  # 慢速建立连接
+   
+   # 保持连接打开但不发送请求
+   time.sleep(3600)
+   ```
+
+2. **大payload 攻击**：
+   ```bash
+   # 发送超大请求体
+   grpcurl -plaintext -d @large-payload.json \
+     localhost:50051 auth9.Auth9Service/CreateUser
+   
+   # large-payload.json 包含 100MB 数据
+   ```
+
+3. **流式 RPC 滥用**：
+   ```python
+   import grpc
+   from auth9_pb2_grpc import Auth9ServiceStub
+   
+   channel = grpc.insecure_channel('localhost:50051')
+   stub = Auth9ServiceStub(channel)
+   
+   # 打开流但不读取响应
+   stream = stub.StreamUsers(request)
+   # 不调用 next() 读取，导致服务器缓冲区积压
+   time.sleep(3600)
+   ```
+
+4. **并发连接耗尽**：
+   ```bash
+   # 使用 ghz 进行压力测试
+   ghz --insecure \
+     --connections=10000 \
+     --duration=60s \
+     --proto=auth9.proto \
+     --call=auth9.Auth9Service/ListTenants \
+     localhost:50051
+   ```
+
+### 预期安全行为
+- 限制并发连接数（如 1000）
+- 限制请求体大小（如 4MB）
+- 流式 RPC 超时机制（idle timeout）
+- 连接速率限制（rate limiting）
+- 返回 `RESOURCE_EXHAUSTED` 而不是崩溃
+
+### 验证方法
+```bash
+# 压力测试
+ghz --insecure --connections=100 --duration=10s \
+  --proto=auth9.proto --call=auth9.Auth9Service/ListTenants \
+  localhost:50051
+
+# 监控服务器资源
+htop  # 观察 CPU/内存使用
+netstat -an | grep 50051 | wc -l  # 连接数
+```
+
+### 修复建议
+- 配置 gRPC 服务器限制：
+  ```rust
+  Server::builder()
+      .max_concurrent_streams(100)  // 限制并发流
+      .max_frame_size(Some(4 * 1024 * 1024))  // 限制帧大小
+      .tcp_keepalive(Some(Duration::from_secs(60)))
+      .http2_keepalive_interval(Some(Duration::from_secs(30)))
+      .http2_keepalive_timeout(Some(Duration::from_secs(10)))
+      .add_service(service)
+      .serve(addr)
+      .await?;
+  ```
+- 使用 rate limiter 限制请求频率
+- 部署在负载均衡器后（如 Envoy, Nginx）
+
+---
+
+## 场景 5：gRPC 反射滥用与信息泄露
+
+### 前置条件
+- gRPC 服务启用了反射 (gRPC Server Reflection)
+
+### 攻击目标
+验证 gRPC 反射是否泄露敏感信息
+
+### 攻击步骤
+1. 列出所有可用服务：
+   ```bash
+   grpcurl -plaintext localhost:50051 list
+   ```
+
+2. 获取服务方法定义：
+   ```bash
+   grpcurl -plaintext localhost:50051 describe auth9.Auth9Service
+   ```
+
+3. 获取完整的 proto 定义：
+   ```bash
+   grpcurl -plaintext localhost:50051 describe auth9.CreateUserRequest
+   ```
+
+4. 发现未文档化的 API：
+   ```bash
+   grpcurl -plaintext localhost:50051 list | grep -i "admin\|internal\|debug"
+   ```
+
+### 预期安全行为（生产环境）
+- 生产环境应**禁用** gRPC 反射
+- 开发/测试环境可启用反射
+- 如启用反射，应需要认证
+- 不暴露内部/调试接口
+
+### 验证方法
+```bash
+# 检查反射是否启用
+grpcurl -plaintext localhost:50051 list
+
+# 生产环境应返回错误：
+# "server does not support the reflection API"
+
+# 检查代码中是否启用反射
+grep -r "tonic_reflection" auth9-core/src/
+```
+
+### 修复建议
+- 生产环境禁用反射：
+  ```rust
+  // 开发环境
+  #[cfg(debug_assertions)]
+  let reflection_service = tonic_reflection::server::Builder::configure()
+      .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
+      .build()?;
+  
+  let mut builder = Server::builder();
+  
+  #[cfg(debug_assertions)]
+  builder = builder.add_service(reflection_service);
+  
+  builder
+      .add_service(auth9_service)
+      .serve(addr)
+      .await?;
+  ```
+- 使用环境变量控制：`ENABLE_GRPC_REFLECTION=false`
+- 如必须启用，添加认证保护
+
+---
+
+## 自动化安全测试脚本
+
+```bash
+#!/bin/bash
+# grpc-security-test.sh
+
+set -e
+
+GRPC_HOST="localhost:50051"
+
+echo "=== Auth9 gRPC Security Test ==="
+
+# 1. 测试未认证访问
+echo "\n[1/5] Testing unauthenticated access..."
+grpcurl -plaintext $GRPC_HOST list && echo "⚠️  Reflection enabled" || echo "✅  Reflection disabled"
+
+# 2. 测试 TLS 配置
+echo "\n[2/5] Testing TLS configuration..."
+openssl s_client -connect $GRPC_HOST -tls1_2 2>&1 | grep -q "Protocol.*TLSv1.2" && echo "⚠️  TLS 1.2 enabled" || echo "✅  TLS 1.2 disabled"
+
+# 3. 测试速率限制
+echo "\n[3/5] Testing rate limiting..."
+for i in {1..100}; do
+    grpcurl -plaintext -d '{"page":1}' $GRPC_HOST auth9.Auth9Service/ListTenants > /dev/null 2>&1 &
+done
+wait
+echo "✅  Rate limit test complete"
+
+# 4. 测试大payload
+echo "\n[4/5] Testing large payload..."
+dd if=/dev/zero bs=1M count=10 | base64 > /tmp/large.json
+grpcurl -plaintext -d @/tmp/large.json $GRPC_HOST auth9.Auth9Service/CreateUser && echo "⚠️  Large payload accepted" || echo "✅  Large payload rejected"
+
+# 5. 测试元数据注入
+echo "\n[5/5] Testing metadata injection..."
+grpcurl -plaintext -H "X-Tenant-Id: 1' OR '1'='1" $GRPC_HOST list && echo "⚠️  SQL injection possible" || echo "✅  SQL injection blocked"
+
+echo "\n=== Test Complete ==="
+```
+
+---
+
+## 参考资料
+
+- [gRPC Security Guide](https://grpc.io/docs/guides/security/)
+- [OWASP gRPC Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/gRPC_Security_Cheat_Sheet.html)
+- [CWE-306: Missing Authentication](https://cwe.mitre.org/data/definitions/306.html)
+- [tonic Security Best Practices](https://github.com/hyperium/tonic/blob/master/examples/README.md#security)
