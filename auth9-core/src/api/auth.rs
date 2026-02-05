@@ -1,5 +1,6 @@
 //! Authentication API handlers
 
+use crate::cache::CacheOperations;
 use crate::domain::parse_user_agent;
 use crate::error::{AppError, Result};
 use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};

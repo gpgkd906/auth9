@@ -226,7 +226,8 @@ pub struct RateLimitConfig {
 impl Default for RateLimitConfig {
     fn default() -> Self {
         Self {
-            enabled: false,
+            // Default to enabled for production security
+            enabled: true,
             default_requests: 100,
             default_window_secs: 60,
             endpoints: HashMap::new(),
@@ -345,9 +346,11 @@ impl Config {
                         .unwrap_or_default();
 
                 RateLimitConfig {
+                    // Default to enabled for production security
+                    // Set RATE_LIMIT_ENABLED=false to disable in development
                     enabled: env::var("RATE_LIMIT_ENABLED")
-                        .map(|s| s.to_lowercase() == "true")
-                        .unwrap_or(false),
+                        .map(|s| s.to_lowercase() != "false")
+                        .unwrap_or(true),
                     default_requests: env::var("RATE_LIMIT_DEFAULT_REQUESTS")
                         .unwrap_or_else(|_| "100".to_string())
                         .parse()
@@ -734,7 +737,8 @@ mod tests {
     #[test]
     fn test_rate_limit_config_default() {
         let config = RateLimitConfig::default();
-        assert!(!config.enabled);
+        // Rate limiting is enabled by default for production security
+        assert!(config.enabled);
         assert_eq!(config.default_requests, 100);
         assert_eq!(config.default_window_secs, 60);
     }

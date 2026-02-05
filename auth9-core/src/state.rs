@@ -4,7 +4,7 @@
 //! enabling the same handler code to work with both production
 //! and test implementations.
 
-use crate::cache::CacheManager;
+use crate::cache::CacheOperations;
 use crate::config::Config;
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
@@ -266,6 +266,9 @@ pub trait HasDbPool: Clone + Send + Sync + 'static {
 /// Trait for states that provide cache access
 /// Used for token blacklisting and other caching operations
 pub trait HasCache: Clone + Send + Sync + 'static {
+    /// The cache type (CacheManager or NoOpCacheManager)
+    type Cache: CacheOperations;
+
     /// Get the cache manager
-    fn cache(&self) -> &CacheManager;
+    fn cache(&self) -> &Self::Cache;
 }

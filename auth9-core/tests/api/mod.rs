@@ -1432,6 +1432,25 @@ impl SessionRepository for TestSessionRepository {
         sessions.retain(|s| s.user_id != user_id);
         Ok((before - sessions.len()) as u64)
     }
+
+    async fn count_active_by_user(&self, user_id: StringUuid) -> Result<i64> {
+        let sessions = self.sessions.read().await;
+        let count = sessions
+            .iter()
+            .filter(|s| s.user_id == user_id && s.revoked_at.is_none())
+            .count();
+        Ok(count as i64)
+    }
+
+    async fn find_oldest_active_by_user(&self, user_id: StringUuid) -> Result<Option<Session>> {
+        let sessions = self.sessions.read().await;
+        let oldest = sessions
+            .iter()
+            .filter(|s| s.user_id == user_id && s.revoked_at.is_none())
+            .min_by_key(|s| s.created_at)
+            .cloned();
+        Ok(oldest)
+    }
 }
 
 // ============================================================================

@@ -173,7 +173,12 @@ impl RateLimitState {
 
         let redis = self.redis.as_ref().ok_or(RateLimitError::NotConfigured)?;
 
-        let rule = self.get_rule("", endpoint);
+        // endpoint is already in "METHOD:path" format, look up directly
+        let rule = self
+            .config
+            .endpoints
+            .get(endpoint)
+            .unwrap_or(&self.config.default);
         let multiplier = tenant_id
             .map(|t| self.get_tenant_multiplier(t))
             .unwrap_or(1.0);
