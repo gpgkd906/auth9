@@ -6,7 +6,8 @@ use crate::api::{
 use crate::domain::{
     AssignRolesInput, CreatePermissionInput, CreateRoleInput, StringUuid, UpdateRoleInput,
 };
-use crate::error::Result;
+use crate::error::{AppError, Result};
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::HasServices;
 use axum::{
     extract::{Path, State},
@@ -17,6 +18,40 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
+
+/// Check if user is a platform admin (can manage roles and permissions)
+fn require_platform_admin(auth: &AuthUser) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => Ok(()),
+        TokenType::TenantAccess => Err(AppError::Forbidden(
+            "Platform admin required: this operation requires platform-level access".to_string(),
+        )),
+    }
+}
+
+/// Check if user can manage RBAC within a tenant
+/// Platform admin can always manage, tenant owner can manage their tenant
+fn require_rbac_management_permission(auth: &AuthUser) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => Ok(()),
+        TokenType::TenantAccess => {
+            // Only platform admin or tenant owner/admin with role management permissions
+            let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
+            let has_rbac_permission = auth
+                .permissions
+                .iter()
+                .any(|p| p == "rbac:write" || p == "rbac:*" || p == "role:write");
+
+            if has_admin_role || has_rbac_permission {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Admin access required: you need admin privileges to manage roles".to_string(),
+                ))
+            }
+        }
+    }
+}
 
 // ==================== Permissions ====================
 
@@ -31,11 +66,16 @@ pub async fn list_permissions<S: HasServices>(
 }
 
 /// Create permission
+/// Requires platform admin to create permissions
 pub async fn create_permission<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Json(input): Json<CreatePermissionInput>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let permission = state.rbac_service().create_permission(input).await?;
     let _ = write_audit_log_generic(
         &state,
@@ -51,11 +91,16 @@ pub async fn create_permission<S: HasServices>(
 }
 
 /// Delete permission
+/// Requires platform admin to delete permissions
 pub async fn delete_permission<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let id = StringUuid::from(id);
     let before = state.rbac_service().get_permission(id).await?;
     state.rbac_service().delete_permission(id).await?;
@@ -97,11 +142,16 @@ pub async fn get_role<S: HasServices>(
 }
 
 /// Create role
+/// Requires platform admin to create roles
 pub async fn create_role<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Json(input): Json<CreateRoleInput>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let role = state.rbac_service().create_role(input).await?;
     let _ = write_audit_log_generic(
         &state,
@@ -117,12 +167,17 @@ pub async fn create_role<S: HasServices>(
 }
 
 /// Update role
+/// Requires platform admin to update roles
 pub async fn update_role<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateRoleInput>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let id = StringUuid::from(id);
     let before = state.rbac_service().get_role(id).await?;
     let role = state.rbac_service().update_role(id, input).await?;
@@ -140,11 +195,16 @@ pub async fn update_role<S: HasServices>(
 }
 
 /// Delete role
+/// Requires platform admin to delete roles
 pub async fn delete_role<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let id = StringUuid::from(id);
     let before = state.rbac_service().get_role(id).await?;
     state.rbac_service().delete_role(id).await?;
@@ -169,12 +229,17 @@ pub struct AssignPermissionInput {
 }
 
 /// Assign permission to role
+/// Requires platform admin to assign permissions to roles
 pub async fn assign_permission<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(role_id): Path<Uuid>,
     Json(input): Json<AssignPermissionInput>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let role_id = StringUuid::from(role_id);
     let permission_id = StringUuid::from(input.permission_id);
     state
@@ -195,11 +260,16 @@ pub async fn assign_permission<S: HasServices>(
 }
 
 /// Remove permission from role
+/// Requires platform admin to remove permissions from roles
 pub async fn remove_permission<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path((role_id, permission_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let role_id = StringUuid::from(role_id);
     let permission_id = StringUuid::from(permission_id);
     state
@@ -222,11 +292,25 @@ pub async fn remove_permission<S: HasServices>(
 // ==================== User-Role Assignment ====================
 
 /// Assign roles to user in tenant
+/// Requires platform admin or tenant owner to assign roles
 pub async fn assign_roles<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Json(input): Json<AssignRolesInput>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin or tenant owner
+    require_rbac_management_permission(&auth)?;
+
+    // Additional check: for tenant access tokens, ensure user can only assign within their tenant
+    if let TokenType::TenantAccess = auth.token_type {
+        if auth.tenant_id != Some(input.tenant_id) {
+            return Err(AppError::Forbidden(
+                "Cannot assign roles in a different tenant".to_string(),
+            ));
+        }
+    }
+
     let granted_by = extract_actor_id_generic(&state, &headers).map(StringUuid::from);
     state.rbac_service().assign_roles(input, granted_by).await?;
     let _ = write_audit_log_generic(
@@ -271,11 +355,25 @@ pub async fn get_user_assigned_roles<S: HasServices>(
 }
 
 /// Unassign role from user in tenant
+/// Requires platform admin or tenant owner to unassign roles
 pub async fn unassign_role<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path((user_id, tenant_id, role_id)): Path<(Uuid, Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin or tenant owner
+    require_rbac_management_permission(&auth)?;
+
+    // Additional check: for tenant access tokens, ensure user can only unassign within their tenant
+    if let TokenType::TenantAccess = auth.token_type {
+        if auth.tenant_id != Some(tenant_id) {
+            return Err(AppError::Forbidden(
+                "Cannot unassign roles in a different tenant".to_string(),
+            ));
+        }
+    }
+
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     let role_id = StringUuid::from(role_id);

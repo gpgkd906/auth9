@@ -2,9 +2,9 @@
 //!
 //! Verifies that permissions cannot be assigned to roles across different services.
 
-use super::{build_test_router, post_json, TestAppState};
 use super::mock_keycloak::MockKeycloakServer;
-use crate::api::{create_test_permission, create_test_role};
+use super::{build_test_router, post_json_with_auth, TestAppState};
+use crate::api::{create_test_identity_token, create_test_permission, create_test_role};
 use auth9_core::api::MessageResponse;
 use axum::http::StatusCode;
 use serde_json::json;
@@ -14,6 +14,7 @@ use uuid::Uuid;
 async fn test_assign_permission_different_service_fails() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin
 
     let service1_id = Uuid::new_v4();
     let service2_id = Uuid::new_v4();
@@ -35,10 +36,11 @@ async fn test_assign_permission_different_service_fails() {
     });
 
     // Attempt assignment
-    let (status, body): (StatusCode, Option<MessageResponse>) = post_json(
+    let (status, body): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
         &format!("/api/v1/roles/{}/permissions", role_id),
         &input,
+        &token,
     )
     .await;
 

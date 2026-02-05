@@ -27,8 +27,29 @@ pub struct AuthorizeRequest {
     pub client_id: String,
     pub redirect_uri: String,
     pub scope: String,
-    pub state: Option<String>,
+    /// State parameter is required for CSRF protection
+    pub state: String,
     pub nonce: Option<String>,
+}
+
+/// Allowed OIDC scopes whitelist
+const ALLOWED_SCOPES: &[&str] = &["openid", "profile", "email"];
+
+/// Filter and validate scope parameter against whitelist
+fn filter_scopes(requested_scope: &str) -> Result<String> {
+    let scopes: Vec<&str> = requested_scope
+        .split_whitespace()
+        .filter(|s| ALLOWED_SCOPES.contains(s))
+        .collect();
+
+    // At minimum, openid scope is required
+    if !scopes.contains(&"openid") {
+        return Err(AppError::BadRequest(
+            "scope must include 'openid'".to_string(),
+        ));
+    }
+
+    Ok(scopes.join(" "))
 }
 
 /// Login redirect (initiates OIDC flow)
@@ -43,12 +64,15 @@ pub async fn authorize<S: HasServices>(
 
     validate_redirect_uri(&service.redirect_uris, &params.redirect_uri)?;
 
+    // Validate and filter scope against whitelist
+    let filtered_scope = filter_scopes(&params.scope)?;
+
     let callback_url = build_callback_url(&state.config().jwt.issuer);
 
     let state_payload = CallbackState {
         redirect_uri: params.redirect_uri,
         client_id: params.client_id,
-        original_state: params.state,
+        original_state: Some(params.state),
     };
 
     let encoded_state = encode_state(&state_payload)?;
@@ -59,7 +83,7 @@ pub async fn authorize<S: HasServices>(
         response_type: &params.response_type,
         client_id: &state_payload.client_id,
         callback_url: &callback_url,
-        scope: &params.scope,
+        scope: &filtered_scope,
         encoded_state: &encoded_state,
         nonce: params.nonce.as_deref(),
     })?;
@@ -930,12 +954,29 @@ mod tests {
         assert_eq!(request.client_id, "my-app");
         assert_eq!(request.redirect_uri, "https://app.example.com/callback");
         assert_eq!(request.scope, "openid profile email");
-        assert_eq!(request.state, Some("abc123".to_string()));
+        assert_eq!(request.state, "abc123");
         assert_eq!(request.nonce, Some("xyz789".to_string()));
     }
 
     #[test]
     fn test_authorize_request_minimal() {
+        // state is now required for CSRF protection
+        let json = r#"{
+            "response_type": "code",
+            "client_id": "my-app",
+            "redirect_uri": "https://app.example.com/callback",
+            "scope": "openid",
+            "state": "csrf-protection-state"
+        }"#;
+
+        let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.state, "csrf-protection-state");
+        assert!(request.nonce.is_none());
+    }
+
+    #[test]
+    fn test_authorize_request_missing_state_fails() {
+        // state is required for CSRF protection, should fail without it
         let json = r#"{
             "response_type": "code",
             "client_id": "my-app",
@@ -943,9 +984,32 @@ mod tests {
             "scope": "openid"
         }"#;
 
-        let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
-        assert!(request.state.is_none());
-        assert!(request.nonce.is_none());
+        let result: serde_json::Result<AuthorizeRequest> = serde_json::from_str(json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_filter_scopes_valid() {
+        let result = filter_scopes("openid profile email").unwrap();
+        assert_eq!(result, "openid profile email");
+    }
+
+    #[test]
+    fn test_filter_scopes_removes_invalid() {
+        let result = filter_scopes("openid admin offline_access profile").unwrap();
+        assert_eq!(result, "openid profile");
+    }
+
+    #[test]
+    fn test_filter_scopes_requires_openid() {
+        let result = filter_scopes("profile email");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_filter_scopes_only_openid() {
+        let result = filter_scopes("openid").unwrap();
+        assert_eq!(result, "openid");
     }
 
     #[test]
@@ -1149,7 +1213,7 @@ mod tests {
     }
 
     #[test]
-    fn test_authorize_request_with_all_optional_fields() {
+    fn test_authorize_request_with_all_fields() {
         let json = r#"{
             "response_type": "code",
             "client_id": "my-app",
@@ -1160,8 +1224,9 @@ mod tests {
         }"#;
 
         let request: AuthorizeRequest = serde_json::from_str(json).unwrap();
+        // offline_access is in the request but will be filtered out by filter_scopes
         assert!(request.scope.contains("offline_access"));
-        assert!(request.state.is_some());
+        assert_eq!(request.state, "random-state-value");
         assert!(request.nonce.is_some());
     }
 

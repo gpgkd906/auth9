@@ -4,7 +4,8 @@ use crate::api::{
     write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse,
 };
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
-use crate::error::Result;
+use crate::error::{AppError, Result};
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
@@ -15,6 +16,43 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
+
+/// Check if user has access to a specific tenant
+fn check_tenant_access(auth: &AuthUser, tenant_id: Uuid) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => {
+            // Identity tokens have platform-level access
+            Ok(())
+        }
+        TokenType::TenantAccess => {
+            // Tenant access tokens must match the tenant_id
+            if auth.tenant_id == Some(tenant_id) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Access denied: you don't have permission to access this tenant".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+/// Check if user is a platform admin (can create/delete tenants)
+fn require_platform_admin(auth: &AuthUser) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => {
+            // Identity tokens have platform-level access for creating tenants
+            Ok(())
+        }
+        TokenType::TenantAccess => {
+            // Tenant access tokens cannot create tenants (tenant admins are not platform admins)
+            Err(AppError::Forbidden(
+                "Platform admin required: tenant administrators cannot create or delete tenants"
+                    .to_string(),
+            ))
+        }
+    }
+}
 
 /// Query parameters for tenant list endpoint with search
 #[derive(Debug, Deserialize)]
@@ -35,45 +73,74 @@ fn default_per_page() -> i64 {
 }
 
 /// List tenants
+/// - Platform admin (Identity token): can list all tenants
+/// - Tenant user (TenantAccess token): can only see their own tenant
 pub async fn list<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Query(query): Query<TenantListQuery>,
 ) -> Result<impl IntoResponse> {
-    let (tenants, total) = if let Some(ref search) = query.search {
-        state
-            .tenant_service()
-            .search(search, query.page, query.per_page)
-            .await?
-    } else {
-        state
-            .tenant_service()
-            .list(query.page, query.per_page)
-            .await?
-    };
+    match auth.token_type {
+        TokenType::Identity => {
+            // Platform admin: can list all tenants
+            let (tenants, total) = if let Some(ref search) = query.search {
+                state
+                    .tenant_service()
+                    .search(search, query.page, query.per_page)
+                    .await?
+            } else {
+                state
+                    .tenant_service()
+                    .list(query.page, query.per_page)
+                    .await?
+            };
 
-    Ok(Json(PaginatedResponse::new(
-        tenants,
-        query.page,
-        query.per_page,
-        total,
-    )))
+            Ok(Json(PaginatedResponse::new(
+                tenants,
+                query.page,
+                query.per_page,
+                total,
+            )))
+        }
+        TokenType::TenantAccess => {
+            // Tenant user: can only see their own tenant
+            let tenant_id = auth.tenant_id.ok_or_else(|| {
+                AppError::Forbidden("No tenant context in token".to_string())
+            })?;
+            let tenant = state
+                .tenant_service()
+                .get(StringUuid::from(tenant_id))
+                .await?;
+            Ok(Json(PaginatedResponse::new(vec![tenant], 1, 1, 1)))
+        }
+    }
 }
 
 /// Get tenant by ID
+/// Verifies the user has access to this tenant
 pub async fn get<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Check tenant access before returning data
+    check_tenant_access(&auth, id)?;
+
     let tenant = state.tenant_service().get(StringUuid::from(id)).await?;
     Ok(Json(SuccessResponse::new(tenant)))
 }
 
 /// Create tenant
+/// Only platform admins (Identity token holders) can create tenants
 pub async fn create<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Json(input): Json<CreateTenantInput>,
 ) -> Result<impl IntoResponse> {
+    // Only platform admins can create tenants
+    require_platform_admin(&auth)?;
+
     let tenant = state.tenant_service().create(input).await?;
     let _ = write_audit_log_generic(
         &state,
@@ -89,12 +156,17 @@ pub async fn create<S: HasServices>(
 }
 
 /// Update tenant
+/// Verifies the user has access to this tenant
 pub async fn update<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<impl IntoResponse> {
+    // Check tenant access before updating
+    check_tenant_access(&auth, id)?;
+
     let id = StringUuid::from(id);
     let before = state.tenant_service().get(id).await?;
     let tenant = state.tenant_service().update(id, input).await?;
@@ -112,11 +184,16 @@ pub async fn update<S: HasServices>(
 }
 
 /// Delete tenant
+/// Only platform admins can delete tenants
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Only platform admins can delete tenants
+    require_platform_admin(&auth)?;
+
     let id = StringUuid::from(id);
     let before = state.tenant_service().get(id).await?;
 
