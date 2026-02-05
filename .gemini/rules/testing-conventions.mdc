@@ -1,0 +1,267 @@
+---
+description: TDD workflow and testing conventions for Auth9 project
+alwaysApply: true
+---
+
+# Testing Conventions
+
+## TDD Development Workflow
+
+When implementing features or fixing bugs, follow the Test-Driven Development (TDD) cycle:
+
+```
+1. RED    → Write a failing test first
+2. GREEN  → Write minimal code to pass the test
+3. REFACTOR → Improve code while keeping tests green
+```
+
+### TDD Rules
+
+- **Write tests BEFORE implementation code**
+- **One test at a time**: Don't write multiple failing tests
+- **Minimal implementation**: Only write enough code to pass the current test
+- **Refactor continuously**: Clean up after each green phase
+
+### Coverage Requirement
+
+**Minimum test coverage: 90%**
+
+```bash
+# Rust - check coverage with llvm-cov (not tarpaulin)
+cargo llvm-cov --html
+
+# TypeScript - check coverage with vitest
+npm run test -- --coverage
+```
+
+Coverage targets by layer:
+| Layer | Target |
+|-------|--------|
+| Domain/Business logic | 95%+ |
+| Service layer | 90%+ |
+| API handlers | 80%+ |
+| gRPC handlers | 85%+ |
+
+## Test Pyramid
+
+```
+        E2E Tests (few, critical flows)
+              /\
+             /  \
+        Unit Tests (service layer with mocks)
+           /      \
+          /        \
+     gRPC/Keycloak Tests (wiremock, NoOpCache)
+```
+
+## auth9-core (Rust)
+
+### Testing Strategy - NO EXTERNAL DEPENDENCIES
+
+All tests run fast (~1-2 seconds) with **no Docker or external services**:
+
+| Component | Testing Approach |
+|-----------|-----------------|
+| Repository layer | Mock traits with `mockall` |
+| Service layer | Unit tests with mock repositories |
+| gRPC services | `NoOpCacheManager` + mock repositories |
+| Keycloak | `wiremock` HTTP mocking |
+
+### Prohibited
+
+- **No testcontainers** - tests must not start Docker containers
+- **No real database connections** - use mock repositories
+- **No real Redis connections** - use `NoOpCacheManager`
+- **No faker library** - construct test data directly
+
+### Unit Tests (Service Layer)
+
+```rust
+// Location: src/service/*.rs inside #[cfg(test)] module
+// Use mockall for mocking repository dependencies
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::repository::tenant::MockTenantRepository;
+    use mockall::predicate::*;
+
+    #[tokio::test]
+    async fn test_create_tenant_success() {
+        let mut mock = MockTenantRepository::new();
+
+        mock.expect_find_by_slug()
+            .with(eq("test-tenant"))
+            .returning(|_| Ok(None));
+
+        mock.expect_create()
+            .returning(|input| Ok(Tenant {
+                name: input.name.clone(),
+                ..Default::default()
+            }));
+
+        let service = TenantService::new(Arc::new(mock), None);
+        let result = service.create(input).await;
+        assert!(result.is_ok());
+    }
+}
+```
+
+### gRPC Tests
+
+```rust
+// Location: tests/grpc_*.rs
+// Use NoOpCacheManager instead of real Redis
+
+use auth9_core::cache::NoOpCacheManager;
+
+fn create_test_cache() -> NoOpCacheManager {
+    NoOpCacheManager::new()
+}
+
+#[tokio::test]
+async fn test_token_exchange() {
+    let cache = create_test_cache();
+    let service = TokenExchangeService::new(
+        jwt_manager,
+        cache,  // No Redis connection needed
+        user_repo,
+        service_repo,
+        rbac_repo,
+    );
+    // ...
+}
+```
+
+### Keycloak Tests
+
+```rust
+// Location: tests/keycloak_unit_test.rs
+// Use wiremock for HTTP mocking
+
+use wiremock::{Mock, ResponseTemplate, matchers::{method, path}};
+
+#[tokio::test]
+async fn test_keycloak_create_user() {
+    let mock_server = MockServer::start().await;
+
+    Mock::given(method("POST"))
+        .and(path("/admin/realms/test/users"))
+        .respond_with(ResponseTemplate::new(201))
+        .mount(&mock_server)
+        .await;
+
+    let client = KeycloakClient::new(config_with_mock(&mock_server.uri()));
+    let result = client.create_user(&input).await;
+    assert!(result.is_ok());
+}
+```
+
+### HTTP Handler Tests (API Layer)
+
+HTTP handler tests use **Dependency Injection via `HasServices` trait** to test production code with mock repositories.
+
+**Architecture:**
+```
+Production:  AppState (impl HasServices) → build_router() → Handlers<AppState>
+Tests:       TestAppState (impl HasServices) → build_router() → Handlers<TestAppState>
+                                                    ↑
+                                          Same production handlers!
+```
+
+**Key Files:**
+| File | Purpose |
+|------|---------|
+| `src/state.rs` | `HasServices` trait definition |
+| `src/server/mod.rs` | `AppState` + `build_router<S: HasServices>()` |
+| `tests/api/http/mod.rs` | `TestAppState` + test helpers |
+| `tests/api/http/*_http_test.rs` | HTTP handler tests |
+
+**Handler Pattern - Always use generics:**
+```rust
+// src/api/tenant.rs - CORRECT
+pub async fn list<S: HasServices>(
+    State(state): State<S>,
+    Query(pagination): Query<PaginationQuery>,
+) -> Result<impl IntoResponse> {
+    let (tenants, total) = state
+        .tenant_service()  // Method from HasServices trait
+        .list(pagination.page, pagination.per_page)
+        .await?;
+    Ok(Json(PaginatedResponse::new(tenants, pagination.page, pagination.per_page, total)))
+}
+```
+
+**Test Example:**
+```rust
+// tests/api/http/tenant_http_test.rs
+use crate::api::http::{build_test_router, get_json, TestAppState};
+
+#[tokio::test]
+async fn test_list_tenants_returns_200() {
+    let state = TestAppState::new("http://mock-keycloak");
+    state.tenant_repo.seed_tenant(input).await;
+
+    let app = build_test_router(state);  // Uses production build_router()
+    let (status, body) = get_json(&app, "/api/v1/tenants").await;
+
+    assert_eq!(status, StatusCode::OK);
+}
+```
+
+**Important Rules:**
+1. **Always use `HasServices` trait** for new handlers - never use concrete `AppState`
+2. **Test production code** - `build_test_router()` uses `build_router(state)` from production
+3. **Mock Keycloak with wiremock** - see `tests/api/http/mock_keycloak.rs`
+
+### Commands
+
+```bash
+cargo test              # All tests (fast, no Docker)
+cargo llvm-cov --html   # Coverage report
+```
+
+## auth9-portal (TypeScript)
+
+### Unit Tests (Vitest)
+
+```typescript
+// Location: tests/unit/*.test.ts
+import { describe, it, expect } from 'vitest';
+
+describe('utils', () => {
+  it('should format date correctly', () => {
+    expect(formatDate(new Date('2024-01-01'))).toBe('Jan 1, 2024');
+  });
+});
+```
+
+### E2E Tests (Playwright)
+
+```typescript
+// Location: tests/e2e/*.spec.ts
+import { test, expect } from '@playwright/test';
+
+test('login flow', async ({ page }) => {
+  await page.goto('/login');
+  await page.fill('[name="email"]', 'admin@example.com');
+  await page.click('button[type="submit"]');
+  await expect(page).toHaveURL('/dashboard');
+});
+```
+
+### Commands
+
+```bash
+npm run test           # Vitest unit tests
+npm run lint           # ESLint
+npm run typecheck      # TypeScript check
+npx playwright test    # E2E tests
+```
+
+## Test Data Conventions
+
+- Use descriptive names: `test_create_tenant_with_valid_data`
+- Keep test data minimal and focused
+- Construct test data directly (no faker)
+- Use `Default::default()` for domain types when possible
