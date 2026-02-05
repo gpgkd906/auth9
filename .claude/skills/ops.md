@@ -1,3 +1,8 @@
+---
+name: ops
+description: Run tests, check logs, and troubleshoot Auth9 services in Docker and Kubernetes environments.
+---
+
 # Operations Skill
 
 Run tests, check logs, and troubleshoot Auth9 services.
