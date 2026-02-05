@@ -1,3 +1,8 @@
+---
+name: test-coverage
+description: Run tests and check coverage for Auth9 backend and frontend with mock-based testing patterns.
+---
+
 # Test Coverage Skill
 
 Run tests and check coverage for Auth9 project.

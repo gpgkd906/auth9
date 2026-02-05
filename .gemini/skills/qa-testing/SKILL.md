@@ -1,1 +1,1 @@
-../../../.claude/skills/qs-testing.md
+../../../.claude/skills/qa-testing.md

@@ -1,3 +1,8 @@
+---
+name: reset-local-env
+description: Reset Auth9 local Docker development environment to a clean state.
+---
+
 # Reset Local Environment Skill
 
 Reset Auth9 local Docker development environment.
