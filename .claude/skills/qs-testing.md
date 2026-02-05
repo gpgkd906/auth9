@@ -173,10 +173,10 @@ After each scenario (success or failure), validate database state:
 
 ```bash
 # Connect to TiDB from host
-mysql -h 127.0.0.1 -P 4000 -u root auth9_db
+mysql -h 127.0.0.1 -P 4000 -u root auth9
 
 # Or execute single query
-mysql -h 127.0.0.1 -P 4000 -u root auth9_db -e "SELECT * FROM users WHERE email='test@example.com';"
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e "SELECT * FROM users WHERE email='test@example.com';"
 ```
 
 3. **Compare actual vs expected**:
