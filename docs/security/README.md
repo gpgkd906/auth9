@@ -64,6 +64,12 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [infrastructure/02-security-headers.md](./infrastructure/02-security-headers.md) | HTTP 安全头测试 | 5 | 中 |
 | [infrastructure/03-dependency-audit.md](./infrastructure/03-dependency-audit.md) | 依赖漏洞审计 | 4 | 高 |
 
+### 高级攻击 (2 个文档, 10 个场景) 🆕
+| 文档 | 描述 | 场景数 | 风险等级 |
+|------|------|--------|----------|
+| [advanced-attacks/01-supply-chain-security.md](./advanced-attacks/01-supply-chain-security.md) | 供应链与依赖安全测试 | 5 | 极高 |
+| [advanced-attacks/02-grpc-security.md](./advanced-attacks/02-grpc-security.md) | gRPC 安全测试 | 5 | 极高 |
+
 ---
 
 ## 统计概览
@@ -77,7 +83,8 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | 数据安全 | 3 | 14 |
 | 会话管理 | 3 | 14 |
 | 基础设施安全 | 3 | 14 |
-| **总计** | **25** | **120** |
+| 高级攻击 | 2 | 10 |
+| **总计** | **27** | **130** |
 
 ---
 
@@ -101,11 +108,13 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 2. authorization/01-tenant-isolation.md - 多租户隔离是关键
 3. authorization/02-rbac-bypass.md - RBAC 权限模型安全
 4. api-security/02-grpc-api.md - gRPC 目前无认证保护
+5. advanced-attacks/02-grpc-security.md - 深入 gRPC 安全测试 🆕
 
 ### 第二阶段：输入/数据安全 (P1)
-5. input-validation/01-injection.md - 注入攻击
-6. data-security/01-sensitive-data.md - 敏感数据暴露
-7. data-security/03-secrets-management.md - 密钥管理
+6. input-validation/01-injection.md - 注入攻击
+7. data-security/01-sensitive-data.md - 敏感数据暴露
+8. data-security/03-secrets-management.md - 密钥管理
+9. advanced-attacks/01-supply-chain-security.md - 供应链安全 🆕
 
 ### 第三阶段：会话/API 安全 (P1)
 8. session-management/01-session-security.md - 会话安全
@@ -225,8 +234,36 @@ cd auth9-portal && npm run dev
 
 ---
 
+## 测试数据准备
+
+### 安全测试专用数据
+
+为了进行全面的安全测试，Auth9 提供了包含已知弱配置的测试数据：
+
+```bash
+# ⚠️ 警告：此数据集包含故意设置的安全漏洞，仅用于安全测试
+cd auth9-core
+cargo run --bin seed-data -- --dataset=security-vulnerable --reset
+
+# 或使用 YAML 配置
+# 参考 scripts/seed-data/security-vulnerable.yaml
+```
+
+此数据集包含：
+- 弱密码策略租户
+- SQL/XSS 注入测试用户
+- 配置错误的客户端（redirect_uri 通配符）
+- SSRF 测试 Webhook
+- 循环角色继承
+- 明文密码配置
+
+详细说明请参考 [测试数据种子设计文档](../testing/seed-data-design.md)。
+
+---
+
 ## 更新日志
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-05 | 1.1.0 | 新增高级攻击模块（供应链安全、gRPC 安全），共 27 个文档 130 个场景；新增安全测试专用种子数据 |
 | 2026-02-03 | 1.0.0 | 初始版本，25 个文档 120 个场景 |
