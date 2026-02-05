@@ -3,8 +3,11 @@
 //! Tests for the role and permission HTTP endpoints using mock repositories.
 
 use super::mock_keycloak::MockKeycloakServer;
-use super::{build_test_router, delete_json, get_json, post_json, put_json, TestAppState};
-use crate::api::{create_test_permission, create_test_role};
+use super::{
+    build_test_router, delete_json_with_auth, get_json, post_json_with_auth, put_json_with_auth,
+    TestAppState,
+};
+use crate::api::{create_test_identity_token, create_test_permission, create_test_role};
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{Permission, Role, UserRolesInTenant};
 use auth9_core::repository::RbacRepository;
@@ -80,6 +83,7 @@ async fn test_list_permissions_empty() {
 async fn test_create_permission() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can create permissions
     let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
@@ -91,7 +95,7 @@ async fn test_create_permission() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Permission>>) =
-        post_json(&app, "/api/v1/permissions", &input).await;
+        post_json_with_auth(&app, "/api/v1/permissions", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -108,6 +112,7 @@ async fn test_create_permission() {
 async fn test_create_permission_minimal() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can create permissions
     let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
@@ -118,7 +123,7 @@ async fn test_create_permission_minimal() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Permission>>) =
-        post_json(&app, "/api/v1/permissions", &input).await;
+        post_json_with_auth(&app, "/api/v1/permissions", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -131,6 +136,7 @@ async fn test_create_permission_minimal() {
 async fn test_delete_permission() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete permissions
 
     let service_id = Uuid::new_v4();
     let permission = create_test_permission(None, service_id);
@@ -140,7 +146,7 @@ async fn test_delete_permission() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/permissions/{}", permission_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/permissions/{}", permission_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -152,11 +158,12 @@ async fn test_delete_permission() {
 async fn test_delete_permission_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete permissions
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json(&app, &format!("/api/v1/permissions/{}", nonexistent_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/permissions/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -253,6 +260,7 @@ async fn test_get_role_not_found() {
 async fn test_create_role() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can create roles
     let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
@@ -263,7 +271,7 @@ async fn test_create_role() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Role>>) =
-        post_json(&app, "/api/v1/roles", &input).await;
+        post_json_with_auth(&app, "/api/v1/roles", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -275,6 +283,7 @@ async fn test_create_role() {
 async fn test_create_role_minimal() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can create roles
     let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
@@ -284,7 +293,7 @@ async fn test_create_role_minimal() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Role>>) =
-        post_json(&app, "/api/v1/roles", &input).await;
+        post_json_with_auth(&app, "/api/v1/roles", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -297,6 +306,7 @@ async fn test_create_role_minimal() {
 async fn test_update_role() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can update roles
 
     let service_id = Uuid::new_v4();
     let role_id = Uuid::new_v4();
@@ -311,7 +321,7 @@ async fn test_update_role() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Role>>) =
-        put_json(&app, &format!("/api/v1/roles/{}", role_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/roles/{}", role_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -327,6 +337,7 @@ async fn test_update_role() {
 async fn test_update_role_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can update roles
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
@@ -335,7 +346,7 @@ async fn test_update_role_not_found() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, &format!("/api/v1/roles/{}", nonexistent_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/roles/{}", nonexistent_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -344,6 +355,7 @@ async fn test_update_role_not_found() {
 async fn test_delete_role() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete roles
 
     let service_id = Uuid::new_v4();
     let role_id = Uuid::new_v4();
@@ -353,7 +365,7 @@ async fn test_delete_role() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/roles/{}", role_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/roles/{}", role_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -365,11 +377,12 @@ async fn test_delete_role() {
 async fn test_delete_role_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete roles
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json(&app, &format!("/api/v1/roles/{}", nonexistent_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/roles/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -382,6 +395,7 @@ async fn test_delete_role_not_found() {
 async fn test_assign_permission_to_role() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can assign permissions
 
     let service_id = Uuid::new_v4();
     let role = create_test_role(None, service_id);
@@ -398,10 +412,11 @@ async fn test_assign_permission_to_role() {
         "permission_id": permission_id.to_string()
     });
 
-    let (status, body): (StatusCode, Option<MessageResponse>) = post_json(
+    let (status, body): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
         &format!("/api/v1/roles/{}/permissions", role_id),
         &input,
+        &token,
     )
     .await;
 
@@ -415,6 +430,7 @@ async fn test_assign_permission_to_role() {
 async fn test_remove_permission_from_role() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can remove permissions
 
     let service_id = Uuid::new_v4();
     let role = create_test_role(None, service_id);
@@ -432,12 +448,13 @@ async fn test_remove_permission_from_role() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json(
+    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
         &format!(
             "/api/v1/roles/{}/permissions/{}",
             role_id.0, permission_id.0
         ),
+        &token,
     )
     .await;
 
@@ -455,6 +472,7 @@ async fn test_remove_permission_from_role() {
 async fn test_assign_roles_to_user() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can assign roles
 
     let service_id = Uuid::new_v4();
     let role1 = create_test_role(None, service_id);
@@ -477,7 +495,7 @@ async fn test_assign_roles_to_user() {
     });
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        post_json(&app, "/api/v1/rbac/assign", &input).await;
+        post_json_with_auth(&app, "/api/v1/rbac/assign", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -573,6 +591,7 @@ async fn test_get_user_assigned_roles() {
 async fn test_unassign_role_from_user() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can unassign roles
 
     let service_id = Uuid::new_v4();
     let role = create_test_role(None, service_id);
@@ -586,12 +605,13 @@ async fn test_unassign_role_from_user() {
 
     // Note: The actual unassignment logic depends on the repository finding a tenant_user_id
     // In tests, the TestRbacRepository returns a new UUID for find_tenant_user_id
-    let (status, _body): (StatusCode, Option<MessageResponse>) = delete_json(
+    let (status, _body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
         &format!(
             "/api/v1/users/{}/tenants/{}/roles/{}",
             user_id, tenant_id, role_id.0
         ),
+        &token,
     )
     .await;
 
@@ -609,6 +629,7 @@ async fn test_unassign_role_from_user() {
 async fn test_create_role_with_parent() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can create roles
 
     let service_id = Uuid::new_v4();
     let parent_role = create_test_role(None, service_id);
@@ -625,7 +646,7 @@ async fn test_create_role_with_parent() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Role>>) =
-        post_json(&app, "/api/v1/roles", &input).await;
+        post_json_with_auth(&app, "/api/v1/roles", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -641,6 +662,7 @@ async fn test_create_role_with_parent() {
 async fn test_permission_code_formats() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can create permissions
     let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
@@ -662,7 +684,7 @@ async fn test_permission_code_formats() {
         });
 
         let (status, _body): (StatusCode, Option<SuccessResponse<Permission>>) =
-            post_json(&app, "/api/v1/permissions", &input).await;
+            post_json_with_auth(&app, "/api/v1/permissions", &input, &token).await;
 
         assert_eq!(status, StatusCode::CREATED, "Failed for code: {}", code);
     }

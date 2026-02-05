@@ -3,8 +3,11 @@
 //! Tests for the user HTTP endpoints using mock repositories and wiremock Keycloak.
 
 use super::mock_keycloak::MockKeycloakServer;
-use super::{build_test_router, delete_json, get_json, post_json, put_json, TestAppState};
-use crate::api::create_test_user;
+use super::{
+    build_test_router, delete_json_with_auth, get_json, get_json_with_auth, post_json,
+    post_json_with_auth, put_json_with_auth, TestAppState,
+};
+use crate::api::{create_test_identity_token, create_test_user};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{TenantUser, TenantUserWithTenant, User};
 use axum::http::StatusCode;
@@ -19,6 +22,7 @@ use uuid::Uuid;
 async fn test_list_users_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can list all users
 
     // Add some test users
     for i in 1..=3 {
@@ -31,7 +35,7 @@ async fn test_list_users_returns_200() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
-        get_json(&app, "/api/v1/users").await;
+        get_json_with_auth(&app, "/api/v1/users", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -44,6 +48,7 @@ async fn test_list_users_returns_200() {
 async fn test_list_users_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     // Add 25 users
     for i in 1..=25 {
@@ -55,7 +60,7 @@ async fn test_list_users_pagination() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
-        get_json(&app, "/api/v1/users?page=2&per_page=10").await;
+        get_json_with_auth(&app, "/api/v1/users?page=2&per_page=10", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -69,10 +74,11 @@ async fn test_list_users_pagination() {
 async fn test_list_users_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
-        get_json(&app, "/api/v1/users").await;
+        get_json_with_auth(&app, "/api/v1/users", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -206,6 +212,7 @@ async fn test_update_user_returns_200() {
     mock_kc.mock_update_user_success(keycloak_user_id).await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can update users
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -220,7 +227,7 @@ async fn test_update_user_returns_200() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        put_json(&app, &format!("/api/v1/users/{}", user_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -234,6 +241,7 @@ async fn test_update_user_avatar_only() {
     // No Keycloak mock needed for avatar-only update (display_name not changed)
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can update users
 
     let user_id = Uuid::new_v4();
     let user = create_test_user(Some(user_id));
@@ -246,7 +254,7 @@ async fn test_update_user_avatar_only() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        put_json(&app, &format!("/api/v1/users/{}", user_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -261,6 +269,7 @@ async fn test_update_user_avatar_only() {
 async fn test_update_user_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can update users
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
@@ -269,7 +278,7 @@ async fn test_update_user_returns_404() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, &format!("/api/v1/users/{}", nonexistent_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/users/{}", nonexistent_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -285,6 +294,7 @@ async fn test_delete_user_returns_200() {
     mock_kc.mock_delete_user_success(keycloak_user_id).await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete users
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -294,7 +304,7 @@ async fn test_delete_user_returns_200() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/users/{}", user_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -308,6 +318,7 @@ async fn test_delete_user_keycloak_not_found_still_succeeds() {
     mock_kc.mock_delete_user_not_found().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete users
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -318,7 +329,7 @@ async fn test_delete_user_keycloak_not_found_still_succeeds() {
 
     // Should succeed even if Keycloak user doesn't exist (404 is ignored)
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/users/{}", user_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -328,11 +339,12 @@ async fn test_delete_user_keycloak_not_found_still_succeeds() {
 async fn test_delete_user_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can delete users
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json(&app, &format!("/api/v1/users/{}", nonexistent_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -345,6 +357,7 @@ async fn test_delete_user_returns_404() {
 async fn test_add_user_to_tenant() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can add users to tenants
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -360,7 +373,7 @@ async fn test_add_user_to_tenant() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<TenantUser>>) =
-        post_json(&app, &format!("/api/v1/users/{}/tenants", user_id), &input).await;
+        post_json_with_auth(&app, &format!("/api/v1/users/{}/tenants", user_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -372,6 +385,7 @@ async fn test_add_user_to_tenant() {
 async fn test_remove_user_from_tenant() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can remove users from tenants
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
@@ -391,9 +405,10 @@ async fn test_remove_user_from_tenant() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json(
+    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/tenants/{}", user_id, tenant_id),
+        &token,
     )
     .await;
 
@@ -504,6 +519,7 @@ async fn test_enable_mfa() {
     mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can enable MFA
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -514,7 +530,7 @@ async fn test_enable_mfa() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        post_json(&app, &format!("/api/v1/users/{}/mfa", user_id), &json!({})).await;
+        post_json_with_auth(&app, &format!("/api/v1/users/{}/mfa", user_id), &json!({}), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -529,6 +545,7 @@ async fn test_disable_mfa() {
     mock_kc.setup_for_mfa_disable(keycloak_user_id).await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can disable MFA
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -539,7 +556,7 @@ async fn test_disable_mfa() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        delete_json(&app, &format!("/api/v1/users/{}/mfa", user_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}/mfa", user_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -551,13 +568,15 @@ async fn test_disable_mfa() {
 async fn test_enable_mfa_user_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin can enable MFA
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
-    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json(
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", nonexistent_id),
         &json!({}),
+        &token,
     )
     .await;
 

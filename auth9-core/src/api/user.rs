@@ -6,6 +6,7 @@ use crate::api::{
 use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput};
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::{HasBranding, HasServices};
 use axum::{
     extract::{Path, Query, State},
@@ -17,22 +18,86 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
+/// Check if user is a platform admin (can manage all users)
+fn require_platform_admin(auth: &AuthUser) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => Ok(()),
+        TokenType::TenantAccess => Err(AppError::Forbidden(
+            "Platform admin required: this operation requires platform-level access".to_string(),
+        )),
+    }
+}
+
+/// Check if user can manage users within a tenant
+/// Platform admin can always manage, tenant admin with appropriate role can manage their tenant
+fn require_user_management_permission(auth: &AuthUser) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => Ok(()),
+        TokenType::TenantAccess => {
+            // Check if user has admin/owner role or user:write/user:delete permissions
+            let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
+            let has_user_write_permission = auth
+                .permissions
+                .iter()
+                .any(|p| p == "user:write" || p == "user:delete" || p == "user:*");
+
+            if has_admin_role || has_user_write_permission {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Admin access required: you need admin privileges to manage users".to_string(),
+                ))
+            }
+        }
+    }
+}
+
 /// List users
+/// - Platform admin (Identity token): can list all users
+/// - Tenant user (TenantAccess token): can only list users in their tenant
 pub async fn list<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
-    let (users, total) = state
-        .user_service()
-        .list(pagination.page, pagination.per_page)
-        .await?;
+    match auth.token_type {
+        TokenType::Identity => {
+            // Platform admin: can list all users
+            let (users, total) = state
+                .user_service()
+                .list(pagination.page, pagination.per_page)
+                .await?;
 
-    Ok(Json(PaginatedResponse::new(
-        users,
-        pagination.page,
-        pagination.per_page,
-        total,
-    )))
+            Ok(Json(PaginatedResponse::new(
+                users,
+                pagination.page,
+                pagination.per_page,
+                total,
+            )))
+        }
+        TokenType::TenantAccess => {
+            // Tenant user: can only list users in their tenant
+            let tenant_id = auth.tenant_id.ok_or_else(|| {
+                AppError::Forbidden("No tenant context in token".to_string())
+            })?;
+            let users = state
+                .user_service()
+                .list_tenant_users(
+                    StringUuid::from(tenant_id),
+                    pagination.page,
+                    pagination.per_page,
+                )
+                .await?;
+            // list_tenant_users returns Vec, wrap in PaginatedResponse
+            let total = users.len() as i64;
+            Ok(Json(PaginatedResponse::new(
+                users,
+                pagination.page,
+                pagination.per_page,
+                total,
+            )))
+        }
+    }
 }
 
 /// Get user by ID
@@ -127,12 +192,17 @@ pub async fn create<S: HasServices + HasBranding>(
 }
 
 /// Update user
+/// Requires platform admin or tenant admin to update users
 pub async fn update<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin or tenant admin
+    require_user_management_permission(&auth)?;
+
     let id = StringUuid::from(id);
     let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
@@ -165,11 +235,16 @@ pub async fn update<S: HasServices>(
 }
 
 /// Delete user
+/// Requires platform admin or tenant admin to delete users
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin or tenant admin
+    require_user_management_permission(&auth)?;
+
     let id = StringUuid::from(id);
     let before = state.user_service().get(id).await?;
     if let Err(err) = state
@@ -202,12 +277,18 @@ pub struct AddToTenantRequest {
     pub role_in_tenant: String,
 }
 
+/// Add user to tenant
+/// Requires platform admin to add users to tenants
 pub async fn add_to_tenant<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(user_id): Path<Uuid>,
     Json(input): Json<AddToTenantRequest>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let tenant_user = state
         .user_service()
         .add_to_tenant(AddUserToTenantInput {
@@ -230,11 +311,16 @@ pub async fn add_to_tenant<S: HasServices>(
 }
 
 /// Remove user from tenant
+/// Requires platform admin to remove users from tenants
 pub async fn remove_from_tenant<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin
+    require_platform_admin(&auth)?;
+
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     state
@@ -268,11 +354,17 @@ pub async fn get_tenants<S: HasServices>(
     Ok(Json(SuccessResponse::new(tenants)))
 }
 
+/// Enable MFA for a user
+/// Requires platform admin or tenant admin
 pub async fn enable_mfa<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin or tenant admin
+    require_user_management_permission(&auth)?;
+
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
     let update = KeycloakUserUpdate {
@@ -302,11 +394,17 @@ pub async fn enable_mfa<S: HasServices>(
     Ok(Json(SuccessResponse::new(updated)))
 }
 
+/// Disable MFA for a user
+/// Requires platform admin or tenant admin
 pub async fn disable_mfa<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Check authorization: require platform admin or tenant admin
+    require_user_management_permission(&auth)?;
+
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
     state

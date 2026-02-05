@@ -2,8 +2,14 @@
 //!
 //! Tests for the tenant HTTP endpoints using mock repositories.
 
-use super::{build_test_router, delete_json, get_json, post_json, put_json, TestAppState};
-use crate::api::{create_test_tenant, MockKeycloakServer};
+use super::{
+    build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
+    put_json_with_auth, TestAppState,
+};
+use crate::api::{
+    create_test_identity_token, create_test_tenant, create_test_tenant_access_token,
+    MockKeycloakServer,
+};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Tenant, TenantStatus};
 use axum::http::StatusCode;
@@ -18,6 +24,7 @@ use uuid::Uuid;
 async fn test_list_tenants_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin token
 
     // Add some test tenants
     for i in 1..=3 {
@@ -30,7 +37,7 @@ async fn test_list_tenants_returns_200() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Tenant>>) =
-        get_json(&app, "/api/v1/tenants").await;
+        get_json_with_auth(&app, "/api/v1/tenants", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -44,6 +51,7 @@ async fn test_list_tenants_returns_200() {
 async fn test_list_tenants_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     // Add 25 tenants
     for i in 1..=25 {
@@ -57,7 +65,7 @@ async fn test_list_tenants_pagination() {
 
     // Request page 2 with per_page=10
     let (status, body): (StatusCode, Option<PaginatedResponse<Tenant>>) =
-        get_json(&app, "/api/v1/tenants?page=2&per_page=10").await;
+        get_json_with_auth(&app, "/api/v1/tenants?page=2&per_page=10", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -73,10 +81,11 @@ async fn test_list_tenants_pagination() {
 async fn test_list_tenants_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Tenant>>) =
-        get_json(&app, "/api/v1/tenants").await;
+        get_json_with_auth(&app, "/api/v1/tenants", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -93,6 +102,7 @@ async fn test_list_tenants_empty() {
 async fn test_get_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let mut tenant = create_test_tenant(Some(tenant_id));
@@ -103,7 +113,7 @@ async fn test_get_tenant_returns_200() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        get_json(&app, &format!("/api/v1/tenants/{}", tenant_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -116,11 +126,12 @@ async fn test_get_tenant_returns_200() {
 async fn test_get_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, &format!("/api/v1/tenants/{}", nonexistent_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -133,6 +144,7 @@ async fn test_get_tenant_returns_404() {
 async fn test_create_tenant_returns_201() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin only
     let app = build_test_router(state);
 
     let input = json!({
@@ -142,7 +154,7 @@ async fn test_create_tenant_returns_201() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -160,6 +172,7 @@ async fn test_create_tenant_returns_201() {
 async fn test_create_tenant_duplicate_slug() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     // Add existing tenant with slug "existing-tenant"
     let mut existing = create_test_tenant(None);
@@ -174,7 +187,7 @@ async fn test_create_tenant_duplicate_slug() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     // Should return 409 Conflict
     assert_eq!(status, StatusCode::CONFLICT);
@@ -184,6 +197,7 @@ async fn test_create_tenant_duplicate_slug() {
 async fn test_create_tenant_validation_error_empty_name() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -192,7 +206,7 @@ async fn test_create_tenant_validation_error_empty_name() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     // Should return 422 Unprocessable Entity for validation errors
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -202,6 +216,7 @@ async fn test_create_tenant_validation_error_empty_name() {
 async fn test_create_tenant_validation_error_empty_slug() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -210,7 +225,7 @@ async fn test_create_tenant_validation_error_empty_slug() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -219,6 +234,7 @@ async fn test_create_tenant_validation_error_empty_slug() {
 async fn test_create_tenant_with_settings() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let input = serde_json::json!({
@@ -232,7 +248,7 @@ async fn test_create_tenant_with_settings() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -249,6 +265,7 @@ async fn test_create_tenant_with_settings() {
 async fn test_update_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let mut tenant = create_test_tenant(Some(tenant_id));
@@ -262,7 +279,7 @@ async fn test_update_tenant_returns_200() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        put_json(&app, &format!("/api/v1/tenants/{}", tenant_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -274,6 +291,7 @@ async fn test_update_tenant_returns_200() {
 async fn test_update_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
@@ -282,7 +300,7 @@ async fn test_update_tenant_returns_404() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -291,6 +309,7 @@ async fn test_update_tenant_returns_404() {
 async fn test_update_tenant_status() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -303,7 +322,7 @@ async fn test_update_tenant_status() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        put_json(&app, &format!("/api/v1/tenants/{}", tenant_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -315,6 +334,7 @@ async fn test_update_tenant_status() {
 async fn test_update_tenant_logo_url() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -327,7 +347,7 @@ async fn test_update_tenant_logo_url() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        put_json(&app, &format!("/api/v1/tenants/{}", tenant_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -346,6 +366,7 @@ async fn test_update_tenant_logo_url() {
 async fn test_delete_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token(); // Platform admin only
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -354,7 +375,7 @@ async fn test_delete_tenant_returns_200() {
     let app = build_test_router(state.clone());
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/tenants/{}", tenant_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -373,11 +394,12 @@ async fn test_delete_tenant_returns_200() {
 async fn test_delete_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json(&app, &format!("/api/v1/tenants/{}", nonexistent_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -390,6 +412,7 @@ async fn test_delete_tenant_returns_404() {
 async fn test_tenant_with_unicode_name() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -398,7 +421,7 @@ async fn test_tenant_with_unicode_name() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -410,6 +433,7 @@ async fn test_tenant_with_unicode_name() {
 async fn test_tenant_with_special_chars_in_name() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -418,7 +442,7 @@ async fn test_tenant_with_special_chars_in_name() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        post_json(&app, "/api/v1/tenants", &input).await;
+        post_json_with_auth(&app, "/api/v1/tenants", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -430,6 +454,7 @@ async fn test_tenant_with_special_chars_in_name() {
 async fn test_list_tenants_default_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
 
     // Add 5 tenants
     for i in 1..=5 {
@@ -443,7 +468,7 @@ async fn test_list_tenants_default_pagination() {
 
     // No pagination params - should use defaults (page=1, per_page=20)
     let (status, body): (StatusCode, Option<PaginatedResponse<Tenant>>) =
-        get_json(&app, "/api/v1/tenants").await;
+        get_json_with_auth(&app, "/api/v1/tenants", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

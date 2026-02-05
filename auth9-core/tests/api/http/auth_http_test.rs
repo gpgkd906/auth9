@@ -132,13 +132,44 @@ async fn test_authorize_success() {
 
     let (status, body) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid",
+        "/api/v1/auth/authorize?response_type=code&client_id=test-client&redirect_uri=https://app.example.com/callback&scope=openid&state=csrf-state",
     ).await;
 
     // Should redirect to Keycloak
     assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
     // Body should be empty for redirect
     assert!(body.is_empty() || status == StatusCode::TEMPORARY_REDIRECT);
+}
+
+#[tokio::test]
+async fn test_authorize_missing_state() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.redirect_uris = vec!["https://app.example.com/callback".to_string()];
+    state.service_repo.add_service(service.clone()).await;
+
+    let client = Client {
+        id: StringUuid::new_v4(),
+        service_id: StringUuid::from(service_id),
+        client_id: "test-client-no-state".to_string(),
+        client_secret_hash: "hash".to_string(),
+        name: None,
+        created_at: Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+
+    // Missing state parameter should return 400 (CSRF protection)
+    let (status, _body) = get_raw(
+        &app,
+        "/api/v1/auth/authorize?response_type=code&client_id=test-client-no-state&redirect_uri=https://app.example.com/callback&scope=openid",
+    ).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -149,7 +180,7 @@ async fn test_authorize_client_not_found() {
 
     let (status, _body) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=nonexistent&redirect_uri=https://app.example.com/callback&scope=openid",
+        "/api/v1/auth/authorize?response_type=code&client_id=nonexistent&redirect_uri=https://app.example.com/callback&scope=openid&state=csrf-state",
     ).await;
 
     // Client not found should return 404
@@ -182,7 +213,7 @@ async fn test_authorize_invalid_redirect_uri() {
     // Try to use a non-whitelisted redirect_uri
     let (status, _body) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=restricted-client&redirect_uri=https://evil.com/callback&scope=openid",
+        "/api/v1/auth/authorize?response_type=code&client_id=restricted-client&redirect_uri=https://evil.com/callback&scope=openid&state=csrf-state",
     ).await;
 
     // Invalid redirect_uri should return 400
@@ -244,7 +275,7 @@ async fn test_authorize_with_nonce() {
 
     let (status, _body) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=nonce-client&redirect_uri=https://app.example.com/callback&scope=openid&nonce=random-nonce-123",
+        "/api/v1/auth/authorize?response_type=code&client_id=nonce-client&redirect_uri=https://app.example.com/callback&scope=openid&nonce=random-nonce-123&state=csrf-state",
     ).await;
 
     assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
@@ -667,21 +698,21 @@ async fn test_authorize_multiple_redirect_uris() {
     // Test first URI
     let (status1, _) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=multi-redirect-client&redirect_uri=https://app1.example.com/callback&scope=openid",
+        "/api/v1/auth/authorize?response_type=code&client_id=multi-redirect-client&redirect_uri=https://app1.example.com/callback&scope=openid&state=csrf-state",
     ).await;
     assert_eq!(status1, StatusCode::TEMPORARY_REDIRECT);
 
     // Test second URI
     let (status2, _) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=multi-redirect-client&redirect_uri=https://app2.example.com/callback&scope=openid",
+        "/api/v1/auth/authorize?response_type=code&client_id=multi-redirect-client&redirect_uri=https://app2.example.com/callback&scope=openid&state=csrf-state",
     ).await;
     assert_eq!(status2, StatusCode::TEMPORARY_REDIRECT);
 
     // Test invalid URI
     let (status3, _) = get_raw(
         &app,
-        "/api/v1/auth/authorize?response_type=code&client_id=multi-redirect-client&redirect_uri=https://invalid.example.com/callback&scope=openid",
+        "/api/v1/auth/authorize?response_type=code&client_id=multi-redirect-client&redirect_uri=https://invalid.example.com/callback&scope=openid&state=csrf-state",
     ).await;
     assert_eq!(status3, StatusCode::BAD_REQUEST);
 }
