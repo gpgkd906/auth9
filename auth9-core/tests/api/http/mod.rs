@@ -46,7 +46,7 @@ use auth9_core::service::{
     WebhookService,
 };
 use auth9_core::state::{
-    HasAnalytics, HasBranding, HasEmailTemplates, HasIdentityProviders, HasPasswordManagement,
+    HasAnalytics, HasBranding, HasCache, HasEmailTemplates, HasIdentityProviders, HasPasswordManagement,
     HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings, HasWebAuthn,
     HasWebhooks,
 };
@@ -529,6 +529,15 @@ impl HasSecurityAlerts for TestAppState {
 
     fn jwt_manager(&self) -> &JwtManager {
         &self.jwt_manager
+    }
+}
+
+/// Implement HasCache trait for TestAppState
+impl HasCache for TestAppState {
+    type Cache = NoOpCacheManager;
+
+    fn cache(&self) -> &Self::Cache {
+        &self.cache_manager
     }
 }
 

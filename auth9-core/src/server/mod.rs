@@ -47,6 +47,10 @@ use tower_http::{
 use tracing::info;
 
 use crate::config::CorsConfig;
+use crate::middleware::rate_limit::{
+    rate_limit_middleware, RateLimitConfig as RateLimitMiddlewareConfig, RateLimitRule,
+    RateLimitState,
+};
 use crate::middleware::require_auth::AuthMiddlewareState;
 use crate::middleware::security_headers::security_headers_middleware;
 
@@ -344,7 +348,9 @@ impl HasDbPool for AppState {
 }
 
 impl HasCache for AppState {
-    fn cache(&self) -> &CacheManager {
+    type Cache = CacheManager;
+
+    fn cache(&self) -> &Self::Cache {
         &self.cache_manager
     }
 }
@@ -525,7 +531,42 @@ pub async fn run(config: Config) -> Result<()> {
         security_detection_service,
     };
 
-    // Create gRPC service
+    // Create rate limit state for middleware
+    let rate_limit_state = if config.rate_limit.enabled {
+        // Convert config to middleware format with login endpoint override
+        let mut endpoints = std::collections::HashMap::new();
+        // Add strict rate limit for login endpoint (10 requests per minute per IP)
+        endpoints.insert(
+            "POST:/api/v1/auth/token".to_string(),
+            RateLimitRule {
+                requests: 10,
+                window_secs: 60,
+            },
+        );
+        // Add strict rate limit for password reset (5 requests per minute)
+        endpoints.insert(
+            "POST:/api/v1/auth/forgot-password".to_string(),
+            RateLimitRule {
+                requests: 5,
+                window_secs: 60,
+            },
+        );
+
+        let rate_limit_config = RateLimitMiddlewareConfig {
+            enabled: true,
+            default: RateLimitRule {
+                requests: config.rate_limit.default_requests,
+                window_secs: config.rate_limit.default_window_secs,
+            },
+            endpoints,
+            tenant_multipliers: std::collections::HashMap::new(),
+        };
+        RateLimitState::new(rate_limit_config, cache_manager.get_connection_manager())
+    } else {
+        RateLimitState::noop()
+    };
+
+    // Create gRPC service (clone cache_manager before move)
     let grpc_service = TokenExchangeService::new(
         jwt_manager,
         cache_manager,
@@ -534,8 +575,8 @@ pub async fn run(config: Config) -> Result<()> {
         rbac_repo,
     );
 
-    // Build HTTP router with all features
-    let app = build_full_router(state);
+    // Build HTTP router with all features and rate limiting
+    let app = build_full_router(state, rate_limit_state);
 
     // Get addresses
     let http_addr = config.http_addr();
@@ -544,12 +585,19 @@ pub async fn run(config: Config) -> Result<()> {
     // Log security configuration warnings
     if !config.rate_limit.enabled {
         tracing::warn!(
-            "Rate limiting is DISABLED. Enable with RATE_LIMIT_ENABLED=true for production."
+            "⚠️  Rate limiting is DISABLED. This is a security risk in production!"
         );
     } else {
         info!(
             "Rate limiting enabled: {} requests per {} seconds",
             config.rate_limit.default_requests, config.rate_limit.default_window_secs
+        );
+    }
+
+    // Warn about gRPC authentication mode
+    if config.grpc_security.auth_mode == "none" {
+        tracing::warn!(
+            "⚠️  gRPC authentication is DISABLED. Set GRPC_AUTH_MODE=api_key for production."
         );
     }
 
@@ -849,7 +897,7 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 ///
 /// This function requires the state to implement both HasServices and the new traits.
 /// Routes are split into public (no auth) and protected (auth required) groups.
-pub fn build_full_router<S>(state: S) -> Router
+pub fn build_full_router<S>(state: S, rate_limit_state: RateLimitState) -> Router
 where
     S: HasServices
         + HasSystemSettings
@@ -1205,10 +1253,15 @@ where
         .merge(protected_routes)
         // Add global middleware (order matters: bottom layer runs first)
         // 1. CORS - must be outermost for preflight requests
-        // 2. Tracing - for request logging
-        // 3. Security headers - adds security headers to all responses
+        // 2. Rate limiting - reject excessive requests early
+        // 3. Tracing - for request logging
+        // 4. Security headers - adds security headers to all responses
         .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(TraceLayer::new_for_http())
+        .layer(axum::middleware::from_fn_with_state(
+            rate_limit_state,
+            rate_limit_middleware,
+        ))
         .layer(cors)
         .with_state(state)
 }

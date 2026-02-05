@@ -75,6 +75,9 @@ services:
       SMTP_PORT: 1025
       SMTP_FROM: noreply@auth9.local
       DEV_SMTP_HOST: mailpit
+      # gRPC Security - For testing API key auth
+      GRPC_AUTH_MODE: ${GRPC_AUTH_MODE:-none}
+      GRPC_API_KEYS: ${GRPC_API_KEYS:-}
       # Enable gRPC reflection for dev (grpcurl, grpcui debugging)
       GRPC_ENABLE_REFLECTION: "true"
     depends_on:
@@ -169,7 +172,7 @@ services:
         cp jar/target/*.jar /output/
       "
     volumes:
-      - keycloak-events:/output
+      - keycloak-theme:/output
     profiles:
       - build
 
@@ -202,7 +205,6 @@ services:
       KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
     volumes:
       - keycloak-theme:/opt/keycloak/providers:ro
-      - keycloak-events:/opt/keycloak/providers/events:ro
     healthcheck:
       test: ["CMD-SHELL", "cat < /dev/null > /dev/tcp/localhost/8080"]
       interval: 10s
@@ -253,4 +255,3 @@ volumes:
   tidb-data:
   redis-data:
   keycloak-theme:
-  keycloak-events:

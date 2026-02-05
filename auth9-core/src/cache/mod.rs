@@ -86,6 +86,11 @@ impl CacheManager {
         Ok(())
     }
 
+    /// Get a clone of the Redis connection manager for rate limiting
+    pub fn get_connection_manager(&self) -> ConnectionManager {
+        self.conn.clone()
+    }
+
     /// Get a value from cache
     async fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
         let mut conn = self.conn.clone();
@@ -427,6 +432,66 @@ impl NoOpCacheManager {
 impl Default for NoOpCacheManager {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[async_trait]
+impl CacheOperations for NoOpCacheManager {
+    async fn ping(&self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_user_roles(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
+        Ok(None)
+    }
+
+    async fn set_user_roles(&self, _roles: &UserRolesInTenant) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_user_roles_for_service(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+        _service_id: Uuid,
+    ) -> Result<Option<UserRolesInTenant>> {
+        Ok(None)
+    }
+
+    async fn set_user_roles_for_service(
+        &self,
+        _roles: &UserRolesInTenant,
+        _service_id: Uuid,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn invalidate_user_roles(&self, _user_id: Uuid, _tenant_id: Option<Uuid>) -> Result<()> {
+        Ok(())
+    }
+
+    async fn invalidate_user_roles_for_tenant(
+        &self,
+        _user_id: Uuid,
+        _tenant_id: Uuid,
+    ) -> Result<()> {
+        Ok(())
+    }
+
+    async fn invalidate_all_user_roles(&self) -> Result<()> {
+        Ok(())
+    }
+
+    async fn add_to_token_blacklist(&self, _jti: &str, _ttl_secs: u64) -> Result<()> {
+        Ok(())
+    }
+
+    async fn is_token_blacklisted(&self, _jti: &str) -> Result<bool> {
+        Ok(false)
     }
 }
 

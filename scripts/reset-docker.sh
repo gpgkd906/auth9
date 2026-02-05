@@ -25,11 +25,12 @@ docker rmi $(docker images -q 'auth9-*' 2>/dev/null) 2>/dev/null || true
 
 # Step 3: Remove volumes (clean data)
 echo "[3/6] Removing volumes..."
-docker volume rm auth9_tidb-data auth9_redis-data auth9_keycloak-theme 2>/dev/null || true
+docker volume rm auth9_tidb-data auth9_redis-data auth9_keycloak-theme auth9_keycloak-events 2>/dev/null || true
 
-# Step 4: Build Keycloak theme
-echo "[4/6] Building Keycloak theme..."
+# Step 4: Build Keycloak theme and events plugin
+echo "[4/6] Building Keycloak theme and events plugin..."
 docker-compose --profile build up --build auth9-theme-builder
+docker-compose --profile build up --build auth9-keycloak-events-builder
 
 # Step 5: Build all images
 echo "[5/6] Building images..."
