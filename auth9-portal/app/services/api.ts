@@ -1080,24 +1080,27 @@ export interface LoginEvent {
 export const analyticsApi = {
   getStats: async (
     startDate?: string,
-    endDate?: string
+    endDate?: string,
+    accessToken?: string
   ): Promise<{ data: LoginStats }> => {
     let url = `${API_BASE_URL}/api/v1/analytics/login-stats`;
     const params = new URLSearchParams();
     if (startDate) params.set("start", startDate);
     if (endDate) params.set("end", endDate);
     if (params.toString()) url += `?${params}`;
-    const response = await fetch(url);
+    const response = await fetch(url, { headers: getHeaders(accessToken) });
     return handleResponse(response);
   },
 
   listEvents: async (
     page = 1,
-    perPage = 50
+    perPage = 50,
+    accessToken?: string
   ): Promise<PaginatedResponse<LoginEvent>> => {
     const offset = (page - 1) * perPage;
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/analytics/login-events?limit=${perPage}&offset=${offset}`
+      `${API_BASE_URL}/api/v1/analytics/login-events?limit=${perPage}&offset=${offset}`,
+      { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);
   },

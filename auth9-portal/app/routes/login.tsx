@@ -16,11 +16,15 @@ export async function action({ request }: ActionFunctionArgs) {
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   const redirectUri = `${portalUrl}/auth/callback`;
 
+  // Generate random state for CSRF protection
+  const state = crypto.randomUUID();
+
   const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");
   authorizeUrl.searchParams.set("client_id", clientId);
   authorizeUrl.searchParams.set("redirect_uri", redirectUri);
   authorizeUrl.searchParams.set("scope", "openid email profile");
+  authorizeUrl.searchParams.set("state", state);
 
   return redirect(authorizeUrl.toString());
 }
