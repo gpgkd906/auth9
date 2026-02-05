@@ -18,14 +18,40 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-/// Check if user is a platform admin (can manage all users)
-fn require_platform_admin(auth: &AuthUser) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => Ok(()),
-        TokenType::TenantAccess => Err(AppError::Forbidden(
-            "Platform admin required: this operation requires platform-level access".to_string(),
-        )),
+/// Check if user can manage the target tenant
+/// Requires the user to be an owner of the target tenant
+async fn require_tenant_owner<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    target_tenant_id: Uuid,
+) -> Result<()> {
+    // For TenantAccess tokens, check if the token is for this tenant with owner role
+    if auth.token_type == TokenType::TenantAccess {
+        if auth.tenant_id == Some(target_tenant_id) {
+            if auth.roles.iter().any(|r| r == "owner") {
+                return Ok(());
+            }
+        }
+        return Err(AppError::Forbidden(
+            "Owner access required: you must be an owner of this tenant".to_string(),
+        ));
     }
+
+    // For Identity tokens, check the database if user is owner of target tenant
+    let user_id = StringUuid::from(auth.user_id);
+    let tenant_id = StringUuid::from(target_tenant_id);
+    let tenant_users = state.user_service().get_user_tenants(user_id).await?;
+
+    for tu in tenant_users {
+        if tu.tenant_id == tenant_id && tu.role_in_tenant == "owner" {
+            return Ok(());
+        }
+    }
+
+    Err(AppError::Forbidden(
+        "Owner access required: you must be an owner of this tenant to perform this action"
+            .to_string(),
+    ))
 }
 
 /// Check if user can manage users within a tenant
@@ -101,10 +127,59 @@ pub async fn list<S: HasServices>(
 }
 
 /// Get user by ID
+/// Users can only read their own profile, or admins with user:read permission can read any user
 pub async fn get<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    // Authorization check: users can only read their own profile
+    // unless they have admin permissions
+    if auth.user_id != id {
+        // Check if user has admin permissions via TenantAccess token
+        if auth.token_type == TokenType::TenantAccess {
+            let has_admin_permission = auth.roles.iter().any(|r| r == "admin" || r == "owner")
+                || auth
+                    .permissions
+                    .iter()
+                    .any(|p| p == "user:read" || p == "user:*");
+            if !has_admin_permission {
+                return Err(AppError::Forbidden(
+                    "Access denied: you can only view your own profile".to_string(),
+                ));
+            }
+        } else {
+            // Identity tokens: check if user is owner/admin of any tenant the target user belongs to
+            let target_user_id = StringUuid::from(id);
+            let auth_user_id = StringUuid::from(auth.user_id);
+
+            // Get tenants where auth user is owner/admin
+            let auth_user_tenants = state.user_service().get_user_tenants(auth_user_id).await?;
+            let target_user_tenants = state.user_service().get_user_tenants(target_user_id).await?;
+
+            let auth_user_admin_tenant_ids: std::collections::HashSet<_> = auth_user_tenants
+                .iter()
+                .filter(|tu| tu.role_in_tenant == "owner" || tu.role_in_tenant == "admin")
+                .map(|tu| tu.tenant_id)
+                .collect();
+
+            let target_user_tenant_ids: std::collections::HashSet<_> =
+                target_user_tenants.iter().map(|tu| tu.tenant_id).collect();
+
+            // Auth user must be admin of at least one tenant the target user belongs to
+            let has_shared_admin_tenant = auth_user_admin_tenant_ids
+                .intersection(&target_user_tenant_ids)
+                .next()
+                .is_some();
+
+            if !has_shared_admin_tenant {
+                return Err(AppError::Forbidden(
+                    "Access denied: you can only view your own profile".to_string(),
+                ));
+            }
+        }
+    }
+
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
     Ok(Json(SuccessResponse::new(user)))
@@ -278,7 +353,7 @@ pub struct AddToTenantRequest {
 }
 
 /// Add user to tenant
-/// Requires platform admin to add users to tenants
+/// Requires the caller to be an owner of the target tenant
 pub async fn add_to_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -286,8 +361,8 @@ pub async fn add_to_tenant<S: HasServices>(
     Path(user_id): Path<Uuid>,
     Json(input): Json<AddToTenantRequest>,
 ) -> Result<impl IntoResponse> {
-    // Check authorization: require platform admin
-    require_platform_admin(&auth)?;
+    // Check authorization: require owner of the target tenant
+    require_tenant_owner(&state, &auth, input.tenant_id).await?;
 
     let tenant_user = state
         .user_service()
@@ -311,15 +386,15 @@ pub async fn add_to_tenant<S: HasServices>(
 }
 
 /// Remove user from tenant
-/// Requires platform admin to remove users from tenants
+/// Requires the caller to be an owner of the target tenant
 pub async fn remove_from_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
-    // Check authorization: require platform admin
-    require_platform_admin(&auth)?;
+    // Check authorization: require owner of the target tenant
+    require_tenant_owner(&state, &auth, tenant_id).await?;
 
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);

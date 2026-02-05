@@ -7,6 +7,37 @@ import { renderToPipeableStream } from "react-dom/server";
 
 const ABORT_DELAY = 5_000;
 
+function setSecurityHeaders(headers: Headers): void {
+  // Prevent MIME type sniffing
+  headers.set("X-Content-Type-Options", "nosniff");
+  // Prevent clickjacking
+  headers.set("X-Frame-Options", "DENY");
+  // Control referrer information
+  headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
+  // Restrict browser features
+  headers.set(
+    "Permissions-Policy",
+    "camera=(), microphone=(), geolocation=(), payment=()"
+  );
+  // Content Security Policy
+  headers.set(
+    "Content-Security-Policy",
+    [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: https:",
+      "font-src 'self' data:",
+      "connect-src 'self' http://localhost:* https://localhost:* ws://localhost:*",
+      "frame-ancestors 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+    ].join("; ")
+  );
+  // Note: Strict-Transport-Security should be set by reverse proxy in production
+  // as it only applies to HTTPS connections
+}
+
 export default function handleRequest(
   request: Request,
   responseStatusCode: number,
@@ -45,6 +76,7 @@ function handleBotRequest(
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
+          setSecurityHeaders(responseHeaders);
 
           resolve(
             new Response(stream, {
@@ -88,6 +120,7 @@ function handleBrowserRequest(
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
+          setSecurityHeaders(responseHeaders);
 
           resolve(
             new Response(stream, {

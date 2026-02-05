@@ -1,8 +1,9 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, Link } from "react-router";
+import { useLoaderData, Link, redirect } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { analyticsApi, type LoginEvent } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import {
   CheckCircledIcon,
   CrossCircledIcon,
@@ -11,12 +12,17 @@ import {
 } from "@radix-ui/react-icons";
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
+  if (!accessToken) {
+    throw redirect("/login");
+  }
+
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = 50;
 
   try {
-    const response = await analyticsApi.listEvents(page, perPage);
+    const response = await analyticsApi.listEvents(page, perPage, accessToken);
     return { events: response.data, pagination: response.pagination };
   } catch {
     return {

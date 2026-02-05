@@ -1,9 +1,15 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, Link } from "react-router";
+import { useLoaderData, Link, redirect, Outlet, useMatch } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { analyticsApi } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
+  if (!accessToken) {
+    throw redirect("/login");
+  }
+
   const url = new URL(request.url);
   const days = Number(url.searchParams.get("days") || "7");
 
@@ -11,7 +17,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
 
   try {
-    const response = await analyticsApi.getStats(startDate, endDate);
+    const response = await analyticsApi.getStats(startDate, endDate, accessToken);
     return { stats: response.data, days };
   } catch (error) {
     console.error("Analytics API error:", error);
@@ -110,11 +116,17 @@ function BreakdownCard({
 
 export default function AnalyticsPage() {
   const { stats, days, error } = useLoaderData<typeof loader>();
+  const isExactMatch = useMatch("/dashboard/analytics");
 
   const successRate =
     stats && stats.total_logins > 0
       ? ((stats.successful_logins / stats.total_logins) * 100).toFixed(1)
       : "0";
+
+  // If we're on a child route (e.g., /dashboard/analytics/events), render the Outlet
+  if (!isExactMatch) {
+    return <Outlet />;
+  }
 
   return (
     <div className="space-y-6">
