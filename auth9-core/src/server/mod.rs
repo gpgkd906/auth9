@@ -760,7 +760,8 @@ pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBr
         )
         .route(
             "/api/v1/users/{user_id}/tenants/{tenant_id}",
-            delete(api::user::remove_from_tenant::<S>),
+            delete(api::user::remove_from_tenant::<S>)
+                .put(api::user::update_role_in_tenant::<S>),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users",
@@ -1007,7 +1008,8 @@ where
         )
         .route(
             "/api/v1/users/{user_id}/tenants/{tenant_id}",
-            delete(api::user::remove_from_tenant::<S>),
+            delete(api::user::remove_from_tenant::<S>)
+                .put(api::user::update_role_in_tenant::<S>),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users",

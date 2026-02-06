@@ -23,6 +23,12 @@ pub trait UserRepository: Send + Sync {
 
     // Tenant-User relations
     async fn add_to_tenant(&self, input: &AddUserToTenantInput) -> Result<TenantUser>;
+    async fn update_role_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        role: &str,
+    ) -> Result<TenantUser>;
     async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()>;
     async fn find_tenant_users(
         &self,
@@ -246,6 +252,46 @@ impl UserRepository for UserRepositoryImpl {
             "#,
         )
         .bind(id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(tenant_user)
+    }
+
+    async fn update_role_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        role: &str,
+    ) -> Result<TenantUser> {
+        let result = sqlx::query(
+            r#"
+            UPDATE tenant_users
+            SET role_in_tenant = ?
+            WHERE user_id = ? AND tenant_id = ?
+            "#,
+        )
+        .bind(role)
+        .bind(user_id)
+        .bind(tenant_id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(
+                "User-tenant relationship not found".to_string(),
+            ));
+        }
+
+        let tenant_user = sqlx::query_as::<_, TenantUser>(
+            r#"
+            SELECT id, tenant_id, user_id, role_in_tenant, joined_at
+            FROM tenant_users
+            WHERE user_id = ? AND tenant_id = ?
+            "#,
+        )
+        .bind(user_id)
+        .bind(tenant_id)
         .fetch_one(&self.pool)
         .await?;
 
