@@ -9,26 +9,53 @@ REDIRECT_URI="http://localhost:3000/callback"
 USERNAME="security-test-user"
 PASSWORD="Test1234!"
 
+# Admin credentials for Keycloak API
+KC_ADMIN_USER="${KEYCLOAK_ADMIN:-admin}"
+KC_ADMIN_PASS="${KEYCLOAK_ADMIN_PASSWORD:-admin}"
+
 echo ">>> Starting OIDC Security Tests <<<"
+
+# Helper: Get Keycloak admin token
+get_admin_token() {
+    curl -s -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
+      -d "grant_type=password" \
+      -d "client_id=admin-cli" \
+      -d "username=$KC_ADMIN_USER" \
+      -d "password=$KC_ADMIN_PASS" | jq -r '.access_token'
+}
+
+# Helper: Get client secret for a client_id
+get_client_secret() {
+    local admin_token="$1"
+    local target_client_id="$2"
+    # Get client UUID
+    local client_uuid=$(curl -s -H "Authorization: Bearer $admin_token" \
+      "$KEYCLOAK_URL/admin/realms/$REALM/clients?clientId=$target_client_id" | jq -r '.[0].id')
+    # Get client secret
+    curl -s -H "Authorization: Bearer $admin_token" \
+      "$KEYCLOAK_URL/admin/realms/$REALM/clients/$client_uuid/client-secret" | jq -r '.value'
+}
+
+# Retrieve client secret (auth9-portal is a confidential client)
+ADMIN_TOKEN=$(get_admin_token)
+CLIENT_SECRET=$(get_client_secret "$ADMIN_TOKEN" "$CLIENT_ID")
+
+if [ -z "$CLIENT_SECRET" ] || [ "$CLIENT_SECRET" == "null" ]; then
+    echo "ERROR: Could not retrieve client secret for $CLIENT_ID. Aborting."
+    exit 1
+fi
 
 # ==========================================
 # Scenario 1: Authorization Code Interception
 # ==========================================
 echo -e "\n[Scenario 1] Authorization Code Interception (Replay Attack)"
 
-# 1. Get a fresh code (Simulation: we need to do a full login flow potentially, 
-# or just simulate the token exchange part if we had a valid code manually. 
-# Since getting a code programmatically via curl without a browser is complex (form parsing),
-# We will test the 'code use' part by trying to use an invalid/expired code and asserting handling
-# or by using Direct Access Grants to get a token and then trying to abuse parameters if applicable.
-# BUT, for 'Code Interception', we verify that a code cannot be used twice.
-# We will simulate the error case: reusing a random string as code or an expired one.
-
-# Attempt to exchange an invalid code
+# Attempt to exchange an invalid code (with proper client authentication)
 RESPONSE=$(curl -s -X POST "$KEYCLOAK_URL/realms/$REALM/protocol/openid-connect/token" \
   -d "grant_type=authorization_code" \
   -d "code=INVALID_OR_REUSED_CODE" \
   -d "client_id=$CLIENT_ID" \
+  -d "client_secret=$CLIENT_SECRET" \
   -d "redirect_uri=$REDIRECT_URI")
 
 if echo "$RESPONSE" | grep -q "invalid_grant" || echo "$RESPONSE" | grep -q "Code not valid"; then
@@ -85,6 +112,7 @@ ADMIN_SCOPE_RESPONSE=$(curl -s -X POST "$KEYCLOAK_URL/realms/$REALM/protocol/ope
   -d "username=$USERNAME" \
   -d "password=$PASSWORD" \
   -d "client_id=$CLIENT_ID" \
+  -d "client_secret=$CLIENT_SECRET" \
   -d "scope=openid admin")
 
 SCOPES=$(echo "$ADMIN_SCOPE_RESPONSE" | jq -r .scope)

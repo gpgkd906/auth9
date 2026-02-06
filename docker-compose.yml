@@ -166,10 +166,11 @@ services:
     working_dir: /build
     command: >
       sh -c "
-        git clone --depth 1 --branch v0.47 https://github.com/p2-inc/keycloak-events.git /build/keycloak-events &&
+        git clone --depth 1 --branch v0.25 https://github.com/p2-inc/keycloak-events.git /build/keycloak-events &&
         cd /build/keycloak-events &&
-        mvn clean package -DskipTests -pl jar -am &&
-        cp jar/target/*.jar /output/
+        mvn clean package -DskipTests &&
+        cp target/keycloak-events-*.jar /output/ &&
+        rm -f /output/original-*.jar
       "
     volumes:
       - keycloak-theme:/output
@@ -199,10 +200,10 @@ services:
       KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
       # Auth9 API URL for custom theme
       AUTH9_API_URL: http://auth9-core:8080
-      # Keycloak Events Webhook SPI configuration (p2-inc/keycloak-events)
-      # These are read by the ext-event-webhook SPI when events are enabled
-      KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_URI: http://auth9-core:8080/api/v1/keycloak/events
-      KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
+      # Keycloak Events HTTP SPI configuration (p2-inc/keycloak-events)
+      # These are read by the ext-event-http listener to forward events to auth9-core
+      KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
+      KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
     volumes:
       - keycloak-theme:/opt/keycloak/providers:ro
     healthcheck:

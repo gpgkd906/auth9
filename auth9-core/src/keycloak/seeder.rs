@@ -254,10 +254,10 @@ impl KeycloakSeeder {
 
         // Build events listeners list
         // Always include jboss-logging for server logs
-        // Add ext-event-webhook if webhook secret is configured
+        // Add ext-event-http if webhook secret is configured (p2-inc/keycloak-events HTTP forwarder)
         let mut events_listeners = vec!["jboss-logging"];
         if self.config.webhook_secret.is_some() {
-            events_listeners.push("ext-event-webhook");
+            events_listeners.push("ext-event-http");
         }
 
         let update = serde_json::json!({
@@ -306,21 +306,84 @@ impl KeycloakSeeder {
             "Updated realm '{}': SSL='{}', loginTheme='auth9', registrationAllowed=false, eventsEnabled=true, eventsListeners={:?}",
             self.config.realm, self.config.ssl_required, events_listeners
         );
+
+        // Configure ext-event-http provider via realm attributes
+        // p2-inc/keycloak-events reads config from realm attribute: _providerConfig.ext-event-http
+        if let Some(ref webhook_secret) = self.config.webhook_secret {
+            self.configure_event_http_provider(token, webhook_secret)
+                .await?;
+        }
+
         Ok(())
     }
 
-    /// Ensure realm exists (create if not) and configure SSL
+    /// Configure ext-event-http provider via realm attributes
+    ///
+    /// The p2-inc/keycloak-events plugin reads its configuration from realm attributes,
+    /// not from Keycloak's standard SPI config. The attribute key is:
+    /// `_providerConfig.ext-event-http` with a JSON value containing targetUri and sharedSecret.
+    async fn configure_event_http_provider(
+        &self,
+        token: &str,
+        webhook_secret: &str,
+    ) -> anyhow::Result<()> {
+        let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
+
+        // Build the webhook target URL - use the internal Docker network URL
+        // auth9-core listens on port 8080 inside the network
+        let target_uri = std::env::var("KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI")
+            .unwrap_or_else(|_| "http://auth9-core:8080/api/v1/keycloak/events".to_string());
+
+        let provider_config = serde_json::json!({
+            "targetUri": target_uri,
+            "sharedSecret": webhook_secret,
+            "hmacAlgorithm": "HmacSHA256"
+        });
+
+        let update = serde_json::json!({
+            "attributes": {
+                "_providerConfig.ext-event-http": provider_config.to_string()
+            }
+        });
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(token)
+            .json(&update)
+            .send()
+            .await
+            .context("Failed to configure ext-event-http provider")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            warn!(
+                "Failed to configure ext-event-http: {} - {}",
+                status, body
+            );
+        } else {
+            info!(
+                "Configured ext-event-http provider: targetUri={}",
+                target_uri
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Ensure realm exists (create if not) and configure settings
     pub async fn ensure_realm_exists(&self) -> anyhow::Result<()> {
         let token = self.get_master_admin_token().await?;
 
         if self.realm_exists(&token).await? {
             info!("Realm '{}' already exists", self.config.realm);
-            // Update settings (SSL, login theme) for existing realm
-            self.update_realm_settings(&token).await?;
-            return Ok(());
+        } else {
+            self.create_realm(&token).await?;
         }
 
-        self.create_realm(&token).await?;
+        // Always update settings (SSL, login theme, event listeners) for both new and existing realms
+        self.update_realm_settings(&token).await?;
         Ok(())
     }
 

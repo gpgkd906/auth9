@@ -181,8 +181,10 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
     // 1. Verify webhook signature if secret is configured
     let config = state.config();
     if let Some(ref secret) = config.keycloak.webhook_secret {
+        // p2-inc/keycloak-events ext-event-http uses X-Keycloak-Signature header
         let signature = headers
-            .get("x-webhook-signature")
+            .get("x-keycloak-signature")
+            .or_else(|| headers.get("x-webhook-signature"))
             .and_then(|v| v.to_str().ok())
             .unwrap_or("");
 
