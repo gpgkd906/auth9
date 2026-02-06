@@ -55,10 +55,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
+  const accessToken = await getAccessToken(request);
   const [users, tenants, services] = await Promise.all([
-    userApi.list(page, perPage),
-    tenantApi.list(1, 100), // List first 100 tenants for now
-    serviceApi.list(undefined, 1, 100) // List first 100 services
+    userApi.list(page, perPage, accessToken || undefined),
+    tenantApi.list(1, 100, undefined, accessToken || undefined), // List first 100 tenants for now
+    serviceApi.list(undefined, 1, 100, accessToken || undefined) // List first 100 services
   ]);
   return { users, tenants, services };
 }
@@ -129,7 +130,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (intent === "force_logout") {
       const id = formData.get("id") as string;
-      await sessionApi.forceLogoutUser(id);
+      await sessionApi.forceLogoutUser(id, accessToken || undefined);
       return { success: true, intent };
     }
 

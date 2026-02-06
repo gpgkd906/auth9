@@ -14,7 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
-import { webhookApi, type Webhook, type CreateWebhookInput } from "~/services/api";
+import { redirect } from "react-router";
+import { webhookApi, tenantApi, type Webhook, type CreateWebhookInput } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import {
   PlusIcon,
   Pencil2Icon,
@@ -37,17 +39,20 @@ const WEBHOOK_EVENTS = [
   { id: "security.alert", label: "Security Alert" },
 ];
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
   const { tenantId } = params;
   if (!tenantId) {
     return { webhooks: [], error: "Tenant ID is required" };
   }
 
   try {
-    const response = await webhookApi.list(tenantId);
+    const accessToken = await getAccessToken(request);
+    // Validate tenant exists first
+    await tenantApi.get(tenantId, accessToken || undefined);
+    const response = await webhookApi.list(tenantId, accessToken || undefined);
     return { webhooks: response.data, tenantId };
   } catch {
-    return { webhooks: [], tenantId, error: "Failed to load webhooks" };
+    throw redirect("/dashboard/tenants");
   }
 }
 
@@ -56,6 +61,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
   if (!tenantId) {
     return { error: "Tenant ID is required" };
   }
+  const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -69,7 +75,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         events: JSON.parse(formData.get("events") as string || "[]"),
         enabled: formData.get("enabled") === "true",
       };
-      await webhookApi.create(tenantId, input);
+      await webhookApi.create(tenantId, input, accessToken || undefined);
       return { success: true, message: "Webhook created" };
     }
 
@@ -82,19 +88,19 @@ export async function action({ request, params }: ActionFunctionArgs) {
         events: JSON.parse(formData.get("events") as string || "[]"),
         enabled: formData.get("enabled") === "true",
       };
-      await webhookApi.update(tenantId, id, input);
+      await webhookApi.update(tenantId, id, input, accessToken || undefined);
       return { success: true, message: "Webhook updated" };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
-      await webhookApi.delete(tenantId, id);
+      await webhookApi.delete(tenantId, id, accessToken || undefined);
       return { success: true, message: "Webhook deleted" };
     }
 
     if (intent === "test") {
       const id = formData.get("id") as string;
-      const result = await webhookApi.test(tenantId, id);
+      const result = await webhookApi.test(tenantId, id, accessToken || undefined);
       if (result.data.success) {
         return {
           success: true,

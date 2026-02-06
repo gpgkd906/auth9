@@ -1,9 +1,13 @@
 //! Invitation API handlers
 
 use crate::api::{extract_actor_id_generic, MessageResponse, PaginatedResponse, SuccessResponse};
-use crate::domain::{CreateInvitationInput, InvitationResponse, InvitationStatus, StringUuid};
+use crate::domain::{
+    AddUserToTenantInput, AssignRolesInput, CreateInvitationInput, CreateUserInput,
+    InvitationResponse, InvitationStatus, StringUuid,
+};
 use crate::error::{AppError, Result};
 use crate::state::HasInvitations;
+use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
@@ -17,6 +21,9 @@ use uuid::Uuid;
 #[derive(Debug, Clone, Deserialize)]
 pub struct AcceptInvitationRequest {
     pub token: String,
+    pub email: Option<String>,
+    pub display_name: Option<String>,
+    pub password: Option<String>,
 }
 
 /// Query parameters for listing invitations
@@ -78,6 +85,21 @@ pub async fn create<S: HasInvitations>(
 
     // TODO: Get inviter name from user service
     let inviter_name = "Admin"; // Placeholder
+
+    // Prevent inviting users who are already members of the tenant
+    match state.user_service().get_by_email(&input.email).await {
+        Ok(user) => {
+            let tenant_users = state.user_service().get_user_tenants(user.id).await?;
+            let already_member = tenant_users.iter().any(|tu| tu.tenant_id == tenant_id);
+            if already_member {
+                return Err(AppError::Conflict(
+                    "User is already a member of this tenant".to_string(),
+                ));
+            }
+        }
+        Err(AppError::NotFound(_)) => {}
+        Err(err) => return Err(err),
+    }
 
     let invitation = state
         .invitation_service()
@@ -153,11 +175,100 @@ pub async fn accept<S: HasInvitations>(
         return Err(AppError::Validation("Token is required".to_string()));
     }
 
-    let invitation = state.invitation_service().accept(&request.token).await?;
-    let response: InvitationResponse = invitation.into();
+    let invitation = state.invitation_service().get_by_token(&request.token).await?;
 
-    // The caller should now create the user in Keycloak and assign roles
-    // This is typically handled by a frontend flow
+    if !invitation.is_valid() {
+        if invitation.is_expired() {
+            return Err(AppError::BadRequest("Invitation has expired".to_string()));
+        }
+        return Err(AppError::BadRequest(format!(
+            "Invitation is no longer valid (status: {})",
+            invitation.status
+        )));
+    }
+
+    if let Some(email) = &request.email {
+        if email.to_lowercase() != invitation.email.to_lowercase() {
+            return Err(AppError::Validation(
+                "Email does not match invitation".to_string(),
+            ));
+        }
+    }
+
+    let user = match state.user_service().get_by_email(&invitation.email).await {
+        Ok(user) => user,
+        Err(AppError::NotFound(_)) => {
+            let password = request
+                .password
+                .clone()
+                .ok_or_else(|| AppError::BadRequest("User not found. Please register.".to_string()))?;
+
+            let credentials = vec![KeycloakCredential {
+                credential_type: "password".to_string(),
+                value: password,
+                temporary: false,
+            }];
+
+            let keycloak_id = state
+                .keycloak_client()
+                .create_user(&CreateKeycloakUserInput {
+                    username: invitation.email.clone(),
+                    email: invitation.email.clone(),
+                    first_name: request.display_name.clone(),
+                    last_name: None,
+                    enabled: true,
+                    email_verified: false,
+                    credentials: Some(credentials),
+                })
+                .await?;
+
+            state
+                .user_service()
+                .create(
+                    &keycloak_id,
+                    CreateUserInput {
+                        email: invitation.email.clone(),
+                        display_name: request.display_name.clone(),
+                        avatar_url: None,
+                    },
+                )
+                .await?
+        }
+        Err(err) => return Err(err),
+    };
+
+    // Ensure user is a member of the tenant
+    let tenant_users = state.user_service().get_user_tenants(user.id).await?;
+    let already_member = tenant_users.iter().any(|tu| tu.tenant_id == invitation.tenant_id);
+    if !already_member {
+        let _ = state
+            .user_service()
+            .add_to_tenant(AddUserToTenantInput {
+                user_id: *user.id,
+                tenant_id: *invitation.tenant_id,
+                role_in_tenant: "member".to_string(),
+            })
+            .await?;
+    }
+
+    // Assign invited roles
+    if !invitation.role_ids.is_empty() {
+        let role_ids: Vec<uuid::Uuid> = invitation.role_ids.iter().map(|id| **id).collect();
+        state
+            .rbac_service()
+            .assign_roles(
+                AssignRolesInput {
+                    user_id: *user.id,
+                    tenant_id: *invitation.tenant_id,
+                    role_ids,
+                },
+                Some(invitation.invited_by),
+            )
+            .await?;
+    }
+
+    let invitation = state.invitation_service().mark_accepted(invitation.id).await?;
+    let response: InvitationResponse = invitation.into();
 
     Ok(Json(SuccessResponse::new(response)))
 }

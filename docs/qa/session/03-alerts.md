@@ -6,6 +6,21 @@
 
 ---
 
+## 测试前置数据（必需）
+
+在执行本文件场景前，先执行：
+
+```bash
+mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/session/seed.sql
+```
+
+说明：
+- `seed.sql` 会创建管理员与目标用户的会话数据
+- 管理员：`admin@auth9.local`
+- 目标用户：`target@example.com`
+
+---
+
 ## 数据库表结构参考
 
 ### security_alerts 表

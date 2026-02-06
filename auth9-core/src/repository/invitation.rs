@@ -44,11 +44,20 @@ pub trait InvitationRepository: Send + Sync {
         status: Option<InvitationStatus>,
     ) -> Result<i64>;
 
+    /// List invitations for token verification (includes non-pending statuses)
+    async fn list_pending(&self) -> Result<Vec<Invitation>>;
+
     /// Update invitation status
     async fn update_status(&self, id: StringUuid, status: InvitationStatus) -> Result<Invitation>;
 
     /// Mark invitation as accepted
     async fn mark_accepted(&self, id: StringUuid) -> Result<Invitation>;
+
+    /// Update invitation token hash and updated_at timestamp
+    async fn update_token_hash(&self, id: StringUuid, token_hash: &str) -> Result<Invitation>;
+
+    /// Update invitation updated_at timestamp
+    async fn touch_updated_at(&self, id: StringUuid) -> Result<Invitation>;
 
     /// Delete an invitation
     async fn delete(&self, id: StringUuid) -> Result<()>;
@@ -206,6 +215,20 @@ impl InvitationRepository for InvitationRepositoryImpl {
         Ok(row.0)
     }
 
+    async fn list_pending(&self) -> Result<Vec<Invitation>> {
+        let invitations = sqlx::query_as::<_, Invitation>(
+            r#"
+            SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+            FROM invitations
+            WHERE status IN ('pending', 'revoked', 'accepted', 'expired')
+            "#,
+        )
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(invitations)
+    }
+
     async fn update_status(&self, id: StringUuid, status: InvitationStatus) -> Result<Invitation> {
         sqlx::query(
             r#"
@@ -235,6 +258,49 @@ impl InvitationRepository for InvitationRepositoryImpl {
         .bind(id)
         .execute(&self.pool)
         .await?;
+
+        self.find_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))
+    }
+
+    async fn update_token_hash(&self, id: StringUuid, token_hash: &str) -> Result<Invitation> {
+        let result = sqlx::query(
+            r#"
+            UPDATE invitations
+            SET token_hash = ?, updated_at = NOW()
+            WHERE id = ?
+            "#,
+        )
+        .bind(token_hash)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("Invitation {} not found", id)));
+        }
+
+        self.find_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))
+    }
+
+    async fn touch_updated_at(&self, id: StringUuid) -> Result<Invitation> {
+        let result = sqlx::query(
+            r#"
+            UPDATE invitations
+            SET updated_at = NOW()
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("Invitation {} not found", id)));
+        }
 
         self.find_by_id(id)
             .await?

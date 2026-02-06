@@ -64,32 +64,35 @@ export const tenantApi = {
     return handleResponse(response);
   },
 
-  get: async (id: string): Promise<{ data: Tenant }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${id}`);
+  get: async (id: string, accessToken?: string): Promise<{ data: Tenant }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${id}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  create: async (input: CreateTenantInput): Promise<{ data: Tenant }> => {
+  create: async (input: CreateTenantInput, accessToken?: string): Promise<{ data: Tenant }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  update: async (id: string, input: Partial<CreateTenantInput>): Promise<{ data: Tenant }> => {
+  update: async (id: string, input: Partial<CreateTenantInput>, accessToken?: string): Promise<{ data: Tenant }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  delete: async (id: string): Promise<void> => {
+  delete: async (id: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${id}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -221,33 +224,36 @@ export const serviceApi = {
     return handleResponse(response);
   },
 
-  get: async (id: string): Promise<{ data: Service }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`);
+  get: async (id: string, accessToken?: string): Promise<{ data: Service }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
   // Note: Backend uses #[serde(flatten)] on ServiceWithClient, so Service fields are at root level
-  create: async (input: CreateServiceInput): Promise<{ data: Service & { client: ClientWithSecret } }> => {
+  create: async (input: CreateServiceInput, accessToken?: string): Promise<{ data: Service & { client: ClientWithSecret } }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  update: async (id: string, input: Partial<CreateServiceInput>): Promise<{ data: Service }> => {
+  update: async (id: string, input: Partial<CreateServiceInput>, accessToken?: string): Promise<{ data: Service }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  delete: async (id: string): Promise<void> => {
+  delete: async (id: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${id}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -255,23 +261,26 @@ export const serviceApi = {
     }
   },
 
-  listClients: async (serviceId: string): Promise<{ data: Client[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients`);
+  listClients: async (serviceId: string, accessToken?: string): Promise<{ data: Client[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  createClient: async (serviceId: string, input: CreateClientInput): Promise<{ data: ClientWithSecret }> => {
+  createClient: async (serviceId: string, input: CreateClientInput, accessToken?: string): Promise<{ data: ClientWithSecret }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  deleteClient: async (serviceId: string, clientId: string): Promise<void> => {
+  deleteClient: async (serviceId: string, clientId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients/${clientId}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -279,9 +288,10 @@ export const serviceApi = {
     }
   },
 
-  regenerateClientSecret: async (serviceId: string, clientId: string): Promise<{ data: { client_id: string; client_secret: string } }> => {
+  regenerateClientSecret: async (serviceId: string, clientId: string, accessToken?: string): Promise<{ data: { client_id: string; client_secret: string } }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/clients/${clientId}/regenerate-secret`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
@@ -327,32 +337,35 @@ export interface RoleWithPermissions extends Role {
 }
 
 export const rbacApi = {
-  listRoles: async (serviceId: string): Promise<{ data: Role[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles`);
+  listRoles: async (serviceId: string, accessToken?: string): Promise<{ data: Role[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/roles`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  createRole: async (serviceId: string, input: CreateRoleInput): Promise<{ data: Role }> => {
+  createRole: async (serviceId: string, input: CreateRoleInput, accessToken?: string): Promise<{ data: Role }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/roles`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ ...input, service_id: serviceId }),
     });
     return handleResponse(response);
   },
 
-  updateRole: async (serviceId: string, roleId: string, input: Partial<CreateRoleInput>): Promise<{ data: Role }> => {
+  updateRole: async (serviceId: string, roleId: string, input: Partial<CreateRoleInput>, accessToken?: string): Promise<{ data: Role }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  deleteRole: async (serviceId: string, roleId: string): Promise<void> => {
+  deleteRole: async (serviceId: string, roleId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -360,23 +373,26 @@ export const rbacApi = {
     }
   },
 
-  listPermissions: async (serviceId: string): Promise<{ data: Permission[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/permissions`);
+  listPermissions: async (serviceId: string, accessToken?: string): Promise<{ data: Permission[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/permissions`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  createPermission: async (input: CreatePermissionInput): Promise<{ data: Permission }> => {
+  createPermission: async (input: CreatePermissionInput, accessToken?: string): Promise<{ data: Permission }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/permissions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  deletePermission: async (permissionId: string): Promise<void> => {
+  deletePermission: async (permissionId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/permissions/${permissionId}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -384,23 +400,26 @@ export const rbacApi = {
     }
   },
 
-  getRole: async (roleId: string): Promise<{ data: RoleWithPermissions }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`);
+  getRole: async (roleId: string, accessToken?: string): Promise<{ data: RoleWithPermissions }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  assignPermissionToRole: async (roleId: string, permissionId: string): Promise<void> => {
+  assignPermissionToRole: async (roleId: string, permissionId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}/permissions`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ permission_id: permissionId }),
     });
     return handleResponse(response);
   },
 
-  removePermissionFromRole: async (roleId: string, permissionId: string): Promise<void> => {
+  removePermissionFromRole: async (roleId: string, permissionId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/roles/${roleId}/permissions/${permissionId}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -537,31 +556,34 @@ export interface SystemSettingResponse {
 
 // System Settings API
 export const systemApi = {
-  getEmailSettings: async (): Promise<{ data: SystemSettingResponse }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/system/email`);
+  getEmailSettings: async (accessToken?: string): Promise<{ data: SystemSettingResponse }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  updateEmailSettings: async (config: EmailProviderConfig): Promise<{ data: SystemSettingResponse }> => {
+  updateEmailSettings: async (config: EmailProviderConfig, accessToken?: string): Promise<{ data: SystemSettingResponse }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ config }),
     });
     return handleResponse(response);
   },
 
-  testEmailConnection: async (): Promise<TestEmailResponse> => {
+  testEmailConnection: async (accessToken?: string): Promise<TestEmailResponse> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email/test`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
 
-  sendTestEmail: async (toEmail: string): Promise<TestEmailResponse> => {
+  sendTestEmail: async (toEmail: string, accessToken?: string): Promise<TestEmailResponse> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email/send-test`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ to_email: toEmail }),
     });
     return handleResponse(response);
@@ -597,7 +619,8 @@ export const invitationApi = {
     tenantId: string,
     page = 1,
     perPage = 20,
-    status?: InvitationStatusFilter
+    status?: InvitationStatusFilter,
+    accessToken?: string
   ): Promise<PaginatedResponse<Invitation>> => {
     const params = new URLSearchParams({
       page: page.toString(),
@@ -607,51 +630,62 @@ export const invitationApi = {
       params.set("status", status);
     }
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations?${params.toString()}`
+      `${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations?${params.toString()}`,
+      { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);
   },
 
   create: async (tenantId: string, input: CreateInvitationInput, accessToken?: string): Promise<{ data: Invitation }> => {
-    const headers: Record<string, string> = { "Content-Type": "application/json" };
-    if (accessToken) {
-      headers["Authorization"] = `Bearer ${accessToken}`;
-    }
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/invitations`, {
       method: "POST",
-      headers,
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  get: async (id: string): Promise<{ data: Invitation }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}`);
+  get: async (id: string, accessToken?: string): Promise<{ data: Invitation }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  revoke: async (id: string): Promise<{ data: Invitation }> => {
+  revoke: async (id: string, accessToken?: string): Promise<{ data: Invitation }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}/revoke`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
 
-  resend: async (id: string): Promise<{ data: Invitation }> => {
+  resend: async (id: string, accessToken?: string): Promise<{ data: Invitation }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}/resend`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
 
-  delete: async (id: string): Promise<void> => {
+  delete: async (id: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/invitations/${id}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
       throw new Error(error.message);
     }
+  },
+
+  accept: async (input: { token: string; email?: string; password?: string; display_name?: string }): Promise<{ data: Invitation }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/invitations/accept`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
   },
 };
 
@@ -734,15 +768,17 @@ export const publicBrandingApi = {
 
 // Branding API
 export const brandingApi = {
-  get: async (): Promise<{ data: BrandingConfig }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/system/branding`);
+  get: async (accessToken?: string): Promise<{ data: BrandingConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/branding`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  update: async (config: BrandingConfig): Promise<{ data: BrandingConfig }> => {
+  update: async (config: BrandingConfig, accessToken?: string): Promise<{ data: BrandingConfig }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/branding`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ config }),
     });
     return handleResponse(response);
@@ -751,42 +787,49 @@ export const brandingApi = {
 
 // Email Template API
 export const emailTemplateApi = {
-  list: async (): Promise<{ data: EmailTemplateWithContent[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates`);
+  list: async (accessToken?: string): Promise<{ data: EmailTemplateWithContent[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  get: async (type: EmailTemplateType): Promise<{ data: EmailTemplateWithContent }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`);
+  get: async (type: EmailTemplateType, accessToken?: string): Promise<{ data: EmailTemplateWithContent }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
   update: async (
     type: EmailTemplateType,
-    content: EmailTemplateContent
+    content: EmailTemplateContent,
+    accessToken?: string
   ): Promise<{ data: EmailTemplateWithContent }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(content),
     });
     return handleResponse(response);
   },
 
-  reset: async (type: EmailTemplateType): Promise<{ data: EmailTemplateWithContent }> => {
+  reset: async (type: EmailTemplateType, accessToken?: string): Promise<{ data: EmailTemplateWithContent }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
 
   preview: async (
     type: EmailTemplateType,
-    content: EmailTemplateContent
+    content: EmailTemplateContent,
+    accessToken?: string
   ): Promise<{ data: RenderedEmailPreview }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}/preview`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(content),
     });
     return handleResponse(response);
@@ -794,11 +837,12 @@ export const emailTemplateApi = {
 
   sendTestEmail: async (
     type: EmailTemplateType,
-    request: SendTemplateTestEmailRequest
+    request: SendTemplateTestEmailRequest,
+    accessToken?: string
   ): Promise<SendTemplateTestEmailResponse> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/system/email-templates/${type}/send-test`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(request),
     });
     return handleResponse(response);
@@ -912,9 +956,10 @@ export const sessionApi = {
     return handleResponse(response);
   },
 
-  forceLogoutUser: async (userId: string): Promise<{ message: string }> => {
+  forceLogoutUser: async (userId: string, accessToken?: string): Promise<{ message: string }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/admin/users/${userId}/logout`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
@@ -992,20 +1037,24 @@ export interface IdpTemplate {
 }
 
 export const identityProviderApi = {
-  list: async (): Promise<{ data: IdentityProvider[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers`);
+  list: async (accessToken?: string): Promise<{ data: IdentityProvider[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  get: async (alias: string): Promise<{ data: IdentityProvider }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`);
+  get: async (alias: string, accessToken?: string): Promise<{ data: IdentityProvider }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  create: async (input: CreateIdentityProviderInput): Promise<{ data: IdentityProvider }> => {
+  create: async (input: CreateIdentityProviderInput, accessToken?: string): Promise<{ data: IdentityProvider }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
@@ -1013,19 +1062,21 @@ export const identityProviderApi = {
 
   update: async (
     alias: string,
-    input: Partial<CreateIdentityProviderInput>
+    input: Partial<CreateIdentityProviderInput>,
+    accessToken?: string
   ): Promise<{ data: IdentityProvider }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  delete: async (alias: string): Promise<void> => {
+  delete: async (alias: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/identity-providers/${alias}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -1137,20 +1188,24 @@ export interface WebhookTestResult {
 }
 
 export const webhookApi = {
-  list: async (tenantId: string): Promise<{ data: Webhook[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks`);
+  list: async (tenantId: string, accessToken?: string): Promise<{ data: Webhook[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  get: async (tenantId: string, id: string): Promise<{ data: Webhook }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`);
+  get: async (tenantId: string, id: string, accessToken?: string): Promise<{ data: Webhook }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  create: async (tenantId: string, input: CreateWebhookInput): Promise<{ data: Webhook }> => {
+  create: async (tenantId: string, input: CreateWebhookInput, accessToken?: string): Promise<{ data: Webhook }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
@@ -1159,19 +1214,21 @@ export const webhookApi = {
   update: async (
     tenantId: string,
     id: string,
-    input: Partial<CreateWebhookInput>
+    input: Partial<CreateWebhookInput>,
+    accessToken?: string
   ): Promise<{ data: Webhook }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  delete: async (tenantId: string, id: string): Promise<void> => {
+  delete: async (tenantId: string, id: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -1179,9 +1236,10 @@ export const webhookApi = {
     }
   },
 
-  test: async (tenantId: string, id: string): Promise<{ data: WebhookTestResult }> => {
+  test: async (tenantId: string, id: string, accessToken?: string): Promise<{ data: WebhookTestResult }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}/test`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
@@ -1198,26 +1256,31 @@ export interface ServiceWithStatus {
 }
 
 export const tenantServiceApi = {
-  listServices: async (tenantId: string): Promise<{ data: ServiceWithStatus[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services`);
+  listServices: async (tenantId: string, accessToken?: string): Promise<{ data: ServiceWithStatus[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
   toggleService: async (
     tenantId: string,
     serviceId: string,
-    enabled: boolean
+    enabled: boolean,
+    accessToken?: string
   ): Promise<{ data: ServiceWithStatus[] }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ service_id: serviceId, enabled }),
     });
     return handleResponse(response);
   },
 
-  getEnabledServices: async (tenantId: string): Promise<{ data: ServiceWithStatus[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services/enabled`);
+  getEnabledServices: async (tenantId: string, accessToken?: string): Promise<{ data: ServiceWithStatus[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/services/enabled`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 };
@@ -1243,18 +1306,22 @@ export const securityAlertApi = {
   list: async (
     page = 1,
     perPage = 50,
-    unresolvedOnly = false
+    unresolvedOnly = false,
+    accessToken?: string
   ): Promise<PaginatedResponse<SecurityAlert>> => {
     const offset = (page - 1) * perPage;
     let url = `${API_BASE_URL}/api/v1/security/alerts?limit=${perPage}&offset=${offset}`;
     if (unresolvedOnly) url += "&unresolved=true";
-    const response = await fetch(url);
+    const response = await fetch(url, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  resolve: async (id: string): Promise<{ data: SecurityAlert }> => {
+  resolve: async (id: string, accessToken?: string): Promise<{ data: SecurityAlert }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/security/alerts/${id}/resolve`, {
       method: "POST",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },

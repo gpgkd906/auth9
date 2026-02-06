@@ -15,6 +15,7 @@ import {
   DialogTitle,
 } from "~/components/ui/dialog";
 import { tenantApi, type Tenant } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 interface TenantSettings {
   branding?: {
@@ -25,14 +26,16 @@ interface TenantSettings {
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "10");
-  const tenants = await tenantApi.list(page, perPage);
+  const tenants = await tenantApi.list(page, perPage, undefined, accessToken || undefined);
   return tenants;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -50,7 +53,7 @@ export async function action({ request }: ActionFunctionArgs) {
         }
       };
 
-      await tenantApi.update(id, { settings });
+      await tenantApi.update(id, { settings }, accessToken || undefined);
       return { success: true };
     }
   } catch (error) {

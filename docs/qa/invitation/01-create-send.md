@@ -6,6 +6,19 @@
 
 ---
 
+## 测试前置数据（必需）
+
+在执行本文件场景前，先执行：
+
+```bash
+mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/invitation/seed.sql
+```
+
+说明：
+- `seed.sql` 会创建测试租户/服务/角色/邀请数据，并把 `admin@auth9.local` 加入租户
+- 如果输出的 `admin_user_id` 为空，请先登录 Portal 完成首次登录以同步用户
+- 测试租户：`invitation-test`（id=`11111111-1111-4111-8111-111111111111`）
+
 ## 数据库表结构参考
 
 ### invitations 表
@@ -60,6 +73,7 @@ WHERE email = 'newuser@example.com' AND tenant_id = '{tenant_id}';
 
 ### 初始状态
 - 用户已是租户成员
+- 可用邮箱：`admin@auth9.local`（seed 已加入租户）
 
 ### 目的
 验证系统拒绝邀请已存在成员
@@ -106,6 +120,7 @@ SELECT COUNT(*) FROM invitations WHERE email = 'pending@example.com' AND status 
 ### 初始状态
 - 存在待处理邀请
 - 被邀请人称未收到邮件
+- 可用邀请：`pending@example.com`（seed 已创建）
 
 ### 目的
 验证重新发送邀请功能
@@ -177,9 +192,9 @@ FROM invitations WHERE id = '{invitation_id}';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 创建邀请 | ☐ | | | |
-| 2 | 邀请已存在成员 | ☐ | | | |
-| 3 | 重复邀请同一邮箱 | ☐ | | | |
-| 4 | 重新发送邀请 | ☐ | | | |
-| 5 | 不同过期时间 | ☐ | | | |
-| 6 | 认证状态检查 | ☐ | | | |
+| 1 | 创建邀请 | PASS | 2026-02-06 | Codex | 邮件发送成功 |
+| 2 | 邀请已存在成员 | FAIL | 2026-02-06 | Codex | 见 `docs/ticket/invitation_01-create-send_scenario2_260206_194614.md` |
+| 3 | 重复邀请同一邮箱 | PASS | 2026-02-06 | Codex | 返回“已存在”错误 |
+| 4 | 重新发送邀请 | FAIL | 2026-02-06 | Codex | 见 `docs/ticket/invitation_01-create-send_scenario4_260206_194834.md` |
+| 5 | 不同过期时间 | PASS | 2026-02-06 | Codex | 24/48/72/168 小时符合预期 |
+| 6 | 认证状态检查 | NOT RUN |  |  |  |

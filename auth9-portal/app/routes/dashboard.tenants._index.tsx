@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { tenantApi, type Tenant } from "~/services/api";
+import { requireAuth } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 
 export const meta: MetaFunction = () => {
@@ -31,17 +32,21 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const session = await requireAuth(request);
+  const accessToken = session.accessToken;
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
   const search = url.searchParams.get("search") || undefined;
-  const tenants = await tenantApi.list(page, perPage, search);
+  const tenants = await tenantApi.list(page, perPage, search, accessToken);
   return { ...tenants, search: search || "" };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const session = await requireAuth(request);
+  const accessToken = session.accessToken;
 
   try {
     if (intent === "create") {
@@ -49,7 +54,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const slug = formData.get("slug") as string;
       const logo_url = formData.get("logo_url") as string;
 
-      await tenantApi.create({ name, slug, logo_url: logo_url || undefined });
+      await tenantApi.create({ name, slug, logo_url: logo_url || undefined }, accessToken);
       return { success: true };
     }
 
@@ -59,13 +64,13 @@ export async function action({ request }: ActionFunctionArgs) {
       const slug = formData.get("slug") as string;
       const logo_url = formData.get("logo_url") as string;
 
-      await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined });
+      await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined }, accessToken);
       return { success: true };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
-      await tenantApi.delete(id);
+      await tenantApi.delete(id, accessToken);
       return { success: true };
     }
   } catch (error) {

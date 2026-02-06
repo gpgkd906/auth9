@@ -1,4 +1,4 @@
-import type { MetaFunction } from "react-router";
+import type { MetaFunction, LoaderFunctionArgs } from "react-router";
 import { Link, useLoaderData } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -12,15 +12,17 @@ import {
   TableRow,
 } from "~/components/ui/table";
 import { emailTemplateApi, type EmailTemplateWithContent } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import { Pencil1Icon } from "@radix-ui/react-icons";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Email Templates - Auth9" }];
 };
 
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   try {
-    const result = await emailTemplateApi.list();
+    const result = await emailTemplateApi.list(accessToken || undefined);
     return { templates: result.data, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load templates";

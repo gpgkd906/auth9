@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, Link, useActionData, useLoaderData, useNavigation, useParams, useSubmit } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useParams, useSearchParams, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, TrashIcon, ReloadIcon, Cross2Icon, ArrowLeftIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -31,7 +31,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select";
-import { invitationApi, tenantApi, tenantServiceApi, rbacApi, type Invitation, type Role, type Tenant } from "~/services/api";
+import { redirect } from "react-router";
+import { invitationApi, tenantApi, tenantServiceApi, rbacApi, type Invitation, type Role, type Tenant, type InvitationStatusFilter } from "~/services/api";
 import { formatDateTime } from "~/lib/utils";
 import { getAccessToken } from "~/services/session.server";
 
@@ -50,6 +51,7 @@ interface LoaderData {
   };
   roles: { serviceId: string; serviceName: string; roles: Role[] }[];
   servicesCount: number;
+  status: InvitationStatusFilter | "all";
 }
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
@@ -58,36 +60,47 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     throw new Response("Tenant ID required", { status: 400 });
   }
 
+  const accessToken = await getAccessToken(request);
+
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
+  const statusParam = url.searchParams.get("status");
+  const status = statusParam && ["pending", "accepted", "expired", "revoked"].includes(statusParam)
+    ? (statusParam as InvitationStatusFilter)
+    : undefined;
 
-  // Fetch tenant, invitations, and enabled services in parallel
-  const [tenantResult, invitationsResult, servicesResult] = await Promise.all([
-    tenantApi.get(tenantId),
-    invitationApi.list(tenantId, page, perPage),
-    tenantServiceApi.getEnabledServices(tenantId), // Get enabled services for this tenant
-  ]);
+  try {
+    // Fetch tenant, invitations, and enabled services in parallel
+    const [tenantResult, invitationsResult, servicesResult] = await Promise.all([
+      tenantApi.get(tenantId, accessToken || undefined),
+      invitationApi.list(tenantId, page, perPage, status, accessToken || undefined),
+      tenantServiceApi.getEnabledServices(tenantId, accessToken || undefined), // Get enabled services for this tenant
+    ]);
 
-  // Fetch roles for each service
-  const rolesPromises = servicesResult.data.map(async (service) => {
-    const rolesResult = await rbacApi.listRoles(service.id);
+    // Fetch roles for each service
+    const rolesPromises = servicesResult.data.map(async (service) => {
+      const rolesResult = await rbacApi.listRoles(service.id, accessToken || undefined);
+      return {
+        serviceId: service.id,
+        serviceName: service.name,
+        roles: rolesResult.data,
+      };
+    });
+
+    const roles = await Promise.all(rolesPromises);
+
     return {
-      serviceId: service.id,
-      serviceName: service.name,
-      roles: rolesResult.data,
-    };
-  });
-
-  const roles = await Promise.all(rolesPromises);
-
-  return {
-    tenant: tenantResult.data,
-    invitations: invitationsResult.data,
-    pagination: invitationsResult.pagination,
-    roles,
-    servicesCount: servicesResult.data.length,
-  } satisfies LoaderData;
+      tenant: tenantResult.data,
+      invitations: invitationsResult.data,
+      pagination: invitationsResult.pagination,
+      roles,
+      servicesCount: servicesResult.data.length,
+      status: status ?? "all",
+    } satisfies LoaderData;
+  } catch {
+    throw redirect("/dashboard/tenants");
+  }
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
@@ -132,19 +145,19 @@ export async function action({ params, request }: ActionFunctionArgs) {
 
     if (intent === "revoke") {
       const id = formData.get("id") as string;
-      await invitationApi.revoke(id);
+      await invitationApi.revoke(id, accessToken);
       return { success: true };
     }
 
     if (intent === "resend") {
       const id = formData.get("id") as string;
-      await invitationApi.resend(id);
+      await invitationApi.resend(id, accessToken);
       return { success: true, message: "Invitation email resent" };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
-      await invitationApi.delete(id);
+      await invitationApi.delete(id, accessToken);
       return { success: true };
     }
   } catch (error) {
@@ -178,10 +191,11 @@ function getStatusBadge(status: Invitation["status"]) {
 }
 
 export default function InvitationsPage() {
-  const { tenant, invitations, pagination, roles, servicesCount } = useLoaderData<LoaderData>();
+  const { tenant, invitations, pagination, roles, servicesCount, status } = useLoaderData<LoaderData>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
+  const [searchParams] = useSearchParams();
   const params = useParams();
 
   const [isCreateOpen, setIsCreateOpen] = useState(false);
@@ -223,6 +237,26 @@ export default function InvitationsPage() {
 
   const handleResend = (id: string) => {
     submit({ intent: "resend", id }, { method: "post" });
+  };
+
+  const handleStatusChange = (value: string) => {
+    const nextParams = new URLSearchParams(searchParams);
+    if (value === "all") {
+      nextParams.delete("status");
+    } else {
+      nextParams.set("status", value);
+    }
+    nextParams.delete("page");
+    submit(nextParams, { method: "get" });
+  };
+
+  const buildPageLink = (page: number) => {
+    const nextParams = new URLSearchParams();
+    nextParams.set("page", page.toString());
+    if (status !== "all") {
+      nextParams.set("status", status);
+    }
+    return `/dashboard/tenants/${params.tenantId}/invitations?${nextParams.toString()}`;
   };
 
   return (
@@ -357,11 +391,28 @@ export default function InvitationsPage() {
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>Pending & Past Invitations</CardTitle>
-          <CardDescription>
-            {pagination.total} invitations • Page {pagination.page} of {pagination.total_pages}
-          </CardDescription>
+        <CardHeader className="gap-4 sm:flex sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <CardTitle>Pending & Past Invitations</CardTitle>
+            <CardDescription>
+              {pagination.total} invitations • Page {pagination.page} of {pagination.total_pages}
+            </CardDescription>
+          </div>
+          <div className="w-full sm:w-56">
+            <Label className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Status Filter</Label>
+            <Select value={status} onValueChange={handleStatusChange}>
+              <SelectTrigger className="mt-2">
+                <SelectValue placeholder="All statuses" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="pending">Pending</SelectItem>
+                <SelectItem value="accepted">Accepted</SelectItem>
+                <SelectItem value="expired">Expired</SelectItem>
+                <SelectItem value="revoked">Revoked</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
         </CardHeader>
         <div className="px-6 pb-6">
           <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
@@ -443,7 +494,7 @@ export default function InvitationsPage() {
               {Array.from({ length: pagination.total_pages }, (_, i) => i + 1).map((page) => (
                 <Link
                   key={page}
-                  to={`/dashboard/tenants/${params.tenantId}/invitations?page=${page}`}
+                  to={buildPageLink(page)}
                   className={`px-3 py-1 text-sm rounded-md ${
                     page === pagination.page
                       ? "bg-apple-blue text-white"

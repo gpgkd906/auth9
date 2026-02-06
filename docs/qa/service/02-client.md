@@ -30,21 +30,21 @@
 
 ### 测试操作流程
 1. 进入服务详情页
-2. 点击「创建客户端」
+2. 点击「创建客户端」 (UI: + 号按钮)
 3. 填写：
-   - Client ID：`my-app-mobile`
-   - 名称：`Mobile App Client`
+   - Description：`Mobile App Client` (UI 仅支持输入描述，Client ID 自动生成)
 4. 点击「创建」
 
 ### 预期结果
 - 显示创建成功
 - 显示 Client Secret（仅此一次）
+- 显示自动生成的 Client ID
 - 客户端出现在列表中
 
 ### 预期数据状态
 ```sql
-SELECT id, service_id, client_id, name FROM clients WHERE client_id = 'my-app-mobile';
--- 预期: 存在记录，client_secret_hash 非空
+SELECT id, service_id, client_id, name FROM clients WHERE name = 'Mobile App Client';
+-- 预期: 存在记录，client_id 为 UUID 格式，client_secret_hash 非空
 ```
 
 ---
