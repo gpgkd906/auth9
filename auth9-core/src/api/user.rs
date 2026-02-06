@@ -17,6 +17,7 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
+use validator::Validate;
 
 /// Check if user can manage the target tenant
 /// Requires the user to be an owner of the target tenant
@@ -227,6 +228,9 @@ pub async fn create<S: HasServices + HasBranding>(
         }
     }
 
+    // Validate input before calling Keycloak (catches invalid emails early)
+    input.user.validate()?;
+
     let credentials = input.password.map(|password| {
         vec![KeycloakCredential {
             credential_type: "password".to_string(),
@@ -383,6 +387,43 @@ pub async fn add_to_tenant<S: HasServices>(
     )
     .await;
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(tenant_user))))
+}
+
+/// Update user's role in a tenant
+#[derive(Debug, Deserialize)]
+pub struct UpdateRoleInTenantRequest {
+    pub role_in_tenant: String,
+}
+
+/// Update user's role in a tenant
+/// Requires the caller to be an owner of the target tenant
+pub async fn update_role_in_tenant<S: HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    headers: HeaderMap,
+    Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
+    Json(input): Json<UpdateRoleInTenantRequest>,
+) -> Result<impl IntoResponse> {
+    // Check authorization: require owner of the target tenant
+    require_tenant_owner(&state, &auth, tenant_id).await?;
+
+    let user_id = StringUuid::from(user_id);
+    let tenant_id = StringUuid::from(tenant_id);
+    let tenant_user = state
+        .user_service()
+        .update_role_in_tenant(user_id, tenant_id, input.role_in_tenant)
+        .await?;
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "user.update_role_in_tenant",
+        "tenant_user",
+        Some(*tenant_user.id),
+        None,
+        serde_json::to_value(&tenant_user).ok(),
+    )
+    .await;
+    Ok(Json(SuccessResponse::new(tenant_user)))
 }
 
 /// Remove user from tenant

@@ -20,12 +20,20 @@ use tracing::{debug, error, info, warn};
 type HmacSha256 = Hmac<Sha256>;
 
 /// Keycloak event payload from p2-inc/keycloak-events plugin
+///
+/// Handles both user events (have `type` field) and admin events
+/// (have `operationType`/`resourceType`, no `type`).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct KeycloakEvent {
-    /// Event type (e.g., "LOGIN", "LOGIN_ERROR", "LOGOUT")
-    #[serde(rename = "type")]
-    pub event_type: String,
+    /// Event type for user events (e.g., "LOGIN", "LOGIN_ERROR", "LOGOUT")
+    /// Optional because admin events use operationType/resourceType instead.
+    #[serde(default, rename = "type", alias = "eventType")]
+    pub event_type: Option<String>,
+    /// Operation type for admin events (e.g., "CREATE", "UPDATE", "DELETE")
+    pub operation_type: Option<String>,
+    /// Resource type for admin events (e.g., "USER", "GROUP", "CLIENT")
+    pub resource_type: Option<String>,
     /// Realm ID
     pub realm_id: Option<String>,
     /// Client ID (application that initiated the login)
@@ -209,7 +217,12 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
     let event: KeycloakEvent = match serde_json::from_slice(&body) {
         Ok(e) => e,
         Err(err) => {
-            error!("Failed to parse Keycloak event: {}", err);
+            // Log truncated raw body for debugging (max 500 chars, avoid sensitive data)
+            let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
+            error!(
+                "Failed to parse Keycloak event: {}. Body preview: {}",
+                err, body_preview
+            );
             return Err(AppError::BadRequest(format!(
                 "Invalid event payload: {}",
                 err
@@ -217,13 +230,24 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
         }
     };
 
+    // 3. Skip admin events (operationType/resourceType) - we only track user login events
+    if event.event_type.is_none() {
+        debug!(
+            "Skipping Keycloak admin event: operation={:?}, resource={:?}",
+            event.operation_type, event.resource_type
+        );
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let event_type_str = event.event_type.as_deref().unwrap_or("");
+
     debug!(
         "Received Keycloak event: type={}, user_id={:?}, error={:?}",
-        event.event_type, event.user_id, event.error
+        event_type_str, event.user_id, event.error
     );
 
-    // 3. Map to our login event type (skip non-login events)
-    let login_event_type = match map_event_type(&event.event_type, event.error.as_deref()) {
+    // 4. Map to our login event type (skip non-login events)
+    let login_event_type = match map_event_type(event_type_str, event.error.as_deref()) {
         Some(t) => t,
         None => {
             // Not a login event we track, acknowledge receipt
@@ -231,21 +255,21 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
         }
     };
 
-    // 4. Parse user ID if present (Keycloak uses UUID format)
+    // 5. Parse user ID if present (Keycloak uses UUID format)
     let user_id = event
         .user_id
         .as_ref()
         .and_then(|id| uuid::Uuid::parse_str(id).ok())
         .map(StringUuid::from);
 
-    // 5. Get email from event details
+    // 6. Get email from event details
     let email = event
         .details
         .email
         .clone()
         .or_else(|| event.details.username.clone());
 
-    // 6. Create login event input
+    // 7. Create login event input
     let input = CreateLoginEventInput {
         user_id,
         email,
@@ -267,17 +291,17 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
         failure_reason: derive_failure_reason(event.error.as_deref()),
     };
 
-    // 7. Record the login event
+    // 8. Record the login event
     let event_id = state.analytics_service().record_login_event(input).await?;
 
     info!(
         "Recorded login event: id={}, type={}, user_id={:?}",
         event_id,
-        event.event_type,
+        event_type_str,
         event.user_id
     );
 
-    // 8. Trigger security detection analysis
+    // 9. Trigger security detection analysis
     // Fetch the event we just created to pass to security detection
     if let Ok((events, _)) = state.analytics_service().list_events(1, 1).await {
         if let Some(login_event) = events.into_iter().next() {
@@ -456,7 +480,7 @@ mod tests {
 
         let event: KeycloakEvent = serde_json::from_str(json).unwrap();
 
-        assert_eq!(event.event_type, "LOGIN_ERROR");
+        assert_eq!(event.event_type, Some("LOGIN_ERROR".to_string()));
         assert_eq!(event.realm_id, Some("auth9".to_string()));
         assert_eq!(event.client_id, Some("auth9-portal".to_string()));
         assert_eq!(
@@ -478,9 +502,25 @@ mod tests {
 
         let event: KeycloakEvent = serde_json::from_str(json).unwrap();
 
-        assert_eq!(event.event_type, "LOGIN");
+        assert_eq!(event.event_type, Some("LOGIN".to_string()));
         assert_eq!(event.realm_id, None);
         assert_eq!(event.user_id, None);
         assert_eq!(event.error, None);
+    }
+
+    #[test]
+    fn test_keycloak_admin_event_deserialization() {
+        let json = r#"{
+            "operationType": "CREATE",
+            "resourceType": "USER",
+            "realmId": "auth9",
+            "time": 1704067200000
+        }"#;
+
+        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+
+        assert_eq!(event.event_type, None);
+        assert_eq!(event.operation_type, Some("CREATE".to_string()));
+        assert_eq!(event.resource_type, Some("USER".to_string()));
     }
 }

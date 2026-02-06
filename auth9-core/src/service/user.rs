@@ -243,7 +243,33 @@ impl<
 
     pub async fn add_to_tenant(&self, input: AddUserToTenantInput) -> Result<TenantUser> {
         input.validate()?;
-        self.repo.add_to_tenant(&input).await
+        self.repo.add_to_tenant(&input).await.map_err(|e| {
+            if let AppError::Database(ref db_err) = e {
+                let err_str = db_err.to_string().to_lowercase();
+                if err_str.contains("duplicate") || err_str.contains("unique") {
+                    return AppError::Conflict(
+                        "User is already a member of this tenant".to_string(),
+                    );
+                }
+            }
+            e
+        })
+    }
+
+    pub async fn update_role_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        role: String,
+    ) -> Result<TenantUser> {
+        if role.is_empty() || role.len() > 50 {
+            return Err(AppError::Validation(
+                "Role must be between 1 and 50 characters".to_string(),
+            ));
+        }
+        self.repo
+            .update_role_in_tenant(user_id, tenant_id, &role)
+            .await
     }
 
     /// Remove a user from a tenant with cascade delete of role assignments.
@@ -308,6 +334,33 @@ mod tests {
     use crate::repository::user::MockUserRepository;
     use mockall::predicate::*;
     use uuid::Uuid;
+
+    /// Helper to create a sqlx::Database error for testing duplicate key scenarios
+    #[derive(Debug)]
+    struct TestDbError(String);
+    impl std::fmt::Display for TestDbError {
+        fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+            write!(f, "{}", self.0)
+        }
+    }
+    impl std::error::Error for TestDbError {}
+    impl sqlx::error::DatabaseError for TestDbError {
+        fn message(&self) -> &str {
+            &self.0
+        }
+        fn as_error(&self) -> &(dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn as_error_mut(&mut self) -> &mut (dyn std::error::Error + Send + Sync + 'static) {
+            self
+        }
+        fn into_error(self: Box<Self>) -> Box<dyn std::error::Error + Send + Sync + 'static> {
+            self
+        }
+        fn kind(&self) -> sqlx::error::ErrorKind {
+            sqlx::error::ErrorKind::UniqueViolation
+        }
+    }
 
     fn create_test_service(
         mock_user: MockUserRepository,
@@ -890,6 +943,33 @@ mod tests {
         let result = service.add_to_tenant(input).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().role_in_tenant, "member");
+    }
+
+    #[tokio::test]
+    async fn test_add_to_tenant_duplicate_returns_conflict() {
+        let mut mock = MockUserRepository::new();
+        let user_id = Uuid::new_v4();
+        let tenant_id = Uuid::new_v4();
+
+        mock.expect_add_to_tenant().returning(|_| {
+            Err(AppError::Database(sqlx::Error::Database(Box::new(
+                TestDbError("Duplicate entry 'xxx' for key 'tenant_users.uk_tenant_user'".into()),
+            ))))
+        });
+
+        let service = create_test_service(mock);
+
+        let input = AddUserToTenantInput {
+            user_id,
+            tenant_id,
+            role_in_tenant: "member".to_string(),
+        };
+
+        let result = service.add_to_tenant(input).await;
+        assert!(matches!(result, Err(AppError::Conflict(_))));
+        if let Err(AppError::Conflict(msg)) = result {
+            assert!(msg.contains("already a member"));
+        }
     }
 
     #[tokio::test]

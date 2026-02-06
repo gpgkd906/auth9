@@ -388,6 +388,23 @@ impl UserRepository for TestUserRepository {
         Ok(tenant_user)
     }
 
+    async fn update_role_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        role: &str,
+    ) -> Result<TenantUser> {
+        let mut tenant_users = self.tenant_users.write().await;
+        let tu = tenant_users
+            .iter_mut()
+            .find(|tu| tu.user_id == user_id && tu.tenant_id == tenant_id)
+            .ok_or_else(|| {
+                AppError::NotFound("User-tenant relationship not found".to_string())
+            })?;
+        tu.role_in_tenant = role.to_string();
+        Ok(tu.clone())
+    }
+
     async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()> {
         let mut tenant_users = self.tenant_users.write().await;
         let pos = tenant_users
