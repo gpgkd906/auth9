@@ -142,6 +142,14 @@ ghcr.io/gpgkd906/auth9-portal:latest
 | `JWT_ISSUER` | JWT issuer URL | `https://auth9.example.com` |
 | `KEYCLOAK_URL` | Keycloak server URL | `http://localhost:8081` |
 
+## Documentation
+
+- **[Architecture](docs/architecture.md)** - System design and architecture overview
+- **[Design System](docs/design-system.md)** - Liquid Glass UI design language
+- **[QA Test Cases](docs/qa/README.md)** - Functional testing scenarios (185 scenarios)
+- **[UI/UX Test Cases](docs/uiux/README.md)** - UI/UX testing scenarios (27 scenarios)
+- **[Keycloak Theme](docs/keycloak-theme.md)** - Customizing Keycloak login pages
+
 ## Development
 
 ### Running Tests
