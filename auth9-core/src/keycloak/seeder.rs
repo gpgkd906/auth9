@@ -284,7 +284,15 @@ impl KeycloakSeeder {
                 "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
             ],
             // Retain events for 30 days (for troubleshooting)
-            "eventsExpiration": 2592000
+            "eventsExpiration": 2592000,
+            // Enable brute force protection
+            "bruteForceProtected": true,
+            "failureFactor": 5,
+            "maxDeltaTimeSeconds": 600,
+            "waitIncrementSeconds": 60,
+            "maxFailureWaitSeconds": 900,
+            "minimumQuickLoginWaitSeconds": 60,
+            "quickLoginCheckMilliSeconds": 1000
         });
 
         let response = self

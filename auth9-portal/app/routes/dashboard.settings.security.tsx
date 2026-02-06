@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -7,10 +7,12 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
 import { passwordApi, tenantApi, type PasswordPolicy, type Tenant } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
   // Load tenants for password policy management (admin only)
-  const tenantsResponse = await tenantApi.list(1, 100);
+  const accessToken = await getAccessToken(request);
+  const tenantsResponse = await tenantApi.list(1, 100, undefined, accessToken || undefined);
   return { tenants: tenantsResponse.data };
 }
 

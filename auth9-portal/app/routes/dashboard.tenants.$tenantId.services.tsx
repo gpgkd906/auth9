@@ -4,37 +4,45 @@ import { ArrowLeftIcon, GlobeIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Switch } from "~/components/ui/switch";
+import { redirect } from "react-router";
 import { tenantApi, tenantServiceApi, type ServiceWithStatus } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction<typeof loader> = ({ data }) => {
   return [{ title: `Services - ${data?.tenant.name || "Tenant"} - Auth9` }];
 };
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
   const { tenantId } = params;
   if (!tenantId) throw new Error("Tenant ID is required");
+  const accessToken = await getAccessToken(request);
 
-  const [tenantRes, servicesRes] = await Promise.all([
-    tenantApi.get(tenantId),
-    tenantServiceApi.listServices(tenantId),
-  ]);
+  try {
+    const [tenantRes, servicesRes] = await Promise.all([
+      tenantApi.get(tenantId, accessToken || undefined),
+      tenantServiceApi.listServices(tenantId, accessToken || undefined),
+    ]);
 
-  return {
-    tenant: tenantRes.data,
-    services: servicesRes.data,
-  };
+    return {
+      tenant: tenantRes.data,
+      services: servicesRes.data,
+    };
+  } catch {
+    throw redirect("/dashboard/tenants");
+  }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const { tenantId } = params;
   if (!tenantId) return Response.json({ error: "Tenant ID required" }, { status: 400 });
+  const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
   const serviceId = formData.get("serviceId") as string;
   const enabled = formData.get("enabled") === "true";
 
   try {
-    const result = await tenantServiceApi.toggleService(tenantId, serviceId, enabled);
+    const result = await tenantServiceApi.toggleService(tenantId, serviceId, enabled, accessToken || undefined);
     return { success: true, services: result.data };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";

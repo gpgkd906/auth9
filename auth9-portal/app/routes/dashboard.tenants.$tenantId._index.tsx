@@ -1,46 +1,55 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
+import { Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
 import { ArrowLeftIcon, EnvelopeClosedIcon, GlobeIcon, Link2Icon, PersonIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Switch } from "~/components/ui/switch";
+import { redirect } from "react-router";
 import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi } from "~/services/api";
 import { formatErrorMessage } from "~/lib/error-messages";
+import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction<typeof loader> = ({ data }) => {
   return [{ title: `${data?.tenant.name || "Tenant"} - Auth9` }];
 };
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
   const { tenantId } = params;
   if (!tenantId) throw new Error("Tenant ID is required");
+  const accessToken = await getAccessToken(request);
 
-  // Fetch tenant details and related counts in parallel
-  const [tenantRes, servicesRes, invitationsRes, webhooksRes, tenantServicesRes] = await Promise.all([
-    tenantApi.get(tenantId),
-    serviceApi.list(tenantId, 1, 1), // Just get count
-    invitationApi.list(tenantId, 1, 1, "pending"), // Pending invitations count
-    webhookApi.list(tenantId),
-    tenantServiceApi.listServices(tenantId), // Get global services with enabled status
-  ]);
+  try {
+    // Fetch tenant details and related counts in parallel
+    const [tenantRes, servicesRes, invitationsRes, webhooksRes, tenantServicesRes] = await Promise.all([
+      tenantApi.get(tenantId, accessToken || undefined),
+      serviceApi.list(tenantId, 1, 1, accessToken || undefined), // Just get count
+      invitationApi.list(tenantId, 1, 1, "pending", accessToken || undefined), // Pending invitations count
+      webhookApi.list(tenantId, accessToken || undefined),
+      tenantServiceApi.listServices(tenantId, accessToken || undefined), // Get global services with enabled status
+    ]);
 
-  const enabledServicesCount = tenantServicesRes.data.filter(s => s.enabled).length;
-  const totalGlobalServicesCount = tenantServicesRes.data.length;
+    const enabledServicesCount = tenantServicesRes.data.filter(s => s.enabled).length;
+    const totalGlobalServicesCount = tenantServicesRes.data.length;
 
-  return {
-    tenant: tenantRes.data,
-    servicesCount: servicesRes.pagination.total,
-    pendingInvitationsCount: invitationsRes.pagination.total,
-    webhooksCount: webhooksRes.data.length,
-    enabledServicesCount,
-    totalGlobalServicesCount,
-  };
+    return {
+      tenant: tenantRes.data,
+      servicesCount: servicesRes.pagination.total,
+      pendingInvitationsCount: invitationsRes.pagination.total,
+      webhooksCount: webhooksRes.data.length,
+      enabledServicesCount,
+      totalGlobalServicesCount,
+    };
+  } catch {
+    throw redirect("/dashboard/tenants");
+  }
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const { tenantId } = params;
   if (!tenantId) return Response.json({ error: "Tenant ID required" }, { status: 400 });
+  const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -55,8 +64,16 @@ export async function action({ request, params }: ActionFunctionArgs) {
         name,
         slug,
         logo_url: logo_url || undefined,
-      });
+      }, accessToken || undefined);
       return { success: true };
+    }
+
+    if (intent === "update_settings") {
+      const requireMfa = formData.get("require_mfa") === "true";
+      await tenantApi.update(tenantId, {
+        settings: { require_mfa: requireMfa },
+      }, accessToken || undefined);
+      return { success: true, settingsUpdated: true };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
@@ -71,8 +88,15 @@ export default function TenantDetailPage() {
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const settingsFetcher = useFetcher();
 
   const isSubmitting = navigation.state === "submitting";
+  const isSettingsUpdating = settingsFetcher.state !== "idle";
+
+  // Optimistic MFA state
+  const requireMfa = settingsFetcher.formData
+    ? settingsFetcher.formData.get("require_mfa") === "true"
+    : (tenant.settings as Record<string, unknown>)?.require_mfa === true;
 
   return (
     <div className="space-y-6">
@@ -170,6 +194,44 @@ export default function TenantDetailPage() {
                   </Button>
                 </div>
               </Form>
+            </CardContent>
+          </Card>
+
+          {/* Security Settings */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Security Settings</CardTitle>
+              <CardDescription>Authentication and security policies for this tenant</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex items-center justify-between">
+                <div className="space-y-0.5">
+                  <Label>Require MFA</Label>
+                  <p className="text-sm text-[var(--text-secondary)]">
+                    Require all users in this tenant to enable multi-factor authentication
+                  </p>
+                </div>
+                <Switch
+                  checked={requireMfa}
+                  disabled={isSettingsUpdating}
+                  onCheckedChange={(checked: boolean) => {
+                    settingsFetcher.submit(
+                      { intent: "update_settings", require_mfa: checked.toString() },
+                      { method: "post" }
+                    );
+                  }}
+                />
+              </div>
+              {settingsFetcher.data && "success" in (settingsFetcher.data as Record<string, unknown>) && (
+                <p className="text-sm text-[var(--accent-green)] mt-3">
+                  Settings saved successfully
+                </p>
+              )}
+              {settingsFetcher.data && "error" in (settingsFetcher.data as Record<string, unknown>) && (
+                <p className="text-sm text-[var(--accent-red)] mt-3">
+                  {String((settingsFetcher.data as Record<string, unknown>).error)}
+                </p>
+              )}
             </CardContent>
           </Card>
         </div>

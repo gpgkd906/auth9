@@ -3,6 +3,7 @@ import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-r
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { securityAlertApi, type SecurityAlert, type AlertSeverity } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import {
   ExclamationTriangleIcon,
   CheckCircledIcon,
@@ -12,9 +13,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const unresolvedOnly = url.searchParams.get("unresolved") === "true";
+  const accessToken = await getAccessToken(request);
 
   try {
-    const response = await securityAlertApi.list(page, 50, unresolvedOnly);
+    const response = await securityAlertApi.list(page, 50, unresolvedOnly, accessToken || undefined);
     return { alerts: response.data, pagination: response.pagination, unresolvedOnly };
   } catch {
     return {
@@ -29,11 +31,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
+  const accessToken = await getAccessToken(request);
 
   try {
     if (intent === "resolve") {
       const alertId = formData.get("alertId") as string;
-      await securityAlertApi.resolve(alertId);
+      await securityAlertApi.resolve(alertId, accessToken || undefined);
       return { success: true, message: "Alert resolved" };
     }
   } catch (error) {

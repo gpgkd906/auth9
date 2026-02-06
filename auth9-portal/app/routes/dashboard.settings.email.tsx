@@ -1,4 +1,4 @@
-import type { MetaFunction, ActionFunctionArgs } from "react-router";
+import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useState, useEffect } from "react";
 import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
@@ -33,6 +33,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { systemApi, type EmailProviderConfig } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 // Helper to get provider display info
 function getProviderInfo(config: EmailProviderConfig): { name: string; details: string } | null {
@@ -59,9 +60,10 @@ export const meta: MetaFunction = () => {
   return [{ title: "Email Settings - Auth9" }];
 };
 
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   try {
-    const result = await systemApi.getEmailSettings();
+    const result = await systemApi.getEmailSettings(accessToken || undefined);
     // The API returns { data: { category, setting_key, value, ... } }
     // The actual config is in result.data.value
     const config = result.data.value as EmailProviderConfig;
@@ -73,6 +75,7 @@ export async function loader() {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -119,12 +122,12 @@ export async function action({ request }: ActionFunctionArgs) {
         return Response.json({ error: "Invalid provider type" }, { status: 400 });
       }
 
-      await systemApi.updateEmailSettings(config);
+      await systemApi.updateEmailSettings(config, accessToken || undefined);
       return { success: true, message: "Email settings saved successfully" };
     }
 
     if (intent === "test_connection") {
-      const result = await systemApi.testEmailConnection();
+      const result = await systemApi.testEmailConnection(accessToken || undefined);
       if (result.success) {
         return { success: true, message: "Connection test successful" };
       } else {
@@ -137,7 +140,7 @@ export async function action({ request }: ActionFunctionArgs) {
       if (!toEmail || !toEmail.includes("@")) {
         return Response.json({ error: "Please enter a valid email address" }, { status: 400 });
       }
-      const result = await systemApi.sendTestEmail(toEmail);
+      const result = await systemApi.sendTestEmail(toEmail, accessToken || undefined);
       if (result.success) {
         return { success: true, message: `Test email sent to ${toEmail}` };
       } else {

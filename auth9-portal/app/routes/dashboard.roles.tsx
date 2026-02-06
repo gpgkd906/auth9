@@ -25,6 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { rbacApi, serviceApi, type Role, type Permission, type RoleWithPermissions } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 // Extended role type with service_id for editing
 interface EditableRole extends Role {
@@ -39,13 +40,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "50");
-  const services = await serviceApi.list(undefined, page, perPage);
+  const accessToken = await getAccessToken(request);
+  const services = await serviceApi.list(undefined, page, perPage, accessToken || undefined);
 
   const entries = await Promise.all(
     services.data.map(async (service) => {
       const [roles, permissions] = await Promise.all([
-        rbacApi.listRoles(service.id),
-        rbacApi.listPermissions(service.id),
+        rbacApi.listRoles(service.id, accessToken || undefined),
+        rbacApi.listPermissions(service.id, accessToken || undefined),
       ]);
       return { service, roles: roles.data, permissions: permissions.data };
     })
@@ -55,6 +57,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -70,7 +73,7 @@ export async function action({ request }: ActionFunctionArgs) {
         name,
         description: description || undefined,
         parent_role_id: parentRoleId || undefined,
-      });
+      }, accessToken || undefined);
       return { success: true };
     }
 
@@ -85,14 +88,14 @@ export async function action({ request }: ActionFunctionArgs) {
         name,
         description: description || undefined,
         parent_role_id: parentRoleId || undefined,
-      });
+      }, accessToken || undefined);
       return { success: true };
     }
 
     if (intent === "delete_role") {
       const serviceId = formData.get("service_id") as string;
       const roleId = formData.get("role_id") as string;
-      await rbacApi.deleteRole(serviceId, roleId);
+      await rbacApi.deleteRole(serviceId, roleId, accessToken || undefined);
       return { success: true };
     }
 
@@ -108,13 +111,13 @@ export async function action({ request }: ActionFunctionArgs) {
         code,
         name,
         description: description || undefined,
-      });
+      }, accessToken || undefined);
       return { success: true };
     }
 
     if (intent === "delete_permission") {
       const permissionId = formData.get("permission_id") as string;
-      await rbacApi.deletePermission(permissionId);
+      await rbacApi.deletePermission(permissionId, accessToken || undefined);
       return { success: true };
     }
 
@@ -122,21 +125,21 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "assign_permission") {
       const roleId = formData.get("role_id") as string;
       const permissionId = formData.get("permission_id") as string;
-      await rbacApi.assignPermissionToRole(roleId, permissionId);
+      await rbacApi.assignPermissionToRole(roleId, permissionId, accessToken || undefined);
       return { success: true };
     }
 
     if (intent === "remove_permission") {
       const roleId = formData.get("role_id") as string;
       const permissionId = formData.get("permission_id") as string;
-      await rbacApi.removePermissionFromRole(roleId, permissionId);
+      await rbacApi.removePermissionFromRole(roleId, permissionId, accessToken || undefined);
       return { success: true };
     }
 
     // Get role with permissions
     if (intent === "get_role_permissions") {
       const roleId = formData.get("role_id") as string;
-      const result = await rbacApi.getRole(roleId);
+      const result = await rbacApi.getRole(roleId, accessToken || undefined);
       return { success: true, role: result.data };
     }
   } catch (error) {

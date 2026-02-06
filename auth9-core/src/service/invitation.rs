@@ -205,9 +205,7 @@ where
     /// Returns the invitation if the token is valid.
     /// The caller is responsible for creating the user and assigning roles.
     pub async fn accept(&self, token: &str) -> Result<Invitation> {
-        // Find all pending invitations and verify token against each
-        // This is not optimal but secure - we don't expose which emails have invitations
-        let invitation = self.find_by_token(token).await?;
+        let invitation = self.get_by_token(token).await?;
 
         if !invitation.is_valid() {
             if invitation.is_expired() {
@@ -221,6 +219,18 @@ where
 
         // Mark as accepted
         self.invitation_repo.mark_accepted(invitation.id).await
+    }
+
+    /// Get invitation by token without changing status.
+    pub async fn get_by_token(&self, token: &str) -> Result<Invitation> {
+        // Find all pending invitations and verify token against each
+        // This is not optimal but secure - we don't expose which emails have invitations
+        self.find_by_token(token).await
+    }
+
+    /// Mark invitation as accepted
+    pub async fn mark_accepted(&self, id: StringUuid) -> Result<Invitation> {
+        self.invitation_repo.mark_accepted(id).await
     }
 
     /// Resend an invitation email
@@ -248,11 +258,11 @@ where
                 AppError::NotFound(format!("Tenant {} not found", invitation.tenant_id))
             })?;
 
-        // Generate new token (we would need to update the repo to support this)
-        let (token, _token_hash) = self.generate_token()?;
-
-        // Update token in database (would need a new method on the repo)
-        // For now, we just resend with the existing token
+        // Generate new token and update hash in database
+        let (token, token_hash) = self.generate_token()?;
+        self.invitation_repo
+            .update_token_hash(id, &token_hash)
+            .await?;
 
         let invite_link = format!(
             "{}/invite/accept?token={}",
@@ -283,7 +293,9 @@ where
             )
             .await?;
 
-        Ok(invitation)
+        self.invitation_repo.find_by_id(id).await?.ok_or_else(|| {
+            AppError::NotFound(format!("Invitation {} not found", id))
+        })
     }
 
     /// Delete an invitation
@@ -329,15 +341,15 @@ where
             .is_ok()
     }
 
-    #[allow(dead_code)]
-    async fn find_by_token(&self, _token: &str) -> Result<Invitation> {
-        // This is a simplified implementation
-        // In production, you'd want to index by a token prefix or use a different approach
-        // For now, we'll require the invitation ID to be passed along with the token
+    async fn find_by_token(&self, token: &str) -> Result<Invitation> {
+        // Iterate through pending invitations and verify the token hash
+        let invitations = self.invitation_repo.list_pending().await?;
 
-        // The token format could be: {invitation_id}.{random_token}
-        // For this implementation, we assume the full token is stored and we need
-        // to iterate through pending invitations
+        for invitation in invitations {
+            if self.verify_token(token, &invitation.token_hash) {
+                return Ok(invitation);
+            }
+        }
 
         Err(AppError::NotFound("Invalid invitation token".to_string()))
     }
@@ -358,7 +370,11 @@ mod tests {
         MockTenantRepository,
         MockSystemSettingsRepository,
     > {
-        let invitation_repo = Arc::new(MockInvitationRepository::new());
+        let mut invitation_repo = MockInvitationRepository::new();
+        invitation_repo
+            .expect_list_pending()
+            .returning(|| Ok(vec![]));
+        let invitation_repo = Arc::new(invitation_repo);
         let tenant_repo = Arc::new(MockTenantRepository::new());
 
         let settings_repo = Arc::new(MockSystemSettingsRepository::new());

@@ -50,7 +50,7 @@ SELECT id, name, slug, logo_url, status FROM tenants WHERE slug = 'test-company'
 -- 预期: 存在一条记录，status = 'active'
 
 SELECT action, resource_type FROM audit_logs WHERE resource_type = 'tenant' ORDER BY created_at DESC LIMIT 1;
--- 预期: action = 'create'
+-- 预期: action = 'tenant.create'
 ```
 
 ---
@@ -105,7 +105,7 @@ SELECT name, logo_url, updated_at FROM tenants WHERE id = '{tenant_id}';
 -- 预期: name = '测试公司（更新）'，updated_at 为当前时间
 
 SELECT action, old_value, new_value FROM audit_logs WHERE resource_id = '{tenant_id}' ORDER BY created_at DESC LIMIT 1;
--- 预期: action = 'update'，包含修改前后的值
+-- 预期: action = 'tenant.update'，包含修改前后的值
 ```
 
 ---
@@ -134,7 +134,7 @@ SELECT COUNT(*) FROM tenants WHERE id = '{tenant_id}';
 -- 预期: 0
 
 SELECT action, resource_id FROM audit_logs WHERE resource_type = 'tenant' ORDER BY created_at DESC LIMIT 1;
--- 预期: action = 'delete'
+-- 预期: action = 'tenant.delete'
 ```
 
 ---

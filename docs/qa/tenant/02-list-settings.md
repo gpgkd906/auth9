@@ -94,9 +94,9 @@ SELECT name, slug FROM tenants WHERE name LIKE '%acme%' OR slug LIKE '%acme%';
 验证租户设置的更新功能
 
 ### 测试操作流程
-1. 进入租户设置页面
-2. 开启「强制 MFA」选项
-3. 保存设置
+1. 进入租户详情页 `/dashboard/tenants/{tenant_id}`
+2. 在「Security Settings」区域找到「Require MFA」开关
+3. 开启开关（自动保存）
 
 ### 预期结果
 - 显示设置保存成功

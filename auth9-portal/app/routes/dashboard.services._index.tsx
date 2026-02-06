@@ -24,6 +24,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { serviceApi } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 
 export const meta: MetaFunction = () => {
@@ -34,11 +35,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
-  const services = await serviceApi.list(undefined, page, perPage);
+  const accessToken = await getAccessToken(request);
+  const services = await serviceApi.list(undefined, page, perPage, accessToken || undefined);
   return services;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -59,7 +62,7 @@ export async function action({ request }: ActionFunctionArgs) {
         base_url: base_url || undefined,
         redirect_uris,
         logout_uris
-      });
+      }, accessToken || undefined);
       // We might want to show the initial secret?
       if (res.data.client) {
         return { success: true, intent, secret: res.data.client.client_secret };
@@ -69,7 +72,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
-      await serviceApi.delete(id);
+      await serviceApi.delete(id, accessToken || undefined);
       return { success: true, intent };
     }
   } catch (error) {

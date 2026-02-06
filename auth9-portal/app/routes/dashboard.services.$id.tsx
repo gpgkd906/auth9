@@ -16,19 +16,21 @@ import {
     DialogTrigger,
 } from "~/components/ui/dialog";
 import { serviceApi } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction = () => {
     return [{ title: "Service Details - Auth9" }];
 };
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
     const { id } = params;
     if (!id) throw new Error("Service ID is required");
+    const accessToken = await getAccessToken(request);
 
     // Fetch Service Details and Clients in parallel
     const [serviceRes, clientsRes] = await Promise.all([
-        serviceApi.get(id),
-        serviceApi.listClients(id)
+        serviceApi.get(id, accessToken || undefined),
+        serviceApi.listClients(id, accessToken || undefined)
     ]);
 
     return {
@@ -40,6 +42,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
 export async function action({ request, params }: ActionFunctionArgs) {
     const { id } = params;
     if (!id) return Response.json({ error: "Service ID required" }, { status: 400 });
+    const accessToken = await getAccessToken(request);
 
     const formData = await request.formData();
     const intent = formData.get("intent");
@@ -56,26 +59,26 @@ export async function action({ request, params }: ActionFunctionArgs) {
                 base_url: base_url || undefined,
                 redirect_uris,
                 logout_uris
-            });
+            }, accessToken || undefined);
             return { success: true, intent };
         }
 
         if (intent === "create_client") {
             const name = formData.get("name") as string;
-            const res = await serviceApi.createClient(id, { name: name || undefined });
+            const res = await serviceApi.createClient(id, { name: name || undefined }, accessToken || undefined);
             // ClientWithSecret is flattened - client fields are at root level
             return { success: true, intent, secret: res.data.client_secret, clientId: res.data.client_id };
         }
 
         if (intent === "delete_client") {
             const clientId = formData.get("client_id") as string;
-            await serviceApi.deleteClient(id, clientId);
+            await serviceApi.deleteClient(id, clientId, accessToken || undefined);
             return { success: true, intent };
         }
 
         if (intent === "regenerate_secret") {
             const clientId = formData.get("client_id") as string;
-            const res = await serviceApi.regenerateClientSecret(id, clientId);
+            const res = await serviceApi.regenerateClientSecret(id, clientId, accessToken || undefined);
             return { success: true, intent, secret: res.data.client_secret, regeneratedClientId: clientId };
         }
 

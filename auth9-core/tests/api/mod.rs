@@ -1848,6 +1848,15 @@ impl InvitationRepository for TestInvitationRepository {
         Ok(invitation.clone())
     }
 
+    async fn list_pending(&self) -> Result<Vec<Invitation>> {
+        let invitations = self.invitations.read().await;
+        Ok(invitations
+            .values()
+            .filter(|i| i.status == InvitationStatus::Pending)
+            .cloned()
+            .collect())
+    }
+
     async fn mark_accepted(&self, id: StringUuid) -> Result<Invitation> {
         let mut invitations = self.invitations.write().await;
         let invitation = invitations
@@ -1855,6 +1864,25 @@ impl InvitationRepository for TestInvitationRepository {
             .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
         invitation.status = InvitationStatus::Accepted;
         invitation.accepted_at = Some(Utc::now());
+        invitation.updated_at = Utc::now();
+        Ok(invitation.clone())
+    }
+
+    async fn update_token_hash(&self, id: StringUuid, token_hash: &str) -> Result<Invitation> {
+        let mut invitations = self.invitations.write().await;
+        let invitation = invitations
+            .get_mut(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
+        invitation.token_hash = token_hash.to_string();
+        invitation.updated_at = Utc::now();
+        Ok(invitation.clone())
+    }
+
+    async fn touch_updated_at(&self, id: StringUuid) -> Result<Invitation> {
+        let mut invitations = self.invitations.write().await;
+        let invitation = invitations
+            .get_mut(&id)
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))?;
         invitation.updated_at = Utc::now();
         Ok(invitation.clone())
     }

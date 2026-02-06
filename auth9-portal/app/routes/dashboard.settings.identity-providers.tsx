@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -19,6 +19,7 @@ import {
   type IdentityProvider,
   type CreateIdentityProviderInput,
 } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 import { PlusIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
 
 // Provider templates with required config fields
@@ -60,9 +61,10 @@ const PROVIDER_TEMPLATES = [
   },
 ];
 
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   try {
-    const response = await identityProviderApi.list();
+    const response = await identityProviderApi.list(accessToken || undefined);
     return { providers: response.data };
   } catch {
     return { providers: [], error: "Failed to load identity providers" };
@@ -70,6 +72,7 @@ export async function loader() {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -82,7 +85,7 @@ export async function action({ request }: ActionFunctionArgs) {
         enabled: formData.get("enabled") === "true",
         config: JSON.parse(formData.get("config") as string || "{}"),
       };
-      await identityProviderApi.create(input);
+      await identityProviderApi.create(input, accessToken || undefined);
       return { success: true, message: "Identity provider created" };
     }
 
@@ -93,20 +96,20 @@ export async function action({ request }: ActionFunctionArgs) {
         enabled: formData.get("enabled") === "true",
         config: JSON.parse(formData.get("config") as string || "{}"),
       };
-      await identityProviderApi.update(alias, input);
+      await identityProviderApi.update(alias, input, accessToken || undefined);
       return { success: true, message: "Identity provider updated" };
     }
 
     if (intent === "delete") {
       const alias = formData.get("alias") as string;
-      await identityProviderApi.delete(alias);
+      await identityProviderApi.delete(alias, accessToken || undefined);
       return { success: true, message: "Identity provider deleted" };
     }
 
     if (intent === "toggle") {
       const alias = formData.get("alias") as string;
       const enabled = formData.get("enabled") === "true";
-      await identityProviderApi.update(alias, { enabled });
+      await identityProviderApi.update(alias, { enabled }, accessToken || undefined);
       return { success: true };
     }
   } catch (error) {
@@ -184,6 +187,14 @@ export default function IdentityProvidersPage() {
   }
 
   const template = getProviderTemplate(selectedTemplate);
+
+  // Validate required fields are filled
+  const hasRequiredFields = (() => {
+    if (!template) return false;
+    return template.requiredFields.every(
+      (field) => formData.config[field] && formData.config[field].trim() !== ""
+    );
+  })();
 
   return (
     <div className="space-y-6">
@@ -425,9 +436,10 @@ export default function IdentityProvidersPage() {
                 {/* Provider-specific fields */}
                 {template?.requiredFields.includes("clientId") && (
                   <div className="space-y-2">
-                    <Label htmlFor="clientId">Client ID</Label>
+                    <Label htmlFor="clientId">Client ID <span className="text-[var(--accent-red)]">*</span></Label>
                     <Input
                       id="clientId"
+                      required
                       value={formData.config.clientId || ""}
                       onChange={(e) =>
                         setFormData((prev) => ({
@@ -442,10 +454,11 @@ export default function IdentityProvidersPage() {
 
                 {template?.requiredFields.includes("clientSecret") && (
                   <div className="space-y-2">
-                    <Label htmlFor="clientSecret">Client Secret</Label>
+                    <Label htmlFor="clientSecret">Client Secret <span className="text-[var(--accent-red)]">*</span></Label>
                     <Input
                       id="clientSecret"
                       type="password"
+                      required
                       value={formData.config.clientSecret || ""}
                       onChange={(e) =>
                         setFormData((prev) => ({
@@ -460,9 +473,10 @@ export default function IdentityProvidersPage() {
 
                 {template?.requiredFields.includes("authorizationUrl") && (
                   <div className="space-y-2">
-                    <Label htmlFor="authorizationUrl">Authorization URL</Label>
+                    <Label htmlFor="authorizationUrl">Authorization URL <span className="text-[var(--accent-red)]">*</span></Label>
                     <Input
                       id="authorizationUrl"
+                      required
                       value={formData.config.authorizationUrl || ""}
                       onChange={(e) =>
                         setFormData((prev) => ({
@@ -477,9 +491,10 @@ export default function IdentityProvidersPage() {
 
                 {template?.requiredFields.includes("tokenUrl") && (
                   <div className="space-y-2">
-                    <Label htmlFor="tokenUrl">Token URL</Label>
+                    <Label htmlFor="tokenUrl">Token URL <span className="text-[var(--accent-red)]">*</span></Label>
                     <Input
                       id="tokenUrl"
+                      required
                       value={formData.config.tokenUrl || ""}
                       onChange={(e) =>
                         setFormData((prev) => ({
@@ -519,7 +534,7 @@ export default function IdentityProvidersPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || (!selectedTemplate && !editingProvider)}
+                disabled={isSubmitting || (!selectedTemplate && !editingProvider) || (!!template && !hasRequiredFields)}
               >
                 {isSubmitting
                   ? "Saving..."

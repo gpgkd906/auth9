@@ -1,4 +1,4 @@
-import type { MetaFunction, ActionFunctionArgs } from "react-router";
+import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useEffect } from "react";
 import { CheckCircledIcon, ResetIcon } from "@radix-ui/react-icons";
@@ -8,6 +8,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { brandingApi, type BrandingConfig } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 // Default branding values (should match backend defaults)
 const DEFAULT_BRANDING: BrandingConfig = {
@@ -22,9 +23,10 @@ export const meta: MetaFunction = () => {
   return [{ title: "Login Branding - Auth9" }];
 };
 
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   try {
-    const result = await brandingApi.get();
+    const result = await brandingApi.get(accessToken || undefined);
     return { config: result.data, error: null };
   } catch {
     // If no config exists yet, return defaults
@@ -33,6 +35,7 @@ export async function loader() {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -50,12 +53,12 @@ export async function action({ request }: ActionFunctionArgs) {
         allow_registration: formData.get("allow_registration") === "true",
       };
 
-      await brandingApi.update(config);
+      await brandingApi.update(config, accessToken || undefined);
       return { success: true, message: "Branding settings saved successfully" };
     }
 
     if (intent === "reset") {
-      await brandingApi.update(DEFAULT_BRANDING);
+      await brandingApi.update(DEFAULT_BRANDING, accessToken || undefined);
       return { success: true, message: "Branding reset to defaults", reset: true };
     }
   } catch (error) {
@@ -182,7 +185,6 @@ export default function BrandingSettingsPage() {
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-6">
-            <input type="hidden" name="intent" value="save" />
 
             {/* Company Identity */}
             <div className="space-y-4">
@@ -390,7 +392,7 @@ export default function BrandingSettingsPage() {
 
             {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-              <Button type="submit" disabled={isSubmitting && currentIntent === "save"}>
+              <Button type="submit" name="intent" value="save" disabled={isSubmitting && currentIntent === "save"}>
                 {isSubmitting && currentIntent === "save" ? "Saving..." : "Save Changes"}
               </Button>
 

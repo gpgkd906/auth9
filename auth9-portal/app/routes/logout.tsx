@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { getAccessToken } from "~/services/session.server";
+import { getAccessToken, getSession, destroySession } from "~/services/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const AUTH9_CORE_URL = process.env.AUTH9_CORE_URL || "http://localhost:8080";
@@ -31,11 +31,18 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
+  // Destroy the portal session cookie so the user can't access dashboard after logout
+  const session = await getSession(request);
+  const headers = new Headers();
+  if (session) {
+    headers.append("Set-Cookie", await destroySession(session));
+  }
+
   // Redirect to backend logout (public URL for browser redirect)
   // This will redirect to Keycloak logout, then back to portal
   const logoutUrl = `${AUTH9_CORE_PUBLIC_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}`;
 
-  return redirect(logoutUrl);
+  return redirect(logoutUrl, { headers });
 }
 
 export default function Logout() {

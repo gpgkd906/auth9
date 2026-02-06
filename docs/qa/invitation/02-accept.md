@@ -6,11 +6,27 @@
 
 ---
 
+## 测试前置数据（必需）
+
+在执行本文件场景前，先执行：
+
+```bash
+mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/invitation/seed.sql
+```
+
+说明：
+- `seed.sql` 会创建测试租户/服务/角色/邀请数据，并把 `admin@auth9.local` 加入租户
+- 如果输出的 `admin_user_id` 为空，请先登录 Portal 完成首次登录以同步用户
+- 接受邀请场景必须使用真实邀请邮件中的链接（seed 数据中的 `token_hash` 不可用于接受）
+- 建议为每个场景在 Portal 中新建邀请以获取有效链接；过期/撤销/已接受可在创建后再通过 UI 或 DB 调整状态
+- 测试租户：`invitation-test`（id=`11111111-1111-4111-8111-111111111111`）
+
 ## 场景 1：接受邀请（新用户）
 
 ### 初始状态
 - 存在邀请 id=`{invitation_id}`，status=`pending`
 - 邀请邮箱不是系统中的已有用户
+- 建议先执行 `01-create-send` 场景 1，使用邮件链接继续测试
 
 ### 目的
 验证新用户接受邀请的完整流程
@@ -153,9 +169,9 @@ SELECT status FROM invitations WHERE id = '{invitation_id}';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 接受邀请（新用户） | ☐ | | | |
-| 2 | 接受邀请（已有用户） | ☐ | | | |
-| 3 | 使用过期邀请 | ☐ | | | |
-| 4 | 使用已撤销邀请 | ☐ | | | |
-| 5 | 使用已接受邀请 | ☐ | | | |
-| 6 | 认证状态检查 | ☐ | | | |
+| 1 | 接受邀请（新用户） | PASS | 2026-02-06 | Codex | newuser3@example.com |
+| 2 | 接受邀请（已有用户） | PASS | 2026-02-06 | Codex | existing2@example.com |
+| 3 | 使用过期邀请 | PASS | 2026-02-06 | Codex | expired2@example.com |
+| 4 | 使用已撤销邀请 | PASS | 2026-02-06 | Codex | revoked2@example.com |
+| 5 | 使用已接受邀请 | PASS | 2026-02-06 | Codex | existing2@example.com（二次访问） |
+| 6 | 认证状态检查 | NOT RUN |  |  |  |

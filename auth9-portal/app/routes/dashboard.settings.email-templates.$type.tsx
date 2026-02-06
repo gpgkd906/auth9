@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { redirect, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
+import { redirect, Form, Link, useActionData, useLoaderData, useNavigation, useFetcher } from "react-router";
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -34,13 +34,15 @@ import {
   type EmailTemplateContent,
   type RenderedEmailPreview,
 } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction<typeof loader> = ({ data }) => {
   const name = data?.template?.metadata?.name || "Template";
   return [{ title: `Edit ${name} - Email Templates - Auth9` }];
 };
 
-export async function loader({ params }: LoaderFunctionArgs) {
+export async function loader({ params, request }: LoaderFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const templateType = params.type as EmailTemplateType;
 
   if (!templateType) {
@@ -48,7 +50,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
   }
 
   try {
-    const result = await emailTemplateApi.get(templateType);
+    const result = await emailTemplateApi.get(templateType, accessToken || undefined);
     return { template: result.data, error: null };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to load template";
@@ -57,6 +59,7 @@ export async function loader({ params }: LoaderFunctionArgs) {
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const templateType = params.type as EmailTemplateType;
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -69,12 +72,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
         text_body: formData.get("text_body") as string,
       };
 
-      await emailTemplateApi.update(templateType, content);
+      await emailTemplateApi.update(templateType, content, accessToken || undefined);
       return { success: true, message: "Template saved successfully" };
     }
 
     if (intent === "reset") {
-      await emailTemplateApi.reset(templateType);
+      await emailTemplateApi.reset(templateType, accessToken || undefined);
       return redirect(`/dashboard/settings/email-templates/${templateType}`);
     }
 
@@ -85,7 +88,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         text_body: formData.get("text_body") as string,
       };
 
-      const result = await emailTemplateApi.preview(templateType, content);
+      const result = await emailTemplateApi.preview(templateType, content, accessToken || undefined);
       return { preview: result.data };
     }
 
@@ -106,7 +109,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
         html_body: htmlBody,
         text_body: textBody,
         variables,
-      });
+      }, accessToken || undefined);
 
       if (result.success) {
         return {
@@ -150,6 +153,8 @@ export default function EmailTemplateEditorPage() {
     }
     return initial;
   });
+
+  const resetFetcher = useFetcher();
 
   const isSubmitting = navigation.state === "submitting";
   const currentIntent = navigation.formData?.get("intent");
@@ -214,10 +219,16 @@ export default function EmailTemplateEditorPage() {
               </AlertDialogHeader>
               <AlertDialogFooter>
                 <AlertDialogCancel>Cancel</AlertDialogCancel>
-                <Form method="post">
-                  <input type="hidden" name="intent" value="reset" />
-                  <AlertDialogAction type="submit">Reset Template</AlertDialogAction>
-                </Form>
+                <AlertDialogAction
+                  onClick={() => {
+                    resetFetcher.submit(
+                      { intent: "reset" },
+                      { method: "post" }
+                    );
+                  }}
+                >
+                  Reset Template
+                </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>

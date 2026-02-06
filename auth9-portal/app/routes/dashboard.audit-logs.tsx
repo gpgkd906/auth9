@@ -2,6 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs } from "react-router";
 import { useLoaderData } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { auditApi } from "~/services/api";
+import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Audit Logs - Auth9" }];
@@ -11,7 +12,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "50");
-  const logs = await auditApi.list(page, perPage);
+  const accessToken = await getAccessToken(request);
+  const logs = await auditApi.list(page, perPage, accessToken || undefined);
   return logs;
 }
 

@@ -6,10 +6,24 @@
 
 ---
 
+## 测试前置数据（必需）
+
+在执行本文件场景前，先执行：
+
+```bash
+mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/invitation/seed.sql
+```
+
+说明：
+- `seed.sql` 会创建测试租户/服务/角色/邀请数据，并把 `admin@auth9.local` 加入租户
+- 如果输出的 `admin_user_id` 为空，请先登录 Portal 完成首次登录以同步用户
+- 测试租户：`invitation-test`（id=`11111111-1111-4111-8111-111111111111`）
+
 ## 场景 1：撤销邀请
 
 ### 初始状态
 - 存在待处理邀请 id=`{invitation_id}`
+- 可用邀请：`pending@example.com`（seed 已创建）
 
 ### 目的
 验证邀请撤销功能
@@ -36,6 +50,7 @@ SELECT status FROM invitations WHERE id = '{invitation_id}';
 
 ### 初始状态
 - 存在邀请 id=`{invitation_id}`
+- 可用邀请：`pending@example.com`（seed 已创建）
 
 ### 目的
 验证邀请删除功能
@@ -61,6 +76,7 @@ SELECT COUNT(*) FROM invitations WHERE id = '{invitation_id}';
 
 ### 初始状态
 - 存在多个不同状态的邀请
+- seed 已包含 `pending@example.com`、`expired@example.com`、`revoked@example.com`、`accepted@example.com`
 
 ### 目的
 验证邀请列表过滤功能
@@ -133,25 +149,12 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 
 ---
 
-## 测试数据准备 SQL
+## 测试数据准备
 
-```sql
--- 准备测试租户
-INSERT INTO tenants (id, name, slug, settings, status) VALUES
-('tenant-inv-1111-1111-111111111111', 'Invitation Test', 'inv-test', '{}', 'active');
+本文件使用统一的 seed 数据：
 
--- 准备测试邀请
-INSERT INTO invitations (id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at) VALUES
-('inv-pending-1111-1111-111111111111', 'tenant-inv-1111-1111-111111111111', 'pending@example.com',
- '[]', 'user-1111', 'hash123', 'pending', DATE_ADD(NOW(), INTERVAL 72 HOUR)),
-('inv-expired-1111-1111-111111111111', 'tenant-inv-1111-1111-111111111111', 'expired@example.com',
- '[]', 'user-1111', 'hash456', 'pending', DATE_SUB(NOW(), INTERVAL 1 DAY)),
-('inv-revoked-1111-1111-111111111111', 'tenant-inv-1111-1111-111111111111', 'revoked@example.com',
- '[]', 'user-1111', 'hash789', 'revoked', DATE_ADD(NOW(), INTERVAL 72 HOUR));
-
--- 清理
-DELETE FROM invitations WHERE id LIKE 'inv-%';
-DELETE FROM tenants WHERE id LIKE 'tenant-inv-%';
+```bash
+mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/invitation/seed.sql
 ```
 
 ---
@@ -180,9 +183,9 @@ DELETE FROM tenants WHERE id LIKE 'tenant-inv-%';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 撤销邀请 | ☐ | | | |
-| 2 | 删除邀请 | ☐ | | | |
-| 3 | 邀请列表过滤 | ☐ | | | |
-| 4 | 多角色邀请 | ☐ | | | |
-| 5 | 邮箱格式验证 | ☐ | | | |
-| 6 | 认证状态检查 | ☐ | | | |
+| 1 | 撤销邀请 | PASS | 2026-02-06 | Codex | pending@example.com 已变更为 revoked |
+| 2 | 删除邀请 | PASS | 2026-02-06 | Codex | revoked@example.com 已删除 |
+| 3 | 邀请列表过滤 | FAIL | 2026-02-06 | Codex | 见 `docs/ticket/invitation_03-manage_scenario3_260206_200143.md` |
+| 4 | 多角色邀请 | BLOCKED | 2026-02-06 | Codex | 邀请可创建，接受步骤被 `/invite/accept` 404 阻塞 |
+| 5 | 邮箱格式验证 | PASS | 2026-02-06 | Codex | 浏览器校验拦截 invalid-email / user@ |
+| 6 | 认证状态检查 | NOT RUN |  |  |  |
