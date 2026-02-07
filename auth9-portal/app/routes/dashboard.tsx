@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Link, Outlet, useLocation } from "react-router";
 import { cn } from "~/lib/utils";
@@ -29,14 +30,56 @@ const navigation = [
 
 export default function Dashboard() {
   const location = useLocation();
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   return (
     <div className="min-h-screen">
+      {/* Skip to Content */}
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[var(--accent-blue)] focus:text-white focus:rounded-lg focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-[var(--accent-blue)] focus:ring-offset-2"
+      >
+        Skip to main content
+      </a>
+
       {/* Dynamic Background */}
       <div className="page-backdrop" />
 
+      {/* Mobile Header */}
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 z-30 px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
+        <Link to="/dashboard" className="flex items-center gap-2">
+          <div className="logo-icon w-8 h-8 text-sm">A9</div>
+          <span className="logo-text text-lg">Auth9</span>
+        </Link>
+        <button
+          onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+          className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--glass-border-subtle)] transition-colors"
+          aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+        >
+          {isSidebarOpen ? (
+            <XIcon className="w-6 h-6" />
+          ) : (
+            <MenuIcon className="w-6 h-6" />
+          )}
+        </button>
+      </header>
+
+      {/* Sidebar Overlay */}
+      {isSidebarOpen && (
+        <div
+          className="lg:hidden fixed inset-0 z-40 bg-black/50 backdrop-blur-sm transition-opacity"
+          onClick={() => setIsSidebarOpen(false)}
+        />
+      )}
+
       {/* Sidebar - Floating Glass Card */}
-      <aside className="sidebar">
+      <aside
+        className={cn(
+          "sidebar transition-transform duration-300 ease-in-out z-50",
+          "fixed lg:translate-x-0",
+          isSidebarOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0"
+        )}
+      >
         {/* Logo & Theme Toggle */}
         <div className="sidebar-header">
           <Link to="/dashboard" className="flex items-center gap-3">
@@ -47,7 +90,7 @@ export default function Dashboard() {
         </div>
 
         {/* Navigation */}
-        <nav className="sidebar-nav">
+        <nav className="sidebar-nav" aria-label="Main navigation">
           <div className="nav-section">
             <div className="nav-section-title">Main</div>
             {navigation.slice(0, 4).map((item) => {
@@ -58,10 +101,12 @@ export default function Dashboard() {
                 <Link
                   key={item.name}
                   to={item.href}
+                  onClick={() => setIsSidebarOpen(false)}
                   className={cn(
                     "sidebar-item",
                     isActive && "active"
                   )}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <item.icon className="w-5 h-5" />
                   {item.name}
@@ -80,10 +125,12 @@ export default function Dashboard() {
                 <Link
                   key={item.name}
                   to={item.href}
+                  onClick={() => setIsSidebarOpen(false)}
                   className={cn(
                     "sidebar-item",
                     isActive && "active"
                   )}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <item.icon className="w-5 h-5" />
                   {item.name}
@@ -102,10 +149,12 @@ export default function Dashboard() {
                 <Link
                   key={item.name}
                   to={item.href}
+                  onClick={() => setIsSidebarOpen(false)}
                   className={cn(
                     "sidebar-item",
                     isActive && "active"
                   )}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   <item.icon className="w-5 h-5" />
                   {item.name}
@@ -142,7 +191,7 @@ export default function Dashboard() {
       </aside>
 
       {/* Main content */}
-      <main className="main-content">
+      <main id="main-content" className="main-content pt-20 lg:pt-0" tabIndex={-1}>
         <div className="content-wrapper">
           <Outlet />
         </div>
@@ -152,6 +201,22 @@ export default function Dashboard() {
 }
 
 // Icons
+function MenuIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+    </svg>
+  );
+}
+
+function XIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+    </svg>
+  );
+}
+
 function HomeIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">

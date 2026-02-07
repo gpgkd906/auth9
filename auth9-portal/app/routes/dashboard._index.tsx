@@ -102,7 +102,7 @@ function StatsCard({
   };
 
   return (
-    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden`}>
+    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${colorClasses[color]} pointer-events-none`} />
       <CardContent className="pt-5 relative">
         <p className="text-[13px] font-medium text-[var(--text-secondary)]">{title}</p>

@@ -251,12 +251,12 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
           <p className="text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
         </div>
-        <Button onClick={() => setCreatingUser(true)}>+ Create User</Button>
+        <Button onClick={() => setCreatingUser(true)} className="w-full sm:w-auto">+ Create User</Button>
       </div>
       <Card>
         <CardHeader>
@@ -267,15 +267,15 @@ export default function UsersPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+          <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
-              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Display Name</th>
-                  <th className="px-4 py-3 font-medium">MFA</th>
-                  <th className="px-4 py-3 font-medium">Updated</th>
-                  <th className="px-4 py-3 font-medium w-10"></th>
+                  <th className="px-4 py-3 font-semibold">Email</th>
+                  <th className="px-4 py-3 font-semibold">Display Name</th>
+                  <th className="px-4 py-3 font-semibold">MFA</th>
+                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--glass-border-subtle)]">
@@ -360,7 +360,7 @@ export default function UsersPage() {
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update_user" />
             <input type="hidden" name="id" value={editingUser?.id || ""} />
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="edit-name">Display Name</Label>
               <Input
                 id="edit-name"
@@ -369,7 +369,7 @@ export default function UsersPage() {
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingUser(null)}>
+              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setEditingUser(null)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>
@@ -401,7 +401,7 @@ export default function UsersPage() {
             }
           }}>
             <input type="hidden" name="intent" value="create_user" />
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="create-email">Email *</Label>
               <Input
                 id="create-email"
@@ -421,7 +421,7 @@ export default function UsersPage() {
                 <p className="text-sm text-[var(--accent-red)]">{createEmailError}</p>
               )}
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="create-name">Display Name</Label>
               <Input
                 id="create-name"
@@ -429,7 +429,7 @@ export default function UsersPage() {
                 placeholder="John Doe"
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="create-password">Password *</Label>
               <Input
                 id="create-password"
@@ -443,7 +443,7 @@ export default function UsersPage() {
               <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => {
+              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => {
                 setCreatingUser(false);
                 setCreateEmailError(null);
                 setCreateEmailValue("");
