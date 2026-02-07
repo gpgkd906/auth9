@@ -6,7 +6,9 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
-use crate::repository::{PasswordResetRepository, SystemSettingsRepository, UserRepository};
+use crate::repository::{
+    PasswordResetRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+};
 use crate::service::EmailService;
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
@@ -21,11 +23,13 @@ pub struct PasswordService<
     P: PasswordResetRepository,
     U: UserRepository,
     S: SystemSettingsRepository,
+    T: TenantRepository = crate::repository::tenant::TenantRepositoryImpl,
 > {
     password_reset_repo: Arc<P>,
     user_repo: Arc<U>,
     email_service: Arc<EmailService<S>>,
     keycloak: Arc<KeycloakClient>,
+    tenant_repo: Option<Arc<T>>,
 }
 
 impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
@@ -42,6 +46,31 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
             user_repo,
             email_service,
             keycloak,
+            tenant_repo: None,
+        }
+    }
+}
+
+impl<
+        P: PasswordResetRepository,
+        U: UserRepository,
+        S: SystemSettingsRepository,
+        T: TenantRepository,
+    > PasswordService<P, U, S, T>
+{
+    pub fn with_tenant_repo(
+        password_reset_repo: Arc<P>,
+        user_repo: Arc<U>,
+        email_service: Arc<EmailService<S>>,
+        keycloak: Arc<KeycloakClient>,
+        tenant_repo: Arc<T>,
+    ) -> Self {
+        Self {
+            password_reset_repo,
+            user_repo,
+            email_service,
+            keycloak,
+            tenant_repo: Some(tenant_repo),
         }
     }
 
@@ -58,17 +87,14 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
             }
         };
 
-        // Invalidate any existing tokens for this user
-        self.password_reset_repo.delete_by_user(user.id).await?;
-
         // Generate a secure random token
         let token = generate_reset_token();
         let token_hash = hash_token(&token)?;
 
-        // Create the reset token (expires in 1 hour)
+        // Atomically delete old tokens and create new one (prevents race condition)
         let expires_at = Utc::now() + Duration::hours(1);
         self.password_reset_repo
-            .create(&CreatePasswordResetTokenInput {
+            .replace_for_user(&CreatePasswordResetTokenInput {
                 user_id: user.id,
                 token_hash,
                 expires_at,
@@ -170,10 +196,16 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
     }
 
     /// Get password policy for a tenant
-    pub async fn get_policy(&self, _tenant_id: StringUuid) -> Result<PasswordPolicy> {
-        // This would need to be fetched from tenant settings
-        // For now, return a default policy
-        Ok(PasswordPolicy::default())
+    pub async fn get_policy(&self, tenant_id: StringUuid) -> Result<PasswordPolicy> {
+        if let Some(ref tenant_repo) = self.tenant_repo {
+            let tenant = tenant_repo
+                .find_by_id(tenant_id)
+                .await?
+                .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", tenant_id)))?;
+            Ok(tenant.password_policy.unwrap_or_default())
+        } else {
+            Ok(PasswordPolicy::default())
+        }
     }
 
     /// Update password policy for a tenant
@@ -202,7 +234,11 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
                 .unwrap_or(current.lockout_duration_mins),
         };
 
-        // TODO: Persist to tenant settings
+        if let Some(ref tenant_repo) = self.tenant_repo {
+            tenant_repo
+                .update_password_policy(tenant_id, &updated)
+                .await?;
+        }
 
         Ok(updated)
     }

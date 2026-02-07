@@ -13,6 +13,57 @@ Execute scenario-based manual QA testing for Auth9 using Playwright browser auto
 2. **Service URLs**: Portal (3000), Auth9 Core (8080), Keycloak (8081)
 3. **Credentials**: Portal Admin `admin / Admin123!`, Keycloak Admin `admin / admin`
 
+## API Token Generation (IMPORTANT - Read First)
+
+QA testing against auth9-core API requires a Bearer token. **Do NOT explore the codebase to figure out how to get a token.** Use the helper tools below directly.
+
+### Quick Token Generation
+
+```bash
+# Generate admin JWT token (valid 1 hour, RS256 signed)
+TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+
+# Use in curl requests
+curl -s http://localhost:8080/api/v1/tenants \
+  -H "Authorization: Bearer $TOKEN"
+```
+
+### API Test Helper Script
+
+For repeated API calls, use the wrapper script that auto-injects the token:
+
+```bash
+# GET request
+.claude/skills/tools/qa-api-test.sh GET /api/v1/tenants
+
+# POST with JSON body
+.claude/skills/tools/qa-api-test.sh POST /api/v1/users '{"email":"test@example.com","password":"Pass123!"}'
+
+# PUT with JSON body
+.claude/skills/tools/qa-api-test.sh PUT /api/v1/tenants/{id}/password-policy '{"min_length":12}'
+```
+
+### Token Details
+
+- **Subject**: `746ceba8-3ddf-4a8b-b021-a1337b7a1a35` (admin@auth9.local)
+- **Algorithm**: RS256 (private key: `.claude/skills/tools/jwt_private_clean.key`)
+- **Issuer**: `http://localhost:8080`
+- **TTL**: 1 hour
+- **Dependency**: `node` + `jsonwebtoken` npm package (already in project root `gen_token.js`)
+
+### Concurrent / Load Testing
+
+Use `hey` for concurrent request testing:
+
+```bash
+hey -n 20 -c 20 -m POST \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com"}' \
+  http://localhost:8080/api/v1/auth/forgot-password
+```
+
+Note: Rate limiting is active on some endpoints (e.g., forgot-password: 5 req/min, token: 10 req/min).
+
 ## Workflow
 
 ```

@@ -1,6 +1,8 @@
 //! Tenant repository
 
-use crate::domain::{CreateTenantInput, StringUuid, Tenant, TenantStatus, UpdateTenantInput};
+use crate::domain::{
+    CreateTenantInput, PasswordPolicy, StringUuid, Tenant, TenantStatus, UpdateTenantInput,
+};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
@@ -17,6 +19,11 @@ pub trait TenantRepository: Send + Sync {
     async fn count_search(&self, query: &str) -> Result<i64>;
     async fn update(&self, id: StringUuid, input: &UpdateTenantInput) -> Result<Tenant>;
     async fn delete(&self, id: StringUuid) -> Result<()>;
+    async fn update_password_policy(
+        &self,
+        id: StringUuid,
+        policy: &PasswordPolicy,
+    ) -> Result<Tenant>;
 }
 
 pub struct TenantRepositoryImpl {
@@ -59,7 +66,7 @@ impl TenantRepository for TenantRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Tenant>> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, created_at, updated_at
+            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             WHERE id = ?
             "#,
@@ -74,7 +81,7 @@ impl TenantRepository for TenantRepositoryImpl {
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Tenant>> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, created_at, updated_at
+            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             WHERE slug = ?
             "#,
@@ -89,7 +96,7 @@ impl TenantRepository for TenantRepositoryImpl {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, created_at, updated_at
+            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -114,7 +121,7 @@ impl TenantRepository for TenantRepositoryImpl {
         let search_pattern = format!("%{}%", query);
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, created_at, updated_at
+            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             WHERE name LIKE ? OR slug LIKE ?
             ORDER BY created_at DESC
@@ -193,6 +200,35 @@ impl TenantRepository for TenantRepositoryImpl {
         }
 
         Ok(())
+    }
+
+    async fn update_password_policy(
+        &self,
+        id: StringUuid,
+        policy: &PasswordPolicy,
+    ) -> Result<Tenant> {
+        let policy_json =
+            serde_json::to_string(policy).map_err(|e| AppError::Internal(e.into()))?;
+
+        let result = sqlx::query(
+            r#"
+            UPDATE tenants
+            SET password_policy = ?, updated_at = NOW()
+            WHERE id = ?
+            "#,
+        )
+        .bind(&policy_json)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("Tenant {} not found", id)));
+        }
+
+        self.find_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to update tenant")))
     }
 }
 

@@ -4,8 +4,8 @@
 
 use super::mock_keycloak::MockKeycloakServer;
 use super::{
-    build_test_router, delete_json_with_auth, get_json, post_json_with_auth, put_json_with_auth,
-    TestAppState,
+    build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
+    put_json_with_auth, TestAppState,
 };
 use crate::api::{create_test_identity_token, create_test_permission, create_test_role};
 use auth9_core::api::{MessageResponse, SuccessResponse};
@@ -46,10 +46,12 @@ async fn test_list_permissions() {
     state.rbac_repo.add_permission(perm2).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json_with_auth(
         &app,
         &format!("/api/v1/services/{}/permissions", service_id),
+        &token,
     )
     .await;
 
@@ -64,12 +66,14 @@ async fn test_list_permissions_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let service_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json_with_auth(
         &app,
         &format!("/api/v1/services/{}/permissions", service_id),
+        &token,
     )
     .await;
 
@@ -196,9 +200,10 @@ async fn test_list_roles() {
     state.rbac_repo.add_role(role2).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) =
-        get_json(&app, &format!("/api/v1/services/{}/roles", service_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/services/{}/roles", service_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -211,11 +216,12 @@ async fn test_list_roles_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let service_id = Uuid::new_v4();
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) =
-        get_json(&app, &format!("/api/v1/services/{}/roles", service_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/services/{}/roles", service_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -237,9 +243,10 @@ async fn test_get_role() {
     state.rbac_repo.add_role(role).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<TestRoleWithPermissions>>) =
-        get_json(&app, &format!("/api/v1/roles/{}", role_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/roles/{}", role_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -256,10 +263,11 @@ async fn test_get_role_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, &format!("/api/v1/roles/{}", nonexistent_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/roles/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -537,10 +545,12 @@ async fn test_get_user_roles() {
         .await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) = get_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) = get_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/tenants/{}/roles", user_id, tenant_id),
+        &token,
     )
     .await;
 
@@ -556,13 +566,15 @@ async fn test_get_user_roles_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) = get_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) = get_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/tenants/{}/roles", user_id, tenant_id),
+        &token,
     )
     .await;
 
@@ -583,16 +595,18 @@ async fn test_get_user_assigned_roles() {
     state.rbac_repo.add_role(role).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) = get_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) = get_json_with_auth(
         &app,
         &format!(
             "/api/v1/users/{}/tenants/{}/assigned-roles",
             user_id, tenant_id
         ),
+        &token,
     )
     .await;
 

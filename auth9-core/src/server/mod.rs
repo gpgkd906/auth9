@@ -106,6 +106,7 @@ pub struct AppState {
             PasswordResetRepositoryImpl,
             UserRepositoryImpl,
             SystemSettingsRepositoryImpl,
+            TenantRepositoryImpl,
         >,
     >,
     pub session_service: Arc<SessionService<SessionRepositoryImpl, UserRepositoryImpl>>,
@@ -244,6 +245,7 @@ impl HasPasswordManagement for AppState {
     type PasswordResetRepo = PasswordResetRepositoryImpl;
     type PasswordUserRepo = UserRepositoryImpl;
     type PasswordSystemSettingsRepo = SystemSettingsRepositoryImpl;
+    type PasswordTenantRepo = TenantRepositoryImpl;
 
     fn password_service(
         &self,
@@ -251,6 +253,7 @@ impl HasPasswordManagement for AppState {
         Self::PasswordResetRepo,
         Self::PasswordUserRepo,
         Self::PasswordSystemSettingsRepo,
+        Self::PasswordTenantRepo,
     > {
         &self.password_service
     }
@@ -475,11 +478,12 @@ pub async fn run(config: Config) -> Result<()> {
     ));
 
     // Create new services for 5 features
-    let password_service = Arc::new(PasswordService::new(
+    let password_service = Arc::new(PasswordService::with_tenant_repo(
         password_reset_repo.clone(),
         user_repo.clone(),
         email_service.clone(),
         keycloak_arc.clone(),
+        tenant_repo.clone(),
     ));
 
     let session_service = Arc::new(SessionService::new(
@@ -698,156 +702,6 @@ fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> A
             AuthInterceptor::noop()
         }
     }
-}
-
-/// Build the HTTP router with generic state type
-///
-/// This function is generic over the state type, allowing it to work with
-/// both production `AppState` and test implementations that implement `HasServices`.
-pub fn build_router<
-    S: HasServices + HasSessionManagement + HasAnalytics + HasBranding + HasCache,
->(
-    state: S,
-) -> Router {
-    // Get CORS configuration from state
-    let cors_config = state.config().cors.clone();
-    let cors = build_cors_layer(&cors_config);
-
-    Router::new()
-        // Health endpoints
-        .route("/health", get(api::health::health))
-        .route("/ready", get(api::health::ready::<S>))
-        // OpenID Connect Discovery
-        .route(
-            "/.well-known/openid-configuration",
-            get(api::auth::openid_configuration::<S>),
-        )
-        .route("/.well-known/jwks.json", get(api::auth::jwks::<S>))
-        // Auth endpoints
-        .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
-        .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
-        .route("/api/v1/auth/token", post(api::auth::token::<S>))
-        .route("/api/v1/auth/logout", get(api::auth::logout::<S>))
-        .route("/api/v1/auth/userinfo", get(api::auth::userinfo::<S>))
-        // Tenant endpoints
-        .route(
-            "/api/v1/tenants",
-            get(api::tenant::list::<S>).post(api::tenant::create::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{id}",
-            get(api::tenant::get::<S>)
-                .put(api::tenant::update::<S>)
-                .delete(api::tenant::delete::<S>),
-        )
-        // User endpoints
-        .route(
-            "/api/v1/users",
-            get(api::user::list::<S>).post(api::user::create::<S>),
-        )
-        .route(
-            "/api/v1/users/{id}",
-            get(api::user::get::<S>)
-                .put(api::user::update::<S>)
-                .delete(api::user::delete::<S>),
-        )
-        .route(
-            "/api/v1/users/{id}/mfa",
-            post(api::user::enable_mfa::<S>).delete(api::user::disable_mfa::<S>),
-        )
-        .route(
-            "/api/v1/users/{id}/tenants",
-            get(api::user::get_tenants::<S>).post(api::user::add_to_tenant::<S>),
-        )
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}",
-            delete(api::user::remove_from_tenant::<S>).put(api::user::update_role_in_tenant::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/users",
-            get(api::user::list_by_tenant::<S>),
-        )
-        // Service endpoints
-        .route(
-            "/api/v1/services",
-            get(api::service::list::<S>).post(api::service::create::<S>),
-        )
-        .route(
-            "/api/v1/services/{id}",
-            get(api::service::get::<S>)
-                .put(api::service::update::<S>)
-                .delete(api::service::delete::<S>),
-        )
-        // .route(
-        //     "/api/v1/services/:id/secret",
-        //     post(api::service::regenerate_secret),
-        // )
-        .route(
-            "/api/v1/services/{id}/clients",
-            get(api::service::list_clients::<S>).post(api::service::create_client::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/clients/{client_id}",
-            delete(api::service::delete_client::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/clients/{client_id}/regenerate-secret",
-            post(api::service::regenerate_client_secret::<S>),
-        )
-        // Permission endpoints
-        .route(
-            "/api/v1/permissions",
-            post(api::role::create_permission::<S>),
-        )
-        .route(
-            "/api/v1/permissions/{id}",
-            delete(api::role::delete_permission::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/permissions",
-            get(api::role::list_permissions::<S>),
-        )
-        // Role endpoints
-        .route("/api/v1/roles", post(api::role::create_role::<S>))
-        .route(
-            "/api/v1/roles/{id}",
-            get(api::role::get_role::<S>)
-                .put(api::role::update_role::<S>)
-                .delete(api::role::delete_role::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/roles",
-            get(api::role::list_roles::<S>),
-        )
-        .route(
-            "/api/v1/roles/{role_id}/permissions",
-            post(api::role::assign_permission::<S>),
-        )
-        .route(
-            "/api/v1/roles/{role_id}/permissions/{permission_id}",
-            delete(api::role::remove_permission::<S>),
-        )
-        // RBAC assignment
-        .route("/api/v1/rbac/assign", post(api::role::assign_roles::<S>))
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles",
-            get(api::role::get_user_roles::<S>),
-        )
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}/assigned-roles",
-            get(api::role::get_user_assigned_roles::<S>),
-        )
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}",
-            delete(api::role::unassign_role::<S>),
-        )
-        // Audit logs
-        .route("/api/v1/audit-logs", get(api::audit::list::<S>))
-        // Add middleware (order matters: bottom layer runs first)
-        .layer(axum::middleware::from_fn(security_headers_middleware))
-        .layer(TraceLayer::new_for_http())
-        .layer(cors)
-        .with_state(state)
 }
 
 /// Build CORS layer from configuration

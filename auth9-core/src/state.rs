@@ -163,6 +163,8 @@ pub trait HasPasswordManagement: Clone + Send + Sync + 'static {
     type PasswordUserRepo: UserRepository;
     /// The system settings repository type
     type PasswordSystemSettingsRepo: SystemSettingsRepository;
+    /// The tenant repository type for password policy
+    type PasswordTenantRepo: TenantRepository;
 
     /// Get the password service
     fn password_service(
@@ -171,6 +173,7 @@ pub trait HasPasswordManagement: Clone + Send + Sync + 'static {
         Self::PasswordResetRepo,
         Self::PasswordUserRepo,
         Self::PasswordSystemSettingsRepo,
+        Self::PasswordTenantRepo,
     >;
 
     /// Get the JWT manager for token verification
