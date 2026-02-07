@@ -3,7 +3,8 @@
 //! Tests for the service and client HTTP endpoints using mock repositories.
 
 use super::mock_keycloak::MockKeycloakServer;
-use super::{build_test_router, delete_json, get_json, post_json, put_json, TestAppState};
+use super::{build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth, put_json_with_auth, TestAppState};
+use crate::api::create_test_identity_token;
 use crate::api::create_test_service;
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Client, Service, ServiceStatus};
@@ -66,9 +67,10 @@ async fn test_list_services() {
     state.service_repo.add_service(svc2).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) =
-        get_json(&app, "/api/v1/services").await;
+        get_json_with_auth(&app, "/api/v1/services", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -95,9 +97,10 @@ async fn test_list_services_with_tenant_filter() {
     state.service_repo.add_service(svc3).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) =
-        get_json(&app, &format!("/api/v1/services?tenant_id={}", tenant1)).await;
+        get_json_with_auth(&app, &format!("/api/v1/services?tenant_id={}", tenant1), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -110,9 +113,10 @@ async fn test_list_services_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) =
-        get_json(&app, "/api/v1/services").await;
+        get_json_with_auth(&app, "/api/v1/services", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -133,9 +137,10 @@ async fn test_list_services_pagination() {
     }
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) =
-        get_json(&app, "/api/v1/services?page=2&per_page=10").await;
+        get_json_with_auth(&app, "/api/v1/services?page=2&per_page=10", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -160,9 +165,10 @@ async fn test_get_service() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        get_json(&app, &format!("/api/v1/services/{}", service_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -175,10 +181,11 @@ async fn test_get_service_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, &format!("/api/v1/services/{}", nonexistent_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/services/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -198,6 +205,7 @@ async fn test_create_service() {
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let input = json!({
@@ -209,7 +217,7 @@ async fn test_create_service() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<TestServiceWithClient>>) =
-        post_json(&app, "/api/v1/services", &input).await;
+        post_json_with_auth(&app, "/api/v1/services", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -230,6 +238,7 @@ async fn test_create_service_with_logout_uris() {
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let input = json!({
@@ -245,7 +254,7 @@ async fn test_create_service_with_logout_uris() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<TestServiceWithClient>>) =
-        post_json(&app, "/api/v1/services", &input).await;
+        post_json_with_auth(&app, "/api/v1/services", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -262,6 +271,7 @@ async fn test_create_service_minimal() {
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let input = json!({
@@ -272,7 +282,7 @@ async fn test_create_service_minimal() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<TestServiceWithClient>>) =
-        post_json(&app, "/api/v1/services", &input).await;
+        post_json_with_auth(&app, "/api/v1/services", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -287,6 +297,7 @@ async fn test_create_service_keycloak_conflict() {
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let input = json!({
@@ -297,7 +308,7 @@ async fn test_create_service_keycloak_conflict() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/services", &input).await;
+        post_json_with_auth(&app, "/api/v1/services", &input, &token).await;
 
     // Keycloak 409 is translated to Conflict
     assert_eq!(status, StatusCode::CONFLICT);
@@ -317,13 +328,14 @@ async fn test_update_service() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "name": "Updated Service Name"
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        put_json(&app, &format!("/api/v1/services/{}", service_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -341,13 +353,14 @@ async fn test_update_service_status() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "status": "inactive"
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        put_json(&app, &format!("/api/v1/services/{}", service_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -360,16 +373,18 @@ async fn test_update_service_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = Uuid::new_v4();
     let input = json!({
         "name": "Updated"
     });
 
-    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json(
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json_with_auth(
         &app,
         &format!("/api/v1/services/{}", nonexistent_id),
         &input,
+        &token,
     )
     .await;
 
@@ -392,9 +407,10 @@ async fn test_delete_service() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/services/{}", service_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -407,10 +423,11 @@ async fn test_delete_service_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json(&app, &format!("/api/v1/services/{}", nonexistent_id)).await;
+        delete_json_with_auth(&app, &format!("/api/v1/services/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -450,10 +467,11 @@ async fn test_list_clients() {
     state.service_repo.add_client(client2).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     // Get raw response to debug
     let (status, raw_body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, &format!("/api/v1/services/{}/clients", service_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/services/{}/clients", service_id), &token).await;
 
     println!("Status: {:?}", status);
     println!("Body: {:?}", raw_body);
@@ -483,15 +501,17 @@ async fn test_create_client() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "name": "New Client"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json_with_auth(
         &app,
         &format!("/api/v1/services/{}/clients", service_id),
         &input,
+        &token,
     )
     .await;
 
@@ -516,13 +536,15 @@ async fn test_create_client_without_name() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({});
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json_with_auth(
         &app,
         &format!("/api/v1/services/{}/clients", service_id),
         &input,
+        &token,
     )
     .await;
 
@@ -553,10 +575,12 @@ async fn test_delete_client() {
     state.service_repo.add_client(client).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json(
+    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
         &format!("/api/v1/services/{}/clients/client-to-delete", service_id),
+        &token,
     )
     .await;
 
@@ -594,14 +618,16 @@ async fn test_regenerate_client_secret() {
     state.service_repo.add_client(client).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = post_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = post_json_with_auth(
         &app,
         &format!(
             "/api/v1/services/{}/clients/existing-client/regenerate-secret",
             service_id
         ),
         &json!({}),
+        &token,
     )
     .await;
 
@@ -625,6 +651,7 @@ async fn test_service_with_multiple_redirect_uris() {
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let tenant_id = Uuid::new_v4();
     let input = json!({
@@ -640,7 +667,7 @@ async fn test_service_with_multiple_redirect_uris() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<TestServiceWithClient>>) =
-        post_json(&app, "/api/v1/services", &input).await;
+        post_json_with_auth(&app, "/api/v1/services", &input, &token).await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -658,6 +685,7 @@ async fn test_update_service_redirect_uris() {
     state.service_repo.add_service(service).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "redirect_uris": [
@@ -667,7 +695,7 @@ async fn test_update_service_redirect_uris() {
     });
 
     let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        put_json(&app, &format!("/api/v1/services/{}", service_id), &input).await;
+        put_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

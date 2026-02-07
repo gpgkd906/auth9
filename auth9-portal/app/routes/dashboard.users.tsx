@@ -111,7 +111,11 @@ export async function action({ request }: ActionFunctionArgs) {
       const email = formData.get("email") as string;
       const display_name = formData.get("display_name") as string;
       const password = formData.get("password") as string;
-      await userApi.create({ email, display_name, password }, accessToken || undefined);
+      const tenant_id = formData.get("tenant_id") as string | null;
+      await userApi.create(
+        { email, display_name, password, ...(tenant_id ? { tenant_id } : {}) },
+        accessToken || undefined
+      );
       return { success: true, intent };
     }
 
@@ -438,6 +442,19 @@ export default function UsersPage() {
                 required
                 placeholder="Enter a strong password"
               />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Tenant (optional)</Label>
+              <Select name="tenant_id">
+                <SelectTrigger>
+                  <SelectValue placeholder="No tenant (platform user)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenants.data.map((t: Tenant) => (
+                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {actionData && "error" in actionData && actionData.intent === "create_user" && (
               <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>

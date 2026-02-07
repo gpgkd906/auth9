@@ -161,6 +161,7 @@ impl TenantRepository for TestTenantRepository {
             logo_url: input.logo_url.clone(),
             settings: input.settings.clone().unwrap_or_default(),
             status: TenantStatus::Active,
+            password_policy: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -254,6 +255,21 @@ impl TenantRepository for TestTenantRepository {
             .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
         tenants.remove(pos);
         Ok(())
+    }
+
+    async fn update_password_policy(
+        &self,
+        id: StringUuid,
+        policy: &auth9_core::domain::PasswordPolicy,
+    ) -> Result<Tenant> {
+        let mut tenants = self.tenants.write().await;
+        let tenant = tenants
+            .iter_mut()
+            .find(|t| t.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Tenant {} not found", id)))?;
+        tenant.password_policy = Some(policy.clone());
+        tenant.updated_at = Utc::now();
+        Ok(tenant.clone())
     }
 }
 
@@ -1375,6 +1391,25 @@ impl PasswordResetRepository for TestPasswordResetRepository {
         tokens.retain(|t| t.user_id != user_id);
         Ok(())
     }
+
+    async fn replace_for_user(
+        &self,
+        input: &CreatePasswordResetTokenInput,
+    ) -> Result<PasswordResetToken> {
+        // Atomically delete old tokens and create new one
+        let mut tokens = self.tokens.write().await;
+        tokens.retain(|t| t.user_id != input.user_id);
+        let token = PasswordResetToken {
+            id: StringUuid::new_v4(),
+            user_id: input.user_id,
+            token_hash: input.token_hash.clone(),
+            expires_at: input.expires_at,
+            used_at: None,
+            created_at: Utc::now(),
+        };
+        tokens.push(token.clone());
+        Ok(token)
+    }
 }
 
 // ============================================================================
@@ -2354,6 +2389,7 @@ pub fn create_test_tenant(id: Option<Uuid>) -> Tenant {
         logo_url: None,
         settings: TenantSettings::default(),
         status: TenantStatus::Active,
+        password_policy: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     }

@@ -195,6 +195,7 @@ pub struct CreateUserRequest {
     #[serde(flatten)]
     pub user: CreateUserInput,
     pub password: Option<String>,
+    pub tenant_id: Option<Uuid>,
 }
 
 /// Create user
@@ -233,6 +234,22 @@ pub async fn create<S: HasServices + HasBranding>(
 
     // Validate input before calling Keycloak (catches invalid emails early)
     input.user.validate()?;
+
+    // Validate password against tenant password policy if provided
+    if let Some(ref password) = input.password {
+        let policy = if let Some(tenant_id) = input.tenant_id {
+            let tenant = state
+                .tenant_service()
+                .get(StringUuid::from(tenant_id))
+                .await?;
+            tenant.password_policy.unwrap_or_default()
+        } else {
+            crate::domain::PasswordPolicy::default()
+        };
+        if let Err(errors) = policy.validate_password(password) {
+            return Err(AppError::Validation(errors.join("; ")));
+        }
+    }
 
     let credentials = input.password.map(|password| {
         vec![KeycloakCredential {

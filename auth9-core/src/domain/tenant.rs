@@ -1,6 +1,7 @@
 //! Tenant domain model
 
 use super::common::StringUuid;
+use super::password::PasswordPolicy;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -120,6 +121,8 @@ pub struct Tenant {
     #[sqlx(json)]
     pub settings: TenantSettings,
     pub status: TenantStatus,
+    #[sqlx(json, default)]
+    pub password_policy: Option<PasswordPolicy>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -134,6 +137,7 @@ impl Default for Tenant {
             logo_url: None,
             settings: TenantSettings::default(),
             status: TenantStatus::default(),
+            password_policy: None,
             created_at: now,
             updated_at: now,
         }

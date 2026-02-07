@@ -5,7 +5,7 @@
 //!
 //! Key components:
 //! - `TestAppState` - Test-friendly version of AppState implementing `HasServices`
-//! - Uses production `build_router()` with `TestAppState` for actual handler coverage
+//! - Uses production `build_full_router()` with `TestAppState` for actual handler coverage
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
 pub mod analytics_http_test;
@@ -41,7 +41,8 @@ use auth9_core::config::{
 };
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
-use auth9_core::server::build_router;
+use auth9_core::middleware::RateLimitState;
+use auth9_core::server::build_full_router;
 use auth9_core::service::{
     AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
     IdentityProviderService, InvitationService, PasswordService, RbacService,
@@ -49,9 +50,9 @@ use auth9_core::service::{
     WebAuthnService, WebhookService,
 };
 use auth9_core::state::{
-    HasAnalytics, HasBranding, HasCache, HasEmailTemplates, HasIdentityProviders, HasInvitations,
-    HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings,
-    HasWebAuthn, HasWebhooks,
+    HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
+    HasInvitations, HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
+    HasSystemSettings, HasWebAuthn, HasWebhooks,
 };
 use axum::{
     body::Body,
@@ -150,6 +151,7 @@ pub struct TestAppState {
             TestPasswordResetRepository,
             TestUserRepository,
             TestSystemSettingsRepository,
+            TestTenantRepository,
         >,
     >,
     pub session_service: Arc<SessionService<TestSessionRepository, TestUserRepository>>,
@@ -177,6 +179,7 @@ pub struct TestAppState {
     pub keycloak_client: KeycloakClient,
     #[allow(dead_code)]
     pub cache_manager: NoOpCacheManager,
+    pub db_pool: sqlx::MySqlPool,
     // Keep references to raw repositories for test setup
     pub tenant_repo: Arc<TestTenantRepository>,
     pub user_repo: Arc<TestUserRepository>,
@@ -256,13 +259,15 @@ impl TestAppState {
         let jwt_manager = create_test_jwt_manager();
         let keycloak_client = KeycloakClient::new(config.keycloak.clone());
         let cache_manager = NoOpCacheManager::new();
+        let db_pool = sqlx::MySqlPool::connect_lazy(&config.database.url).unwrap();
 
         // Create new services
-        let password_service = Arc::new(PasswordService::new(
+        let password_service = Arc::new(PasswordService::with_tenant_repo(
             password_reset_repo.clone(),
             user_repo.clone(),
             email_service.clone(),
             Arc::new(KeycloakClient::new(config.keycloak.clone())),
+            tenant_repo.clone(),
         ));
         let session_service = Arc::new(SessionService::new(
             session_repo.clone(),
@@ -314,6 +319,7 @@ impl TestAppState {
             jwt_manager,
             keycloak_client,
             cache_manager,
+            db_pool,
             tenant_repo,
             user_repo,
             service_repo,
@@ -453,6 +459,7 @@ impl HasPasswordManagement for TestAppState {
     type PasswordResetRepo = TestPasswordResetRepository;
     type PasswordUserRepo = TestUserRepository;
     type PasswordSystemSettingsRepo = TestSystemSettingsRepository;
+    type PasswordTenantRepo = TestTenantRepository;
 
     fn password_service(
         &self,
@@ -460,6 +467,7 @@ impl HasPasswordManagement for TestAppState {
         Self::PasswordResetRepo,
         Self::PasswordUserRepo,
         Self::PasswordSystemSettingsRepo,
+        Self::PasswordTenantRepo,
     > {
         &self.password_service
     }
@@ -560,6 +568,13 @@ impl HasInvitations for TestAppState {
     }
 }
 
+/// Implement HasDbPool trait for TestAppState
+impl HasDbPool for TestAppState {
+    fn db_pool(&self) -> &sqlx::MySqlPool {
+        &self.db_pool
+    }
+}
+
 /// Implement HasCache trait for TestAppState
 impl HasCache for TestAppState {
     type Cache = NoOpCacheManager;
@@ -575,12 +590,12 @@ impl HasCache for TestAppState {
 
 /// Build a router for HTTP handler tests using the PRODUCTION router.
 ///
-/// This uses the actual `build_router` from `auth9_core::server` with TestAppState,
+/// This uses the actual `build_full_router` from `auth9_core::server` with TestAppState,
 /// which means these tests cover the real production handler code in `src/api/*.rs`.
 pub fn build_test_router(state: TestAppState) -> Router {
-    // Use the production router with TestAppState
+    // Use the production router with TestAppState and disabled rate limiting
     // This ensures we're testing the actual production handlers
-    build_router(state)
+    build_full_router(state, RateLimitState::noop())
 }
 
 /// Build a router with email template endpoints for testing.

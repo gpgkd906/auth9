@@ -14,6 +14,10 @@ pub trait PasswordResetRepository: Send + Sync {
     async fn mark_used(&self, id: StringUuid) -> Result<()>;
     async fn delete_expired(&self) -> Result<u64>;
     async fn delete_by_user(&self, user_id: StringUuid) -> Result<()>;
+    async fn replace_for_user(
+        &self,
+        input: &CreatePasswordResetTokenInput,
+    ) -> Result<PasswordResetToken>;
 }
 
 pub struct PasswordResetRepositoryImpl {
@@ -128,6 +132,43 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
 
         Ok(())
     }
+
+    async fn replace_for_user(
+        &self,
+        input: &CreatePasswordResetTokenInput,
+    ) -> Result<PasswordResetToken> {
+        let id = StringUuid::new_v4();
+        let mut tx = self.pool.begin().await?;
+
+        sqlx::query(
+            r#"
+            DELETE FROM password_reset_tokens
+            WHERE user_id = ?
+            "#,
+        )
+        .bind(input.user_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query(
+            r#"
+            INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
+            VALUES (?, ?, ?, ?, NOW())
+            "#,
+        )
+        .bind(id)
+        .bind(input.user_id)
+        .bind(&input.token_hash)
+        .bind(input.expires_at)
+        .execute(&mut *tx)
+        .await?;
+
+        tx.commit().await?;
+
+        self.find_by_id(id).await?.ok_or_else(|| {
+            AppError::Internal(anyhow::anyhow!("Failed to create password reset token"))
+        })
+    }
 }
 
 impl PasswordResetRepositoryImpl {
@@ -225,5 +266,30 @@ mod tests {
         let result = mock.create(&input).await.unwrap();
         assert_eq!(result.user_id, user_id);
         assert_eq!(result.token_hash, "hash123");
+    }
+
+    #[tokio::test]
+    async fn test_mock_replace_for_user() {
+        let mut mock = MockPasswordResetRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_replace_for_user().returning(|input| {
+            Ok(PasswordResetToken {
+                user_id: input.user_id,
+                token_hash: input.token_hash.clone(),
+                expires_at: input.expires_at,
+                ..Default::default()
+            })
+        });
+
+        let input = CreatePasswordResetTokenInput {
+            user_id,
+            token_hash: "new-hash".to_string(),
+            expires_at: Utc::now() + chrono::Duration::hours(1),
+        };
+
+        let result = mock.replace_for_user(&input).await.unwrap();
+        assert_eq!(result.user_id, user_id);
+        assert_eq!(result.token_hash, "new-hash");
     }
 }

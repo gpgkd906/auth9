@@ -132,12 +132,12 @@ export const userApi = {
     return handleResponse(response);
   },
 
-  create: async (input: CreateUserInput & { password?: string }, accessToken?: string): Promise<{ data: User }> => {
-    const { password, ...user } = input;
+  create: async (input: CreateUserInput & { password?: string; tenant_id?: string }, accessToken?: string): Promise<{ data: User }> => {
+    const { password, tenant_id, ...user } = input;
     const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
       method: "POST",
       headers: getHeaders(accessToken),
-      body: JSON.stringify({ ...user, password }),
+      body: JSON.stringify({ ...user, password, tenant_id }),
     });
     return handleResponse(response);
   },

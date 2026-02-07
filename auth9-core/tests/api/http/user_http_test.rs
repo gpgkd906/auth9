@@ -4,7 +4,7 @@
 
 use super::mock_keycloak::MockKeycloakServer;
 use super::{
-    build_test_router, delete_json_with_auth, get_json, get_json_with_auth, post_json,
+    build_test_router, delete_json_with_auth, get_json_with_auth, post_json,
     post_json_with_auth, put_json_with_auth, TestAppState,
 };
 use crate::api::{
@@ -487,11 +487,12 @@ async fn test_get_user_tenants() {
     state.user_repo.add_tenant_user(tu2).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (
         StatusCode,
         Option<SuccessResponse<Vec<TenantUserWithTenant>>>,
-    ) = get_json(&app, &format!("/api/v1/users/{}/tenants", user_id)).await;
+    ) = get_json_with_auth(&app, &format!("/api/v1/users/{}/tenants", user_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -538,9 +539,10 @@ async fn test_list_users_by_tenant() {
     state.user_repo.add_tenant_user(tu2).await;
 
     let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<User>>>) =
-        get_json(&app, &format!("/api/v1/tenants/{}/users", tenant_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/users", tenant_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

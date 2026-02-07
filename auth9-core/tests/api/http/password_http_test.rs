@@ -123,12 +123,15 @@ async fn test_get_password_policy_default() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
+    // Create a tenant first so it can be found
+    let tenant = crate::api::create_test_tenant(None);
+    state.tenant_repo.add_tenant(tenant.clone()).await;
+
     let app = build_password_test_router(state);
 
-    let tenant_id = StringUuid::new_v4();
     let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = super::get_json(
         &app,
-        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &format!("/api/v1/tenants/{}/password-policy", tenant.id),
     )
     .await;
 
@@ -144,9 +147,12 @@ async fn test_update_password_policy() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
+    // Create a tenant first so it can be found
+    let tenant = crate::api::create_test_tenant(None);
+    state.tenant_repo.add_tenant(tenant.clone()).await;
+
     let app = build_password_test_router(state);
 
-    let tenant_id = StringUuid::new_v4();
     let input = serde_json::json!({
         "min_length": 12,
         "require_uppercase": true,
@@ -161,7 +167,7 @@ async fn test_update_password_policy() {
 
     let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json(
         &app,
-        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &format!("/api/v1/tenants/{}/password-policy", tenant.id),
         &input,
     )
     .await;
