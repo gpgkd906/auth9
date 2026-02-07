@@ -30,12 +30,15 @@ use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Maximum allowed per_page value for pagination
+pub(crate) const MAX_PER_PAGE: i64 = 100;
+
 /// Pagination query parameters
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PaginationQuery {
-    #[serde(default = "default_page")]
+    #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page")]
+    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
     pub per_page: i64,
 }
 
@@ -45,6 +48,24 @@ fn default_page() -> i64 {
 
 fn default_per_page() -> i64 {
     20
+}
+
+/// Clamp page to minimum 1
+pub(crate) fn deserialize_page<'de, D>(deserializer: D) -> std::result::Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = i64::deserialize(deserializer)?;
+    Ok(value.max(1))
+}
+
+/// Clamp per_page to [1, MAX_PER_PAGE]
+pub(crate) fn deserialize_per_page<'de, D>(deserializer: D) -> std::result::Result<i64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let value = i64::deserialize(deserializer)?;
+    Ok(value.clamp(1, MAX_PER_PAGE))
 }
 
 /// Paginated response wrapper
@@ -230,6 +251,28 @@ mod tests {
             serde_json::from_str(r#"{"page": 5, "per_page": 50}"#).unwrap();
         assert_eq!(query.page, 5);
         assert_eq!(query.per_page, 50);
+    }
+
+    #[test]
+    fn test_pagination_query_per_page_clamped_to_max() {
+        let query: PaginationQuery =
+            serde_json::from_str(r#"{"page": 1, "per_page": 1000000}"#).unwrap();
+        assert_eq!(query.page, 1);
+        assert_eq!(query.per_page, MAX_PER_PAGE);
+    }
+
+    #[test]
+    fn test_pagination_query_per_page_clamped_to_min() {
+        let query: PaginationQuery =
+            serde_json::from_str(r#"{"page": 1, "per_page": -5}"#).unwrap();
+        assert_eq!(query.per_page, 1);
+    }
+
+    #[test]
+    fn test_pagination_query_page_clamped_to_min() {
+        let query: PaginationQuery =
+            serde_json::from_str(r#"{"page": 0, "per_page": 20}"#).unwrap();
+        assert_eq!(query.page, 1);
     }
 
     #[test]

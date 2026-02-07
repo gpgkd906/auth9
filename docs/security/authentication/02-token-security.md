@@ -2,7 +2,7 @@
 
 **模块**: 认证安全
 **测试范围**: JWT Token 签发、验证和存储安全
-**场景数**: 5
+**场景数**: 3
 **风险等级**: 🔴 极高
 
 ---
@@ -116,53 +116,7 @@ curl http://localhost:8080/.well-known/jwks.json | jq .
 
 ---
 
-## 场景 3：Token 有效期与刷新测试
-
-### 前置条件
-- 正常用户会话
-
-### 攻击目标
-验证 Token 过期机制是否正确实现
-
-### 攻击步骤
-1. 获取有效 Token
-2. 检查 Token 过期时间 (exp claim)
-3. 等待 Token 过期后使用
-4. 测试 refresh token 机制：
-   - 过期的 refresh token 是否可用
-   - refresh token 是否可重放
-   - 吊销后 refresh token 是否仍有效
-
-### 预期安全行为
-- Access Token 过期后立即失效
-- Refresh Token 一次性使用
-- 支持 Token 吊销
-
-### 验证方法
-```bash
-# 解析 Token 获取过期时间
-echo $TOKEN | cut -d'.' -f2 | base64 -d | jq .exp
-
-# 过期后使用
-curl -H "Authorization: Bearer $EXPIRED_TOKEN" \
-  http://localhost:8080/api/v1/users
-# 预期: 401 {"error": "token_expired"}
-
-# 测试 refresh token 重放
-curl -X POST http://localhost:8080/api/v1/auth/refresh \
-  -d "refresh_token=$USED_REFRESH_TOKEN"
-# 预期: 400 {"error": "invalid_grant"}
-```
-
-### 修复建议
-- Access Token 有效期: 15-60 分钟
-- Refresh Token 有效期: 7-30 天
-- 实现 Token Rotation (每次刷新生成新的 refresh token)
-- 支持 Token 黑名单 (Redis)
-
----
-
-## 场景 4：Token 声明篡改
+## 场景 3：Token 声明篡改
 
 ### 前置条件
 - 有效的 JWT Token
@@ -204,59 +158,13 @@ curl -H "Authorization: Bearer $TAMPERED_TOKEN" \
 
 ---
 
-## 场景 5：Token Exchange 安全测试
-
-### 前置条件
-- 有效的 Identity Token
-- gRPC 客户端工具
-
-### 攻击目标
-验证 Token Exchange 流程的安全性
-
-### 攻击步骤
-1. 使用有效 Identity Token 请求 Token Exchange
-2. 尝试请求未授权的 tenant_id
-3. 尝试请求未授权的 service_id
-4. 检查返回的 Tenant Access Token 权限
-
-### 预期安全行为
-- 仅能交换用户实际所属租户的 Token
-- 拒绝未授权的 tenant_id 请求
-- Token 中的权限与数据库一致
-
-### 验证方法
-```bash
-# 使用 grpcurl 测试 Token Exchange
-grpcurl -plaintext \
-  -d '{
-    "identity_token": "valid_token_here",
-    "tenant_id": "unauthorized_tenant_id",
-    "service_id": "test-service"
-  }' \
-  localhost:50051 auth9.TokenExchange/ExchangeToken
-# 预期: gRPC 错误 "User not member of tenant"
-
-# 验证返回的 Token 权限
-# 解析并确认权限与数据库一致
-```
-
-### 修复建议
-- 验证用户与租户的关联关系
-- 从数据库实时查询权限 (不信任请求参数)
-- 记录 Token Exchange 审计日志
-- 实现调用方认证 (mTLS/API Key)
-
----
-
 ## 检查清单
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
 | 1 | JWT 签名算法混淆攻击 | ☐ | | | |
 | 2 | JWT 密钥泄露测试 | ☐ | | | |
-| 3 | Token 有效期与刷新测试 | ☐ | | | |
-| 4 | Token 声明篡改 | ☐ | | | |
-| 5 | Token Exchange 安全测试 | ☐ | | | |
+| 3 | Token 声明篡改 | ☐ | | | |
 
 ---
 

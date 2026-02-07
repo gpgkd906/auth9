@@ -14,17 +14,28 @@ use axum::{
 };
 use serde_json::json;
 
+use crate::cache::CacheOperations;
 use crate::jwt::JwtManager;
+use std::sync::Arc;
 
 /// Shared state for authentication middleware
 #[derive(Clone)]
 pub struct AuthMiddlewareState {
     jwt_manager: JwtManager,
+    cache: Option<Arc<dyn CacheOperations>>,
 }
 
 impl AuthMiddlewareState {
     pub fn new(jwt_manager: JwtManager) -> Self {
-        Self { jwt_manager }
+        Self {
+            jwt_manager,
+            cache: None,
+        }
+    }
+
+    pub fn with_cache(mut self, cache: Arc<dyn CacheOperations>) -> Self {
+        self.cache = Some(cache);
+        self
     }
 }
 
@@ -66,15 +77,38 @@ pub async fn require_auth_middleware(
         }
     };
 
-    // Validate the token (try identity token first, then tenant access token)
-    let is_valid = auth_state.jwt_manager.verify_identity_token(token).is_ok()
-        || auth_state
-            .jwt_manager
-            .verify_tenant_access_token(token, None)
-            .is_ok();
+    // Validate the token (service client, identity, then tenant access token)
+    // Also extract session ID for blacklist check
+    let mut session_id: Option<String> = None;
+
+    let is_valid = if let Ok(claims) = auth_state.jwt_manager.verify_service_client_token(token) {
+        session_id = Some(claims.sub.clone());
+        true
+    } else if let Ok(claims) = auth_state.jwt_manager.verify_identity_token(token) {
+        session_id = claims.sid.clone();
+        true
+    } else if let Ok(claims) = auth_state.jwt_manager.verify_tenant_access_token(token, None) {
+        session_id = Some(claims.sub.clone());
+        true
+    } else {
+        false
+    };
 
     if !is_valid {
         return unauthorized_response("Invalid or expired token");
+    }
+
+    // Check token blacklist (e.g., after logout)
+    if let (Some(ref cache), Some(ref sid)) = (&auth_state.cache, &session_id) {
+        match cache.is_token_blacklisted(sid).await {
+            Ok(true) => {
+                return unauthorized_response("Token has been revoked");
+            }
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(error = %e, "Failed to check token blacklist, allowing request");
+            }
+        }
     }
 
     // Token is valid, proceed with the request

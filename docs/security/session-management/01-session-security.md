@@ -2,7 +2,7 @@
 
 **模块**: 会话管理
 **测试范围**: Session 生成、存储和保护
-**场景数**: 5
+**场景数**: 4
 **风险等级**: 🟠 高
 
 ---
@@ -211,54 +211,6 @@ curl -b "session_2.txt" http://localhost:3000/dashboard
 
 ---
 
-## 场景 5：Session 超时与续期
-
-### 前置条件
-- 有效 Session
-
-### 攻击目标
-验证 Session 超时机制
-
-### 攻击步骤
-1. 获取 Session 过期时间
-2. 测试绝对超时 (最大生存期)
-3. 测试空闲超时 (不活动时间)
-4. 测试续期机制
-
-### 预期安全行为
-- 合理的超时时间
-- 空闲超时强制
-- 续期有限制
-
-### 验证方法
-```bash
-# 检查 Session Cookie 的 Max-Age/Expires
-curl -I -c - http://localhost:3000/login
-
-# 测试空闲超时
-# 1. 登录获取 Session
-# 2. 等待超时时间
-# 3. 尝试访问
-sleep 1800  # 30 分钟后
-curl -b "session=$SESSION" http://localhost:3000/dashboard
-# 预期: 如果空闲超时为 30 分钟，应要求重新登录
-
-# 测试绝对超时
-# Session 应有最大生存期，无论活动与否
-
-# 检查续期行为
-curl -b "session=$SESSION" http://localhost:3000/api/keep-alive
-# 检查 Session 过期时间是否延长
-```
-
-### 修复建议
-- 空闲超时: 15-30 分钟
-- 绝对超时: 8-24 小时
-- 敏感操作需要重新认证
-- 续期有次数/时间限制
-
----
-
 ## 检查清单
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
@@ -267,7 +219,6 @@ curl -b "session=$SESSION" http://localhost:3000/api/keep-alive
 | 2 | Session 固定攻击 | ☐ | | | |
 | 3 | Session 劫持防护 | ☐ | | | |
 | 4 | 并发 Session 控制 | ☐ | | | |
-| 5 | Session 超时与续期 | ☐ | | | |
 
 ---
 

@@ -213,6 +213,15 @@ where
             .map_err(|e| Status::internal(format!("Failed to lookup service: {}", e)))?
             .ok_or_else(|| Status::internal("Service integrity error"))?;
 
+        // Verify service belongs to the requested tenant (prevent cross-tenant abuse)
+        if let Some(service_tenant_id) = service.tenant_id {
+            if service_tenant_id != tenant_id {
+                return Err(Status::permission_denied(
+                    "Service does not belong to the requested tenant",
+                ));
+            }
+        }
+
         let user_roles = match self
             .cache_manager
             .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service.id.0)

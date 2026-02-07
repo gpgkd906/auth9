@@ -15,6 +15,7 @@ Project skills are in `.agents/skills/`. Read the relevant skill file before exe
 - `.agents/skills/test-coverage/SKILL.md` - Coverage analysis, writing tests with mocks
 - `.agents/skills/reset-local-env/SKILL.md` - Resetting local development environment
 - `.agents/skills/qs-testing/SKILL.md` - QA testing, manual testing, verify feature functionality, or test specific modules.
+- `.agents/skills/auth9-grpc-regression/SKILL.md` - gRPC regression testing
 
 ## Build, Test, and Development Commands
 Backend:

@@ -1,11 +1,16 @@
 //! Service/Client API handlers
 
-use crate::api::{write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse};
+use crate::api::{
+    deserialize_page, deserialize_per_page, write_audit_log_generic, MessageResponse,
+    PaginatedResponse, SuccessResponse,
+};
+use crate::config::Config;
 use crate::domain::{
     CreateClientInput, CreateServiceInput, Service, ServiceStatus, UpdateServiceInput,
 };
-use crate::error::Result;
+use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakOidcClient;
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
@@ -116,14 +121,73 @@ pub fn build_keycloak_client_for_update(
 }
 
 // ============================================================================
+// Authorization helpers
+// ============================================================================
+
+/// Check if the authenticated user can manage a service.
+/// - Identity tokens (platform admin): can manage any service
+/// - TenantAccess tokens: can only manage services in their own tenant
+fn require_service_access(
+    config: &Config,
+    auth: &AuthUser,
+    service_tenant_id: Option<Uuid>,
+) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => {
+            if config.is_platform_admin_email(&auth.email) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Platform admin required: identity token is not a platform admin".to_string(),
+                ))
+            }
+        }
+        TokenType::TenantAccess => {
+            let token_tenant = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+
+            match service_tenant_id {
+                Some(tid) if tid == token_tenant => {
+                    // Check if user has admin/owner role or service:write permissions
+                    let has_admin_role =
+                        auth.roles.iter().any(|r| r == "admin" || r == "owner");
+                    let has_service_permission = auth
+                        .permissions
+                        .iter()
+                        .any(|p| p == "service:write" || p == "service:*");
+
+                    if has_admin_role || has_service_permission {
+                        Ok(())
+                    } else {
+                        Err(AppError::Forbidden(
+                            "Admin access required to manage services".to_string(),
+                        ))
+                    }
+                }
+                _ => Err(AppError::Forbidden(
+                    "Cannot access services in another tenant".to_string(),
+                )),
+            }
+        }
+        TokenType::ServiceClient => {
+            // Service client tokens cannot manage services
+            Err(AppError::Forbidden(
+                "Service client tokens cannot manage services".to_string(),
+            ))
+        }
+    }
+}
+
+// ============================================================================
 // API Handlers
 // ============================================================================
 
 #[derive(Debug, Deserialize)]
 pub struct ListServicesQuery {
-    #[serde(default = "default_page")]
+    #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page")]
+    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
     pub per_page: i64,
     pub tenant_id: Option<Uuid>,
 }
@@ -137,13 +201,42 @@ fn default_per_page() -> i64 {
 }
 
 /// List services
+/// - Platform admin (Identity token): can list all services or filter by tenant
+/// - Tenant user (TenantAccess token): can only list services in their tenant
 pub async fn list<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Query(query): Query<ListServicesQuery>,
 ) -> Result<impl IntoResponse> {
+    let tenant_filter = match auth.token_type {
+        TokenType::Identity => {
+            if !state.config().is_platform_admin_email(&auth.email) {
+                return Err(AppError::Forbidden(
+                    "Platform admin required to list services without tenant scope".to_string(),
+                ));
+            }
+            query.tenant_id // Platform admin: optional filter
+        }
+        TokenType::TenantAccess | TokenType::ServiceClient => {
+            // Tenant user / service client: must scope to their tenant
+            let token_tenant = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+            // If they specified a different tenant, deny
+            if let Some(requested) = query.tenant_id {
+                if requested != token_tenant {
+                    return Err(AppError::Forbidden(
+                        "Cannot list services in another tenant".to_string(),
+                    ));
+                }
+            }
+            Some(token_tenant)
+        }
+    };
+
     let (services, total) = state
         .client_service()
-        .list(query.tenant_id, query.page, query.per_page)
+        .list(tenant_filter, query.page, query.per_page)
         .await?;
 
     Ok(Json(PaginatedResponse::new(
@@ -157,18 +250,22 @@ pub async fn list<S: HasServices>(
 /// Get service by ID
 pub async fn get<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service().get(id).await?;
+    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
     Ok(Json(SuccessResponse::new(service)))
 }
 
 /// Create service
 pub async fn create<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Json(input): Json<CreateServiceInput>,
 ) -> Result<impl IntoResponse> {
+    require_service_access(state.config(), &auth, input.tenant_id)?;
     let keycloak_client = build_keycloak_client_from_create_input(&input);
 
     let client_uuid = state
@@ -205,11 +302,13 @@ pub async fn create<S: HasServices>(
 /// Update service
 pub async fn update<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateServiceInput>,
 ) -> Result<impl IntoResponse> {
     let before = state.client_service().get(id).await?;
+    require_service_access(state.config(), &auth, before.tenant_id.as_ref().map(|t| t.0))?;
     let merged = merge_service_update(&before, &input);
 
     // Update all associated Keycloak clients with new service settings
@@ -245,8 +344,11 @@ pub async fn update<S: HasServices>(
 /// List clients of a service
 pub async fn list_clients<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let service = state.client_service().get(id).await?;
+    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
     let clients = state.client_service().list_clients(id).await?;
     Ok(Json(SuccessResponse::new(clients)))
 }
@@ -254,11 +356,13 @@ pub async fn list_clients<S: HasServices>(
 /// Create a new client for a service
 pub async fn create_client<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
     Json(input): Json<CreateClientInput>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service().get(id).await?;
+    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
 
     // Create new Keycloak client
     // We need to generate a client_id logic or let Keycloak do it?
@@ -333,11 +437,13 @@ pub async fn create_client<S: HasServices>(
 /// Delete a client from a service
 pub async fn delete_client<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path((service_id, client_id)): Path<(Uuid, String)>,
 ) -> Result<impl IntoResponse> {
     // Check if client exists and belongs to service
-    let _ = state.client_service().get(service_id).await?;
+    let service = state.client_service().get(service_id).await?;
+    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
 
     // Also delete from Keycloak
     if let Ok(kc_uuid) = state
@@ -370,10 +476,13 @@ pub async fn delete_client<S: HasServices>(
 /// Delete service
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
-    // We should also delete all Keycloak clients associated with this service?
+    let service = state.client_service().get(id).await?;
+    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    // Also delete all Keycloak clients associated with this service
     // If we assume a name prefix or just delete clients in DB...
     // The clients in DB have `client_id` which maps to Keycloak.
     // Ideally we should iterate clients and delete them from Keycloak first.
@@ -405,11 +514,13 @@ pub async fn delete<S: HasServices>(
 /// Regenerate client secret
 pub async fn regenerate_client_secret<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path((service_id, client_id)): Path<(Uuid, String)>,
 ) -> Result<impl IntoResponse> {
-    // Verify service exists
-    let _ = state.client_service().get(service_id).await?;
+    // Verify service exists and check access
+    let service = state.client_service().get(service_id).await?;
+    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
 
     // Regenerate in Keycloak first (if it exists there)
     let new_secret = if let Ok(kc_uuid) = state

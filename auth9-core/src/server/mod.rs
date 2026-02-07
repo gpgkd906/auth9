@@ -775,8 +775,9 @@ where
     let cors_config = state.config().cors.clone();
     let cors = build_cors_layer(&cors_config);
 
-    // Create auth middleware state
-    let auth_state = AuthMiddlewareState::new(HasServices::jwt_manager(&state).clone());
+    // Create auth middleware state with cache for token blacklist checking
+    let auth_state = AuthMiddlewareState::new(HasServices::jwt_manager(&state).clone())
+        .with_cache(std::sync::Arc::new(state.cache().clone()));
 
     // ============================================================
     // PUBLIC ROUTES (no authentication required)
@@ -820,8 +821,11 @@ where
             "/api/v1/keycloak/events",
             post(api::keycloak_event::receive::<S>),
         )
-        // User creation (has internal check for public registration)
-        .route("/api/v1/users", post(api::user::create::<S>));
+        // User endpoints on /api/v1/users:
+        // - POST: public registration (handler has internal auth check)
+        // - GET: list users (AuthUser extractor enforces auth)
+        // Both must be on the same router to avoid axum route merge conflicts.
+        .route("/api/v1/users", get(api::user::list::<S>).post(api::user::create::<S>));
 
     // ============================================================
     // PROTECTED ROUTES (authentication required)
@@ -840,8 +844,7 @@ where
                 .put(api::tenant::update::<S>)
                 .delete(api::tenant::delete::<S>),
         )
-        // User endpoints (except POST which is public for registration)
-        .route("/api/v1/users", get(api::user::list::<S>))
+        // User endpoints (GET/POST on /api/v1/users is in public_routes to avoid merge conflict)
         .route(
             "/api/v1/users/{id}",
             get(api::user::get::<S>)
@@ -1111,8 +1114,10 @@ where
         // 1. CORS - must be outermost for preflight requests
         // 2. Rate limiting - reject excessive requests early
         // 3. Tracing - for request logging
-        // 4. Security headers - adds security headers to all responses
+        // 4. Error response normalization - consistent JSON error format
+        // 5. Security headers - adds security headers to all responses
         .layer(axum::middleware::from_fn(security_headers_middleware))
+        .layer(axum::middleware::from_fn(crate::middleware::normalize_error_response))
         .layer(TraceLayer::new_for_http())
         .layer(axum::middleware::from_fn_with_state(
             rate_limit_state,

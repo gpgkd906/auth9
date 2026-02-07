@@ -284,15 +284,7 @@ impl KeycloakSeeder {
                 "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
             ],
             // Retain events for 30 days (for troubleshooting)
-            "eventsExpiration": 2592000,
-            // Enable brute force protection
-            "bruteForceProtected": true,
-            "failureFactor": 5,
-            "maxDeltaTimeSeconds": 600,
-            "waitIncrementSeconds": 60,
-            "maxFailureWaitSeconds": 900,
-            "minimumQuickLoginWaitSeconds": 60,
-            "quickLoginCheckMilliSeconds": 1000
+            "eventsExpiration": 2592000
         });
 
         let response = self
@@ -321,6 +313,85 @@ impl KeycloakSeeder {
             self.configure_event_http_provider(token, webhook_secret)
                 .await?;
         }
+
+        // IMPORTANT: configure_realm_security must be called LAST because it uses GET-merge-PUT
+        // to apply brute force protection and password policy. Earlier partial PUTs (events config,
+        // ext-event-http attributes) can reset boolean fields like bruteForceProtected to false
+        // when those fields are omitted from the partial JSON payload.
+        self.configure_realm_security(token).await?;
+
+        Ok(())
+    }
+
+    /// Configure brute force protection and password policy via GET-merge-PUT
+    async fn configure_realm_security(&self, token: &str) -> anyhow::Result<()> {
+        let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
+
+        // GET current realm representation
+        let current: serde_json::Value = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to get realm for security config")?
+            .json()
+            .await
+            .context("Failed to parse realm JSON")?;
+
+        // Merge security settings into full representation
+        let mut updated = current;
+        if let Some(obj) = updated.as_object_mut() {
+            obj.insert(
+                "bruteForceProtected".to_string(),
+                serde_json::json!(true),
+            );
+            obj.insert("failureFactor".to_string(), serde_json::json!(5));
+            obj.insert("maxDeltaTimeSeconds".to_string(), serde_json::json!(600));
+            obj.insert("waitIncrementSeconds".to_string(), serde_json::json!(60));
+            obj.insert(
+                "maxFailureWaitSeconds".to_string(),
+                serde_json::json!(900),
+            );
+            obj.insert(
+                "minimumQuickLoginWaitSeconds".to_string(),
+                serde_json::json!(60),
+            );
+            obj.insert(
+                "quickLoginCheckMilliSeconds".to_string(),
+                serde_json::json!(1000),
+            );
+            obj.insert(
+                "passwordPolicy".to_string(),
+                serde_json::json!(
+                    "length(8) and upperCase(1) and lowerCase(1) and digits(1) and notUsername()"
+                ),
+            );
+        }
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(token)
+            .json(&updated)
+            .send()
+            .await
+            .context("Failed to update realm security settings")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Failed to update realm security settings: {} - {}",
+                status,
+                body
+            );
+        }
+
+        info!(
+            "Configured realm '{}' security: bruteForceProtected=true, failureFactor=5, passwordPolicy=enabled",
+            self.config.realm
+        );
 
         Ok(())
     }

@@ -38,13 +38,13 @@ pub struct PasswordPolicy {
     #[serde(default = "default_min_length")]
     pub min_length: u32,
     /// Require at least one uppercase letter
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub require_uppercase: bool,
     /// Require at least one lowercase letter
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub require_lowercase: bool,
     /// Require at least one number
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub require_numbers: bool,
     /// Require at least one symbol
     #[serde(default)]
@@ -67,9 +67,9 @@ impl Default for PasswordPolicy {
     fn default() -> Self {
         Self {
             min_length: 8,
-            require_uppercase: false,
-            require_lowercase: false,
-            require_numbers: false,
+            require_uppercase: true,
+            require_lowercase: true,
+            require_numbers: true,
             require_symbols: false,
             max_age_days: 0,
             history_count: 0,
@@ -77,6 +77,10 @@ impl Default for PasswordPolicy {
             lockout_duration_mins: 15,
         }
     }
+}
+
+fn default_true() -> bool {
+    true
 }
 
 fn default_min_length() -> u32 {
@@ -122,6 +126,7 @@ pub struct CreatePasswordResetTokenInput {
 
 /// Input for updating password policy
 #[derive(Debug, Clone, Deserialize, Validate)]
+#[serde(deny_unknown_fields)]
 pub struct UpdatePasswordPolicyInput {
     #[validate(range(min = 6, max = 128))]
     pub min_length: Option<u32>,
@@ -197,9 +202,9 @@ mod tests {
     fn test_password_policy_default() {
         let policy = PasswordPolicy::default();
         assert_eq!(policy.min_length, 8);
-        assert!(!policy.require_uppercase);
-        assert!(!policy.require_lowercase);
-        assert!(!policy.require_numbers);
+        assert!(policy.require_uppercase);
+        assert!(policy.require_lowercase);
+        assert!(policy.require_numbers);
         assert!(!policy.require_symbols);
         assert_eq!(policy.max_age_days, 0);
         assert_eq!(policy.history_count, 0);
@@ -215,7 +220,7 @@ mod tests {
         };
 
         assert!(policy.validate_password("short").is_err());
-        assert!(policy.validate_password("longenough1").is_ok());
+        assert!(policy.validate_password("Longenough1").is_ok());
     }
 
     #[test]
@@ -263,7 +268,7 @@ mod tests {
         };
 
         assert!(policy.validate_password("NoSymbols1").is_err());
-        assert!(policy.validate_password("HasSymbol!").is_ok());
+        assert!(policy.validate_password("HasSymbol1!").is_ok());
     }
 
     #[test]
@@ -385,7 +390,20 @@ mod tests {
         let policy: PasswordPolicy = serde_json::from_str(json).unwrap();
 
         assert_eq!(policy.min_length, 8);
-        assert!(!policy.require_uppercase);
+        assert!(policy.require_uppercase);
+        assert!(policy.require_lowercase);
+        assert!(policy.require_numbers);
+        assert!(!policy.require_symbols);
         assert_eq!(policy.lockout_duration_mins, 15);
+    }
+
+    #[test]
+    fn test_password_policy_deserialization_explicit_false_preserved() {
+        let json = r#"{"require_uppercase": false, "require_lowercase": false, "require_numbers": false}"#;
+        let policy: PasswordPolicy = serde_json::from_str(json).unwrap();
+
+        assert!(!policy.require_uppercase);
+        assert!(!policy.require_lowercase);
+        assert!(!policy.require_numbers);
     }
 }

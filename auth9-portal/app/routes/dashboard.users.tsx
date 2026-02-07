@@ -74,7 +74,7 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "update_user") {
       const id = formData.get("id") as string;
       const display_name = formData.get("display_name") as string;
-      await userApi.update(id, { display_name });
+      await userApi.update(id, { display_name }, accessToken || undefined);
       return { success: true, intent };
     }
 
@@ -82,14 +82,14 @@ export async function action({ request }: ActionFunctionArgs) {
       const user_id = formData.get("user_id") as string;
       const tenant_id = formData.get("tenant_id") as string;
       const role_in_tenant = formData.get("role_in_tenant") as string;
-      await userApi.addToTenant(user_id, tenant_id, role_in_tenant);
+      await userApi.addToTenant(user_id, tenant_id, role_in_tenant, accessToken || undefined);
       return { success: true, intent };
     }
 
     if (intent === "remove_from_tenant") {
       const user_id = formData.get("user_id") as string;
       const tenant_id = formData.get("tenant_id") as string;
-      await userApi.removeFromTenant(user_id, tenant_id);
+      await userApi.removeFromTenant(user_id, tenant_id, accessToken || undefined);
       return { success: true, intent };
     }
 
@@ -129,7 +129,7 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (intent === "delete_user") {
       const id = formData.get("id") as string;
-      await userApi.delete(id);
+      await userApi.delete(id, accessToken || undefined);
       return { success: true, intent };
     }
 

@@ -28,11 +28,13 @@ PATH_PART="${2:?Usage: qa-api-test.sh METHOD PATH [JSON_BODY]}"
 BODY="${3:-}"
 
 if [ -n "$BODY" ]; then
-  curl -s -X "$METHOD" "${AUTH9_URL}${PATH_PART}" \
+  # Force IPv4 to avoid occasional IPv6 localhost connection issues in sandboxed envs.
+  curl -4 -s -X "$METHOD" "${AUTH9_URL}${PATH_PART}" \
     -H "Authorization: Bearer $AUTH9_TOKEN" \
     -H "Content-Type: application/json" \
     -d "$BODY"
 else
-  curl -s -X "$METHOD" "${AUTH9_URL}${PATH_PART}" \
+  # Force IPv4 to avoid occasional IPv6 localhost connection issues in sandboxed envs.
+  curl -4 -s -X "$METHOD" "${AUTH9_URL}${PATH_PART}" \
     -H "Authorization: Bearer $AUTH9_TOKEN"
 fi

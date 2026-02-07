@@ -12,7 +12,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
-use crate::jwt::{IdentityClaims, TenantAccessClaims};
+use crate::jwt::{IdentityClaims, ServiceClientClaims, TenantAccessClaims};
 use crate::state::HasServices;
 
 /// Authenticated user information extracted from JWT token
@@ -39,6 +39,9 @@ pub enum TokenType {
     Identity,
     /// Tenant access token (issued after token exchange)
     TenantAccess,
+    /// Service client token (issued via client_credentials grant)
+    /// Has limited permissions - cannot perform platform admin operations
+    ServiceClient,
 }
 
 impl AuthUser {
@@ -52,6 +55,26 @@ impl AuthUser {
             email: claims.email,
             token_type: TokenType::Identity,
             tenant_id: None,
+            roles: vec![],
+            permissions: vec![],
+        })
+    }
+
+    /// Create AuthUser from service client token claims
+    pub fn from_service_client_claims(claims: ServiceClientClaims) -> Result<Self, AuthError> {
+        let service_id = Uuid::parse_str(&claims.sub)
+            .map_err(|_| AuthError::InvalidToken("Invalid service ID in token".to_string()))?;
+
+        let tenant_id = claims
+            .tenant_id
+            .as_ref()
+            .and_then(|t| Uuid::parse_str(t).ok());
+
+        Ok(Self {
+            user_id: service_id,
+            email: claims.email,
+            token_type: TokenType::ServiceClient,
+            tenant_id,
             roles: vec![],
             permissions: vec![],
         })
@@ -171,7 +194,14 @@ where
         let token = extract_bearer_token(&parts.headers)?;
         let jwt_manager = state.jwt_manager();
 
-        // Try to validate as identity token first
+        // Try to validate as service client token first (aud: "auth9-service")
+        // This must come before identity token check because both use the same
+        // signing key, and we need to distinguish service tokens from user tokens.
+        if let Ok(claims) = jwt_manager.verify_service_client_token(token) {
+            return AuthUser::from_service_client_claims(claims);
+        }
+
+        // Try to validate as identity token (aud: "auth9")
         if let Ok(claims) = jwt_manager.verify_identity_token(token) {
             return AuthUser::from_identity_claims(claims);
         }

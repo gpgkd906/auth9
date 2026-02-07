@@ -16,6 +16,7 @@ Thumbs.db
 
 # Secrets (never commit)
 deploy/k8s/secrets.yaml
+deploy/dev-certs/
 
 # Build artifacts
 target/

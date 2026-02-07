@@ -53,6 +53,28 @@ pub struct TenantAccessClaims {
     pub exp: i64,
 }
 
+/// Service Client Token claims (issued via client_credentials grant)
+/// Uses a distinct audience ("auth9-service") so the auth middleware can distinguish
+/// service tokens from user Identity tokens.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceClientClaims {
+    /// Subject (service ID, not a user ID)
+    pub sub: String,
+    /// Service email (synthetic, e.g., service+client_id@auth9.local)
+    pub email: String,
+    /// Issuer
+    pub iss: String,
+    /// Audience (always "auth9-service" to distinguish from Identity tokens)
+    pub aud: String,
+    /// The tenant_id this service belongs to (if any)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub tenant_id: Option<String>,
+    /// Issued at (Unix timestamp)
+    pub iat: i64,
+    /// Expiration (Unix timestamp)
+    pub exp: i64,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RefreshClaims {
     pub sub: String,
@@ -186,6 +208,40 @@ impl JwtManager {
         };
         let header = Header::new(self.algorithm);
         encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
+    }
+
+    /// Create a service client token (for client_credentials grant)
+    pub fn create_service_client_token(
+        &self,
+        service_id: Uuid,
+        email: &str,
+        tenant_id: Option<Uuid>,
+    ) -> Result<String> {
+        let now = Utc::now();
+        let exp = now + Duration::seconds(self.config.access_token_ttl_secs);
+
+        let claims = ServiceClientClaims {
+            sub: service_id.to_string(),
+            email: email.to_string(),
+            iss: self.config.issuer.clone(),
+            aud: "auth9-service".to_string(),
+            tenant_id: tenant_id.map(|t| t.to_string()),
+            iat: now.timestamp(),
+            exp: exp.timestamp(),
+        };
+        let header = Header::new(self.algorithm);
+        encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
+    }
+
+    /// Verify and decode a service client token
+    pub fn verify_service_client_token(&self, token: &str) -> Result<ServiceClientClaims> {
+        let mut validation = Validation::new(self.algorithm);
+        validation.set_audience(&["auth9-service"]);
+        validation.set_issuer(&[&self.config.issuer]);
+
+        let token_data =
+            decode::<ServiceClientClaims>(token, &self.decoding_key, &validation)?;
+        Ok(token_data.claims)
     }
 
     /// Verify and decode an identity token

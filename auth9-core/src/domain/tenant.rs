@@ -147,10 +147,11 @@ impl Default for Tenant {
 /// Input for creating a new tenant
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct CreateTenantInput {
-    #[validate(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
     pub name: String,
     #[validate(length(min = 1, max = 63), custom(function = "validate_slug"))]
     pub slug: String,
+    #[validate(custom(function = "validate_url_scheme"))]
     pub logo_url: Option<String>,
     pub settings: Option<TenantSettings>,
 }
@@ -164,11 +165,34 @@ fn validate_slug(slug: &str) -> Result<(), validator::ValidationError> {
     }
 }
 
+/// Validate that a string does not contain HTML tags (prevent stored XSS)
+fn validate_no_html(value: &str) -> Result<(), validator::ValidationError> {
+    if value.contains('<') || value.contains('>') {
+        let mut err = validator::ValidationError::new("contains_html");
+        err.message = Some("Value must not contain HTML tags".into());
+        Err(err)
+    } else {
+        Ok(())
+    }
+}
+
+/// Validate URL scheme - only allow http:// and https://
+fn validate_url_scheme(url: &str) -> Result<(), validator::ValidationError> {
+    if url.starts_with("http://") || url.starts_with("https://") {
+        Ok(())
+    } else {
+        let mut err = validator::ValidationError::new("invalid_url_scheme");
+        err.message = Some("URL must use http:// or https:// scheme".into());
+        Err(err)
+    }
+}
+
 /// Input for updating a tenant
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateTenantInput {
-    #[validate(length(min = 1, max = 255))]
+    #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
     pub name: Option<String>,
+    #[validate(custom(function = "validate_url_scheme"))]
     pub logo_url: Option<String>,
     pub settings: Option<TenantSettings>,
     pub status: Option<TenantStatus>,

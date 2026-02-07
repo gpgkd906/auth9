@@ -3,9 +3,10 @@
 //! Tests for invitation management endpoints.
 
 use super::{
-    delete_json, get_json, post_json, post_json_with_auth, MockKeycloakServer, TestAppState,
+    delete_json, get_json, get_json_with_auth, post_json, post_json_with_auth, MockKeycloakServer,
+    TestAppState,
 };
-use crate::api::{create_test_identity_token, create_test_tenant};
+use crate::api::{create_test_identity_token, create_test_role, create_test_service, create_test_tenant};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Invitation, InvitationResponse, InvitationStatus, StringUuid};
 use axum::http::StatusCode;
@@ -25,9 +26,10 @@ async fn test_list_invitations_empty() {
     state.tenant_repo.add_tenant(tenant).await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
-        get_json(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -64,9 +66,10 @@ async fn test_list_invitations_with_data() {
     }
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
-        get_json(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -120,10 +123,12 @@ async fn test_list_invitations_filter_by_status() {
         .await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) = get_json(
+    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) = get_json_with_auth(
         &app,
         &format!("/api/v1/tenants/{}/invitations?status=pending", tenant_id),
+        &token,
     )
     .await;
 
@@ -147,10 +152,17 @@ async fn test_create_invitation_success() {
     let tenant_id = tenant.id;
     state.tenant_repo.add_tenant(tenant).await;
 
+    // Create a service and role for validation
+    let service_id = uuid::Uuid::new_v4();
+    let service = create_test_service(Some(service_id), Some(*tenant_id));
+    state.service_repo.add_service(service).await;
+    let role = create_test_role(None, service_id);
+    let role_id = role.id;
+    state.rbac_repo.add_role(role).await;
+
     let token = create_test_identity_token();
     let app = build_invitation_test_router(state);
 
-    let role_id = StringUuid::new_v4();
     let input = serde_json::json!({
         "email": "newuser@example.com",
         "role_ids": [role_id.to_string()],
@@ -529,13 +541,15 @@ async fn test_list_invitations_with_pagination() {
     }
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) = get_json(
+    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) = get_json_with_auth(
         &app,
         &format!(
             "/api/v1/tenants/{}/invitations?page=1&per_page=5",
             tenant_id
         ),
+        &token,
     )
     .await;
 

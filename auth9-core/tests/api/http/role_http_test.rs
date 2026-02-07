@@ -7,7 +7,7 @@ use super::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
 };
-use crate::api::{create_test_identity_token, create_test_permission, create_test_role};
+use crate::api::{create_test_identity_token, create_test_permission, create_test_role, create_test_service};
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{Permission, Role, UserRolesInTenant};
 use auth9_core::repository::RbacRepository;
@@ -88,9 +88,11 @@ async fn test_create_permission() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_identity_token(); // Platform admin can create permissions
-    let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
+    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+
+    let app = build_test_router(state);
     let input = json!({
         "service_id": service_id.to_string(),
         "code": "documents:read",
@@ -117,9 +119,11 @@ async fn test_create_permission_minimal() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_identity_token(); // Platform admin can create permissions
-    let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
+    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+
+    let app = build_test_router(state);
     let input = json!({
         "service_id": service_id.to_string(),
         "code": "admin:all",
@@ -277,9 +281,11 @@ async fn test_create_role() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_identity_token(); // Platform admin can create roles
-    let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
+    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+
+    let app = build_test_router(state);
     let input = json!({
         "service_id": service_id.to_string(),
         "name": "manager",
@@ -300,9 +306,11 @@ async fn test_create_role_minimal() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_identity_token(); // Platform admin can create roles
-    let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
+    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+
+    let app = build_test_router(state);
     let input = json!({
         "service_id": service_id.to_string(),
         "name": "viewer"
@@ -496,10 +504,15 @@ async fn test_assign_roles_to_user() {
     let token = create_test_identity_token(); // Platform admin can assign roles
 
     let service_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
     let role1 = create_test_role(None, service_id);
     let role2 = create_test_role(None, service_id);
     let role1_id = role1.id.0;
     let role2_id = role2.id.0;
+
+    // Add service so cross-tenant validation can look it up
+    let service = create_test_service(Some(service_id), Some(tenant_id));
+    state.service_repo.add_service(service).await;
 
     state.rbac_repo.add_role(role1).await;
     state.rbac_repo.add_role(role2).await;
@@ -507,7 +520,6 @@ async fn test_assign_roles_to_user() {
     let app = build_test_router(state);
 
     let user_id = Uuid::new_v4();
-    let tenant_id = Uuid::new_v4();
 
     let input = json!({
         "user_id": user_id.to_string(),
@@ -659,6 +671,8 @@ async fn test_create_role_with_parent() {
     let token = create_test_identity_token(); // Platform admin can create roles
 
     let service_id = Uuid::new_v4();
+    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+
     let parent_role = create_test_role(None, service_id);
     let parent_role_id = parent_role.id.0;
     state.rbac_repo.add_role(parent_role).await;
@@ -690,9 +704,11 @@ async fn test_permission_code_formats() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_identity_token(); // Platform admin can create permissions
-    let app = build_test_router(state);
 
     let service_id = Uuid::new_v4();
+    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+
+    let app = build_test_router(state);
 
     // Test various permission code formats
     // Note: Stick to simple colon-separated formats that pass validation

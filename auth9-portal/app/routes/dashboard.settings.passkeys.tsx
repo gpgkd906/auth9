@@ -1,17 +1,15 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { webauthnApi, type WebAuthnCredential } from "~/services/api";
 import { LockClosedIcon, TrashIcon, PlusIcon } from "@radix-ui/react-icons";
+import { getAccessToken } from "~/services/session.server";
 
-// Mock access token - in real app, get from session/cookie
-const getAccessToken = () => "";
-
-export async function loader() {
+export async function loader({ request }: LoaderFunctionArgs) {
   try {
-    const accessToken = getAccessToken();
-    const response = await webauthnApi.listPasskeys(accessToken);
+    const accessToken = await getAccessToken(request);
+    const response = await webauthnApi.listPasskeys(accessToken || "");
     return { passkeys: response.data };
   } catch {
     return { passkeys: [], error: "Failed to load passkeys" };
@@ -21,7 +19,7 @@ export async function loader() {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const accessToken = getAccessToken();
+  const accessToken = await getAccessToken(request) || "";
 
   try {
     if (intent === "delete") {

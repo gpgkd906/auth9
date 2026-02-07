@@ -2,7 +2,7 @@
 
 **模块**: 授权安全
 **测试范围**: 多租户数据隔离
-**场景数**: 5
+**场景数**: 4
 **风险等级**: 🔴 极高
 
 ---
@@ -74,52 +74,7 @@ ORDER BY created_at DESC LIMIT 10;
 
 ---
 
-## 场景 2：Token Exchange 跨租户攻击
-
-### 前置条件
-- 用户属于租户 1
-- 用户不属于租户 2
-
-### 攻击目标
-验证 Token Exchange 是否可获取未授权租户的 Token
-
-### 攻击步骤
-1. 获取有效的 Identity Token
-2. 调用 Token Exchange，请求租户 2 的 Token：
-   ```
-   ExchangeToken(identity_token, tenant_id=tenant_2)
-   ```
-3. 如果成功，使用该 Token 访问租户 2 资源
-
-### 预期安全行为
-- 验证用户与目标租户的关联
-- 拒绝未授权的租户请求
-- 返回明确的错误信息
-
-### 验证方法
-```bash
-# 使用 grpcurl 测试
-grpcurl -plaintext \
-  -d '{
-    "identity_token": "'$IDENTITY_TOKEN'",
-    "tenant_id": "'$UNAUTHORIZED_TENANT_ID'",
-    "service_id": "test-service"
-  }' \
-  localhost:50051 auth9.TokenExchange/ExchangeToken
-
-# 预期响应:
-# ERROR: PermissionDenied: User is not a member of tenant
-```
-
-### 修复建议
-- 验证 `tenant_users` 表中的关联关系
-- 从数据库查询而非信任请求参数
-- Token 中的 tenant_id 应与数据库一致
-- 记录 Token Exchange 审计日志
-
----
-
-## 场景 3：批量操作租户泄露
+## 场景 2：批量操作租户泄露
 
 ### 前置条件
 - 具有列表查询权限的用户
@@ -171,7 +126,7 @@ WHERE user_id NOT IN (
 
 ---
 
-## 场景 4：关联资源跨租户访问
+## 场景 3：关联资源跨租户访问
 
 ### 前置条件
 - 用户 A 属于租户 1
@@ -219,7 +174,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN_A" \
 
 ---
 
-## 场景 5：管理员权限边界测试
+## 场景 4：管理员权限边界测试
 
 ### 前置条件
 - 租户 1 的管理员
@@ -269,10 +224,9 @@ curl -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
 | 1 | 跨租户数据访问 (IDOR) | ☐ | | | |
-| 2 | Token Exchange 跨租户攻击 | ☐ | | | |
-| 3 | 批量操作租户泄露 | ☐ | | | |
-| 4 | 关联资源跨租户访问 | ☐ | | | |
-| 5 | 管理员权限边界测试 | ☐ | | | |
+| 2 | 批量操作租户泄露 | ☐ | | | |
+| 3 | 关联资源跨租户访问 | ☐ | | | |
+| 4 | 管理员权限边界测试 | ☐ | | | |
 
 ---
 

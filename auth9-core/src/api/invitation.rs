@@ -1,12 +1,15 @@
 //! Invitation API handlers
 
-use crate::api::{extract_actor_id_generic, MessageResponse, PaginatedResponse, SuccessResponse};
+use crate::api::{
+    deserialize_page, deserialize_per_page, MessageResponse, PaginatedResponse, SuccessResponse,
+};
 use crate::domain::{
     AddUserToTenantInput, AssignRolesInput, CreateInvitationInput, CreateUserInput,
     InvitationResponse, InvitationStatus, StringUuid,
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::HasInvitations;
 use axum::{
     extract::{Path, Query, State},
@@ -29,9 +32,9 @@ pub struct AcceptInvitationRequest {
 /// Query parameters for listing invitations
 #[derive(Debug, Clone, Deserialize)]
 pub struct InvitationListQuery {
-    #[serde(default = "default_page")]
+    #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page")]
+    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
     pub per_page: i64,
     /// Optional status filter (pending, accepted, expired, revoked)
     pub status: Option<InvitationStatus>,
@@ -48,9 +51,34 @@ fn default_per_page() -> i64 {
 /// List invitations for a tenant
 pub async fn list<S: HasInvitations>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<Uuid>,
     Query(query): Query<InvitationListQuery>,
 ) -> Result<impl IntoResponse> {
+    // Service client tokens cannot manage invitations
+    if auth.token_type == TokenType::ServiceClient {
+        return Err(AppError::Forbidden(
+            "Service client tokens cannot manage invitations".to_string(),
+        ));
+    }
+    // Scope: TenantAccess tokens can only list their own tenant's invitations
+    if let TokenType::TenantAccess = auth.token_type {
+        let token_tenant = auth
+            .tenant_id
+            .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+        if token_tenant != tenant_id {
+            return Err(AppError::Forbidden(
+                "Cannot list invitations for another tenant".to_string(),
+            ));
+        }
+    }
+    // Identity tokens are only allowed for platform admins
+    if auth.token_type == TokenType::Identity && !state.config().is_platform_admin_email(&auth.email)
+    {
+        return Err(AppError::Forbidden(
+            "Platform admin required to list invitations".to_string(),
+        ));
+    }
     let tenant_id = StringUuid::from(tenant_id);
 
     let (invitations, total) = state
@@ -72,19 +100,80 @@ pub async fn list<S: HasInvitations>(
 /// Create a new invitation
 pub async fn create<S: HasInvitations>(
     State(state): State<S>,
+    auth: AuthUser,
     headers: HeaderMap,
     Path(tenant_id): Path<Uuid>,
     Json(input): Json<CreateInvitationInput>,
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
 
-    // Get the actor (inviter) from the JWT
-    let invited_by = extract_actor_id_generic(&state, &headers)
-        .map(StringUuid::from)
-        .ok_or_else(|| AppError::Unauthorized("Authentication required".to_string()))?;
+    // Service client tokens cannot create invitations
+    if auth.token_type == TokenType::ServiceClient {
+        return Err(AppError::Forbidden(
+            "Service client tokens cannot create invitations".to_string(),
+        ));
+    }
+    // Authorization: verify caller can manage the target tenant
+    if let TokenType::TenantAccess = auth.token_type {
+        // Tenant user: must be in this tenant with admin/owner role
+        let token_tenant = auth
+            .tenant_id
+            .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+        if StringUuid::from(token_tenant) != tenant_id {
+            return Err(AppError::Forbidden(
+                "Cannot create invitations for another tenant".to_string(),
+            ));
+        }
+        let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
+        if !has_admin_role {
+            return Err(AppError::Forbidden(
+                "Admin or owner role required to create invitations".to_string(),
+            ));
+        }
+    }
+    // Identity tokens are only allowed for platform admins
+    if auth.token_type == TokenType::Identity && !state.config().is_platform_admin_email(&auth.email)
+    {
+        return Err(AppError::Forbidden(
+            "Platform admin required to create invitations".to_string(),
+        ));
+    }
+
+    // Get the actor (inviter) from the JWT (prefer auth.user_id, fallback to header extraction)
+    let invited_by = StringUuid::from(auth.user_id);
+    let _ = &headers; // Used by audit log in future
 
     // TODO: Get inviter name from user service
     let inviter_name = "Admin"; // Placeholder
+
+    // Validate that all role_ids exist and belong to services within the target tenant
+    for role_id in &input.role_ids {
+        let role = state
+            .rbac_service()
+            .get_role(*role_id)
+            .await
+            .map_err(|_| {
+                AppError::BadRequest(format!("Role '{}' does not exist", role_id))
+            })?;
+        let service = state
+            .client_service()
+            .get(*role.service_id)
+            .await
+            .map_err(|_| {
+                AppError::BadRequest(format!(
+                    "Service for role '{}' does not exist",
+                    role_id
+                ))
+            })?;
+        if let Some(ref svc_tenant_id) = service.tenant_id {
+            if *svc_tenant_id != tenant_id {
+                return Err(AppError::BadRequest(format!(
+                    "Role '{}' belongs to a service in a different tenant",
+                    role_id
+                )));
+            }
+        }
+    }
 
     // Prevent inviting users who are already members of the tenant
     match state.user_service().get_by_email(&input.email).await {

@@ -52,6 +52,18 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
         "geolocation=(), microphone=(), camera=()".parse().unwrap(),
     );
 
+    // HTTP Strict Transport Security (browsers will upgrade HTTP to HTTPS)
+    headers.insert(
+        header::STRICT_TRANSPORT_SECURITY,
+        "max-age=31536000; includeSubDomains".parse().unwrap(),
+    );
+
+    // Content Security Policy for API responses
+    headers.insert(
+        header::CONTENT_SECURITY_POLICY,
+        "default-src 'none'; frame-ancestors 'none'".parse().unwrap(),
+    );
+
     response
 }
 
@@ -104,5 +116,16 @@ mod tests {
             .unwrap()
             .contains("no-store"));
         assert!(response.headers().get("Permissions-Policy").is_some());
+        assert_eq!(
+            response
+                .headers()
+                .get("Strict-Transport-Security")
+                .unwrap(),
+            "max-age=31536000; includeSubDomains"
+        );
+        assert_eq!(
+            response.headers().get("Content-Security-Policy").unwrap(),
+            "default-src 'none'; frame-ancestors 'none'"
+        );
     }
 }
