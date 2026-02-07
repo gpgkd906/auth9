@@ -111,7 +111,7 @@ export default function TenantsIndexPage() {
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <PlusIcon className="mr-2 h-4 w-4" /> Create Tenant
             </Button>
           </DialogTrigger>
@@ -124,15 +124,15 @@ export default function TenantsIndexPage() {
             </DialogHeader>
             <Form method="post" className="space-y-4">
               <input type="hidden" name="intent" value="create" />
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="create-name">Name</Label>
                 <Input id="create-name" name="name" placeholder="Acme Corp" required />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="create-slug">Slug</Label>
                 <Input id="create-slug" name="slug" placeholder="acme" required />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="create-logo">Logo URL</Label>
                 <Input id="create-logo" name="logo_url" placeholder="https://..." />
               </div>
@@ -140,7 +140,7 @@ export default function TenantsIndexPage() {
                 <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
               )}
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setIsCreateOpen(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
@@ -162,46 +162,49 @@ export default function TenantsIndexPage() {
                 {data.pagination.total_pages}
               </CardDescription>
             </div>
-            <Form method="get" className="flex items-center gap-2">
-              <div className="relative">
+            <Form method="get" className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto mb-6">
+              <div className="relative w-full sm:w-auto">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
                 <Input
                   name="search"
                   placeholder="Search tenants..."
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
-                  className="w-[200px] pl-8"
+                  className="w-full sm:w-[200px] pl-8"
                 />
               </div>
-              <Button type="submit" variant="outline" size="sm">
-                Search
-              </Button>
-              {data.search && (
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => {
-                    setSearchValue("");
-                    window.location.href = "/dashboard/tenants";
-                  }}
-                >
-                  Clear
+              <div className="flex gap-2 w-full sm:w-auto">
+                <Button type="submit" variant="outline" className="bg-[var(--glass-bg)] flex-1 sm:flex-none" size="default">
+                  Search
                 </Button>
-              )}
+                {data.search && (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="default"
+                    className="flex-1 sm:flex-none"
+                    onClick={() => {
+                      setSearchValue("");
+                      window.location.href = "/dashboard/tenants";
+                    }}
+                  >
+                    Clear
+                  </Button>
+                )}
+              </div>
             </Form>
           </div>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+          <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
-              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Slug</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Updated</th>
-                  <th className="px-4 py-3 font-medium w-10"></th>
+                  <th className="px-4 py-3 font-semibold">Name</th>
+                  <th className="px-4 py-3 font-semibold">Slug</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--glass-border-subtle)]">
@@ -292,7 +295,7 @@ export default function TenantsIndexPage() {
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update" />
             <input type="hidden" name="id" value={editingTenant?.id || ""} />
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="edit-name">Name</Label>
               <Input
                 id="edit-name"
@@ -301,7 +304,7 @@ export default function TenantsIndexPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="edit-slug">Slug</Label>
               <Input
                 id="edit-slug"
@@ -310,7 +313,7 @@ export default function TenantsIndexPage() {
                 required
               />
             </div>
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <Label htmlFor="edit-logo">Logo URL</Label>
               <Input
                 id="edit-logo"
@@ -322,7 +325,7 @@ export default function TenantsIndexPage() {
               <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>
+              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setEditingTenant(null)}>
                 Cancel
               </Button>
               <Button type="submit" disabled={isSubmitting}>

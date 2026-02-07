@@ -106,14 +106,14 @@ export default function ServicesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Services</h1>
           <p className="text-sm text-[var(--text-secondary)]">Register and manage OIDC clients</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button>
+            <Button className="w-full sm:w-auto">
               <PlusIcon className="mr-2 h-4 w-4" /> Register Service
             </Button>
           </DialogTrigger>
@@ -127,24 +127,24 @@ export default function ServicesPage() {
             <Form method="post" className="space-y-4">
               <input type="hidden" name="intent" value="create" />
               <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="create-name">Service Name</Label>
                   <Input id="create-name" name="name" placeholder="My App" required />
                 </div>
-                <div className="space-y-2">
+                <div className="space-y-1.5">
                   <Label htmlFor="create-client-id">Client ID (Optional)</Label>
                   <Input id="create-client-id" name="client_id" placeholder="my-app-client" />
                 </div>
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="create-base-url">Base URL</Label>
                 <Input id="create-base-url" name="base_url" placeholder="https://myapp.com" />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="create-redirect-uris">Redirect URIs (comma separated)</Label>
                 <Input id="create-redirect-uris" name="redirect_uris" placeholder="https://myapp.com/callback, https://dev.myapp.com/callback" />
               </div>
-              <div className="space-y-2">
+              <div className="space-y-1.5">
                 <Label htmlFor="create-logout-uris">Logout URIs (comma separated)</Label>
                 <Input id="create-logout-uris" name="logout_uris" placeholder="https://myapp.com/logout" />
               </div>
@@ -152,7 +152,7 @@ export default function ServicesPage() {
                 <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
               )}
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
+                <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setIsCreateOpen(false)}>
                   Cancel
                 </Button>
                 <Button type="submit" disabled={isSubmitting}>
@@ -175,12 +175,12 @@ export default function ServicesPage() {
         <div className="px-6 pb-6">
           <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
-              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Updated</th>
-                  <th className="px-4 py-3 font-medium w-10"></th>
+                  <th className="px-4 py-3 font-semibold">Name</th>
+                  <th className="px-4 py-3 font-semibold">Status</th>
+                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--glass-border-subtle)]">
