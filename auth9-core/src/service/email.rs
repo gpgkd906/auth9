@@ -9,18 +9,80 @@ use crate::email::{
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
 use crate::service::SystemSettingsService;
+use async_trait::async_trait;
 use std::sync::Arc;
+
+/// Factory for building an [`EmailProvider`] from configuration.
+///
+/// This indirection keeps unit tests hermetic (no AWS SDK TLS/root-store requirements).
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait EmailProviderFactory: Send + Sync {
+    async fn create(&self, config: &EmailProviderConfig) -> Result<Box<dyn EmailProvider>>;
+}
+
+struct DefaultEmailProviderFactory;
+
+#[async_trait]
+impl EmailProviderFactory for DefaultEmailProviderFactory {
+    async fn create(&self, config: &EmailProviderConfig) -> Result<Box<dyn EmailProvider>> {
+        match config {
+            EmailProviderConfig::None => Err(AppError::BadRequest(
+                "Email provider not configured".to_string(),
+            )),
+            EmailProviderConfig::Smtp(smtp_config) => {
+                let provider = SmtpEmailProvider::from_config(smtp_config).map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("Failed to create SMTP provider: {}", e))
+                })?;
+                Ok(Box::new(provider))
+            }
+            EmailProviderConfig::Ses(ses_config) => {
+                let provider = SesEmailProvider::from_config(ses_config)
+                    .await
+                    .map_err(|e| {
+                        AppError::Internal(anyhow::anyhow!("Failed to create SES provider: {}", e))
+                    })?;
+                Ok(Box::new(provider))
+            }
+            EmailProviderConfig::Oracle(oracle_config) => {
+                let provider =
+                    SmtpEmailProvider::from_oracle_config(oracle_config).map_err(|e| {
+                        AppError::Internal(anyhow::anyhow!(
+                            "Failed to create Oracle Email provider: {}",
+                            e
+                        ))
+                    })?;
+                Ok(Box::new(provider))
+            }
+        }
+    }
+}
 
 /// Service for sending emails
 ///
 /// Handles provider selection with tenant override support.
 pub struct EmailService<R: SystemSettingsRepository> {
     settings_service: Arc<SystemSettingsService<R>>,
+    provider_factory: Arc<dyn EmailProviderFactory>,
 }
 
 impl<R: SystemSettingsRepository> EmailService<R> {
     pub fn new(settings_service: Arc<SystemSettingsService<R>>) -> Self {
-        Self { settings_service }
+        Self {
+            settings_service,
+            provider_factory: Arc::new(DefaultEmailProviderFactory),
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_factory(
+        settings_service: Arc<SystemSettingsService<R>>,
+        provider_factory: Arc<dyn EmailProviderFactory>,
+    ) -> Self {
+        Self {
+            settings_service,
+            provider_factory,
+        }
     }
 
     /// Send an email using the configured provider
@@ -274,35 +336,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         &self,
         config: &EmailProviderConfig,
     ) -> Result<Box<dyn EmailProvider>> {
-        match config {
-            EmailProviderConfig::None => Err(AppError::BadRequest(
-                "Email provider not configured".to_string(),
-            )),
-            EmailProviderConfig::Smtp(smtp_config) => {
-                let provider = SmtpEmailProvider::from_config(smtp_config).map_err(|e| {
-                    AppError::Internal(anyhow::anyhow!("Failed to create SMTP provider: {}", e))
-                })?;
-                Ok(Box::new(provider))
-            }
-            EmailProviderConfig::Ses(ses_config) => {
-                let provider = SesEmailProvider::from_config(ses_config)
-                    .await
-                    .map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!("Failed to create SES provider: {}", e))
-                    })?;
-                Ok(Box::new(provider))
-            }
-            EmailProviderConfig::Oracle(oracle_config) => {
-                let provider =
-                    SmtpEmailProvider::from_oracle_config(oracle_config).map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!(
-                            "Failed to create Oracle Email provider: {}",
-                            e
-                        ))
-                    })?;
-                Ok(Box::new(provider))
-            }
-        }
+        self.provider_factory.create(config).await
     }
 }
 
@@ -313,6 +347,26 @@ mod tests {
     use crate::domain::SystemSettingRow;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use mockall::predicate::*;
+
+    struct StubProvider(&'static str);
+
+    #[async_trait]
+    impl EmailProvider for StubProvider {
+        async fn send(
+            &self,
+            _message: &EmailMessage,
+        ) -> std::result::Result<EmailSendResult, EmailProviderError> {
+            Ok(EmailSendResult::success(Some("msg-1".to_string())))
+        }
+
+        async fn test_connection(&self) -> std::result::Result<(), EmailProviderError> {
+            Ok(())
+        }
+
+        fn provider_name(&self) -> &'static str {
+            self.0
+        }
+    }
 
     #[tokio::test]
     async fn test_send_not_configured() {
@@ -458,7 +512,15 @@ mod tests {
 
         let mock = MockSystemSettingsRepository::new();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
-        let email_service = EmailService::new(settings_service);
+        let mut factory = MockEmailProviderFactory::new();
+
+        factory
+            .expect_create()
+            .withf(|cfg| matches!(cfg, EmailProviderConfig::Ses(_)))
+            .returning(|_| Ok(Box::new(StubProvider("ses"))))
+            .times(1);
+
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         // Use explicit credentials for testing
         let config = EmailProviderConfig::Ses(SesConfig {
@@ -470,7 +532,7 @@ mod tests {
             configuration_set: None,
         });
 
-        // Provider creation should succeed (it doesn't validate credentials at creation time)
+        // Provider creation should succeed (factory is mocked)
         let result = email_service.create_provider(&config).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().provider_name(), "ses");

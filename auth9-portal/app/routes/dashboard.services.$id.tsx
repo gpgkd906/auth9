@@ -2,6 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, TrashIcon, ArrowLeftIcon, CopyIcon, UpdateIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
+import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -100,6 +101,7 @@ export default function ServiceDetailPage() {
     const actionData = useActionData<typeof action>();
     const navigation = useNavigation();
     const submit = useSubmit();
+    const confirm = useConfirm();
 
     const [isAddClientOpen, setIsAddClientOpen] = useState(false);
     const [secretDialog, setSecretDialog] = useState<{ clientId: string; secret: string; isNew: boolean } | null>(null);
@@ -246,8 +248,13 @@ export default function ServiceDetailPage() {
                                                 variant="outline"
                                                 size="sm"
                                                 className="h-7 text-xs"
-                                                onClick={() => {
-                                                    if (confirm("Regenerate secret? The old secret will stop working immediately.")) {
+                                                onClick={async () => {
+                                                    const ok = await confirm({
+                                                        title: "Regenerate Secret",
+                                                        description: "Regenerate secret? The old secret will stop working immediately.",
+                                                        confirmLabel: "Regenerate",
+                                                    });
+                                                    if (ok) {
                                                         submit({ intent: "regenerate_secret", client_id: client.client_id }, { method: "post" });
                                                     }
                                                 }}
@@ -259,8 +266,13 @@ export default function ServiceDetailPage() {
                                                 variant="ghost"
                                                 size="sm"
                                                 className="h-7 text-xs text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
-                                                onClick={() => {
-                                                    if (confirm("Delete this client? This action cannot be undone.")) {
+                                                onClick={async () => {
+                                                    const ok = await confirm({
+                                                        title: "Delete Client",
+                                                        description: "Delete this client? This action cannot be undone.",
+                                                        variant: "destructive",
+                                                    });
+                                                    if (ok) {
                                                         submit({ intent: "delete_client", client_id: client.client_id }, { method: "post" });
                                                     }
                                                 }}

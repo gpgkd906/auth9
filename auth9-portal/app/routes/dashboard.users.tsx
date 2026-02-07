@@ -44,6 +44,7 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon, TrashIcon, ExitIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
+import { useConfirm } from "~/hooks/useConfirm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Checkbox } from "~/components/ui/checkbox";
 
@@ -147,6 +148,7 @@ export default function UsersPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
+  const confirm = useConfirm();
 
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
@@ -302,8 +304,13 @@ export default function UsersPage() {
                             <PersonIcon className="mr-2 h-3.5 w-3.5" /> Manage Tenants
                           </DropdownMenuItem>
                           <DropdownMenuItem
-                            onClick={() => {
-                              if (confirm("Force logout this user from all active sessions?")) {
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: "Force Logout",
+                                description: "Force logout this user from all active sessions?",
+                                confirmLabel: "Force Logout",
+                              });
+                              if (ok) {
                                 submit({ intent: "force_logout", id: user.id }, { method: "post" });
                               }
                             }}
@@ -313,8 +320,13 @@ export default function UsersPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
-                            onClick={() => {
-                              if (confirm("Are you sure you want to delete this user? This action cannot be undone.")) {
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: "Delete User",
+                                description: "Are you sure you want to delete this user? This action cannot be undone.",
+                                variant: "destructive",
+                              });
+                              if (ok) {
                                 submit({ intent: "delete_user", id: user.id }, { method: "post" });
                               }
                             }}

@@ -384,7 +384,9 @@ impl MockKeycloakServer {
     /// Mock successful password reset
     pub async fn mock_reset_password_success(&self) {
         Mock::given(method("PUT"))
-            .and(path_regex(r"/admin/realms/test/users/[^/]+/reset-password$"))
+            .and(path_regex(
+                r"/admin/realms/test/users/[^/]+/reset-password$",
+            ))
             .respond_with(ResponseTemplate::new(204))
             .mount(&self.server)
             .await;

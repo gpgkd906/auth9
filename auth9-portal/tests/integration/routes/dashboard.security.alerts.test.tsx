@@ -62,7 +62,7 @@ describe("Security Alerts Page", () => {
       pagination: mockPagination,
       unresolvedOnly: false,
     });
-    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, false);
+    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, false, undefined);
   });
 
   it("loader respects unresolved filter", async () => {
@@ -75,7 +75,7 @@ describe("Security Alerts Page", () => {
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response.unresolvedOnly).toBe(true);
-    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, true);
+    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, true, undefined);
   });
 
   it("loader returns error on API failure", async () => {
@@ -282,7 +282,7 @@ describe("Security Alerts Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(securityAlertApi.resolve).toHaveBeenCalledWith("alert-1");
+    expect(securityAlertApi.resolve).toHaveBeenCalledWith("alert-1", undefined);
     expect(response).toEqual({ success: true, message: "Alert resolved" });
   });
 

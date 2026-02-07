@@ -296,9 +296,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
 
     info!(
         "Recorded login event: id={}, type={}, user_id={:?}",
-        event_id,
-        event_type_str,
-        event.user_id
+        event_id, event_type_str, event.user_id
     );
 
     // 9. Trigger security detection analysis
@@ -434,7 +432,8 @@ mod tests {
     fn test_verify_signature_invalid() {
         let secret = "test-secret";
         let body = b"test body";
-        let wrong_signature = "sha256=0000000000000000000000000000000000000000000000000000000000000000";
+        let wrong_signature =
+            "sha256=0000000000000000000000000000000000000000000000000000000000000000";
 
         assert!(!verify_signature(secret, body, wrong_signature));
     }
@@ -522,5 +521,157 @@ mod tests {
         assert_eq!(event.event_type, None);
         assert_eq!(event.operation_type, Some("CREATE".to_string()));
         assert_eq!(event.resource_type, Some("USER".to_string()));
+    }
+
+    // ========================================================================
+    // Additional map_event_type edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_map_event_type_login_error_invalid_otp() {
+        assert_eq!(
+            map_event_type("LOGIN_ERROR", Some("invalid_otp")),
+            Some(LoginEventType::FailedMfa)
+        );
+    }
+
+    #[test]
+    fn test_map_event_type_login_error_user_temporarily_disabled() {
+        assert_eq!(
+            map_event_type("LOGIN_ERROR", Some("user_temporarily_disabled")),
+            Some(LoginEventType::Locked)
+        );
+    }
+
+    #[test]
+    fn test_map_event_type_login_error_default() {
+        // Unknown error code defaults to FailedPassword
+        assert_eq!(
+            map_event_type("LOGIN_ERROR", Some("some_unknown_error")),
+            Some(LoginEventType::FailedPassword)
+        );
+    }
+
+    #[test]
+    fn test_map_event_type_login_error_no_error() {
+        // LOGIN_ERROR with None error defaults to FailedPassword
+        assert_eq!(
+            map_event_type("LOGIN_ERROR", None),
+            Some(LoginEventType::FailedPassword)
+        );
+    }
+
+    #[test]
+    fn test_map_event_type_update_totp() {
+        assert_eq!(map_event_type("UPDATE_TOTP", None), None);
+    }
+
+    #[test]
+    fn test_map_event_type_remove_totp() {
+        assert_eq!(map_event_type("REMOVE_TOTP", None), None);
+    }
+
+    #[test]
+    fn test_map_event_type_non_login_events() {
+        assert_eq!(map_event_type("LOGOUT_ERROR", None), None);
+        assert_eq!(map_event_type("REGISTER_ERROR", None), None);
+        assert_eq!(map_event_type("UPDATE_PASSWORD", None), None);
+        assert_eq!(map_event_type("RESET_PASSWORD", None), None);
+        assert_eq!(map_event_type("SEND_RESET_PASSWORD", None), None);
+        assert_eq!(map_event_type("SEND_VERIFY_EMAIL", None), None);
+        assert_eq!(map_event_type("VERIFY_EMAIL", None), None);
+        assert_eq!(map_event_type("VERIFY_EMAIL_ERROR", None), None);
+        assert_eq!(map_event_type("TOKEN_EXCHANGE", None), None);
+        assert_eq!(map_event_type("REFRESH_TOKEN_ERROR", None), None);
+        assert_eq!(map_event_type("CLIENT_LOGIN", None), None);
+        assert_eq!(map_event_type("CLIENT_LOGIN_ERROR", None), None);
+    }
+
+    #[test]
+    fn test_map_event_type_unknown() {
+        assert_eq!(map_event_type("COMPLETELY_UNKNOWN_EVENT", None), None);
+    }
+
+    // ========================================================================
+    // Additional derive_failure_reason edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_derive_failure_reason_all_known_errors() {
+        assert_eq!(
+            derive_failure_reason(Some("user_disabled")),
+            Some("Account disabled".to_string())
+        );
+        assert_eq!(
+            derive_failure_reason(Some("user_temporarily_disabled")),
+            Some("Account temporarily locked".to_string())
+        );
+        assert_eq!(
+            derive_failure_reason(Some("expired_code")),
+            Some("Authentication code expired".to_string())
+        );
+        assert_eq!(
+            derive_failure_reason(Some("invalid_code")),
+            Some("Invalid authentication code".to_string())
+        );
+        assert_eq!(
+            derive_failure_reason(Some("session_expired")),
+            Some("Session expired".to_string())
+        );
+        assert_eq!(
+            derive_failure_reason(Some("invalid_otp")),
+            Some("Invalid MFA code".to_string())
+        );
+    }
+
+    // ========================================================================
+    // Additional deserialization edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_keycloak_event_with_event_type_alias() {
+        // Test eventType alias
+        let json = r#"{
+            "eventType": "LOGIN",
+            "time": 1704067200000
+        }"#;
+
+        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.event_type, Some("LOGIN".to_string()));
+    }
+
+    #[test]
+    fn test_keycloak_event_details_all_fields() {
+        let json = r#"{
+            "type": "LOGIN",
+            "time": 0,
+            "details": {
+                "username": "user1",
+                "email": "user1@test.com",
+                "authMethod": "password",
+                "identityProvider": "google",
+                "redirectUri": "https://app.com/cb",
+                "codeId": "code-123"
+            }
+        }"#;
+
+        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.details.username, Some("user1".to_string()));
+        assert_eq!(event.details.email, Some("user1@test.com".to_string()));
+        assert_eq!(event.details.auth_method, Some("password".to_string()));
+        assert_eq!(event.details.identity_provider, Some("google".to_string()));
+        assert_eq!(
+            event.details.redirect_uri,
+            Some("https://app.com/cb".to_string())
+        );
+        assert_eq!(event.details.code_id, Some("code-123".to_string()));
+    }
+
+    #[test]
+    fn test_keycloak_event_empty_details() {
+        let json = r#"{"type": "LOGIN", "time": 0, "details": {}}"#;
+        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        assert!(event.details.username.is_none());
+        assert!(event.details.email.is_none());
     }
 }

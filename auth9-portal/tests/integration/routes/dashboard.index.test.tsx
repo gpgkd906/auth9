@@ -1,7 +1,8 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import DashboardIndex from "~/routes/dashboard._index";
+import DashboardIndex, { loader } from "~/routes/dashboard._index";
+import { tenantApi, userApi, serviceApi, auditApi } from "~/services/api";
 
 // Mock APIs (used internally by loader)
 vi.mock("~/services/api", () => ({
@@ -15,6 +16,8 @@ vi.mock("~/services/api", () => ({
 vi.mock("~/services/session.server", () => ({
     getAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
 }));
+
+import { getAccessToken } from "~/services/session.server";
 
 describe("Dashboard Index Page", () => {
     beforeEach(() => {
@@ -95,6 +98,62 @@ describe("Dashboard Index Page", () => {
             expect(screen.getByText("Recent Activity")).toBeInTheDocument();
             expect(screen.getByText(/CREATE • tenant/)).toBeInTheDocument();
             expect(screen.getByText(/UPDATE • user/)).toBeInTheDocument();
+        });
+    });
+
+    // ============================================================================
+    // Loader Tests
+    // ============================================================================
+
+    describe("loader", () => {
+        beforeEach(() => {
+            vi.mocked(tenantApi.list).mockResolvedValue({
+                data: [],
+                pagination: { page: 1, per_page: 1, total: 5, total_pages: 5 },
+            });
+            vi.mocked(userApi.list).mockResolvedValue({
+                data: [],
+                pagination: { page: 1, per_page: 1, total: 12, total_pages: 12 },
+            });
+            vi.mocked(serviceApi.list).mockResolvedValue({
+                data: [],
+                pagination: { page: 1, per_page: 1, total: 3, total_pages: 3 },
+            });
+            vi.mocked(auditApi.list).mockResolvedValue({
+                data: [
+                    { id: 1, action: "CREATE", resource_type: "tenant", created_at: new Date().toISOString() },
+                ],
+                pagination: { page: 1, per_page: 5, total: 1, total_pages: 1 },
+            });
+        });
+
+        it("returns totals and audits from APIs", async () => {
+            const request = new Request("http://localhost/dashboard");
+            const result = await loader({ request, params: {}, context: {} });
+            expect(result).toEqual({
+                totals: { tenants: 5, users: 12, services: 3 },
+                audits: expect.any(Array),
+            });
+        });
+
+        it("passes page and perPage from search params", async () => {
+            const request = new Request("http://localhost/dashboard?page=2&perPage=10");
+            await loader({ request, params: {}, context: {} });
+            expect(auditApi.list).toHaveBeenCalledWith(2, 10, "mock-access-token");
+        });
+
+        it("defaults page=1 and perPage=5", async () => {
+            const request = new Request("http://localhost/dashboard");
+            await loader({ request, params: {}, context: {} });
+            expect(auditApi.list).toHaveBeenCalledWith(1, 5, "mock-access-token");
+        });
+
+        it("redirects to /login when no access token", async () => {
+            vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+            const request = new Request("http://localhost/dashboard");
+            await expect(loader({ request, params: {}, context: {} })).rejects.toEqual(
+                expect.objectContaining({ status: 302 })
+            );
         });
     });
 

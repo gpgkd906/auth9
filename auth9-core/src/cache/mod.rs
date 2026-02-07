@@ -690,4 +690,97 @@ mod tests {
         let result = cache.add_to_token_blacklist("test-jti", 0).await;
         assert!(result.is_ok());
     }
+
+    // ========================================================================
+    // CacheOperations trait dispatch tests for NoOpCacheManager
+    // (covers the `impl CacheOperations for NoOpCacheManager` block)
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_ping() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.ping().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_get_user_roles() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        let result = cache
+            .get_user_roles(Uuid::new_v4(), Uuid::new_v4())
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_set_user_roles() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        let roles = UserRolesInTenant {
+            user_id: Uuid::new_v4(),
+            tenant_id: Uuid::new_v4(),
+            roles: vec![],
+            permissions: vec![],
+        };
+        assert!(cache.set_user_roles(&roles).await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_get_user_roles_for_service() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        let result = cache
+            .get_user_roles_for_service(Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4())
+            .await
+            .unwrap();
+        assert!(result.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_set_user_roles_for_service() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        let roles = UserRolesInTenant {
+            user_id: Uuid::new_v4(),
+            tenant_id: Uuid::new_v4(),
+            roles: vec![],
+            permissions: vec![],
+        };
+        assert!(cache
+            .set_user_roles_for_service(&roles, Uuid::new_v4())
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_invalidate_user_roles() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache
+            .invalidate_user_roles(Uuid::new_v4(), Some(Uuid::new_v4()))
+            .await
+            .is_ok());
+        assert!(cache
+            .invalidate_user_roles(Uuid::new_v4(), None)
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_invalidate_user_roles_for_tenant() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache
+            .invalidate_user_roles_for_tenant(Uuid::new_v4(), Uuid::new_v4())
+            .await
+            .is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_invalidate_all_user_roles() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.invalidate_all_user_roles().await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_token_blacklist() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.add_to_token_blacklist("jti-1", 3600).await.is_ok());
+        assert!(!cache.is_token_blacklisted("jti-1").await.unwrap());
+    }
 }

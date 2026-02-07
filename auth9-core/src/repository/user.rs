@@ -388,7 +388,18 @@ impl UserRepository for UserRepositoryImpl {
         let result = rows
             .into_iter()
             .map(
-                |(id, tenant_id, user_id, role_in_tenant, joined_at, tenant_real_id, name, slug, logo_url, status)| {
+                |(
+                    id,
+                    tenant_id,
+                    user_id,
+                    role_in_tenant,
+                    joined_at,
+                    tenant_real_id,
+                    name,
+                    slug,
+                    logo_url,
+                    status,
+                )| {
                     TenantUserWithTenant {
                         id,
                         tenant_id,

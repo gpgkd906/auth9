@@ -366,10 +366,7 @@ impl KeycloakSeeder {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            warn!(
-                "Failed to configure ext-event-http: {} - {}",
-                status, body
-            );
+            warn!("Failed to configure ext-event-http: {} - {}", status, body);
         } else {
             info!(
                 "Configured ext-event-http provider: targetUri={}",

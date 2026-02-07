@@ -133,13 +133,12 @@ impl TenantRepository for TenantRepositoryImpl {
 
     async fn count_search(&self, query: &str) -> Result<i64> {
         let search_pattern = format!("%{}%", query);
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM tenants WHERE name LIKE ? OR slug LIKE ?",
-        )
-        .bind(&search_pattern)
-        .bind(&search_pattern)
-        .fetch_one(&self.pool)
-        .await?;
+        let row: (i64,) =
+            sqlx::query_as("SELECT COUNT(*) FROM tenants WHERE name LIKE ? OR slug LIKE ?")
+                .bind(&search_pattern)
+                .bind(&search_pattern)
+                .fetch_one(&self.pool)
+                .await?;
         Ok(row.0)
     }
 

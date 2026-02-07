@@ -135,7 +135,7 @@ pub struct CreateInvitationInput {
 }
 
 /// API response for invitation list (without sensitive token_hash)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct InvitationResponse {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -302,5 +302,89 @@ mod tests {
 
         let parsed: InvitationStatus = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, status);
+    }
+
+    #[test]
+    fn test_invitation_status_all_serialization_roundtrip() {
+        for (status, expected_json) in [
+            (InvitationStatus::Pending, "\"pending\""),
+            (InvitationStatus::Accepted, "\"accepted\""),
+            (InvitationStatus::Expired, "\"expired\""),
+            (InvitationStatus::Revoked, "\"revoked\""),
+        ] {
+            let json = serde_json::to_string(&status).unwrap();
+            assert_eq!(json, expected_json);
+            let parsed: InvitationStatus = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, status);
+        }
+    }
+
+    #[test]
+    fn test_invitation_status_encode_by_ref() {
+        for status in [
+            InvitationStatus::Pending,
+            InvitationStatus::Accepted,
+            InvitationStatus::Expired,
+            InvitationStatus::Revoked,
+        ] {
+            let mut buf = Vec::new();
+            let result = sqlx::Encode::<sqlx::MySql>::encode_by_ref(&status, &mut buf);
+            assert!(result.is_ok());
+            let encoded = String::from_utf8_lossy(&buf);
+            assert!(encoded.contains(&status.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_invitation_not_valid_if_revoked() {
+        let inv = Invitation {
+            status: InvitationStatus::Revoked,
+            expires_at: Utc::now() + Duration::hours(1),
+            ..Default::default()
+        };
+        assert!(!inv.is_valid());
+    }
+
+    #[test]
+    fn test_invitation_not_valid_if_expired_status() {
+        let inv = Invitation {
+            status: InvitationStatus::Expired,
+            expires_at: Utc::now() + Duration::hours(1),
+            ..Default::default()
+        };
+        assert!(!inv.is_valid());
+    }
+
+    #[test]
+    fn test_create_invitation_input_expires_in_hours_out_of_range() {
+        let input = CreateInvitationInput {
+            email: "valid@example.com".to_string(),
+            role_ids: vec![StringUuid::new_v4()],
+            expires_in_hours: Some(721), // max is 720
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_invitation_input_expires_in_hours_zero() {
+        let input = CreateInvitationInput {
+            email: "valid@example.com".to_string(),
+            role_ids: vec![StringUuid::new_v4()],
+            expires_in_hours: Some(0), // min is 1
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_accept_invitation_input_validation() {
+        let valid = AcceptInvitationInput {
+            token: "some-token".to_string(),
+        };
+        assert!(valid.validate().is_ok());
+
+        let empty = AcceptInvitationInput {
+            token: "".to_string(),
+        };
+        assert!(empty.validate().is_err());
     }
 }

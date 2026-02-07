@@ -476,7 +476,8 @@ mod tests {
     fn test_compute_ses_smtp_password() {
         // Test with known values
         // The algorithm should produce a base64 string starting with version byte 0x04
-        let password = compute_ses_smtp_password("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1");
+        let password =
+            compute_ses_smtp_password("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY", "us-east-1");
 
         // Password should be base64 encoded and start with the version byte
         assert!(!password.is_empty());

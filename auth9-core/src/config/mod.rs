@@ -120,8 +120,14 @@ impl fmt::Debug for JwtConfig {
             .field("issuer", &self.issuer)
             .field("access_token_ttl_secs", &self.access_token_ttl_secs)
             .field("refresh_token_ttl_secs", &self.refresh_token_ttl_secs)
-            .field("private_key_pem", &self.private_key_pem.as_ref().map(|_| "<REDACTED>"))
-            .field("public_key_pem", &self.public_key_pem.as_ref().map(|_| "<REDACTED>"))
+            .field(
+                "private_key_pem",
+                &self.private_key_pem.as_ref().map(|_| "<REDACTED>"),
+            )
+            .field(
+                "public_key_pem",
+                &self.public_key_pem.as_ref().map(|_| "<REDACTED>"),
+            )
             .finish()
     }
 }
@@ -160,7 +166,10 @@ impl fmt::Debug for KeycloakConfig {
             .field("ssl_required", &self.ssl_required)
             .field("core_public_url", &self.core_public_url)
             .field("portal_url", &self.portal_url)
-            .field("webhook_secret", &self.webhook_secret.as_ref().map(|_| "<REDACTED>"))
+            .field(
+                "webhook_secret",
+                &self.webhook_secret.as_ref().map(|_| "<REDACTED>"),
+            )
             .finish()
     }
 }
@@ -697,8 +706,12 @@ mod tests {
     #[test]
     fn test_cors_config_default() {
         let config = CorsConfig::default();
-        assert!(config.allowed_origins.contains(&"http://localhost:3000".to_string()));
-        assert!(config.allowed_origins.contains(&"http://localhost:5173".to_string()));
+        assert!(config
+            .allowed_origins
+            .contains(&"http://localhost:3000".to_string()));
+        assert!(config
+            .allowed_origins
+            .contains(&"http://localhost:5173".to_string()));
         assert!(config.allow_credentials);
     }
 
@@ -712,7 +725,9 @@ mod tests {
             allow_credentials: true,
         };
         assert_eq!(config.allowed_origins.len(), 2);
-        assert!(config.allowed_origins.contains(&"https://app.example.com".to_string()));
+        assert!(config
+            .allowed_origins
+            .contains(&"https://app.example.com".to_string()));
     }
 
     #[test]
@@ -797,6 +812,298 @@ mod tests {
         assert_eq!(config.window_secs, 60);
     }
 
+    // ==================== from_env() tests ====================
+    // These tests use a Mutex to serialize env var access since Rust tests
+    // run in parallel and env vars are process-wide.
+
+    use std::sync::Mutex;
+    static ENV_MUTEX: Mutex<()> = Mutex::new(());
+
+    /// Helper to save and restore env vars around a test closure
+    fn with_env_vars<F>(vars: &[(&str, Option<&str>)], test_fn: F)
+    where
+        F: FnOnce(),
+    {
+        let _guard = ENV_MUTEX.lock().unwrap();
+
+        // Save originals
+        let originals: Vec<(&str, Option<String>)> = vars
+            .iter()
+            .map(|(key, _)| (*key, env::var(key).ok()))
+            .collect();
+
+        // Set new values
+        for (key, value) in vars {
+            match value {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+
+        // Run test
+        test_fn();
+
+        // Restore originals
+        for (key, original) in originals {
+            match original {
+                Some(v) => env::set_var(key, v),
+                None => env::remove_var(key),
+            }
+        }
+    }
+
+    #[test]
+    fn test_from_env_missing_database_url() {
+        with_env_vars(
+            &[("DATABASE_URL", None), ("JWT_SECRET", Some("test-secret"))],
+            || {
+                let result = Config::from_env();
+                assert!(result.is_err());
+                let err_msg = format!("{}", result.unwrap_err());
+                assert!(err_msg.contains("DATABASE_URL"));
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_missing_jwt_secret() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/test")),
+                ("JWT_SECRET", None),
+            ],
+            || {
+                let result = Config::from_env();
+                assert!(result.is_err());
+                let err_msg = format!("{}", result.unwrap_err());
+                assert!(err_msg.contains("JWT_SECRET"));
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_with_minimal_config() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("minimal-test-secret")),
+                ("RATE_LIMIT_ENABLED", None),
+                ("GRPC_AUTH_MODE", None),
+                ("HTTP_HOST", None),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.http_host, "0.0.0.0");
+                assert_eq!(config.database.url, "mysql://test:test@localhost/testdb");
+                assert_eq!(config.jwt.secret, "minimal-test-secret");
+                assert!(config.rate_limit.enabled);
+                assert_eq!(config.grpc_security.auth_mode, "none");
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_cors_wildcard() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("CORS_ALLOWED_ORIGINS", Some("*")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.cors.allowed_origins, vec!["*".to_string()]);
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_cors_comma_separated() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                (
+                    "CORS_ALLOWED_ORIGINS",
+                    Some("https://app.example.com, https://admin.example.com"),
+                ),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.cors.allowed_origins.len(), 2);
+                assert!(config
+                    .cors
+                    .allowed_origins
+                    .contains(&"https://app.example.com".to_string()));
+                assert!(config
+                    .cors
+                    .allowed_origins
+                    .contains(&"https://admin.example.com".to_string()));
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_rate_limit_disabled() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("RATE_LIMIT_ENABLED", Some("false")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert!(!config.rate_limit.enabled);
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_grpc_api_keys() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("GRPC_AUTH_MODE", Some("api_key")),
+                ("GRPC_API_KEYS", Some("key-alpha, key-beta , key-gamma")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.grpc_security.auth_mode, "api_key");
+                assert_eq!(config.grpc_security.api_keys.len(), 3);
+                assert_eq!(config.grpc_security.api_keys[0], "key-alpha");
+                assert_eq!(config.grpc_security.api_keys[1], "key-beta");
+                assert_eq!(config.grpc_security.api_keys[2], "key-gamma");
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_jwt_pem_newline_replacement() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                (
+                    "JWT_PRIVATE_KEY",
+                    Some("-----BEGIN PRIVATE KEY-----\\nMIIEvg\\n-----END PRIVATE KEY-----"),
+                ),
+                (
+                    "JWT_PUBLIC_KEY",
+                    Some("-----BEGIN PUBLIC KEY-----\\nMIIBIj\\n-----END PUBLIC KEY-----"),
+                ),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                let priv_key = config.jwt.private_key_pem.unwrap();
+                let pub_key = config.jwt.public_key_pem.unwrap();
+                assert!(priv_key.contains('\n'));
+                assert!(!priv_key.contains("\\n"));
+                assert!(pub_key.contains('\n'));
+                assert!(!pub_key.contains("\\n"));
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_grpc_reflection_enabled() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("GRPC_ENABLE_REFLECTION", Some("true")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert!(config.grpc_security.enable_reflection);
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_cors_allow_credentials_false() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("CORS_ALLOW_CREDENTIALS", Some("false")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert!(!config.cors.allow_credentials);
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_keycloak_webhook_secret() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("KEYCLOAK_WEBHOOK_SECRET", Some("my-webhook-hmac-secret")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(
+                    config.keycloak.webhook_secret.unwrap(),
+                    "my-webhook-hmac-secret"
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_rate_limit_endpoints_json() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                (
+                    "RATE_LIMIT_ENDPOINTS",
+                    Some(r#"{"POST:/api/v1/auth/token":{"requests":10,"window_secs":30}}"#),
+                ),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.rate_limit.endpoints.len(), 1);
+                let ep = config
+                    .rate_limit
+                    .endpoints
+                    .get("POST:/api/v1/auth/token")
+                    .unwrap();
+                assert_eq!(ep.requests, 10);
+                assert_eq!(ep.window_secs, 30);
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_rate_limit_tenant_multipliers_json() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                (
+                    "RATE_LIMIT_TENANT_MULTIPLIERS",
+                    Some(r#"{"premium":2.0,"enterprise":5.0}"#),
+                ),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.rate_limit.tenant_multipliers.len(), 2);
+                assert_eq!(
+                    config.rate_limit.tenant_multipliers.get("premium"),
+                    Some(&2.0)
+                );
+                assert_eq!(
+                    config.rate_limit.tenant_multipliers.get("enterprise"),
+                    Some(&5.0)
+                );
+            },
+        );
+    }
+
     #[test]
     fn test_sensitive_data_redacted_in_debug() {
         // Create a config with sensitive data
@@ -818,8 +1125,12 @@ mod tests {
                 issuer: "https://auth9.example.com".to_string(),
                 access_token_ttl_secs: 3600,
                 refresh_token_ttl_secs: 604800,
-                private_key_pem: Some("-----BEGIN PRIVATE KEY-----\nsecretkey\n-----END PRIVATE KEY-----".to_string()),
-                public_key_pem: Some("-----BEGIN PUBLIC KEY-----\npublickey\n-----END PUBLIC KEY-----".to_string()),
+                private_key_pem: Some(
+                    "-----BEGIN PRIVATE KEY-----\nsecretkey\n-----END PRIVATE KEY-----".to_string(),
+                ),
+                public_key_pem: Some(
+                    "-----BEGIN PUBLIC KEY-----\npublickey\n-----END PUBLIC KEY-----".to_string(),
+                ),
             },
             keycloak: KeycloakConfig {
                 url: "http://keycloak:8080".to_string(),
@@ -847,23 +1158,59 @@ mod tests {
         let debug_str = format!("{:?}", config);
 
         // Verify sensitive data is NOT in the debug output
-        assert!(!debug_str.contains("supersecretpassword"), "Database password should be redacted");
-        assert!(!debug_str.contains("redispassword"), "Redis password should be redacted");
-        assert!(!debug_str.contains("my-super-secret-jwt-key"), "JWT secret should be redacted");
-        assert!(!debug_str.contains("secretkey"), "Private key should be redacted");
-        assert!(!debug_str.contains("keycloak-admin-secret"), "Keycloak admin secret should be redacted");
-        assert!(!debug_str.contains("webhook-secret-key"), "Webhook secret should be redacted");
-        assert!(!debug_str.contains("api-key-1"), "API keys should be redacted");
-        assert!(!debug_str.contains("api-key-2"), "API keys should be redacted");
+        assert!(
+            !debug_str.contains("supersecretpassword"),
+            "Database password should be redacted"
+        );
+        assert!(
+            !debug_str.contains("redispassword"),
+            "Redis password should be redacted"
+        );
+        assert!(
+            !debug_str.contains("my-super-secret-jwt-key"),
+            "JWT secret should be redacted"
+        );
+        assert!(
+            !debug_str.contains("secretkey"),
+            "Private key should be redacted"
+        );
+        assert!(
+            !debug_str.contains("keycloak-admin-secret"),
+            "Keycloak admin secret should be redacted"
+        );
+        assert!(
+            !debug_str.contains("webhook-secret-key"),
+            "Webhook secret should be redacted"
+        );
+        assert!(
+            !debug_str.contains("api-key-1"),
+            "API keys should be redacted"
+        );
+        assert!(
+            !debug_str.contains("api-key-2"),
+            "API keys should be redacted"
+        );
 
         // Verify non-sensitive data IS present
-        assert!(debug_str.contains("127.0.0.1"), "HTTP host should be visible");
+        assert!(
+            debug_str.contains("127.0.0.1"),
+            "HTTP host should be visible"
+        );
         assert!(debug_str.contains("8080"), "HTTP port should be visible");
         assert!(debug_str.contains("auth9"), "Realm should be visible");
-        assert!(debug_str.contains("https://auth9.example.com"), "Issuer should be visible");
+        assert!(
+            debug_str.contains("https://auth9.example.com"),
+            "Issuer should be visible"
+        );
 
         // Verify redaction markers are present
-        assert!(debug_str.contains("<REDACTED>"), "Should contain redaction markers");
-        assert!(debug_str.contains("[2 keys]"), "Should show API key count without values");
+        assert!(
+            debug_str.contains("<REDACTED>"),
+            "Should contain redaction markers"
+        );
+        assert!(
+            debug_str.contains("[2 keys]"),
+            "Should show API key count without values"
+        );
     }
 }

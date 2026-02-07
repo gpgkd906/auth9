@@ -576,4 +576,165 @@ mod tests {
         let parsed: RateLimitConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed.default.requests, 50);
     }
+
+    #[test]
+    fn test_rate_limit_layer_new() {
+        let state = RateLimitState::noop();
+        let _layer = RateLimitLayer::new(state);
+    }
+
+    #[test]
+    fn test_rate_limit_state_is_enabled_false_when_disabled() {
+        let config = RateLimitConfig {
+            enabled: false,
+            ..Default::default()
+        };
+        let state = RateLimitState {
+            config: Arc::new(config),
+            redis: None,
+        };
+        assert!(!state.is_enabled());
+    }
+
+    #[test]
+    fn test_rate_limit_state_is_enabled_false_without_redis() {
+        let config = RateLimitConfig {
+            enabled: true,
+            ..Default::default()
+        };
+        let state = RateLimitState {
+            config: Arc::new(config),
+            redis: None,
+        };
+        // enabled=true but no redis => still disabled
+        assert!(!state.is_enabled());
+    }
+
+    #[test]
+    fn test_rate_limit_get_rule_default_fallback() {
+        let config = RateLimitConfig {
+            enabled: true,
+            default: RateLimitRule {
+                requests: 200,
+                window_secs: 120,
+            },
+            endpoints: HashMap::new(),
+            tenant_multipliers: HashMap::new(),
+        };
+        let state = RateLimitState {
+            config: Arc::new(config),
+            redis: None,
+        };
+        // Non-matching endpoint should fall back to default
+        let rule = state.get_rule("GET", "/api/v1/unknown");
+        assert_eq!(rule.requests, 200);
+        assert_eq!(rule.window_secs, 120);
+    }
+
+    #[test]
+    fn test_rate_limit_get_rule_matching_endpoint() {
+        let mut endpoints = HashMap::new();
+        endpoints.insert(
+            "POST:/api/v1/auth/login".to_string(),
+            RateLimitRule {
+                requests: 5,
+                window_secs: 60,
+            },
+        );
+        let config = RateLimitConfig {
+            enabled: true,
+            default: RateLimitRule::default(),
+            endpoints,
+            tenant_multipliers: HashMap::new(),
+        };
+        let state = RateLimitState {
+            config: Arc::new(config),
+            redis: None,
+        };
+        let rule = state.get_rule("POST", "/api/v1/auth/login");
+        assert_eq!(rule.requests, 5);
+    }
+
+    #[tokio::test]
+    async fn test_rate_limit_middleware_disabled_passes_through() {
+        use axum::{body::Body, http::Request, middleware, routing::get, Router};
+        use tower::ServiceExt;
+
+        let state = RateLimitState::noop();
+
+        let app = Router::new()
+            .route("/test", get(|| async { "ok" }))
+            .layer(middleware::from_fn_with_state(
+                state.clone(),
+                rate_limit_middleware,
+            ))
+            .with_state(state);
+
+        let req = Request::builder().uri("/test").body(Body::empty()).unwrap();
+
+        let response = app.oneshot(req).await.unwrap();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[test]
+    fn test_rate_limit_error_debug() {
+        let err = RateLimitError::NotConfigured;
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("NotConfigured"));
+
+        let err = RateLimitError::RedisError("connection refused".to_string());
+        let debug = format!("{:?}", err);
+        assert!(debug.contains("connection refused"));
+    }
+
+    #[test]
+    fn test_rate_limit_config_deserialization() {
+        let json = r#"{
+            "enabled": true,
+            "default": {"requests": 100, "window_secs": 60},
+            "endpoints": {"POST:/api/v1/auth/token": {"requests": 10, "window_secs": 30}},
+            "tenant_multipliers": {"premium": 2.0}
+        }"#;
+        let config: RateLimitConfig = serde_json::from_str(json).unwrap();
+        assert!(config.enabled);
+        assert_eq!(config.default.requests, 100);
+        assert_eq!(config.endpoints.len(), 1);
+        assert_eq!(config.tenant_multipliers.get("premium"), Some(&2.0));
+    }
+
+    #[test]
+    fn test_rate_limit_exceeded_response_headers() {
+        let response = RateLimitExceededResponse {
+            error: "Rate limit exceeded".to_string(),
+            code: "RATE_LIMITED".to_string(),
+            retry_after: 45,
+        };
+
+        let http_response = response.into_response();
+        assert_eq!(http_response.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert_eq!(http_response.headers().get("Retry-After").unwrap(), "45");
+        assert_eq!(
+            http_response.headers().get("Content-Type").unwrap(),
+            "application/json"
+        );
+    }
+
+    #[test]
+    fn test_rate_limit_key_clone() {
+        let key = RateLimitKey::Tenant {
+            tenant_id: "t-1".to_string(),
+        };
+        let cloned = key.clone();
+        assert_eq!(
+            key.to_redis_key("GET:/test"),
+            cloned.to_redis_key("GET:/test")
+        );
+    }
+
+    #[test]
+    fn test_rate_limit_state_clone() {
+        let state = RateLimitState::noop();
+        let cloned = state.clone();
+        assert!(!cloned.is_enabled());
+    }
 }

@@ -25,13 +25,8 @@ fn validate_single_redirect_uri(uri: &str) -> Result<(), validator::ValidationEr
         let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
         if !is_localhost {
             let mut err = validator::ValidationError::new("insecure_redirect_uri");
-            err.message = Some(
-                format!(
-                    "HTTP is only allowed for localhost. Use HTTPS for: {}",
-                    uri
-                )
-                .into(),
-            );
+            err.message =
+                Some(format!("HTTP is only allowed for localhost. Use HTTPS for: {}", uri).into());
             return Err(err);
         }
     } else if scheme != "https" {

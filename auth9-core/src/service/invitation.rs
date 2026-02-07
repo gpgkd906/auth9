@@ -293,9 +293,10 @@ where
             )
             .await?;
 
-        self.invitation_repo.find_by_id(id).await?.ok_or_else(|| {
-            AppError::NotFound(format!("Invitation {} not found", id))
-        })
+        self.invitation_repo
+            .find_by_id(id)
+            .await?
+            .ok_or_else(|| AppError::NotFound(format!("Invitation {} not found", id)))
     }
 
     /// Delete an invitation
@@ -649,7 +650,10 @@ mod tests {
             "https://app.example.com".to_string(),
         );
 
-        let (invitations, total) = service.list_by_tenant(tenant_id, None, 1, 10).await.unwrap();
+        let (invitations, total) = service
+            .list_by_tenant(tenant_id, None, 1, 10)
+            .await
+            .unwrap();
         assert_eq!(invitations.len(), 2);
         assert_eq!(total, 2);
     }

@@ -197,11 +197,7 @@ mod tests {
         // Generate a valid identity token
         let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
         let valid_token = jwt_manager
-            .create_identity_token(
-                user_id,
-                "test@example.com",
-                Some("Test User"),
-            )
+            .create_identity_token(user_id, "test@example.com", Some("Test User"))
             .unwrap();
 
         let auth_state = AuthMiddlewareState::new(jwt_manager);

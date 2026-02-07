@@ -203,4 +203,29 @@ mod tests {
         assert!(!uuid1.is_nil());
         assert!(!uuid2.is_nil());
     }
+
+    #[test]
+    fn test_string_uuid_parse_str() {
+        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
+        let uuid = StringUuid::parse_str(uuid_str).unwrap();
+        assert_eq!(uuid.to_string(), uuid_str);
+    }
+
+    #[test]
+    fn test_string_uuid_parse_str_invalid() {
+        let result = StringUuid::parse_str("not-a-uuid");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_string_uuid_encode_by_ref() {
+        let uuid_str = "550e8400-e29b-41d4-a716-446655440000";
+        let uuid = StringUuid::parse_str(uuid_str).unwrap();
+        let mut buf = Vec::new();
+        let result = sqlx::Encode::<sqlx::MySql>::encode_by_ref(&uuid, &mut buf);
+        assert!(result.is_ok());
+        // The encoded buffer should contain the UUID string
+        let encoded = String::from_utf8_lossy(&buf);
+        assert!(encoded.contains(uuid_str));
+    }
 }

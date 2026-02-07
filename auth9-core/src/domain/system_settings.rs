@@ -157,4 +157,106 @@ mod tests {
         let parsed: SettingCategory = serde_json::from_str(&json).unwrap();
         assert_eq!(parsed, category);
     }
+
+    #[test]
+    fn test_setting_category_branding_display() {
+        assert_eq!(format!("{}", SettingCategory::Branding), "branding");
+    }
+
+    #[test]
+    fn test_setting_category_branding_from_str() {
+        assert_eq!(
+            "branding".parse::<SettingCategory>().unwrap(),
+            SettingCategory::Branding
+        );
+        assert_eq!(
+            "BRANDING".parse::<SettingCategory>().unwrap(),
+            SettingCategory::Branding
+        );
+    }
+
+    #[test]
+    fn test_setting_category_auth_from_str() {
+        assert_eq!(
+            "auth".parse::<SettingCategory>().unwrap(),
+            SettingCategory::Auth
+        );
+        assert_eq!(
+            "AUTH".parse::<SettingCategory>().unwrap(),
+            SettingCategory::Auth
+        );
+    }
+
+    #[test]
+    fn test_system_setting_response_from_row() {
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let row = SystemSettingRow {
+            id: 1,
+            category: "email".to_string(),
+            setting_key: "provider".to_string(),
+            value: serde_json::json!({"type": "smtp"}),
+            encrypted: false,
+            description: Some("Email provider config".to_string()),
+            created_at: now,
+            updated_at: now,
+        };
+
+        let response: SystemSettingResponse = row.into();
+        assert_eq!(response.category, "email");
+        assert_eq!(response.setting_key, "provider");
+        assert_eq!(response.value["type"], "smtp");
+        assert_eq!(response.description.unwrap(), "Email provider config");
+    }
+
+    #[test]
+    fn test_system_setting_response_from_row_no_description() {
+        use chrono::Utc;
+
+        let now = Utc::now();
+        let row = SystemSettingRow {
+            id: 2,
+            category: "auth".to_string(),
+            setting_key: "mfa".to_string(),
+            value: serde_json::json!(true),
+            encrypted: true,
+            description: None,
+            created_at: now,
+            updated_at: now,
+        };
+
+        let response: SystemSettingResponse = row.into();
+        assert_eq!(response.category, "auth");
+        assert!(response.description.is_none());
+    }
+
+    #[test]
+    fn test_upsert_system_setting_input_deserialize() {
+        let json = r#"{
+            "category": "email",
+            "setting_key": "provider",
+            "value": {"type": "ses"},
+            "encrypted": false,
+            "description": "AWS SES config"
+        }"#;
+        let input: UpsertSystemSettingInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.category, "email");
+        assert_eq!(input.setting_key, "provider");
+        assert!(!input.encrypted);
+    }
+
+    #[test]
+    fn test_setting_category_all_serialization() {
+        for (cat, expected) in [
+            (SettingCategory::Email, "\"email\""),
+            (SettingCategory::Auth, "\"auth\""),
+            (SettingCategory::Branding, "\"branding\""),
+        ] {
+            let json = serde_json::to_string(&cat).unwrap();
+            assert_eq!(json, expected);
+            let parsed: SettingCategory = serde_json::from_str(&json).unwrap();
+            assert_eq!(parsed, cat);
+        }
+    }
 }

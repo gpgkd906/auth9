@@ -2,9 +2,7 @@
 //!
 //! Tests for identity provider management endpoints.
 
-use super::{
-    delete_json, get_json, post_json, put_json, MockKeycloakServer, TestAppState,
-};
+use super::{delete_json, get_json, post_json, put_json, MockKeycloakServer, TestAppState};
 use crate::api::create_test_user;
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{
@@ -276,9 +274,7 @@ async fn test_list_providers_empty() {
 #[tokio::test]
 async fn test_get_provider_success() {
     let mock_kc = MockKeycloakServer::new().await;
-    mock_kc
-        .mock_get_identity_provider("google", "google")
-        .await;
+    mock_kc.mock_get_identity_provider("google", "google").await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_idp_test_router(state);
@@ -314,9 +310,7 @@ async fn test_get_provider_not_found() {
 async fn test_create_provider_success() {
     let mock_kc = MockKeycloakServer::new().await;
     mock_kc.mock_create_identity_provider_success().await;
-    mock_kc
-        .mock_get_identity_provider("google", "google")
-        .await;
+    mock_kc.mock_get_identity_provider("google", "google").await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_idp_test_router(state);
@@ -393,9 +387,7 @@ async fn test_create_provider_validation_error() {
 #[tokio::test]
 async fn test_update_provider_success() {
     let mock_kc = MockKeycloakServer::new().await;
-    mock_kc
-        .mock_get_identity_provider("google", "google")
-        .await;
+    mock_kc.mock_get_identity_provider("google", "google").await;
     mock_kc.mock_update_identity_provider_success().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 

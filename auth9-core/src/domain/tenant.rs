@@ -505,4 +505,86 @@ mod tests {
         // Same ID should have same identity
         assert_eq!(tenant1.id, tenant2.id);
     }
+
+    #[test]
+    fn test_tenant_status_encode_by_ref() {
+        for status in [
+            TenantStatus::Active,
+            TenantStatus::Inactive,
+            TenantStatus::Suspended,
+        ] {
+            let mut buf = Vec::new();
+            let result = sqlx::Encode::<sqlx::MySql>::encode_by_ref(&status, &mut buf);
+            assert!(result.is_ok());
+            let encoded = String::from_utf8_lossy(&buf);
+            assert!(encoded.contains(&status.to_string()));
+        }
+    }
+
+    #[test]
+    fn test_toggle_service_input_deserialize() {
+        let json = r#"{"service_id": "550e8400-e29b-41d4-a716-446655440000", "enabled": true}"#;
+        let input: ToggleServiceInput = serde_json::from_str(json).unwrap();
+        assert!(input.enabled);
+        assert_eq!(
+            input.service_id.to_string(),
+            "550e8400-e29b-41d4-a716-446655440000"
+        );
+    }
+
+    #[test]
+    fn test_toggle_service_input_disable() {
+        let json = r#"{"service_id": "550e8400-e29b-41d4-a716-446655440000", "enabled": false}"#;
+        let input: ToggleServiceInput = serde_json::from_str(json).unwrap();
+        assert!(!input.enabled);
+    }
+
+    #[test]
+    fn test_service_with_status_serialize() {
+        let sws = ServiceWithStatus {
+            id: StringUuid::new_v4(),
+            name: "Auth Service".to_string(),
+            base_url: Some("https://auth.example.com".to_string()),
+            status: "active".to_string(),
+            enabled: true,
+        };
+
+        let json = serde_json::to_string(&sws).unwrap();
+        assert!(json.contains("Auth Service"));
+        assert!(json.contains("auth.example.com"));
+        assert!(json.contains("\"enabled\":true"));
+    }
+
+    #[test]
+    fn test_tenant_service_assoc_serialize() {
+        let now = Utc::now();
+        let assoc = TenantServiceAssoc {
+            tenant_id: StringUuid::new_v4(),
+            service_id: StringUuid::new_v4(),
+            enabled: true,
+            created_at: now,
+            updated_at: now,
+        };
+
+        let json = serde_json::to_string(&assoc).unwrap();
+        assert!(json.contains("\"enabled\":true"));
+    }
+
+    #[test]
+    fn test_tenant_settings_json_defaults() {
+        // When fields are missing from JSON, defaults should be used
+        let json = r#"{}"#;
+        let settings: TenantSettings = serde_json::from_str(json).unwrap();
+        assert!(!settings.require_mfa);
+        assert_eq!(settings.session_timeout_secs, 3600);
+        assert!(settings.allowed_auth_methods.is_empty());
+    }
+
+    #[test]
+    fn test_tenant_settings_partial_json() {
+        let json = r#"{"require_mfa": true}"#;
+        let settings: TenantSettings = serde_json::from_str(json).unwrap();
+        assert!(settings.require_mfa);
+        assert_eq!(settings.session_timeout_secs, 3600); // default
+    }
 }

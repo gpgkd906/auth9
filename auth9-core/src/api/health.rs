@@ -108,4 +108,11 @@ mod tests {
 
         assert!(response.version.is_empty());
     }
+
+    #[tokio::test]
+    async fn test_health_endpoint_returns_json() {
+        let response = health().await;
+        let response = response.into_response();
+        assert_eq!(response.status(), StatusCode::OK);
+    }
 }

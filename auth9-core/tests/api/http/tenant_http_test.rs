@@ -278,8 +278,13 @@ async fn test_update_tenant_returns_200() {
         "name": "New Name"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -299,8 +304,13 @@ async fn test_update_tenant_returns_404() {
         "name": "New Name"
     });
 
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &input, &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}", nonexistent_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -321,8 +331,13 @@ async fn test_update_tenant_status() {
         "status": "inactive"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -346,8 +361,13 @@ async fn test_update_tenant_logo_url() {
         "logo_url": "https://new-cdn.example.com/logo.png"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) =
-        put_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Tenant>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

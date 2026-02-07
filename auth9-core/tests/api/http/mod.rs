@@ -9,10 +9,13 @@
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
 pub mod analytics_http_test;
+pub mod audit_http_test;
 pub mod auth_http_test;
 pub mod branding_http_test;
 pub mod email_template_http_test;
 pub mod identity_provider_http_test;
+pub mod invitation_http_test;
+pub mod keycloak_event_http_test;
 pub mod mock_keycloak;
 pub mod password_http_test;
 pub mod role_http_test;
@@ -33,22 +36,22 @@ use crate::api::{
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
-    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RateLimitConfig,
-    RedisConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig,
+    RateLimitConfig, RedisConfig,
 };
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::server::build_router;
 use auth9_core::service::{
     AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
-    IdentityProviderService, PasswordService, RbacService, SecurityDetectionService,
-    SessionService, SystemSettingsService, TenantService, UserService, WebAuthnService,
-    WebhookService,
+    IdentityProviderService, InvitationService, PasswordService, RbacService,
+    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
+    WebAuthnService, WebhookService,
 };
 use auth9_core::state::{
-    HasAnalytics, HasBranding, HasCache, HasEmailTemplates, HasIdentityProviders, HasPasswordManagement,
-    HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings, HasWebAuthn,
-    HasWebhooks,
+    HasAnalytics, HasBranding, HasCache, HasEmailTemplates, HasIdentityProviders, HasInvitations,
+    HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement, HasSystemSettings,
+    HasWebAuthn, HasWebhooks,
 };
 use axum::{
     body::Body,
@@ -154,6 +157,13 @@ pub struct TestAppState {
         Arc<IdentityProviderService<TestLinkedIdentityRepository, TestUserRepository>>,
     pub webauthn_service: Arc<WebAuthnService>,
     pub webhook_service: Arc<WebhookService<TestWebhookRepository>>,
+    pub invitation_service: Arc<
+        InvitationService<
+            TestInvitationRepository,
+            TestTenantRepository,
+            TestSystemSettingsRepository,
+        >,
+    >,
     pub analytics_service: Arc<AnalyticsService<TestLoginEventRepository>>,
     pub security_detection_service: Arc<
         SecurityDetectionService<
@@ -268,6 +278,12 @@ impl TestAppState {
         let webauthn_service = Arc::new(WebAuthnService::new(Arc::new(KeycloakClient::new(
             config.keycloak.clone(),
         ))));
+        let invitation_service = Arc::new(InvitationService::new(
+            invitation_repo.clone(),
+            tenant_repo.clone(),
+            email_service.clone(),
+            "http://localhost:3000".to_string(),
+        ));
         let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
         let security_detection_service = Arc::new(SecurityDetectionService::new(
             login_event_repo.clone(),
@@ -291,6 +307,7 @@ impl TestAppState {
             identity_provider_service,
             webauthn_service,
             webhook_service,
+            invitation_service,
             analytics_service,
             security_detection_service,
             audit_repo,
@@ -529,6 +546,17 @@ impl HasSecurityAlerts for TestAppState {
 
     fn jwt_manager(&self) -> &JwtManager {
         &self.jwt_manager
+    }
+}
+
+/// Implement HasInvitations trait for TestAppState
+impl HasInvitations for TestAppState {
+    type InvitationRepo = TestInvitationRepository;
+
+    fn invitation_service(
+        &self,
+    ) -> &InvitationService<Self::InvitationRepo, Self::TenantRepo, Self::SystemSettingsRepo> {
+        &self.invitation_service
     }
 }
 

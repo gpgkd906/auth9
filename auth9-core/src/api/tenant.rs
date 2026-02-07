@@ -1,8 +1,6 @@
 //! Tenant API handlers
 
-use crate::api::{
-    write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse,
-};
+use crate::api::{write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse};
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::middleware::auth::{AuthUser, TokenType};
@@ -104,9 +102,9 @@ pub async fn list<S: HasServices>(
         }
         TokenType::TenantAccess => {
             // Tenant user: can only see their own tenant
-            let tenant_id = auth.tenant_id.ok_or_else(|| {
-                AppError::Forbidden("No tenant context in token".to_string())
-            })?;
+            let tenant_id = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
             let tenant = state
                 .tenant_service()
                 .get(StringUuid::from(tenant_id))

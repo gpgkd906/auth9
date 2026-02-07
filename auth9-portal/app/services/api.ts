@@ -1243,6 +1243,14 @@ export const webhookApi = {
     });
     return handleResponse(response);
   },
+
+  regenerateSecret: async (tenantId: string, id: string, accessToken?: string): Promise<{ data: Webhook }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/webhooks/${id}/regenerate-secret`, {
+      method: "POST",
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
 };
 
 // ==================== Tenant-Service Toggle API ====================

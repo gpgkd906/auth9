@@ -1,8 +1,8 @@
 import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import Register, { action } from "~/routes/register";
-import { userApi } from "~/services/api";
+import Register, { loader, action } from "~/routes/register";
+import { userApi, publicBrandingApi } from "~/services/api";
 
 // Helper to create a proper form request that works with request.formData()
 function createFormRequest(url: string, data: Record<string, string>): Request {
@@ -21,12 +21,67 @@ vi.mock("~/services/api", () => ({
     userApi: {
         create: vi.fn(),
     },
+    publicBrandingApi: {
+        get: vi.fn(),
+    },
 }));
 
 describe("Register Page", () => {
     beforeEach(() => {
         vi.clearAllMocks();
     });
+
+    // ============================================================================
+    // Loader Tests
+    // ============================================================================
+
+    describe("loader", () => {
+        it("returns null when registration is allowed", async () => {
+            vi.mocked(publicBrandingApi.get).mockResolvedValue({
+                data: {
+                    app_name: "Auth9",
+                    logo_url: "",
+                    favicon_url: "",
+                    allow_registration: true,
+                },
+            });
+
+            const response = await loader();
+
+            expect(publicBrandingApi.get).toHaveBeenCalled();
+            expect(response).toBeNull();
+        });
+
+        it("redirects to /login when registration is not allowed", async () => {
+            vi.mocked(publicBrandingApi.get).mockResolvedValue({
+                data: {
+                    app_name: "Auth9",
+                    logo_url: "",
+                    favicon_url: "",
+                    allow_registration: false,
+                },
+            });
+
+            const response = await loader();
+
+            expect(publicBrandingApi.get).toHaveBeenCalled();
+            expect(response.status).toBe(302);
+            expect(response.headers.get("Location")).toBe("/login");
+        });
+
+        it("redirects to /login when branding API call fails", async () => {
+            vi.mocked(publicBrandingApi.get).mockRejectedValue(new Error("Network error"));
+
+            const response = await loader();
+
+            expect(response.status).toBe(302);
+            expect(response.headers.get("Location")).toBe("/login");
+        });
+    });
+
+    // ============================================================================
+    // Rendering Tests
+    // ============================================================================
 
     it("renders registration form", async () => {
         const RoutesStub = createRoutesStub([
@@ -196,6 +251,59 @@ describe("Register Page", () => {
 
         expect(response.status).toBe(400);
         expect(data.error).toBe("User already exists");
+    });
+
+    it("action returns generic error when non-Error is thrown", async () => {
+        vi.mocked(userApi.create).mockRejectedValue("unexpected string error");
+
+        const request = createFormRequest("http://localhost:3000/register", {
+            email: "test@example.com",
+            password: "password123",
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+        const data = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Registration failed");
+    });
+
+    it("action creates user without display_name when not provided", async () => {
+        vi.mocked(userApi.create).mockResolvedValue({
+            data: {
+                id: "user-2",
+                email: "nodisplay@example.com",
+                display_name: "",
+                mfa_enabled: false,
+                created_at: "2024-01-01T00:00:00Z",
+                updated_at: "2024-01-01T00:00:00Z",
+            },
+        });
+
+        const request = createFormRequest("http://localhost:3000/register", {
+            email: "nodisplay@example.com",
+            password: "securePassword123",
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        expect(userApi.create).toHaveBeenCalledWith({
+            email: "nodisplay@example.com",
+            display_name: undefined,
+            password: "securePassword123",
+        });
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe("/login");
+    });
+
+    it("action returns error when both email and password are missing", async () => {
+        const request = createFormRequest("http://localhost:3000/register", {});
+
+        const response = await action({ request, params: {}, context: {} });
+        const data = await response.json();
+
+        expect(response.status).toBe(400);
+        expect(data.error).toBe("Email and password are required");
     });
 
     it("sign in link navigates to login page", async () => {
