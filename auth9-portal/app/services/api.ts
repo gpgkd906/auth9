@@ -142,18 +142,19 @@ export const userApi = {
     return handleResponse(response);
   },
 
-  update: async (id: string, input: Partial<CreateUserInput>): Promise<{ data: User }> => {
+  update: async (id: string, input: Partial<CreateUserInput>, accessToken?: string): Promise<{ data: User }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  delete: async (id: string): Promise<void> => {
+  delete: async (id: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -161,23 +162,26 @@ export const userApi = {
     }
   },
 
-  getTenants: async (userId: string): Promise<{ data: { id: string; tenant_id: string; user_id: string; role_in_tenant: string; joined_at: string; tenant: { id: string; name: string; slug: string; logo_url?: string; status: string } }[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants`);
+  getTenants: async (userId: string, accessToken?: string): Promise<{ data: { id: string; tenant_id: string; user_id: string; role_in_tenant: string; joined_at: string; tenant: { id: string; name: string; slug: string; logo_url?: string; status: string } }[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  addToTenant: async (userId: string, tenantId: string, roleInTenant: string): Promise<void> => {
+  addToTenant: async (userId: string, tenantId: string, roleInTenant: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify({ tenant_id: tenantId, role_in_tenant: roleInTenant }),
     });
     return handleResponse(response);
   },
 
-  removeFromTenant: async (userId: string, tenantId: string): Promise<void> => {
+  removeFromTenant: async (userId: string, tenantId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();

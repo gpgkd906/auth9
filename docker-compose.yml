@@ -46,7 +46,8 @@ services:
     command: ["auth9-core", "serve"]
     ports:
       - "8080:8080"   # HTTP API
-      - "50051:50051" # gRPC
+    expose:
+      - "50051" # gRPC (internal only; TLS terminated by auth9-grpc-tls)
     environment:
       RUST_LOG: debug
       HTTP_HOST: 0.0.0.0
@@ -76,15 +77,30 @@ services:
       SMTP_FROM: noreply@auth9.local
       DEV_SMTP_HOST: mailpit
       # gRPC Security - For testing API key auth
-      GRPC_AUTH_MODE: ${GRPC_AUTH_MODE:-none}
-      GRPC_API_KEYS: ${GRPC_API_KEYS:-}
-      # Enable gRPC reflection for dev (grpcurl, grpcui debugging)
-      GRPC_ENABLE_REFLECTION: "true"
+      GRPC_AUTH_MODE: ${GRPC_AUTH_MODE:-api_key}
+      GRPC_API_KEYS: ${GRPC_API_KEYS:-dev-grpc-api-key}
+      # gRPC reflection should be off by default for security
+      GRPC_ENABLE_REFLECTION: "false"
     depends_on:
       auth9-init:
         condition: service_completed_successfully
       redis:
         condition: service_started
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== gRPC TLS Termination (Nginx) ====================
+  auth9-grpc-tls:
+    image: nginx:1.25-alpine
+    container_name: auth9-grpc-tls
+    ports:
+      - "50051:50051" # TLS gRPC
+    volumes:
+      - ./deploy/nginx/grpc-tls-nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./deploy/dev-certs/grpc:/etc/nginx/certs:ro
+    depends_on:
+      - auth9-core
     networks:
       - auth9-network
     restart: unless-stopped

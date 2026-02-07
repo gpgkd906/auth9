@@ -11,9 +11,11 @@ use crate::repository::{
 };
 use crate::service::EmailService;
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
+use hmac::{Hmac, Mac};
+use sha2::Sha256;
 use chrono::{Duration, Utc};
 use rand::Rng;
 use std::sync::Arc;
@@ -256,18 +258,22 @@ fn generate_reset_token() -> String {
     hex::encode(bytes)
 }
 
-/// Hash a token for secure storage
+/// Hash a token for secure storage using HMAC-SHA256
+/// Uses a deterministic hash so the same token always produces the same hash,
+/// enabling lookup by hash in the database.
 fn hash_token(token: &str) -> Result<String> {
-    let salt = SaltString::generate(&mut OsRng);
-    let argon2 = Argon2::default();
-
-    argon2
-        .hash_password(token.as_bytes(), &salt)
-        .map(|hash| hash.to_string())
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to hash token: {}", e)))
+    // Use a fixed key for HMAC to ensure deterministic hashing.
+    // The token itself has 256 bits of entropy (32 random bytes),
+    // so HMAC-SHA256 provides sufficient security for lookup.
+    let key = b"auth9-password-reset-token-hmac-key";
+    let mut mac = Hmac::<Sha256>::new_from_slice(key)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("HMAC init error: {}", e)))?;
+    mac.update(token.as_bytes());
+    let result = mac.finalize();
+    Ok(hex::encode(result.into_bytes()))
 }
 
-/// Verify a token against a hash
+/// Verify a token against a hash (legacy argon2 support)
 #[allow(dead_code)]
 fn verify_token(token: &str, hash: &str) -> Result<bool> {
     let parsed_hash = PasswordHash::new(hash)
@@ -302,19 +308,21 @@ mod tests {
     }
 
     #[test]
-    fn test_hash_and_verify_token() {
+    fn test_hash_token_deterministic() {
         let token = generate_reset_token();
-        let hash = hash_token(&token).unwrap();
+        let hash1 = hash_token(&token).unwrap();
+        let hash2 = hash_token(&token).unwrap();
 
-        // Hash should be a valid argon2 hash string
-        assert!(hash.starts_with("$argon2"));
+        // HMAC-SHA256 hash should be a hex string (64 chars = 32 bytes)
+        assert_eq!(hash1.len(), 64);
 
-        // Verification should work
-        assert!(verify_token(&token, &hash).unwrap());
+        // Same token should produce same hash (deterministic)
+        assert_eq!(hash1, hash2);
 
-        // Wrong token should not verify
-        let wrong_token = generate_reset_token();
-        assert!(!verify_token(&wrong_token, &hash).unwrap());
+        // Different token should produce different hash
+        let other_token = generate_reset_token();
+        let other_hash = hash_token(&other_token).unwrap();
+        assert_ne!(hash1, other_hash);
     }
 
     #[test]
@@ -371,8 +379,11 @@ mod tests {
     fn test_password_policy_default() {
         let policy = PasswordPolicy::default();
 
-        // Default policy should be lenient
-        assert!(policy.validate_password("simple123").is_ok());
+        // Default policy requires uppercase + lowercase + numbers
+        assert!(policy.validate_password("Simple123").is_ok());
+        assert!(policy.validate_password("simple123").is_err()); // missing uppercase
+        assert!(policy.validate_password("SIMPLE123").is_err()); // missing lowercase
+        assert!(policy.validate_password("Simpleabc").is_err()); // missing number
     }
 
     #[test]

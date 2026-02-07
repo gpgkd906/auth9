@@ -134,6 +134,18 @@ impl<
         Ok((users, total))
     }
 
+    pub async fn search(
+        &self,
+        query: &str,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<User>, i64)> {
+        let offset = (page - 1) * per_page;
+        let users = self.repo.search(query, offset, per_page).await?;
+        let total = self.repo.search_count(query).await?;
+        Ok((users, total))
+    }
+
     pub async fn update(&self, id: StringUuid, input: UpdateUserInput) -> Result<User> {
         input.validate()?;
         let _ = self.get(id).await?;

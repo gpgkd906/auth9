@@ -17,6 +17,8 @@ pub trait UserRepository: Send + Sync {
     async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>>;
     async fn count(&self) -> Result<i64>;
+    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<User>>;
+    async fn search_count(&self, query: &str) -> Result<i64>;
     async fn update(&self, id: StringUuid, input: &UpdateUserInput) -> Result<User>;
     async fn update_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User>;
     async fn delete(&self, id: StringUuid) -> Result<()>;
@@ -160,6 +162,39 @@ impl UserRepository for UserRepositoryImpl {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM users")
             .fetch_one(&self.pool)
             .await?;
+        Ok(row.0)
+    }
+
+    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<User>> {
+        let pattern = format!("%{}%", query);
+        let users = sqlx::query_as::<_, User>(
+            r#"
+            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
+            FROM users
+            WHERE email LIKE ? OR display_name LIKE ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(users)
+    }
+
+    async fn search_count(&self, query: &str) -> Result<i64> {
+        let pattern = format!("%{}%", query);
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users WHERE email LIKE ? OR display_name LIKE ?",
+        )
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_one(&self.pool)
+        .await?;
         Ok(row.0)
     }
 

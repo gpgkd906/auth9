@@ -30,6 +30,11 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     /// CORS configuration
     pub cors: CorsConfig,
+    /// Platform admin email allowlist.
+    ///
+    /// Identity tokens are intentionally tenant-unscoped. Only Identity tokens whose
+    /// email is in this allowlist are treated as platform admins.
+    pub platform_admin_emails: Vec<String>,
 }
 
 impl fmt::Debug for Config {
@@ -46,6 +51,10 @@ impl fmt::Debug for Config {
             .field("grpc_security", &self.grpc_security)
             .field("rate_limit", &self.rate_limit)
             .field("cors", &self.cors)
+            .field(
+                "platform_admin_emails",
+                &format!("[{} emails]", self.platform_admin_emails.len()),
+            )
             .finish()
     }
 }
@@ -255,6 +264,13 @@ pub struct RateLimitEndpointConfig {
 }
 
 impl Config {
+    pub fn is_platform_admin_email(&self, email: &str) -> bool {
+        let email = email.trim();
+        self.platform_admin_emails
+            .iter()
+            .any(|e| e.eq_ignore_ascii_case(email))
+    }
+
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self> {
         Ok(Self {
@@ -397,6 +413,10 @@ impl Config {
                     allow_credentials,
                 }
             },
+            platform_admin_emails: parse_csv_env(
+                "PLATFORM_ADMIN_EMAILS",
+                vec!["admin@auth9.local".to_string()],
+            ),
         })
     }
 
@@ -408,6 +428,25 @@ impl Config {
     /// Get gRPC server address
     pub fn grpc_addr(&self) -> String {
         format!("{}:{}", self.grpc_host, self.grpc_port)
+    }
+}
+
+fn parse_csv_env(key: &str, default: Vec<String>) -> Vec<String> {
+    match env::var(key) {
+        Ok(v) => {
+            let items: Vec<String> = v
+                .split(',')
+                .map(|s| s.trim())
+                .filter(|s| !s.is_empty())
+                .map(|s| s.to_string())
+                .collect();
+            if items.is_empty() {
+                default
+            } else {
+                items
+            }
+        }
+        Err(_) => default,
     }
 }
 
@@ -451,6 +490,7 @@ mod tests {
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
+            platform_admin_emails: vec!["admin@auth9.local".to_string()],
         }
     }
 
@@ -697,6 +737,7 @@ mod tests {
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
+            platform_admin_emails: vec!["admin@auth9.local".to_string()],
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
@@ -1153,6 +1194,7 @@ mod tests {
             },
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
+            platform_admin_emails: vec!["admin@auth9.local".to_string()],
         };
 
         let debug_str = format!("{:?}", config);

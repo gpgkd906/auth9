@@ -108,6 +108,7 @@ Project skills are in `.claude/skills/`. Read the relevant skill file before exe
 - `test-coverage.md` - Coverage analysis, writing tests with mocks
 - `reset-local-env.md` - Resetting local development environment
 - `qa-testing.md` - QA testing, manual testing, verify feature functionality, or test specific modules. Includes API token generation helpers in `.claude/skills/tools/`.
+- `auth9-grpc-regression.md` - gRPC regression testing
 
 ## Testing Strategy
 

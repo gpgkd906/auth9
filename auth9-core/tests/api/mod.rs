@@ -62,11 +62,14 @@ pub fn create_test_jwt_manager() -> JwtManager {
 }
 
 /// Create an identity token for platform-level testing (platform admin)
+///
+/// Uses "admin@auth9.local" to match the `platform_admin_emails` allowlist
+/// in test configs, so the token passes `is_platform_admin_email()` checks.
 pub fn create_test_identity_token() -> String {
     let jwt_manager = create_test_jwt_manager();
     let user_id = Uuid::new_v4();
     jwt_manager
-        .create_identity_token(user_id, "platform-admin@test.com", Some("Platform Admin"))
+        .create_identity_token(user_id, "admin@auth9.local", Some("Platform Admin"))
         .expect("Failed to create test identity token")
 }
 
@@ -352,6 +355,40 @@ impl UserRepository for TestUserRepository {
 
     async fn count(&self) -> Result<i64> {
         Ok(self.users.read().await.len() as i64)
+    }
+
+    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<User>> {
+        let users = self.users.read().await;
+        let query_lower = query.to_lowercase();
+        let filtered: Vec<User> = users
+            .iter()
+            .filter(|u| {
+                u.email.to_lowercase().contains(&query_lower)
+                    || u.display_name
+                        .as_ref()
+                        .map(|n| n.to_lowercase().contains(&query_lower))
+                        .unwrap_or(false)
+            })
+            .cloned()
+            .collect();
+        let start = offset as usize;
+        Ok(filtered.into_iter().skip(start).take(limit as usize).collect())
+    }
+
+    async fn search_count(&self, query: &str) -> Result<i64> {
+        let users = self.users.read().await;
+        let query_lower = query.to_lowercase();
+        let count = users
+            .iter()
+            .filter(|u| {
+                u.email.to_lowercase().contains(&query_lower)
+                    || u.display_name
+                        .as_ref()
+                        .map(|n| n.to_lowercase().contains(&query_lower))
+                        .unwrap_or(false)
+            })
+            .count();
+        Ok(count as i64)
     }
 
     async fn update(&self, id: StringUuid, input: &UpdateUserInput) -> Result<User> {

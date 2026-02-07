@@ -270,7 +270,7 @@ pub trait HasDbPool: Clone + Send + Sync + 'static {
 /// Used for token blacklisting and other caching operations
 pub trait HasCache: Clone + Send + Sync + 'static {
     /// The cache type (CacheManager or NoOpCacheManager)
-    type Cache: CacheOperations;
+    type Cache: CacheOperations + Clone + 'static;
 
     /// Get the cache manager
     fn cache(&self) -> &Self::Cache;

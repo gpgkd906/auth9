@@ -11,13 +11,14 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 
 ## 测试用例索引
 
-### 认证安全 (4 个文档, 20 个场景)
+### 认证安全 (5 个文档, 24 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [authentication/01-oidc-security.md](./authentication/01-oidc-security.md) | OIDC 流程安全测试 | 5 | 高 |
 | [authentication/02-token-security.md](./authentication/02-token-security.md) | JWT Token 安全测试 | 5 | 极高 |
 | [authentication/03-mfa-security.md](./authentication/03-mfa-security.md) | 多因素认证安全测试 | 5 | 高 |
 | [authentication/04-password-security.md](./authentication/04-password-security.md) | 密码安全测试 | 5 | 高 |
+| [authentication/05-idp-security.md](./authentication/05-idp-security.md) | 身份提供商与邮件安全测试 | 4 | 高 | 🆕
 
 ### 授权安全 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -27,13 +28,15 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [authorization/03-privilege-escalation.md](./authorization/03-privilege-escalation.md) | 权限提升测试 | 5 | 极高 |
 | [authorization/04-resource-access.md](./authorization/04-resource-access.md) | 资源访问控制测试 | 5 | 高 |
 
-### 输入验证 (4 个文档, 19 个场景)
+### 输入验证 (6 个文档, 27 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [input-validation/01-injection.md](./input-validation/01-injection.md) | 注入攻击测试 (SQL/NoSQL) | 5 | 极高 |
 | [input-validation/02-xss.md](./input-validation/02-xss.md) | 跨站脚本攻击测试 | 5 | 高 |
 | [input-validation/03-csrf.md](./input-validation/03-csrf.md) | CSRF 攻击测试 | 5 | 高 |
 | [input-validation/04-parameter-tampering.md](./input-validation/04-parameter-tampering.md) | 参数篡改测试 | 4 | 中 |
+| [input-validation/05-ssrf.md](./input-validation/05-ssrf.md) | 服务器端请求伪造 (SSRF) 测试 | 5 | 极高 | 🆕
+| [input-validation/06-deserialization.md](./input-validation/06-deserialization.md) | 反序列化安全测试 | 3 | 高 | 🆕
 
 ### API 安全 (4 个文档, 19 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -43,12 +46,13 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [api-security/03-rate-limiting.md](./api-security/03-rate-limiting.md) | 限流与 DoS 防护测试 | 5 | 高 |
 | [api-security/04-cors-headers.md](./api-security/04-cors-headers.md) | CORS 与安全头测试 | 4 | 中 |
 
-### 数据安全 (3 个文档, 14 个场景)
+### 数据安全 (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [data-security/01-sensitive-data.md](./data-security/01-sensitive-data.md) | 敏感数据暴露测试 | 5 | 极高 |
 | [data-security/02-encryption.md](./data-security/02-encryption.md) | 加密安全测试 | 5 | 高 |
 | [data-security/03-secrets-management.md](./data-security/03-secrets-management.md) | 密钥管理安全测试 | 4 | 极高 |
+| [data-security/04-encryption-impl.md](./data-security/04-encryption-impl.md) | 加密实现安全测试 (AES-GCM) | 3 | 高 | 🆕
 
 ### 会话管理 (3 个文档, 14 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -64,11 +68,31 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [infrastructure/02-security-headers.md](./infrastructure/02-security-headers.md) | HTTP 安全头测试 | 5 | 中 |
 | [infrastructure/03-dependency-audit.md](./infrastructure/03-dependency-audit.md) | 依赖漏洞审计 | 4 | 高 |
 
-### 高级攻击 (2 个文档, 10 个场景) 🆕
+### 业务逻辑安全 (2 个文档, 9 个场景) 🆕
+| 文档 | 描述 | 场景数 | 风险等级 |
+|------|------|--------|----------|
+| [business-logic/01-workflow-abuse.md](./business-logic/01-workflow-abuse.md) | 工作流滥用测试 | 5 | 极高 | 🆕
+| [business-logic/02-race-conditions.md](./business-logic/02-race-conditions.md) | 竞态条件测试 | 4 | 极高 | 🆕
+
+### 日志与监控安全 (1 个文档, 5 个场景) 🆕
+| 文档 | 描述 | 场景数 | 风险等级 |
+|------|------|--------|----------|
+| [logging-monitoring/01-log-security.md](./logging-monitoring/01-log-security.md) | 日志安全与检测系统测试 | 5 | 高 | 🆕
+
+### 文件安全 (1 个文档, 4 个场景) 🆕
+| 文档 | 描述 | 场景数 | 风险等级 |
+|------|------|--------|----------|
+| [file-security/01-file-upload.md](./file-security/01-file-upload.md) | 文件上传安全测试 | 4 | 高 | 🆕
+
+### 高级攻击 (6 个文档, 24 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [advanced-attacks/01-supply-chain-security.md](./advanced-attacks/01-supply-chain-security.md) | 供应链与依赖安全测试 | 5 | 极高 |
 | [advanced-attacks/02-grpc-security.md](./advanced-attacks/02-grpc-security.md) | gRPC 安全测试 | 5 | 极高 |
+| [advanced-attacks/03-detection-evasion.md](./advanced-attacks/03-detection-evasion.md) | 安全检测规避测试 | 4 | 高 | 🆕
+| [advanced-attacks/04-oidc-advanced.md](./advanced-attacks/04-oidc-advanced.md) | OIDC 高级攻击测试 | 3 | 高 | 🆕
+| [advanced-attacks/05-webhook-forgery.md](./advanced-attacks/05-webhook-forgery.md) | Webhook 伪造测试 | 3 | 高 | 🆕
+| [advanced-attacks/06-http-smuggling.md](./advanced-attacks/06-http-smuggling.md) | HTTP 请求走私测试 | 2 | 高 | 🆕
 
 ---
 
@@ -76,15 +100,37 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 
 | 模块 | 文档数 | 场景数 |
 |------|--------|--------|
-| 认证安全 | 4 | 20 |
+| 认证安全 | 5 | 24 |
 | 授权安全 | 4 | 20 |
-| 输入验证 | 4 | 19 |
+| 输入验证 | 6 | 27 |
 | API 安全 | 4 | 19 |
-| 数据安全 | 3 | 14 |
+| 数据安全 | 4 | 17 |
 | 会话管理 | 3 | 14 |
 | 基础设施安全 | 3 | 14 |
-| 高级攻击 | 2 | 10 |
-| **总计** | **27** | **130** |
+| 业务逻辑安全 | 2 | 9 |
+| 日志与监控安全 | 1 | 5 |
+| 文件安全 | 1 | 4 |
+| 高级攻击 | 6 | 24 |
+| **总计** | **39** | **177** |
+
+---
+
+## OWASP ASVS 覆盖矩阵
+
+| ASVS 章节 | 覆盖文档 | 覆盖程度 |
+|-----------|---------|---------|
+| V2 认证 | authentication/*, advanced-attacks/04 | 🟩 90% |
+| V3 会话管理 | session-management/* | 🟩 80% |
+| V4 访问控制 | authorization/* | 🟩 90% |
+| V5 输入验证 | input-validation/* | 🟩 85% |
+| V6 存储加密 | data-security/02, data-security/04 | 🟩 75% |
+| V7 错误处理与日志 | logging-monitoring/01 | 🟧 60% |
+| V8 数据保护 | data-security/01, data-security/03 | 🟩 70% |
+| V9 通信安全 | infrastructure/01 | 🟩 75% |
+| V11 业务逻辑 | business-logic/* | 🟩 70% |
+| V12 文件与资源 | file-security/01, input-validation/05 | 🟩 70% |
+| V13 API 安全 | api-security/*, advanced-attacks/05-06 | 🟩 85% |
+| V14 配置 | infrastructure/02-03, advanced-attacks/01 | 🟩 75% |
 
 ---
 
@@ -108,21 +154,31 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 2. authorization/01-tenant-isolation.md - 多租户隔离是关键
 3. authorization/02-rbac-bypass.md - RBAC 权限模型安全
 4. api-security/02-grpc-api.md - gRPC 目前无认证保护
-5. advanced-attacks/02-grpc-security.md - 深入 gRPC 安全测试 🆕
+5. input-validation/05-ssrf.md - Webhook SSRF 风险 🆕
+6. business-logic/01-workflow-abuse.md - Token Exchange 流程安全 🆕
+7. business-logic/02-race-conditions.md - 竞态条件 🆕
 
 ### 第二阶段：输入/数据安全 (P1)
-6. input-validation/01-injection.md - 注入攻击
-7. data-security/01-sensitive-data.md - 敏感数据暴露
-8. data-security/03-secrets-management.md - 密钥管理
-9. advanced-attacks/01-supply-chain-security.md - 供应链安全 🆕
+8. input-validation/01-injection.md - 注入攻击
+9. data-security/01-sensitive-data.md - 敏感数据暴露
+10. data-security/03-secrets-management.md - 密钥管理
+11. data-security/04-encryption-impl.md - AES-GCM 加密实现 🆕
+12. file-security/01-file-upload.md - 文件上传安全 🆕
+13. input-validation/06-deserialization.md - 反序列化攻击 🆕
+14. logging-monitoring/01-log-security.md - 日志与检测系统 🆕
 
-### 第三阶段：会话/API 安全 (P1)
-8. session-management/01-session-security.md - 会话安全
-9. api-security/01-rest-api.md - REST API 安全
-10. api-security/03-rate-limiting.md - DoS 防护
+### 第三阶段：会话/API/高级攻击 (P1)
+15. session-management/01-session-security.md - 会话安全
+16. api-security/01-rest-api.md - REST API 安全
+17. api-security/03-rate-limiting.md - DoS 防护
+18. advanced-attacks/03-detection-evasion.md - 检测规避 🆕
+19. advanced-attacks/05-webhook-forgery.md - Webhook 伪造 🆕
 
 ### 第四阶段：其他安全测试 (P2)
-11. 其余文档按需测试
+20. authentication/05-idp-security.md - IdP 与邮件安全 🆕
+21. advanced-attacks/04-oidc-advanced.md - OIDC 高级攻击 🆕
+22. advanced-attacks/06-http-smuggling.md - HTTP 请求走私 🆕
+23. 其余文档按需测试
 
 ---
 
@@ -163,6 +219,9 @@ cd auth9-portal && npm run dev
 - **sqlmap**: SQL 注入自动化测试
 - **jwt.io**: JWT Token 解析
 - **nikto**: Web 服务器扫描
+- **smuggler**: HTTP 请求走私检测 🆕
+- **h2spec**: HTTP/2 合规性测试 🆕
+- **race-the-web**: 竞态条件测试 🆕
 
 ---
 
@@ -224,12 +283,14 @@ cd auth9-portal && npm run dev
 - [OWASP Top 10 2021](https://owasp.org/Top10/)
 - [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
 - [OWASP Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
+- [OWASP ASVS 4.0](https://owasp.org/www-project-application-security-verification-standard/)
 - [CWE Top 25](https://cwe.mitre.org/top25/archive/2023/2023_top25_list.html)
 
 ### 认证相关标准
 - [RFC 6749 - OAuth 2.0](https://datatracker.ietf.org/doc/html/rfc6749)
 - [RFC 7519 - JWT](https://datatracker.ietf.org/doc/html/rfc7519)
 - [RFC 8414 - OAuth 2.0 Discovery](https://datatracker.ietf.org/doc/html/rfc8414)
+- [RFC 8693 - OAuth 2.0 Token Exchange](https://datatracker.ietf.org/doc/html/rfc8693)
 - [OpenID Connect Core](https://openid.net/specs/openid-connect-core-1_0.html)
 
 ---
@@ -265,5 +326,6 @@ cargo run --bin seed-data -- --dataset=security-vulnerable --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-07 | 2.0.0 | 基于 OWASP ASVS 差距分析，新增 12 个文档 47 个场景：SSRF、业务逻辑、竞态条件、日志安全、文件上传、反序列化、加密实现、检测规避、OIDC 高级攻击、Webhook 伪造、HTTP 走私、IdP 安全；共 39 个文档 177 个场景 |
 | 2026-02-05 | 1.1.0 | 新增高级攻击模块（供应链安全、gRPC 安全），共 27 个文档 130 个场景；新增安全测试专用种子数据 |
 | 2026-02-03 | 1.0.0 | 初始版本，25 个文档 120 个场景 |

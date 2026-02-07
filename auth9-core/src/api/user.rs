@@ -8,6 +8,7 @@ use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::{HasBranding, HasServices};
+use crate::config::Config;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -19,6 +20,19 @@ use serde::Deserialize;
 use uuid::Uuid;
 use validator::Validate;
 
+/// User list query parameters (extends PaginationQuery with search)
+#[derive(Debug, Clone, Deserialize)]
+pub struct UserListQuery {
+    #[serde(default = "default_page", deserialize_with = "crate::api::deserialize_page")]
+    pub page: i64,
+    #[serde(default = "default_per_page", deserialize_with = "crate::api::deserialize_per_page")]
+    pub per_page: i64,
+    pub search: Option<String>,
+}
+
+fn default_page() -> i64 { 1 }
+fn default_per_page() -> i64 { 20 }
+
 /// Check if user can manage the target tenant
 /// Requires the user to be an owner of the target tenant
 async fn require_tenant_owner<S: HasServices>(
@@ -26,6 +40,13 @@ async fn require_tenant_owner<S: HasServices>(
     auth: &AuthUser,
     target_tenant_id: Uuid,
 ) -> Result<()> {
+    // Service client tokens cannot perform tenant owner operations
+    if auth.token_type == TokenType::ServiceClient {
+        return Err(AppError::Forbidden(
+            "Service client tokens cannot perform tenant owner operations".to_string(),
+        ));
+    }
+
     // For TenantAccess tokens, check if the token is for this tenant with owner role
     if auth.token_type == TokenType::TenantAccess {
         if auth.tenant_id == Some(target_tenant_id) {
@@ -57,9 +78,17 @@ async fn require_tenant_owner<S: HasServices>(
 
 /// Check if user can manage users within a tenant
 /// Platform admin can always manage, tenant admin with appropriate role can manage their tenant
-fn require_user_management_permission(auth: &AuthUser) -> Result<()> {
+fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
     match auth.token_type {
-        TokenType::Identity => Ok(()),
+        TokenType::Identity => {
+            if config.is_platform_admin_email(&auth.email) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Platform admin required for identity-token user management".to_string(),
+                ))
+            }
+        }
         TokenType::TenantAccess => {
             // Check if user has admin/owner role or user:write/user:delete permissions
             let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
@@ -76,29 +105,77 @@ fn require_user_management_permission(auth: &AuthUser) -> Result<()> {
                 ))
             }
         }
+        TokenType::ServiceClient => Err(AppError::Forbidden(
+            "Service client tokens cannot manage users".to_string(),
+        )),
     }
 }
 
 /// List users
 /// - Platform admin (Identity token): can list all users
 /// - Tenant user (TenantAccess token): can only list users in their tenant
+/// Supports optional `search` query parameter to filter by email or display_name
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
-    Query(pagination): Query<PaginationQuery>,
+    Query(query): Query<UserListQuery>,
 ) -> Result<impl IntoResponse> {
     match auth.token_type {
         TokenType::Identity => {
-            // Platform admin: can list all users
-            let (users, total) = state
-                .user_service()
-                .list(pagination.page, pagination.per_page)
-                .await?;
+            if !state.config().is_platform_admin_email(&auth.email) {
+                return Err(AppError::Forbidden(
+                    "Platform admin required to list all users".to_string(),
+                ));
+            }
+            // Platform admin: can list all users (with optional search)
+            let (users, total) = if let Some(ref search) = query.search {
+                if !search.is_empty() {
+                    state
+                        .user_service()
+                        .search(search, query.page, query.per_page)
+                        .await?
+                } else {
+                    state
+                        .user_service()
+                        .list(query.page, query.per_page)
+                        .await?
+                }
+            } else {
+                state
+                    .user_service()
+                    .list(query.page, query.per_page)
+                    .await?
+            };
 
             Ok(Json(PaginatedResponse::new(
                 users,
-                pagination.page,
-                pagination.per_page,
+                query.page,
+                query.per_page,
+                total,
+            )))
+        }
+        TokenType::ServiceClient => {
+            // Service client: can only list users in their service's tenant
+            let tenant_id = auth
+                .tenant_id
+                .ok_or_else(|| {
+                    AppError::Forbidden(
+                        "Service client token has no tenant context".to_string(),
+                    )
+                })?;
+            let users = state
+                .user_service()
+                .list_tenant_users(
+                    StringUuid::from(tenant_id),
+                    query.page,
+                    query.per_page,
+                )
+                .await?;
+            let total = users.len() as i64;
+            Ok(Json(PaginatedResponse::new(
+                users,
+                query.page,
+                query.per_page,
                 total,
             )))
         }
@@ -111,16 +188,16 @@ pub async fn list<S: HasServices>(
                 .user_service()
                 .list_tenant_users(
                     StringUuid::from(tenant_id),
-                    pagination.page,
-                    pagination.per_page,
+                    query.page,
+                    query.per_page,
                 )
                 .await?;
             // list_tenant_users returns Vec, wrap in PaginatedResponse
             let total = users.len() as i64;
             Ok(Json(PaginatedResponse::new(
                 users,
-                pagination.page,
-                pagination.per_page,
+                query.page,
+                query.per_page,
                 total,
             )))
         }
@@ -137,6 +214,12 @@ pub async fn get<S: HasServices>(
     // Authorization check: users can only read their own profile
     // unless they have admin permissions
     if auth.user_id != id {
+        // Service client tokens cannot look up arbitrary users
+        if auth.token_type == TokenType::ServiceClient {
+            return Err(AppError::Forbidden(
+                "Service client tokens cannot access user profiles".to_string(),
+            ));
+        }
         // Check if user has admin permissions via TenantAccess token
         if auth.token_type == TokenType::TenantAccess {
             let has_admin_permission = auth.roles.iter().any(|r| r == "admin" || r == "owner")
@@ -208,22 +291,52 @@ pub async fn create<S: HasServices + HasBranding>(
     headers: HeaderMap,
     Json(input): Json<CreateUserRequest>,
 ) -> Result<impl IntoResponse> {
-    // Check if this is an authenticated request (admin creating user)
-    let is_authenticated = headers
+    // If Authorization is present, enforce permissions (tenant admin or platform admin).
+    // Otherwise this is public registration (if enabled).
+    let auth_user: Option<AuthUser> = headers
         .get(axum::http::header::AUTHORIZATION)
         .and_then(|h| h.to_str().ok())
         .and_then(|auth_str| auth_str.strip_prefix("Bearer "))
-        .map(|token| {
-            state.jwt_manager().verify_identity_token(token).is_ok()
-                || state
-                    .jwt_manager()
-                    .verify_tenant_access_token(token, None)
-                    .is_ok()
-        })
-        .unwrap_or(false);
+        .and_then(|token| {
+            let jwt = state.jwt_manager();
 
-    // If not authenticated, check if public registration is allowed
-    if !is_authenticated {
+            // Reject service client tokens on this endpoint.
+            if jwt.verify_service_client_token(token).is_ok() {
+                return None;
+            }
+
+            if let Ok(claims) = jwt.verify_identity_token(token) {
+                return AuthUser::from_identity_claims(claims).ok();
+            }
+            if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
+                return AuthUser::from_tenant_access_claims(claims).ok();
+            }
+            None
+        });
+
+    if let Some(ref auth) = auth_user {
+        require_user_management_permission(state.config(), auth)?;
+
+        // Tenant-scoped creation must stay within the caller tenant.
+        if auth.token_type == TokenType::TenantAccess {
+            let token_tenant = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+            if let Some(requested) = input.tenant_id {
+                if requested != token_tenant {
+                    return Err(AppError::Forbidden(
+                        "Cannot create user in another tenant".to_string(),
+                    ));
+                }
+            }
+        }
+    } else {
+        // If an Authorization header existed but we couldn't parse a supported token,
+        // treat it as an authentication error (don't fall back to public registration).
+        if headers.get(axum::http::header::AUTHORIZATION).is_some() {
+            return Err(AppError::Unauthorized("Invalid authorization token".to_string()));
+        }
+
         let branding = state.branding_service().get_branding().await?;
         if !branding.allow_registration {
             return Err(AppError::Forbidden(
@@ -237,7 +350,11 @@ pub async fn create<S: HasServices + HasBranding>(
 
     // Validate password against tenant password policy if provided
     if let Some(ref password) = input.password {
-        let policy = if let Some(tenant_id) = input.tenant_id {
+        // Determine tenant for policy: explicit tenant_id > caller's token tenant > default
+        let effective_tenant_id = input.tenant_id.or_else(|| {
+            auth_user.as_ref().and_then(|a| a.tenant_id)
+        });
+        let policy = if let Some(tenant_id) = effective_tenant_id {
             let tenant = state
                 .tenant_service()
                 .get(StringUuid::from(tenant_id))
@@ -300,9 +417,11 @@ pub async fn update<S: HasServices>(
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
-    require_user_management_permission(&auth)?;
+    require_user_management_permission(state.config(), &auth)?;
 
     let id = StringUuid::from(id);
+    // Validate input before sending to Keycloak (prevent invalid data reaching external service)
+    input.validate().map_err(|e| AppError::Validation(e.to_string()))?;
     let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
         let update = KeycloakUserUpdate {
@@ -342,7 +461,7 @@ pub async fn delete<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
-    require_user_management_permission(&auth)?;
+    require_user_management_permission(state.config(), &auth)?;
 
     let id = StringUuid::from(id);
     let before = state.user_service().get(id).await?;
@@ -369,6 +488,22 @@ pub async fn delete<S: HasServices>(
     Ok(Json(MessageResponse::new("User deleted successfully")))
 }
 
+/// Valid values for role_in_tenant
+const VALID_TENANT_ROLES: &[&str] = &["owner", "admin", "member"];
+
+/// Validate that role_in_tenant is one of the allowed values
+fn validate_role_in_tenant(role: &str) -> Result<()> {
+    if VALID_TENANT_ROLES.contains(&role) {
+        Ok(())
+    } else {
+        Err(AppError::BadRequest(format!(
+            "Invalid role_in_tenant '{}'. Must be one of: {}",
+            role,
+            VALID_TENANT_ROLES.join(", ")
+        )))
+    }
+}
+
 /// Add user to tenant
 #[derive(Debug, Deserialize)]
 pub struct AddToTenantRequest {
@@ -385,6 +520,9 @@ pub async fn add_to_tenant<S: HasServices>(
     Path(user_id): Path<Uuid>,
     Json(input): Json<AddToTenantRequest>,
 ) -> Result<impl IntoResponse> {
+    // Validate role_in_tenant enum
+    validate_role_in_tenant(&input.role_in_tenant)?;
+
     // Check authorization: require owner of the target tenant
     require_tenant_owner(&state, &auth, input.tenant_id).await?;
 
@@ -424,6 +562,9 @@ pub async fn update_role_in_tenant<S: HasServices>(
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
     Json(input): Json<UpdateRoleInTenantRequest>,
 ) -> Result<impl IntoResponse> {
+    // Validate role_in_tenant enum
+    validate_role_in_tenant(&input.role_in_tenant)?;
+
     // Check authorization: require owner of the target tenant
     require_tenant_owner(&state, &auth, tenant_id).await?;
 
@@ -499,7 +640,7 @@ pub async fn enable_mfa<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
-    require_user_management_permission(&auth)?;
+    require_user_management_permission(state.config(), &auth)?;
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -539,7 +680,7 @@ pub async fn disable_mfa<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
-    require_user_management_permission(&auth)?;
+    require_user_management_permission(state.config(), &auth)?;
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -891,5 +1032,20 @@ mod tests {
         let json = r#"{"avatar_url": null}"#;
         let input: UpdateUserInput = serde_json::from_str(json).unwrap();
         assert!(input.avatar_url.is_none());
+    }
+
+    #[test]
+    fn test_validate_role_in_tenant_valid() {
+        assert!(validate_role_in_tenant("owner").is_ok());
+        assert!(validate_role_in_tenant("admin").is_ok());
+        assert!(validate_role_in_tenant("member").is_ok());
+    }
+
+    #[test]
+    fn test_validate_role_in_tenant_invalid() {
+        assert!(validate_role_in_tenant("superadmin").is_err());
+        assert!(validate_role_in_tenant("viewer").is_err());
+        assert!(validate_role_in_tenant("platform_admin").is_err());
+        assert!(validate_role_in_tenant("").is_err());
     }
 }

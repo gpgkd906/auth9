@@ -12,6 +12,8 @@ function setSecurityHeaders(headers: Headers): void {
   headers.set("X-Content-Type-Options", "nosniff");
   // Prevent clickjacking
   headers.set("X-Frame-Options", "DENY");
+  // XSS protection (legacy but useful for older browsers)
+  headers.set("X-XSS-Protection", "1; mode=block");
   // Control referrer information
   headers.set("Referrer-Policy", "strict-origin-when-cross-origin");
   // Restrict browser features
@@ -34,8 +36,8 @@ function setSecurityHeaders(headers: Headers): void {
       "form-action 'self'",
     ].join("; ")
   );
-  // Note: Strict-Transport-Security should be set by reverse proxy in production
-  // as it only applies to HTTPS connections
+  // HTTP Strict Transport Security
+  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
 }
 
 export default function handleRequest(

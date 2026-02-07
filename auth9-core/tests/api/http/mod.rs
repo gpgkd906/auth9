@@ -105,6 +105,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
+        platform_admin_emails: vec!["admin@auth9.local".to_string()],
     }
 }
 

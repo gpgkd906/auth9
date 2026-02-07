@@ -1,0 +1,375 @@
+# 日志与监控 - 日志安全测试
+
+**模块**: 错误处理与日志安全
+**测试范围**: 日志注入、审计完整性、检测系统有效性
+**场景数**: 5
+**风险等级**: 🟠 高
+**OWASP ASVS**: V7.1, V7.2, V7.3, V7.4
+
+---
+
+## 背景知识
+
+Auth9 的日志与监控体系：
+- **应用日志**: Rust `tracing` 框架，结构化日志输出
+- **审计日志**: `audit_logs` 表，记录所有安全敏感操作
+- **安全检测**: `SecurityDetectionService` - 暴力破解、密码喷洒、不可能旅行检测
+- **安全告警**: `security_alerts` 表，按严重级别分类
+
+日志安全问题可导致：攻击痕迹消除、日志伪造误导调查、敏感数据泄露。
+
+---
+
+## 场景 1：日志注入攻击
+
+### 前置条件
+- 能够在 API 请求中传递用户可控数据
+- 访问应用日志输出
+
+### 攻击目标
+验证用户输入是否可注入恶意日志条目，伪造日志记录
+
+### 攻击步骤
+1. 在用户名字段中注入换行符和伪造的日志条目
+2. 在搜索参数中注入日志格式化字符串
+3. 在 HTTP 头（User-Agent, X-Forwarded-For）中注入
+4. 检查应用日志是否包含注入的内容
+5. 尝试注入 ANSI 颜色代码混淆日志输出
+
+### 预期安全行为
+- 日志框架对用户输入自动转义换行符
+- 结构化日志（JSON 格式）中用户数据作为值而非结构
+- CRLF 注入不会产生新的日志行
+- 日志查看工具不会执行注入的格式化字符串
+
+### 验证方法
+```bash
+# CRLF 注入 - 尝试伪造日志条目
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -d "grant_type=password" \
+  -d "client_id=auth9-portal" \
+  -d 'username=admin%0a[INFO] Login successful for admin from 127.0.0.1' \
+  -d "password=test"
+# 检查日志: 注入内容应在同一日志字段内，不产生新行
+
+# HTTP Header 注入
+curl -H "User-Agent: Mozilla/5.0\r\n[WARN] Suspicious activity detected" \
+  http://localhost:8080/health
+# 检查日志: User-Agent 应被完整记录为单个字段值
+
+# ANSI 转义序列注入
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -d "username=\x1b[31m[CRITICAL] System compromised\x1b[0m" \
+  -d "password=test"
+# 检查日志: ANSI 代码应被转义，不影响显示
+
+# 检查日志格式
+docker logs auth9-core 2>&1 | tail -20
+# 验证: 日志使用结构化格式 (JSON)，用户输入在引号内
+```
+
+### 修复建议
+- 使用结构化日志格式（JSON），用户数据作为字段值
+- 对日志中的用户输入进行转义（至少转义 `\n`, `\r`）
+- 日志查看工具过滤 ANSI 转义序列
+- 生产环境日志发送到集中式日志系统（ELK, Loki）
+
+---
+
+## 场景 2：审计日志完整性验证
+
+### 前置条件
+- 管理员 Token
+- 了解审计日志 API
+
+### 攻击目标
+验证审计日志是否不可篡改，且覆盖所有安全敏感操作
+
+### 攻击步骤
+1. 执行多个安全敏感操作（创建用户、分配角色、更改密码等）
+2. 查询审计日志确认每个操作都被记录
+3. 尝试通过 API 删除或修改审计日志
+4. 尝试通过 SQL 注入修改审计记录
+5. 验证审计日志包含足够的上下文信息
+
+### 预期安全行为
+- 无 API 端点可删除或修改审计日志
+- 审计日志记录：操作类型、操作者、资源、时间戳、IP、新旧值
+- 所有安全敏感操作都有对应审计记录
+- 审计日志不可通过应用层接口篡改
+
+### 验证方法
+```bash
+# 执行安全敏感操作
+curl -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  http://localhost:8080/api/v1/users \
+  -d '{"email": "audit-test@test.com", "name": "Audit Test"}'
+
+# 检查审计日志
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/v1/audit?resource_type=user&limit=5"
+# 预期: 包含 user.created 记录，含 actor_id, resource_id, ip_address
+
+# 尝试删除审计日志（不应存在此端点）
+curl -X DELETE -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/v1/audit/some-audit-id
+# 预期: 404 或 405 Method Not Allowed
+
+# 尝试修改审计日志
+curl -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  http://localhost:8080/api/v1/audit/some-audit-id \
+  -d '{"action": "modified"}'
+# 预期: 404 或 405
+
+# 验证覆盖完整性 - 以下操作都应有审计记录
+OPERATIONS=(
+  "user.created" "user.updated" "user.deleted"
+  "role.created" "role.updated" "role.deleted"
+  "role.assigned" "role.unassigned"
+  "tenant.created" "tenant.updated" "tenant.deleted"
+  "service.created" "service.updated" "service.deleted"
+  "password.changed" "password.reset"
+  "settings.updated"
+  "invitation.created" "invitation.accepted"
+)
+for op in "${OPERATIONS[@]}"; do
+  echo -n "$op: "
+  curl -s -H "Authorization: Bearer $TOKEN" \
+    "http://localhost:8080/api/v1/audit?action=$op&limit=1" | jq '.total'
+done
+```
+
+### 修复建议
+- 审计日志表不提供 DELETE/UPDATE API
+- 数据库级别可使用只追加表（如果 TiDB 支持）
+- 关键审计记录同步到外部不可变存储
+- 定期审查审计日志覆盖完整性
+
+---
+
+## 场景 3：敏感数据日志泄露
+
+### 前置条件
+- 访问应用日志输出
+- 能够触发各种 API 请求
+
+### 攻击目标
+验证日志中是否意外记录了敏感信息
+
+### 攻击步骤
+1. 执行密码相关操作，检查日志中是否出现密码明文
+2. 执行 Token 操作，检查日志中是否出现完整 JWT
+3. 触发错误，检查错误日志中的敏感信息
+4. 检查 HTTP 请求日志中是否记录了 Authorization 头
+5. 检查 Keycloak 通信日志中是否泄露 client_secret
+
+### 预期安全行为
+- 密码、Token、API Key 不出现在日志中
+- Authorization 头内容被脱敏（如 `Bearer ***`）
+- 错误日志不包含数据库连接字符串
+- PII 数据（邮箱、电话）根据策略脱敏
+- Keycloak admin_client_secret 不出现在日志中
+
+### 验证方法
+```bash
+# 触发密码操作
+curl -X POST http://localhost:8080/api/v1/password/forgot \
+  -H "Content-Type: application/json" \
+  -d '{"email": "test@example.com"}'
+
+curl -X POST http://localhost:8080/api/v1/password/change \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"current_password": "OldPass123!", "new_password": "NewPass456!"}'
+
+# 检查日志中的敏感信息
+docker logs auth9-core 2>&1 | grep -i "password\|secret\|OldPass\|NewPass"
+# 预期: 无明文密码
+
+docker logs auth9-core 2>&1 | grep -i "eyJ"
+# 预期: 无完整 JWT token (eyJ 是 base64 编码的 JWT 头部前缀)
+
+docker logs auth9-core 2>&1 | grep -i "database_url\|redis_url\|connection"
+# 预期: 连接字符串已脱敏或不出现
+
+# 触发错误路径
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -d "grant_type=password&username=nonexistent&password=wrong"
+docker logs auth9-core 2>&1 | tail -5
+# 预期: 错误日志不包含密码值
+
+# 检查配置输出
+docker logs auth9-core 2>&1 | grep -i "REDACTED\|<REDACTED>"
+# 预期: 敏感配置值显示为 <REDACTED>
+```
+
+### 修复建议
+- 使用 tracing 的 `skip` 或 `#[instrument(skip(password))]` 跳过敏感字段
+- 实现日志中间件自动脱敏 Authorization 头
+- 配置结构体的 Debug trait 实现中脱敏敏感字段（已实现）
+- 定期扫描日志文件检测敏感数据泄露
+
+---
+
+## 场景 4：安全告警系统有效性
+
+### 前置条件
+- 了解 `SecurityDetectionService` 的检测阈值
+- 能够模拟各类攻击模式
+
+### 攻击目标
+验证安全检测与告警系统是否正确识别攻击行为
+
+### 攻击步骤
+1. **暴力破解检测**: 对同一账户连续 5 次错误登录，检查是否生成 HIGH 告警
+2. **密码喷洒检测**: 从同一 IP 对 5+ 不同账户尝试登录，检查是否生成 CRITICAL 告警
+3. **新设备检测**: 使用不同 User-Agent 登录，检查是否生成 INFO 告警
+4. **检测规避**: 使用低速攻击（每 3 分钟 1 次），验证是否绕过检测
+5. **检查告警列表是否正确展示**
+
+### 预期安全行为
+- 暴力破解: 5 次失败 / 10 分钟 → HIGH 告警
+- 密码喷洒: 5+ 不同账户 / 同一 IP / 10 分钟 → CRITICAL 告警
+- 新设备: 新 IP+UA 组合 → INFO 告警
+- 告警可通过 API 查询
+- 检测不影响正常用户体验（低误报率）
+
+### 验证方法
+```bash
+# 暴力破解检测测试
+for i in $(seq 1 6); do
+  curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/api/v1/auth/token \
+    -d "grant_type=password&client_id=auth9-portal&username=test@test.com&password=wrong$i"
+  echo " - attempt $i"
+  sleep 1
+done
+
+# 检查是否生成告警
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:8080/api/v1/security-alerts?type=brute_force&limit=5"
+# 预期: 至少 1 条 HIGH 级别告警
+
+# 密码喷洒检测测试
+for user in user1@test.com user2@test.com user3@test.com user4@test.com user5@test.com user6@test.com; do
+  curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/api/v1/auth/token \
+    -d "grant_type=password&client_id=auth9-portal&username=$user&password=common-password"
+  echo " - $user"
+  sleep 0.5
+done
+
+# 检查密码喷洒告警
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:8080/api/v1/security-alerts?type=password_spray&limit=5"
+# 预期: CRITICAL 级别告警
+
+# 新设备检测测试
+curl -X POST http://localhost:8080/api/v1/auth/token \
+  -H "User-Agent: NewDevice/1.0 (Unknown OS)" \
+  -d "grant_type=password&client_id=auth9-portal&username=test@test.com&password=correct-password"
+
+curl -H "Authorization: Bearer $ADMIN_TOKEN" \
+  "http://localhost:8080/api/v1/security-alerts?type=new_device&limit=5"
+# 预期: INFO 级别告警
+
+# 检测规避测试 - 低速攻击
+for i in $(seq 1 10); do
+  curl -s -o /dev/null \
+    -X POST http://localhost:8080/api/v1/auth/token \
+    -d "grant_type=password&client_id=auth9-portal&username=test@test.com&password=wrong"
+  sleep 180  # 每 3 分钟一次
+done
+# 检查是否仍然触发告警（根据滑动窗口设计）
+```
+
+### 修复建议
+- 支持可配置的检测阈值
+- 实现滑动窗口而非固定窗口（防止边界绕过）
+- 低速攻击检测需要更大的时间窗口（如 24 小时聚合分析）
+- 告警触发后的自动响应（如临时封禁 IP）
+
+---
+
+## 场景 5：错误处理信息泄露
+
+### 前置条件
+- 能够触发各种错误条件
+
+### 攻击目标
+验证错误响应是否泄露内部实现细节
+
+### 攻击步骤
+1. 发送畸形请求触发 400 错误
+2. 访问不存在的端点触发 404 错误
+3. 发送导致服务器错误的请求 (500)
+4. 检查错误响应中的信息
+5. 比较不同错误条件下的响应格式一致性
+
+### 预期安全行为
+- 错误响应不包含堆栈跟踪 (stack trace)
+- 错误响应不暴露内部文件路径
+- 错误响应不暴露数据库查询或连接信息
+- 错误响应不暴露第三方服务信息（Keycloak 内部 URL 等）
+- 所有错误使用统一格式
+
+### 验证方法
+```bash
+# 畸形 JSON
+curl -s -X POST http://localhost:8080/api/v1/tenants \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"invalid json'
+# 预期: {"error": "Bad Request", "message": "Invalid JSON"} (无内部细节)
+
+# 不存在的端点
+curl -s http://localhost:8080/api/v1/nonexistent
+# 预期: {"error": "Not Found"} (无路由泄露)
+
+# 超大请求体
+python3 -c "print('A' * 10_000_000)" | curl -s -X POST \
+  -H "Content-Type: application/json" \
+  -d @- http://localhost:8080/api/v1/tenants
+# 预期: 413 Payload Too Large (无崩溃信息)
+
+# 无效 UUID
+curl -s -H "Authorization: Bearer $TOKEN" \
+  http://localhost:8080/api/v1/tenants/not-a-uuid
+# 预期: 400 或 404 (无 SQL 错误)
+
+# 检查所有错误响应格式一致性
+for code in 400 401 403 404 409 422 429 500; do
+  echo "=== HTTP $code ==="
+  # 触发各状态码并检查响应格式
+done
+```
+
+### 修复建议
+- 统一错误响应格式：`{"error": "...", "message": "..."}`
+- 生产环境禁用详细错误信息
+- 500 错误仅返回通用消息，详细信息记录到日志
+- 实现全局错误处理中间件
+
+---
+
+## 检查清单
+
+| # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
+|---|------|------|----------|----------|----------|
+| 1 | 日志注入攻击 | ☐ | | | |
+| 2 | 审计日志完整性验证 | ☐ | | | |
+| 3 | 敏感数据日志泄露 | ☐ | | | |
+| 4 | 安全告警系统有效性 | ☐ | | | |
+| 5 | 错误处理信息泄露 | ☐ | | | |
+
+---
+
+## 参考资料
+
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
+- [CWE-117: Improper Output Neutralization for Logs](https://cwe.mitre.org/data/definitions/117.html)
+- [CWE-532: Insertion of Sensitive Information into Log File](https://cwe.mitre.org/data/definitions/532.html)
+- [CWE-209: Generation of Error Message Containing Sensitive Information](https://cwe.mitre.org/data/definitions/209.html)
+- [OWASP Error Handling](https://owasp.org/www-community/Improper_Error_Handling)

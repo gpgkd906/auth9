@@ -306,31 +306,51 @@ impl Default for Webhook {
     }
 }
 
-/// Validate webhook URL - HTTPS required for external URLs, HTTP allowed for localhost only
+/// Validate webhook URL - block internal/private IPs for all schemes, HTTP only for localhost/private
 fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
     let parsed = Url::parse(url).map_err(|_| ValidationError::new("invalid_url"))?;
 
     let scheme = parsed.scheme();
     let host = parsed.host_str().unwrap_or("");
 
-    // HTTPS is always allowed
+    // Only allow http and https schemes
+    if scheme != "http" && scheme != "https" {
+        return Err(ValidationError::new("invalid_scheme"));
+    }
+
+    // Block internal/cloud metadata IPs for ALL schemes (including HTTPS)
+    let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
+    let is_loopback = host == "127.0.0.1" || host == "::1" || host == "0.0.0.0";
+    let is_private = host.starts_with("192.168.")
+        || host.starts_with("10.")
+        || (host.starts_with("172.")
+            && host
+                .split('.')
+                .nth(1)
+                .and_then(|s| s.parse::<u8>().ok())
+                .map(|n| (16..=31).contains(&n))
+                .unwrap_or(false));
+
+    if is_cloud_metadata {
+        let mut err = ValidationError::new("ssrf_blocked");
+        err.message = Some("Cloud metadata endpoints are not allowed".into());
+        return Err(err);
+    }
+
+    // For HTTPS: allow external URLs, block private/loopback
     if scheme == "https" {
+        if is_loopback || is_private {
+            let mut err = ValidationError::new("internal_ip_blocked");
+            err.message =
+                Some("Internal IP addresses are not allowed for webhook URLs".into());
+            return Err(err);
+        }
         return Ok(());
     }
 
-    // HTTP only allowed for localhost/private networks
+    // HTTP only allowed for localhost/private networks (dev environment)
     if scheme == "http" {
         let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
-        let is_private = host.starts_with("192.168.")
-            || host.starts_with("10.")
-            || (host.starts_with("172.")
-                && host
-                    .split('.')
-                    .nth(1)
-                    .and_then(|s| s.parse::<u8>().ok())
-                    .map(|n| (16..=31).contains(&n))
-                    .unwrap_or(false));
-
         if is_localhost || is_private {
             return Ok(());
         }

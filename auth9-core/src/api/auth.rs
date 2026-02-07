@@ -302,10 +302,12 @@ pub async fn token<S: HasServices + HasSessionManagement + HasAnalytics>(
                 .await?;
 
             let email = format!("service+{}@auth9.local", client_id);
-            let identity_token = jwt_manager.create_identity_token(service.id.0, &email, None)?;
+            let tenant_id = service.tenant_id.map(|t| t.0);
+            let service_token =
+                jwt_manager.create_service_client_token(service.id.0, &email, tenant_id)?;
 
             Ok(Json(TokenResponse {
-                access_token: identity_token,
+                access_token: service_token,
                 token_type: "Bearer".to_string(),
                 expires_in: jwt_manager.access_token_ttl(),
                 refresh_token: None,

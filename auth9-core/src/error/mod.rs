@@ -127,6 +127,14 @@ impl From<validator::ValidationErrors> for AppError {
     }
 }
 
+// Conversion from axum JSON rejection - hide internal parser details
+impl From<axum::extract::rejection::JsonRejection> for AppError {
+    fn from(rejection: axum::extract::rejection::JsonRejection) -> Self {
+        tracing::debug!("JSON rejection: {:?}", rejection);
+        AppError::BadRequest("Invalid request body".to_string())
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
