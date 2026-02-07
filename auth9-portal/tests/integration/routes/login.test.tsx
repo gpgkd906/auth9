@@ -1,9 +1,14 @@
 import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import Login, { action } from "~/routes/login";
+import Login, { action, meta } from "~/routes/login";
 
 describe("Login Page", () => {
+    it("meta returns correct title", () => {
+        const result = meta({} as Parameters<typeof meta>[0]);
+        expect(result).toEqual([{ title: "Sign In - Auth9" }]);
+    });
+
     it("renders login form", async () => {
         const RoutesStub = createRoutesStub([
             {

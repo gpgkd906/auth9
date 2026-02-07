@@ -24,22 +24,13 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
     let headers = response.headers_mut();
 
     // Prevent MIME type sniffing
-    headers.insert(
-        header::X_CONTENT_TYPE_OPTIONS,
-        "nosniff".parse().unwrap(),
-    );
+    headers.insert(header::X_CONTENT_TYPE_OPTIONS, "nosniff".parse().unwrap());
 
     // Prevent clickjacking
-    headers.insert(
-        header::X_FRAME_OPTIONS,
-        "DENY".parse().unwrap(),
-    );
+    headers.insert(header::X_FRAME_OPTIONS, "DENY".parse().unwrap());
 
     // XSS protection (legacy but still useful for older browsers)
-    headers.insert(
-        "X-XSS-Protection",
-        "1; mode=block".parse().unwrap(),
-    );
+    headers.insert("X-XSS-Protection", "1; mode=block".parse().unwrap());
 
     // Control referrer information
     headers.insert(
@@ -50,7 +41,9 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
     // Prevent caching of sensitive API responses
     headers.insert(
         header::CACHE_CONTROL,
-        "no-store, no-cache, must-revalidate, private".parse().unwrap(),
+        "no-store, no-cache, must-revalidate, private"
+            .parse()
+            .unwrap(),
     );
 
     // Restrict browser features
@@ -83,10 +76,7 @@ mod tests {
             .route("/test", get(dummy_handler))
             .layer(axum::middleware::from_fn(security_headers_middleware));
 
-        let request = Request::builder()
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
         let response = app.oneshot(request).await.unwrap();
 
@@ -97,10 +87,7 @@ mod tests {
             response.headers().get("X-Content-Type-Options").unwrap(),
             "nosniff"
         );
-        assert_eq!(
-            response.headers().get("X-Frame-Options").unwrap(),
-            "DENY"
-        );
+        assert_eq!(response.headers().get("X-Frame-Options").unwrap(), "DENY");
         assert_eq!(
             response.headers().get("X-XSS-Protection").unwrap(),
             "1; mode=block"
@@ -116,9 +103,6 @@ mod tests {
             .to_str()
             .unwrap()
             .contains("no-store"));
-        assert!(response
-            .headers()
-            .get("Permissions-Policy")
-            .is_some());
+        assert!(response.headers().get("Permissions-Policy").is_some());
     }
 }

@@ -8,6 +8,7 @@ import {
   isRouteErrorResponse,
 } from "react-router";
 import type { LinksFunction, MetaFunction } from "react-router";
+import { ConfirmProvider } from "~/hooks/useConfirm";
 import "./styles/tailwind.css";
 
 export const links: LinksFunction = () => [
@@ -64,7 +65,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  return <Outlet />;
+  return (
+    <ConfirmProvider>
+      <Outlet />
+    </ConfirmProvider>
+  );
 }
 
 export function ErrorBoundary() {

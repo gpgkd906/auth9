@@ -4,7 +4,6 @@ use crate::cache::CacheOperations;
 use crate::domain::parse_user_agent;
 use crate::error::{AppError, Result};
 use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
-use chrono::Utc;
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
@@ -14,6 +13,7 @@ use axum::{
 use axum_extra::headers::{authorization::Bearer, Authorization};
 use axum_extra::TypedHeader;
 use base64::Engine;
+use chrono::Utc;
 use rsa::pkcs8::DecodePublicKey;
 use rsa::traits::PublicKeyParts;
 use rsa::RsaPublicKey;
@@ -178,10 +178,7 @@ pub async fn callback<S: HasServices + HasSessionManagement + HasAnalytics>(
         let mut pairs = redirect_url.query_pairs_mut();
         pairs.append_pair("access_token", &identity_token);
         pairs.append_pair("token_type", "Bearer");
-        pairs.append_pair(
-            "expires_in",
-            &jwt_manager.access_token_ttl().to_string(),
-        );
+        pairs.append_pair("expires_in", &jwt_manager.access_token_ttl().to_string());
         if let Some(original_state) = state_payload.original_state {
             pairs.append_pair("state", &original_state);
         }
@@ -424,7 +421,10 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
                     };
 
                     if remaining_ttl > 0 {
-                        if let Err(e) = state.cache().add_to_token_blacklist(sid, remaining_ttl).await
+                        if let Err(e) = state
+                            .cache()
+                            .add_to_token_blacklist(sid, remaining_ttl)
+                            .await
                         {
                             tracing::warn!(
                                 session_id = %sid,
@@ -1625,5 +1625,97 @@ mod tests {
         let json = serde_json::to_string(&jwks).unwrap();
         assert!(json.contains("\"keys\""));
         assert!(json.contains("RSA"));
+    }
+
+    // ========================================================================
+    // Tests for extract_client_ip
+    // ========================================================================
+
+    #[test]
+    fn test_extract_client_ip_from_x_forwarded_for() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "192.168.1.100".parse().unwrap());
+        assert_eq!(
+            extract_client_ip(&headers),
+            Some("192.168.1.100".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_client_ip_from_x_forwarded_for_multiple() {
+        let mut headers = HeaderMap::new();
+        headers.insert(
+            "x-forwarded-for",
+            "10.0.0.1, 192.168.1.1, 172.16.0.1".parse().unwrap(),
+        );
+        // Should take the first IP (original client)
+        assert_eq!(extract_client_ip(&headers), Some("10.0.0.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_from_x_real_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-real-ip", "203.0.113.50".parse().unwrap());
+        assert_eq!(
+            extract_client_ip(&headers),
+            Some("203.0.113.50".to_string())
+        );
+    }
+
+    #[test]
+    fn test_extract_client_ip_x_forwarded_for_takes_priority() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "10.0.0.1".parse().unwrap());
+        headers.insert("x-real-ip", "203.0.113.50".parse().unwrap());
+        // X-Forwarded-For takes priority over X-Real-IP
+        assert_eq!(extract_client_ip(&headers), Some("10.0.0.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_no_headers() {
+        let headers = HeaderMap::new();
+        assert_eq!(extract_client_ip(&headers), None);
+    }
+
+    #[test]
+    fn test_extract_client_ip_ipv6() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "::1".parse().unwrap());
+        assert_eq!(extract_client_ip(&headers), Some("::1".to_string()));
+    }
+
+    // ========================================================================
+    // Additional filter_scopes edge cases
+    // ========================================================================
+
+    #[test]
+    fn test_filter_scopes_all_invalid_except_openid() {
+        let result = filter_scopes("openid admin root superuser").unwrap();
+        assert_eq!(result, "openid");
+    }
+
+    #[test]
+    fn test_filter_scopes_duplicate_openid() {
+        let result = filter_scopes("openid openid profile").unwrap();
+        // Both openid entries pass the filter
+        assert!(result.contains("openid"));
+        assert!(result.contains("profile"));
+    }
+
+    #[test]
+    fn test_filter_scopes_empty_string() {
+        let result = filter_scopes("");
+        assert!(result.is_err());
+    }
+
+    // ========================================================================
+    // Jwks empty keys
+    // ========================================================================
+
+    #[test]
+    fn test_jwks_empty_keys() {
+        let jwks = Jwks { keys: vec![] };
+        let json = serde_json::to_string(&jwks).unwrap();
+        assert!(json.contains("\"keys\":[]"));
     }
 }

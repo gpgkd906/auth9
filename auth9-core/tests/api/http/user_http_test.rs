@@ -7,7 +7,9 @@ use super::{
     build_test_router, delete_json_with_auth, get_json, get_json_with_auth, post_json,
     post_json_with_auth, put_json_with_auth, TestAppState,
 };
-use crate::api::{create_test_identity_token, create_test_user};
+use crate::api::{
+    create_test_identity_token, create_test_identity_token_for_user, create_test_user,
+};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{TenantUser, TenantUserWithTenant, User};
 use axum::http::StatusCode;
@@ -102,10 +104,12 @@ async fn test_get_user_returns_200() {
     user.display_name = Some("John Doe".to_string());
     state.user_repo.add_user(user).await;
 
+    // Users can view their own profile
+    let token = create_test_identity_token_for_user(user_id);
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        get_json(&app, &format!("/api/v1/users/{}", user_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -120,9 +124,11 @@ async fn test_get_user_returns_404() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
+    // Use token with same user_id as the requested user to pass auth check
     let nonexistent_id = Uuid::new_v4();
+    let token = create_test_identity_token_for_user(nonexistent_id);
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, &format!("/api/v1/users/{}", nonexistent_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/users/{}", nonexistent_id), &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -277,8 +283,13 @@ async fn test_update_user_returns_404() {
         "display_name": "New Name"
     });
 
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json_with_auth(&app, &format!("/api/v1/users/{}", nonexistent_id), &input, &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}", nonexistent_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -357,14 +368,25 @@ async fn test_delete_user_returns_404() {
 async fn test_add_user_to_tenant() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin can add users to tenants
 
+    let auth_user_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
 
     let user = create_test_user(Some(user_id));
     state.user_repo.add_user(user).await;
 
+    // Auth user must be owner of the target tenant
+    let owner_tu = TenantUser {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        user_id: auth9_core::domain::StringUuid::from(auth_user_id),
+        tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+        role_in_tenant: "owner".to_string(),
+        joined_at: chrono::Utc::now(),
+    };
+    state.user_repo.add_tenant_user(owner_tu).await;
+
+    let token = create_test_identity_token_for_user(auth_user_id);
     let app = build_test_router(state);
 
     let input = json!({
@@ -372,8 +394,13 @@ async fn test_add_user_to_tenant() {
         "role_in_tenant": "admin"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TenantUser>>) =
-        post_json_with_auth(&app, &format!("/api/v1/users/{}/tenants", user_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<TenantUser>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}/tenants", user_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::CREATED);
     assert!(body.is_some());
@@ -385,15 +412,25 @@ async fn test_add_user_to_tenant() {
 async fn test_remove_user_from_tenant() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin can remove users from tenants
 
+    let auth_user_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
 
     let user = create_test_user(Some(user_id));
     state.user_repo.add_user(user).await;
 
-    // First add user to tenant
+    // Auth user must be owner of the target tenant
+    let owner_tu = TenantUser {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        user_id: auth9_core::domain::StringUuid::from(auth_user_id),
+        tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+        role_in_tenant: "owner".to_string(),
+        joined_at: chrono::Utc::now(),
+    };
+    state.user_repo.add_tenant_user(owner_tu).await;
+
+    // Add target user to tenant
     let tenant_user = TenantUser {
         id: auth9_core::domain::StringUuid::new_v4(),
         user_id: auth9_core::domain::StringUuid::from(user_id),
@@ -403,6 +440,7 @@ async fn test_remove_user_from_tenant() {
     };
     state.user_repo.add_tenant_user(tenant_user).await;
 
+    let token = create_test_identity_token_for_user(auth_user_id);
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
@@ -450,8 +488,10 @@ async fn test_get_user_tenants() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<TenantUserWithTenant>>>) =
-        get_json(&app, &format!("/api/v1/users/{}/tenants", user_id)).await;
+    let (status, body): (
+        StatusCode,
+        Option<SuccessResponse<Vec<TenantUserWithTenant>>>,
+    ) = get_json(&app, &format!("/api/v1/users/{}/tenants", user_id)).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -529,8 +569,13 @@ async fn test_enable_mfa() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        post_json_with_auth(&app, &format!("/api/v1/users/{}/mfa", user_id), &json!({}), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}/mfa", user_id),
+        &json!({}),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

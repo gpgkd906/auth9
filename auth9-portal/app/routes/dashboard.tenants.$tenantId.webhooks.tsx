@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
-import { useState, useEffect } from "react";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { useState, useEffect, useRef } from "react";
+import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -22,8 +23,7 @@ import {
   Pencil2Icon,
   TrashIcon,
   RocketIcon,
-  
-  
+  ReloadIcon,
 } from "@radix-ui/react-icons";
 
 const WEBHOOK_EVENTS = [
@@ -98,6 +98,12 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return { success: true, message: "Webhook deleted" };
     }
 
+    if (intent === "regenerate_secret") {
+      const id = formData.get("id") as string;
+      const result = await webhookApi.regenerateSecret(tenantId, id, accessToken || undefined);
+      return { success: true, message: "Secret regenerated", newSecret: result.data.secret };
+    }
+
     if (intent === "test") {
       const id = formData.get("id") as string;
       const result = await webhookApi.test(tenantId, id, accessToken || undefined);
@@ -122,6 +128,8 @@ export default function WebhooksPage() {
   const { webhooks, error: loadError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const submit = useSubmit();
+  const confirm = useConfirm();
 
   const [showDialog, setShowDialog] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
@@ -134,15 +142,24 @@ export default function WebhooksPage() {
   });
 
   const isSubmitting = navigation.state === "submitting";
+  const dialogSubmitting = useRef(false);
 
-  // Close dialog on success
+  // Track when a form is submitted from within the dialog
   useEffect(() => {
-    if (actionData?.success && (showDialog || editingWebhook)) {
+    if (navigation.state === "submitting" && (showDialog || editingWebhook)) {
+      dialogSubmitting.current = true;
+    }
+  }, [navigation.state, showDialog, editingWebhook]);
+
+  // Close dialog on success only if the submission came from the dialog
+  useEffect(() => {
+    if (actionData?.success && dialogSubmitting.current) {
+      dialogSubmitting.current = false;
       setShowDialog(false);
       setEditingWebhook(null);
       resetForm();
     }
-  }, [actionData, showDialog, editingWebhook]);
+  }, [actionData]);
 
   function resetForm() {
     setFormData({
@@ -282,30 +299,52 @@ export default function WebhooksPage() {
                     <Button
                       variant="ghost"
                       size="sm"
+                      title="Regenerate Secret"
+                      disabled={isSubmitting}
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: "Regenerate Secret",
+                          description: "Are you sure? The old secret will be invalidated immediately.",
+                          variant: "destructive",
+                        });
+                        if (ok) {
+                          submit(
+                            { intent: "regenerate_secret", id: webhook.id },
+                            { method: "post" }
+                          );
+                        }
+                      }}
+                    >
+                      <ReloadIcon className="h-4 w-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => openEditDialog(webhook)}
                     >
                       <Pencil2Icon className="h-4 w-4" />
                     </Button>
-                    <Form
-                      method="post"
-                      onSubmit={(e) => {
-                        if (!confirm("Are you sure you want to delete this webhook? This action cannot be undone.")) {
-                          e.preventDefault();
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
+                      disabled={isSubmitting}
+                      onClick={async () => {
+                        const ok = await confirm({
+                          title: "Delete Webhook",
+                          description: "Are you sure you want to delete this webhook? This action cannot be undone.",
+                          variant: "destructive",
+                        });
+                        if (ok) {
+                          submit(
+                            { intent: "delete", id: webhook.id },
+                            { method: "post" }
+                          );
                         }
                       }}
                     >
-                      <input type="hidden" name="intent" value="delete" />
-                      <input type="hidden" name="id" value={webhook.id} />
-                      <Button
-                        type="submit"
-                        variant="ghost"
-                        size="sm"
-                        className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
-                        disabled={isSubmitting}
-                      >
-                        <TrashIcon className="h-4 w-4" />
-                      </Button>
-                    </Form>
+                      <TrashIcon className="h-4 w-4" />
+                    </Button>
                   </div>
                 </div>
               ))}

@@ -324,7 +324,10 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
         }
     };
 
-    info!("Dev environment detected, configuring email to use {}...", smtp_host);
+    info!(
+        "Dev environment detected, configuring email to use {}...",
+        smtp_host
+    );
 
     let pool: Pool<MySql> = MySqlPoolOptions::new()
         .max_connections(1)
@@ -388,8 +391,7 @@ async fn sync_smtp_to_keycloak(config: &Config, smtp_host: &str) -> Result<()> {
         .context("Failed to create HTTP client")?;
 
     // Get admin token
-    let admin_username =
-        std::env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
+    let admin_username = std::env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
     let admin_password =
         std::env::var("KEYCLOAK_ADMIN_PASSWORD").unwrap_or_else(|_| "admin".to_string());
 
@@ -447,17 +449,11 @@ async fn sync_smtp_to_keycloak(config: &Config, smtp_host: &str) -> Result<()> {
         .context("Failed to update Keycloak realm SMTP settings")?;
 
     if response.status().is_success() {
-        info!(
-            "Synced SMTP config to Keycloak realm ({}:1025)",
-            smtp_host
-        );
+        info!("Synced SMTP config to Keycloak realm ({}:1025)", smtp_host);
     } else {
         let status = response.status();
         let body = response.text().await.unwrap_or_default();
-        warn!(
-            "Failed to sync SMTP to Keycloak: {} - {}",
-            status, body
-        );
+        warn!("Failed to sync SMTP to Keycloak: {} - {}", status, body);
     }
 
     Ok(())

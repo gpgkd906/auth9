@@ -10,12 +10,16 @@
 
 | 事件类型 | 描述 |
 |---------|------|
+| login.success | 登录成功 |
+| login.failed | 登录失败 |
 | user.created | 用户创建 |
 | user.updated | 用户更新 |
 | user.deleted | 用户删除 |
-| session.created | 会话创建 |
+| password.changed | 密码修改 |
+| mfa.enabled | MFA 启用 |
+| mfa.disabled | MFA 禁用 |
 | session.revoked | 会话撤销 |
-| security_alert.created | 安全告警创建 |
+| security.alert | 安全告警 |
 
 ---
 
@@ -133,7 +137,7 @@ WHERE tenant_id = '{tenant_id}' AND events LIKE '%user.created%';
 
 ### 初始状态
 - Webhook A 订阅：`user.created`, `user.deleted`
-- Webhook B 订阅：`session.created`
+- Webhook B 订阅：`login.success`
 
 ### 目的
 验证事件只发送给订阅了该事件的 Webhook

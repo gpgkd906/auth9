@@ -7,17 +7,35 @@
 use crate::domain::BrandingConfig;
 use crate::error::Result;
 use crate::keycloak::{KeycloakClient, RealmUpdate, SmtpServerConfig};
+use async_trait::async_trait;
 use std::sync::Arc;
 use tracing::{error, info};
 
+/// Minimal interface needed by [`KeycloakSyncService`].
+///
+/// Using a trait here keeps unit tests fast and independent from HTTP mocking.
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait KeycloakRealmUpdater: Send + Sync {
+    async fn update_realm(&self, settings: &RealmUpdate) -> Result<()>;
+}
+
+#[async_trait]
+impl KeycloakRealmUpdater for KeycloakClient {
+    async fn update_realm(&self, settings: &RealmUpdate) -> Result<()> {
+        // Call the inherent method on KeycloakClient (avoid trait recursion).
+        KeycloakClient::update_realm(self, settings).await
+    }
+}
+
 /// Service for synchronizing Auth9 configuration with Keycloak realm settings
 pub struct KeycloakSyncService {
-    keycloak: Arc<KeycloakClient>,
+    keycloak: Arc<dyn KeycloakRealmUpdater>,
 }
 
 impl KeycloakSyncService {
     /// Create a new KeycloakSyncService
-    pub fn new(keycloak: Arc<KeycloakClient>) -> Self {
+    pub fn new(keycloak: Arc<dyn KeycloakRealmUpdater>) -> Self {
         Self { keycloak }
     }
 
@@ -83,34 +101,6 @@ impl KeycloakSyncService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::config::KeycloakConfig;
-    use wiremock::matchers::{method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
-
-    fn create_test_config(mock_server_url: &str) -> KeycloakConfig {
-        KeycloakConfig {
-            url: mock_server_url.to_string(),
-            public_url: mock_server_url.to_string(),
-            realm: "test-realm".to_string(),
-            admin_client_id: "auth9-admin".to_string(),
-            admin_client_secret: "test-secret".to_string(),
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        }
-    }
-
-    async fn setup_token_mock(mock_server: &MockServer) {
-        Mock::given(method("POST"))
-            .and(path("/realms/master/protocol/openid-connect/token"))
-            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
-                "access_token": "test-token",
-                "expires_in": 300
-            })))
-            .mount(mock_server)
-            .await;
-    }
 
     #[test]
     fn test_extract_realm_settings_allow_registration_true() {
@@ -146,18 +136,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_realm_settings_success() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(204))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm().returning(|_| Ok(())).times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         let settings = RealmUpdate {
             registration_allowed: Some(true),
@@ -170,20 +151,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_realm_settings_error() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(403).set_body_json(serde_json::json!({
-                "error": "access_denied"
-            })))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm()
+            .returning(|_| {
+                Err(crate::error::AppError::Keycloak(
+                    "access_denied".to_string(),
+                ))
+            })
+            .times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         let settings = RealmUpdate {
             registration_allowed: Some(true),
@@ -196,18 +172,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_branding_config_success() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(204))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm().returning(|_| Ok(())).times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         let branding = BrandingConfig {
             allow_registration: true,
@@ -220,20 +187,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_branding_config_error_does_not_propagate() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
-                "error": "internal_error"
-            })))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm()
+            .returning(|_| {
+                Err(crate::error::AppError::Keycloak(
+                    "internal_error".to_string(),
+                ))
+            })
+            .times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         let branding = BrandingConfig {
             allow_registration: true,
@@ -246,18 +208,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_email_config_success() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(204))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm().returning(|_| Ok(())).times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         let smtp = SmtpServerConfig {
             host: Some("smtp.example.com".to_string()),
@@ -277,12 +230,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_email_config_none_skips_sync() {
-        let mock_server = MockServer::start().await;
-        // Don't set up any mocks - sync should be skipped entirely
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm().times(0);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         // This should not panic and should not make any HTTP requests
         service.sync_email_config(None).await;
@@ -290,20 +240,15 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_email_config_error_does_not_propagate() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(500).set_body_json(serde_json::json!({
-                "error": "internal_error"
-            })))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm()
+            .returning(|_| {
+                Err(crate::error::AppError::Keycloak(
+                    "internal_error".to_string(),
+                ))
+            })
+            .times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         let smtp = SmtpServerConfig {
             host: Some("smtp.example.com".to_string()),
@@ -317,18 +262,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_sync_email_config_empty_clears_smtp() {
-        let mock_server = MockServer::start().await;
-        setup_token_mock(&mock_server).await;
-
-        Mock::given(method("PUT"))
-            .and(path("/admin/realms/test-realm"))
-            .respond_with(ResponseTemplate::new(204))
-            .mount(&mock_server)
-            .await;
-
-        let config = create_test_config(&mock_server.uri());
-        let client = Arc::new(KeycloakClient::new(config));
-        let service = KeycloakSyncService::new(client);
+        let mut mock = MockKeycloakRealmUpdater::new();
+        mock.expect_update_realm().returning(|_| Ok(())).times(1);
+        let service = KeycloakSyncService::new(Arc::new(mock));
 
         // Empty config should be sent to clear SMTP settings
         let empty_smtp = SmtpServerConfig::default();

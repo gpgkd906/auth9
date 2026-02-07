@@ -11,6 +11,10 @@ vi.mock("~/services/api", () => ({
   },
 }));
 
+vi.mock("~/services/session.server", () => ({
+  getAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
+}));
+
 const mockStats = {
   total_logins: 1250,
   successful_logins: 1180,

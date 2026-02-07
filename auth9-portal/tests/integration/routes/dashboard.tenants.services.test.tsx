@@ -16,6 +16,10 @@ vi.mock("~/services/api", () => ({
   },
 }));
 
+vi.mock("~/services/session.server", () => ({
+  getAccessToken: vi.fn().mockResolvedValue(null),
+}));
+
 const mockTenant = {
   id: "tenant-1",
   name: "Acme Corporation",
@@ -86,8 +90,8 @@ describe("Tenant Services Page", () => {
         tenant: mockTenant,
         services: mockServices,
       });
-      expect(tenantApi.get).toHaveBeenCalledWith("tenant-1");
-      expect(tenantServiceApi.listServices).toHaveBeenCalledWith("tenant-1");
+      expect(tenantApi.get).toHaveBeenCalledWith("tenant-1", undefined);
+      expect(tenantServiceApi.listServices).toHaveBeenCalledWith("tenant-1", undefined);
     });
 
     it("throws error when tenantId is missing", async () => {
@@ -490,7 +494,7 @@ describe("Tenant Services Page", () => {
         context: {},
       });
 
-      expect(tenantServiceApi.toggleService).toHaveBeenCalledWith("tenant-1", "svc-2", true);
+      expect(tenantServiceApi.toggleService).toHaveBeenCalledWith("tenant-1", "svc-2", true, undefined);
       expect(response).toEqual({
         success: true,
         services: expect.any(Array),
@@ -519,7 +523,7 @@ describe("Tenant Services Page", () => {
         context: {},
       });
 
-      expect(tenantServiceApi.toggleService).toHaveBeenCalledWith("tenant-1", "svc-1", false);
+      expect(tenantServiceApi.toggleService).toHaveBeenCalledWith("tenant-1", "svc-1", false, undefined);
       expect(response).toEqual({
         success: true,
         services: expect.any(Array),

@@ -249,7 +249,12 @@ async fn test_list_my_sessions_success() {
     // Create a valid JWT token with session ID
     let token = state
         .jwt_manager
-        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(*current_session_id))
+        .create_identity_token_with_session(
+            *user_id,
+            "test@example.com",
+            Some("Test User"),
+            Some(*current_session_id),
+        )
         .unwrap();
 
     let app = build_my_session_test_router(state);
@@ -277,7 +282,12 @@ async fn test_list_my_sessions_empty() {
     let current_session_id = uuid::Uuid::new_v4();
     let token = state
         .jwt_manager
-        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(current_session_id))
+        .create_identity_token_with_session(
+            *user_id,
+            "test@example.com",
+            Some("Test User"),
+            Some(current_session_id),
+        )
         .unwrap();
 
     let app = build_my_session_test_router(state);
@@ -366,24 +376,29 @@ async fn test_revoke_session_success() {
     // Create a valid JWT token with session ID
     let token = state
         .jwt_manager
-        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(*current_session_id))
+        .create_identity_token_with_session(
+            *user_id,
+            "test@example.com",
+            Some("Test User"),
+            Some(*current_session_id),
+        )
         .unwrap();
 
     let app = build_my_session_test_router(state.clone());
 
-    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
-        &app,
-        &format!("/api/v1/me/sessions/{}", session_id),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<MessageResponse>) =
+        delete_json_with_auth(&app, &format!("/api/v1/me/sessions/{}", session_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     assert!(body.unwrap().message.contains("revoked"));
 
     // Verify only the target session is revoked (current session should remain)
-    let remaining = state.session_repo.list_active_by_user(user_id).await.unwrap();
+    let remaining = state
+        .session_repo
+        .list_active_by_user(user_id)
+        .await
+        .unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].id, current_session_id);
 }
@@ -402,7 +417,12 @@ async fn test_revoke_session_not_found() {
     let current_session_id = uuid::Uuid::new_v4();
     let token = state
         .jwt_manager
-        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(current_session_id))
+        .create_identity_token_with_session(
+            *user_id,
+            "test@example.com",
+            Some("Test User"),
+            Some(current_session_id),
+        )
         .unwrap();
 
     let app = build_my_session_test_router(state);
@@ -481,7 +501,12 @@ async fn test_revoke_other_sessions_success() {
     // Create a valid JWT token with session ID
     let token = state
         .jwt_manager
-        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(*current_session_id))
+        .create_identity_token_with_session(
+            *user_id,
+            "test@example.com",
+            Some("Test User"),
+            Some(*current_session_id),
+        )
         .unwrap();
 
     let app = build_my_session_test_router(state.clone());
@@ -497,7 +522,11 @@ async fn test_revoke_other_sessions_success() {
     assert_eq!(response.revoked_count, 3);
 
     // Verify only current session remains
-    let remaining = state.session_repo.list_active_by_user(user_id).await.unwrap();
+    let remaining = state
+        .session_repo
+        .list_active_by_user(user_id)
+        .await
+        .unwrap();
     assert_eq!(remaining.len(), 1);
     assert_eq!(remaining[0].id, current_session_id);
 }
@@ -530,7 +559,12 @@ async fn test_revoke_other_sessions_no_other_sessions() {
     let current_session_id = uuid::Uuid::new_v4();
     let token = state
         .jwt_manager
-        .create_identity_token_with_session(*user_id, "test@example.com", Some("Test User"), Some(current_session_id))
+        .create_identity_token_with_session(
+            *user_id,
+            "test@example.com",
+            Some("Test User"),
+            Some(current_session_id),
+        )
         .unwrap();
 
     let app = build_my_session_test_router(state);

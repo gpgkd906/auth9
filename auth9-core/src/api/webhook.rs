@@ -75,6 +75,24 @@ pub async fn delete_webhook<S: HasWebhooks>(
     Ok(Json(MessageResponse::new("Webhook deleted successfully.")))
 }
 
+/// Regenerate a webhook's secret
+pub async fn regenerate_webhook_secret<S: HasWebhooks>(
+    State(state): State<S>,
+    Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
+) -> Result<Json<SuccessResponse<Webhook>>, AppError> {
+    // Verify the webhook belongs to the tenant
+    let existing = state.webhook_service().get(webhook_id).await?;
+    if existing.tenant_id != tenant_id {
+        return Err(AppError::NotFound("Webhook not found".to_string()));
+    }
+
+    let webhook = state
+        .webhook_service()
+        .regenerate_secret(webhook_id)
+        .await?;
+    Ok(Json(SuccessResponse::new(webhook)))
+}
+
 /// Test a webhook by sending a test event
 pub async fn test_webhook<S: HasWebhooks>(
     State(state): State<S>,

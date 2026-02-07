@@ -1,7 +1,8 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import SessionsPage from "~/routes/dashboard.settings.sessions";
+import SessionsPage, { loader, action } from "~/routes/dashboard.settings.sessions";
 import { sessionApi } from "~/services/api";
 
 // Mock the API
@@ -17,6 +18,8 @@ vi.mock("~/services/api", () => ({
 vi.mock("~/services/session.server", () => ({
   getAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
 }));
+
+import { getAccessToken } from "~/services/session.server";
 
 const mockCurrentSession = {
   id: "session-1",
@@ -311,5 +314,305 @@ describe("Sessions Settings Page", () => {
     const response = await stubAction({ request });
 
     expect(response).toEqual({ error: "Invalid action" });
+  });
+
+  // ============================================================================
+  // formatDate edge case tests
+  // ============================================================================
+
+  it("renders last active with days format for sessions older than 24h", async () => {
+    const threeDaysAgo = new Date(Date.now() - 3 * 86400000).toISOString();
+    const mockSessionDaysOld = {
+      ...mockCurrentSession,
+      last_active_at: threeDaysAgo,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [mockSessionDaysOld] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/3 days ago/)).toBeInTheDocument();
+    });
+  });
+
+  it("renders last active with locale date for sessions older than 7 days", async () => {
+    const twoWeeksAgo = new Date(Date.now() - 14 * 86400000);
+    const mockSessionWeeksOld = {
+      ...mockCurrentSession,
+      last_active_at: twoWeeksAgo.toISOString(),
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [mockSessionWeeksOld] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      // Should use toLocaleDateString format for 7+ day old sessions
+      const expectedDate = twoWeeksAgo.toLocaleDateString();
+      expect(screen.getByText(new RegExp(expectedDate))).toBeInTheDocument();
+    });
+  });
+
+  it("renders tablet device icon for tablet sessions", async () => {
+    const tabletSession = {
+      ...mockOtherSession,
+      id: "session-tablet",
+      device_type: "tablet",
+      device_name: "Safari on iPad",
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [mockCurrentSession, tabletSession] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Safari on iPad")).toBeInTheDocument();
+    });
+  });
+
+  it("displays action error message in other sessions section", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [mockCurrentSession, mockOtherSession] }),
+        action: () => ({ error: "Session revocation failed" }),
+      },
+    ]);
+
+    const user = userEvent.setup();
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Safari on iPhone")).toBeInTheDocument();
+    });
+
+    // Click revoke button to trigger the action
+    const revokeButton = screen.getByRole("button", { name: /revoke/i });
+    await user.click(revokeButton);
+
+    await waitFor(() => {
+      expect(screen.getByText("Session revocation failed")).toBeInTheDocument();
+    });
+  });
+
+  it("displays 'Unknown Device' when device_name is empty", async () => {
+    const unknownDeviceSession = {
+      ...mockCurrentSession,
+      device_name: undefined,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [unknownDeviceSession] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Unknown Device")).toBeInTheDocument();
+    });
+  });
+
+  it("renders session without ip_address correctly", async () => {
+    const noIpSession = {
+      ...mockCurrentSession,
+      ip_address: undefined,
+      location: undefined,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [noIpSession] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Chrome on macOS")).toBeInTheDocument();
+    });
+    // IP address should not be shown
+    expect(screen.queryByText(/192\.168/)).not.toBeInTheDocument();
+  });
+
+  it("shows 'Unable to identify current session' when no current session", async () => {
+    const nonCurrentSession = {
+      ...mockOtherSession,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [nonCurrentSession] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Unable to identify current session")).toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
+  // Direct loader/action Tests
+  // ============================================================================
+
+  describe("loader (direct)", () => {
+    it("returns sessions from API", async () => {
+      vi.mocked(sessionApi.listMySessions).mockResolvedValue({
+        data: [mockCurrentSession],
+      });
+
+      const request = new Request("http://localhost/dashboard/settings/sessions");
+      const result = await loader({ request, params: {}, context: {} });
+      expect(result).toEqual({ sessions: [mockCurrentSession] });
+    });
+
+    it("returns empty sessions on API error", async () => {
+      vi.mocked(sessionApi.listMySessions).mockRejectedValue(new Error("API Error"));
+
+      const request = new Request("http://localhost/dashboard/settings/sessions");
+      const result = await loader({ request, params: {}, context: {} });
+      expect(result).toEqual({ sessions: [], error: "Failed to load sessions" });
+    });
+
+    it("redirects to login when not authenticated", async () => {
+      vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+
+      const request = new Request("http://localhost/dashboard/settings/sessions");
+      await expect(loader({ request, params: {}, context: {} })).rejects.toEqual(
+        expect.objectContaining({ status: 302 })
+      );
+    });
+  });
+
+  describe("action (direct)", () => {
+    it("revokes a specific session", async () => {
+      vi.mocked(sessionApi.revokeSession).mockResolvedValue(undefined);
+
+      const formData = new FormData();
+      formData.append("intent", "revoke");
+      formData.append("sessionId", "session-2");
+
+      const request = new Request("http://localhost/dashboard/settings/sessions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await action({ request, params: {}, context: {} });
+      expect(sessionApi.revokeSession).toHaveBeenCalledWith("session-2", "mock-access-token");
+      expect(result).toBeInstanceOf(Response);
+      expect((result as Response).status).toBe(302);
+    });
+
+    it("revokes all other sessions", async () => {
+      vi.mocked(sessionApi.revokeOtherSessions).mockResolvedValue(undefined);
+
+      const formData = new FormData();
+      formData.append("intent", "revoke_all");
+
+      const request = new Request("http://localhost/dashboard/settings/sessions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await action({ request, params: {}, context: {} });
+      expect(sessionApi.revokeOtherSessions).toHaveBeenCalledWith("mock-access-token");
+      expect(result).toBeInstanceOf(Response);
+    });
+
+    it("returns error when not authenticated", async () => {
+      vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+
+      const formData = new FormData();
+      formData.append("intent", "revoke");
+      formData.append("sessionId", "session-2");
+
+      const request = new Request("http://localhost/dashboard/settings/sessions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await action({ request, params: {}, context: {} });
+      expect(result).toEqual({ error: "Not authenticated" });
+    });
+
+    it("returns error on API failure", async () => {
+      vi.mocked(sessionApi.revokeSession).mockRejectedValue(new Error("Not found"));
+
+      const formData = new FormData();
+      formData.append("intent", "revoke");
+      formData.append("sessionId", "bad-id");
+
+      const request = new Request("http://localhost/dashboard/settings/sessions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await action({ request, params: {}, context: {} });
+      expect(result).toEqual({ error: "Not found" });
+    });
+
+    it("returns error for invalid intent", async () => {
+      const formData = new FormData();
+      formData.append("intent", "invalid");
+
+      const request = new Request("http://localhost/dashboard/settings/sessions", {
+        method: "POST",
+        body: formData,
+      });
+
+      const result = await action({ request, params: {}, context: {} });
+      expect(result).toEqual({ error: "Invalid action" });
+    });
+  });
+
+  it("renders 'Just now' for very recent sessions", async () => {
+    const justNow = new Date().toISOString();
+    const recentSession = {
+      ...mockCurrentSession,
+      last_active_at: justNow,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/settings/sessions",
+        Component: SessionsPage,
+        loader: () => ({ sessions: [recentSession] }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/Just now/)).toBeInTheDocument();
+    });
   });
 });

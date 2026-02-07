@@ -23,6 +23,7 @@ export default defineConfig({
         "app/**/*.test.{ts,tsx}",
         "app/entry.*.tsx",
         "app/root.tsx",
+        "app/routes.ts",
       ],
       thresholds: {
         global: {

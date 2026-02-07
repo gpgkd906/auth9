@@ -759,3 +759,154 @@ async fn test_userinfo_without_name() {
     let claims = body.unwrap();
     assert_eq!(claims["email"], "noname@example.com");
 }
+
+// ============================================================================
+// Health & Ready Endpoint Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_health_endpoint_via_router() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) = get_json(&app, "/health").await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["status"], "healthy");
+    assert!(body["version"].as_str().is_some());
+}
+
+#[tokio::test]
+async fn test_ready_endpoint_via_router() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    let (status, _body) = get_raw(&app, "/ready").await;
+    // TestAppState.check_ready always returns (true, true)
+    assert_eq!(status, StatusCode::OK);
+}
+
+// ============================================================================
+// Logout with valid token tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_logout_with_valid_token_and_session() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create a user and session first
+    let user_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+
+    // Create identity token with session ID
+    let token = state
+        .jwt_manager
+        .create_identity_token_with_session(
+            user_id,
+            "logout-user@example.com",
+            Some("Logout User"),
+            Some(session_id),
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    // Logout with bearer token containing session ID
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::GET)
+        .uri("/api/v1/auth/logout")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(axum::body::Body::empty())
+        .unwrap();
+
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    // Should still redirect to Keycloak (session revocation is best-effort)
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+}
+
+#[tokio::test]
+async fn test_logout_with_expired_token() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    // Use an obviously invalid token (not a real JWT)
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::GET)
+        .uri("/api/v1/auth/logout")
+        .header("Authorization", "Bearer expired-invalid-token")
+        .body(axum::body::Body::empty())
+        .unwrap();
+
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    // Should still redirect to Keycloak even with invalid token
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+}
+
+#[tokio::test]
+async fn test_logout_with_token_no_session_id() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create identity token WITHOUT session ID
+    let user_id = Uuid::new_v4();
+    let token = state
+        .jwt_manager
+        .create_identity_token(user_id, "no-session@example.com", None)
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::GET)
+        .uri("/api/v1/auth/logout")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(axum::body::Body::empty())
+        .unwrap();
+
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    // Should still redirect to Keycloak
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+}
+
+// ============================================================================
+// Authorize with scope filtering tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_authorize_with_invalid_scope_rejects() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.redirect_uris = vec!["https://app.example.com/callback".to_string()];
+    state.service_repo.add_service(service.clone()).await;
+
+    let client = Client {
+        id: StringUuid::new_v4(),
+        service_id: StringUuid::from(service_id),
+        client_id: "scope-test-client".to_string(),
+        client_secret_hash: "hash".to_string(),
+        name: None,
+        created_at: Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+
+    // Scope without openid should return 400
+    let (status, _body) = get_raw(
+        &app,
+        "/api/v1/auth/authorize?response_type=code&client_id=scope-test-client&redirect_uri=https://app.example.com/callback&scope=profile+email&state=csrf-state",
+    ).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}

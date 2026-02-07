@@ -682,7 +682,9 @@ mod tests {
 
         let alerts = service.analyze_login_event(&event).await.unwrap();
         // Should have impossible travel alert (same user agent passes device check)
-        assert!(alerts.iter().any(|a| a.alert_type == SecurityAlertType::ImpossibleTravel));
+        assert!(alerts
+            .iter()
+            .any(|a| a.alert_type == SecurityAlertType::ImpossibleTravel));
     }
 
     #[tokio::test]
@@ -772,16 +774,17 @@ mod tests {
 
         let alert_id = StringUuid::new_v4();
 
-        alert_mock.expect_find_by_id().with(eq(alert_id)).returning(
-            move |id| {
+        alert_mock
+            .expect_find_by_id()
+            .with(eq(alert_id))
+            .returning(move |id| {
                 Ok(Some(SecurityAlert {
                     id,
                     alert_type: SecurityAlertType::BruteForce,
                     severity: AlertSeverity::High,
                     ..Default::default()
                 }))
-            },
-        );
+            });
 
         let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
         let service = SecurityDetectionService::new(
@@ -827,7 +830,10 @@ mod tests {
         let mut alert_mock = MockSecurityAlertRepository::new();
         let webhook_mock = MockWebhookRepository::new();
 
-        alert_mock.expect_delete_old().with(eq(30)).returning(|_| Ok(5));
+        alert_mock
+            .expect_delete_old()
+            .with(eq(30))
+            .returning(|_| Ok(5));
 
         let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
         let service = SecurityDetectionService::new(

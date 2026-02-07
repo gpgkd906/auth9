@@ -20,10 +20,10 @@ use auth9_core::domain::{
     CreatePermissionInput, CreateRoleInput, CreateSecurityAlertInput, CreateServiceInput,
     CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput, Invitation,
     InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats, PasswordResetToken,
-    Permission, Role, SecurityAlert, Service, ServiceStatus, Session,
-    StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
-    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
-    UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
+    Permission, Role, SecurityAlert, Service, ServiceStatus, Session, StringUuid, SystemSettingRow,
+    Tenant, TenantSettings, TenantStatus, TenantUser, UpdateRoleInput, UpdateServiceInput,
+    UpdateTenantInput, UpdateUserInput, UpdateWebhookInput, UpsertSystemSettingInput, User,
+    UserRolesInTenant, Webhook,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
@@ -398,9 +398,7 @@ impl UserRepository for TestUserRepository {
         let tu = tenant_users
             .iter_mut()
             .find(|tu| tu.user_id == user_id && tu.tenant_id == tenant_id)
-            .ok_or_else(|| {
-                AppError::NotFound("User-tenant relationship not found".to_string())
-            })?;
+            .ok_or_else(|| AppError::NotFound("User-tenant relationship not found".to_string()))?;
         tu.role_in_tenant = role.to_string();
         Ok(tu.clone())
     }
@@ -1141,8 +1139,30 @@ impl AuditRepository for TestAuditRepository {
     }
 
     async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
-        let logs = self.find(query).await?;
-        Ok(logs.len() as i64)
+        // Count should return total matching records WITHOUT pagination (like the real impl)
+        let logs = self.logs.read().await;
+        let count = logs
+            .iter()
+            .filter(|log| {
+                if let Some(actor_id) = query.actor_id {
+                    if log.actor_id.as_ref().map(|id| id.as_str()) != Some(&actor_id.to_string()) {
+                        return false;
+                    }
+                }
+                if let Some(ref resource_type) = query.resource_type {
+                    if &log.resource_type != resource_type {
+                        return false;
+                    }
+                }
+                if let Some(ref action) = query.action {
+                    if &log.action != action {
+                        return false;
+                    }
+                }
+                true
+            })
+            .count();
+        Ok(count as i64)
     }
 
     async fn find_with_actor(
@@ -1827,8 +1847,7 @@ impl InvitationRepository for TestInvitationRepository {
         let mut filtered: Vec<_> = invitations
             .values()
             .filter(|i| {
-                i.tenant_id == tenant_id
-                    && status.as_ref().map_or(true, |s| &i.status == s)
+                i.tenant_id == tenant_id && status.as_ref().map_or(true, |s| &i.status == s)
             })
             .cloned()
             .collect();
@@ -1849,8 +1868,7 @@ impl InvitationRepository for TestInvitationRepository {
         Ok(invitations
             .values()
             .filter(|i| {
-                i.tenant_id == tenant_id
-                    && status.as_ref().map_or(true, |s| &i.status == s)
+                i.tenant_id == tenant_id && status.as_ref().map_or(true, |s| &i.status == s)
             })
             .count() as i64)
     }

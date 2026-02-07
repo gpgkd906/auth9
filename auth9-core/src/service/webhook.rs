@@ -15,6 +15,51 @@ use validator::Validate;
 
 type HmacSha256 = Hmac<Sha256>;
 
+/// Minimal HTTP client interface for webhook delivery.
+///
+/// This exists to keep unit tests hermetic (no TCP listeners required).
+#[cfg_attr(test, mockall::automock)]
+#[async_trait]
+pub trait WebhookHttpClient: Send + Sync {
+    async fn post(
+        &self,
+        url: &str,
+        headers: Vec<(String, String)>,
+        body: String,
+        timeout: Duration,
+    ) -> std::result::Result<(u16, Option<String>), String>;
+}
+
+#[derive(Clone)]
+struct ReqwestWebhookHttpClient {
+    client: reqwest::Client,
+}
+
+#[async_trait]
+impl WebhookHttpClient for ReqwestWebhookHttpClient {
+    async fn post(
+        &self,
+        url: &str,
+        headers: Vec<(String, String)>,
+        body: String,
+        timeout_dur: Duration,
+    ) -> std::result::Result<(u16, Option<String>), String> {
+        let mut req = self.client.post(url);
+        for (k, v) in headers {
+            req = req.header(k, v);
+        }
+
+        let resp = timeout(timeout_dur, req.body(body).send())
+            .await
+            .map_err(|_| "Webhook request timed out".to_string())?
+            .map_err(|e| e.to_string())?;
+
+        let status = resp.status().as_u16();
+        let text = resp.text().await.ok();
+        Ok((status, text))
+    }
+}
+
 /// Trait for publishing webhook events.
 ///
 /// This trait allows services to trigger webhook events without depending
@@ -35,10 +80,16 @@ fn generate_webhook_secret() -> String {
     format!("whsec_{}", hex::encode(bytes))
 }
 
+/// Maximum number of consecutive failures before auto-disabling a webhook
+const MAX_FAILURE_COUNT: i32 = 10;
+
+/// Maximum number of retry attempts for failed webhook deliveries
+const MAX_RETRY_ATTEMPTS: u32 = 3;
+
 /// Webhook service for managing and triggering webhooks
 pub struct WebhookService<W: WebhookRepository> {
     webhook_repo: Arc<W>,
-    http_client: reqwest::Client,
+    http_client: Arc<dyn WebhookHttpClient>,
 }
 
 impl<W: WebhookRepository + 'static> WebhookService<W> {
@@ -48,6 +99,16 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
             .build()
             .unwrap_or_default();
 
+        Self {
+            webhook_repo,
+            http_client: Arc::new(ReqwestWebhookHttpClient {
+                client: http_client,
+            }),
+        }
+    }
+
+    #[cfg(test)]
+    fn new_with_http(webhook_repo: Arc<W>, http_client: Arc<dyn WebhookHttpClient>) -> Self {
         Self {
             webhook_repo,
             http_client,
@@ -110,7 +171,7 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
         };
 
         let start = Instant::now();
-        match deliver_webhook_with_status(&self.http_client, &webhook, &test_event).await {
+        match deliver_webhook_with_status(self.http_client.as_ref(), &webhook, &test_event).await {
             Ok(response) => Ok(WebhookTestResult {
                 success: true,
                 status_code: Some(response.status_code),
@@ -152,24 +213,63 @@ impl<W: WebhookRepository + 'static> WebhookEventPublisher for WebhookService<W>
             .await?;
 
         for webhook in webhooks {
-            // Clone what we need for the spawned task
             let http_client = self.http_client.clone();
             let webhook_repo = self.webhook_repo.clone();
             let event_clone = event.clone();
             let webhook_clone = webhook.clone();
 
-            // Fire and forget - don't block on webhook delivery
             tokio::spawn(async move {
-                let result = deliver_webhook(&http_client, &webhook_clone, &event_clone).await;
+                let mut success = false;
+
+                // Retry with exponential backoff
+                for attempt in 0..MAX_RETRY_ATTEMPTS {
+                    match deliver_webhook(http_client.as_ref(), &webhook_clone, &event_clone).await
+                    {
+                        Ok(_) => {
+                            success = true;
+                            break;
+                        }
+                        Err(e) => {
+                            tracing::warn!(
+                                "Webhook delivery attempt {}/{} failed for {}: {}",
+                                attempt + 1,
+                                MAX_RETRY_ATTEMPTS,
+                                webhook_clone.id,
+                                e
+                            );
+                            if attempt + 1 < MAX_RETRY_ATTEMPTS {
+                                let delay = Duration::from_secs(2u64.pow(attempt));
+                                tokio::time::sleep(delay).await;
+                            }
+                        }
+                    }
+                }
 
                 // Update the webhook status
-                let success = result.is_ok();
                 let _ = webhook_repo
                     .update_triggered(webhook_clone.id, success)
                     .await;
 
-                if let Err(e) = result {
-                    tracing::warn!("Webhook delivery failed for {}: {}", webhook_clone.id, e);
+                // Auto-disable if failure count exceeds threshold
+                if !success {
+                    if let Ok(Some(w)) = webhook_repo.find_by_id(webhook_clone.id).await {
+                        if w.failure_count >= MAX_FAILURE_COUNT {
+                            tracing::warn!(
+                                "Auto-disabling webhook {} after {} consecutive failures",
+                                webhook_clone.id,
+                                w.failure_count
+                            );
+                            let _ = webhook_repo
+                                .update(
+                                    webhook_clone.id,
+                                    &UpdateWebhookInput {
+                                        enabled: Some(false),
+                                        ..Default::default()
+                                    },
+                                )
+                                .await;
+                        }
+                    }
                 }
             });
         }
@@ -179,7 +279,7 @@ impl<W: WebhookRepository + 'static> WebhookEventPublisher for WebhookService<W>
 }
 
 /// Result of a webhook test
-#[derive(Debug, Clone, serde::Serialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct WebhookTestResult {
     pub success: bool,
     pub status_code: Option<u16>,
@@ -196,7 +296,7 @@ struct WebhookResponse {
 
 /// Deliver a webhook event to a specific webhook endpoint
 async fn deliver_webhook(
-    client: &reqwest::Client,
+    client: &dyn WebhookHttpClient,
     webhook: &Webhook,
     event: &WebhookEvent,
 ) -> Result<WebhookResponse> {
@@ -208,42 +308,39 @@ async fn deliver_webhook(
 
 /// Deliver a webhook and return status code even on error
 async fn deliver_webhook_with_status(
-    client: &reqwest::Client,
+    client: &dyn WebhookHttpClient,
     webhook: &Webhook,
     event: &WebhookEvent,
 ) -> std::result::Result<WebhookResponse, (Option<u16>, String)> {
     let payload = serde_json::to_string(event).map_err(|e| (None, e.to_string()))?;
 
-    let mut request = client
-        .post(&webhook.url)
-        .header("Content-Type", "application/json")
-        .header("X-Webhook-Event", &event.event_type)
-        .header("X-Webhook-Timestamp", event.timestamp.to_rfc3339());
+    let mut headers = vec![
+        ("Content-Type".to_string(), "application/json".to_string()),
+        ("X-Webhook-Event".to_string(), event.event_type.clone()),
+        (
+            "X-Webhook-Timestamp".to_string(),
+            event.timestamp.to_rfc3339(),
+        ),
+    ];
 
     // Add signature if secret is configured
     if let Some(secret) = &webhook.secret {
         let signature = compute_signature(&payload, secret).map_err(|e| (None, e.to_string()))?;
-        request = request.header("X-Webhook-Signature", signature);
+        headers.push(("X-Webhook-Signature".to_string(), signature));
     }
 
-    // Send the request with a timeout
-    let response = timeout(Duration::from_secs(30), request.body(payload).send())
+    let (status_code, body) = client
+        .post(&webhook.url, headers, payload, Duration::from_secs(30))
         .await
-        .map_err(|_| (None, "Webhook request timed out".to_string()))?
-        .map_err(|e| (None, e.to_string()))?;
-
-    let status_code = response.status().as_u16();
+        .map_err(|e| (None, e))?;
 
     // Consider 2xx status codes as success
-    if !response.status().is_success() {
-        let body = response.text().await.ok();
+    if !(200..=299).contains(&status_code) {
         return Err((
             Some(status_code),
             format!("Webhook returned error status {}: {:?}", status_code, body),
         ));
     }
-
-    let body = response.text().await.ok();
 
     Ok(WebhookResponse { status_code, body })
 }
@@ -265,8 +362,39 @@ mod tests {
     use super::*;
     use crate::repository::webhook::MockWebhookRepository;
     use mockall::predicate::*;
-    use wiremock::matchers::{header, method, path};
-    use wiremock::{Mock, MockServer, ResponseTemplate};
+    use std::sync::Mutex;
+
+    #[derive(Debug, Clone)]
+    struct RecordedRequest {
+        url: String,
+        headers: Vec<(String, String)>,
+        body: String,
+    }
+
+    #[derive(Clone)]
+    struct RecordingHttpClient {
+        requests: Arc<Mutex<Vec<RecordedRequest>>>,
+        status: u16,
+        body: Option<String>,
+    }
+
+    #[async_trait]
+    impl WebhookHttpClient for RecordingHttpClient {
+        async fn post(
+            &self,
+            url: &str,
+            headers: Vec<(String, String)>,
+            body: String,
+            _timeout: Duration,
+        ) -> std::result::Result<(u16, Option<String>), String> {
+            self.requests.lock().unwrap().push(RecordedRequest {
+                url: url.to_string(),
+                headers,
+                body,
+            });
+            Ok((self.status, self.body.clone()))
+        }
+    }
 
     #[test]
     fn test_compute_signature() {
@@ -466,24 +594,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_trigger_event_success() {
-        // Start a mock HTTP server
-        let mock_server = MockServer::start().await;
-
-        Mock::given(method("POST"))
-            .and(path("/webhook"))
-            .and(header("Content-Type", "application/json"))
-            .and(header("X-Webhook-Event", "login.success"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let http = Arc::new(RecordingHttpClient {
+            requests: requests.clone(),
+            status: 200,
+            body: Some("ok".to_string()),
+        });
 
         let webhook_id = StringUuid::new_v4();
         let tenant_id = StringUuid::new_v4();
 
         let mut mock = MockWebhookRepository::new();
         mock.expect_list_enabled_for_event().returning({
-            let url = format!("{}/webhook", mock_server.uri());
+            let url = "https://example.com/webhook".to_string();
             move |_| {
                 Ok(vec![Webhook {
                     id: webhook_id,
@@ -497,9 +620,12 @@ mod tests {
                 }])
             }
         });
-        mock.expect_update_triggered().returning(|_, _| Ok(()));
+        mock.expect_update_triggered()
+            .with(eq(webhook_id), eq(true))
+            .returning(|_, _| Ok(()))
+            .times(1);
 
-        let service = WebhookService::new(Arc::new(mock));
+        let service = WebhookService::new_with_http(Arc::new(mock), http);
 
         let event = WebhookEvent {
             event_type: "login.success".to_string(),
@@ -512,6 +638,15 @@ mod tests {
 
         // Wait a bit for the spawned task to complete
         tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let reqs = requests.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        let req = &reqs[0];
+        assert_eq!(req.url, "https://example.com/webhook");
+        assert!(req
+            .headers
+            .iter()
+            .any(|(k, v)| k == "X-Webhook-Event" && v == "login.success"));
     }
 
     #[tokio::test]
@@ -534,25 +669,19 @@ mod tests {
 
     #[tokio::test]
     async fn test_trigger_event_with_signature() {
-        let mock_server = MockServer::start().await;
-
-        // Verify that signature header is present
-        Mock::given(method("POST"))
-            .and(path("/webhook"))
-            .and(header("Content-Type", "application/json"))
-            .and(header("X-Webhook-Event", "user.created"))
-            .and(wiremock::matchers::header_exists("X-Webhook-Signature"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let http = Arc::new(RecordingHttpClient {
+            requests: requests.clone(),
+            status: 200,
+            body: Some("ok".to_string()),
+        });
 
         let webhook_id = StringUuid::new_v4();
         let tenant_id = StringUuid::new_v4();
 
         let mut mock = MockWebhookRepository::new();
         mock.expect_list_enabled_for_event().returning({
-            let url = format!("{}/webhook", mock_server.uri());
+            let url = "https://example.com/webhook".to_string();
             move |_| {
                 Ok(vec![Webhook {
                     id: webhook_id,
@@ -566,9 +695,12 @@ mod tests {
                 }])
             }
         });
-        mock.expect_update_triggered().returning(|_, _| Ok(()));
+        mock.expect_update_triggered()
+            .with(eq(webhook_id), eq(true))
+            .returning(|_, _| Ok(()))
+            .times(1);
 
-        let service = WebhookService::new(Arc::new(mock));
+        let service = WebhookService::new_with_http(Arc::new(mock), http);
 
         let event = WebhookEvent {
             event_type: "user.created".to_string(),
@@ -580,25 +712,36 @@ mod tests {
         assert!(result.is_ok());
 
         tokio::time::sleep(Duration::from_millis(100)).await;
+
+        let reqs = requests.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        let req = &reqs[0];
+        let sig = req
+            .headers
+            .iter()
+            .find(|(k, _)| k == "X-Webhook-Signature")
+            .map(|(_, v)| v.clone());
+        assert!(sig.is_some());
+
+        // The signature must match the recorded payload and the configured secret.
+        let expected = compute_signature(&req.body, "webhook-secret").unwrap();
+        assert_eq!(sig.unwrap(), expected);
     }
 
     #[tokio::test]
     async fn test_test_webhook_success() {
-        let mock_server = MockServer::start().await;
-
-        Mock::given(method("POST"))
-            .and(path("/webhook"))
-            .and(header("X-Webhook-Event", "test"))
-            .respond_with(ResponseTemplate::new(200).set_body_string("Success"))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let http = Arc::new(RecordingHttpClient {
+            requests: requests.clone(),
+            status: 200,
+            body: Some("Success".to_string()),
+        });
 
         let webhook_id = StringUuid::new_v4();
 
         let mut mock = MockWebhookRepository::new();
         mock.expect_find_by_id().returning({
-            let url = format!("{}/webhook", mock_server.uri());
+            let url = "https://example.com/webhook".to_string();
             move |id| {
                 Ok(Some(Webhook {
                     id,
@@ -611,31 +754,35 @@ mod tests {
             }
         });
 
-        let service = WebhookService::new(Arc::new(mock));
+        let service = WebhookService::new_with_http(Arc::new(mock), http);
         let result = service.test(webhook_id).await.unwrap();
 
         assert!(result.success);
         assert_eq!(result.status_code, Some(200));
         assert_eq!(result.response_body, Some("Success".to_string()));
         assert!(result.error.is_none());
+
+        let reqs = requests.lock().unwrap();
+        assert_eq!(reqs.len(), 1);
+        assert!(reqs[0]
+            .headers
+            .iter()
+            .any(|(k, v)| k == "X-Webhook-Event" && v == "test"));
     }
 
     #[tokio::test]
     async fn test_test_webhook_failure_http_error() {
-        let mock_server = MockServer::start().await;
-
-        Mock::given(method("POST"))
-            .and(path("/webhook"))
-            .respond_with(ResponseTemplate::new(500).set_body_string("Internal Server Error"))
-            .expect(1)
-            .mount(&mock_server)
-            .await;
+        let http = Arc::new(RecordingHttpClient {
+            requests: Arc::new(Mutex::new(Vec::new())),
+            status: 500,
+            body: Some("Internal Server Error".to_string()),
+        });
 
         let webhook_id = StringUuid::new_v4();
 
         let mut mock = MockWebhookRepository::new();
         mock.expect_find_by_id().returning({
-            let url = format!("{}/webhook", mock_server.uri());
+            let url = "https://example.com/webhook".to_string();
             move |id| {
                 Ok(Some(Webhook {
                     id,
@@ -648,7 +795,7 @@ mod tests {
             }
         });
 
-        let service = WebhookService::new(Arc::new(mock));
+        let service = WebhookService::new_with_http(Arc::new(mock), http);
         let result = service.test(webhook_id).await.unwrap();
 
         assert!(!result.success);

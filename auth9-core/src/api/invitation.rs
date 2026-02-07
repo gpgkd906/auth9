@@ -6,8 +6,8 @@ use crate::domain::{
     InvitationResponse, InvitationStatus, StringUuid,
 };
 use crate::error::{AppError, Result};
-use crate::state::HasInvitations;
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
+use crate::state::HasInvitations;
 use axum::{
     extract::{Path, Query, State},
     http::{HeaderMap, StatusCode},
@@ -175,7 +175,10 @@ pub async fn accept<S: HasInvitations>(
         return Err(AppError::Validation("Token is required".to_string()));
     }
 
-    let invitation = state.invitation_service().get_by_token(&request.token).await?;
+    let invitation = state
+        .invitation_service()
+        .get_by_token(&request.token)
+        .await?;
 
     if !invitation.is_valid() {
         if invitation.is_expired() {
@@ -198,10 +201,9 @@ pub async fn accept<S: HasInvitations>(
     let user = match state.user_service().get_by_email(&invitation.email).await {
         Ok(user) => user,
         Err(AppError::NotFound(_)) => {
-            let password = request
-                .password
-                .clone()
-                .ok_or_else(|| AppError::BadRequest("User not found. Please register.".to_string()))?;
+            let password = request.password.clone().ok_or_else(|| {
+                AppError::BadRequest("User not found. Please register.".to_string())
+            })?;
 
             let credentials = vec![KeycloakCredential {
                 credential_type: "password".to_string(),
@@ -239,7 +241,9 @@ pub async fn accept<S: HasInvitations>(
 
     // Ensure user is a member of the tenant
     let tenant_users = state.user_service().get_user_tenants(user.id).await?;
-    let already_member = tenant_users.iter().any(|tu| tu.tenant_id == invitation.tenant_id);
+    let already_member = tenant_users
+        .iter()
+        .any(|tu| tu.tenant_id == invitation.tenant_id);
     if !already_member {
         let _ = state
             .user_service()
@@ -267,7 +271,10 @@ pub async fn accept<S: HasInvitations>(
             .await?;
     }
 
-    let invitation = state.invitation_service().mark_accepted(invitation.id).await?;
+    let invitation = state
+        .invitation_service()
+        .mark_accepted(invitation.id)
+        .await?;
     let response: InvitationResponse = invitation.into();
 
     Ok(Json(SuccessResponse::new(response)))

@@ -94,8 +94,8 @@ describe("Tenant Detail Page", () => {
         enabledServicesCount: 2,
         totalGlobalServicesCount: 3,
       });
-      expect(tenantApi.get).toHaveBeenCalledWith("tenant-1");
-      expect(tenantServiceApi.listServices).toHaveBeenCalledWith("tenant-1");
+      expect(tenantApi.get).toHaveBeenCalledWith("tenant-1", undefined);
+      expect(tenantServiceApi.listServices).toHaveBeenCalledWith("tenant-1", undefined);
     });
 
     it("throws error when tenantId is missing", async () => {
@@ -587,7 +587,7 @@ describe("Tenant Detail Page", () => {
         name: "Updated Acme",
         slug: "updated-acme",
         logo_url: "https://new-logo.com/logo.png",
-      });
+      }, undefined);
       expect(response).toEqual({ success: true });
     });
 
@@ -615,7 +615,7 @@ describe("Tenant Detail Page", () => {
         name: "Updated Acme",
         slug: "updated-acme",
         logo_url: undefined,
-      });
+      }, undefined);
     });
 
     it("returns error when tenantId is missing", async () => {
@@ -746,6 +746,208 @@ describe("Tenant Detail Page", () => {
         expect(screen.getByLabelText("Name")).toBeInTheDocument();
         expect(screen.getByLabelText("Slug")).toBeInTheDocument();
       });
+    });
+
+    it("displays error message from action", async () => {
+      const RoutesStub = createRoutesStub([
+        {
+          path: "/dashboard/tenants/:tenantId",
+          Component: TenantDetailPage,
+          loader: () => ({
+            tenant: mockTenant,
+            servicesCount: 5,
+            pendingInvitationsCount: 3,
+            webhooksCount: 2,
+            enabledServicesCount: 2,
+            totalGlobalServicesCount: 3,
+          }),
+          action: () => ({ error: "Operation not allowed" }),
+        },
+      ]);
+
+      const user = userEvent.setup();
+      render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
+
+      await waitFor(() => {
+        expect(screen.getByLabelText("Name")).toBeInTheDocument();
+      });
+
+      await user.click(screen.getByRole("button", { name: "Save Changes" }));
+
+      await waitFor(() => {
+        expect(screen.getByText("Operation not allowed")).toBeInTheDocument();
+      });
+    });
+  });
+
+  // ============================================================================
+  // Security Settings Tests
+  // ============================================================================
+
+  describe("security settings", () => {
+    const loaderData = {
+      tenant: mockTenant,
+      servicesCount: 5,
+      pendingInvitationsCount: 3,
+      webhooksCount: 2,
+      enabledServicesCount: 2,
+      totalGlobalServicesCount: 3,
+    };
+
+    it("renders security settings card with MFA switch", async () => {
+      const RoutesStub = createRoutesStub([
+        {
+          path: "/dashboard/tenants/:tenantId",
+          Component: TenantDetailPage,
+          loader: () => loaderData,
+        },
+      ]);
+
+      render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Security Settings")).toBeInTheDocument();
+        expect(screen.getByText("Require MFA")).toBeInTheDocument();
+        expect(screen.getByText(/require all users in this tenant/i)).toBeInTheDocument();
+      });
+
+      // MFA switch should be present and unchecked (settings is {})
+      const mfaSwitch = screen.getByRole("switch");
+      expect(mfaSwitch).toBeInTheDocument();
+      expect(mfaSwitch).toHaveAttribute("data-state", "unchecked");
+    });
+
+    it("renders MFA switch as checked when require_mfa is true", async () => {
+      const tenantWithMfa = {
+        ...mockTenant,
+        settings: { require_mfa: true },
+      };
+
+      const RoutesStub = createRoutesStub([
+        {
+          path: "/dashboard/tenants/:tenantId",
+          Component: TenantDetailPage,
+          loader: () => ({
+            ...loaderData,
+            tenant: tenantWithMfa,
+          }),
+        },
+      ]);
+
+      render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
+
+      await waitFor(() => {
+        const mfaSwitch = screen.getByRole("switch");
+        expect(mfaSwitch).toHaveAttribute("data-state", "checked");
+      });
+    });
+
+    it("toggles MFA switch and submits settings via fetcher", async () => {
+      const actionFn = vi.fn().mockReturnValue({ success: true, settingsUpdated: true });
+      const RoutesStub = createRoutesStub([
+        {
+          path: "/dashboard/tenants/:tenantId",
+          Component: TenantDetailPage,
+          loader: () => loaderData,
+          action: actionFn,
+        },
+      ]);
+
+      const user = userEvent.setup();
+      render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
+
+      await waitFor(() => {
+        expect(screen.getByRole("switch")).toBeInTheDocument();
+      });
+
+      // MFA switch should be unchecked initially
+      const mfaSwitch = screen.getByRole("switch");
+      expect(mfaSwitch).toHaveAttribute("data-state", "unchecked");
+
+      // Click to toggle MFA on - this triggers settingsFetcher.submit
+      await user.click(mfaSwitch);
+
+      // The action should have been called with the settings data
+      await waitFor(() => {
+        expect(actionFn).toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ============================================================================
+  // Action - update_settings tests
+  // ============================================================================
+
+  describe("action - update_settings", () => {
+    it("updates security settings with require_mfa true", async () => {
+      vi.mocked(tenantApi.update).mockResolvedValue({ data: mockTenant });
+
+      const formData = new FormData();
+      formData.append("intent", "update_settings");
+      formData.append("require_mfa", "true");
+
+      const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
+        method: "POST",
+        body: formData,
+      });
+
+      const response = await action({
+        request,
+        params: { tenantId: "tenant-1" },
+        context: {},
+      });
+
+      expect(tenantApi.update).toHaveBeenCalledWith("tenant-1", {
+        settings: { require_mfa: true },
+      }, undefined);
+      expect(response).toEqual({ success: true, settingsUpdated: true });
+    });
+
+    it("updates security settings with require_mfa false", async () => {
+      vi.mocked(tenantApi.update).mockResolvedValue({ data: mockTenant });
+
+      const formData = new FormData();
+      formData.append("intent", "update_settings");
+      formData.append("require_mfa", "false");
+
+      const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
+        method: "POST",
+        body: formData,
+      });
+
+      const response = await action({
+        request,
+        params: { tenantId: "tenant-1" },
+        context: {},
+      });
+
+      expect(tenantApi.update).toHaveBeenCalledWith("tenant-1", {
+        settings: { require_mfa: false },
+      }, undefined);
+      expect(response).toEqual({ success: true, settingsUpdated: true });
+    });
+
+    it("returns error when update_settings API call fails", async () => {
+      vi.mocked(tenantApi.update).mockRejectedValue(new Error("MFA update failed"));
+
+      const formData = new FormData();
+      formData.append("intent", "update_settings");
+      formData.append("require_mfa", "true");
+
+      const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
+        method: "POST",
+        body: formData,
+      });
+
+      const response = await action({
+        request,
+        params: { tenantId: "tenant-1" },
+        context: {},
+      });
+
+      expect(response).toBeInstanceOf(Response);
+      const json = await (response as Response).json();
+      expect(json).toEqual({ error: "MFA update failed" });
     });
   });
 });

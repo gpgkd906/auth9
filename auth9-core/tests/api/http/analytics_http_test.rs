@@ -207,8 +207,11 @@ async fn test_list_tenant_events() {
 
     let app = build_analytics_test_router(state);
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<LoginEvent>>) =
-        get_json(&app, &format!("/api/v1/analytics/tenants/{}/events", tenant_id)).await;
+    let (status, body): (StatusCode, Option<PaginatedResponse<LoginEvent>>) = get_json(
+        &app,
+        &format!("/api/v1/analytics/tenants/{}/events", tenant_id),
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

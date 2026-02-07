@@ -2,6 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, Link, useActionData, useLoaderData, useNavigation, useParams, useSearchParams, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, TrashIcon, ReloadIcon, Cross2Icon, ArrowLeftIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
+import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -195,6 +196,7 @@ export default function InvitationsPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
+  const confirm = useConfirm();
   const [searchParams] = useSearchParams();
   const params = useParams();
 
@@ -223,14 +225,25 @@ export default function InvitationsPage() {
     });
   };
 
-  const handleDelete = (id: string) => {
-    if (confirm("Are you sure you want to delete this invitation?")) {
+  const handleDelete = async (id: string) => {
+    const ok = await confirm({
+      title: "Delete Invitation",
+      description: "Are you sure you want to delete this invitation?",
+      variant: "destructive",
+    });
+    if (ok) {
       submit({ intent: "delete", id }, { method: "post" });
     }
   };
 
-  const handleRevoke = (id: string) => {
-    if (confirm("Are you sure you want to revoke this invitation?")) {
+  const handleRevoke = async (id: string) => {
+    const ok = await confirm({
+      title: "Revoke Invitation",
+      description: "Are you sure you want to revoke this invitation?",
+      confirmLabel: "Revoke",
+      variant: "destructive",
+    });
+    if (ok) {
       submit({ intent: "revoke", id }, { method: "post" });
     }
   };

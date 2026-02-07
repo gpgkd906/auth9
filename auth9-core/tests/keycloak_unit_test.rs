@@ -1485,7 +1485,10 @@ async fn test_get_user_sessions_success() {
     let user_id = "user-uuid-12345";
     // Mock get user sessions endpoint
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/users/{}/sessions", user_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/sessions",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!([
             {
                 "id": "session-1",
@@ -1537,7 +1540,10 @@ async fn test_get_user_sessions_not_found() {
     let user_id = "nonexistent-user";
     // Mock 404 response
     Mock::given(method("GET"))
-        .and(path(format!("/admin/realms/test/users/{}/sessions", user_id)))
+        .and(path(format!(
+            "/admin/realms/test/users/{}/sessions",
+            user_id
+        )))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -1843,7 +1849,9 @@ async fn test_delete_identity_provider_success() {
 
     // Mock delete identity provider endpoint
     Mock::given(method("DELETE"))
-        .and(path("/admin/realms/test/identity-provider/instances/google"))
+        .and(path(
+            "/admin/realms/test/identity-provider/instances/google",
+        ))
         .respond_with(ResponseTemplate::new(204))
         .mount(&mock_server)
         .await;
@@ -1870,7 +1878,9 @@ async fn test_delete_identity_provider_not_found() {
 
     // Mock 404 response
     Mock::given(method("DELETE"))
-        .and(path("/admin/realms/test/identity-provider/instances/nonexistent"))
+        .and(path(
+            "/admin/realms/test/identity-provider/instances/nonexistent",
+        ))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -2284,7 +2294,9 @@ async fn test_get_identity_provider_success() {
 
     // Mock get identity provider endpoint
     Mock::given(method("GET"))
-        .and(path("/admin/realms/test/identity-provider/instances/google"))
+        .and(path(
+            "/admin/realms/test/identity-provider/instances/google",
+        ))
         .respond_with(ResponseTemplate::new(200).set_body_json(json!({
             "alias": "google",
             "displayName": "Google",
@@ -2323,7 +2335,9 @@ async fn test_get_identity_provider_not_found() {
 
     // Mock 404 response
     Mock::given(method("GET"))
-        .and(path("/admin/realms/test/identity-provider/instances/nonexistent"))
+        .and(path(
+            "/admin/realms/test/identity-provider/instances/nonexistent",
+        ))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;
@@ -2354,7 +2368,9 @@ async fn test_update_identity_provider_success() {
 
     // Mock update identity provider endpoint
     Mock::given(method("PUT"))
-        .and(path("/admin/realms/test/identity-provider/instances/google"))
+        .and(path(
+            "/admin/realms/test/identity-provider/instances/google",
+        ))
         .respond_with(ResponseTemplate::new(204))
         .mount(&mock_server)
         .await;
@@ -2394,7 +2410,9 @@ async fn test_update_identity_provider_not_found() {
 
     // Mock 404 response
     Mock::given(method("PUT"))
-        .and(path("/admin/realms/test/identity-provider/instances/nonexistent"))
+        .and(path(
+            "/admin/realms/test/identity-provider/instances/nonexistent",
+        ))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;

@@ -9,7 +9,10 @@ use sqlx::MySqlPool;
 #[async_trait]
 pub trait TenantServiceRepository: Send + Sync {
     /// List all services with their enabled status for a tenant
-    async fn list_services_for_tenant(&self, tenant_id: StringUuid) -> Result<Vec<ServiceWithStatus>>;
+    async fn list_services_for_tenant(
+        &self,
+        tenant_id: StringUuid,
+    ) -> Result<Vec<ServiceWithStatus>>;
 
     /// Enable or disable a service for a tenant
     async fn toggle_service(
@@ -23,7 +26,11 @@ pub trait TenantServiceRepository: Send + Sync {
     async fn get_enabled_services(&self, tenant_id: StringUuid) -> Result<Vec<ServiceWithStatus>>;
 
     /// Check if a service is enabled for a tenant
-    async fn is_service_enabled(&self, tenant_id: StringUuid, service_id: StringUuid) -> Result<bool>;
+    async fn is_service_enabled(
+        &self,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+    ) -> Result<bool>;
 }
 
 pub struct TenantServiceRepositoryImpl {
@@ -38,7 +45,10 @@ impl TenantServiceRepositoryImpl {
 
 #[async_trait]
 impl TenantServiceRepository for TenantServiceRepositoryImpl {
-    async fn list_services_for_tenant(&self, tenant_id: StringUuid) -> Result<Vec<ServiceWithStatus>> {
+    async fn list_services_for_tenant(
+        &self,
+        tenant_id: StringUuid,
+    ) -> Result<Vec<ServiceWithStatus>> {
         // List all global services (tenant_id IS NULL) with their enabled status for this tenant
         let services = sqlx::query_as::<_, ServiceWithStatus>(
             r#"
@@ -106,7 +116,11 @@ impl TenantServiceRepository for TenantServiceRepositoryImpl {
         Ok(services)
     }
 
-    async fn is_service_enabled(&self, tenant_id: StringUuid, service_id: StringUuid) -> Result<bool> {
+    async fn is_service_enabled(
+        &self,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+    ) -> Result<bool> {
         let row: Option<(bool,)> = sqlx::query_as(
             r#"
             SELECT enabled FROM tenant_services
@@ -164,7 +178,10 @@ mod tests {
             .with(eq(tenant_id), eq(service_id))
             .returning(|_, _| Ok(true));
 
-        let result = mock.is_service_enabled(tenant_id, service_id).await.unwrap();
+        let result = mock
+            .is_service_enabled(tenant_id, service_id)
+            .await
+            .unwrap();
         assert!(result);
     }
 }

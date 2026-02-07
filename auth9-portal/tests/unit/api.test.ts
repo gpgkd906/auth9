@@ -9,6 +9,15 @@ import {
   invitationApi,
   brandingApi,
   emailTemplateApi,
+  analyticsApi,
+  webhookApi,
+  tenantServiceApi,
+  securityAlertApi,
+  passwordApi,
+  sessionApi,
+  webauthnApi,
+  identityProviderApi,
+  publicBrandingApi,
   type Tenant,
   type User,
   type Service,
@@ -107,7 +116,8 @@ describe('API Service', () => {
       const result = await tenantApi.get('123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants/123')
+        expect.stringContaining('/api/v1/tenants/123'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data).toEqual(mockTenant);
     });
@@ -373,7 +383,8 @@ describe('API Service', () => {
       await serviceApi.listClients('service-123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/services/service-123/clients')
+        expect.stringContaining('/api/v1/services/service-123/clients'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -433,7 +444,8 @@ describe('API Service', () => {
       await rbacApi.listRoles('service-123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/services/service-123/roles')
+        expect.stringContaining('/api/v1/services/service-123/roles'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -492,7 +504,8 @@ describe('API Service', () => {
       await rbacApi.listPermissions('service-123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/services/service-123/permissions')
+        expect.stringContaining('/api/v1/services/service-123/permissions'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -616,7 +629,8 @@ describe('API Service', () => {
 
       const result = await systemApi.getEmailSettings();
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/system/email')
+        expect.stringContaining('/api/v1/system/email'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data.value.type).toBe('smtp');
     });
@@ -684,7 +698,8 @@ describe('API Service', () => {
       await invitationApi.list('tenant-123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants/tenant-123/invitations?page=1&per_page=20')
+        expect.stringContaining('/api/v1/tenants/tenant-123/invitations?page=1&per_page=20'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -720,7 +735,8 @@ describe('API Service', () => {
       const result = await invitationApi.get('inv-123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/invitations/inv-123')
+        expect.stringContaining('/api/v1/invitations/inv-123'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data.id).toBe('inv-123');
     });
@@ -799,7 +815,8 @@ describe('API Service', () => {
       const result = await brandingApi.get();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/system/branding')
+        expect.stringContaining('/api/v1/system/branding'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data.primary_color).toBe('#007AFF');
     });
@@ -840,7 +857,8 @@ describe('API Service', () => {
       await emailTemplateApi.list();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/system/email-templates')
+        expect.stringContaining('/api/v1/system/email-templates'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 
@@ -859,7 +877,8 @@ describe('API Service', () => {
       const result = await emailTemplateApi.get('invitation');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/system/email-templates/invitation')
+        expect.stringContaining('/api/v1/system/email-templates/invitation'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data.metadata.template_type).toBe('invitation');
     });
@@ -1039,6 +1058,683 @@ describe('API Service', () => {
       });
 
       await expect(rbacApi.unassignRole('user-123', 'tenant-456', 'role-789')).rejects.toThrow('Role assignment not found');
+    });
+  });
+
+  // ============================================================================
+  // Analytics API
+  // ============================================================================
+
+  describe('analyticsApi', () => {
+    it('should get login stats without date range', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { total_logins: 100, successful_logins: 90, failed_logins: 10, unique_users: 50 },
+        }),
+      });
+
+      await analyticsApi.getStats();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/analytics/login-stats'),
+        expect.objectContaining({ headers: expect.any(Object) })
+      );
+      // Should NOT contain query params
+      expect(mockFetch.mock.calls[0][0]).not.toContain('?');
+    });
+
+    it('should get login stats with date range', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { total_logins: 50 } }),
+      });
+
+      await analyticsApi.getStats('2024-01-01', '2024-01-31', 'token123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('start=2024-01-01'),
+        expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer token123' }) })
+      );
+      expect(mockFetch.mock.calls[0][0]).toContain('end=2024-01-31');
+    });
+
+    it('should list login events with pagination', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [],
+          pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+        }),
+      });
+
+      await analyticsApi.listEvents(2, 25);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/analytics/login-events?limit=25&offset=25'),
+        expect.objectContaining({ headers: expect.any(Object) })
+      );
+    });
+
+    it('should list login events with defaults', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [], pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 } }),
+      });
+
+      await analyticsApi.listEvents();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('limit=50&offset=0'),
+        expect.any(Object)
+      );
+    });
+  });
+
+  // ============================================================================
+  // Webhook API
+  // ============================================================================
+
+  describe('webhookApi', () => {
+    it('should list webhooks for tenant', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [] }),
+      });
+
+      await webhookApi.list('tenant-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks'),
+        expect.objectContaining({ headers: expect.any(Object) })
+      );
+    });
+
+    it('should get a webhook by ID', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { id: 'wh-1', name: 'Test Webhook' } }),
+      });
+
+      const result = await webhookApi.get('tenant-1', 'wh-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks/wh-1'),
+        expect.any(Object)
+      );
+      expect(result.data.name).toBe('Test Webhook');
+    });
+
+    it('should create a webhook', async () => {
+      const input = { name: 'New Hook', url: 'https://example.com/hook', events: ['user.created'], enabled: true };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { id: 'wh-2', ...input } }),
+      });
+
+      await webhookApi.create('tenant-1', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should update a webhook', async () => {
+      const input = { name: 'Updated Hook' };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { id: 'wh-1', name: 'Updated Hook' } }),
+      });
+
+      await webhookApi.update('tenant-1', 'wh-1', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks/wh-1'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should delete a webhook', async () => {
+      mockFetch.mockResolvedValue({ ok: true });
+
+      await webhookApi.delete('tenant-1', 'wh-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks/wh-1'),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    it('should throw error on delete webhook failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'not_found', message: 'Webhook not found' }),
+      });
+
+      await expect(webhookApi.delete('tenant-1', 'wh-1')).rejects.toThrow('Webhook not found');
+    });
+
+    it('should test a webhook', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { success: true, status_code: 200, response_time_ms: 150 } }),
+      });
+
+      const result = await webhookApi.test('tenant-1', 'wh-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks/wh-1/test'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.data.success).toBe(true);
+    });
+
+    it('should regenerate webhook secret', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { id: 'wh-1', secret: 'new-secret' } }),
+      });
+
+      const result = await webhookApi.regenerateSecret('tenant-1', 'wh-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/webhooks/wh-1/regenerate-secret'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.data.secret).toBe('new-secret');
+    });
+  });
+
+  // ============================================================================
+  // Tenant-Service API
+  // ============================================================================
+
+  describe('tenantServiceApi', () => {
+    it('should list services for tenant', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 's1', name: 'App', enabled: true }] }),
+      });
+
+      await tenantServiceApi.listServices('tenant-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/services'),
+        expect.any(Object)
+      );
+    });
+
+    it('should toggle service', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [] }),
+      });
+
+      await tenantServiceApi.toggleService('tenant-1', 'service-1', true);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/services'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ service_id: 'service-1', enabled: true }),
+        })
+      );
+    });
+
+    it('should get enabled services', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 's1', enabled: true }] }),
+      });
+
+      await tenantServiceApi.getEnabledServices('tenant-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/services/enabled'),
+        expect.any(Object)
+      );
+    });
+  });
+
+  // ============================================================================
+  // Security Alert API
+  // ============================================================================
+
+  describe('securityAlertApi', () => {
+    it('should list security alerts', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [],
+          pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+        }),
+      });
+
+      await securityAlertApi.list(1, 50);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/security/alerts?limit=50&offset=0'),
+        expect.any(Object)
+      );
+      // Should NOT contain unresolved param
+      expect(mockFetch.mock.calls[0][0]).not.toContain('unresolved');
+    });
+
+    it('should list unresolved-only security alerts', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [], pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 } }),
+      });
+
+      await securityAlertApi.list(1, 50, true);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('unresolved=true'),
+        expect.any(Object)
+      );
+    });
+
+    it('should list alerts with custom pagination', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [], pagination: { page: 2, per_page: 25, total: 0, total_pages: 0 } }),
+      });
+
+      await securityAlertApi.list(3, 25);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('limit=25&offset=50'),
+        expect.any(Object)
+      );
+    });
+
+    it('should resolve a security alert', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { id: 'alert-1', resolved_at: '2024-01-01' } }),
+      });
+
+      const result = await securityAlertApi.resolve('alert-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/security/alerts/alert-1/resolve'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.data.resolved_at).toBe('2024-01-01');
+    });
+  });
+
+  // ============================================================================
+  // Password API
+  // ============================================================================
+
+  describe('passwordApi', () => {
+    it('should call forgot password', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Reset email sent' }),
+      });
+
+      const result = await passwordApi.forgotPassword('user@test.com');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/forgot-password'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ email: 'user@test.com' }),
+        })
+      );
+      expect(result.message).toBe('Reset email sent');
+    });
+
+    it('should call reset password', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Password reset successful' }),
+      });
+
+      const result = await passwordApi.resetPassword('token-123', 'newPass123!');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/reset-password'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ token: 'token-123', new_password: 'newPass123!' }),
+        })
+      );
+      expect(result.message).toBe('Password reset successful');
+    });
+
+    it('should call change password', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Password changed' }),
+      });
+
+      await passwordApi.changePassword('oldPass', 'newPass', 'access-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/password'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer access-token' }),
+          body: JSON.stringify({ current_password: 'oldPass', new_password: 'newPass' }),
+        })
+      );
+    });
+
+    it('should get password policy', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { min_length: 8, require_uppercase: true } }),
+      });
+
+      const result = await passwordApi.getPasswordPolicy('tenant-1');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/password-policy')
+      );
+      expect(result.data.min_length).toBe(8);
+    });
+
+    it('should update password policy', async () => {
+      const policy = { min_length: 12, require_symbols: true };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: policy }),
+      });
+
+      await passwordApi.updatePasswordPolicy('tenant-1', policy);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/password-policy'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(policy),
+        })
+      );
+    });
+  });
+
+  // ============================================================================
+  // Session API
+  // ============================================================================
+
+  describe('sessionApi', () => {
+    it('should list user sessions', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 's1', is_current: true }] }),
+      });
+
+      const result = await sessionApi.listMySessions('token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/sessions'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer token' } })
+      );
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should revoke a session', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Session revoked' }),
+      });
+
+      await sessionApi.revokeSession('session-1', 'token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/sessions/session-1'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer token' },
+        })
+      );
+    });
+
+    it('should revoke other sessions', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Other sessions revoked' }),
+      });
+
+      await sessionApi.revokeOtherSessions('token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/sessions'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer token' },
+        })
+      );
+    });
+
+    it('should force logout a user', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'User logged out' }),
+      });
+
+      await sessionApi.forceLogoutUser('user-1', 'admin-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/admin/users/user-1/logout'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer admin-token' }),
+        })
+      );
+    });
+  });
+
+  // ============================================================================
+  // WebAuthn API
+  // ============================================================================
+
+  describe('webauthnApi', () => {
+    it('should list passkeys', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 'cred-1', credential_type: 'public-key' }] }),
+      });
+
+      const result = await webauthnApi.listPasskeys('token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/passkeys'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer token' } })
+      );
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should delete a passkey', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Passkey deleted' }),
+      });
+
+      await webauthnApi.deletePasskey('cred-1', 'token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/passkeys/cred-1'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer token' },
+        })
+      );
+    });
+
+    it('should get register URL', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { url: 'https://example.com/register' } }),
+      });
+
+      const result = await webauthnApi.getRegisterUrl('https://app.com/callback', 'token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/webauthn/register?redirect_uri='),
+        expect.objectContaining({ headers: { Authorization: 'Bearer token' } })
+      );
+      expect(result.data.url).toBe('https://example.com/register');
+    });
+  });
+
+  // ============================================================================
+  // Identity Provider API
+  // ============================================================================
+
+  describe('identityProviderApi', () => {
+    it('should list identity providers', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ alias: 'google', enabled: true }] }),
+      });
+
+      await identityProviderApi.list();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/identity-providers'),
+        expect.any(Object)
+      );
+    });
+
+    it('should get an identity provider', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { alias: 'google', display_name: 'Google' } }),
+      });
+
+      const result = await identityProviderApi.get('google');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/identity-providers/google'),
+        expect.any(Object)
+      );
+      expect(result.data.alias).toBe('google');
+    });
+
+    it('should create an identity provider', async () => {
+      const input = { alias: 'github', provider_id: 'github', config: { clientId: '123' } };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { ...input, enabled: false } }),
+      });
+
+      await identityProviderApi.create(input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/identity-providers'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should update an identity provider', async () => {
+      const input = { display_name: 'Updated Google', enabled: true };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { alias: 'google', ...input } }),
+      });
+
+      await identityProviderApi.update('google', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/identity-providers/google'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should delete an identity provider', async () => {
+      mockFetch.mockResolvedValue({ ok: true });
+
+      await identityProviderApi.delete('google');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/identity-providers/google'),
+        expect.objectContaining({ method: 'DELETE' })
+      );
+    });
+
+    it('should throw error on delete provider failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        json: async () => ({ error: 'conflict', message: 'Provider in use' }),
+      });
+
+      await expect(identityProviderApi.delete('google')).rejects.toThrow('Provider in use');
+    });
+
+    it('should list linked identities', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 'li-1', provider_type: 'google' }] }),
+      });
+
+      const result = await identityProviderApi.listMyLinkedIdentities('token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/linked-identities'),
+        expect.objectContaining({ headers: { Authorization: 'Bearer token' } })
+      );
+      expect(result.data).toHaveLength(1);
+    });
+
+    it('should unlink an identity', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'Identity unlinked' }),
+      });
+
+      await identityProviderApi.unlinkIdentity('li-1', 'token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/users/me/linked-identities/li-1'),
+        expect.objectContaining({
+          method: 'DELETE',
+          headers: { Authorization: 'Bearer token' },
+        })
+      );
+    });
+  });
+
+  // ============================================================================
+  // Public Branding API
+  // ============================================================================
+
+  describe('publicBrandingApi', () => {
+    it('should get public branding without auth', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: { primary_color: '#007AFF', allow_registration: true },
+        }),
+      });
+
+      const result = await publicBrandingApi.get();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/public/branding')
+      );
+      expect(result.data.primary_color).toBe('#007AFF');
     });
   });
 });

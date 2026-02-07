@@ -2,6 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
+import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -88,6 +89,7 @@ export default function ServicesPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
+  const confirm = useConfirm();
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [newSecret, setNewSecret] = useState<string | null>(null);
 
@@ -207,8 +209,13 @@ export default function ServicesPage() {
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
-                            onClick={() => {
-                              if (confirm("Are you sure you want to delete this service?")) {
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: "Delete Service",
+                                description: "Are you sure you want to delete this service?",
+                                variant: "destructive",
+                              });
+                              if (ok) {
                                 submit({ intent: "delete", id: service.id }, { method: "post" });
                               }
                             }}

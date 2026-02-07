@@ -104,9 +104,9 @@ pub async fn list<S: HasServices>(
         }
         TokenType::TenantAccess => {
             // Tenant user: can only list users in their tenant
-            let tenant_id = auth.tenant_id.ok_or_else(|| {
-                AppError::Forbidden("No tenant context in token".to_string())
-            })?;
+            let tenant_id = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
             let users = state
                 .user_service()
                 .list_tenant_users(
@@ -156,7 +156,10 @@ pub async fn get<S: HasServices>(
 
             // Get tenants where auth user is owner/admin
             let auth_user_tenants = state.user_service().get_user_tenants(auth_user_id).await?;
-            let target_user_tenants = state.user_service().get_user_tenants(target_user_id).await?;
+            let target_user_tenants = state
+                .user_service()
+                .get_user_tenants(target_user_id)
+                .await?;
 
             let auth_user_admin_tenant_ids: std::collections::HashSet<_> = auth_user_tenants
                 .iter()

@@ -1,7 +1,7 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
-import AuditLogsPage, { loader } from "~/routes/dashboard.audit-logs";
+import AuditLogsPage, { loader, meta } from "~/routes/dashboard.audit-logs";
 import { auditApi } from "~/services/api";
 
 // Mock audit API
@@ -10,6 +10,11 @@ vi.mock("~/services/api", () => ({
 }));
 
 describe("Audit Logs Page", () => {
+    it("meta returns correct title", () => {
+        const result = meta({} as Parameters<typeof meta>[0]);
+        expect(result).toEqual([{ title: "Audit Logs - Auth9" }]);
+    });
+
     const mockAuditLogs = {
         data: [
             {

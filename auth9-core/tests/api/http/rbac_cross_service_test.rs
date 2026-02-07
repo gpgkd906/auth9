@@ -48,5 +48,7 @@ async fn test_assign_permission_different_service_fails() {
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body.is_some());
     let response = body.unwrap();
-    assert!(response.message.contains("Cannot assign permission from service"));
+    assert!(response
+        .message
+        .contains("Cannot assign permission from service"));
 }

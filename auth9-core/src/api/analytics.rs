@@ -18,10 +18,9 @@ pub async fn get_stats<S: HasAnalytics>(
 ) -> Result<Json<SuccessResponse<LoginStats>>, AppError> {
     // First check for start/end date parameters (ISO 8601 format)
     if let (Some(start), Some(end)) = (&params.start, &params.end) {
-        if let (Ok(start_dt), Ok(end_dt)) = (
-            start.parse::<DateTime<Utc>>(),
-            end.parse::<DateTime<Utc>>(),
-        ) {
+        if let (Ok(start_dt), Ok(end_dt)) =
+            (start.parse::<DateTime<Utc>>(), end.parse::<DateTime<Utc>>())
+        {
             let stats = state
                 .analytics_service()
                 .get_stats_for_range(start_dt, end_dt)

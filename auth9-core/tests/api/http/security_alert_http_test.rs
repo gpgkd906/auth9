@@ -182,14 +182,13 @@ async fn test_resolve_alert_success() {
 
     let app = build_security_alert_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) =
-        post_json_with_auth(
-            &app,
-            &format!("/api/v1/security/alerts/{}/resolve", alert_id),
-            &(),
-            &token,
-        )
-        .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/security/alerts/{}/resolve", alert_id),
+        &(),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

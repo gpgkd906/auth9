@@ -145,8 +145,12 @@ async fn test_delete_permission() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, &format!("/api/v1/permissions/{}", permission_id), &token).await;
+    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/permissions/{}", permission_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -162,8 +166,12 @@ async fn test_delete_permission_not_found() {
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json_with_auth(&app, &format!("/api/v1/permissions/{}", nonexistent_id), &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/permissions/{}", nonexistent_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -345,8 +353,13 @@ async fn test_update_role_not_found() {
         "name": "updated"
     });
 
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json_with_auth(&app, &format!("/api/v1/roles/{}", nonexistent_id), &input, &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/roles/{}", nonexistent_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

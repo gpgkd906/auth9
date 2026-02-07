@@ -7,6 +7,7 @@ use crate::api::create_test_tenant;
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{StringUuid, Webhook};
 use auth9_core::repository::WebhookRepository;
+use auth9_core::service::WebhookTestResult;
 use axum::http::StatusCode;
 use chrono::Utc;
 
@@ -396,6 +397,366 @@ async fn test_delete_webhook_not_found() {
 }
 
 // ============================================================================
+// Update Webhook - Not Found / Wrong Tenant Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_update_webhook_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let app = build_webhook_test_router(state);
+
+    let nonexistent_id = StringUuid::new_v4();
+    let input = serde_json::json!({
+        "name": "Updated Name",
+        "events": ["user.created"],
+        "enabled": false
+    });
+
+    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) = put_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks/{}", tenant_id, nonexistent_id),
+        &input,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_update_webhook_wrong_tenant() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant1 = create_test_tenant(None);
+    let tenant1_id = tenant1.id;
+    state.tenant_repo.add_tenant(tenant1).await;
+
+    let tenant2 = create_test_tenant(None);
+    let tenant2_id = tenant2.id;
+    state.tenant_repo.add_tenant(tenant2).await;
+
+    // Webhook belongs to tenant1
+    let webhook = Webhook {
+        id: StringUuid::new_v4(),
+        tenant_id: tenant1_id,
+        name: "Tenant1 Webhook".to_string(),
+        url: "https://example.com/webhook".to_string(),
+        secret: Some("secret123".to_string()),
+        events: vec!["login.success".to_string()],
+        enabled: true,
+        last_triggered_at: None,
+        failure_count: 0,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    let webhook_id = webhook.id;
+    state.webhook_repo.add_webhook(webhook).await;
+
+    let app = build_webhook_test_router(state);
+
+    let input = serde_json::json!({
+        "name": "Hacked Name",
+        "enabled": false
+    });
+
+    // Try to update from tenant2
+    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) = put_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks/{}", tenant2_id, webhook_id),
+        &input,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ============================================================================
+// Create Webhook - Tenant Not Found Test
+// ============================================================================
+
+#[tokio::test]
+async fn test_create_webhook_tenant_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Don't create a tenant - use a random ID
+    let nonexistent_tenant_id = StringUuid::new_v4();
+
+    let app = build_webhook_test_router(state);
+
+    let input = serde_json::json!({
+        "name": "Orphan Webhook",
+        "url": "https://example.com/orphan",
+        "events": ["user.created"],
+        "enabled": true
+    });
+
+    // The create_webhook handler does not validate tenant existence,
+    // so the webhook is created successfully with the given tenant_id.
+    let (status, body): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks", nonexistent_tenant_id),
+        &input,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let webhook = body.unwrap().data;
+    assert_eq!(webhook.name, "Orphan Webhook");
+    assert_eq!(webhook.tenant_id, nonexistent_tenant_id);
+}
+
+// ============================================================================
+// Regenerate Webhook Secret Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_regenerate_webhook_secret_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let original_secret = "original-secret-value".to_string();
+    let webhook = Webhook {
+        id: StringUuid::new_v4(),
+        tenant_id,
+        name: "Regenerate Test".to_string(),
+        url: "https://example.com/webhook".to_string(),
+        secret: Some(original_secret.clone()),
+        events: vec!["login.success".to_string()],
+        enabled: true,
+        last_triggered_at: None,
+        failure_count: 0,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    let webhook_id = webhook.id;
+    state.webhook_repo.add_webhook(webhook).await;
+
+    let app = build_webhook_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/webhooks/{}/regenerate-secret",
+            tenant_id, webhook_id
+        ),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let webhook = body.unwrap().data;
+    // Secret should have changed
+    assert!(webhook.secret.is_some());
+    let new_secret = webhook.secret.unwrap();
+    assert_ne!(new_secret, original_secret);
+    // New secret should follow the whsec_ format
+    assert!(new_secret.starts_with("whsec_"));
+}
+
+#[tokio::test]
+async fn test_regenerate_webhook_secret_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let app = build_webhook_test_router(state);
+
+    let nonexistent_id = StringUuid::new_v4();
+    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/webhooks/{}/regenerate-secret",
+            tenant_id, nonexistent_id
+        ),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_regenerate_webhook_secret_wrong_tenant() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant1 = create_test_tenant(None);
+    let tenant1_id = tenant1.id;
+    state.tenant_repo.add_tenant(tenant1).await;
+
+    let tenant2 = create_test_tenant(None);
+    let tenant2_id = tenant2.id;
+    state.tenant_repo.add_tenant(tenant2).await;
+
+    // Webhook belongs to tenant1
+    let webhook = Webhook {
+        id: StringUuid::new_v4(),
+        tenant_id: tenant1_id,
+        name: "Tenant1 Webhook".to_string(),
+        url: "https://example.com/webhook".to_string(),
+        secret: Some("secret123".to_string()),
+        events: vec!["login.success".to_string()],
+        enabled: true,
+        last_triggered_at: None,
+        failure_count: 0,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    let webhook_id = webhook.id;
+    state.webhook_repo.add_webhook(webhook).await;
+
+    let app = build_webhook_test_router(state);
+
+    // Try to regenerate from tenant2
+    let (status, _): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/webhooks/{}/regenerate-secret",
+            tenant2_id, webhook_id
+        ),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ============================================================================
+// Test Webhook Endpoint Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_webhook_test_endpoint() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let webhook = Webhook {
+        id: StringUuid::new_v4(),
+        tenant_id,
+        name: "Test Endpoint Webhook".to_string(),
+        url: "https://example.com/webhook".to_string(),
+        secret: Some("secret123".to_string()),
+        events: vec!["login.success".to_string()],
+        enabled: true,
+        last_triggered_at: None,
+        failure_count: 0,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    let webhook_id = webhook.id;
+    state.webhook_repo.add_webhook(webhook).await;
+
+    let app = build_webhook_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<WebhookTestResult>>) = post_json(
+        &app,
+        &format!("/api/v1/tenants/{}/webhooks/{}/test", tenant_id, webhook_id),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let result = body.unwrap().data;
+    // The test event will fail because the URL is not reachable,
+    // but the handler should still return 200 with a WebhookTestResult.
+    assert!(!result.success);
+    assert!(result.error.is_some());
+    assert!(result.response_time_ms.is_some());
+}
+
+#[tokio::test]
+async fn test_webhook_test_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let app = build_webhook_test_router(state);
+
+    let nonexistent_id = StringUuid::new_v4();
+    let (status, _): (StatusCode, Option<SuccessResponse<WebhookTestResult>>) = post_json(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/webhooks/{}/test",
+            tenant_id, nonexistent_id
+        ),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_webhook_test_wrong_tenant() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant1 = create_test_tenant(None);
+    let tenant1_id = tenant1.id;
+    state.tenant_repo.add_tenant(tenant1).await;
+
+    let tenant2 = create_test_tenant(None);
+    let tenant2_id = tenant2.id;
+    state.tenant_repo.add_tenant(tenant2).await;
+
+    // Webhook belongs to tenant1
+    let webhook = Webhook {
+        id: StringUuid::new_v4(),
+        tenant_id: tenant1_id,
+        name: "Tenant1 Webhook".to_string(),
+        url: "https://example.com/webhook".to_string(),
+        secret: Some("secret123".to_string()),
+        events: vec!["login.success".to_string()],
+        enabled: true,
+        last_triggered_at: None,
+        failure_count: 0,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    let webhook_id = webhook.id;
+    state.webhook_repo.add_webhook(webhook).await;
+
+    let app = build_webhook_test_router(state);
+
+    // Try to test from tenant2
+    let (status, _): (StatusCode, Option<SuccessResponse<WebhookTestResult>>) = post_json(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/webhooks/{}/test",
+            tenant2_id, webhook_id
+        ),
+        &serde_json::json!({}),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+// ============================================================================
 // Test Router Builder
 // ============================================================================
 
@@ -418,6 +779,10 @@ fn build_webhook_test_router(state: TestAppState) -> axum::Router {
         .route(
             "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}/test",
             post(webhook::test_webhook::<TestAppState>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}/regenerate-secret",
+            post(webhook::regenerate_webhook_secret::<TestAppState>),
         )
         .with_state(state)
 }

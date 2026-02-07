@@ -2,6 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, CheckIcon, GearIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
+import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -155,6 +156,7 @@ export default function RolesPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
+  const confirm = useConfirm();
 
   // Role state
   const [createRoleServiceId, setCreateRoleServiceId] = useState<string | null>(null);
@@ -334,8 +336,13 @@ export default function RolesPage() {
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
-                                onClick={() => {
-                                  if (confirm("Are you sure you want to delete this role?")) {
+                                onClick={async () => {
+                                  const ok = await confirm({
+                                    title: "Delete Role",
+                                    description: "Are you sure you want to delete this role?",
+                                    variant: "destructive",
+                                  });
+                                  if (ok) {
                                     submit({
                                       intent: "delete_role",
                                       service_id: entry.service.id,
@@ -411,8 +418,13 @@ export default function RolesPage() {
                                 variant="ghost"
                                 size="sm"
                                 className="text-[var(--accent-red)] hover:text-[var(--accent-red)] h-7 px-2"
-                                onClick={() => {
-                                  if (confirm("Are you sure you want to delete this permission?")) {
+                                onClick={async () => {
+                                  const ok = await confirm({
+                                    title: "Delete Permission",
+                                    description: "Are you sure you want to delete this permission?",
+                                    variant: "destructive",
+                                  });
+                                  if (ok) {
                                     submit({
                                       intent: "delete_permission",
                                       permission_id: permission.id

@@ -439,7 +439,9 @@ pub async fn run(config: Config) -> Result<()> {
     }
 
     // Create Keycloak sync service (shared between branding and system settings)
-    let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_arc.clone()));
+    let keycloak_updater: Arc<dyn crate::service::keycloak_sync::KeycloakRealmUpdater> =
+        keycloak_arc.clone();
+    let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
 
     // Create system settings service with Keycloak sync
     let system_settings_service = Arc::new(SystemSettingsService::with_sync_service(
@@ -584,9 +586,7 @@ pub async fn run(config: Config) -> Result<()> {
 
     // Log security configuration warnings
     if !config.rate_limit.enabled {
-        tracing::warn!(
-            "⚠️  Rate limiting is DISABLED. This is a security risk in production!"
-        );
+        tracing::warn!("⚠️  Rate limiting is DISABLED. This is a security risk in production!");
     } else {
         info!(
             "Rate limiting enabled: {} requests per {} seconds",
@@ -606,10 +606,7 @@ pub async fn run(config: Config) -> Result<()> {
             "CORS is configured with wildcard (*). Set CORS_ALLOWED_ORIGINS for production."
         );
     } else {
-        info!(
-            "CORS allowed origins: {:?}",
-            config.cors.allowed_origins
-        );
+        info!("CORS allowed origins: {:?}", config.cors.allowed_origins);
     }
 
     // Run HTTP and gRPC servers concurrently
@@ -707,7 +704,11 @@ fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> A
 ///
 /// This function is generic over the state type, allowing it to work with
 /// both production `AppState` and test implementations that implement `HasServices`.
-pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBranding + HasCache>(state: S) -> Router {
+pub fn build_router<
+    S: HasServices + HasSessionManagement + HasAnalytics + HasBranding + HasCache,
+>(
+    state: S,
+) -> Router {
     // Get CORS configuration from state
     let cors_config = state.config().cors.clone();
     let cors = build_cors_layer(&cors_config);
@@ -760,8 +761,7 @@ pub fn build_router<S: HasServices + HasSessionManagement + HasAnalytics + HasBr
         )
         .route(
             "/api/v1/users/{user_id}/tenants/{tenant_id}",
-            delete(api::user::remove_from_tenant::<S>)
-                .put(api::user::update_role_in_tenant::<S>),
+            delete(api::user::remove_from_tenant::<S>).put(api::user::update_role_in_tenant::<S>),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users",
@@ -887,7 +887,9 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
     };
 
     // Configure credentials
-    if config.allow_credentials && !(config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*") {
+    if config.allow_credentials
+        && !(config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*")
+    {
         cors.allow_credentials(true)
     } else {
         cors.allow_credentials(false)
@@ -965,10 +967,7 @@ where
             post(api::keycloak_event::receive::<S>),
         )
         // User creation (has internal check for public registration)
-        .route(
-            "/api/v1/users",
-            post(api::user::create::<S>),
-        );
+        .route("/api/v1/users", post(api::user::create::<S>));
 
     // ============================================================
     // PROTECTED ROUTES (authentication required)
@@ -988,10 +987,7 @@ where
                 .delete(api::tenant::delete::<S>),
         )
         // User endpoints (except POST which is public for registration)
-        .route(
-            "/api/v1/users",
-            get(api::user::list::<S>),
-        )
+        .route("/api/v1/users", get(api::user::list::<S>))
         .route(
             "/api/v1/users/{id}",
             get(api::user::get::<S>)
@@ -1008,8 +1004,7 @@ where
         )
         .route(
             "/api/v1/users/{user_id}/tenants/{tenant_id}",
-            delete(api::user::remove_from_tenant::<S>)
-                .put(api::user::update_role_in_tenant::<S>),
+            delete(api::user::remove_from_tenant::<S>).put(api::user::update_role_in_tenant::<S>),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/users",
@@ -1223,6 +1218,10 @@ where
             "/api/v1/tenants/{tenant_id}/webhooks/{id}/test",
             post(api::webhook::test_webhook::<S>),
         )
+        .route(
+            "/api/v1/tenants/{tenant_id}/webhooks/{id}/regenerate-secret",
+            post(api::webhook::regenerate_webhook_secret::<S>),
+        )
         // Security Alert endpoints
         .route(
             "/api/v1/security/alerts",
@@ -1235,7 +1234,8 @@ where
         // Tenant-Service toggle endpoints
         .route(
             "/api/v1/tenants/{tenant_id}/services",
-            get(api::tenant_service::list_services::<S>).post(api::tenant_service::toggle_service::<S>),
+            get(api::tenant_service::list_services::<S>)
+                .post(api::tenant_service::toggle_service::<S>),
         )
         .route(
             "/api/v1/tenants/{tenant_id}/services/enabled",
