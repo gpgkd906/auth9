@@ -10,12 +10,15 @@
 | [tenant/01-crud.md](./tenant/01-crud.md) | 创建、更新、删除操作 | 5 |
 | [tenant/02-list-settings.md](./tenant/02-list-settings.md) | 列表、搜索、设置 | 5 |
 
-### 用户管理 (3 个文档, 13 个场景)
+### 用户管理 (6 个文档, 28 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [user/01-crud.md](./user/01-crud.md) | 创建、更新、租户关联 | 5 |
 | [user/02-advanced.md](./user/02-advanced.md) | 删除、MFA、列表 | 5 |
 | [user/03-validation.md](./user/03-validation.md) | 边界测试、验证 | 3 |
+| [user/04-account-profile.md](./user/04-account-profile.md) | 个人资料 API、Profile 页面、自更新权限 | 5 |
+| [user/05-account-security.md](./user/05-account-security.md) | 修改密码、Passkeys、会话、关联身份 | 5 |
+| [user/06-account-navigation.md](./user/06-account-navigation.md) | Account 导航布局、侧边栏、Settings 清理 | 5 |
 
 ### RBAC 角色权限 (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 |
@@ -106,7 +109,7 @@
 | 模块 | 文档数 | 场景数 |
 |------|--------|--------|
 | 租户管理 | 2 | 10 |
-| 用户管理 | 3 | 13 |
+| 用户管理 | 6 | 28 |
 | RBAC 角色权限 | 4 | 17 |
 | 服务与客户端 | 3 | 15 |
 | 邀请管理 | 3 | 15 |
@@ -119,7 +122,7 @@
 | 分析与统计 | 2 | 10 |
 | 审计日志 | 1 | 5 |
 | 集成测试 | 2 | 10 |
-| **总计** | **39** | **185** |
+| **总计** | **42** | **200** |
 
 ---
 
@@ -129,18 +132,19 @@
 
 **建议的执行顺序**（如有依赖）：
 1. 认证流程 (auth/*) - 先确保登录功能正常
-2. 系统设置 (settings/*) - 配置品牌和邮件
-3. 租户管理 (tenant/*) - 创建测试租户
-4. 用户管理 (user/*) - 创建测试用户
-5. 身份提供商 (identity-provider/*) - 配置社交登录
-6. Passkeys (passkeys/*) - 测试无密码登录
-7. 服务与客户端 (service/*) - 配置测试服务
-8. RBAC (rbac/*) - 配置角色和权限
-9. 邀请管理 (invitation/*) - 测试邀请流程
-10. 会话与安全 (session/*) - 测试安全功能
-11. Webhook (webhook/*) - 测试事件通知
-12. 分析与统计 (analytics/*) - 验证登录统计
-13. 审计日志 (audit/*) - 验证操作记录
+2. 用户账户 (user/04~06) - 测试个人资料、Account 页面、导航布局
+3. 系统设置 (settings/*) - 配置品牌和邮件
+4. 租户管理 (tenant/*) - 创建测试租户
+5. 用户管理 (user/01~03) - 创建测试用户
+6. 身份提供商 (identity-provider/*) - 配置社交登录
+7. Passkeys (passkeys/*) - 测试无密码登录
+8. 服务与客户端 (service/*) - 配置测试服务
+9. RBAC (rbac/*) - 配置角色和权限
+10. 邀请管理 (invitation/*) - 测试邀请流程
+11. 会话与安全 (session/*) - 测试安全功能
+12. Webhook (webhook/*) - 测试事件通知
+13. 分析与统计 (analytics/*) - 验证登录统计
+14. 审计日志 (audit/*) - 验证操作记录
 
 ---
 
@@ -262,6 +266,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-08 | 3.2.0 | 新增用户账户模块（个人资料 API、Account 页面、导航布局），共 42 个文档 200 个场景 |
 | 2026-02-05 | 3.1.0 | 新增集成测试模块（并发操作、密码策略），共 39 个文档 185 个场景；新增测试数据种子基础设施 |
 | 2026-02-02 | 3.0.0 | 新增系统设置、身份提供商、Passkeys、分析统计、审计日志模块，共 37 个文档 175 个场景 |
 | 2024-02-02 | 2.0.0 | 细分文档，每个不超过 5 个场景，共 28 个文档 |

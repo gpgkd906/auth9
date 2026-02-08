@@ -2,7 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import SessionsPage, { loader, action } from "~/routes/dashboard.settings.sessions";
+import SessionsPage, { loader, action } from "~/routes/dashboard.account.sessions";
 import { sessionApi } from "~/services/api";
 
 // Mock the API
@@ -59,7 +59,7 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: async () => {
           const response = await sessionApi.listMySessions("mock-token");
@@ -68,7 +68,7 @@ describe("Sessions Settings Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Chrome on macOS")).toBeInTheDocument();
@@ -80,7 +80,7 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: async () => {
           try {
@@ -93,7 +93,7 @@ describe("Sessions Settings Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Failed to load sessions")).toBeInTheDocument();
@@ -107,13 +107,13 @@ describe("Sessions Settings Page", () => {
   it("renders current session section", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockCurrentSession, mockOtherSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Current Session")).toBeInTheDocument();
@@ -126,13 +126,13 @@ describe("Sessions Settings Page", () => {
   it("renders other sessions section", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockCurrentSession, mockOtherSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Other Sessions")).toBeInTheDocument();
@@ -145,13 +145,13 @@ describe("Sessions Settings Page", () => {
   it("renders empty state when no other sessions", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockCurrentSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("No other active sessions")).toBeInTheDocument();
@@ -163,13 +163,13 @@ describe("Sessions Settings Page", () => {
   it("renders security tips section", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Security Tips")).toBeInTheDocument();
@@ -181,13 +181,13 @@ describe("Sessions Settings Page", () => {
   it("displays session location and IP address", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockCurrentSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/192\.168\.1\.1/)).toBeInTheDocument();
@@ -219,7 +219,7 @@ describe("Sessions Settings Page", () => {
     formData.append("intent", "revoke");
     formData.append("sessionId", "session-2");
 
-    const request = new Request("http://localhost/dashboard/settings/sessions", {
+    const request = new Request("http://localhost/dashboard/account/sessions", {
       method: "POST",
       body: formData,
     });
@@ -247,7 +247,7 @@ describe("Sessions Settings Page", () => {
     const formData = new FormData();
     formData.append("intent", "revoke_all");
 
-    const request = new Request("http://localhost/dashboard/settings/sessions", {
+    const request = new Request("http://localhost/dashboard/account/sessions", {
       method: "POST",
       body: formData,
     });
@@ -282,7 +282,7 @@ describe("Sessions Settings Page", () => {
     formData.append("intent", "revoke");
     formData.append("sessionId", "invalid-session");
 
-    const request = new Request("http://localhost/dashboard/settings/sessions", {
+    const request = new Request("http://localhost/dashboard/account/sessions", {
       method: "POST",
       body: formData,
     });
@@ -306,7 +306,7 @@ describe("Sessions Settings Page", () => {
     const formData = new FormData();
     formData.append("intent", "invalid");
 
-    const request = new Request("http://localhost/dashboard/settings/sessions", {
+    const request = new Request("http://localhost/dashboard/account/sessions", {
       method: "POST",
       body: formData,
     });
@@ -329,13 +329,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockSessionDaysOld] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/3 days ago/)).toBeInTheDocument();
@@ -351,13 +351,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockSessionWeeksOld] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       // Should use toLocaleDateString format for 7+ day old sessions
@@ -376,13 +376,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockCurrentSession, tabletSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Safari on iPad")).toBeInTheDocument();
@@ -392,7 +392,7 @@ describe("Sessions Settings Page", () => {
   it("displays action error message in other sessions section", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [mockCurrentSession, mockOtherSession] }),
         action: () => ({ error: "Session revocation failed" }),
@@ -400,7 +400,7 @@ describe("Sessions Settings Page", () => {
     ]);
 
     const user = userEvent.setup();
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Safari on iPhone")).toBeInTheDocument();
@@ -423,13 +423,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [unknownDeviceSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Unknown Device")).toBeInTheDocument();
@@ -445,13 +445,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [noIpSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Chrome on macOS")).toBeInTheDocument();
@@ -467,13 +467,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [nonCurrentSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Unable to identify current session")).toBeInTheDocument();
@@ -490,7 +490,7 @@ describe("Sessions Settings Page", () => {
         data: [mockCurrentSession],
       });
 
-      const request = new Request("http://localhost/dashboard/settings/sessions");
+      const request = new Request("http://localhost/dashboard/account/sessions");
       const result = await loader({ request, params: {}, context: {} });
       expect(result).toEqual({ sessions: [mockCurrentSession] });
     });
@@ -498,7 +498,7 @@ describe("Sessions Settings Page", () => {
     it("returns empty sessions on API error", async () => {
       vi.mocked(sessionApi.listMySessions).mockRejectedValue(new Error("API Error"));
 
-      const request = new Request("http://localhost/dashboard/settings/sessions");
+      const request = new Request("http://localhost/dashboard/account/sessions");
       const result = await loader({ request, params: {}, context: {} });
       expect(result).toEqual({ sessions: [], error: "Failed to load sessions" });
     });
@@ -506,7 +506,7 @@ describe("Sessions Settings Page", () => {
     it("redirects to login when not authenticated", async () => {
       vi.mocked(getAccessToken).mockResolvedValueOnce(null);
 
-      const request = new Request("http://localhost/dashboard/settings/sessions");
+      const request = new Request("http://localhost/dashboard/account/sessions");
       await expect(loader({ request, params: {}, context: {} })).rejects.toEqual(
         expect.objectContaining({ status: 302 })
       );
@@ -521,7 +521,7 @@ describe("Sessions Settings Page", () => {
       formData.append("intent", "revoke");
       formData.append("sessionId", "session-2");
 
-      const request = new Request("http://localhost/dashboard/settings/sessions", {
+      const request = new Request("http://localhost/dashboard/account/sessions", {
         method: "POST",
         body: formData,
       });
@@ -538,7 +538,7 @@ describe("Sessions Settings Page", () => {
       const formData = new FormData();
       formData.append("intent", "revoke_all");
 
-      const request = new Request("http://localhost/dashboard/settings/sessions", {
+      const request = new Request("http://localhost/dashboard/account/sessions", {
         method: "POST",
         body: formData,
       });
@@ -555,7 +555,7 @@ describe("Sessions Settings Page", () => {
       formData.append("intent", "revoke");
       formData.append("sessionId", "session-2");
 
-      const request = new Request("http://localhost/dashboard/settings/sessions", {
+      const request = new Request("http://localhost/dashboard/account/sessions", {
         method: "POST",
         body: formData,
       });
@@ -571,7 +571,7 @@ describe("Sessions Settings Page", () => {
       formData.append("intent", "revoke");
       formData.append("sessionId", "bad-id");
 
-      const request = new Request("http://localhost/dashboard/settings/sessions", {
+      const request = new Request("http://localhost/dashboard/account/sessions", {
         method: "POST",
         body: formData,
       });
@@ -584,7 +584,7 @@ describe("Sessions Settings Page", () => {
       const formData = new FormData();
       formData.append("intent", "invalid");
 
-      const request = new Request("http://localhost/dashboard/settings/sessions", {
+      const request = new Request("http://localhost/dashboard/account/sessions", {
         method: "POST",
         body: formData,
       });
@@ -603,13 +603,13 @@ describe("Sessions Settings Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/sessions",
+        path: "/dashboard/account/sessions",
         Component: SessionsPage,
         loader: () => ({ sessions: [recentSession] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/sessions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/sessions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/Just now/)).toBeInTheDocument();

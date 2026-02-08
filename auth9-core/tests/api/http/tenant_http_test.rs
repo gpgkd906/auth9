@@ -6,10 +6,7 @@ use super::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
 };
-use crate::api::{
-    create_test_identity_token, create_test_tenant, create_test_tenant_access_token,
-    MockKeycloakServer,
-};
+use crate::api::{create_test_identity_token, create_test_tenant, MockKeycloakServer};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Tenant, TenantStatus};
 use axum::http::StatusCode;

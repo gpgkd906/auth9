@@ -81,37 +81,6 @@ pub fn create_test_identity_token_for_user(user_id: Uuid) -> String {
         .expect("Failed to create test identity token")
 }
 
-/// Create a tenant access token for tenant-scoped testing
-pub fn create_test_tenant_access_token(tenant_id: Uuid) -> String {
-    let jwt_manager = create_test_jwt_manager();
-    let user_id = Uuid::new_v4();
-    jwt_manager
-        .create_tenant_access_token(
-            user_id,
-            "tenant-user@test.com",
-            tenant_id,
-            "test-service",
-            vec!["admin".to_string()],
-            vec!["read".to_string(), "write".to_string()],
-        )
-        .expect("Failed to create test tenant access token")
-}
-
-/// Create a tenant access token for a specific user and tenant
-pub fn create_test_tenant_access_token_for_user(user_id: Uuid, tenant_id: Uuid) -> String {
-    let jwt_manager = create_test_jwt_manager();
-    jwt_manager
-        .create_tenant_access_token(
-            user_id,
-            "test-user@test.com",
-            tenant_id,
-            "test-service",
-            vec!["admin".to_string()],
-            vec!["read".to_string(), "write".to_string()],
-        )
-        .expect("Failed to create test tenant access token")
-}
-
 #[allow(dead_code)]
 pub fn create_test_cache() -> NoOpCacheManager {
     NoOpCacheManager::new()

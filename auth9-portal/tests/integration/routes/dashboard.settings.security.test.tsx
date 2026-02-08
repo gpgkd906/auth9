@@ -11,7 +11,6 @@ import { passwordApi, tenantApi } from "~/services/api";
 // Mock the API
 vi.mock("~/services/api", () => ({
   passwordApi: {
-    changePassword: vi.fn(),
     getPasswordPolicy: vi.fn(),
     updatePasswordPolicy: vi.fn(),
   },
@@ -61,77 +60,6 @@ describe("Security Settings Page", () => {
   // Action Tests
   // ============================================================================
 
-  it("action validates password change - missing fields", async () => {
-    const formData = new FormData();
-    formData.append("intent", "change_password");
-    formData.append("currentPassword", "");
-    formData.append("newPassword", "");
-
-    const request = new Request("http://localhost/dashboard/settings/security", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await action({ request, params: {}, context: {} });
-    expect(response).toEqual({ error: "All password fields are required" });
-  });
-
-  it("action validates password change - too short", async () => {
-    const formData = new FormData();
-    formData.append("intent", "change_password");
-    formData.append("currentPassword", "oldpass");
-    formData.append("newPassword", "short");
-    formData.append("confirmPassword", "short");
-
-    const request = new Request("http://localhost/dashboard/settings/security", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await action({ request, params: {}, context: {} });
-    expect(response).toEqual({
-      error: "New password must be at least 8 characters",
-    });
-  });
-
-  it("action validates password change - mismatch", async () => {
-    const formData = new FormData();
-    formData.append("intent", "change_password");
-    formData.append("currentPassword", "oldpassword");
-    formData.append("newPassword", "newpassword123");
-    formData.append("confirmPassword", "differentpassword");
-
-    const request = new Request("http://localhost/dashboard/settings/security", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await action({ request, params: {}, context: {} });
-    expect(response).toEqual({ error: "New passwords do not match" });
-  });
-
-  it("action changes password successfully", async () => {
-    vi.mocked(passwordApi.changePassword).mockResolvedValue({});
-
-    const formData = new FormData();
-    formData.append("intent", "change_password");
-    formData.append("currentPassword", "oldpassword");
-    formData.append("newPassword", "newpassword123");
-    formData.append("confirmPassword", "newpassword123");
-
-    const request = new Request("http://localhost/dashboard/settings/security", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await action({ request, params: {}, context: {} });
-    expect(response).toEqual({
-      success: true,
-      message: "Password changed successfully",
-    });
-    expect(passwordApi.changePassword).toHaveBeenCalled();
-  });
-
   it("action updates password policy successfully", async () => {
     vi.mocked(passwordApi.updatePasswordPolicy).mockResolvedValue({});
 
@@ -178,25 +106,6 @@ describe("Security Settings Page", () => {
   // Rendering Tests
   // ============================================================================
 
-  it("renders change password section", async () => {
-    const RoutesStub = createRoutesStub([
-      {
-        path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
-      },
-    ]);
-
-    render(<RoutesStub initialEntries={["/dashboard/settings/security"]} />);
-
-    await waitFor(() => {
-      expect(screen.getByText("Change Password")).toBeInTheDocument();
-    });
-    expect(screen.getByLabelText("Current password")).toBeInTheDocument();
-    expect(screen.getByLabelText("New password")).toBeInTheDocument();
-    expect(screen.getByLabelText("Confirm new password")).toBeInTheDocument();
-  });
-
   it("renders password policy section", async () => {
     const RoutesStub = createRoutesStub([
       {
@@ -235,47 +144,9 @@ describe("Security Settings Page", () => {
     expect(screen.getByText("Beta Inc")).toBeInTheDocument();
   });
 
-  it("renders password requirements hint", async () => {
-    const RoutesStub = createRoutesStub([
-      {
-        path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
-      },
-    ]);
-
-    render(<RoutesStub initialEntries={["/dashboard/settings/security"]} />);
-
-    await waitFor(() => {
-      expect(
-        screen.getByText("Must be at least 8 characters")
-      ).toBeInTheDocument();
-    });
-  });
-
   // ============================================================================
   // Action Error Path Tests
   // ============================================================================
-
-  it("action handles change_password API error", async () => {
-    vi.mocked(passwordApi.changePassword).mockRejectedValue(
-      new Error("Current password is incorrect")
-    );
-
-    const formData = new FormData();
-    formData.append("intent", "change_password");
-    formData.append("currentPassword", "wrongpassword");
-    formData.append("newPassword", "newpassword123");
-    formData.append("confirmPassword", "newpassword123");
-
-    const request = new Request("http://localhost/dashboard/settings/security", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await action({ request, params: {}, context: {} });
-    expect(response).toEqual({ error: "Current password is incorrect" });
-  });
 
   it("action handles update_policy API error", async () => {
     vi.mocked(passwordApi.updatePasswordPolicy).mockRejectedValue(
@@ -302,24 +173,6 @@ describe("Security Settings Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
     expect(response).toEqual({ error: "Policy update failed" });
-  });
-
-  it("action handles non-Error exception", async () => {
-    vi.mocked(passwordApi.changePassword).mockRejectedValue("string error");
-
-    const formData = new FormData();
-    formData.append("intent", "change_password");
-    formData.append("currentPassword", "oldpass");
-    formData.append("newPassword", "newpassword123");
-    formData.append("confirmPassword", "newpassword123");
-
-    const request = new Request("http://localhost/dashboard/settings/security", {
-      method: "POST",
-      body: formData,
-    });
-
-    const response = await action({ request, params: {}, context: {} });
-    expect(response).toEqual({ error: "Operation failed" });
   });
 
   // ============================================================================
@@ -564,43 +417,6 @@ describe("Security Settings Page", () => {
     // Verify the policy form is still visible (loaded for second tenant)
     expect(screen.getByLabelText("Minimum length")).toBeInTheDocument();
     expect(passwordApi.getPasswordPolicy).toHaveBeenCalledTimes(2);
-  });
-
-  it("renders change password button", async () => {
-    const RoutesStub = createRoutesStub([
-      {
-        path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
-      },
-    ]);
-
-    render(<RoutesStub initialEntries={["/dashboard/settings/security"]} />);
-
-    await waitFor(() => {
-      expect(screen.getByRole("button", { name: "Change password" })).toBeInTheDocument();
-    });
-  });
-
-  it("renders hidden intent field for change password form", async () => {
-    const RoutesStub = createRoutesStub([
-      {
-        path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
-      },
-    ]);
-
-    const { container } = render(
-      <RoutesStub initialEntries={["/dashboard/settings/security"]} />
-    );
-
-    await waitFor(() => {
-      expect(screen.getByText("Change Password")).toBeInTheDocument();
-    });
-
-    const hiddenIntent = container.querySelector('input[name="intent"][value="change_password"]');
-    expect(hiddenIntent).toBeInTheDocument();
   });
 
   it("renders hidden fields for policy form after selecting tenant", async () => {

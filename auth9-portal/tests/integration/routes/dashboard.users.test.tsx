@@ -610,7 +610,7 @@ describe("Users Page", () => {
             await user.click(screen.getByRole("button", { name: /Save Changes/i }));
 
             await waitFor(() => {
-                expect(userApi.update).toHaveBeenCalledWith("u1", { display_name: "Alice Updated" });
+                expect(userApi.update).toHaveBeenCalledWith("u1", { display_name: "Alice Updated" }, "test-token");
             });
         });
     });
@@ -884,7 +884,7 @@ describe("Users Page", () => {
             await user.click(screen.getByTestId("confirm-dialog-action"));
 
             await waitFor(() => {
-                expect(userApi.delete).toHaveBeenCalledWith("u1");
+                expect(userApi.delete).toHaveBeenCalledWith("u1", "test-token");
             });
         });
 
@@ -1353,7 +1353,7 @@ describe("Users Page", () => {
 
             const result = await action({ request, params: {}, context: {} });
             expect(result).toEqual({ success: true, intent: "update_user" });
-            expect(userApi.update).toHaveBeenCalledWith("u1", { display_name: "New Name" });
+            expect(userApi.update).toHaveBeenCalledWith("u1", { display_name: "New Name" }, "test-token");
         });
 
         it("create_user calls userApi.create", async () => {
@@ -1386,7 +1386,7 @@ describe("Users Page", () => {
 
             const result = await action({ request, params: {}, context: {} });
             expect(result).toEqual({ success: true, intent: "add_to_tenant" });
-            expect(userApi.addToTenant).toHaveBeenCalledWith("u1", "t1", "admin");
+            expect(userApi.addToTenant).toHaveBeenCalledWith("u1", "t1", "admin", "test-token");
         });
 
         it("remove_from_tenant calls userApi.removeFromTenant", async () => {
@@ -1400,7 +1400,7 @@ describe("Users Page", () => {
 
             const result = await action({ request, params: {}, context: {} });
             expect(result).toEqual({ success: true, intent: "remove_from_tenant" });
-            expect(userApi.removeFromTenant).toHaveBeenCalledWith("u1", "t1");
+            expect(userApi.removeFromTenant).toHaveBeenCalledWith("u1", "t1", "test-token");
         });
 
         it("assign_roles calls rbacApi.assignRoles", async () => {
@@ -1451,7 +1451,7 @@ describe("Users Page", () => {
 
             const result = await action({ request, params: {}, context: {} });
             expect(result).toEqual({ success: true, intent: "delete_user" });
-            expect(userApi.delete).toHaveBeenCalledWith("u1");
+            expect(userApi.delete).toHaveBeenCalledWith("u1", "test-token");
         });
 
         it("force_logout calls sessionApi.forceLogoutUser", async () => {

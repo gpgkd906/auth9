@@ -21,29 +21,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const intent = formData.get("intent");
 
   try {
-    if (intent === "change_password") {
-      const currentPassword = formData.get("currentPassword") as string;
-      const newPassword = formData.get("newPassword") as string;
-      const confirmPassword = formData.get("confirmPassword") as string;
-
-      if (!currentPassword || !newPassword) {
-        return { error: "All password fields are required" };
-      }
-
-      if (newPassword.length < 8) {
-        return { error: "New password must be at least 8 characters" };
-      }
-
-      if (newPassword !== confirmPassword) {
-        return { error: "New passwords do not match" };
-      }
-
-      // Note: In real implementation, get access token from session
-      const accessToken = formData.get("accessToken") as string || "";
-      await passwordApi.changePassword(currentPassword, newPassword, accessToken);
-      return { success: true, message: "Password changed successfully" };
-    }
-
     if (intent === "update_policy") {
       const tenantId = formData.get("tenantId") as string;
       const policy: Partial<PasswordPolicy> = {
@@ -96,69 +73,6 @@ export default function SecuritySettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Change Password Section */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Change Password</CardTitle>
-          <CardDescription>
-            Update your account password. You will need to enter your current password.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Form method="post" className="space-y-4 max-w-md">
-            <input type="hidden" name="intent" value="change_password" />
-
-            <div className="space-y-2">
-              <Label htmlFor="currentPassword">Current password</Label>
-              <Input
-                id="currentPassword"
-                name="currentPassword"
-                type="password"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="newPassword">New password</Label>
-              <Input
-                id="newPassword"
-                name="newPassword"
-                type="password"
-                minLength={8}
-                required
-              />
-              <p className="text-xs text-[var(--text-secondary)]">Must be at least 8 characters</p>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm new password</Label>
-              <Input
-                id="confirmPassword"
-                name="confirmPassword"
-                type="password"
-                required
-              />
-            </div>
-
-            {actionData?.error && navigation.formData?.get("intent") === "change_password" && (
-              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-                {actionData.error}
-              </div>
-            )}
-
-            {actionData?.success && navigation.formData?.get("intent") === "change_password" && (
-              <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
-                {actionData.message}
-              </div>
-            )}
-
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Changing..." : "Change password"}
-            </Button>
-          </Form>
-        </CardContent>
-      </Card>
-
       {/* Password Policy Section (Admin only) */}
       <Card>
         <CardHeader>
@@ -341,13 +255,13 @@ export default function SecuritySettingsPage() {
                   </div>
                 </div>
 
-                {actionData?.error && navigation.formData?.get("intent") === "update_policy" && (
+                {actionData?.error && (
                   <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
                     {actionData.error}
                   </div>
                 )}
 
-                {actionData?.success && navigation.formData?.get("intent") === "update_policy" && (
+                {actionData?.success && (
                   <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
                     {actionData.message}
                   </div>

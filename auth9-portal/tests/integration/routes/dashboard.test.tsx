@@ -1,5 +1,5 @@
 import { createRoutesStub } from "react-router";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
 import Dashboard from "~/routes/dashboard";
 
@@ -9,6 +9,14 @@ describe("Dashboard Layout", () => {
             {
                 path: "/dashboard",
                 Component: Dashboard,
+                loader: () => ({
+                    currentUser: {
+                        id: "user-1",
+                        display_name: "John Doe",
+                        email: "john@example.com",
+                        avatar_url: "",
+                    },
+                }),
                 children: [
                     {
                         path: "/dashboard",
@@ -20,7 +28,9 @@ describe("Dashboard Layout", () => {
 
         render(<RoutesStub initialEntries={["/dashboard"]} />);
 
-        expect(screen.getByText("Auth9")).toBeInTheDocument();
+        await waitFor(() => {
+            expect(screen.getAllByText("Auth9").length).toBeGreaterThanOrEqual(1);
+        });
         expect(screen.getByText("Overview")).toBeInTheDocument();
         expect(screen.getByText("Tenants")).toBeInTheDocument();
 
