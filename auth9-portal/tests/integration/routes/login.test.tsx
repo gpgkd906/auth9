@@ -1,7 +1,7 @@
 import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect } from "vitest";
-import Login, { action, meta } from "~/routes/login";
+import Login, { loader, action, meta } from "~/routes/login";
 
 describe("Login Page", () => {
     it("meta returns correct title", () => {
@@ -9,106 +9,105 @@ describe("Login Page", () => {
         expect(result).toEqual([{ title: "Sign In - Auth9" }]);
     });
 
-    it("renders login form", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/login",
-                Component: Login,
-                action,
-            },
-        ]);
+    // ============================================================================
+    // Loader Tests
+    // ============================================================================
 
-        render(<RoutesStub initialEntries={["/login"]} />);
+    it("loader redirects to authorize endpoint when no error", async () => {
+        const request = new Request("http://localhost:3000/login");
+        const response = await loader({ request, params: {}, context: {} });
 
-        expect(screen.getByText("Welcome back")).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: /sign in/i })).toBeInTheDocument();
+        expect(response.status).toBe(302);
+        const location = response.headers.get("Location");
+        expect(location).toContain("/api/v1/auth/authorize");
+        expect(location).toContain("response_type=code");
+        expect(location).toContain("scope=openid+email+profile");
     });
 
-    it("displays Auth9 branding", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/login",
-                Component: Login,
-            },
-        ]);
+    it("loader returns error data when error param present", async () => {
+        const request = new Request("http://localhost:3000/login?error=access_denied");
+        const result = await loader({ request, params: {}, context: {} });
 
-        render(<RoutesStub initialEntries={["/login"]} />);
-
-        expect(screen.getByText("Sign in to your Auth9 account")).toBeInTheDocument();
+        expect(result).toEqual({ error: "access_denied" });
     });
 
-    it("has link to registration page", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/login",
-                Component: Login,
-            },
-        ]);
+    it("loader returns error data for generic errors", async () => {
+        const request = new Request("http://localhost:3000/login?error=server_error");
+        const result = await loader({ request, params: {}, context: {} });
 
-        render(<RoutesStub initialEntries={["/login"]} />);
-
-        expect(screen.getByText("Sign up")).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /sign up/i })).toHaveAttribute("href", "/register");
+        expect(result).toEqual({ error: "server_error" });
     });
 
-    it("renders sign in button with correct text", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/login",
-                Component: Login,
-            },
-        ]);
-
-        render(<RoutesStub initialEntries={["/login"]} />);
-
-        const submitButton = screen.getByRole("button", { name: /sign in with sso/i });
-        expect(submitButton).toBeInTheDocument();
-        expect(submitButton).not.toBeDisabled();
-    });
-
-    it("displays Auth9 logo with letter A", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/login",
-                Component: Login,
-            },
-        ]);
-
-        render(<RoutesStub initialEntries={["/login"]} />);
-
-        // Logo container has "A9"
-        expect(screen.getByText("A9")).toBeInTheDocument();
-    });
-
-    it("displays 'Don't have an account?' text", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/login",
-                Component: Login,
-            },
-        ]);
-
-        render(<RoutesStub initialEntries={["/login"]} />);
-
-        expect(screen.getByText(/Don't have an account\?/i)).toBeInTheDocument();
-    });
+    // ============================================================================
+    // Action Tests
+    // ============================================================================
 
     it("action redirects to authorize endpoint", async () => {
-        // Create a mock request
         const request = new Request("http://localhost:3000/login", {
             method: "POST",
         });
 
         const response = await action({ request, params: {}, context: {} });
 
-        // Verify it returns a redirect
         expect(response.status).toBe(302);
-
-        // Get the Location header
         const location = response.headers.get("Location");
         expect(location).toContain("/api/v1/auth/authorize");
         expect(location).toContain("response_type=code");
         expect(location).toContain("scope=openid+email+profile");
     });
-});
 
+    // ============================================================================
+    // Component Tests (error state only)
+    // ============================================================================
+
+    it("renders error page with Try Again button on access_denied", async () => {
+        const RoutesStub = createRoutesStub([
+            {
+                path: "/login",
+                Component: Login,
+                loader() {
+                    return { error: "access_denied" };
+                },
+            },
+        ]);
+
+        render(<RoutesStub initialEntries={["/login?error=access_denied"]} />);
+
+        expect(await screen.findByText("Sign In Failed")).toBeInTheDocument();
+        expect(screen.getByText(/Access was denied/)).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+    });
+
+    it("renders error page with error message for generic errors", async () => {
+        const RoutesStub = createRoutesStub([
+            {
+                path: "/login",
+                Component: Login,
+                loader() {
+                    return { error: "server_error" };
+                },
+            },
+        ]);
+
+        render(<RoutesStub initialEntries={["/login?error=server_error"]} />);
+
+        expect(await screen.findByText("Sign In Failed")).toBeInTheDocument();
+        expect(screen.getByText(/An error occurred during sign in: server_error/)).toBeInTheDocument();
+    });
+
+    it("displays Auth9 logo on error page", async () => {
+        const RoutesStub = createRoutesStub([
+            {
+                path: "/login",
+                Component: Login,
+                loader() {
+                    return { error: "test_error" };
+                },
+            },
+        ]);
+
+        render(<RoutesStub initialEntries={["/login?error=test_error"]} />);
+
+        expect(await screen.findByText("A9")).toBeInTheDocument();
+    });
+});

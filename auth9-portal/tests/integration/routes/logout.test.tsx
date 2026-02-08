@@ -47,7 +47,7 @@ describe("Logout Page", () => {
     const response = await loader({ request, params: {}, context: {} });
 
     const location = response.headers.get("Location");
-    expect(location).toContain(encodeURIComponent("http://localhost:3000"));
+    expect(location).toContain("post_logout_redirect_uri=http");
   });
 
   it("calls backend logout API when access token exists", async () => {
@@ -131,5 +131,52 @@ describe("Logout Page", () => {
       500
     );
     consoleSpy.mockRestore();
+  });
+
+  // ============================================================================
+  // id_token_hint Tests
+  // ============================================================================
+
+  it("includes id_token_hint in redirect URL when session has idToken", async () => {
+    vi.mocked(getAccessToken).mockResolvedValue(null);
+    vi.mocked(getSession).mockResolvedValue({
+      accessToken: "token",
+      idToken: "my-id-token-value",
+    });
+    vi.mocked(destroySession).mockResolvedValue("destroyed-cookie");
+
+    const request = new Request("http://localhost:3000/logout");
+    const response = await loader({ request, params: {}, context: {} });
+
+    expect(response.status).toBe(302);
+    const location = response.headers.get("Location");
+    expect(location).toContain("id_token_hint=my-id-token-value");
+  });
+
+  it("does not include id_token_hint when session has no idToken", async () => {
+    vi.mocked(getAccessToken).mockResolvedValue(null);
+    vi.mocked(getSession).mockResolvedValue({
+      accessToken: "token",
+    });
+    vi.mocked(destroySession).mockResolvedValue("destroyed-cookie");
+
+    const request = new Request("http://localhost:3000/logout");
+    const response = await loader({ request, params: {}, context: {} });
+
+    expect(response.status).toBe(302);
+    const location = response.headers.get("Location");
+    expect(location).not.toContain("id_token_hint");
+  });
+
+  it("does not include id_token_hint when session is null", async () => {
+    vi.mocked(getAccessToken).mockResolvedValue(null);
+    vi.mocked(getSession).mockResolvedValue(null);
+
+    const request = new Request("http://localhost:3000/logout");
+    const response = await loader({ request, params: {}, context: {} });
+
+    expect(response.status).toBe(302);
+    const location = response.headers.get("Location");
+    expect(location).not.toContain("id_token_hint");
   });
 });

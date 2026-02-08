@@ -6,6 +6,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const url = new URL(request.url);
     const code = url.searchParams.get("code");
     const accessToken = url.searchParams.get("access_token");
+    const idToken = url.searchParams.get("id_token");
     const expiresIn = url.searchParams.get("expires_in");
     const error = url.searchParams.get("error");
     const errorDescription = url.searchParams.get("error_description");
@@ -20,7 +21,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
         const session = {
             accessToken: accessToken,
             refreshToken: undefined,
-            idToken: undefined,
+            idToken: idToken || undefined,
             expiresAt: Date.now() + (parseInt(expiresIn || "3600", 10) * 1000),
         };
 

@@ -1,5 +1,5 @@
-import type { MetaFunction, ActionFunctionArgs } from "react-router";
-import { redirect, Form, Link, useNavigation } from "react-router";
+import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import { redirect, Form, useLoaderData, useNavigation } from "react-router";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { ThemeToggle } from "~/components/ThemeToggle";
@@ -8,15 +8,12 @@ export const meta: MetaFunction = () => {
   return [{ title: "Sign In - Auth9" }];
 };
 
-export async function action({ request }: ActionFunctionArgs) {
-  const url = new URL(request.url);
-  // Use public URL for browser redirects (defaults to localhost for local dev)
+function buildAuthorizeUrl(requestUrl: URL) {
   const corePublicUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
-  const portalUrl = process.env.AUTH9_PORTAL_URL || url.origin;
+  const portalUrl = process.env.AUTH9_PORTAL_URL || requestUrl.origin;
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   const redirectUri = `${portalUrl}/auth/callback`;
 
-  // Generate random state for CSRF protection
   const state = crypto.randomUUID();
 
   const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
@@ -26,10 +23,30 @@ export async function action({ request }: ActionFunctionArgs) {
   authorizeUrl.searchParams.set("scope", "openid email profile");
   authorizeUrl.searchParams.set("state", state);
 
-  return redirect(authorizeUrl.toString());
+  return authorizeUrl.toString();
+}
+
+export async function loader({ request }: LoaderFunctionArgs) {
+  const url = new URL(request.url);
+  const error = url.searchParams.get("error");
+
+  if (error) {
+    return { error };
+  }
+
+  // No error: auto-redirect to SSO
+  const authorizeUrl = buildAuthorizeUrl(url);
+  return redirect(authorizeUrl);
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const url = new URL(request.url);
+  const authorizeUrl = buildAuthorizeUrl(url);
+  return redirect(authorizeUrl);
 }
 
 export default function Login() {
+  const { error } = useLoaderData<typeof loader>() as { error: string };
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -47,24 +64,19 @@ export default function Login() {
         <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
         <CardHeader className="text-center">
           <div className="logo-icon mx-auto mb-4">A9</div>
-          <CardTitle className="text-2xl">Welcome back</CardTitle>
+          <CardTitle className="text-2xl">Sign In Failed</CardTitle>
           <CardDescription>
-            Sign in to your Auth9 account
+            {error === "access_denied"
+              ? "Access was denied. Please try again or contact your administrator."
+              : `An error occurred during sign in: ${error}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-4">
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Redirecting..." : "Sign in with SSO"}
+              {isSubmitting ? "Redirecting..." : "Try Again"}
             </Button>
           </Form>
-
-          <div className="mt-6 text-center text-sm text-[var(--text-tertiary)]">
-            Don&apos;t have an account?{" "}
-            <Link to="/register" className="text-[var(--accent-blue)] hover:underline font-medium">
-              Sign up
-            </Link>
-          </div>
         </CardContent>
         </Card>
       </div>
