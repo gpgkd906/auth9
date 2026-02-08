@@ -177,19 +177,12 @@ services:
   # Builds the p2-inc/keycloak-events webhook plugin
   # Run with: docker-compose --profile build up auth9-keycloak-events-builder
   auth9-keycloak-events-builder:
-    image: maven:3.9-eclipse-temurin-17
+    build:
+      context: ./auth9-keycloak-events
+      dockerfile: Dockerfile
     container_name: auth9-keycloak-events-builder
-    working_dir: /build
-    command: >
-      sh -c "
-        git clone --depth 1 --branch v0.25 https://github.com/p2-inc/keycloak-events.git /build/keycloak-events &&
-        cd /build/keycloak-events &&
-        mvn clean package -DskipTests &&
-        cp target/keycloak-events-*.jar /output/ &&
-        rm -f /output/original-*.jar
-      "
     volumes:
-      - keycloak-theme:/output
+      - keycloak-theme:/events-output
     profiles:
       - build
 
