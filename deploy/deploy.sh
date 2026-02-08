@@ -483,7 +483,7 @@ generate_secrets() {
     if [ -z "${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}" ]; then
         local webhook_secret=$(openssl rand -hex 32)
         AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]="$webhook_secret"
-        KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET]="$webhook_secret"
+        KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]="$webhook_secret"
         echo ""
         print_warning "已生成 KEYCLOAK_WEBHOOK_SECRET - 请安全保存："
         echo -e "${GREEN}${webhook_secret}${NC}"
@@ -492,9 +492,39 @@ generate_secrets() {
     else
         print_info "KEYCLOAK_WEBHOOK_SECRET 已存在（不会重新生成）"
         # Sync to keycloak-secrets if not already set
-        if [ -z "${KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET]}" ]; then
-            KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET]="${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}"
+        if [ -z "${KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]}" ]; then
+            KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]="${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}"
         fi
+    fi
+
+    # GRPC_API_KEYS
+    if [ -z "${AUTH9_SECRETS[GRPC_API_KEYS]}" ]; then
+        AUTH9_SECRETS[GRPC_API_KEYS]=$(openssl rand -base64 32)
+        echo ""
+        print_warning "已生成 GRPC_API_KEYS - 请安全保存："
+        echo -e "${GREEN}${AUTH9_SECRETS[GRPC_API_KEYS]}${NC}"
+        echo ""
+        read "?保存后按 Enter 继续..."
+    else
+        print_info "GRPC_API_KEYS 已存在（不会重新生成）"
+    fi
+
+    # JWT RSA Key Pair (RS256)
+    if [ -z "${AUTH9_SECRETS[JWT_PRIVATE_KEY]}" ] || [ -z "${AUTH9_SECRETS[JWT_PUBLIC_KEY]}" ]; then
+        print_info "正在生成 JWT RSA 密钥对（RS256）..."
+        local tmp_private=$(mktemp)
+        local tmp_public=$(mktemp)
+        openssl genrsa -out "$tmp_private" 2048 2>/dev/null
+        openssl rsa -in "$tmp_private" -pubout -out "$tmp_public" 2>/dev/null
+        AUTH9_SECRETS[JWT_PRIVATE_KEY]=$(cat "$tmp_private")
+        AUTH9_SECRETS[JWT_PUBLIC_KEY]=$(cat "$tmp_public")
+        rm -f "$tmp_private" "$tmp_public"
+        echo ""
+        print_warning "已生成 JWT RSA 密钥对"
+        echo ""
+        read "?按 Enter 继续..."
+    else
+        print_info "JWT RSA 密钥对已存在（不会重新生成）"
     fi
 }
 
@@ -581,9 +611,15 @@ data:
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
   KEYCLOAK_SSL_REQUIRED: "none"
   KEYCLOAK_PUBLIC_URL: "${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
+  GRPC_AUTH_MODE: "api_key"
+  GRPC_ENABLE_REFLECTION: "false"
+  CORS_ALLOWED_ORIGINS: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
+  CORS_ALLOW_CREDENTIALS: "true"
+  PLATFORM_ADMIN_EMAILS: "${CONFIGMAP_VALUES[PLATFORM_ADMIN_EMAILS]:-admin@auth9.local}"
   AUTH9_CORE_URL: "http://auth9-core:8080"
   AUTH9_CORE_PUBLIC_URL: "${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
   AUTH9_PORTAL_URL: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
+  AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   NODE_ENV: "production"
 EOF
 
@@ -611,14 +647,15 @@ run_interactive_setup() {
 
     # Detect auth9-secrets
     detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
-        "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "SESSION_SECRET" \
+        "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
+        "SESSION_SECRET" \
         "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
-        "KEYCLOAK_WEBHOOK_SECRET" || true
+        "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" || true
 
     # Detect keycloak-secrets
     detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
         "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" \
-        "KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET" || true
+        "KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET" || true
 
     # Detect ConfigMap
     detect_existing_configmap || true
@@ -756,11 +793,15 @@ check_secrets_non_interactive() {
         echo "      --from-literal=DATABASE_URL='...' \\"
         echo "      --from-literal=REDIS_URL='...' \\"
         echo "      --from-literal=JWT_SECRET='...' \\"
+        echo "      --from-literal=JWT_PRIVATE_KEY='...' \\"
+        echo "      --from-literal=JWT_PUBLIC_KEY='...' \\"
         echo "      --from-literal=KEYCLOAK_URL='...' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN='admin' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
+        echo "      --from-literal=KEYCLOAK_WEBHOOK_SECRET='...' \\"
+        echo "      --from-literal=GRPC_API_KEYS='...' \\"
         echo "      -n $NAMESPACE"
         echo ""
         if [ -z "$DRY_RUN" ]; then
@@ -777,6 +818,7 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
         echo "      --from-literal=KC_DB_USERNAME='keycloak' \\"
         echo "      --from-literal=KC_DB_PASSWORD='...' \\"
+        echo "      --from-literal=KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET='...' \\"
         echo "      -n $NAMESPACE"
         echo ""
         if [ -z "$DRY_RUN" ]; then

@@ -82,6 +82,7 @@ spec:
             - --hostname-strict=false
             - --http-enabled=true
             - --health-enabled=true
+            - --spi-login-protocol-openid-connect-legacy-logout-redirect-uri=true
           ports:
             - name: http
               containerPort: 8080

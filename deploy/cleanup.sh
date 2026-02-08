@@ -340,9 +340,12 @@ interactive_delete_secrets() {
     print_warning "密钥包含敏感数据:"
     echo "    - DATABASE_URL（数据库连接字符串）"
     echo "    - REDIS_URL"
-    echo "    - JWT_SECRET、SESSION_SECRET"
+    echo "    - JWT_SECRET、JWT_PRIVATE_KEY、JWT_PUBLIC_KEY"
+    echo "    - SESSION_SECRET"
     echo "    - KEYCLOAK_ADMIN_PASSWORD"
     echo "    - KEYCLOAK_ADMIN_CLIENT_SECRET"
+    echo "    - KEYCLOAK_WEBHOOK_SECRET"
+    echo "    - GRPC_API_KEYS"
     echo ""
 
     if [ -n "$DRY_RUN" ]; then
