@@ -179,6 +179,9 @@ pub async fn callback<S: HasServices + HasSessionManagement + HasAnalytics>(
         pairs.append_pair("access_token", &identity_token);
         pairs.append_pair("token_type", "Bearer");
         pairs.append_pair("expires_in", &jwt_manager.access_token_ttl().to_string());
+        if let Some(ref id_token) = token_response.id_token {
+            pairs.append_pair("id_token", id_token);
+        }
         if let Some(original_state) = state_payload.original_state {
             pairs.append_pair("state", &original_state);
         }

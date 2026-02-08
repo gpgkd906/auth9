@@ -40,9 +40,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Redirect to backend logout (public URL for browser redirect)
   // This will redirect to Keycloak logout, then back to portal
-  const logoutUrl = `${AUTH9_CORE_PUBLIC_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}`;
+  const logoutUrl = new URL(`${AUTH9_CORE_PUBLIC_URL}/api/v1/auth/logout`);
+  logoutUrl.searchParams.set("post_logout_redirect_uri", PORTAL_URL);
 
-  return redirect(logoutUrl, { headers });
+  // Pass id_token_hint so Keycloak skips the logout confirmation page
+  if (session?.idToken) {
+    logoutUrl.searchParams.set("id_token_hint", session.idToken);
+  }
+
+  return redirect(logoutUrl.toString(), { headers });
 }
 
 export default function Logout() {
