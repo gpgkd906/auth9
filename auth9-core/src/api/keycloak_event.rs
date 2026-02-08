@@ -77,7 +77,7 @@ fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> 
     match kc_type {
         // Successful logins
         "LOGIN" => Some(LoginEventType::Success),
-        "CODE_TO_TOKEN" => Some(LoginEventType::Success),
+        "CODE_TO_TOKEN" => None, // OAuth code exchange, not a distinct login
 
         // Failed logins
         "LOGIN_ERROR" => {
@@ -324,10 +324,8 @@ mod tests {
     #[test]
     fn test_map_event_type_login_success() {
         assert_eq!(map_event_type("LOGIN", None), Some(LoginEventType::Success));
-        assert_eq!(
-            map_event_type("CODE_TO_TOKEN", None),
-            Some(LoginEventType::Success)
-        );
+        // CODE_TO_TOKEN is OAuth code exchange, not a distinct login event
+        assert_eq!(map_event_type("CODE_TO_TOKEN", None), None);
     }
 
     #[test]

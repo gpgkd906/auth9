@@ -752,6 +752,462 @@ async fn test_update_other_user_requires_admin() {
 }
 
 // ============================================================================
+// Authorization Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_list_users_non_admin_identity_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Non-admin identity token (email not in platform_admin_emails)
+    let token = create_test_identity_token_for_user(Uuid::new_v4());
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, "/api/v1/users", &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_users_service_client_with_tenant() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+
+    // Add a user to this tenant
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    let tu = TenantUser {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        user_id: auth9_core::domain::StringUuid::from(user_id),
+        tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+        role_in_tenant: "member".to_string(),
+        joined_at: chrono::Utc::now(),
+    };
+    state.user_repo.add_tenant_user(tu).await;
+
+    // ServiceClient token with tenant context
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(Uuid::new_v4(), "svc@test.com", Some(tenant_id))
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
+        get_json_with_auth(&app, "/api/v1/users", &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let response = body.unwrap();
+    assert_eq!(response.data.len(), 1);
+}
+
+#[tokio::test]
+async fn test_list_users_service_client_no_tenant_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // ServiceClient token without tenant context
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(Uuid::new_v4(), "svc@test.com", None)
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, "/api/v1/users", &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_users_tenant_access_token() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+    let auth_user_id = Uuid::new_v4();
+
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    let tu = TenantUser {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        user_id: auth9_core::domain::StringUuid::from(user_id),
+        tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+        role_in_tenant: "member".to_string(),
+        joined_at: chrono::Utc::now(),
+    };
+    state.user_repo.add_tenant_user(tu).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            auth_user_id,
+            "tenant-user@test.com",
+            tenant_id,
+            "my-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
+        get_json_with_auth(&app, "/api/v1/users", &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+}
+
+#[tokio::test]
+async fn test_get_user_service_client_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(Uuid::new_v4(), "svc@test.com", Some(Uuid::new_v4()))
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_get_user_tenant_access_no_admin_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let other_user_id = Uuid::new_v4();
+    let user = create_test_user(Some(other_user_id));
+    state.user_repo.add_user(user).await;
+
+    // TenantAccess with member role (not admin)
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "member@test.com",
+            Uuid::new_v4(),
+            "my-service",
+            vec!["member".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, &format!("/api/v1/users/{}", other_user_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_get_user_tenant_access_with_admin_role() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let other_user_id = Uuid::new_v4();
+    let user = create_test_user(Some(other_user_id));
+    state.user_repo.add_user(user).await;
+
+    // TenantAccess with admin role
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            Uuid::new_v4(),
+            "admin@test.com",
+            Uuid::new_v4(),
+            "my-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
+        get_json_with_auth(&app, &format!("/api/v1/users/{}", other_user_id), &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+}
+
+#[tokio::test]
+async fn test_create_user_public_registration_disabled_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    // Don't call enable_public_registration - it's disabled by default
+    let app = build_test_router(state);
+
+    let input = json!({
+        "email": "newuser@example.com"
+    });
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/users", &input).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_create_user_with_invalid_auth_header_returns_401() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    let input = json!({
+        "email": "user@example.com"
+    });
+
+    // Use an invalid/expired token
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        post_json_with_auth(&app, "/api/v1/users", &input, "invalid-token-here").await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_create_user_admin_can_create_without_registration() {
+    let mock_kc = MockKeycloakServer::new().await;
+    mock_kc.mock_create_user_success("kc-admin-created").await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    // Don't enable public registration - admin can always create
+    let token = create_test_identity_token();
+    let app = build_test_router(state);
+
+    let input = json!({
+        "email": "admin-created@example.com"
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
+        post_json_with_auth(&app, "/api/v1/users", &input, &token).await;
+
+    assert_eq!(status, StatusCode::CREATED);
+    assert!(body.is_some());
+}
+
+#[tokio::test]
+async fn test_delete_user_non_admin_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    // Non-admin identity token
+    let token = create_test_identity_token_for_user(Uuid::new_v4());
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_delete_user_service_client_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(Uuid::new_v4(), "svc@test.com", Some(Uuid::new_v4()))
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_add_user_to_tenant_invalid_role_returns_400() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+    let auth_user_id = Uuid::new_v4();
+
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    // Auth user is owner
+    let owner_tu = TenantUser {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        user_id: auth9_core::domain::StringUuid::from(auth_user_id),
+        tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+        role_in_tenant: "owner".to_string(),
+        joined_at: chrono::Utc::now(),
+    };
+    state.user_repo.add_tenant_user(owner_tu).await;
+
+    let token = create_test_identity_token_for_user(auth_user_id);
+    let app = build_test_router(state);
+
+    let input = json!({
+        "tenant_id": tenant_id.to_string(),
+        "role_in_tenant": "superadmin"  // invalid role
+    });
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}/tenants", user_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_add_user_to_tenant_service_client_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+
+    let user = create_test_user(Some(user_id));
+    state.user_repo.add_user(user).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(Uuid::new_v4(), "svc@test.com", Some(tenant_id))
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let input = json!({
+        "tenant_id": tenant_id.to_string(),
+        "role_in_tenant": "member"
+    });
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}/tenants", user_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_users_with_search() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
+
+    let mut user1 = create_test_user(None);
+    user1.email = "alice@example.com".to_string();
+    user1.display_name = Some("Alice Wonderland".to_string());
+    state.user_repo.add_user(user1).await;
+
+    let mut user2 = create_test_user(None);
+    user2.email = "bob@example.com".to_string();
+    user2.display_name = Some("Bob Builder".to_string());
+    state.user_repo.add_user(user2).await;
+
+    let app = build_test_router(state);
+
+    let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
+        get_json_with_auth(&app, "/api/v1/users?search=alice", &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let response = body.unwrap();
+    assert_eq!(response.data.len(), 1);
+    assert_eq!(response.data[0].email, "alice@example.com");
+}
+
+#[tokio::test]
+async fn test_list_users_with_empty_search() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
+
+    let user = create_test_user(None);
+    state.user_repo.add_user(user).await;
+
+    let app = build_test_router(state);
+
+    // Empty search should return all users
+    let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
+        get_json_with_auth(&app, "/api/v1/users?search=", &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let response = body.unwrap();
+    assert_eq!(response.data.len(), 1);
+}
+
+#[tokio::test]
+async fn test_tenant_access_with_user_write_permission_can_delete() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let keycloak_user_id = "kc-user-to-delete-by-perm";
+    mock_kc.mock_delete_user_success(keycloak_user_id).await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let mut user = create_test_user(Some(user_id));
+    user.keycloak_id = keycloak_user_id.to_string();
+    state.user_repo.add_user(user).await;
+
+    // TenantAccess with user:delete permission (not admin role)
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            Uuid::new_v4(),
+            "permuser@test.com",
+            Uuid::new_v4(),
+            "my-service",
+            vec!["member".to_string()],
+            vec!["user:delete".to_string()],
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<MessageResponse>) =
+        delete_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+}
+
+// ============================================================================
 // Edge Cases
 // ============================================================================
 

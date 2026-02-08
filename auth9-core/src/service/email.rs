@@ -619,4 +619,335 @@ mod tests {
             .await;
         assert!(result.is_err());
     }
+
+    // --- Helper: stub provider that fails ---
+
+    struct FailingProvider(EmailProviderError);
+
+    #[async_trait]
+    impl EmailProvider for FailingProvider {
+        async fn send(
+            &self,
+            _msg: &EmailMessage,
+        ) -> std::result::Result<EmailSendResult, EmailProviderError> {
+            Err(EmailProviderError::SendFailed("send failed".to_string()))
+        }
+        async fn test_connection(&self) -> std::result::Result<(), EmailProviderError> {
+            Err(match &self.0 {
+                EmailProviderError::AuthenticationFailed(m) => {
+                    EmailProviderError::AuthenticationFailed(m.clone())
+                }
+                EmailProviderError::ConnectionError(m) => {
+                    EmailProviderError::ConnectionError(m.clone())
+                }
+                EmailProviderError::InvalidConfiguration(m) => {
+                    EmailProviderError::InvalidConfiguration(m.clone())
+                }
+                e => EmailProviderError::SendFailed(e.to_string()),
+            })
+        }
+        fn provider_name(&self) -> &'static str {
+            "failing"
+        }
+    }
+
+    fn create_stub_factory() -> MockEmailProviderFactory {
+        let mut factory = MockEmailProviderFactory::new();
+        factory
+            .expect_create()
+            .returning(|_| Ok(Box::new(StubProvider("stub"))));
+        factory
+    }
+
+    fn smtp_system_settings_mock() -> MockSystemSettingsRepository {
+        let mut mock = MockSystemSettingsRepository::new();
+        mock.expect_get()
+            .with(eq("email"), eq("provider"))
+            .returning(|_, _| {
+                Ok(Some(SystemSettingRow {
+                    id: 1,
+                    category: "email".to_string(),
+                    setting_key: "provider".to_string(),
+                    value: serde_json::json!({
+                        "type": "smtp",
+                        "host": "smtp.example.com",
+                        "port": 587,
+                        "from_email": "no-reply@example.com"
+                    }),
+                    encrypted: false,
+                    description: None,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))
+            });
+        mock
+    }
+
+    #[tokio::test]
+    async fn test_send_success() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let message = EmailMessage::new(
+            EmailAddress::new("user@example.com"),
+            "Hello",
+            "<p>World</p>",
+        );
+        let result = email_service.send(&message, None).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().message_id, Some("msg-1".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_send_provider_error() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+
+        let mut factory = MockEmailProviderFactory::new();
+        factory.expect_create().returning(|_| {
+            Ok(Box::new(FailingProvider(
+                EmailProviderError::SendFailed("boom".into()),
+            )))
+        });
+
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let message = EmailMessage::new(
+            EmailAddress::new("user@example.com"),
+            "Hello",
+            "<p>World</p>",
+        );
+        let result = email_service.send(&message, None).await;
+        assert!(matches!(result, Err(AppError::Internal(_))));
+    }
+
+    #[tokio::test]
+    async fn test_send_with_from_with_text_body() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_with_from(
+                EmailAddress::new("user@example.com"),
+                "Subject",
+                "<p>html</p>",
+                Some("plain text"),
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_with_from_without_text_body() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_with_from(
+                EmailAddress::new("user@example.com"),
+                "Subject",
+                "<p>html</p>",
+                None,
+                None,
+            )
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_password_reset_success() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_password_reset("user@example.com", "reset-token-123", Some("Alice"))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_password_reset_without_name() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_password_reset("user@example.com", "token-abc", None)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_password_changed_success() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_password_changed("user@example.com", Some("Bob"))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_password_changed_without_name() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_password_changed("user@example.com", None)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_test_email_success() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service
+            .send_test_email("user@example.com", None)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_send_test_email_with_tenant_settings() {
+        let mock = MockSystemSettingsRepository::new(); // should not be called
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let tenant_settings = TenantEmailSettings {
+            provider: Some(EmailProviderConfig::Smtp(SmtpConfig {
+                host: "tenant.smtp.com".to_string(),
+                port: 465,
+                username: None,
+                password: None,
+                use_tls: true,
+                from_email: "tenant@example.com".to_string(),
+                from_name: None,
+            })),
+            from_email: None,
+            from_name: None,
+        };
+
+        let result = email_service
+            .send_test_email("user@example.com", Some(&tenant_settings))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_connection_auth_failed() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+
+        let mut factory = MockEmailProviderFactory::new();
+        factory.expect_create().returning(|_| {
+            Ok(Box::new(FailingProvider(
+                EmailProviderError::AuthenticationFailed("bad creds".into()),
+            )))
+        });
+
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service.test_connection(None).await;
+        assert!(matches!(result, Err(AppError::Unauthorized(_))));
+    }
+
+    #[tokio::test]
+    async fn test_connection_connection_error() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+
+        let mut factory = MockEmailProviderFactory::new();
+        factory.expect_create().returning(|_| {
+            Ok(Box::new(FailingProvider(
+                EmailProviderError::ConnectionError("timeout".into()),
+            )))
+        });
+
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service.test_connection(None).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[tokio::test]
+    async fn test_connection_invalid_configuration() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+
+        let mut factory = MockEmailProviderFactory::new();
+        factory.expect_create().returning(|_| {
+            Ok(Box::new(FailingProvider(
+                EmailProviderError::InvalidConfiguration("bad port".into()),
+            )))
+        });
+
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service.test_connection(None).await;
+        assert!(matches!(result, Err(AppError::Validation(_))));
+    }
+
+    #[tokio::test]
+    async fn test_connection_generic_error() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+
+        let mut factory = MockEmailProviderFactory::new();
+        factory.expect_create().returning(|_| {
+            Ok(Box::new(FailingProvider(
+                EmailProviderError::SendFailed("unexpected".into()),
+            )))
+        });
+
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service.test_connection(None).await;
+        assert!(matches!(result, Err(AppError::Internal(_))));
+    }
+
+    #[tokio::test]
+    async fn test_connection_success() {
+        let mock = smtp_system_settings_mock();
+        let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
+        let factory = create_stub_factory();
+        let email_service =
+            EmailService::new_with_factory(settings_service, Arc::new(factory));
+
+        let result = email_service.test_connection(None).await;
+        assert!(result.is_ok());
+    }
 }

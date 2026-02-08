@@ -51,7 +51,7 @@ pub async fn get_register_url<S: HasWebAuthn>(
 ) -> Result<Json<SuccessResponse<RegisterUrlResponse>>, AppError> {
     let redirect_uri = params
         .redirect_uri
-        .unwrap_or_else(|| "/dashboard/settings/passkeys".to_string());
+        .unwrap_or_else(|| "/dashboard/account/passkeys".to_string());
 
     let url = state.webauthn_service().build_register_url(&redirect_uri);
 

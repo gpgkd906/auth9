@@ -508,6 +508,324 @@ async fn test_accept_invitation_invalid_token() {
 }
 
 // ============================================================================
+// Authorization Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_list_invitations_service_client_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(uuid::Uuid::new_v4(), "svc@test.com", Some(*tenant_id))
+        .unwrap();
+
+    let app = build_invitation_test_router(state);
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_invitations_non_admin_identity_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Non-admin identity token
+    let token = crate::api::create_test_identity_token_for_user(uuid::Uuid::new_v4());
+    let app = build_invitation_test_router(state);
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_invitations_tenant_access_wrong_tenant_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let other_tenant_id = uuid::Uuid::new_v4();
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "user@test.com",
+            other_tenant_id,
+            "my-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_invitation_test_router(state);
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_list_invitations_tenant_access_same_tenant_succeeds() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "user@test.com",
+            tenant_id,
+            "my-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_invitation_test_router(state);
+
+    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
+        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+}
+
+#[tokio::test]
+async fn test_create_invitation_service_client_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(uuid::Uuid::new_v4(), "svc@test.com", Some(*tenant_id))
+        .unwrap();
+
+    let app = build_invitation_test_router(state);
+
+    let input = serde_json::json!({
+        "email": "newuser@example.com",
+        "role_ids": []
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_create_invitation_tenant_access_member_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // TenantAccess with member role (not admin/owner)
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "member@test.com",
+            tenant_id,
+            "my-service",
+            vec!["member".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_invitation_test_router(state);
+
+    let input = serde_json::json!({
+        "email": "newuser@example.com",
+        "role_ids": []
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_create_invitation_cross_tenant_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let other_tenant_id = uuid::Uuid::new_v4();
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "admin@test.com",
+            other_tenant_id,
+            "my-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_invitation_test_router(state);
+
+    let input = serde_json::json!({
+        "email": "newuser@example.com",
+        "role_ids": []
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_create_invitation_non_admin_identity_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let token = crate::api::create_test_identity_token_for_user(uuid::Uuid::new_v4());
+    let app = build_invitation_test_router(state);
+
+    let input = serde_json::json!({
+        "email": "newuser@example.com",
+        "role_ids": []
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_create_invitation_user_already_member_returns_409() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Add an existing user who is already a member
+    use crate::api::create_test_user;
+    let user_id = uuid::Uuid::new_v4();
+    let mut user = create_test_user(Some(user_id));
+    user.email = "existing@example.com".to_string();
+    state.user_repo.add_user(user).await;
+
+    let tu = auth9_core::domain::TenantUser {
+        id: StringUuid::new_v4(),
+        user_id: StringUuid::from(user_id),
+        tenant_id,
+        role_in_tenant: "member".to_string(),
+        joined_at: Utc::now(),
+    };
+    state.user_repo.add_tenant_user(tu).await;
+
+    let token = create_test_identity_token();
+    let app = build_invitation_test_router(state);
+
+    let input = serde_json::json!({
+        "email": "existing@example.com",
+        "role_ids": []
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn test_create_invitation_invalid_role_returns_400() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = create_test_tenant(None);
+    let tenant_id = tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let token = create_test_identity_token();
+    let app = build_invitation_test_router(state);
+
+    let nonexistent_role_id = StringUuid::new_v4();
+    let input = serde_json::json!({
+        "email": "newuser@example.com",
+        "role_ids": [nonexistent_role_id.to_string()]
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+// ============================================================================
 // Pagination Tests
 // ============================================================================
 

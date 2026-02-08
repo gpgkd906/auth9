@@ -4,6 +4,7 @@ import {
     Select,
     SelectContent,
     SelectItem,
+    SelectSeparator,
     SelectTrigger,
     SelectValue,
     SelectGroup,
@@ -106,5 +107,28 @@ describe("Select Component", () => {
         const trigger = screen.getByTestId("select-trigger");
         // The chevron is inside the trigger
         expect(trigger.querySelector("svg")).toBeInTheDocument();
+    });
+
+    it("renders SelectSeparator between groups", () => {
+        render(
+            <Select defaultValue="apple">
+                <SelectTrigger>
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectGroup>
+                        <SelectLabel>Fruits</SelectLabel>
+                        <SelectItem value="apple">Apple</SelectItem>
+                    </SelectGroup>
+                    <SelectSeparator data-testid="separator" />
+                    <SelectGroup>
+                        <SelectLabel>Vegetables</SelectLabel>
+                        <SelectItem value="carrot">Carrot</SelectItem>
+                    </SelectGroup>
+                </SelectContent>
+            </Select>
+        );
+
+        expect(screen.getByText("Apple")).toBeInTheDocument();
     });
 });
