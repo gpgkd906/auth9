@@ -844,6 +844,11 @@ where
                 .put(api::tenant::update::<S>)
                 .delete(api::tenant::delete::<S>),
         )
+        // Current user profile endpoints (must be before /api/v1/users/{id})
+        .route(
+            "/api/v1/users/me",
+            get(api::user::get_me::<S>).put(api::user::update_me::<S>),
+        )
         // User endpoints (GET/POST on /api/v1/users is in public_routes to avoid merge conflict)
         .route(
             "/api/v1/users/{id}",

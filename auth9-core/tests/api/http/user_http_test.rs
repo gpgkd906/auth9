@@ -631,6 +631,127 @@ async fn test_enable_mfa_user_not_found() {
 }
 
 // ============================================================================
+// GET /api/v1/users/me Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_me_returns_current_user() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let mut user = create_test_user(Some(user_id));
+    user.email = "me@example.com".to_string();
+    user.display_name = Some("Me User".to_string());
+    state.user_repo.add_user(user).await;
+
+    let token = create_test_identity_token_for_user(user_id);
+    let app = build_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
+        get_json_with_auth(&app, "/api/v1/users/me", &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let response = body.unwrap();
+    assert_eq!(response.data.email, "me@example.com");
+    assert_eq!(response.data.display_name, Some("Me User".to_string()));
+}
+
+// ============================================================================
+// PUT /api/v1/users/me Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_update_me_changes_display_name() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let keycloak_user_id = "kc-me-update";
+    mock_kc.mock_update_user_success(keycloak_user_id).await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let mut user = create_test_user(Some(user_id));
+    user.keycloak_id = keycloak_user_id.to_string();
+    user.display_name = Some("Old Name".to_string());
+    state.user_repo.add_user(user).await;
+
+    let token = create_test_identity_token_for_user(user_id);
+    let app = build_test_router(state);
+
+    let input = json!({
+        "display_name": "Updated Name"
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
+        put_json_with_auth(&app, "/api/v1/users/me", &input, &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let response = body.unwrap();
+    assert_eq!(response.data.display_name, Some("Updated Name".to_string()));
+}
+
+// ============================================================================
+// Self-Update via PUT /api/v1/users/:id Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_self_update_succeeds_without_admin() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let keycloak_user_id = "kc-self-update";
+    mock_kc.mock_update_user_success(keycloak_user_id).await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let mut user = create_test_user(Some(user_id));
+    user.keycloak_id = keycloak_user_id.to_string();
+    user.display_name = Some("Original".to_string());
+    state.user_repo.add_user(user).await;
+
+    // Non-admin token for the same user
+    let token = create_test_identity_token_for_user(user_id);
+    let app = build_test_router(state);
+
+    let input = json!({
+        "display_name": "Self Updated"
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
+        put_json_with_auth(&app, &format!("/api/v1/users/{}", user_id), &input, &token).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let response = body.unwrap();
+    assert_eq!(response.data.display_name, Some("Self Updated".to_string()));
+}
+
+#[tokio::test]
+async fn test_update_other_user_requires_admin() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let other_user_id = Uuid::new_v4();
+    let user = create_test_user(Some(other_user_id));
+    state.user_repo.add_user(user).await;
+
+    // Non-admin token for a different user
+    let token = create_test_identity_token_for_user(user_id);
+    let app = build_test_router(state);
+
+    let input = json!({
+        "display_name": "Hacked Name"
+    });
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        put_json_with_auth(&app, &format!("/api/v1/users/{}", other_user_id), &input, &token).await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+// ============================================================================
 // Edge Cases
 // ============================================================================
 

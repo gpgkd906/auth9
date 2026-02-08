@@ -1,7 +1,7 @@
 import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import PasskeysPage, { loader, action } from "~/routes/dashboard.settings.passkeys";
+import PasskeysPage, { loader, action } from "~/routes/dashboard.account.passkeys";
 import { webauthnApi } from "~/services/api";
 
 // Mock the API
@@ -11,6 +11,11 @@ vi.mock("~/services/api", () => ({
     deletePasskey: vi.fn(),
     getRegisterUrl: vi.fn(),
   },
+}));
+
+// Mock the session server
+vi.mock("~/services/session.server", () => ({
+  getAccessToken: vi.fn().mockResolvedValue("mock-access-token"),
 }));
 
 const mockPasskey = {
@@ -41,7 +46,8 @@ describe("Passkeys Settings Page", () => {
       data: [mockPasskey, mockPasskey2],
     });
 
-    const response = await loader();
+    const request = new Request("http://localhost/dashboard/account/passkeys");
+    const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toEqual({
       passkeys: [mockPasskey, mockPasskey2],
@@ -51,7 +57,8 @@ describe("Passkeys Settings Page", () => {
   it("loader returns empty passkeys on API error", async () => {
     vi.mocked(webauthnApi.listPasskeys).mockRejectedValue(new Error("API Error"));
 
-    const response = await loader();
+    const request = new Request("http://localhost/dashboard/account/passkeys");
+    const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toEqual({
       passkeys: [],
@@ -66,13 +73,13 @@ describe("Passkeys Settings Page", () => {
   it("renders passkeys page header", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Passkeys")).toBeInTheDocument();
@@ -85,13 +92,13 @@ describe("Passkeys Settings Page", () => {
   it("renders add passkey button", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /add passkey/i })).toBeInTheDocument();
@@ -101,13 +108,13 @@ describe("Passkeys Settings Page", () => {
   it("renders empty state when no passkeys", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("No passkeys yet")).toBeInTheDocument();
@@ -119,13 +126,13 @@ describe("Passkeys Settings Page", () => {
   it("renders passkey list when passkeys exist", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [mockPasskey, mockPasskey2] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("My Macbook")).toBeInTheDocument();
@@ -138,13 +145,13 @@ describe("Passkeys Settings Page", () => {
   it("renders remove button for each passkey", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [mockPasskey] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       expect(screen.getByRole("button", { name: /remove/i })).toBeInTheDocument();
@@ -154,13 +161,13 @@ describe("Passkeys Settings Page", () => {
   it("renders about passkeys section", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("About Passkeys")).toBeInTheDocument();
@@ -173,13 +180,13 @@ describe("Passkeys Settings Page", () => {
   it("displays creation date for passkeys", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/settings/passkeys",
+        path: "/dashboard/account/passkeys",
         Component: PasskeysPage,
         loader: () => ({ passkeys: [mockPasskey] }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/settings/passkeys"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
     await waitFor(() => {
       // The date formatting will produce "January 15, 2024" or similar
@@ -198,14 +205,14 @@ describe("Passkeys Settings Page", () => {
     formData.append("intent", "delete");
     formData.append("credentialId", "cred-1");
 
-    const request = new Request("http://localhost/dashboard/settings/passkeys", {
+    const request = new Request("http://localhost/dashboard/account/passkeys", {
       method: "POST",
       body: formData,
     });
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(webauthnApi.deletePasskey).toHaveBeenCalledWith("cred-1", "");
+    expect(webauthnApi.deletePasskey).toHaveBeenCalledWith("cred-1", "mock-access-token");
     expect(response).toEqual({ success: true, message: "Passkey deleted" });
   });
 
@@ -216,16 +223,16 @@ describe("Passkeys Settings Page", () => {
 
     const formData = new FormData();
     formData.append("intent", "register");
-    formData.append("redirectUri", "/dashboard/settings/passkeys");
+    formData.append("redirectUri", "/dashboard/account/passkeys");
 
-    const request = new Request("http://localhost/dashboard/settings/passkeys", {
+    const request = new Request("http://localhost/dashboard/account/passkeys", {
       method: "POST",
       body: formData,
     });
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(webauthnApi.getRegisterUrl).toHaveBeenCalledWith("/dashboard/settings/passkeys", "");
+    expect(webauthnApi.getRegisterUrl).toHaveBeenCalledWith("/dashboard/account/passkeys", "mock-access-token");
     expect(response).toEqual({
       redirect: "https://keycloak.example.com/register?action=WEBAUTHN_REGISTER",
     });
@@ -238,7 +245,7 @@ describe("Passkeys Settings Page", () => {
     formData.append("intent", "delete");
     formData.append("credentialId", "invalid-id");
 
-    const request = new Request("http://localhost/dashboard/settings/passkeys", {
+    const request = new Request("http://localhost/dashboard/account/passkeys", {
       method: "POST",
       body: formData,
     });
@@ -252,7 +259,7 @@ describe("Passkeys Settings Page", () => {
     const formData = new FormData();
     formData.append("intent", "invalid");
 
-    const request = new Request("http://localhost/dashboard/settings/passkeys", {
+    const request = new Request("http://localhost/dashboard/account/passkeys", {
       method: "POST",
       body: formData,
     });

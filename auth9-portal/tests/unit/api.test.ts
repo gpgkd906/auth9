@@ -258,7 +258,8 @@ describe('API Service', () => {
       await userApi.getTenants('123');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/users/123/tenants')
+        expect.stringContaining('/api/v1/users/123/tenants'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
     });
 

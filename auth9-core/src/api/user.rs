@@ -407,8 +407,58 @@ pub async fn create<S: HasServices + HasBranding>(
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(user))))
 }
 
+/// Get current user's own profile
+pub async fn get_me<S: HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(auth.user_id);
+    let user = state.user_service().get(id).await?;
+    Ok(Json(SuccessResponse::new(user)))
+}
+
+/// Update current user's own profile (display_name, avatar_url)
+pub async fn update_me<S: HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    headers: HeaderMap,
+    Json(input): Json<UpdateUserInput>,
+) -> Result<impl IntoResponse> {
+    let id = StringUuid::from(auth.user_id);
+    input.validate().map_err(|e| AppError::Validation(e.to_string()))?;
+    let before = state.user_service().get(id).await?;
+    if input.display_name.is_some() {
+        let update = KeycloakUserUpdate {
+            username: None,
+            email: None,
+            first_name: input.display_name.clone(),
+            last_name: None,
+            enabled: None,
+            email_verified: None,
+            required_actions: None,
+        };
+        state
+            .keycloak_client()
+            .update_user(&before.keycloak_id, &update)
+            .await?;
+    }
+    let user = state.user_service().update(id, input).await?;
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "user.update",
+        "user",
+        Some(*user.id),
+        serde_json::to_value(&before).ok(),
+        serde_json::to_value(&user).ok(),
+    )
+    .await;
+    Ok(Json(SuccessResponse::new(user)))
+}
+
 /// Update user
-/// Requires platform admin or tenant admin to update users
+/// Self-update: users can update their own profile without admin permissions
+/// Admin update: requires platform admin or tenant admin to update other users
 pub async fn update<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -416,8 +466,11 @@ pub async fn update<S: HasServices>(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
-    // Check authorization: require platform admin or tenant admin
-    require_user_management_permission(state.config(), &auth)?;
+    // Self-update: allow users to update their own profile
+    // Admin update: require platform admin or tenant admin
+    if auth.user_id != id {
+        require_user_management_permission(state.config(), &auth)?;
+    }
 
     let id = StringUuid::from(id);
     // Validate input before sending to Keycloak (prevent invalid data reaching external service)

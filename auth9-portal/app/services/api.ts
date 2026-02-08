@@ -188,6 +188,22 @@ export const userApi = {
       throw new Error(error.message);
     }
   },
+
+  getMe: async (accessToken?: string): Promise<{ data: User }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
+
+  updateMe: async (input: Partial<CreateUserInput>, accessToken?: string): Promise<{ data: User }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
+      method: "PUT",
+      headers: getHeaders(accessToken),
+      body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
 };
 
 // Service API

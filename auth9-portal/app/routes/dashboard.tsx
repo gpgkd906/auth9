@@ -1,10 +1,11 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Link, Outlet, useLocation } from "react-router";
+import { Link, Outlet, useLocation, useLoaderData } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
-import { requireAuth } from "~/services/session.server";
+import { requireAuth, getAccessToken } from "~/services/session.server";
+import { userApi, type User } from "~/services/api";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Dashboard - Auth9" }];
@@ -13,7 +14,17 @@ export const meta: MetaFunction = () => {
 // Protect all dashboard routes - redirects to /login if not authenticated
 export async function loader({ request }: LoaderFunctionArgs) {
   await requireAuth(request);
-  return null;
+  const accessToken = await getAccessToken(request);
+  let currentUser: User | null = null;
+  if (accessToken) {
+    try {
+      const response = await userApi.getMe(accessToken);
+      currentUser = response.data;
+    } catch {
+      // fallback to null
+    }
+  }
+  return { currentUser };
 }
 
 const navigation = [
@@ -30,7 +41,18 @@ const navigation = [
 
 export default function Dashboard() {
   const location = useLocation();
+  const { currentUser } = useLoaderData<typeof loader>();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
+  const displayName = currentUser?.display_name || currentUser?.email || "User";
+  const email = currentUser?.email || "";
+  const avatarUrl = currentUser?.avatar_url || "";
+  const initials = displayName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
     <div className="min-h-screen">
@@ -167,18 +189,20 @@ export default function Dashboard() {
         {/* User */}
         <div className="sidebar-footer">
           <div className="user-card">
-            <Avatar>
-              <AvatarImage src="" />
-              <AvatarFallback>JD</AvatarFallback>
-            </Avatar>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium text-[var(--text-primary)] truncate">
-                John Doe
-              </p>
-              <p className="text-xs text-[var(--text-tertiary)] truncate">
-                john@example.com
-              </p>
-            </div>
+            <Link to="/dashboard/account" className="flex items-center gap-3 flex-1 min-w-0" onClick={() => setIsSidebarOpen(false)}>
+              <Avatar>
+                <AvatarImage src={avatarUrl} />
+                <AvatarFallback>{initials}</AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-[var(--text-primary)] truncate">
+                  {displayName}
+                </p>
+                <p className="text-xs text-[var(--text-tertiary)] truncate">
+                  {email}
+                </p>
+              </div>
+            </Link>
             <Link
               to="/logout"
               className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-secondary)] transition-colors"

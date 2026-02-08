@@ -125,7 +125,7 @@ describe('UI Components', () => {
 
       const input = screen.getByPlaceholderText('Enter text');
       expect(input).toBeInTheDocument();
-      expect(input).toHaveClass('rounded-[10px]');
+      expect(input).toHaveClass('rounded-[12px]');
     });
 
     it('should accept text input', async () => {
