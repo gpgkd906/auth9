@@ -316,4 +316,243 @@ describe("Security Alerts Page", () => {
 
     expect(response).toEqual({ error: "Invalid action" });
   });
+
+  it("action returns generic error for non-Error throw", async () => {
+    vi.mocked(securityAlertApi.resolve).mockRejectedValue("unexpected");
+
+    const formData = new FormData();
+    formData.append("intent", "resolve");
+    formData.append("alertId", "alert-1");
+
+    const request = new Request("http://localhost/dashboard/security/alerts", {
+      method: "POST",
+      body: formData,
+    });
+
+    const response = await action({ request, params: {}, context: {} });
+    expect(response).toEqual({ error: "Operation failed" });
+  });
+
+  // ============================================================================
+  // Severity & Alert Type Coverage
+  // ============================================================================
+
+  it("renders high severity alert", async () => {
+    const highAlert = {
+      id: "alert-h",
+      alert_type: "impossible_travel",
+      severity: "high",
+      user_id: "user-abc",
+      created_at: "2024-01-15T10:00:00Z",
+      resolved_at: null,
+      details: null,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [highAlert],
+          pagination: mockPagination,
+          unresolvedOnly: false,
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("HIGH")).toBeInTheDocument();
+      expect(screen.getByText("Impossible Travel")).toBeInTheDocument();
+    });
+  });
+
+  it("renders low severity alert", async () => {
+    const lowAlert = {
+      id: "alert-l",
+      alert_type: "suspicious_ip",
+      severity: "low",
+      user_id: null,
+      created_at: "2024-01-15T10:00:00Z",
+      resolved_at: null,
+      details: null,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [lowAlert],
+          pagination: mockPagination,
+          unresolvedOnly: false,
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("LOW")).toBeInTheDocument();
+      expect(screen.getByText("Suspicious IP")).toBeInTheDocument();
+    });
+  });
+
+  it("renders unknown severity/type alert", async () => {
+    const unknownAlert = {
+      id: "alert-u",
+      alert_type: "custom_alert_type",
+      severity: "info",
+      user_id: null,
+      created_at: "2024-01-15T10:00:00Z",
+      resolved_at: null,
+      details: null,
+    };
+
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [unknownAlert],
+          pagination: mockPagination,
+          unresolvedOnly: false,
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("INFO")).toBeInTheDocument();
+      expect(screen.getByText("custom alert type")).toBeInTheDocument();
+    });
+  });
+
+  // ============================================================================
+  // Pagination Tests
+  // ============================================================================
+
+  it("renders pagination with Previous and Next buttons", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [mockAlertCritical],
+          pagination: { page: 2, per_page: 50, total: 150, total_pages: 3 },
+          unresolvedOnly: false,
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts?page=2"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 2 of 3")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /Previous/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Next/i })).toBeInTheDocument();
+  });
+
+  it("renders only Next button on first page", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [mockAlertCritical],
+          pagination: { page: 1, per_page: 50, total: 100, total_pages: 2 },
+          unresolvedOnly: false,
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 1 of 2")).toBeInTheDocument();
+    });
+    expect(screen.queryByRole("button", { name: /Previous/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /Next/i })).toBeInTheDocument();
+  });
+
+  it("renders only Previous button on last page", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [mockAlertCritical],
+          pagination: { page: 3, per_page: 50, total: 150, total_pages: 3 },
+          unresolvedOnly: false,
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts?page=3"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Page 3 of 3")).toBeInTheDocument();
+    });
+    expect(screen.getByRole("button", { name: /Previous/i })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Next/i })).not.toBeInTheDocument();
+  });
+
+  // ============================================================================
+  // Messages Display
+  // ============================================================================
+
+  it("renders action success message", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [],
+          pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+          unresolvedOnly: false,
+        }),
+        action: () => ({ success: true, message: "Alert resolved" }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
+    await waitFor(() => {
+      expect(screen.getByText("All clear!")).toBeInTheDocument();
+    });
+  });
+
+  it("renders load error message", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/security/alerts",
+        Component: SecurityAlertsPage,
+        loader: () => ({
+          alerts: [],
+          pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+          unresolvedOnly: false,
+          error: "Failed to load security alerts",
+        }),
+      },
+    ]);
+
+    render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
+    await waitFor(() => {
+      expect(screen.getByText("Failed to load security alerts")).toBeInTheDocument();
+    });
+  });
+
+  it("loader passes page parameter to API", async () => {
+    vi.mocked(securityAlertApi.list).mockResolvedValue({
+      data: [],
+      pagination: { page: 3, per_page: 50, total: 0, total_pages: 0 },
+    });
+
+    const request = new Request("http://localhost/dashboard/security/alerts?page=3");
+    await loader({ request, params: {}, context: {} });
+
+    expect(securityAlertApi.list).toHaveBeenCalledWith(3, 50, false, undefined);
+  });
 });

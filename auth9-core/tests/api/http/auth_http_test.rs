@@ -910,3 +910,580 @@ async fn test_authorize_with_invalid_scope_rejects() {
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+// ============================================================================
+// Client Credentials Success Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_token_client_credentials_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create a service and client with a properly hashed secret
+    let service_id = Uuid::new_v4();
+    let service = create_test_service(Some(service_id), None);
+    state.service_repo.add_service(service.clone()).await;
+
+    let client_secret = "test-secret-for-credentials";
+    let salt = argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let argon2 = argon2::Argon2::default();
+    let hashed = argon2::PasswordHasher::hash_password(&argon2, client_secret.as_bytes(), &salt)
+        .unwrap()
+        .to_string();
+
+    let client = Client {
+        id: StringUuid::new_v4(),
+        service_id: StringUuid::from(service_id),
+        client_id: "cc-test-client".to_string(),
+        client_secret_hash: hashed,
+        name: Some("CC Test Client".to_string()),
+        created_at: Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "client_credentials",
+        "client_id": "cc-test-client",
+        "client_secret": client_secret
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["token_type"], "Bearer");
+    assert!(body["access_token"].as_str().is_some());
+    assert!(body["expires_in"].as_i64().unwrap() > 0);
+    // client_credentials should not have refresh_token or id_token
+    assert!(body["refresh_token"].is_null());
+    assert!(body["id_token"].is_null());
+}
+
+#[tokio::test]
+async fn test_token_client_credentials_wrong_secret() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let service = create_test_service(Some(service_id), None);
+    state.service_repo.add_service(service.clone()).await;
+
+    let salt = argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let argon2_hasher = argon2::Argon2::default();
+    let hashed = argon2::PasswordHasher::hash_password(&argon2_hasher, b"correct-secret", &salt)
+        .unwrap()
+        .to_string();
+
+    let client = Client {
+        id: StringUuid::new_v4(),
+        service_id: StringUuid::from(service_id),
+        client_id: "cc-wrong-secret-client".to_string(),
+        client_secret_hash: hashed,
+        name: None,
+        created_at: Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "client_credentials",
+        "client_id": "cc-wrong-secret-client",
+        "client_secret": "wrong-secret"
+    });
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_token_client_credentials_with_tenant() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant_id = Uuid::new_v4();
+    let service_id = Uuid::new_v4();
+    let service = create_test_service(Some(service_id), Some(tenant_id));
+    state.service_repo.add_service(service.clone()).await;
+
+    let client_secret = "tenant-client-secret";
+    let salt = argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let argon2_hasher = argon2::Argon2::default();
+    let hashed = argon2::PasswordHasher::hash_password(&argon2_hasher, client_secret.as_bytes(), &salt)
+        .unwrap()
+        .to_string();
+
+    let client = Client {
+        id: StringUuid::new_v4(),
+        service_id: StringUuid::from(service_id),
+        client_id: "cc-tenant-client".to_string(),
+        client_secret_hash: hashed,
+        name: None,
+        created_at: Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "client_credentials",
+        "client_id": "cc-tenant-client",
+        "client_secret": client_secret
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["token_type"], "Bearer");
+    assert!(body["access_token"].as_str().is_some());
+}
+
+// ============================================================================
+// Callback Success Tests (with mock Keycloak OIDC endpoints)
+// ============================================================================
+
+/// Helper to create an encoded state for callback tests
+fn create_encoded_callback_state(redirect_uri: &str, client_id: &str) -> String {
+    let state_payload = serde_json::json!({
+        "redirect_uri": redirect_uri,
+        "client_id": client_id,
+        "original_state": "test-state"
+    });
+    base64::engine::general_purpose::URL_SAFE_NO_PAD
+        .encode(serde_json::to_vec(&state_payload).unwrap())
+}
+
+#[tokio::test]
+async fn test_callback_success_existing_user() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    // Set up Keycloak mock for token exchange and userinfo
+    // NOTE: mock_get_client_uuid_by_client_id must be mounted LAST because its
+    // broad path_regex would shadow more specific mocks (wiremock: last-wins)
+    let kc_sub = "kc-existing-user-123";
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-client-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-access-token", Some("kc-refresh-token"), Some("kc-id-token"))
+        .await;
+    mock_kc
+        .mock_userinfo_endpoint(kc_sub, "existing@example.com", Some("Existing User"))
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("callback-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Pre-create the user in the repo
+    let user = auth9_core::domain::User {
+        id: StringUuid::new_v4(),
+        email: "existing@example.com".to_string(),
+        display_name: Some("Existing User".to_string()),
+        avatar_url: None,
+        keycloak_id: kc_sub.to_string(),
+        mfa_enabled: false,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    state.user_repo.add_user(user).await;
+
+    let app = build_test_router(state);
+
+    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "callback-client");
+
+    let (status, _body) = get_raw(
+        &app,
+        &format!(
+            "/api/v1/auth/callback?code=auth-code-123&state={}",
+            encoded_state
+        ),
+    )
+    .await;
+
+    // Should redirect to the redirect_uri with tokens
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+}
+
+#[tokio::test]
+async fn test_callback_success_new_user_created() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let kc_sub = "kc-new-user-456";
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-client-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-access-token-new", None, None)
+        .await;
+    mock_kc
+        .mock_userinfo_endpoint(kc_sub, "newuser@example.com", Some("New User"))
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("callback-new-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Don't pre-create user - should be created automatically
+    let app = build_test_router(state);
+
+    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "callback-new-client");
+
+    let (status, _body) = get_raw(
+        &app,
+        &format!(
+            "/api/v1/auth/callback?code=new-auth-code&state={}",
+            encoded_state
+        ),
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+}
+
+#[tokio::test]
+async fn test_callback_token_exchange_failure() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-client-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_failure("invalid_grant", "Authorization code expired")
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("fail-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "fail-client");
+
+    let (status, _body) = get_raw(
+        &app,
+        &format!(
+            "/api/v1/auth/callback?code=expired-code&state={}",
+            encoded_state
+        ),
+    )
+    .await;
+
+    // Token exchange failure should return an error
+    assert!(status.as_u16() >= 400);
+}
+
+#[tokio::test]
+async fn test_callback_userinfo_failure() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-client-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-access-token-fail", None, None)
+        .await;
+    mock_kc.mock_userinfo_endpoint_failure().await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("userinfo-fail-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "userinfo-fail-client");
+
+    let (status, _body) = get_raw(
+        &app,
+        &format!(
+            "/api/v1/auth/callback?code=valid-code&state={}",
+            encoded_state
+        ),
+    )
+    .await;
+
+    // Userinfo failure should return an error
+    assert!(status.as_u16() >= 400);
+}
+
+// ============================================================================
+// Token Authorization Code Success Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_token_authorization_code_success_existing_user() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let kc_sub = "kc-token-user-789";
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-client-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-access-token-auth", Some("kc-refresh-token-auth"), Some("kc-id-token-auth"))
+        .await;
+    mock_kc
+        .mock_userinfo_endpoint(kc_sub, "tokenuser@example.com", Some("Token User"))
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("token-auth-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Pre-create the user
+    let user = auth9_core::domain::User {
+        id: StringUuid::new_v4(),
+        email: "tokenuser@example.com".to_string(),
+        display_name: Some("Token User".to_string()),
+        avatar_url: None,
+        keycloak_id: kc_sub.to_string(),
+        mfa_enabled: false,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    state.user_repo.add_user(user).await;
+
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "authorization_code",
+        "client_id": "token-auth-client",
+        "code": "valid-auth-code",
+        "redirect_uri": "https://app.example.com/callback"
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["token_type"], "Bearer");
+    assert!(body["access_token"].as_str().is_some());
+    assert!(body["expires_in"].as_i64().unwrap() > 0);
+    // Should have refresh_token and id_token from Keycloak
+    assert_eq!(body["refresh_token"], "kc-refresh-token-auth");
+    assert_eq!(body["id_token"], "kc-id-token-auth");
+}
+
+#[tokio::test]
+async fn test_token_authorization_code_new_user() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let kc_sub = "kc-new-token-user-abc";
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-access-new", None, None)
+        .await;
+    mock_kc
+        .mock_userinfo_endpoint(kc_sub, "newtoken@example.com", None)
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("token-new-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    // Don't pre-create user
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "authorization_code",
+        "client_id": "token-new-client",
+        "code": "new-user-code",
+        "redirect_uri": "https://app.example.com/callback"
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["token_type"], "Bearer");
+    assert!(body["access_token"].as_str().is_some());
+}
+
+// ============================================================================
+// Token Refresh Tests (with mock Keycloak)
+// ============================================================================
+
+#[tokio::test]
+async fn test_token_refresh_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let kc_sub = "kc-refresh-user-xyz";
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-refreshed-access", Some("kc-new-refresh"), None)
+        .await;
+    mock_kc
+        .mock_userinfo_endpoint(kc_sub, "refresh@example.com", Some("Refresh User"))
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("refresh-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Pre-create the user
+    let user = auth9_core::domain::User {
+        id: StringUuid::new_v4(),
+        email: "refresh@example.com".to_string(),
+        display_name: Some("Refresh User".to_string()),
+        avatar_url: None,
+        keycloak_id: kc_sub.to_string(),
+        mfa_enabled: false,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    };
+    state.user_repo.add_user(user).await;
+
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "refresh_token",
+        "client_id": "refresh-client",
+        "refresh_token": "original-refresh-token"
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert_eq!(body["token_type"], "Bearer");
+    assert!(body["access_token"].as_str().is_some());
+    // Should have new refresh_token
+    assert_eq!(body["refresh_token"], "kc-new-refresh");
+}
+
+#[tokio::test]
+async fn test_token_refresh_new_user() {
+    let mock_kc = MockKeycloakServer::new().await;
+
+    let kc_sub = "kc-refresh-new-user";
+    let client_uuid = Uuid::new_v4().to_string();
+    mock_kc
+        .mock_get_client_secret(&client_uuid, "kc-secret")
+        .await;
+    mock_kc
+        .mock_token_exchange_success("kc-refreshed-access-new", None, None)
+        .await;
+    mock_kc
+        .mock_userinfo_endpoint(kc_sub, "refresh-new@example.com", None)
+        .await;
+    mock_kc
+        .mock_get_client_uuid_by_client_id("refresh-new-client", &client_uuid)
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    // Don't pre-create user
+    let app = build_test_router(state);
+
+    let input = json!({
+        "grant_type": "refresh_token",
+        "client_id": "refresh-new-client",
+        "refresh_token": "refresh-token-for-new-user"
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/token", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    let body = body.unwrap();
+    assert!(body["access_token"].as_str().is_some());
+}
+
+// ============================================================================
+// Authorize scope filtering edge cases
+// ============================================================================
+
+#[tokio::test]
+async fn test_authorize_filters_unsafe_scopes() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.redirect_uris = vec!["https://app.example.com/callback".to_string()];
+    state.service_repo.add_service(service.clone()).await;
+
+    let client = Client {
+        id: StringUuid::new_v4(),
+        service_id: StringUuid::from(service_id),
+        client_id: "scope-filter-client".to_string(),
+        client_secret_hash: "hash".to_string(),
+        name: None,
+        created_at: Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+
+    // Include unsafe scopes that should be filtered out - openid is still present so should succeed
+    let (status, _body) = get_raw(
+        &app,
+        "/api/v1/auth/authorize?response_type=code&client_id=scope-filter-client&redirect_uri=https://app.example.com/callback&scope=openid+admin+offline_access+profile&state=csrf-state",
+    ).await;
+
+    // Should succeed since openid is present (unsafe scopes are just filtered out)
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+}
+
+// ============================================================================
+// Logout with session blacklist tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_logout_with_session_and_all_params() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let user_id = Uuid::new_v4();
+    let session_id = Uuid::new_v4();
+
+    let token = state
+        .jwt_manager
+        .create_identity_token_with_session(
+            user_id,
+            "full-logout@example.com",
+            Some("Full Logout User"),
+            Some(session_id),
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    // Logout with bearer token AND query params
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::GET)
+        .uri(
+            "/api/v1/auth/logout?id_token_hint=hint123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
+        )
+        .header("Authorization", format!("Bearer {}", token))
+        .body(axum::body::Body::empty())
+        .unwrap();
+
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
+}

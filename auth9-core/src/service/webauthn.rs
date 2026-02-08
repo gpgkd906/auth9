@@ -58,18 +58,14 @@ impl WebAuthnService {
     /// The user should be redirected to this URL to register a new passkey.
     /// After registration, Keycloak will redirect back to the redirect_uri.
     pub fn build_register_url(&self, redirect_uri: &str) -> String {
-        // Keycloak handles WebAuthn registration through required actions
-        // The client needs to trigger the CONFIGURE_TOTP or WEBAUTHN_REGISTER action
+        let account_url = format!(
+            "{}/realms/{}/account",
+            self.keycloak.public_url(),
+            self.keycloak.realm()
+        );
         format!(
             "{}?redirect_uri={}&kc_action=WEBAUTHN_REGISTER",
-            std::env::var("KEYCLOAK_ACCOUNT_URL").unwrap_or_else(|_| {
-                format!(
-                    "{}/realms/{}/account",
-                    std::env::var("KEYCLOAK_URL")
-                        .unwrap_or_else(|_| "http://localhost:8081".to_string()),
-                    std::env::var("KEYCLOAK_REALM").unwrap_or_else(|_| "auth9".to_string())
-                )
-            }),
+            account_url,
             urlencoding::encode(redirect_uri)
         )
     }
@@ -107,6 +103,8 @@ mod tests {
         let url = service.build_register_url("http://localhost:3000/callback");
         assert!(url.contains("redirect_uri"));
         assert!(url.contains("kc_action=WEBAUTHN_REGISTER"));
+        // Should use the public URL from config, not the internal URL
+        assert!(url.starts_with("http://localhost:8081/realms/auth9/account"));
     }
 
     #[test]
@@ -118,6 +116,8 @@ mod tests {
 
         // URL should contain the WebAuthn register action
         assert!(url.contains("kc_action=WEBAUTHN_REGISTER"));
+        // Should use the public URL from config
+        assert!(url.contains("localhost:8081"));
     }
 
     #[test]

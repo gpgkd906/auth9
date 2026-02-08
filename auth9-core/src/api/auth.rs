@@ -1,9 +1,8 @@
 //! Authentication API handlers
 
 use crate::cache::CacheOperations;
-use crate::domain::parse_user_agent;
 use crate::error::{AppError, Result};
-use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
+use crate::state::{HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
@@ -107,7 +106,7 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
 }
 
-pub async fn callback<S: HasServices + HasSessionManagement + HasAnalytics>(
+pub async fn callback<S: HasServices + HasSessionManagement>(
     State(state): State<S>,
     headers: HeaderMap,
     Query(params): Query<CallbackRequest>,
@@ -139,28 +138,8 @@ pub async fn callback<S: HasServices + HasSessionManagement + HasAnalytics>(
 
     let session = state
         .session_service()
-        .create_session(user.id, None, ip_address.clone(), user_agent.clone())
+        .create_session(user.id, None, ip_address, user_agent)
         .await?;
-
-    // Record login event
-    let (device_type, _) = user_agent
-        .as_ref()
-        .map(|ua| parse_user_agent(ua))
-        .unwrap_or((None, None));
-
-    // Fire and forget - don't fail login if event recording fails
-    let _ = state
-        .analytics_service()
-        .record_successful_login(
-            user.id,
-            &userinfo.email,
-            None,
-            ip_address,
-            user_agent,
-            device_type,
-            Some(session.id),
-        )
-        .await;
 
     // Create identity token with session ID
     let jwt_manager = HasServices::jwt_manager(&state);
@@ -201,7 +180,7 @@ pub struct TokenRequest {
     pub refresh_token: Option<String>,
 }
 
-pub async fn token<S: HasServices + HasSessionManagement + HasAnalytics>(
+pub async fn token<S: HasServices + HasSessionManagement>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(params): Json<TokenRequest>,
@@ -251,28 +230,8 @@ pub async fn token<S: HasServices + HasSessionManagement + HasAnalytics>(
 
             let session = state
                 .session_service()
-                .create_session(user.id, None, ip_address.clone(), user_agent.clone())
+                .create_session(user.id, None, ip_address, user_agent)
                 .await?;
-
-            // Record login event
-            let (device_type, _) = user_agent
-                .as_ref()
-                .map(|ua| parse_user_agent(ua))
-                .unwrap_or((None, None));
-
-            // Fire and forget - don't fail login if event recording fails
-            let _ = state
-                .analytics_service()
-                .record_successful_login(
-                    user.id,
-                    &userinfo.email,
-                    None,
-                    ip_address,
-                    user_agent,
-                    device_type,
-                    Some(session.id),
-                )
-                .await;
 
             // Create identity token with session ID
             let identity_token = jwt_manager.create_identity_token_with_session(

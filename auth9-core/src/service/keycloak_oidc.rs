@@ -942,4 +942,711 @@ mod tests {
         assert!(result.redirect_url.contains("access_token="));
         assert_eq!(result.expires_in, 7200);
     }
+
+    #[tokio::test]
+    async fn test_build_authorize_url_client_not_found() {
+        let config = create_test_keycloak_config();
+
+        let mut service_repo = MockServiceRepository::new();
+        service_repo
+            .expect_find_by_client_id()
+            .with(eq("nonexistent"))
+            .returning(|_| Ok(None));
+
+        let service = build_service(
+            Arc::new(MockKeycloakOidcAdminApi::new()),
+            Arc::new(MockOidcHttpClient::new()),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(service_repo),
+            config,
+        );
+
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "nonexistent".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            scope: "openid".to_string(),
+            state: None,
+            nonce: None,
+        };
+
+        let result = service.build_authorize_url(&params).await;
+        assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    #[tokio::test]
+    async fn test_build_authorize_url_without_nonce() {
+        let config = create_test_keycloak_config();
+
+        let mut service_repo = MockServiceRepository::new();
+        service_repo
+            .expect_find_by_client_id()
+            .with(eq("my-app"))
+            .returning(|_| {
+                Ok(Some(create_test_service(vec![
+                    "https://app.example.com/callback".to_string(),
+                ])))
+            });
+
+        let service = build_service(
+            Arc::new(MockKeycloakOidcAdminApi::new()),
+            Arc::new(MockOidcHttpClient::new()),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(service_repo),
+            config,
+        );
+
+        let params = AuthorizeParams {
+            response_type: "code".to_string(),
+            client_id: "my-app".to_string(),
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            scope: "openid".to_string(),
+            state: None,
+            nonce: None,
+        };
+
+        let url = service.build_authorize_url(&params).await.unwrap();
+        assert!(!url.contains("nonce="));
+        assert!(url.contains("response_type=code"));
+    }
+
+    #[tokio::test]
+    async fn test_build_logout_url_with_all_params() {
+        let config = create_test_keycloak_config();
+        let service = build_service(
+            Arc::new(MockKeycloakOidcAdminApi::new()),
+            Arc::new(MockOidcHttpClient::new()),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let url = service
+            .build_logout_url(
+                Some("id-token-hint-value"),
+                Some("https://app.com/post-logout"),
+                Some("logout-state"),
+            )
+            .unwrap();
+
+        assert!(url.contains("id_token_hint=id-token-hint-value"));
+        assert!(url.contains("post_logout_redirect_uri="));
+        assert!(url.contains("state=logout-state"));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_new_user_created() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("client-uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "kc-access",
+                        "refresh_token": "kc-refresh"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "new-kc-user-id",
+                        "email": "newuser@example.com",
+                        "name": "New User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let new_user = create_test_user("new-kc-user-id", "newuser@example.com");
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .with(eq("new-kc-user-id"))
+            .returning(|_| Ok(None));
+        user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(new_user.clone()));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let state_payload = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state_payload).unwrap();
+
+        let result = service
+            .handle_callback("auth-code", Some(&encoded))
+            .await
+            .unwrap();
+
+        assert!(!result.identity_token.is_empty());
+        // No original_state, so "state=" should not appear
+        assert!(!result.redirect_url.contains("state="));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_token_exchange_http_error() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| Ok((401, "unauthorized".to_string())));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "c".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        let result = service
+            .handle_callback("code", Some(&encoded))
+            .await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_token_exchange_network_error() {
+        let config = create_test_keycloak_config();
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .returning(|_, _| Err("connection refused".to_string()));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "c".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        let result = service
+            .handle_callback("code", Some(&encoded))
+            .await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_userinfo_http_error() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "tok",
+                        "refresh_token": "ref"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| Ok((401, "token expired".to_string())));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "c".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        let result = service
+            .handle_callback("code", Some(&encoded))
+            .await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_handle_callback_userinfo_parse_error() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "tok",
+                        "refresh_token": "ref"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| Ok((200, "not json".to_string())));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "c".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        let result = service
+            .handle_callback("code", Some(&encoded))
+            .await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_exchange_authorization_code_existing_user() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "kc-tok",
+                        "refresh_token": "kc-ref",
+                        "id_token": "kc-id"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "user-sub",
+                        "email": "user@test.com",
+                        "name": "User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let user = create_test_user("user-sub", "user@test.com");
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(move |_| Ok(Some(user.clone())));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let result = service
+            .exchange_authorization_code("auth-code", "client-id", "https://app.com/cb")
+            .await
+            .unwrap();
+
+        assert!(!result.access_token.is_empty());
+        assert_eq!(result.token_type, "Bearer");
+        assert_eq!(result.expires_in, 3600);
+        assert_eq!(result.refresh_token, Some("kc-ref".to_string()));
+        assert_eq!(result.id_token, Some("kc-id".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_exchange_authorization_code_new_user() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "kc-tok"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "new-sub",
+                        "email": "new@test.com"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let new_user = create_test_user("new-sub", "new@test.com");
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None));
+        user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(new_user.clone()));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let result = service
+            .exchange_authorization_code("code", "cid", "https://app.com/cb")
+            .await
+            .unwrap();
+
+        assert!(!result.access_token.is_empty());
+        assert!(result.refresh_token.is_none());
+        assert!(result.id_token.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_success_existing_user() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, params| {
+                url == token_url.as_str()
+                    && params
+                        .iter()
+                        .any(|(k, v)| k == "grant_type" && v == "refresh_token")
+            })
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "new-access",
+                        "refresh_token": "new-refresh"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "user-sub",
+                        "email": "user@test.com",
+                        "name": "User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let user = create_test_user("user-sub", "user@test.com");
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(move |_| Ok(Some(user.clone())));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let result = service
+            .refresh_token("valid-refresh-token", "test-client")
+            .await
+            .unwrap();
+
+        assert!(!result.access_token.is_empty());
+        assert_eq!(result.token_type, "Bearer");
+        assert_eq!(result.refresh_token, Some("new-refresh".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_new_user() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "new-access"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "new-sub",
+                        "email": "new@test.com"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let new_user = create_test_user("new-sub", "new@test.com");
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None));
+        user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(new_user.clone()));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let result = service
+            .refresh_token("refresh-tok", "client-id")
+            .await
+            .unwrap();
+
+        assert!(!result.access_token.is_empty());
+    }
+
+    #[tokio::test]
+    async fn test_refresh_token_network_error() {
+        let config = create_test_keycloak_config();
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .returning(|_, _| Err("network error".to_string()));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let result = service.refresh_token("tok", "cid").await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[tokio::test]
+    async fn test_exchange_code_malformed_json() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .returning(|_| Ok("uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .returning(|_| Ok("secret".to_string()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| Ok((200, "not-json".to_string())));
+
+        let service = build_service(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(MockUserRepository::new()),
+            Arc::new(MockServiceRepository::new()),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "c".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        let result = service
+            .handle_callback("code", Some(&encoded))
+            .await;
+        assert!(matches!(result, Err(AppError::Keycloak(_))));
+    }
+
+    #[test]
+    fn test_decode_state_missing() {
+        let result = decode_state(None);
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[test]
+    fn test_decode_state_invalid_base64() {
+        let result = decode_state(Some("!!!invalid-base64!!!"));
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[test]
+    fn test_encode_decode_state_without_original_state() {
+        let state = CallbackState {
+            redirect_uri: "https://app.com/cb".to_string(),
+            client_id: "c".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+        let decoded = decode_state(Some(&encoded)).unwrap();
+        assert_eq!(decoded.redirect_uri, "https://app.com/cb");
+        assert!(decoded.original_state.is_none());
+    }
 }

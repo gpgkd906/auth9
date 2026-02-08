@@ -42,6 +42,16 @@ impl KeycloakClient {
         }
     }
 
+    /// Get the public (browser-facing) Keycloak URL
+    pub fn public_url(&self) -> &str {
+        &self.config.public_url
+    }
+
+    /// Get the realm name
+    pub fn realm(&self) -> &str {
+        &self.config.realm
+    }
+
     /// Get admin access token (with caching)
     async fn get_admin_token(&self) -> Result<String> {
         // Check if we have a valid cached token
