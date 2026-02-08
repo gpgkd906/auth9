@@ -30,17 +30,17 @@ else
   echo "Found existing $CERT_DIR/server.crt and server.key"
 fi
 
-# Step 1: Stop and remove all containers
-echo "[1/7] Stopping and removing containers..."
-docker-compose down --remove-orphans 2>/dev/null || true
+# Step 1: Stop and remove all containers (including build profile) and volumes
+echo "[1/7] Stopping and removing containers and volumes..."
+docker-compose --profile build down -v --remove-orphans 2>/dev/null || true
 
 # Step 2: Remove project images (force rebuild)
 echo "[2/7] Removing project images..."
-docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-theme-builder 2>/dev/null || true
+docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-theme-builder auth9-auth9-keycloak-events-builder 2>/dev/null || true
 docker rmi $(docker images -q 'auth9-*' 2>/dev/null) 2>/dev/null || true
 
-# Step 3: Remove volumes (clean data)
-echo "[3/7] Removing volumes..."
+# Step 3: Remove any remaining volumes (safety net)
+echo "[3/7] Removing remaining volumes..."
 docker volume rm auth9_tidb-data auth9_redis-data auth9_keycloak-theme auth9_keycloak-events 2>/dev/null || true
 
 # Step 4: Build Keycloak theme and events plugin
