@@ -28,23 +28,33 @@ describe("Login Page", () => {
         const request = new Request("http://localhost:3000/login?error=access_denied");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ error: "access_denied" });
+        expect(result).toEqual({
+            error: "access_denied",
+            showPasskey: true,
+            apiBaseUrl: "http://localhost:8080",
+        });
     });
 
     it("loader returns error data for generic errors", async () => {
         const request = new Request("http://localhost:3000/login?error=server_error");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ error: "server_error" });
+        expect(result).toEqual({
+            error: "server_error",
+            showPasskey: true,
+            apiBaseUrl: "http://localhost:8080",
+        });
     });
 
     // ============================================================================
     // Action Tests
     // ============================================================================
 
-    it("action redirects to authorize endpoint", async () => {
+    it("action redirects to authorize endpoint for SSO login", async () => {
+        const formData = new FormData();
         const request = new Request("http://localhost:3000/login", {
             method: "POST",
+            body: formData,
         });
 
         const response = await action({ request, params: {}, context: {} });
@@ -60,13 +70,13 @@ describe("Login Page", () => {
     // Component Tests (error state only)
     // ============================================================================
 
-    it("renders error page with Try Again button on access_denied", async () => {
+    it("renders error page with SSO and passkey buttons on access_denied", async () => {
         const RoutesStub = createRoutesStub([
             {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "access_denied" };
+                    return { error: "access_denied", showPasskey: true, apiBaseUrl: "http://localhost:8080" };
                 },
             },
         ]);
@@ -75,7 +85,8 @@ describe("Login Page", () => {
 
         expect(await screen.findByText("Sign In Failed")).toBeInTheDocument();
         expect(screen.getByText(/Access was denied/)).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: /try again/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /sign in with sso/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /sign in with passkey/i })).toBeInTheDocument();
     });
 
     it("renders error page with error message for generic errors", async () => {
@@ -84,7 +95,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "server_error" };
+                    return { error: "server_error", showPasskey: true, apiBaseUrl: "http://localhost:8080" };
                 },
             },
         ]);
@@ -101,7 +112,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "test_error" };
+                    return { error: "test_error", showPasskey: true, apiBaseUrl: "http://localhost:8080" };
                 },
             },
         ]);

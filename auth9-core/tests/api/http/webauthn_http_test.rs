@@ -10,56 +10,6 @@ use crate::api::create_test_user;
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::WebAuthnCredential;
 use axum::http::StatusCode;
-use serde::Deserialize;
-
-// Response type for testing
-#[derive(Debug, Deserialize)]
-struct RegisterUrlTestResponse {
-    url: String,
-}
-
-// ============================================================================
-// Get Register URL Tests
-// ============================================================================
-
-#[tokio::test]
-async fn test_get_register_url_default_redirect() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
-
-    let app = build_webauthn_test_router(state);
-
-    let (status, body): (StatusCode, Option<SuccessResponse<RegisterUrlTestResponse>>) =
-        get_json(&app, "/api/v1/webauthn/register-url").await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert!(body.is_some());
-    let response = body.unwrap().data;
-    assert!(response.url.contains("WEBAUTHN_REGISTER"));
-    // Should contain default redirect
-    assert!(response.url.contains("passkeys"));
-}
-
-#[tokio::test]
-async fn test_get_register_url_custom_redirect() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
-
-    let app = build_webauthn_test_router(state);
-
-    let (status, body): (StatusCode, Option<SuccessResponse<RegisterUrlTestResponse>>) = get_json(
-        &app,
-        "/api/v1/webauthn/register-url?redirect_uri=/custom/path",
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::OK);
-    assert!(body.is_some());
-    let response = body.unwrap().data;
-    assert!(response.url.contains("WEBAUTHN_REGISTER"));
-    // Should contain custom redirect (URL encoded)
-    assert!(response.url.contains("custom"));
-}
 
 // ============================================================================
 // List Passkeys Tests
@@ -68,7 +18,7 @@ async fn test_get_register_url_custom_redirect() {
 #[tokio::test]
 async fn test_list_passkeys_success() {
     let mock_kc = MockKeycloakServer::new().await;
-    // Mock the credentials endpoint - the user_id in the token becomes keycloak_user_id
+    // Mock the credentials endpoint for migration-period Keycloak listing
     mock_kc
         .mock_list_user_credentials_any(vec![
             ("cred-1", "webauthn"),
@@ -82,7 +32,7 @@ async fn test_list_passkeys_success() {
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Create a valid JWT token - the sub claim is used as keycloak_user_id
+    // Create a valid JWT token
     let token = state
         .jwt_manager
         .create_identity_token(*user_id, "test@example.com", Some("Test User"))
@@ -96,22 +46,21 @@ async fn test_list_passkeys_success() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let credentials = body.unwrap().data;
+    // Keycloak credentials should be prefixed with kc_
     assert_eq!(credentials.len(), 2);
+    assert!(credentials[0].id.starts_with("kc_"));
 }
 
 #[tokio::test]
 async fn test_list_passkeys_empty() {
     let mock_kc = MockKeycloakServer::new().await;
-    // Mock empty credentials list
     mock_kc.mock_list_user_credentials_any(vec![]).await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
-    // Add a test user
     let user = create_test_user(None);
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Create a valid JWT token
     let token = state
         .jwt_manager
         .create_identity_token(*user_id, "test@example.com", Some("Test User"))
@@ -135,7 +84,6 @@ async fn test_list_passkeys_unauthorized() {
 
     let app = build_passkey_test_router(state);
 
-    // No auth header
     let (status, _): (StatusCode, Option<SuccessResponse<Vec<WebAuthnCredential>>>) =
         get_json(&app, "/api/v1/me/passkeys").await;
 
@@ -149,7 +97,6 @@ async fn test_list_passkeys_invalid_token() {
 
     let app = build_passkey_test_router(state);
 
-    // Invalid token
     let (status, _): (StatusCode, Option<SuccessResponse<Vec<WebAuthnCredential>>>) =
         get_json_with_auth(&app, "/api/v1/me/passkeys", "invalid-token").await;
 
@@ -161,18 +108,15 @@ async fn test_list_passkeys_invalid_token() {
 // ============================================================================
 
 #[tokio::test]
-async fn test_delete_passkey_success() {
+async fn test_delete_passkey_keycloak_success() {
     let mock_kc = MockKeycloakServer::new().await;
-    // Mock the delete credential endpoint
     mock_kc.mock_delete_user_credential_success().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
-    // Add a test user
     let user = create_test_user(None);
     let user_id = user.id;
     state.user_repo.add_user(user).await;
 
-    // Create a valid JWT token
     let token = state
         .jwt_manager
         .create_identity_token(*user_id, "test@example.com", Some("Test User"))
@@ -180,38 +124,13 @@ async fn test_delete_passkey_success() {
 
     let app = build_passkey_test_router(state);
 
+    // Delete a Keycloak credential (prefixed with kc_)
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, "/api/v1/me/passkeys/cred-123", &token).await;
+        delete_json_with_auth(&app, "/api/v1/me/passkeys/kc_cred-123", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     assert!(body.unwrap().message.contains("deleted"));
-}
-
-#[tokio::test]
-async fn test_delete_passkey_not_found() {
-    let mock_kc = MockKeycloakServer::new().await;
-    // Mock delete credential returning 404
-    mock_kc.mock_delete_user_credential_not_found().await;
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
-
-    // Add a test user
-    let user = create_test_user(None);
-    let user_id = user.id;
-    state.user_repo.add_user(user).await;
-
-    // Create a valid JWT token
-    let token = state
-        .jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
-        .unwrap();
-
-    let app = build_passkey_test_router(state);
-
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, "/api/v1/me/passkeys/nonexistent-cred", &token).await;
-
-    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -221,7 +140,6 @@ async fn test_delete_passkey_unauthorized() {
 
     let app = build_passkey_test_router(state);
 
-    // No auth header
     let (status, _): (StatusCode, Option<MessageResponse>) =
         delete_json(&app, "/api/v1/me/passkeys/cred-123").await;
 
@@ -235,7 +153,6 @@ async fn test_delete_passkey_invalid_token() {
 
     let app = build_passkey_test_router(state);
 
-    // Invalid token
     let (status, _): (StatusCode, Option<MessageResponse>) =
         delete_json_with_auth(&app, "/api/v1/me/passkeys/cred-123", "invalid-token").await;
 
@@ -245,18 +162,6 @@ async fn test_delete_passkey_invalid_token() {
 // ============================================================================
 // Test Router Builder
 // ============================================================================
-
-fn build_webauthn_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::webauthn;
-    use axum::routing::get;
-
-    axum::Router::new()
-        .route(
-            "/api/v1/webauthn/register-url",
-            get(webauthn::get_register_url::<TestAppState>),
-        )
-        .with_state(state)
-}
 
 fn build_passkey_test_router(state: TestAppState) -> axum::Router {
     use auth9_core::api::webauthn;

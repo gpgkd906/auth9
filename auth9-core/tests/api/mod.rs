@@ -17,13 +17,13 @@ use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
     AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateInvitationInput,
     CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasswordResetTokenInput,
-    CreatePermissionInput, CreateRoleInput, CreateSecurityAlertInput, CreateServiceInput,
-    CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput, Invitation,
-    InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats, PasswordResetToken,
-    Permission, Role, SecurityAlert, Service, ServiceStatus, Session, StringUuid, SystemSettingRow,
-    Tenant, TenantSettings, TenantStatus, TenantUser, UpdateRoleInput, UpdateServiceInput,
-    UpdateTenantInput, UpdateUserInput, UpdateWebhookInput, UpsertSystemSettingInput, User,
-    UserRolesInTenant, Webhook,
+    CreatePasskeyInput, CreatePermissionInput, CreateRoleInput, CreateSecurityAlertInput,
+    CreateServiceInput, CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput,
+    Invitation, InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats,
+    PasswordResetToken, Permission, Role, SecurityAlert, Service, ServiceStatus, Session,
+    StoredPasskey, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
+    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
+    UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
@@ -33,7 +33,8 @@ use auth9_core::repository::audit::{
 use auth9_core::repository::{
     InvitationRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
     RbacRepository, SecurityAlertRepository, ServiceRepository, SessionRepository,
-    SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
+    SystemSettingsRepository, TenantRepository, UserRepository, WebAuthnRepository,
+    WebhookRepository,
 };
 use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
 use chrono::{DateTime, Utc};
@@ -2380,6 +2381,98 @@ impl SecurityAlertRepository for TestSecurityAlertRepository {
         let before = alerts.len();
         alerts.retain(|a| a.tenant_id != Some(tenant_id));
         Ok((before - alerts.len()) as u64)
+    }
+}
+
+// ============================================================================
+// Test WebAuthn Repository
+// ============================================================================
+
+pub struct TestWebAuthnRepository {
+    credentials: RwLock<Vec<StoredPasskey>>,
+}
+
+impl TestWebAuthnRepository {
+    pub fn new() -> Self {
+        Self {
+            credentials: RwLock::new(vec![]),
+        }
+    }
+}
+
+impl Default for TestWebAuthnRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl WebAuthnRepository for TestWebAuthnRepository {
+    async fn create(&self, input: &CreatePasskeyInput) -> Result<StoredPasskey> {
+        let stored = StoredPasskey {
+            id: input.id.clone(),
+            user_id: input.user_id.clone(),
+            credential_id: input.credential_id.clone(),
+            credential_data: input.credential_data.clone(),
+            user_label: input.user_label.clone(),
+            aaguid: input.aaguid.clone(),
+            created_at: Utc::now(),
+            last_used_at: None,
+        };
+        self.credentials.write().await.push(stored.clone());
+        Ok(stored)
+    }
+
+    async fn find_by_credential_id(&self, credential_id: &str) -> Result<Option<StoredPasskey>> {
+        let creds = self.credentials.read().await;
+        Ok(creds
+            .iter()
+            .find(|c| c.credential_id == credential_id)
+            .cloned())
+    }
+
+    async fn list_by_user(&self, user_id: &str) -> Result<Vec<StoredPasskey>> {
+        let creds = self.credentials.read().await;
+        Ok(creds
+            .iter()
+            .filter(|c| c.user_id == user_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn delete(&self, id: &str, user_id: &str) -> Result<()> {
+        let mut creds = self.credentials.write().await;
+        let before = creds.len();
+        creds.retain(|c| !(c.id == id && c.user_id == user_id));
+        if creds.len() == before {
+            return Err(AppError::NotFound(
+                "WebAuthn credential not found".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
+    async fn delete_by_user(&self, user_id: &str) -> Result<u64> {
+        let mut creds = self.credentials.write().await;
+        let before = creds.len();
+        creds.retain(|c| c.user_id != user_id);
+        Ok((before - creds.len()) as u64)
+    }
+
+    async fn update_last_used(&self, id: &str) -> Result<()> {
+        let mut creds = self.credentials.write().await;
+        if let Some(cred) = creds.iter_mut().find(|c| c.id == id) {
+            cred.last_used_at = Some(Utc::now());
+        }
+        Ok(())
+    }
+
+    async fn update_credential_data(&self, id: &str, data: &serde_json::Value) -> Result<()> {
+        let mut creds = self.credentials.write().await;
+        if let Some(cred) = creds.iter_mut().find(|c| c.id == id) {
+            cred.credential_data = data.clone();
+        }
+        Ok(())
     }
 }
 

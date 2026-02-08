@@ -509,6 +509,18 @@ generate_secrets() {
         print_info "GRPC_API_KEYS 已存在（不会重新生成）"
     fi
 
+    # SETTINGS_ENCRYPTION_KEY (AES-256 for encrypting sensitive settings)
+    if [ -z "${AUTH9_SECRETS[SETTINGS_ENCRYPTION_KEY]}" ]; then
+        AUTH9_SECRETS[SETTINGS_ENCRYPTION_KEY]=$(openssl rand -base64 32)
+        echo ""
+        print_warning "已生成 SETTINGS_ENCRYPTION_KEY - 请安全保存："
+        echo -e "${GREEN}${AUTH9_SECRETS[SETTINGS_ENCRYPTION_KEY]}${NC}"
+        echo ""
+        read "?保存后按 Enter 继续..."
+    else
+        print_info "SETTINGS_ENCRYPTION_KEY 已存在（不会重新生成）"
+    fi
+
     # JWT RSA Key Pair (RS256)
     if [ -z "${AUTH9_SECRETS[JWT_PRIVATE_KEY]}" ] || [ -z "${AUTH9_SECRETS[JWT_PUBLIC_KEY]}" ]; then
         print_info "正在生成 JWT RSA 密钥对（RS256）..."
@@ -613,6 +625,7 @@ data:
   KEYCLOAK_PUBLIC_URL: "${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp-auth9.gitski.work}"
   GRPC_AUTH_MODE: "api_key"
   GRPC_ENABLE_REFLECTION: "false"
+  WEBAUTHN_RP_ID: "${CONFIGMAP_VALUES[WEBAUTHN_RP_ID]:-gitski.work}"
   CORS_ALLOWED_ORIGINS: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.gitski.work}"
   CORS_ALLOW_CREDENTIALS: "true"
   PLATFORM_ADMIN_EMAILS: "${CONFIGMAP_VALUES[PLATFORM_ADMIN_EMAILS]:-admin@auth9.local}"
@@ -648,7 +661,7 @@ run_interactive_setup() {
     # Detect auth9-secrets
     detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
-        "SESSION_SECRET" \
+        "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" \
         "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
         "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" || true
 
@@ -800,6 +813,7 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
         echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
+        echo "      --from-literal=SETTINGS_ENCRYPTION_KEY='...' \\"
         echo "      --from-literal=KEYCLOAK_WEBHOOK_SECRET='...' \\"
         echo "      --from-literal=GRPC_API_KEYS='...' \\"
         echo "      -n $NAMESPACE"

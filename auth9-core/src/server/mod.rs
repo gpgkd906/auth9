@@ -493,7 +493,25 @@ pub async fn run(config: Config) -> Result<()> {
         Some(webhook_service.clone()), // webhook event publisher
     ));
 
-    let webauthn_service = Arc::new(WebAuthnService::new(keycloak_arc.clone()));
+    // Create WebAuthn service with native passkey support
+    let webauthn_repo = Arc::new(crate::repository::webauthn::WebAuthnRepositoryImpl::new(
+        db_pool.clone(),
+    ));
+    let webauthn_instance = {
+        let rp_origin = url::Url::parse(&config.webauthn.rp_origin).map_err(|e| {
+            anyhow::anyhow!("Invalid WEBAUTHN_RP_ORIGIN '{}': {}", config.webauthn.rp_origin, e)
+        })?;
+        let builder = webauthn_rs::WebauthnBuilder::new(&config.webauthn.rp_id, &rp_origin)?
+            .rp_name(&config.webauthn.rp_name);
+        Arc::new(builder.build()?)
+    };
+    let webauthn_service = Arc::new(WebAuthnService::new(
+        webauthn_instance,
+        webauthn_repo,
+        Arc::new(cache_manager.clone()),
+        Some(keycloak_arc.clone()),
+        config.webauthn.challenge_ttl_secs,
+    ));
 
     let identity_provider_service = Arc::new(IdentityProviderService::new(
         linked_identity_repo.clone(),
@@ -821,6 +839,15 @@ where
             "/api/v1/keycloak/events",
             post(api::keycloak_event::receive::<S>),
         )
+        // WebAuthn authentication endpoints (public, no auth required)
+        .route(
+            "/api/v1/auth/webauthn/authenticate/start",
+            post(api::webauthn::start_authentication::<S>),
+        )
+        .route(
+            "/api/v1/auth/webauthn/authenticate/complete",
+            post(api::webauthn::complete_authentication::<S>),
+        )
         // User endpoints on /api/v1/users:
         // - POST: public registration (handler has internal auth check)
         // - GET: list users (AuthUser extractor enforces auth)
@@ -1033,8 +1060,12 @@ where
             delete(api::webauthn::delete_passkey::<S>),
         )
         .route(
-            "/api/v1/auth/webauthn/register",
-            get(api::webauthn::get_register_url::<S>),
+            "/api/v1/users/me/passkeys/register/start",
+            post(api::webauthn::start_registration::<S>),
+        )
+        .route(
+            "/api/v1/users/me/passkeys/register/complete",
+            post(api::webauthn::complete_registration::<S>),
         )
         // Identity Provider endpoints
         .route(

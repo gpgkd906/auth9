@@ -72,6 +72,10 @@ hmac = "0.12"
 hex = "0.4"
 urlencoding = "2"
 
+# WebAuthn
+webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "conditional-ui"] }
+webauthn-rs-proto = "0.5"
+
 # AWS SDK for SES
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 aws-sdk-sesv2 = "1.60"

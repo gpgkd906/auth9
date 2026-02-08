@@ -5,6 +5,19 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt;
 
+/// WebAuthn configuration
+#[derive(Debug, Clone)]
+pub struct WebAuthnConfig {
+    /// Relying Party ID (domain, e.g. "localhost" or "auth9.example.com")
+    pub rp_id: String,
+    /// Relying Party display name
+    pub rp_name: String,
+    /// Relying Party origin URL (e.g. "http://localhost:3000")
+    pub rp_origin: String,
+    /// Challenge TTL in seconds (default 300)
+    pub challenge_ttl_secs: u64,
+}
+
 /// Application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -30,6 +43,8 @@ pub struct Config {
     pub rate_limit: RateLimitConfig,
     /// CORS configuration
     pub cors: CorsConfig,
+    /// WebAuthn configuration
+    pub webauthn: WebAuthnConfig,
     /// Platform admin email allowlist.
     ///
     /// Identity tokens are intentionally tenant-unscoped. Only Identity tokens whose
@@ -51,6 +66,7 @@ impl fmt::Debug for Config {
             .field("grpc_security", &self.grpc_security)
             .field("rate_limit", &self.rate_limit)
             .field("cors", &self.cors)
+            .field("webauthn", &self.webauthn)
             .field(
                 "platform_admin_emails",
                 &format!("[{} emails]", self.platform_admin_emails.len()),
@@ -413,6 +429,22 @@ impl Config {
                     allow_credentials,
                 }
             },
+            webauthn: {
+                let portal_url = env::var("AUTH9_PORTAL_URL")
+                    .unwrap_or_else(|_| "http://localhost:3000".to_string());
+                WebAuthnConfig {
+                    rp_id: env::var("WEBAUTHN_RP_ID")
+                        .unwrap_or_else(|_| "localhost".to_string()),
+                    rp_name: env::var("WEBAUTHN_RP_NAME")
+                        .unwrap_or_else(|_| "Auth9".to_string()),
+                    rp_origin: env::var("WEBAUTHN_RP_ORIGIN")
+                        .unwrap_or(portal_url),
+                    challenge_ttl_secs: env::var("WEBAUTHN_CHALLENGE_TTL_SECS")
+                        .unwrap_or_else(|_| "300".to_string())
+                        .parse()
+                        .unwrap_or(300),
+                }
+            },
             platform_admin_emails: parse_csv_env(
                 "PLATFORM_ADMIN_EMAILS",
                 vec!["admin@auth9.local".to_string()],
@@ -490,6 +522,12 @@ mod tests {
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
+            webauthn: WebAuthnConfig {
+                rp_id: "localhost".to_string(),
+                rp_name: "Auth9".to_string(),
+                rp_origin: "http://localhost:3000".to_string(),
+                challenge_ttl_secs: 300,
+            },
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
         }
     }
@@ -737,6 +775,12 @@ mod tests {
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
+            webauthn: WebAuthnConfig {
+                rp_id: "localhost".to_string(),
+                rp_name: "Auth9".to_string(),
+                rp_origin: "http://localhost:3000".to_string(),
+                challenge_ttl_secs: 300,
+            },
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
         };
 
@@ -1194,6 +1238,12 @@ mod tests {
             },
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
+            webauthn: WebAuthnConfig {
+                rp_id: "localhost".to_string(),
+                rp_name: "Auth9".to_string(),
+                rp_origin: "http://localhost:3000".to_string(),
+                challenge_ttl_secs: 300,
+            },
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
         };
 
