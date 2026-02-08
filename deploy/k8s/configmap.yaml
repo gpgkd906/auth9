@@ -34,8 +34,20 @@ data:
   # Must be exposed via cloudflared tunnel
   KEYCLOAK_PUBLIC_URL: "https://idp-auth9.gitski.work"
   
+  # gRPC Security
+  GRPC_AUTH_MODE: "api_key"
+  GRPC_ENABLE_REFLECTION: "false"
+
+  # CORS
+  CORS_ALLOWED_ORIGINS: "https://auth9.gitski.work"
+  CORS_ALLOW_CREDENTIALS: "true"
+
+  # Platform admin emails (comma-separated)
+  PLATFORM_ADMIN_EMAILS: "admin@auth9.local"
+
   # Portal configuration
   AUTH9_CORE_URL: "http://auth9-core:8080"
   AUTH9_CORE_PUBLIC_URL: "https://api-auth9.gitski.work"
   AUTH9_PORTAL_URL: "https://auth9.gitski.work"
+  AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   NODE_ENV: "production"

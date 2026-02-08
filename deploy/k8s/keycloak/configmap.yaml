@@ -32,10 +32,10 @@ data:
   # Auth9 API URL for theme integration
   AUTH9_API_URL: http://auth9-core:8080
 
-  # Keycloak Events Webhook SPI configuration (p2-inc/keycloak-events)
+  # Keycloak Events SPI configuration (p2-inc/keycloak-events v0.25+)
   # Events are sent to auth9-core for security monitoring and analytics
-  KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_URI: http://auth9-core:8080/api/v1/keycloak/events
-  # Note: KC_SPI_EVENTS_LISTENER_EXT_EVENT_WEBHOOK_HMAC_SECRET is set via keycloak-secrets
+  KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
+  # Note: KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET is set via keycloak-secrets
 
   # Logging
   KC_LOG_LEVEL: INFO

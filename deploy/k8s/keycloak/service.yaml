@@ -16,10 +16,6 @@ spec:
       port: 8080
       targetPort: 8080
       protocol: TCP
-    - name: health
-      port: 9000
-      targetPort: 9000
-      protocol: TCP
 ---
 # Headless Service for JGroups cluster discovery (DNS_PING)
 # This allows Keycloak pods to discover each other via DNS
