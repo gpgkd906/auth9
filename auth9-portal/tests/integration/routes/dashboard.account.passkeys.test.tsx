@@ -8,7 +8,8 @@ vi.mock("~/services/api", () => ({
     webauthnApi: {
         listPasskeys: vi.fn(),
         deletePasskey: vi.fn(),
-        getRegisterUrl: vi.fn(),
+        startRegistration: vi.fn(),
+        completeRegistration: vi.fn(),
     },
 }));
 
@@ -63,7 +64,11 @@ describe("Account Passkeys Page", () => {
         const request = new Request("http://localhost/dashboard/account/passkeys");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ passkeys: mockPasskeys });
+        expect(result).toEqual({
+            passkeys: mockPasskeys,
+            accessToken: "test-token",
+            apiBaseUrl: "http://localhost:8080",
+        });
     });
 
     it("loader returns empty array on error", async () => {
@@ -72,7 +77,12 @@ describe("Account Passkeys Page", () => {
         const request = new Request("http://localhost/dashboard/account/passkeys");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ passkeys: [], error: "Failed to load passkeys" });
+        expect(result).toEqual({
+            passkeys: [],
+            accessToken: "",
+            apiBaseUrl: "http://localhost:8080",
+            error: "Failed to load passkeys",
+        });
     });
 
     // ============================================================================
@@ -89,18 +99,11 @@ describe("Account Passkeys Page", () => {
         expect(webauthnApi.deletePasskey).toHaveBeenCalledWith("pk-1", "test-token");
     });
 
-    it("action returns registration URL", async () => {
-        vi.mocked(webauthnApi.getRegisterUrl).mockResolvedValue({
-            data: { url: "https://keycloak.example.com/register" },
-        });
-
-        const request = createFormRequest({
-            intent: "register",
-            redirectUri: "http://localhost/dashboard/account/passkeys",
-        });
+    it("action returns error for register intent (removed)", async () => {
+        const request = createFormRequest({ intent: "register" });
         const result = await action({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ redirect: "https://keycloak.example.com/register" });
+        expect(result).toEqual({ error: "Invalid action" });
     });
 
     it("action returns error on delete failure", async () => {

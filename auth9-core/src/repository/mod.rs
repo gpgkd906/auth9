@@ -13,6 +13,7 @@ pub mod system_settings;
 pub mod tenant;
 pub mod tenant_service;
 pub mod user;
+pub mod webauthn;
 pub mod webhook;
 
 pub use audit::AuditRepository;
@@ -28,6 +29,7 @@ pub use system_settings::SystemSettingsRepository;
 pub use tenant::TenantRepository;
 pub use tenant_service::TenantServiceRepository;
 pub use user::UserRepository;
+pub use webauthn::WebAuthnRepository;
 pub use webhook::WebhookRepository;
 
 use sqlx::MySqlPool;

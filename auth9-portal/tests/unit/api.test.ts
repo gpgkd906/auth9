@@ -1576,19 +1576,37 @@ describe('API Service', () => {
       );
     });
 
-    it('should get register URL', async () => {
+    it('should start registration', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ data: { url: 'https://example.com/register' } }),
+        json: async () => ({ data: { challenge: 'test-challenge' } }),
       });
 
-      const result = await webauthnApi.getRegisterUrl('https://app.com/callback', 'token');
+      const result = await webauthnApi.startRegistration('token');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/auth/webauthn/register?redirect_uri='),
-        expect.objectContaining({ headers: { Authorization: 'Bearer token' } })
+        expect.stringContaining('/api/v1/users/me/passkeys/register/start'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: expect.objectContaining({ Authorization: 'Bearer token' }),
+        })
       );
-      expect(result.data.url).toBe('https://example.com/register');
+      expect(result.data).toBeDefined();
+    });
+
+    it('should start authentication', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { challenge_id: 'ch-1', publicKey: {} } }),
+      });
+
+      const result = await webauthnApi.startAuthentication();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/webauthn/authenticate/start'),
+        expect.objectContaining({ method: 'POST' })
+      );
+      expect(result.data.challenge_id).toBe('ch-1');
     });
   });
 

@@ -106,6 +106,12 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
         platform_admin_emails: vec!["admin@auth9.local".to_string()],
+        webauthn: auth9_core::config::WebAuthnConfig {
+            rp_id: "localhost".to_string(),
+            rp_name: "Auth9 Test".to_string(),
+            rp_origin: "http://localhost:3000".to_string(),
+            challenge_ttl_secs: 300,
+        },
     }
 }
 
@@ -281,9 +287,24 @@ impl TestAppState {
             user_repo.clone(),
             Arc::new(KeycloakClient::new(config.keycloak.clone())),
         ));
-        let webauthn_service = Arc::new(WebAuthnService::new(Arc::new(KeycloakClient::new(
-            config.keycloak.clone(),
-        ))));
+        let webauthn_service = {
+            let rp_origin = url::Url::parse(&config.webauthn.rp_origin).unwrap();
+            let webauthn_instance = Arc::new(
+                webauthn_rs::WebauthnBuilder::new(&config.webauthn.rp_id, &rp_origin)
+                    .unwrap()
+                    .rp_name(&config.webauthn.rp_name)
+                    .build()
+                    .unwrap(),
+            );
+            let webauthn_repo = Arc::new(super::TestWebAuthnRepository::new());
+            Arc::new(WebAuthnService::new(
+                webauthn_instance,
+                webauthn_repo,
+                Arc::new(auth9_core::cache::NoOpCacheManager::new()),
+                Some(Arc::new(KeycloakClient::new(config.keycloak.clone()))),
+                config.webauthn.challenge_ttl_secs,
+            ))
+        };
         let invitation_service = Arc::new(InvitationService::new(
             invitation_repo.clone(),
             tenant_repo.clone(),

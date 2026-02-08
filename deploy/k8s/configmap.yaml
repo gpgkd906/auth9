@@ -38,6 +38,10 @@ data:
   GRPC_AUTH_MODE: "api_key"
   GRPC_ENABLE_REFLECTION: "false"
 
+  # WebAuthn configuration
+  # WEBAUTHN_RP_ID must be an effective domain of AUTH9_PORTAL_URL
+  WEBAUTHN_RP_ID: "auth9.example.com"
+
   # CORS
   CORS_ALLOWED_ORIGINS: "https://auth9.example.com"
   CORS_ALLOW_CREDENTIALS: "true"

@@ -1,10 +1,11 @@
 //! WebAuthn/Passkey domain models
 //!
-//! Note: WebAuthn credentials are stored in Keycloak.
-//! These models are for displaying credential info in Auth9 Portal.
+//! Native WebAuthn credentials are stored in TiDB.
+//! Keycloak credentials are supported during migration period.
 
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
+use sqlx::FromRow;
 
 /// WebAuthn credential info from Keycloak
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -13,6 +14,41 @@ pub struct WebAuthnCredential {
     pub credential_type: String,
     pub user_label: Option<String>,
     pub created_at: Option<DateTime<Utc>>,
+}
+
+/// Stored passkey credential (TiDB entity)
+#[derive(Debug, Clone, FromRow)]
+pub struct StoredPasskey {
+    pub id: String,
+    pub user_id: String,
+    pub credential_id: String,
+    pub credential_data: serde_json::Value,
+    pub user_label: Option<String>,
+    pub aaguid: Option<String>,
+    pub created_at: DateTime<Utc>,
+    pub last_used_at: Option<DateTime<Utc>>,
+}
+
+/// Input for creating a new passkey credential
+#[derive(Debug, Clone)]
+pub struct CreatePasskeyInput {
+    pub id: String,
+    pub user_id: String,
+    pub credential_id: String,
+    pub credential_data: serde_json::Value,
+    pub user_label: Option<String>,
+    pub aaguid: Option<String>,
+}
+
+impl From<StoredPasskey> for WebAuthnCredential {
+    fn from(stored: StoredPasskey) -> Self {
+        Self {
+            id: stored.id,
+            credential_type: "webauthn".to_string(),
+            user_label: stored.user_label,
+            created_at: Some(stored.created_at),
+        }
+    }
 }
 
 /// Keycloak credential representation
@@ -126,6 +162,60 @@ mod tests {
         assert_eq!(cred.id, "cred-789");
         assert!(cred.user_label.is_none());
         assert!(cred.created_date.is_none());
+    }
+
+    #[test]
+    fn test_stored_passkey_to_webauthn_credential() {
+        let stored = StoredPasskey {
+            id: "pk-123".to_string(),
+            user_id: "user-456".to_string(),
+            credential_id: "cred-id-base64url".to_string(),
+            credential_data: serde_json::json!({"key": "data"}),
+            user_label: Some("My MacBook".to_string()),
+            aaguid: Some("aaguid-123".to_string()),
+            created_at: Utc::now(),
+            last_used_at: None,
+        };
+
+        let cred: WebAuthnCredential = stored.into();
+        assert_eq!(cred.id, "pk-123");
+        assert_eq!(cred.credential_type, "webauthn");
+        assert_eq!(cred.user_label, Some("My MacBook".to_string()));
+        assert!(cred.created_at.is_some());
+    }
+
+    #[test]
+    fn test_stored_passkey_without_label() {
+        let stored = StoredPasskey {
+            id: "pk-789".to_string(),
+            user_id: "user-456".to_string(),
+            credential_id: "cred-id-2".to_string(),
+            credential_data: serde_json::json!({}),
+            user_label: None,
+            aaguid: None,
+            created_at: Utc::now(),
+            last_used_at: Some(Utc::now()),
+        };
+
+        let cred: WebAuthnCredential = stored.into();
+        assert_eq!(cred.id, "pk-789");
+        assert!(cred.user_label.is_none());
+    }
+
+    #[test]
+    fn test_create_passkey_input() {
+        let input = CreatePasskeyInput {
+            id: "pk-new".to_string(),
+            user_id: "user-123".to_string(),
+            credential_id: "cred-new".to_string(),
+            credential_data: serde_json::json!({"type": "public-key"}),
+            user_label: Some("Test Key".to_string()),
+            aaguid: Some("aaguid-test".to_string()),
+        };
+
+        assert_eq!(input.id, "pk-new");
+        assert_eq!(input.user_id, "user-123");
+        assert_eq!(input.user_label, Some("Test Key".to_string()));
     }
 
     #[test]

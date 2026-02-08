@@ -8,7 +8,7 @@
 #
 # 选项:
 #   --namespace NS    使用其他命名空间（默认: auth9）
-#   --component NAME  只升级指定组件（core, portal, all）
+#   --component NAME  只升级指定组件（core, portal, keycloak, all）
 #   --no-wait         不等待 rollout 完成
 #   --dry-run         仅显示将要执行的命令
 
@@ -57,7 +57,7 @@ parse_arguments() {
                 echo ""
                 echo "选项:"
                 echo "  --namespace NS    使用其他命名空间（默认: auth9）"
-                echo "  --component NAME  只升级指定组件: core, portal, all（默认: all）"
+                echo "  --component NAME  只升级指定组件: core, portal, keycloak, all（默认: all）"
                 echo "  --no-wait         不等待 rollout 完成"
                 echo "  --dry-run         仅显示将要执行的命令"
                 echo "  -h, --help        显示帮助信息"
@@ -132,12 +132,16 @@ main() {
         portal)
             upgrade_component "auth9-portal" "auth9-portal"
             ;;
+        keycloak)
+            upgrade_component "keycloak" "keycloak"
+            ;;
         all)
             upgrade_component "auth9-core" "auth9-core"
             upgrade_component "auth9-portal" "auth9-portal"
+            upgrade_component "keycloak" "keycloak"
             ;;
         *)
-            print_error "未知组件: $COMPONENT（可选: core, portal, all）"
+            print_error "未知组件: $COMPONENT（可选: core, portal, keycloak, all）"
             exit 1
             ;;
     esac

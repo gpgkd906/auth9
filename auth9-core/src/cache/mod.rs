@@ -41,6 +41,26 @@ pub trait CacheOperations: Send + Sync {
 
     /// Check if a token JTI is in the blacklist.
     async fn is_token_blacklisted(&self, jti: &str) -> Result<bool>;
+
+    // ==================== WebAuthn Challenge State ====================
+
+    /// Store WebAuthn registration state (keyed by user_id, one active per user)
+    async fn store_webauthn_reg_state(&self, user_id: &str, state: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get WebAuthn registration state
+    async fn get_webauthn_reg_state(&self, user_id: &str) -> Result<Option<String>>;
+
+    /// Remove WebAuthn registration state
+    async fn remove_webauthn_reg_state(&self, user_id: &str) -> Result<()>;
+
+    /// Store WebAuthn authentication state (keyed by challenge_id)
+    async fn store_webauthn_auth_state(&self, challenge_id: &str, state: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get WebAuthn authentication state
+    async fn get_webauthn_auth_state(&self, challenge_id: &str) -> Result<Option<String>>;
+
+    /// Remove WebAuthn authentication state
+    async fn remove_webauthn_auth_state(&self, challenge_id: &str) -> Result<()>;
 }
 
 /// Cache key prefixes
@@ -50,6 +70,8 @@ mod keys {
     pub const SERVICE_CONFIG: &str = "auth9:service";
     pub const TENANT_CONFIG: &str = "auth9:tenant";
     pub const TOKEN_BLACKLIST: &str = "auth9:token_blacklist";
+    pub const WEBAUTHN_REG: &str = "auth9:webauthn_reg";
+    pub const WEBAUTHN_AUTH: &str = "auth9:webauthn_auth";
 }
 
 /// Default TTLs
@@ -300,6 +322,46 @@ impl CacheManager {
         let value: Option<String> = self.get(&key).await?;
         Ok(value.is_some())
     }
+
+    // ==================== WebAuthn Challenge State ====================
+
+    pub async fn store_webauthn_reg_state(&self, user_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::WEBAUTHN_REG, user_id);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, state, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_webauthn_reg_state(&self, user_id: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::WEBAUTHN_REG, user_id);
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(&key).await?;
+        Ok(value)
+    }
+
+    pub async fn remove_webauthn_reg_state(&self, user_id: &str) -> Result<()> {
+        let key = format!("{}:{}", keys::WEBAUTHN_REG, user_id);
+        self.delete(&key).await
+    }
+
+    pub async fn store_webauthn_auth_state(&self, challenge_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::WEBAUTHN_AUTH, challenge_id);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, state, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_webauthn_auth_state(&self, challenge_id: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::WEBAUTHN_AUTH, challenge_id);
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(&key).await?;
+        Ok(value)
+    }
+
+    pub async fn remove_webauthn_auth_state(&self, challenge_id: &str) -> Result<()> {
+        let key = format!("{}:{}", keys::WEBAUTHN_AUTH, challenge_id);
+        self.delete(&key).await
+    }
 }
 
 #[async_trait]
@@ -355,6 +417,30 @@ impl CacheOperations for CacheManager {
 
     async fn is_token_blacklisted(&self, jti: &str) -> Result<bool> {
         CacheManager::is_token_blacklisted(self, jti).await
+    }
+
+    async fn store_webauthn_reg_state(&self, user_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+        CacheManager::store_webauthn_reg_state(self, user_id, state, ttl_secs).await
+    }
+
+    async fn get_webauthn_reg_state(&self, user_id: &str) -> Result<Option<String>> {
+        CacheManager::get_webauthn_reg_state(self, user_id).await
+    }
+
+    async fn remove_webauthn_reg_state(&self, user_id: &str) -> Result<()> {
+        CacheManager::remove_webauthn_reg_state(self, user_id).await
+    }
+
+    async fn store_webauthn_auth_state(&self, challenge_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+        CacheManager::store_webauthn_auth_state(self, challenge_id, state, ttl_secs).await
+    }
+
+    async fn get_webauthn_auth_state(&self, challenge_id: &str) -> Result<Option<String>> {
+        CacheManager::get_webauthn_auth_state(self, challenge_id).await
+    }
+
+    async fn remove_webauthn_auth_state(&self, challenge_id: &str) -> Result<()> {
+        CacheManager::remove_webauthn_auth_state(self, challenge_id).await
     }
 }
 
@@ -427,6 +513,30 @@ impl NoOpCacheManager {
     pub async fn is_token_blacklisted(&self, _jti: &str) -> Result<bool> {
         Ok(false)
     }
+
+    pub async fn store_webauthn_reg_state(&self, _user_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn get_webauthn_reg_state(&self, _user_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    pub async fn remove_webauthn_reg_state(&self, _user_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn store_webauthn_auth_state(&self, _challenge_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn get_webauthn_auth_state(&self, _challenge_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    pub async fn remove_webauthn_auth_state(&self, _challenge_id: &str) -> Result<()> {
+        Ok(())
+    }
 }
 
 impl Default for NoOpCacheManager {
@@ -492,6 +602,30 @@ impl CacheOperations for NoOpCacheManager {
 
     async fn is_token_blacklisted(&self, _jti: &str) -> Result<bool> {
         Ok(false)
+    }
+
+    async fn store_webauthn_reg_state(&self, _user_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_webauthn_reg_state(&self, _user_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    async fn remove_webauthn_reg_state(&self, _user_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    async fn store_webauthn_auth_state(&self, _challenge_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_webauthn_auth_state(&self, _challenge_id: &str) -> Result<Option<String>> {
+        Ok(None)
+    }
+
+    async fn remove_webauthn_auth_state(&self, _challenge_id: &str) -> Result<()> {
+        Ok(())
     }
 }
 
@@ -782,5 +916,57 @@ mod tests {
         let cache: &dyn CacheOperations = &NoOpCacheManager::new();
         assert!(cache.add_to_token_blacklist("jti-1", 3600).await.is_ok());
         assert!(!cache.is_token_blacklisted("jti-1").await.unwrap());
+    }
+
+    // ========================================================================
+    // WebAuthn challenge state tests
+    // ========================================================================
+
+    #[test]
+    fn test_webauthn_reg_key_format() {
+        let user_id = "user-123";
+        let key = format!("{}:{}", keys::WEBAUTHN_REG, user_id);
+        assert_eq!(key, "auth9:webauthn_reg:user-123");
+    }
+
+    #[test]
+    fn test_webauthn_auth_key_format() {
+        let challenge_id = "challenge-456";
+        let key = format!("{}:{}", keys::WEBAUTHN_AUTH, challenge_id);
+        assert_eq!(key, "auth9:webauthn_auth:challenge-456");
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_webauthn_reg_state() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache.store_webauthn_reg_state("user-1", "{}", 300).await.is_ok());
+        let result = cache.get_webauthn_reg_state("user-1").await.unwrap();
+        assert!(result.is_none());
+        assert!(cache.remove_webauthn_reg_state("user-1").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_webauthn_auth_state() {
+        let cache = NoOpCacheManager::new();
+        assert!(cache.store_webauthn_auth_state("challenge-1", "{}", 300).await.is_ok());
+        let result = cache.get_webauthn_auth_state("challenge-1").await.unwrap();
+        assert!(result.is_none());
+        assert!(cache.remove_webauthn_auth_state("challenge-1").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_webauthn_reg() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.store_webauthn_reg_state("user-1", "{\"test\": true}", 300).await.is_ok());
+        assert!(cache.get_webauthn_reg_state("user-1").await.unwrap().is_none());
+        assert!(cache.remove_webauthn_reg_state("user-1").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_webauthn_auth() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.store_webauthn_auth_state("ch-1", "{\"test\": true}", 300).await.is_ok());
+        assert!(cache.get_webauthn_auth_state("ch-1").await.unwrap().is_none());
+        assert!(cache.remove_webauthn_auth_state("ch-1").await.is_ok());
     }
 }

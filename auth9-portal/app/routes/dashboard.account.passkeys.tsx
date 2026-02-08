@@ -1,5 +1,6 @@
 import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useRevalidator } from "react-router";
+import { useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { webauthnApi, type WebAuthnCredential } from "~/services/api";
@@ -7,12 +8,13 @@ import { LockClosedIcon, TrashIcon, PlusIcon } from "@radix-ui/react-icons";
 import { getAccessToken } from "~/services/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   try {
     const accessToken = await getAccessToken(request);
     const response = await webauthnApi.listPasskeys(accessToken || "");
-    return { passkeys: response.data };
+    return { passkeys: response.data, accessToken: accessToken || "", apiBaseUrl };
   } catch {
-    return { passkeys: [], error: "Failed to load passkeys" };
+    return { passkeys: [], accessToken: "", apiBaseUrl, error: "Failed to load passkeys" };
   }
 }
 
@@ -26,12 +28,6 @@ export async function action({ request }: ActionFunctionArgs) {
       const credentialId = formData.get("credentialId") as string;
       await webauthnApi.deletePasskey(credentialId, accessToken);
       return { success: true, message: "Passkey deleted" };
-    }
-
-    if (intent === "register") {
-      const redirectUri = formData.get("redirectUri") as string;
-      const response = await webauthnApi.getRegisterUrl(redirectUri, accessToken);
-      return { redirect: response.data.url };
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Operation failed";
@@ -60,18 +56,144 @@ function getCredentialTypeLabel(type: string) {
   }
 }
 
+// ==================== Base64URL Helpers ====================
+
+function arrayBufferToBase64url(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = "";
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
+  }
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64urlToArrayBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) {
+    bytes[i] = binary.charCodeAt(i);
+  }
+  return bytes.buffer;
+}
+
+/**
+ * Convert webauthn-rs CreationChallengeResponse to browser-compatible PublicKeyCredentialCreationOptions.
+ * webauthn-rs serializes binary fields as base64url strings; the browser API needs ArrayBuffers.
+ */
+function toCreationOptions(options: Record<string, unknown>): PublicKeyCredentialCreationOptions {
+  const publicKey = (options.publicKey || options) as Record<string, unknown>;
+
+  const challenge = base64urlToArrayBuffer(publicKey.challenge as string);
+
+  const user = publicKey.user as Record<string, unknown>;
+  const userId = base64urlToArrayBuffer(user.id as string);
+
+  const excludeCredentials = ((publicKey.excludeCredentials as Array<Record<string, unknown>>) || []).map(
+    (cred) => ({
+      id: base64urlToArrayBuffer(cred.id as string),
+      type: cred.type as PublicKeyCredentialType,
+      transports: cred.transports as AuthenticatorTransport[] | undefined,
+    })
+  );
+
+  return {
+    ...publicKey,
+    challenge,
+    user: { ...user, id: userId },
+    excludeCredentials,
+  } as PublicKeyCredentialCreationOptions;
+}
+
 export default function AccountPasskeysPage() {
-  const { passkeys, error: loadError } = useLoaderData<typeof loader>();
+  const { passkeys, accessToken, apiBaseUrl, error: loadError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const revalidator = useRevalidator();
 
   const isSubmitting = navigation.state === "submitting";
 
-  // Handle redirect for registration
-  if (actionData?.redirect) {
-    window.location.href = actionData.redirect;
-    return null;
-  }
+  const [registering, setRegistering] = useState(false);
+  const [clientError, setClientError] = useState<string | null>(null);
+  const [clientSuccess, setClientSuccess] = useState<string | null>(null);
+
+  const handleRegisterPasskey = useCallback(async () => {
+    setClientError(null);
+    setClientSuccess(null);
+    setRegistering(true);
+
+    try {
+      // 1. Get creation options from backend
+      const startResponse = await fetch(
+        `${apiBaseUrl}/api/v1/users/me/passkeys/register/start`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+        }
+      );
+
+      if (!startResponse.ok) {
+        const err = await startResponse.json().catch(() => ({ message: "Failed to start registration" }));
+        throw new Error(err.message || "Failed to start registration");
+      }
+
+      const creationOptions = await startResponse.json();
+
+      // 2. Convert to browser-compatible format and call WebAuthn API
+      const options = toCreationOptions(creationOptions);
+      const credential = await navigator.credentials.create({ publicKey: options });
+
+      if (!credential) {
+        throw new Error("Registration was cancelled");
+      }
+
+      // 3. Send result to backend
+      const pkCred = credential as PublicKeyCredential;
+      const attestation = pkCred.response as AuthenticatorAttestationResponse;
+      const completeBody = {
+        credential: {
+          id: pkCred.id,
+          rawId: arrayBufferToBase64url(pkCred.rawId),
+          type: pkCred.type,
+          response: {
+            attestationObject: arrayBufferToBase64url(attestation.attestationObject),
+            clientDataJSON: arrayBufferToBase64url(attestation.clientDataJSON),
+          },
+        },
+      };
+      const completeResponse = await fetch(
+        `${apiBaseUrl}/api/v1/users/me/passkeys/register/complete`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${accessToken}`,
+          },
+          body: JSON.stringify(completeBody),
+        }
+      );
+      if (!completeResponse.ok) {
+        const err = await completeResponse.json().catch(() => ({ message: "Failed to complete registration" }));
+        throw new Error(err.message || "Failed to complete registration");
+      }
+
+      setClientSuccess("Passkey registered successfully!");
+      revalidator.revalidate();
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "NotAllowedError") {
+        setClientError("Registration was cancelled or timed out.");
+      } else {
+        const message = error instanceof Error ? error.message : "Registration failed";
+        setClientError(message);
+      }
+    } finally {
+      setRegistering(false);
+    }
+  }, [accessToken, apiBaseUrl, revalidator]);
 
   return (
     <div className="space-y-6">
@@ -86,18 +208,10 @@ export default function AccountPasskeysPage() {
                 biometrics (fingerprint, face) or screen lock.
               </CardDescription>
             </div>
-            <Form method="post">
-              <input type="hidden" name="intent" value="register" />
-              <input
-                type="hidden"
-                name="redirectUri"
-                value={typeof window !== "undefined" ? window.location.href : ""}
-              />
-              <Button type="submit" disabled={isSubmitting}>
-                <PlusIcon className="h-4 w-4 mr-2" />
-                Add passkey
-              </Button>
-            </Form>
+            <Button onClick={handleRegisterPasskey} disabled={registering || isSubmitting}>
+              <PlusIcon className="h-4 w-4 mr-2" />
+              {registering ? "Registering..." : "Add passkey"}
+            </Button>
           </div>
         </CardHeader>
       </Card>
@@ -109,9 +223,21 @@ export default function AccountPasskeysPage() {
         </div>
       )}
 
+      {clientError && (
+        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+          {clientError}
+        </div>
+      )}
+
       {actionData?.error && (
         <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
           {actionData.error}
+        </div>
+      )}
+
+      {clientSuccess && (
+        <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
+          {clientSuccess}
         </div>
       )}
 
@@ -138,18 +264,10 @@ export default function AccountPasskeysPage() {
               <p className="text-[var(--text-secondary)] mb-4">
                 Add a passkey to sign in faster and more securely.
               </p>
-              <Form method="post">
-                <input type="hidden" name="intent" value="register" />
-                <input
-                  type="hidden"
-                  name="redirectUri"
-                  value={typeof window !== "undefined" ? window.location.href : ""}
-                />
-                <Button type="submit" disabled={isSubmitting}>
-                  <PlusIcon className="h-4 w-4 mr-2" />
-                  Add your first passkey
-                </Button>
-              </Form>
+              <Button onClick={handleRegisterPasskey} disabled={registering || isSubmitting}>
+                <PlusIcon className="h-4 w-4 mr-2" />
+                {registering ? "Registering..." : "Add your first passkey"}
+              </Button>
             </div>
           ) : (
             <div className="divide-y">

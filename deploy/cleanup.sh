@@ -236,6 +236,7 @@ delete_configmaps() {
         kubectl get configmaps -n "$NAMESPACE" -o name 2>/dev/null | grep -v "kube-root-ca" || true
     else
         kubectl delete configmap auth9-config -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete configmap keycloak-config -n "$NAMESPACE" --ignore-not-found=true
         print_success "ConfigMaps 已删除"
     fi
 }
@@ -341,8 +342,8 @@ interactive_delete_secrets() {
     echo "    - DATABASE_URL（数据库连接字符串）"
     echo "    - REDIS_URL"
     echo "    - JWT_SECRET、JWT_PRIVATE_KEY、JWT_PUBLIC_KEY"
-    echo "    - SESSION_SECRET"
-    echo "    - KEYCLOAK_ADMIN_PASSWORD"
+    echo "    - SESSION_SECRET、SETTINGS_ENCRYPTION_KEY"
+    echo "    - KEYCLOAK_URL、KEYCLOAK_ADMIN、KEYCLOAK_ADMIN_PASSWORD"
     echo "    - KEYCLOAK_ADMIN_CLIENT_SECRET"
     echo "    - KEYCLOAK_WEBHOOK_SECRET"
     echo "    - GRPC_API_KEYS"
