@@ -1,0 +1,4 @@
+interface:
+  display_name: "Project Bootstrap"
+  short_description: "Bootstrap a new full-stack project"
+  default_prompt: "Use -bootstrap to initialize a new empty project."

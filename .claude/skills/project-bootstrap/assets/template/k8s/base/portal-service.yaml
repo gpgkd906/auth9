@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{project_name}}-portal
+  namespace: {{namespace}}
+spec:
+  selector:
+    app: {{project_name}}-portal
+  ports:
+    - name: http
+      port: {{portal_port}}
+      targetPort: {{portal_port}}

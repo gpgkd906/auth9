@@ -1,0 +1,20 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{project_name}}-portal
+  namespace: {{namespace}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{project_name}}-portal
+  template:
+    metadata:
+      labels:
+        app: {{project_name}}-portal
+    spec:
+      containers:
+        - name: portal
+          image: {{project_name}}-portal:latest
+          ports:
+            - containerPort: {{portal_port}}

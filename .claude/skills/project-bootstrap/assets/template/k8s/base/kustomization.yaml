@@ -1,0 +1,5 @@
+resources:
+  - core-deployment.yaml
+  - core-service.yaml
+  - portal-deployment.yaml
+  - portal-service.yaml
