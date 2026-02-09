@@ -1,0 +1,4 @@
+interface:
+  display_name: "Deploy GH + K8s"
+  short_description: "Gate CI then deploy to Kubernetes safely"
+  default_prompt: "When the user requests deployment (e.g., 进行部署), verify the latest GitHub Actions workflow run. If it failed, inspect logs, fix code/IaC, and report back asking the user to review and re-submit. If it succeeded, run deploy/upgrade.sh, monitor resources with kubectl, troubleshoot errors via describe/logs and fix code/IaC, then ask the user to review and re-submit. If the deployment succeeds, run health checks and report completion."

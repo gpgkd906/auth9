@@ -1,1 +1,0 @@
-../../../.claude/skills/test-coverage.md
