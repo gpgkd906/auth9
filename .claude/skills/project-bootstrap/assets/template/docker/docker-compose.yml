@@ -1,0 +1,17 @@
+version: "3.8"
+
+services:
+  {{project_name}}-core:
+    build:
+      context: ../core
+      dockerfile: ../docker/Dockerfile.core
+    ports:
+      - "{{core_port}}:{{core_port}}"
+  {{project_name}}-portal:
+    build:
+      context: ../portal
+      dockerfile: ../docker/Dockerfile.portal
+    ports:
+      - "{{portal_port}}:{{portal_port}}"
+    depends_on:
+      - {{project_name}}-core

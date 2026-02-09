@@ -1,0 +1,28 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{project_name}}-core
+  namespace: {{namespace}}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: {{project_name}}-core
+  template:
+    metadata:
+      labels:
+        app: {{project_name}}-core
+    spec:
+      containers:
+        - name: core
+          image: {{project_name}}-core:latest
+          ports:
+            - containerPort: {{core_port}}
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: {{core_port}}
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: {{core_port}}
