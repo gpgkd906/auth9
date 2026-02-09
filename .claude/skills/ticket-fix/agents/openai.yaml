@@ -1,0 +1,4 @@
+interface:
+  display_name: "Ticket Fix"
+  short_description: "Fix QA tickets end-to-end"
+  default_prompt: "Use -fix to resolve a QA ticket."
