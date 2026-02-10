@@ -1,6 +1,7 @@
 const jwt = require('jsonwebtoken');
 const fs = require('fs');
 const crypto = require('crypto');
+const { execSync } = require('child_process');
 
 const path = require('path');
 const keyPath = path.resolve(__dirname, 'jwt_private_clean.key');
@@ -15,9 +16,33 @@ try {
     process.exit(1);
 }
 
+// Resolve user ID: CLI arg > env var > database query
+let userId = process.argv[2] || process.env.ADMIN_USER_ID;
+
+if (!userId) {
+    try {
+        userId = execSync(
+            `mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM users WHERE email = 'admin@auth9.local' LIMIT 1;"`,
+            { encoding: 'utf8', timeout: 5000 }
+        ).trim();
+    } catch (e) {
+        console.error("Failed to query admin user ID from database:", e.message);
+        console.error("Provide user ID via: node gen_token.js <user_id> or ADMIN_USER_ID env var");
+        process.exit(1);
+    }
+}
+
+if (!userId) {
+    console.error("No admin user found in database for email 'admin@auth9.local'");
+    console.error("Provide user ID via: node gen_token.js <user_id> or ADMIN_USER_ID env var");
+    process.exit(1);
+}
+
+console.error("Using user ID:", userId);
+
 const now = Math.floor(Date.now() / 1000);
 const payload = {
-  sub: "746ceba8-3ddf-4a8b-b021-a1337b7a1a35",
+  sub: userId,
   email: "admin@auth9.local",
   name: "Admin User",
   iss: "http://localhost:8080",

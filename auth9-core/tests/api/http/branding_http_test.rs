@@ -2,7 +2,11 @@
 //!
 //! Tests for the branding HTTP endpoints using mock repositories.
 
-use super::{build_branding_test_router, get_json, put_json, MockKeycloakServer, TestAppState};
+use super::{
+    build_branding_test_router, get_json, get_json_with_auth, put_json_with_auth,
+    MockKeycloakServer, TestAppState,
+};
+use crate::api::create_test_identity_token;
 use auth9_core::domain::SystemSettingRow;
 use axum::http::StatusCode;
 use chrono::Utc;
@@ -98,9 +102,10 @@ async fn test_get_admin_branding_defaults() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/branding").await;
+        get_json_with_auth(&app, "/api/v1/system/branding", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -119,6 +124,7 @@ async fn test_update_branding_success() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -132,7 +138,7 @@ async fn test_update_branding_success() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -153,6 +159,7 @@ async fn test_update_branding_minimal() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     // Only required fields (colors)
     let input = json!({
@@ -165,7 +172,7 @@ async fn test_update_branding_minimal() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -180,6 +187,7 @@ async fn test_update_branding_with_custom_css() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -192,7 +200,7 @@ async fn test_update_branding_with_custom_css() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -208,6 +216,7 @@ async fn test_update_branding_invalid_color() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -219,7 +228,7 @@ async fn test_update_branding_invalid_color() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     // Invalid color should return validation error
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -230,6 +239,7 @@ async fn test_update_branding_invalid_color_no_hash() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -241,7 +251,7 @@ async fn test_update_branding_invalid_color_no_hash() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     // Missing hash should return validation error
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -252,6 +262,7 @@ async fn test_update_branding_invalid_color_wrong_length() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -263,7 +274,7 @@ async fn test_update_branding_invalid_color_wrong_length() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     // 3-digit hex should return validation error
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -274,6 +285,7 @@ async fn test_update_branding_invalid_logo_url() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -286,7 +298,7 @@ async fn test_update_branding_invalid_logo_url() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     // Invalid URL should return validation error
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -297,6 +309,7 @@ async fn test_update_branding_invalid_favicon_url() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -309,7 +322,7 @@ async fn test_update_branding_invalid_favicon_url() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     // Invalid favicon URL should return validation error
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -324,6 +337,7 @@ async fn test_branding_roundtrip() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     // Update branding
     let input = json!({
@@ -339,12 +353,12 @@ async fn test_branding_roundtrip() {
     });
 
     let (status1, _): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
     assert_eq!(status1, StatusCode::OK);
 
     // Read back branding
     let (status2, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/branding").await;
+        get_json_with_auth(&app, "/api/v1/system/branding", &token).await;
     assert_eq!(status2, StatusCode::OK);
 
     let response = body.unwrap();
@@ -364,6 +378,7 @@ async fn test_branding_public_and_admin_match() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     // Update branding
     let input = json!({
@@ -376,7 +391,7 @@ async fn test_branding_public_and_admin_match() {
         }
     });
 
-    put_json::<_, serde_json::Value>(&app, "/api/v1/system/branding", &input).await;
+    put_json_with_auth::<_, serde_json::Value>(&app, "/api/v1/system/branding", &input, &token).await;
 
     // Read from public endpoint
     let (_, public_body): (StatusCode, Option<serde_json::Value>) =
@@ -384,7 +399,7 @@ async fn test_branding_public_and_admin_match() {
 
     // Read from admin endpoint
     let (_, admin_body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/branding").await;
+        get_json_with_auth(&app, "/api/v1/system/branding", &token).await;
 
     // Both should return the same data
     let public_data = public_body.unwrap();
@@ -405,6 +420,7 @@ async fn test_update_branding_lowercase_color() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     // Lowercase hex colors should work
     let input = json!({
@@ -417,7 +433,7 @@ async fn test_update_branding_lowercase_color() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -451,6 +467,7 @@ async fn test_update_branding_with_allow_registration() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     // Update with allow_registration = true
     let input = json!({
@@ -464,7 +481,7 @@ async fn test_update_branding_with_allow_registration() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -485,6 +502,7 @@ async fn test_update_branding_without_allow_registration_defaults_false() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_branding_test_router(state);
+    let token = create_test_identity_token();
 
     // Update without specifying allow_registration - should default to false
     let input = json!({
@@ -497,7 +515,7 @@ async fn test_update_branding_without_allow_registration_defaults_false() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/branding", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/branding", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();

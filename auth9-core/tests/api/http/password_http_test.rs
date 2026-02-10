@@ -2,8 +2,11 @@
 //!
 //! Tests for password reset and password change endpoints.
 
-use super::{post_json, post_json_with_auth, put_json, MockKeycloakServer, TestAppState};
-use crate::api::create_test_user;
+use super::{
+    get_json_with_auth, post_json, post_json_with_auth, put_json_with_auth, MockKeycloakServer,
+    TestAppState,
+};
+use crate::api::{create_test_identity_token, create_test_user};
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{PasswordPolicy, StringUuid};
 use axum::http::StatusCode;
@@ -128,12 +131,15 @@ async fn test_get_password_policy_default() {
     state.tenant_repo.add_tenant(tenant.clone()).await;
 
     let app = build_password_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = super::get_json(
-        &app,
-        &format!("/api/v1/tenants/{}/password-policy", tenant.id),
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/password-policy", tenant.id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -152,6 +158,7 @@ async fn test_update_password_policy() {
     state.tenant_repo.add_tenant(tenant.clone()).await;
 
     let app = build_password_test_router(state);
+    let token = create_test_identity_token();
 
     let input = serde_json::json!({
         "min_length": 12,
@@ -165,10 +172,11 @@ async fn test_update_password_policy() {
         "lockout_duration_mins": 30
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json(
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json_with_auth(
         &app,
         &format!("/api/v1/tenants/{}/password-policy", tenant.id),
         &input,
+        &token,
     )
     .await;
 
@@ -186,21 +194,246 @@ async fn test_update_password_policy_invalid_min_length() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_password_test_router(state);
+    let token = create_test_identity_token();
 
     let tenant_id = StringUuid::new_v4();
     let input = serde_json::json!({
         "min_length": 3  // Too short, should be at least 6
     });
 
-    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json(
+    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json_with_auth(
         &app,
         &format!("/api/v1/tenants/{}/password-policy", tenant_id),
         &input,
+        &token,
     )
     .await;
 
     // 422 UNPROCESSABLE_ENTITY for validation errors
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+// ============================================================================
+// Password Policy Authorization Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_update_password_policy_member_forbidden() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = crate::api::create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Create a tenant access token with "member" role (not owner/admin)
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "member@test.com",
+            tenant_id,
+            "test-service",
+            vec!["member".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "min_length": 6,
+        "require_uppercase": false,
+        "require_lowercase": false,
+        "require_numbers": false,
+        "require_symbols": false,
+        "max_age_days": 0
+    });
+
+    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
+        put_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+            &input,
+            &token,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_update_password_policy_owner_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = crate::api::create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Create a tenant access token with "owner" role
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "owner@test.com",
+            tenant_id,
+            "test-service",
+            vec!["owner".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "min_length": 12,
+        "require_uppercase": true,
+        "require_lowercase": true,
+        "require_numbers": true,
+        "require_symbols": true,
+        "max_age_days": 90
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
+        put_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+            &input,
+            &token,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let policy = body.unwrap().data;
+    assert_eq!(policy.min_length, 12);
+}
+
+#[tokio::test]
+async fn test_update_password_policy_admin_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = crate::api::create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Create a tenant access token with "admin" role
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "admin@test.com",
+            tenant_id,
+            "test-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "min_length": 10,
+        "require_uppercase": true,
+        "require_lowercase": true,
+        "require_numbers": false,
+        "require_symbols": false,
+        "max_age_days": 60
+    });
+
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
+        put_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+            &input,
+            &token,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let policy = body.unwrap().data;
+    assert_eq!(policy.min_length, 10);
+}
+
+#[tokio::test]
+async fn test_update_password_policy_service_client_forbidden() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = crate::api::create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Create a service client token
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_service_client_token(
+            uuid::Uuid::new_v4(),
+            "service@test.com",
+            Some(tenant_id),
+        )
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let input = serde_json::json!({
+        "min_length": 6,
+        "require_uppercase": false,
+        "require_lowercase": false,
+        "require_numbers": false,
+        "require_symbols": false,
+        "max_age_days": 0
+    });
+
+    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
+        put_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+            &input,
+            &token,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_get_password_policy_member_allowed() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let tenant = crate::api::create_test_tenant(None);
+    let tenant_id = *tenant.id;
+    state.tenant_repo.add_tenant(tenant).await;
+
+    // Members should be able to READ the policy (just not modify)
+    let jwt_manager = crate::api::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            uuid::Uuid::new_v4(),
+            "member@test.com",
+            tenant_id,
+            "test-service",
+            vec!["member".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_password_test_router(state);
+
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+            &token,
+        )
+        .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
 }
 
 // ============================================================================

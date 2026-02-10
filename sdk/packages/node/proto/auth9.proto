@@ -22,9 +22,10 @@ service TokenExchange {
 message ExchangeTokenRequest {
   // The identity token (JWT) from initial authentication
   string identity_token = 1;
-  // Target tenant ID
+  // Target tenant ID (UUID format)
   string tenant_id = 2;
-  // Target service/client ID
+  // OAuth client_id string (NOT service UUID).
+  // Example: "auth9-portal", "my-app-client"
   string service_id = 3;
 }
 

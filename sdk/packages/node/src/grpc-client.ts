@@ -6,6 +6,8 @@ import { dirname, join } from "node:path";
 export interface GrpcClientConfig {
   /** gRPC server address (host:port) */
   address: string;
+  /** Use TLS for the connection (server-side TLS, no client certs) */
+  tls?: boolean;
   /** Authentication method */
   auth?:
     | { apiKey: string }
@@ -133,6 +135,8 @@ export class Auth9GrpcClient {
         config.auth.mtls.key,
         config.auth.mtls.cert,
       );
+    } else if (config.tls) {
+      credentials = grpc.credentials.createSsl();
     } else {
       credentials = grpc.credentials.createInsecure();
     }
