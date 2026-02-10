@@ -1,8 +1,6 @@
 # Auth9 - Local Development Environment
 # Usage: docker-compose up -d
 
-version: '3.8'
-
 services:
   # ==================== Auth9 Init (Migration & Seed) ====================
   auth9-init:

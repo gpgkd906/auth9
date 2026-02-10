@@ -1,0 +1,13 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+rule_files:
+  - "alert-rules.yml"
+
+scrape_configs:
+  - job_name: 'auth9-core'
+    metrics_path: /metrics
+    scrape_interval: 15s
+    static_configs:
+      - targets: ['auth9-core:8080']

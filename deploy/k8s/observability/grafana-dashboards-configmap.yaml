@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: auth9-grafana-dashboards
+  namespace: auth9
+  labels:
+    grafana_dashboard: "true"
+data:
+  auth9-overview.json: |
+    { "annotations": { "list": [] }, "title": "Auth9 - System Overview", "uid": "auth9-overview", "description": "See deploy/observability/grafana/dashboards/ for full dashboard definitions" }
+  auth9-auth.json: |
+    { "annotations": { "list": [] }, "title": "Auth9 - Authentication", "uid": "auth9-auth", "description": "See deploy/observability/grafana/dashboards/ for full dashboard definitions" }
+  auth9-security.json: |
+    { "annotations": { "list": [] }, "title": "Auth9 - Security", "uid": "auth9-security", "description": "See deploy/observability/grafana/dashboards/ for full dashboard definitions" }
+  auth9-infra.json: |
+    { "annotations": { "list": [] }, "title": "Auth9 - Infrastructure", "uid": "auth9-infra", "description": "See deploy/observability/grafana/dashboards/ for full dashboard definitions" }

@@ -23,6 +23,10 @@ spec:
         app.kubernetes.io/name: auth9-core
         app.kubernetes.io/component: backend
         app.kubernetes.io/part-of: auth9
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8080"
     spec:
       serviceAccountName: auth9
       imagePullSecrets:

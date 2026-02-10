@@ -8,10 +8,9 @@
 //!   reset   - Reset database (drop all tables)
 
 use anyhow::Result;
-use auth9_core::{config::Config, migration, server};
+use auth9_core::{config::Config, migration, server, telemetry};
 use clap::{Parser, Subcommand};
 use tracing::info;
-use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 #[derive(Parser)]
 #[command(name = "auth9-core")]
@@ -35,23 +34,14 @@ enum Commands {
     Reset,
 }
 
-fn init_tracing() {
-    tracing_subscriber::registry()
-        .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| "auth9_core=info,tower_http=debug".into()),
-        )
-        .with(tracing_subscriber::fmt::layer())
-        .init();
-}
-
 #[tokio::main]
 async fn main() -> Result<()> {
-    init_tracing();
-
-    // Load configuration
+    // Load configuration first (telemetry init needs config)
     dotenvy::dotenv().ok();
     let config = Config::from_env()?;
+
+    // Initialise telemetry (metrics + tracing + structured logging)
+    let prometheus_handle = telemetry::init(&config.telemetry);
 
     let cli = Cli::parse();
 
@@ -81,7 +71,7 @@ async fn main() -> Result<()> {
             info!("Starting Auth9 Core Service");
             info!("HTTP server listening on {}", config.http_addr());
             info!("gRPC server listening on {}", config.grpc_addr());
-            server::run(config).await?;
+            server::run(config, prometheus_handle).await?;
         }
     }
 

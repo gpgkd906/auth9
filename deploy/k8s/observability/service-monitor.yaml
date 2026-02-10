@@ -1,0 +1,18 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: auth9-core
+  namespace: auth9
+  labels:
+    app: auth9-core
+spec:
+  selector:
+    matchLabels:
+      app: auth9-core
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+  namespaceSelector:
+    matchNames:
+      - auth9

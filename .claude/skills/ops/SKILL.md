@@ -72,6 +72,11 @@ cd auth9-portal && npm run typecheck
 | Cache | auth9-redis |
 | Auth Engine | auth9-keycloak |
 | DB Admin | auth9-adminer |
+| Prometheus | auth9-prometheus |
+| Grafana | auth9-grafana |
+| Loki | auth9-loki |
+| Tempo | auth9-tempo |
+| Promtail | auth9-promtail |
 
 ### Common Commands
 

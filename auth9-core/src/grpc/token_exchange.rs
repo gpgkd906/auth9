@@ -162,6 +162,7 @@ where
         &self,
         request: Request<ExchangeTokenRequest>,
     ) -> Result<Response<ExchangeTokenResponse>, Status> {
+        let start = std::time::Instant::now();
         let req = request.into_inner();
 
         // Verify identity token
@@ -270,6 +271,10 @@ where
             )
             .map_err(|e| Status::internal(format!("Failed to create refresh token: {}", e)))?;
 
+        metrics::counter!("auth9_auth_token_exchange_total", "result" => "success").increment(1);
+        metrics::histogram!("auth9_grpc_request_duration_seconds", "service" => "TokenExchange", "method" => "exchange_token").record(start.elapsed().as_secs_f64());
+        metrics::counter!("auth9_grpc_requests_total", "service" => "TokenExchange", "method" => "exchange_token", "status" => "ok").increment(1);
+
         Ok(Response::new(ExchangeTokenResponse {
             access_token,
             token_type: "Bearer".to_string(),
@@ -294,18 +299,24 @@ where
             .jwt_manager
             .verify_tenant_access_token(&req.access_token, audience)
         {
-            Ok(claims) => Ok(Response::new(ValidateTokenResponse {
-                valid: true,
-                user_id: claims.sub,
-                tenant_id: claims.tenant_id,
-                error: String::new(),
-            })),
-            Err(e) => Ok(Response::new(ValidateTokenResponse {
-                valid: false,
-                user_id: String::new(),
-                tenant_id: String::new(),
-                error: e.to_string(),
-            })),
+            Ok(claims) => {
+                metrics::counter!("auth9_auth_token_validation_total", "result" => "valid").increment(1);
+                Ok(Response::new(ValidateTokenResponse {
+                    valid: true,
+                    user_id: claims.sub,
+                    tenant_id: claims.tenant_id,
+                    error: String::new(),
+                }))
+            }
+            Err(e) => {
+                metrics::counter!("auth9_auth_token_validation_total", "result" => "invalid").increment(1);
+                Ok(Response::new(ValidateTokenResponse {
+                    valid: false,
+                    user_id: String::new(),
+                    tenant_id: String::new(),
+                    error: e.to_string(),
+                }))
+            }
         }
     }
 

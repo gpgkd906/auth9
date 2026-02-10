@@ -55,3 +55,10 @@ data:
   AUTH9_PORTAL_URL: "https://auth9.gitski.work"
   AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   NODE_ENV: "production"
+
+  # Telemetry / Observability
+  OTEL_METRICS_ENABLED: "true"
+  OTEL_TRACING_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.observability:4317"
+  LOG_FORMAT: "json"
+  OTEL_SERVICE_NAME: "auth9-core"

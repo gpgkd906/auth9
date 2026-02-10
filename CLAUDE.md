@@ -38,6 +38,9 @@ npm run test:e2e:full:reset    # Reset env + full-stack E2E tests
 # Start dependencies (TiDB, Redis, Keycloak)
 docker-compose -f docker-compose.yml -f docker-compose.dev.yml up -d
 
+# (Optional) Add observability stack (Prometheus, Grafana, Loki, Tempo)
+docker-compose -f docker-compose.yml -f docker-compose.dev.yml -f docker-compose.observability.yml up -d
+
 # Run backend
 cd auth9-core && cargo run
 

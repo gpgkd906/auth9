@@ -1,0 +1,12 @@
+apiVersion: 1
+
+providers:
+  - name: auth9
+    type: file
+    folder: Auth9
+    disableDeletion: false
+    editable: true
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards
+      foldersFromFilesStructure: false

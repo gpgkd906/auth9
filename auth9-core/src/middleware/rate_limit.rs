@@ -378,6 +378,7 @@ pub async fn rate_limit_middleware(
         }
         Ok(result) => {
             // Rate limit exceeded
+            metrics::counter!("auth9_rate_limit_throttled_total", "endpoint" => endpoint.clone()).increment(1);
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
