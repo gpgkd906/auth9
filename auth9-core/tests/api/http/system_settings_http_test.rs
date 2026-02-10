@@ -3,9 +3,10 @@
 //! Tests for the system settings HTTP endpoints using mock repositories.
 
 use super::{
-    build_system_settings_test_router, get_json, post_json, put_json, MockKeycloakServer,
-    TestAppState,
+    build_system_settings_test_router, get_json_with_auth, post_json_with_auth,
+    put_json_with_auth, MockKeycloakServer, TestAppState,
 };
+use crate::api::create_test_identity_token;
 use auth9_core::api::system_settings::TestEmailResponse;
 use auth9_core::domain::SystemSettingRow;
 use axum::http::StatusCode;
@@ -21,9 +22,10 @@ async fn test_get_email_settings_none() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/email").await;
+        get_json_with_auth(&app, "/api/v1/system/email", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -63,9 +65,10 @@ async fn test_get_email_settings_smtp_masked() {
     state.system_settings_repo.add_setting(setting).await;
 
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/email").await;
+        get_json_with_auth(&app, "/api/v1/system/email", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -112,9 +115,10 @@ async fn test_get_email_settings_oracle() {
     state.system_settings_repo.add_setting(setting).await;
 
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/email").await;
+        get_json_with_auth(&app, "/api/v1/system/email", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -152,9 +156,10 @@ async fn test_get_email_settings_ses() {
     state.system_settings_repo.add_setting(setting).await;
 
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/email").await;
+        get_json_with_auth(&app, "/api/v1/system/email", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -179,6 +184,7 @@ async fn test_update_email_settings_smtp() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -194,7 +200,7 @@ async fn test_update_email_settings_smtp() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -235,6 +241,7 @@ async fn test_update_email_settings_none() {
     state.system_settings_repo.add_setting(setting).await;
 
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     // Now disable email by setting to None
     let input = json!({
@@ -244,7 +251,7 @@ async fn test_update_email_settings_none() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -257,6 +264,7 @@ async fn test_update_email_settings_oracle() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -271,7 +279,7 @@ async fn test_update_email_settings_oracle() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -288,6 +296,7 @@ async fn test_update_email_settings_ses() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -301,7 +310,7 @@ async fn test_update_email_settings_ses() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -318,6 +327,7 @@ async fn test_update_email_settings_invalid_email() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -330,7 +340,7 @@ async fn test_update_email_settings_invalid_email() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     // Invalid email should return validation error (422)
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -341,6 +351,7 @@ async fn test_update_email_settings_missing_host() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "config": {
@@ -351,7 +362,7 @@ async fn test_update_email_settings_missing_host() {
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     // Missing required field should fail
     assert!(status == StatusCode::BAD_REQUEST || status == StatusCode::UNPROCESSABLE_ENTITY);
@@ -366,12 +377,12 @@ async fn test_email_connection_not_configured() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/system/email/test", &json!({})).await;
+        post_json_with_auth(&app, "/api/v1/system/email/test", &json!({}), &token).await;
 
     // When email is not configured, should return an error
-    // The actual status depends on how the service handles this case
     assert!(
         status == StatusCode::BAD_REQUEST
             || status == StatusCode::INTERNAL_SERVER_ERROR
@@ -415,13 +426,14 @@ async fn test_send_email_not_configured() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "to_email": "recipient@example.com"
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/system/email/send-test", &input).await;
+        post_json_with_auth(&app, "/api/v1/system/email/send-test", &input, &token).await;
 
     // When email is not configured, should return an error
     assert!(
@@ -457,13 +469,14 @@ async fn test_send_email_invalid_address() {
     state.system_settings_repo.add_setting(setting).await;
 
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     let input = json!({
         "to_email": "not-an-email"
     });
 
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        post_json(&app, "/api/v1/system/email/send-test", &input).await;
+        post_json_with_auth(&app, "/api/v1/system/email/send-test", &input, &token).await;
 
     // Invalid email should return validation error
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -514,6 +527,7 @@ async fn test_update_preserves_password_on_masked_input() {
     state.system_settings_repo.add_setting(setting).await;
 
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     // Update with masked password (should preserve original)
     let input = json!({
@@ -528,7 +542,7 @@ async fn test_update_preserves_password_on_masked_input() {
     });
 
     let (status, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -543,6 +557,7 @@ async fn test_email_settings_roundtrip() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     // Update settings
     let input = json!({
@@ -555,12 +570,12 @@ async fn test_email_settings_roundtrip() {
     });
 
     let (status1, _): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &input, &token).await;
     assert_eq!(status1, StatusCode::OK);
 
     // Read back settings
     let (status2, body): (StatusCode, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/email").await;
+        get_json_with_auth(&app, "/api/v1/system/email", &token).await;
     assert_eq!(status2, StatusCode::OK);
 
     let response = body.unwrap();
@@ -576,6 +591,7 @@ async fn test_email_provider_type_switch() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_system_settings_test_router(state);
+    let token = create_test_identity_token();
 
     // Start with SMTP
     let smtp_input = json!({
@@ -588,7 +604,7 @@ async fn test_email_provider_type_switch() {
     });
 
     let (status1, _): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &smtp_input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &smtp_input, &token).await;
     assert_eq!(status1, StatusCode::OK);
 
     // Switch to SES
@@ -601,10 +617,48 @@ async fn test_email_provider_type_switch() {
     });
 
     let (status2, body): (StatusCode, Option<serde_json::Value>) =
-        put_json(&app, "/api/v1/system/email", &ses_input).await;
+        put_json_with_auth(&app, "/api/v1/system/email", &ses_input, &token).await;
     assert_eq!(status2, StatusCode::OK);
 
     let response = body.unwrap();
     let config_type = response["data"]["value"]["type"].as_str();
     assert_eq!(config_type, Some("ses"));
+}
+
+// ============================================================================
+// Authorization Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_get_email_settings_requires_auth() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_system_settings_test_router(state);
+
+    // No auth token
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        super::get_json(&app, "/api/v1/system/email").await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
+}
+
+#[tokio::test]
+async fn test_update_email_settings_requires_auth() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_system_settings_test_router(state);
+
+    let input = json!({
+        "config": {
+            "type": "smtp",
+            "host": "smtp.attacker.com",
+            "port": 25,
+            "from_email": "attacker@example.com"
+        }
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        super::put_json(&app, "/api/v1/system/email", &input).await;
+
+    assert_eq!(status, StatusCode::UNAUTHORIZED);
 }

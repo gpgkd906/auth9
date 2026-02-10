@@ -203,7 +203,12 @@ where
             .find_client_by_client_id(&req.service_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to lookup client: {}", e)))?
-            .ok_or_else(|| Status::not_found("Client not found"))?;
+            .ok_or_else(|| {
+                Status::not_found(format!(
+                    "Client not found for service_id '{}'. Note: service_id expects an OAuth client_id string (e.g., 'auth9-portal'), not a service UUID.",
+                    req.service_id
+                ))
+            })?;
 
         // Get Service
         let service = self

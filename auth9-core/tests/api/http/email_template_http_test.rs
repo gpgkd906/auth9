@@ -4,8 +4,10 @@
 //! with `TestAppState` to achieve high coverage without external dependencies.
 
 use super::{
-    build_email_template_test_router, delete_json, get_json, post_json, put_json, TestAppState,
+    build_email_template_test_router, delete_json_with_auth, get_json_with_auth,
+    post_json_with_auth, put_json_with_auth, TestAppState,
 };
+use crate::api::create_test_identity_token;
 use auth9_core::api::SuccessResponse;
 use auth9_core::domain::{
     EmailTemplateContent, EmailTemplateType, EmailTemplateWithContent, RenderedEmailPreview,
@@ -29,9 +31,10 @@ struct ListTemplatesResponse {
 async fn test_list_templates_returns_all_default_templates() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (_, Option<ListTemplatesResponse>) =
-        get_json(&app, "/api/v1/system/email-templates").await;
+        get_json_with_auth(&app, "/api/v1/system/email-templates", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -71,9 +74,10 @@ async fn test_list_templates_shows_customized() {
         .await;
 
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (_, Option<ListTemplatesResponse>) =
-        get_json(&app, "/api/v1/system/email-templates").await;
+        get_json_with_auth(&app, "/api/v1/system/email-templates", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -96,9 +100,10 @@ async fn test_list_templates_shows_customized() {
 async fn test_get_template_default() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-        get_json(&app, "/api/v1/system/email-templates/invitation").await;
+        get_json_with_auth(&app, "/api/v1/system/email-templates/invitation", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let response = body.unwrap();
@@ -139,9 +144,10 @@ async fn test_get_template_customized() {
         .await;
 
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-        get_json(&app, "/api/v1/system/email-templates/welcome").await;
+        get_json_with_auth(&app, "/api/v1/system/email-templates/welcome", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let template = body.unwrap().data;
@@ -154,9 +160,10 @@ async fn test_get_template_customized() {
 async fn test_get_template_not_found() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, _): (_, Option<serde_json::Value>) =
-        get_json(&app, "/api/v1/system/email-templates/nonexistent").await;
+        get_json_with_auth(&app, "/api/v1/system/email-templates/nonexistent", &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -165,6 +172,7 @@ async fn test_get_template_not_found() {
 async fn test_get_all_template_types() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state.clone());
+    let token = create_test_identity_token();
 
     // Test each template type endpoint
     let template_types = [
@@ -180,7 +188,7 @@ async fn test_get_all_template_types() {
     for template_type in template_types {
         let path = format!("/api/v1/system/email-templates/{}", template_type);
         let (status, _): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-            get_json(&app, &path).await;
+            get_json_with_auth(&app, &path, &token).await;
         assert_eq!(
             status,
             StatusCode::OK,
@@ -198,6 +206,7 @@ async fn test_get_all_template_types() {
 async fn test_update_template_success() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let update_request = serde_json::json!({
         "subject": "Updated Subject {{name}}",
@@ -205,10 +214,11 @@ async fn test_update_template_success() {
         "text_body": "Updated text"
     });
 
-    let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) = put_json(
+    let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) = put_json_with_auth(
         &app,
         "/api/v1/system/email-templates/invitation",
         &update_request,
+        &token,
     )
     .await;
 
@@ -228,6 +238,7 @@ async fn test_update_template_success() {
 async fn test_update_template_invalid_type() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let update_request = serde_json::json!({
         "subject": "Test",
@@ -235,10 +246,11 @@ async fn test_update_template_invalid_type() {
         "text_body": "Test"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) = put_json(
+    let (status, _): (_, Option<serde_json::Value>) = put_json_with_auth(
         &app,
         "/api/v1/system/email-templates/invalid_type",
         &update_request,
+        &token,
     )
     .await;
 
@@ -249,6 +261,7 @@ async fn test_update_template_invalid_type() {
 async fn test_update_template_empty_subject() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let update_request = serde_json::json!({
         "subject": "",
@@ -256,10 +269,11 @@ async fn test_update_template_empty_subject() {
         "text_body": "Content"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) = put_json(
+    let (status, _): (_, Option<serde_json::Value>) = put_json_with_auth(
         &app,
         "/api/v1/system/email-templates/invitation",
         &update_request,
+        &token,
     )
     .await;
 
@@ -270,6 +284,7 @@ async fn test_update_template_empty_subject() {
 async fn test_update_template_empty_html_body() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let update_request = serde_json::json!({
         "subject": "Subject",
@@ -277,10 +292,11 @@ async fn test_update_template_empty_html_body() {
         "text_body": "Text"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) = put_json(
+    let (status, _): (_, Option<serde_json::Value>) = put_json_with_auth(
         &app,
         "/api/v1/system/email-templates/invitation",
         &update_request,
+        &token,
     )
     .await;
 
@@ -316,10 +332,11 @@ async fn test_reset_template_success() {
         .await;
 
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     // Reset the template
     let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-        delete_json(&app, "/api/v1/system/email-templates/password_reset").await;
+        delete_json_with_auth(&app, "/api/v1/system/email-templates/password_reset", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     let template = body.unwrap().data;
@@ -335,10 +352,11 @@ async fn test_reset_template_success() {
 async fn test_reset_template_not_customized() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     // Reset a template that isn't customized
     let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-        delete_json(&app, "/api/v1/system/email-templates/email_mfa").await;
+        delete_json_with_auth(&app, "/api/v1/system/email-templates/email_mfa", &token).await;
 
     // Should still succeed and return default template
     assert_eq!(status, StatusCode::OK);
@@ -350,9 +368,10 @@ async fn test_reset_template_not_customized() {
 async fn test_reset_template_invalid_type() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, _): (_, Option<serde_json::Value>) =
-        delete_json(&app, "/api/v1/system/email-templates/not_a_template").await;
+        delete_json_with_auth(&app, "/api/v1/system/email-templates/not_a_template", &token).await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -365,6 +384,7 @@ async fn test_reset_template_invalid_type() {
 async fn test_preview_template_success() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     // Use invitation template variables: inviter_name, tenant_name, invite_link, app_name
     let preview_request = serde_json::json!({
@@ -373,10 +393,11 @@ async fn test_preview_template_success() {
         "text_body": "Hello! {{inviter_name}} has invited you to join {{app_name}}!"
     });
 
-    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json(
+    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json_with_auth(
         &app,
         "/api/v1/system/email-templates/invitation/preview",
         &preview_request,
+        &token,
     )
     .await;
 
@@ -398,6 +419,7 @@ async fn test_preview_template_success() {
 async fn test_preview_template_password_reset() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let preview_request = serde_json::json!({
         "subject": "Reset your password",
@@ -405,10 +427,11 @@ async fn test_preview_template_password_reset() {
         "text_body": "Reset: {{reset_link}}"
     });
 
-    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json(
+    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json_with_auth(
         &app,
         "/api/v1/system/email-templates/password_reset/preview",
         &preview_request,
+        &token,
     )
     .await;
 
@@ -423,6 +446,7 @@ async fn test_preview_template_password_reset() {
 async fn test_preview_template_email_mfa() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let preview_request = serde_json::json!({
         "subject": "Your verification code: {{verification_code}}",
@@ -430,10 +454,11 @@ async fn test_preview_template_email_mfa() {
         "text_body": "Code: {{verification_code}}"
     });
 
-    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json(
+    let (status, body): (_, Option<SuccessResponse<RenderedEmailPreview>>) = post_json_with_auth(
         &app,
         "/api/v1/system/email-templates/email_mfa/preview",
         &preview_request,
+        &token,
     )
     .await;
 
@@ -448,6 +473,7 @@ async fn test_preview_template_email_mfa() {
 async fn test_preview_template_invalid_type() {
     let state = TestAppState::new("http://mock-keycloak:8080");
     let app = build_email_template_test_router(state);
+    let token = create_test_identity_token();
 
     let preview_request = serde_json::json!({
         "subject": "Test",
@@ -455,10 +481,11 @@ async fn test_preview_template_invalid_type() {
         "text_body": "Test"
     });
 
-    let (status, _): (_, Option<serde_json::Value>) = post_json(
+    let (status, _): (_, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         "/api/v1/system/email-templates/invalid/preview",
         &preview_request,
+        &token,
     )
     .await;
 

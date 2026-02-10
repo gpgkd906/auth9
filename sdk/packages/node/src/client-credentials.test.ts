@@ -97,3 +97,85 @@ describe("ClientCredentials", () => {
     expect(mockFetch).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("ClientCredentials error handling", () => {
+  it("throws UnauthorizedError on invalid credentials (401)", async () => {
+    const creds = createCreds();
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: () =>
+        Promise.resolve({
+          error: "invalid_client",
+          message: "Invalid client credentials",
+        }),
+    });
+
+    await expect(creds.getToken()).rejects.toThrow("Invalid client credentials");
+    await expect(creds.getToken()).rejects.toHaveProperty("statusCode", 401);
+  });
+
+  it("throws UnauthorizedError on non-existent client (401)", async () => {
+    const creds = new ClientCredentials({
+      domain: "https://auth9.example.com",
+      clientId: "non-existent",
+      clientSecret: "any",
+    });
+
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: () =>
+        Promise.resolve({
+          error: "invalid_client",
+          message: "Client not found",
+        }),
+    });
+
+    await expect(creds.getToken()).rejects.toThrow("Client not found");
+    await expect(creds.getToken()).rejects.toHaveProperty("statusCode", 401);
+  });
+
+  it("throws on network connection failure", async () => {
+    const creds = new ClientCredentials({
+      domain: "http://localhost:9999",
+      clientId: "any",
+      clientSecret: "any",
+    });
+
+    mockFetch.mockRejectedValue(new TypeError("fetch failed"));
+
+    await expect(creds.getToken()).rejects.toThrow("fetch failed");
+  });
+
+  it("throws on server error (500)", async () => {
+    const creds = createCreds();
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+      json: () =>
+        Promise.resolve({
+          error: "internal_error",
+          message: "Internal server error",
+        }),
+    });
+
+    await expect(creds.getToken()).rejects.toThrow("Internal server error");
+    await expect(creds.getToken()).rejects.toHaveProperty("statusCode", 500);
+  });
+
+  it("handles malformed error response body", async () => {
+    const creds = createCreds();
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 401,
+      statusText: "Unauthorized",
+      json: () => Promise.reject(new Error("invalid json")),
+    });
+
+    await expect(creds.getToken()).rejects.toHaveProperty("statusCode", 401);
+  });
+});
