@@ -27,6 +27,16 @@ const DEFAULT_PORTAL_CLIENT_NAME: &str = "Auth9 Admin Portal";
 const DEFAULT_ADMIN_CLIENT_ID: &str = "auth9-admin";
 const DEFAULT_ADMIN_CLIENT_NAME: &str = "Auth9 Admin Client";
 
+/// Get admin email from env var or use default
+fn get_admin_email() -> String {
+    if let Ok(email) = env::var("AUTH9_ADMIN_EMAIL") {
+        if !email.is_empty() {
+            return email;
+        }
+    }
+    DEFAULT_ADMIN_EMAIL.to_string()
+}
+
 /// Get admin password from env var or generate a secure random one
 fn get_admin_password() -> String {
     // Allow override via environment variable (useful for local development)
@@ -496,10 +506,11 @@ impl KeycloakSeeder {
         );
 
         let password = get_admin_password();
+        let email = get_admin_email();
 
         let user = CreateKeycloakUserInput {
             username: DEFAULT_ADMIN_USERNAME.to_string(),
-            email: DEFAULT_ADMIN_EMAIL.to_string(),
+            email,
             first_name: Some(DEFAULT_ADMIN_FIRST_NAME.to_string()),
             last_name: Some(DEFAULT_ADMIN_LAST_NAME.to_string()),
             enabled: true,
@@ -562,6 +573,42 @@ impl KeycloakSeeder {
         }
 
         Ok(())
+    }
+
+    /// Query Keycloak for the admin user's UUID and email
+    /// Returns (keycloak_id, email) if found, None otherwise
+    pub async fn get_admin_user_keycloak_id(&self) -> anyhow::Result<Option<(String, String)>> {
+        let token = self.get_master_admin_token().await?;
+
+        let url = format!(
+            "{}/admin/realms/{}/users?username={}&exact=true",
+            self.config.url, self.config.realm, DEFAULT_ADMIN_USERNAME
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .context("Failed to query admin user from Keycloak")?;
+
+        if !response.status().is_success() {
+            return Ok(None);
+        }
+
+        let users: Vec<serde_json::Value> = response.json().await.unwrap_or_default();
+
+        if let Some(user) = users.first() {
+            let keycloak_id = user["id"].as_str().map(|s| s.to_string());
+            let email = user["email"].as_str().map(|s| s.to_string());
+
+            if let (Some(id), Some(email)) = (keycloak_id, email) {
+                return Ok(Some((id, email)));
+            }
+        }
+
+        Ok(None)
     }
 
     /// Check if portal client exists
