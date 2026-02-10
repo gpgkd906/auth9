@@ -1,0 +1,106 @@
+{
+  "name": "@auth9/node",
+  "version": "0.1.0",
+  "description": "Auth9 Node.js SDK - token verification, gRPC client, and framework middleware",
+  "type": "module",
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./middleware/express": {
+      "import": {
+        "types": "./dist/middleware/express.d.ts",
+        "default": "./dist/middleware/express.js"
+      },
+      "require": {
+        "types": "./dist/middleware/express.d.cts",
+        "default": "./dist/middleware/express.cjs"
+      }
+    },
+    "./middleware/next": {
+      "import": {
+        "types": "./dist/middleware/next.d.ts",
+        "default": "./dist/middleware/next.js"
+      },
+      "require": {
+        "types": "./dist/middleware/next.d.cts",
+        "default": "./dist/middleware/next.cjs"
+      }
+    },
+    "./middleware/fastify": {
+      "import": {
+        "types": "./dist/middleware/fastify.d.ts",
+        "default": "./dist/middleware/fastify.js"
+      },
+      "require": {
+        "types": "./dist/middleware/fastify.d.cts",
+        "default": "./dist/middleware/fastify.cjs"
+      }
+    },
+    "./testing": {
+      "import": {
+        "types": "./dist/testing.d.ts",
+        "default": "./dist/testing.js"
+      },
+      "require": {
+        "types": "./dist/testing.d.cts",
+        "default": "./dist/testing.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "proto"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "lint": "tsc --noEmit",
+    "clean": "rm -rf dist"
+  },
+  "dependencies": {
+    "@auth9/core": "workspace:*",
+    "@grpc/grpc-js": "^1.12.0",
+    "@grpc/proto-loader": "^0.7.13",
+    "jose": "^5.9.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@vitest/coverage-v8": "^4.0.18",
+    "tsup": "^8.3.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
+  },
+  "peerDependencies": {
+    "express": ">=4.0.0",
+    "fastify": ">=4.0.0",
+    "next": ">=13.0.0"
+  },
+  "peerDependenciesMeta": {
+    "express": {
+      "optional": true
+    },
+    "fastify": {
+      "optional": true
+    },
+    "next": {
+      "optional": true
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "license": "MIT"
+}
