@@ -1,11 +1,11 @@
 ---
 name: test-coverage
-description: Run tests and check coverage for Auth9 backend and frontend with mock-based testing patterns.
+description: Run tests and check coverage for Auth9 backend, frontend, and SDK with mock-based testing patterns.
 ---
 
 # Test Coverage Skill
 
-Run tests and check coverage for Auth9 project.
+Run tests and check coverage for Auth9 project (backend, frontend, SDK).
 
 ## When to Use
 
@@ -54,6 +54,82 @@ The following files are excluded from coverage tracking:
 | `migration/*.rs` | Database migration scripts |
 
 These exclusions are configured in `auth9-core/Makefile`. Repository layer coverage is low by design - all business logic lives in the service layer, which is tested via mock repositories.
+
+## SDK (sdk/)
+
+### Run Tests
+
+```bash
+cd sdk
+pnpm run --filter @auth9/core test
+pnpm run --filter @auth9/node test
+```
+
+Or run all SDK tests at once:
+
+```bash
+cd sdk && pnpm test
+```
+
+### Run Coverage
+
+```bash
+cd sdk
+pnpm run --filter @auth9/core test:coverage
+pnpm run --filter @auth9/node test:coverage
+```
+
+### Coverage Exclusions
+
+| File/Pattern | Reason |
+|--------------|--------|
+| `src/index.ts` | Barrel re-export, no logic |
+| `src/types/**/*.ts` (@auth9/core only) | Pure type definitions, no runtime code |
+
+These exclusions are configured in each package's `vitest.config.ts`.
+
+### Test File Structure
+
+```
+sdk/packages/
+├── core/src/
+│   ├── utils.test.ts              # toSnakeCase / toCamelCase (12 tests)
+│   ├── errors.test.ts             # Error hierarchy, createErrorFromStatus (17 tests)
+│   ├── http-client.test.ts        # HTTP client with fetch mocking (8 tests)
+│   └── claims.test.ts             # getTokenType() discrimination (3 tests)
+└── node/src/
+    ├── testing.test.ts            # createMockToken, createMockAuth9 (5 tests)
+    └── client-credentials.test.ts # Token fetch, caching, cache clear (3 tests)
+```
+
+### Writing SDK Tests
+
+SDK tests use **vitest** with global `fetch` mocking (no external services):
+
+```typescript
+import { describe, it, expect, vi, beforeEach } from "vitest";
+
+// Mock global fetch
+const mockFetch = vi.fn();
+vi.stubGlobal("fetch", mockFetch);
+
+beforeEach(() => {
+  mockFetch.mockReset();
+});
+
+it("fetches data with auto snake/camel conversion", async () => {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: async () => ({ data: { user_name: "test" } }),
+  });
+
+  const client = new Auth9HttpClient({ baseUrl: "http://localhost:8080" });
+  const result = await client.get<{ userName: string }>("/api/v1/users/1");
+
+  expect(result.userName).toBe("test"); // auto camelCase
+});
+```
 
 ## Frontend (auth9-portal)
 
@@ -330,6 +406,8 @@ async fn test_keycloak_operation() {
 | API handlers | 80%+ | HTTP routing |
 | gRPC handlers | 85%+ | Token exchange, validation |
 | Repository layer | N/A | Excluded from tracking (thin data mapping) |
+| SDK @auth9/core | 90%+ | Utils, errors, HTTP client |
+| SDK @auth9/node | 70%+ | Token verifier, gRPC client, middleware, testing |
 
 ---
 
