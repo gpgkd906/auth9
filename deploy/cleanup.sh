@@ -312,6 +312,12 @@ EOF
             -p='[{"op": "remove", "path": "/data/KEYCLOAK_ADMIN_CLIENT_SECRET"}]' 2>/dev/null || true
         print_success "KEYCLOAK_ADMIN_CLIENT_SECRET 已删除（下次部署将重新生成）"
 
+        echo ""
+        print_warning "注意: TiDB 数据已重置，但 Keycloak PVCs 中的数据仍然存在。"
+        print_warning "Seed 管理员用户与 Keycloak 管理员共享 keycloak_id 链接。"
+        print_warning "如果需要完全重置，建议同时删除 Keycloak PVCs。"
+        print_info "重新运行 init 将通过 ON DUPLICATE KEY UPDATE 自动重新链接。"
+
         return 0
     else
         print_error "数据库重置失败或超时"

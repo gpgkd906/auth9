@@ -16,6 +16,13 @@ use tracing::info;
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
 const DEFAULT_PORTAL_NAME: &str = "Auth9 Admin Portal";
 
+/// Default seed data constants
+const DEFAULT_PLATFORM_TENANT_NAME: &str = "Auth9 Platform";
+const DEFAULT_PLATFORM_TENANT_SLUG: &str = "auth9-platform";
+const DEFAULT_DEMO_TENANT_NAME: &str = "Demo Organization";
+const DEFAULT_DEMO_TENANT_SLUG: &str = "demo";
+const SEED_ADMIN_DISPLAY_NAME: &str = "Admin User";
+
 /// Build redirect URIs for database (JSON array)
 fn build_db_redirect_uris(_core_public_url: Option<&str>, portal_url: Option<&str>) -> String {
     let mut uris = vec![
@@ -196,6 +203,12 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
     // Seed dev email config if in dev environment
     seed_dev_email_config(config).await?;
 
+    // Seed initial data (tenants, admin user, associations)
+    info!("Seeding initial data...");
+    seed_initial_data(config)
+        .await
+        .context("Failed to seed initial data")?;
+
     info!("Keycloak seeding completed");
     Ok(())
 }
@@ -307,6 +320,175 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
             DEFAULT_PORTAL_CLIENT_ID
         );
     }
+
+    Ok(())
+}
+
+/// Seed initial data: platform tenant, demo tenant, admin user, and associations
+///
+/// This function is safe to call multiple times (idempotent):
+/// - Tenants: INSERT IGNORE (slug UNIQUE constraint)
+/// - Users: INSERT ... ON DUPLICATE KEY UPDATE keycloak_id (handles Keycloak reset)
+/// - Tenant users: INSERT IGNORE (tenant_id, user_id UNIQUE constraint)
+/// - Tenant services: INSERT ... ON DUPLICATE KEY UPDATE enabled = TRUE
+async fn seed_initial_data(config: &Config) -> Result<()> {
+    use tracing::warn;
+
+    // 1. Query Keycloak for admin user's keycloak_id and email
+    let seeder = KeycloakSeeder::new(&config.keycloak);
+    let (keycloak_id, admin_email) = match seeder.get_admin_user_keycloak_id().await? {
+        Some((id, email)) => (id, email),
+        None => {
+            warn!("Admin user not found in Keycloak, skipping initial data seed");
+            return Ok(());
+        }
+    };
+
+    info!(
+        "Found admin user in Keycloak: keycloak_id={}, email={}",
+        keycloak_id, admin_email
+    );
+
+    let pool: Pool<MySql> = MySqlPoolOptions::new()
+        .max_connections(1)
+        .connect(&config.database.url)
+        .await
+        .context("Failed to connect to database")?;
+
+    let default_settings =
+        serde_json::json!({"require_mfa": false, "allowed_auth_methods": [], "session_timeout_secs": 3600, "branding": {}});
+    let settings_json = default_settings.to_string();
+
+    // 2. INSERT IGNORE two tenants
+    let platform_tenant_id = uuid::Uuid::new_v4().to_string();
+    let demo_tenant_id = uuid::Uuid::new_v4().to_string();
+
+    sqlx::query(
+        r#"INSERT IGNORE INTO tenants (id, name, slug, settings, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'active', NOW(), NOW())"#,
+    )
+    .bind(&platform_tenant_id)
+    .bind(DEFAULT_PLATFORM_TENANT_NAME)
+    .bind(DEFAULT_PLATFORM_TENANT_SLUG)
+    .bind(&settings_json)
+    .execute(&pool)
+    .await
+    .context("Failed to seed platform tenant")?;
+
+    sqlx::query(
+        r#"INSERT IGNORE INTO tenants (id, name, slug, settings, status, created_at, updated_at)
+        VALUES (?, ?, ?, ?, 'active', NOW(), NOW())"#,
+    )
+    .bind(&demo_tenant_id)
+    .bind(DEFAULT_DEMO_TENANT_NAME)
+    .bind(DEFAULT_DEMO_TENANT_SLUG)
+    .bind(&settings_json)
+    .execute(&pool)
+    .await
+    .context("Failed to seed demo tenant")?;
+
+    // 3. INSERT admin user (ON DUPLICATE KEY UPDATE handles Keycloak reset)
+    let admin_user_id = uuid::Uuid::new_v4().to_string();
+
+    sqlx::query(
+        r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
+        VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
+        ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id)"#,
+    )
+    .bind(&admin_user_id)
+    .bind(&keycloak_id)
+    .bind(&admin_email)
+    .bind(SEED_ADMIN_DISPLAY_NAME)
+    .execute(&pool)
+    .await
+    .context("Failed to seed admin user")?;
+
+    // 4. SELECT actual IDs (handles case where records already existed)
+    let (actual_platform_id,): (String,) =
+        sqlx::query_as("SELECT id FROM tenants WHERE slug = ?")
+            .bind(DEFAULT_PLATFORM_TENANT_SLUG)
+            .fetch_one(&pool)
+            .await
+            .context("Failed to get platform tenant ID")?;
+
+    let (actual_demo_id,): (String,) = sqlx::query_as("SELECT id FROM tenants WHERE slug = ?")
+        .bind(DEFAULT_DEMO_TENANT_SLUG)
+        .fetch_one(&pool)
+        .await
+        .context("Failed to get demo tenant ID")?;
+
+    let (actual_user_id,): (String,) =
+        sqlx::query_as("SELECT id FROM users WHERE keycloak_id = ?")
+            .bind(&keycloak_id)
+            .fetch_one(&pool)
+            .await
+            .context("Failed to get admin user ID")?;
+
+    // 5. INSERT IGNORE tenant_users (admin → both tenants)
+    sqlx::query(
+        r#"INSERT IGNORE INTO tenant_users (id, tenant_id, user_id, role_in_tenant, joined_at)
+        VALUES (?, ?, ?, 'admin', NOW())"#,
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&actual_platform_id)
+    .bind(&actual_user_id)
+    .execute(&pool)
+    .await
+    .context("Failed to seed platform tenant_user")?;
+
+    sqlx::query(
+        r#"INSERT IGNORE INTO tenant_users (id, tenant_id, user_id, role_in_tenant, joined_at)
+        VALUES (?, ?, ?, 'admin', NOW())"#,
+    )
+    .bind(uuid::Uuid::new_v4().to_string())
+    .bind(&actual_demo_id)
+    .bind(&actual_user_id)
+    .execute(&pool)
+    .await
+    .context("Failed to seed demo tenant_user")?;
+
+    // 6. INSERT tenant_services (both tenants → Auth9 Admin Portal)
+    let portal_service: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM services WHERE tenant_id IS NULL AND name = ?")
+            .bind(DEFAULT_PORTAL_NAME)
+            .fetch_optional(&pool)
+            .await
+            .context("Failed to query portal service")?;
+
+    if let Some((service_id,)) = portal_service {
+        sqlx::query(
+            r#"INSERT INTO tenant_services (tenant_id, service_id, enabled, created_at, updated_at)
+            VALUES (?, ?, TRUE, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE enabled = TRUE"#,
+        )
+        .bind(&actual_platform_id)
+        .bind(&service_id)
+        .execute(&pool)
+        .await
+        .context("Failed to seed platform tenant_service")?;
+
+        sqlx::query(
+            r#"INSERT INTO tenant_services (tenant_id, service_id, enabled, created_at, updated_at)
+            VALUES (?, ?, TRUE, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE enabled = TRUE"#,
+        )
+        .bind(&actual_demo_id)
+        .bind(&service_id)
+        .execute(&pool)
+        .await
+        .context("Failed to seed demo tenant_service")?;
+
+        info!("Seeded tenant_services for both tenants → Auth9 Admin Portal");
+    } else {
+        warn!("Auth9 Admin Portal service not found in database, skipping tenant_services seed");
+    }
+
+    pool.close().await;
+
+    info!(
+        "Initial data seeded: tenants=[{}, {}], admin_user={}, email={}",
+        DEFAULT_PLATFORM_TENANT_SLUG, DEFAULT_DEMO_TENANT_SLUG, keycloak_id, admin_email
+    );
 
     Ok(())
 }

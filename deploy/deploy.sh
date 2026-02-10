@@ -454,6 +454,21 @@ collect_portal_url() {
     print_success "Auth9 Portal URL 已配置"
 }
 
+collect_admin_email() {
+    print_info "Auth9 管理员邮箱配置"
+
+    if [ -n "${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}" ]; then
+        echo "  当前: ${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}"
+        if confirm_action "  保留现有管理员邮箱？"; then
+            return 0
+        fi
+    fi
+
+    local email=$(prompt_user "  管理员邮箱" "admin@auth9.local")
+    AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]="$email"
+    print_success "AUTH9_ADMIN_EMAIL 已配置"
+}
+
 generate_secrets() {
     # JWT_SECRET
     if [ -z "${AUTH9_SECRETS[JWT_SECRET]}" ]; then
@@ -663,7 +678,7 @@ run_interactive_setup() {
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
         "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" \
         "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
-        "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" || true
+        "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
 
     # Detect keycloak-secrets
     detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
@@ -689,6 +704,7 @@ run_interactive_setup() {
     collect_core_public_url
     collect_portal_url
     collect_keycloak_public_url
+    collect_admin_email
 
     # Step 4/6: Generate secrets
     print_progress "4/6" "生成安全密钥"
