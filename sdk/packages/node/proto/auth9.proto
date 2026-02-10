@@ -1,0 +1,103 @@
+syntax = "proto3";
+
+package auth9;
+
+// Token Exchange Service - for service-to-service communication
+service TokenExchange {
+  // Exchange Identity Token for Tenant Access Token
+  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse);
+  
+  // Validate an access token
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  
+  // Get user roles in a specific tenant
+  rpc GetUserRoles(GetUserRolesRequest) returns (GetUserRolesResponse);
+  
+  // Introspect token details
+  rpc IntrospectToken(IntrospectTokenRequest) returns (IntrospectTokenResponse);
+}
+
+// ==================== Token Exchange ====================
+
+message ExchangeTokenRequest {
+  // The identity token (JWT) from initial authentication
+  string identity_token = 1;
+  // Target tenant ID
+  string tenant_id = 2;
+  // Target service/client ID
+  string service_id = 3;
+}
+
+message ExchangeTokenResponse {
+  // The tenant-scoped access token
+  string access_token = 1;
+  // Token type (always "Bearer")
+  string token_type = 2;
+  // Expiration time in seconds
+  int64 expires_in = 3;
+  // Optional refresh token
+  string refresh_token = 4;
+}
+
+// ==================== Token Validation ====================
+
+message ValidateTokenRequest {
+  // The access token to validate
+  string access_token = 1;
+  // Expected audience (optional)
+  string audience = 2;
+}
+
+message ValidateTokenResponse {
+  // Whether the token is valid
+  bool valid = 1;
+  // User ID (subject)
+  string user_id = 2;
+  // Tenant ID (if present)
+  string tenant_id = 3;
+  // Error message if invalid
+  string error = 4;
+}
+
+// ==================== User Roles ====================
+
+message GetUserRolesRequest {
+  // User ID
+  string user_id = 1;
+  // Tenant ID
+  string tenant_id = 2;
+  // Optional: filter by service ID
+  string service_id = 3;
+}
+
+message GetUserRolesResponse {
+  // List of roles
+  repeated Role roles = 1;
+  // List of permissions (derived from roles)
+  repeated string permissions = 2;
+}
+
+message Role {
+  string id = 1;
+  string name = 2;
+  string service_id = 3;
+}
+
+// ==================== Token Introspection ====================
+
+message IntrospectTokenRequest {
+  string token = 1;
+}
+
+message IntrospectTokenResponse {
+  bool active = 1;
+  string sub = 2;
+  string email = 3;
+  string tenant_id = 4;
+  repeated string roles = 5;
+  repeated string permissions = 6;
+  int64 exp = 7;
+  int64 iat = 8;
+  string iss = 9;
+  string aud = 10;
+}

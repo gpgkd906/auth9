@@ -98,6 +98,16 @@
 |------|------|--------|
 | [audit/01-audit-logs.md](./audit/01-audit-logs.md) | 审计日志查看、验证 | 5 |
 
+### SDK (@auth9/core + @auth9/node) (6 个文档, 30 个场景) 🆕
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [sdk/01-core-types-utils.md](./sdk/01-core-types-utils.md) | 类型导出、snake/camel 转换、错误体系、Claims 辨别 | 5 |
+| [sdk/02-http-client.md](./sdk/02-http-client.md) | HTTP 客户端、自动转换、错误映射、Token Provider | 5 |
+| [sdk/03-token-verification.md](./sdk/03-token-verification.md) | JWKS Token 验证、三种 Token 类型、Audience 验证 | 5 |
+| [sdk/04-grpc-client-credentials.md](./sdk/04-grpc-client-credentials.md) | gRPC 4 方法、Client Credentials、Token 缓存 | 5 |
+| [sdk/05-express-middleware.md](./sdk/05-express-middleware.md) | Express 中间件、权限控制、角色控制、AuthInfo | 5 |
+| [sdk/06-middleware-testing.md](./sdk/06-middleware-testing.md) | Next.js/Fastify 中间件、Mock Token、构建输出 | 5 |
+
 ### 集成测试 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
@@ -124,8 +134,9 @@
 | Passkeys | 3 | 15 |
 | 分析与统计 | 2 | 10 |
 | 审计日志 | 1 | 5 |
+| SDK | 6 | 30 |
 | 集成测试 | 3 | 15 |
-| **总计** | **45** | **215** |
+| **总计** | **51** | **245** |
 
 ---
 
