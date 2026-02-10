@@ -241,6 +241,8 @@ pub async fn token<S: HasServices + HasSessionManagement>(
                 Some(*session.id),
             )?;
 
+            metrics::counter!("auth9_auth_login_total", "result" => "success").increment(1);
+
             Ok(Json(TokenResponse {
                 access_token: identity_token,
                 token_type: "Bearer".to_string(),

@@ -649,6 +649,11 @@ data:
   AUTH9_PORTAL_URL: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
   AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   NODE_ENV: "production"
+  OTEL_METRICS_ENABLED: "true"
+  OTEL_TRACING_ENABLED: "true"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.observability:4317"
+  LOG_FORMAT: "json"
+  OTEL_SERVICE_NAME: "auth9-core"
 EOF
 
     if [ $? -eq 0 ]; then
@@ -754,60 +759,64 @@ deploy_auth9() {
     print_header "Auth9 部署"
 
     # Step 1: Create namespace and service account
-    print_progress "1/10" "创建命名空间和服务账户"
+    print_progress "1/11" "创建命名空间和服务账户"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/ghcr-secret.yaml" $DRY_RUN
 
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "2/10" "应用 ConfigMap"
+        print_progress "2/11" "应用 ConfigMap"
         kubectl apply -f "$K8S_DIR/configmap.yaml" $DRY_RUN
     else
-        print_progress "2/10" "ConfigMap 已应用"
+        print_progress "2/11" "ConfigMap 已应用"
     fi
 
     # Step 3: Secrets already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "3/10" "检查密钥"
+        print_progress "3/11" "检查密钥"
         check_secrets_non_interactive
     else
-        print_progress "3/10" "密钥已应用"
+        print_progress "3/11" "密钥已应用"
     fi
 
     # Step 4: Deploy infrastructure (keycloak, redis, postgres)
-    print_progress "4/10" "部署基础设施"
+    print_progress "4/11" "部署基础设施"
     deploy_infrastructure
 
     # Step 5-6: Wait for dependencies
-    print_progress "5/10" "等待 keycloak-postgres 就绪"
+    print_progress "5/11" "等待 keycloak-postgres 就绪"
     wait_for_postgres
 
-    print_progress "6/10" "等待 keycloak 就绪"
+    print_progress "6/11" "等待 keycloak 就绪"
     wait_for_keycloak
 
     # Step 7-8: Init job (conditional execution) - runs AFTER keycloak is ready
     if [ "$NEEDS_INIT_JOB" = "true" ] && [ -z "$SKIP_INIT" ]; then
-        print_progress "7/10" "运行 auth9-init 初始化作业"
+        print_progress "7/11" "运行 auth9-init 初始化作业"
         run_init_job
 
-        print_progress "8/10" "提取 Keycloak 管理员客户端密钥"
+        print_progress "8/11" "提取 Keycloak 管理员客户端密钥"
         extract_client_secret
     else
-        print_progress "7/10" "跳过 auth9-init 初始化作业"
-        print_progress "8/10" "跳过密钥提取"
+        print_progress "7/11" "跳过 auth9-init 初始化作业"
+        print_progress "8/11" "跳过密钥提取"
     fi
 
     # Step 9: Deploy auth9 applications
-    print_progress "9/10" "部署 auth9 应用"
+    print_progress "9/11" "部署 auth9 应用"
     deploy_auth9_apps
 
-    # Step 10: Wait for auth9 apps to be ready
+    # Step 10: Deploy observability resources (ServiceMonitor, PrometheusRule, Grafana dashboards)
+    print_progress "10/11" "部署可观测性资源"
+    deploy_observability
+
+    # Step 11: Wait for auth9 apps to be ready
     if [ -z "$DRY_RUN" ]; then
-        print_progress "10/10" "等待 auth9 应用就绪"
+        print_progress "11/11" "等待 auth9 应用就绪"
         wait_for_auth9_apps
     else
-        print_progress "10/10" "跳过等待（预演模式）"
+        print_progress "11/11" "跳过等待（预演模式）"
     fi
 
     print_deployment_complete
@@ -991,6 +1000,22 @@ deploy_auth9_apps() {
         print_success "Auth9 应用已部署"
     else
         print_info "跳过 auth9 部署（预演模式）"
+    fi
+}
+
+deploy_observability() {
+    local obs_dir="$K8S_DIR/observability"
+    if [ ! -d "$obs_dir" ]; then
+        print_info "可观测性目录不存在，跳过"
+        return
+    fi
+
+    if [ -z "$DRY_RUN" ]; then
+        print_info "正在部署可观测性资源 (ServiceMonitor, PrometheusRule, Grafana dashboards)..."
+        kubectl apply -f "$obs_dir/" $DRY_RUN
+        print_success "可观测性资源已部署"
+    else
+        print_info "跳过可观测性部署（预演模式）"
     fi
 }
 

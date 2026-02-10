@@ -55,22 +55,24 @@ After reset, use these credentials:
 ```bash
 cd /path/to/auth9
 
+COMPOSE_FILES="-f docker-compose.yml -f docker-compose.observability.yml"
+
 # Stop and remove containers
-docker-compose down --remove-orphans
+docker-compose $COMPOSE_FILES down --remove-orphans
 
 # Remove images
 docker rmi auth9-auth9-core auth9-auth9-portal
 
 # Remove volumes
-docker volume rm auth9_tidb-data auth9_redis-data
+docker volume rm auth9_tidb-data auth9_redis-data auth9_prometheus-data auth9_grafana-data auth9_loki-data auth9_tempo-data
 
 # Rebuild and start
-docker-compose build --no-cache
-docker-compose up -d
+docker-compose $COMPOSE_FILES build --no-cache
+docker-compose $COMPOSE_FILES up -d
 
 # Wait for services
 sleep 30
-docker-compose ps
+docker-compose $COMPOSE_FILES ps
 ```
 
 ---
@@ -80,11 +82,15 @@ docker-compose ps
 | Service | Port | Purpose |
 |---------|------|---------|
 | auth9-portal | 3000 | Admin dashboard |
-| auth9-core | 8080 | REST API |
+| auth9-core | 8080 | REST API + /metrics |
 | auth9-core | 50051 | gRPC |
 | keycloak | 8081 | OIDC provider |
 | tidb | 4000 | Database |
 | redis | 6379 | Cache |
+| prometheus | 9090 | Metrics collection |
+| grafana | 3001 | Dashboards |
+| loki | 3100 | Log aggregation |
+| tempo | 3200/4317 | Distributed tracing |
 
 ---
 
@@ -139,5 +145,5 @@ lsof -i :4000
 ```bash
 # Remove volumes with sudo if needed
 docker volume ls
-sudo docker volume rm auth9_tidb-data auth9_redis-data
+sudo docker volume rm auth9_tidb-data auth9_redis-data auth9_prometheus-data auth9_grafana-data auth9_loki-data auth9_tempo-data
 ```

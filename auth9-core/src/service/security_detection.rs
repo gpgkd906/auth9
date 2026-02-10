@@ -149,6 +149,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
             };
 
             let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "brute_force", "severity" => "high").increment(1);
             return Ok(Some(alert));
         }
 
@@ -179,6 +180,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
             };
 
             let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "suspicious_ip", "severity" => "critical").increment(1);
             return Ok(Some(alert));
         }
 
@@ -221,6 +223,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
                 };
 
                 let alert = self.security_alert_repo.create(&input).await?;
+                metrics::counter!("auth9_security_alerts_total", "type" => "new_device", "severity" => "medium").increment(1);
                 return Ok(Some(alert));
             }
         }
@@ -266,6 +269,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
                     };
 
                     let alert = self.security_alert_repo.create(&input).await?;
+                    metrics::counter!("auth9_security_alerts_total", "type" => "impossible_travel", "severity" => "high").increment(1);
                     return Ok(Some(alert));
                 }
             }

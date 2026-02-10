@@ -3,8 +3,6 @@
 # This file runs only the dependencies (no auth9-core/portal) for local development
 # Use this when running auth9-core with 'cargo run' and auth9-portal with 'npm run dev'
 
-version: '3.8'
-
 services:
   # Disable auth9-core in dev mode (run locally with cargo run)
   auth9-core:

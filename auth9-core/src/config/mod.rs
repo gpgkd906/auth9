@@ -5,6 +5,33 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt;
 
+/// Telemetry configuration
+#[derive(Debug, Clone)]
+pub struct TelemetryConfig {
+    /// Enable Prometheus /metrics endpoint
+    pub metrics_enabled: bool,
+    /// Enable OpenTelemetry trace export
+    pub tracing_enabled: bool,
+    /// OTLP exporter endpoint (e.g. http://tempo:4317)
+    pub otlp_endpoint: Option<String>,
+    /// Log format: "json" (production) or "pretty" (development)
+    pub log_format: String,
+    /// OpenTelemetry service name
+    pub service_name: String,
+}
+
+impl Default for TelemetryConfig {
+    fn default() -> Self {
+        Self {
+            metrics_enabled: false,
+            tracing_enabled: false,
+            otlp_endpoint: None,
+            log_format: "pretty".to_string(),
+            service_name: "auth9-core".to_string(),
+        }
+    }
+}
+
 /// WebAuthn configuration
 #[derive(Debug, Clone)]
 pub struct WebAuthnConfig {
@@ -45,6 +72,8 @@ pub struct Config {
     pub cors: CorsConfig,
     /// WebAuthn configuration
     pub webauthn: WebAuthnConfig,
+    /// Telemetry configuration
+    pub telemetry: TelemetryConfig,
     /// Platform admin email allowlist.
     ///
     /// Identity tokens are intentionally tenant-unscoped. Only Identity tokens whose
@@ -67,6 +96,7 @@ impl fmt::Debug for Config {
             .field("rate_limit", &self.rate_limit)
             .field("cors", &self.cors)
             .field("webauthn", &self.webauthn)
+            .field("telemetry", &self.telemetry)
             .field(
                 "platform_admin_emails",
                 &format!("[{} emails]", self.platform_admin_emails.len()),
@@ -445,6 +475,18 @@ impl Config {
                         .unwrap_or(300),
                 }
             },
+            telemetry: TelemetryConfig {
+                metrics_enabled: env::var("OTEL_METRICS_ENABLED")
+                    .map(|s| s.to_lowercase() == "true")
+                    .unwrap_or(false),
+                tracing_enabled: env::var("OTEL_TRACING_ENABLED")
+                    .map(|s| s.to_lowercase() == "true")
+                    .unwrap_or(false),
+                otlp_endpoint: env::var("OTEL_EXPORTER_OTLP_ENDPOINT").ok(),
+                log_format: env::var("LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string()),
+                service_name: env::var("OTEL_SERVICE_NAME")
+                    .unwrap_or_else(|_| "auth9-core".to_string()),
+            },
             platform_admin_emails: parse_csv_env(
                 "PLATFORM_ADMIN_EMAILS",
                 vec!["admin@auth9.local".to_string()],
@@ -528,6 +570,7 @@ mod tests {
                 rp_origin: "http://localhost:3000".to_string(),
                 challenge_ttl_secs: 300,
             },
+            telemetry: TelemetryConfig::default(),
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
         }
     }
@@ -781,6 +824,7 @@ mod tests {
                 rp_origin: "http://localhost:3000".to_string(),
                 challenge_ttl_secs: 300,
             },
+            telemetry: TelemetryConfig::default(),
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
         };
 
@@ -1244,6 +1288,7 @@ mod tests {
                 rp_origin: "http://localhost:3000".to_string(),
                 challenge_ttl_secs: 300,
             },
+            telemetry: TelemetryConfig::default(),
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
         };
 

@@ -108,12 +108,14 @@
 | [sdk/05-express-middleware.md](./sdk/05-express-middleware.md) | Express 中间件、权限控制、角色控制、AuthInfo | 5 |
 | [sdk/06-middleware-testing.md](./sdk/06-middleware-testing.md) | Next.js/Fastify 中间件、Mock Token、构建输出 | 5 |
 
-### 集成测试 (3 个文档, 15 个场景)
+### 集成测试 (5 个文档, 25 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 5 |
 | [integration/02-password-policy.md](./integration/02-password-policy.md) | 密码策略强制执行 | 5 |
 | [integration/06-init-seed-data.md](./integration/06-init-seed-data.md) | Init 初始种子数据、幂等性、Keycloak 重置恢复 | 5 |
+| [integration/07-observability-metrics.md](./integration/07-observability-metrics.md) | Prometheus /metrics 端点、HTTP 指标、X-Request-ID、路径折叠 | 5 |
+| [integration/08-observability-stack.md](./integration/08-observability-stack.md) | 可观测性栈启动、Grafana 仪表盘、业务指标、限流指标 | 5 |
 
 ---
 
@@ -135,8 +137,8 @@
 | 分析与统计 | 2 | 10 |
 | 审计日志 | 1 | 5 |
 | SDK | 6 | 30 |
-| 集成测试 | 3 | 15 |
-| **总计** | **51** | **245** |
+| 集成测试 | 5 | 25 |
+| **总计** | **53** | **255** |
 
 ---
 
@@ -280,6 +282,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-11 | 3.5.0 | 新增全栈可观测性集成测试（Prometheus /metrics 端点、HTTP 指标、X-Request-ID、路径折叠、可观测性栈启动、Grafana 仪表盘、业务指标、限流指标），共 53 个文档 255 个场景 |
 | 2026-02-10 | 3.4.0 | 新增 Init 种子数据集成测试（首次创建、幂等性、自定义邮箱、Keycloak 重置恢复、Portal 登录验证），共 45 个文档 215 个场景 |
 | 2026-02-08 | 3.3.0 | Passkeys 模块重写：原生 WebAuthn 注册、Passkey 登录认证、API 端点测试，共 44 个文档 210 个场景 |
 | 2026-02-08 | 3.2.0 | 新增用户账户模块（个人资料 API、Account 页面、导航布局），共 42 个文档 200 个场景 |

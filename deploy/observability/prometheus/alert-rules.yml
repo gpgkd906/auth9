@@ -1,0 +1,62 @@
+groups:
+  - name: auth9.rules
+    rules:
+      - alert: HighErrorRate
+        expr: >
+          sum(rate(auth9_http_request_duration_seconds_count{status=~"5.."}[5m]))
+          /
+          sum(rate(auth9_http_request_duration_seconds_count[5m]))
+          > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "High HTTP 5xx error rate"
+          description: "More than 5% of requests are returning 5xx status codes over the last 5 minutes."
+
+      - alert: HighLoginFailureRate
+        expr: >
+          sum(rate(auth9_auth_login_total{result="failure"}[5m]))
+          /
+          sum(rate(auth9_auth_login_total[5m]))
+          > 0.3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High login failure rate"
+          description: "More than 30% of login attempts are failing over the last 5 minutes."
+
+      - alert: SecurityAlertsSpike
+        expr: rate(auth9_security_alerts_total[2m]) > 1
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Security alerts spike detected"
+          description: "Security alert rate exceeds 1 per second over the last 2 minutes."
+
+      - alert: HighP99Latency
+        expr: >
+          histogram_quantile(0.99,
+            sum(rate(auth9_http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High P99 request latency"
+          description: "The 99th percentile request latency exceeds 2 seconds over the last 5 minutes."
+
+      - alert: DatabasePoolExhaustion
+        expr: >
+          auth9_db_pool_connections_active
+          /
+          (auth9_db_pool_connections_active + auth9_db_pool_connections_idle)
+          > 0.9
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Database connection pool near exhaustion"
+          description: "More than 90% of database pool connections are active, indicating potential pool exhaustion."

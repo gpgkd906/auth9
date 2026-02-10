@@ -64,6 +64,8 @@ impl KeycloakClient {
             }
         }
 
+        let _start = std::time::Instant::now();
+
         // Fetch new token using password grant with auth9-admin (Confidential Client)
         let token_url = format!(
             "{}/realms/master/protocol/openid-connect/token",
@@ -126,6 +128,9 @@ impl KeycloakClient {
             let mut token = self.token.write().await;
             *token = Some(admin_token);
         }
+
+        metrics::counter!("auth9_keycloak_api_calls_total", "operation" => "get_admin_token", "status" => "ok").increment(1);
+        metrics::histogram!("auth9_keycloak_api_duration_seconds", "operation" => "get_admin_token").record(_start.elapsed().as_secs_f64());
 
         Ok(token_response.access_token)
     }

@@ -237,12 +237,40 @@ delete_configmaps() {
     else
         kubectl delete configmap auth9-config -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete configmap keycloak-config -n "$NAMESPACE" --ignore-not-found=true
+        kubectl delete configmap auth9-grafana-dashboards -n "$NAMESPACE" --ignore-not-found=true
         print_success "ConfigMaps 已删除"
     fi
 }
 
+delete_observability_resources() {
+    # Clean up Prometheus Operator CRDs and observability resources
+    local has_resources=false
+
+    if kubectl get servicemonitor auth9-core -n "$NAMESPACE" &>/dev/null 2>&1; then
+        has_resources=true
+    fi
+    if kubectl get prometheusrule auth9-core -n "$NAMESPACE" &>/dev/null 2>&1; then
+        has_resources=true
+    fi
+
+    if [ "$has_resources" = "false" ]; then
+        print_info "没有可观测性资源需要删除"
+        return
+    fi
+
+    print_info "正在删除可观测性资源..."
+    if [ -n "$DRY_RUN" ]; then
+        kubectl get servicemonitor -n "$NAMESPACE" -o name 2>/dev/null || true
+        kubectl get prometheusrule -n "$NAMESPACE" -o name 2>/dev/null || true
+    else
+        kubectl delete servicemonitor auth9-core -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null || true
+        kubectl delete prometheusrule auth9-core -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null || true
+        print_success "可观测性资源已删除"
+    fi
+}
+
 reset_tidb_database() {
-    print_progress "6/9" "重置 TiDB 数据库"
+    print_progress "7/10" "重置 TiDB 数据库"
 
     echo ""
     print_warning "此操作将删除 auth9 数据库中的所有数据！"
@@ -329,7 +357,7 @@ EOF
 }
 
 interactive_delete_secrets() {
-    print_progress "7/9" "Secrets"
+    print_progress "8/10" "Secrets"
 
     # 如果数据库重置成功，提示 client secret 已删除
     if [ -n "$DB_RESET_DONE" ]; then
@@ -372,7 +400,7 @@ interactive_delete_secrets() {
 }
 
 interactive_delete_pvcs() {
-    print_progress "8/9" "持久卷声明（数据库数据）"
+    print_progress "9/10" "持久卷声明（数据库数据）"
 
     local pvc_count=$(kubectl get pvc -n "$NAMESPACE" --no-headers 2>/dev/null | wc -l | tr -d ' ')
     if [ "$pvc_count" -eq 0 ]; then
@@ -409,7 +437,7 @@ interactive_delete_pvcs() {
 }
 
 interactive_delete_namespace() {
-    print_progress "9/9" "命名空间"
+    print_progress "10/10" "命名空间"
 
     echo ""
     print_info "删除命名空间将移除所有剩余资源"
@@ -453,34 +481,38 @@ main() {
     print_header "正在清理资源"
 
     # Step 1-5: Delete workloads (no confirmation needed)
-    print_progress "1/9" "Jobs"
+    print_progress "1/10" "Jobs"
     delete_jobs
 
-    print_progress "2/9" "Deployments"
+    print_progress "2/10" "Deployments"
     delete_deployments
 
-    print_progress "3/9" "StatefulSets"
+    print_progress "3/10" "StatefulSets"
     delete_statefulsets
 
-    print_progress "4/9" "HorizontalPodAutoscalers"
+    print_progress "4/10" "HorizontalPodAutoscalers"
     delete_hpas
 
-    print_progress "5/9" "Services 和 ConfigMaps"
+    print_progress "5/10" "Services 和 ConfigMaps"
     delete_services
     delete_configmaps
 
-    # Step 6: Reset TiDB database (optional, before deleting secrets)
+    # Step 6: Delete observability CRDs (ServiceMonitor, PrometheusRule)
+    print_progress "6/10" "可观测性资源"
+    delete_observability_resources
+
+    # Step 7: Reset TiDB database (optional, before deleting secrets)
     # Track if database was reset (secrets deleted as part of reset)
     DB_RESET_DONE=""
     if reset_tidb_database; then
         DB_RESET_DONE="true"
     fi
 
-    # Step 7: Interactive confirmation for sensitive data
+    # Step 8: Interactive confirmation for sensitive data
     interactive_delete_secrets
     interactive_delete_pvcs
 
-    # Step 8-9: Namespace
+    # Step 9-10: Namespace
     interactive_delete_namespace
 
     print_header "清理完成"

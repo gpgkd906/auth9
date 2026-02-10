@@ -115,8 +115,12 @@ impl CacheManager {
 
     /// Get a value from cache
     async fn get<T: DeserializeOwned>(&self, key: &str) -> Result<Option<T>> {
+        let start = std::time::Instant::now();
         let mut conn = self.conn.clone();
         let value: Option<String> = conn.get(key).await?;
+
+        metrics::counter!("auth9_redis_operations_total", "operation" => "get").increment(1);
+        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "get").record(start.elapsed().as_secs_f64());
 
         match value {
             Some(v) => {
@@ -131,18 +135,24 @@ impl CacheManager {
 
     /// Set a value in cache with TTL
     async fn set<T: Serialize>(&self, key: &str, value: &T, ttl: Duration) -> Result<()> {
+        let start = std::time::Instant::now();
         let mut conn = self.conn.clone();
         let serialized = serde_json::to_string(value)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Cache serialize error: {}", e)))?;
 
         let _: () = conn.set_ex(key, serialized, ttl.as_secs()).await?;
+        metrics::counter!("auth9_redis_operations_total", "operation" => "set").increment(1);
+        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "set").record(start.elapsed().as_secs_f64());
         Ok(())
     }
 
     /// Delete a key from cache
     async fn delete(&self, key: &str) -> Result<()> {
+        let start = std::time::Instant::now();
         let mut conn = self.conn.clone();
         let _: () = conn.del(key).await?;
+        metrics::counter!("auth9_redis_operations_total", "operation" => "del").increment(1);
+        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "del").record(start.elapsed().as_secs_f64());
         Ok(())
     }
 

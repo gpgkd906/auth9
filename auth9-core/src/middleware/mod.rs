@@ -8,6 +8,7 @@
 
 pub mod auth;
 pub mod error_response;
+pub mod metrics;
 pub mod rate_limit;
 pub mod require_auth;
 pub mod security_headers;

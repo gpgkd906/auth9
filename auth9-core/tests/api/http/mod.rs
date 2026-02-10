@@ -105,6 +105,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
+        telemetry: auth9_core::config::TelemetryConfig::default(),
         platform_admin_emails: vec!["admin@auth9.local".to_string()],
         webauthn: auth9_core::config::WebAuthnConfig {
             rp_id: "localhost".to_string(),
@@ -617,7 +618,7 @@ impl HasCache for TestAppState {
 pub fn build_test_router(state: TestAppState) -> Router {
     // Use the production router with TestAppState and disabled rate limiting
     // This ensures we're testing the actual production handlers
-    build_full_router(state, RateLimitState::noop())
+    build_full_router(state, RateLimitState::noop(), std::sync::Arc::new(None))
 }
 
 /// Build a router with email template endpoints for testing.

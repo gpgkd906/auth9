@@ -19,6 +19,7 @@ pub mod repository;
 pub mod server;
 pub mod service;
 pub mod state;
+pub mod telemetry;
 
 // Re-export commonly used types
 pub use config::Config;

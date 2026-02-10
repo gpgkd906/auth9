@@ -1,0 +1,111 @@
+# Auth9 - Observability Stack (Prometheus, Grafana, Loki, Tempo, Promtail)
+# Usage: docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
+
+services:
+  # ==================== Override: Enable Telemetry on auth9-core ====================
+  auth9-core:
+    environment:
+      OTEL_METRICS_ENABLED: "true"
+      OTEL_TRACING_ENABLED: "true"
+      OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo:4317"
+      LOG_FORMAT: "json"
+    labels:
+      logging: "promtail"
+
+  # ==================== Prometheus (Metrics) ====================
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: auth9-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deploy/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/observability/prometheus/alert-rules.yml:/etc/prometheus/alert-rules.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--storage.tsdb.retention.time=15d"
+      - "--web.enable-lifecycle"
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Grafana (Dashboards) ====================
+  grafana:
+    image: grafana/grafana:11.0.0
+    container_name: auth9-grafana
+    ports:
+      - "3001:3000"
+    volumes:
+      - ./deploy/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./deploy/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_DISABLE_LOGIN_FORM: "true"
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Loki (Log Aggregation) ====================
+  loki:
+    image: grafana/loki:3.0.0
+    container_name: auth9-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./deploy/observability/loki/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Tempo (Distributed Tracing) ====================
+  tempo:
+    image: grafana/tempo:2.4.1
+    container_name: auth9-tempo
+    ports:
+      - "4317:4317"   # OTLP gRPC
+      - "3200:3200"   # Tempo HTTP API
+    volumes:
+      - ./deploy/observability/tempo/tempo.yml:/etc/tempo/tempo.yaml:ro
+      - tempo-data:/var/tempo
+    command: -config.file=/etc/tempo/tempo.yaml
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Promtail (Log Collector) ====================
+  promtail:
+    image: grafana/promtail:3.0.0
+    container_name: auth9-promtail
+    volumes:
+      - ./deploy/observability/promtail/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+networks:
+  auth9-network:
+    driver: bridge
+
+volumes:
+  prometheus-data:
+  grafana-data:
+  loki-data:
+  tempo-data:

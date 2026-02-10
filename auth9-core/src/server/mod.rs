@@ -36,6 +36,7 @@ use axum::{
     routing::{delete, get, post},
     Router,
 };
+use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -359,7 +360,7 @@ impl HasCache for AppState {
 }
 
 /// Run the server
-pub async fn run(config: Config) -> Result<()> {
+pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) -> Result<()> {
     // Create database connection pool
     let db_pool = MySqlPoolOptions::new()
         .max_connections(config.database.max_connections)
@@ -599,8 +600,57 @@ pub async fn run(config: Config) -> Result<()> {
         rbac_repo,
     );
 
+    // Wrap prometheus handle in Arc for sharing
+    let prom_handle = Arc::new(prometheus_handle);
+
     // Build HTTP router with all features and rate limiting
-    let app = build_full_router(state, rate_limit_state);
+    let app = build_full_router(state, rate_limit_state, prom_handle.clone());
+
+    // Start background metrics tasks (DB pool + business gauges)
+    if prom_handle.is_some() {
+        let pool_clone = db_pool.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(15));
+            loop {
+                interval.tick().await;
+                let size = pool_clone.size() as f64;
+                let idle = pool_clone.num_idle() as f64;
+                metrics::gauge!("auth9_db_pool_connections_active").set(size - idle);
+                metrics::gauge!("auth9_db_pool_connections_idle").set(idle);
+            }
+        });
+
+        let biz_pool = db_pool.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                interval.tick().await;
+                // Tenant count
+                if let Ok(row) = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM tenants")
+                    .fetch_one(&biz_pool)
+                    .await
+                {
+                    metrics::gauge!("auth9_tenants_active_total").set(row as f64);
+                }
+                // User count
+                if let Ok(row) = sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM users")
+                    .fetch_one(&biz_pool)
+                    .await
+                {
+                    metrics::gauge!("auth9_users_active_total").set(row as f64);
+                }
+                // Session count
+                if let Ok(row) = sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM sessions WHERE revoked_at IS NULL",
+                )
+                .fetch_one(&biz_pool)
+                .await
+                {
+                    metrics::gauge!("auth9_sessions_active_total").set(row as f64);
+                }
+            }
+        });
+    }
 
     // Get addresses
     let http_addr = config.http_addr();
@@ -772,7 +822,11 @@ fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
 ///
 /// This function requires the state to implement both HasServices and the new traits.
 /// Routes are split into public (no auth) and protected (auth required) groups.
-pub fn build_full_router<S>(state: S, rate_limit_state: RateLimitState) -> Router
+pub fn build_full_router<S>(
+    state: S,
+    rate_limit_state: RateLimitState,
+    prometheus_handle: Arc<Option<PrometheusHandle>>,
+) -> Router
 where
     S: HasServices
         + HasSystemSettings
@@ -1141,24 +1195,39 @@ where
         ));
 
     // ============================================================
+    // METRICS ENDPOINT (separate state, nested router)
+    // ============================================================
+    let metrics_route: Router<()> = Router::new()
+        .route("/metrics", get(crate::api::metrics::metrics_handler))
+        .with_state(prometheus_handle);
+
+    // ============================================================
     // COMBINE ROUTES AND APPLY GLOBAL MIDDLEWARE
     // ============================================================
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        // Explicit fallback so unmatched routes pass through middleware layers
+        // (axum skips .layer() middleware for its implicit 404 fallback)
+        .fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not Found") })
         // Add global middleware (order matters: bottom layer runs first)
         // 1. CORS - must be outermost for preflight requests
         // 2. Rate limiting - reject excessive requests early
-        // 3. Tracing - for request logging
-        // 4. Error response normalization - consistent JSON error format
-        // 5. Security headers - adds security headers to all responses
+        // 3. Request ID - propagate or generate request IDs
+        // 4. HTTP Metrics - record request count/duration/in-flight
+        // 5. Tracing - for request logging
+        // 6. Error response normalization - consistent JSON error format
+        // 7. Security headers - adds security headers to all responses
         .layer(axum::middleware::from_fn(security_headers_middleware))
         .layer(axum::middleware::from_fn(crate::middleware::normalize_error_response))
         .layer(TraceLayer::new_for_http())
+        .layer(crate::middleware::metrics::ObservabilityLayer)
         .layer(axum::middleware::from_fn_with_state(
             rate_limit_state,
             rate_limit_middleware,
         ))
         .layer(cors)
         .with_state(state)
+        // Nest the metrics route outside .with_state() since it uses its own state
+        .merge(metrics_route)
 }
