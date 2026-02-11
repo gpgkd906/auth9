@@ -34,7 +34,7 @@ fn default_page() -> i64 { 1 }
 fn default_per_page() -> i64 { 20 }
 
 /// Check if user can manage the target tenant
-/// Requires the user to be an owner of the target tenant
+/// Requires the user to be an owner of the target tenant or a platform admin
 async fn require_tenant_owner<S: HasServices>(
     state: &S,
     auth: &AuthUser,
@@ -59,7 +59,12 @@ async fn require_tenant_owner<S: HasServices>(
         ));
     }
 
-    // For Identity tokens, check the database if user is owner of target tenant
+    // For Identity tokens, check if user is a platform admin first
+    if state.config().is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
+    // Otherwise check the database if user is owner of target tenant
     let user_id = StringUuid::from(auth.user_id);
     let tenant_id = StringUuid::from(target_tenant_id);
     let tenant_users = state.user_service().get_user_tenants(user_id).await?;
@@ -308,8 +313,16 @@ pub async fn create<S: HasServices + HasBranding>(
             if let Ok(claims) = jwt.verify_identity_token(token) {
                 return AuthUser::from_identity_claims(claims).ok();
             }
-            if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
-                return AuthUser::from_tenant_access_claims(claims).ok();
+            let allowed = &state.config().jwt_tenant_access_allowed_audiences;
+            if !allowed.is_empty() {
+                if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
+                    return AuthUser::from_tenant_access_claims(claims).ok();
+                }
+            } else if !state.config().is_production() {
+                #[allow(deprecated)]
+                if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
+                    return AuthUser::from_tenant_access_claims(claims).ok();
+                }
             }
             None
         });

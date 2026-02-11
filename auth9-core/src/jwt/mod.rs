@@ -254,8 +254,11 @@ impl JwtManager {
         Ok(token_data.claims)
     }
 
-    /// Verify and decode a tenant access token
-    pub fn verify_tenant_access_token(
+    /// Verify and decode a tenant access token with optional audience.
+    ///
+    /// Intended for gRPC/internal flows that may receive a per-request audience.
+    /// For REST authentication, prefer `verify_tenant_access_token_strict`.
+    pub fn verify_tenant_access_token_with_optional_audience(
         &self,
         token: &str,
         expected_audience: Option<&str>,
@@ -268,6 +271,41 @@ impl JwtManager {
         } else {
             validation.validate_aud = false;
         }
+
+        let token_data = decode::<TenantAccessClaims>(token, &self.decoding_key, &validation)?;
+        Ok(token_data.claims)
+    }
+
+    /// Verify and decode a tenant access token
+    #[deprecated(note = "Use verify_tenant_access_token_strict for REST-side validation")]
+    pub fn verify_tenant_access_token(
+        &self,
+        token: &str,
+        expected_audience: Option<&str>,
+    ) -> Result<TenantAccessClaims> {
+        self.verify_tenant_access_token_with_optional_audience(token, expected_audience)
+    }
+
+    /// Verify and decode a tenant access token (strict audience allowlist).
+    ///
+    /// This is intended for REST-side authentication where the caller must be one of a known set
+    /// of clients/services. In production, the allowlist must be non-empty.
+    pub fn verify_tenant_access_token_strict(
+        &self,
+        token: &str,
+        expected_audiences: &[String],
+    ) -> Result<TenantAccessClaims> {
+        if expected_audiences.is_empty() {
+            return Err(AppError::Unauthorized(
+                "Tenant access token audience allowlist is not configured".to_string(),
+            ));
+        }
+
+        let mut validation = Validation::new(self.algorithm);
+        validation.set_issuer(&[&self.config.issuer]);
+
+        let aud_refs: Vec<&str> = expected_audiences.iter().map(|s| s.as_str()).collect();
+        validation.set_audience(&aud_refs);
 
         let token_data = decode::<TenantAccessClaims>(token, &self.decoding_key, &validation)?;
         Ok(token_data.claims)
@@ -337,7 +375,7 @@ mod tests {
             .unwrap();
 
         let claims = manager
-            .verify_tenant_access_token(&token, Some("my-service"))
+            .verify_tenant_access_token_strict(&token, &vec!["my-service".to_string()])
             .unwrap();
 
         assert_eq!(claims.sub, user_id.to_string());
@@ -371,7 +409,8 @@ mod tests {
             )
             .unwrap();
 
-        let result = manager.verify_tenant_access_token(&token, Some("other-service"));
+        let result =
+            manager.verify_tenant_access_token_strict(&token, &vec!["other-service".to_string()]);
         assert!(result.is_err());
     }
 
@@ -425,7 +464,7 @@ mod tests {
     }
 
     #[test]
-    fn test_tenant_access_token_without_audience_validation() {
+    fn test_tenant_access_token_strict_audience_allowlist() {
         let manager = JwtManager::new(test_config());
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();
@@ -441,8 +480,9 @@ mod tests {
             )
             .unwrap();
 
-        // Should succeed without audience check
-        let claims = manager.verify_tenant_access_token(&token, None).unwrap();
+        let claims = manager
+            .verify_tenant_access_token_strict(&token, &vec!["any-service".to_string()])
+            .unwrap();
         assert_eq!(claims.aud, "any-service");
     }
 
@@ -463,7 +503,9 @@ mod tests {
             )
             .unwrap();
 
-        let claims = manager.verify_tenant_access_token(&token, None).unwrap();
+        let claims = manager
+            .verify_tenant_access_token_strict(&token, &vec!["service".to_string()])
+            .unwrap();
         assert!(claims.roles.is_empty());
         assert!(claims.permissions.is_empty());
     }

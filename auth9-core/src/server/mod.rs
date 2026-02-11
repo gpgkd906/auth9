@@ -598,6 +598,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         user_repo,
         service_repo,
         rbac_repo,
+        config.is_production(),
     );
 
     // Wrap prometheus handle in Arc for sharing
@@ -690,7 +691,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     };
 
     // Create gRPC authentication interceptor based on config
-    let grpc_auth_interceptor = create_grpc_auth_interceptor(&config.grpc_security);
+    let grpc_auth_interceptor = create_grpc_auth_interceptor(&config)?;
 
     let grpc_server = async {
         let addr = grpc_addr.parse()?;
@@ -735,39 +736,45 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 }
 
 /// Create gRPC authentication interceptor based on configuration
-fn create_grpc_auth_interceptor(config: &crate::config::GrpcSecurityConfig) -> AuthInterceptor {
-    match config.auth_mode.as_str() {
+fn create_grpc_auth_interceptor(config: &Config) -> Result<AuthInterceptor> {
+    match config.grpc_security.auth_mode.as_str() {
         "api_key" => {
-            if config.api_keys.is_empty() {
-                tracing::warn!(
-                    "gRPC auth_mode is 'api_key' but no API keys configured. Falling back to no auth."
-                );
-                AuthInterceptor::noop()
+            if config.grpc_security.api_keys.is_empty() {
+                if config.is_production() {
+                    anyhow::bail!(
+                        "gRPC auth_mode is 'api_key' but no API keys configured (GRPC_API_KEYS)"
+                    );
+                }
+                tracing::warn!("gRPC auth_mode is 'api_key' but no API keys configured. Falling back to no auth (non-production).");
+                Ok(AuthInterceptor::noop())
             } else {
                 info!(
                     "gRPC authentication enabled: API key mode ({} keys configured)",
-                    config.api_keys.len()
+                    config.grpc_security.api_keys.len()
                 );
-                let authenticator = ApiKeyAuthenticator::new(config.api_keys.clone());
-                AuthInterceptor::api_key(authenticator)
+                let authenticator = ApiKeyAuthenticator::new(config.grpc_security.api_keys.clone());
+                Ok(AuthInterceptor::api_key(authenticator))
             }
         }
         "mtls" => {
             // mTLS is handled at the transport layer, not as an interceptor
             // For now, we just log and use noop (mTLS validation happens in TLS handshake)
             info!("gRPC authentication enabled: mTLS mode");
-            AuthInterceptor::noop()
+            Ok(AuthInterceptor::noop())
         }
         "none" => {
-            info!("gRPC authentication disabled");
-            AuthInterceptor::noop()
+            if config.is_production() {
+                anyhow::bail!("gRPC authentication is disabled (GRPC_AUTH_MODE=none)");
+            }
+            info!("gRPC authentication disabled (non-production)");
+            Ok(AuthInterceptor::noop())
         }
         other => {
-            tracing::warn!(
-                "Unknown gRPC auth_mode '{}'. Falling back to no auth.",
-                other
-            );
-            AuthInterceptor::noop()
+            if config.is_production() {
+                anyhow::bail!("Unknown gRPC auth_mode '{}'", other);
+            }
+            tracing::warn!("Unknown gRPC auth_mode '{}'. Falling back to no auth (non-production).", other);
+            Ok(AuthInterceptor::noop())
         }
     }
 }
@@ -847,8 +854,14 @@ where
     let cors_config = state.config().cors.clone();
     let cors = build_cors_layer(&cors_config);
 
+    let security_headers_config = state.config().security_headers.clone();
+
     // Create auth middleware state with cache for token blacklist checking
-    let auth_state = AuthMiddlewareState::new(HasServices::jwt_manager(&state).clone())
+    let auth_state = AuthMiddlewareState::new(
+        HasServices::jwt_manager(&state).clone(),
+        state.config().jwt_tenant_access_allowed_audiences.clone(),
+        state.config().is_production(),
+    )
         .with_cache(std::sync::Arc::new(state.cache().clone()));
 
     // ============================================================
@@ -1218,7 +1231,10 @@ where
         // 5. Tracing - for request logging
         // 6. Error response normalization - consistent JSON error format
         // 7. Security headers - adds security headers to all responses
-        .layer(axum::middleware::from_fn(security_headers_middleware))
+        .layer(axum::middleware::from_fn_with_state(
+            security_headers_config,
+            security_headers_middleware,
+        ))
         .layer(axum::middleware::from_fn(crate::middleware::normalize_error_response))
         .layer(TraceLayer::new_for_http())
         .layer(crate::middleware::metrics::ObservabilityLayer)

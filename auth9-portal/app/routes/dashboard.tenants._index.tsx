@@ -76,10 +76,10 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return Response.json({ error: message }, { status: 400 });
+    return Response.json({ error: message, intent }, { status: 400 });
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: "Invalid intent", intent }, { status: 400 });
 }
 
 export default function TenantsIndexPage() {
@@ -321,7 +321,7 @@ export default function TenantsIndexPage() {
                 defaultValue={editingTenant?.logo_url}
               />
             </div>
-            {actionData && "error" in actionData && (
+            {actionData && "error" in actionData && actionData.intent === "update" && (
               <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
             )}
             <DialogFooter>

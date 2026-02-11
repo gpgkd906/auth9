@@ -115,7 +115,12 @@ pub struct UpdateRoleInput {
     #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
     pub description: Option<String>,
-    pub parent_role_id: Option<Uuid>,
+    // Option<Option<Uuid>> allows distinguishing between:
+    // - None: not provided, keep existing value
+    // - Some(None): explicitly set to null/None
+    // - Some(Some(id)): set to specific parent role
+    #[serde(default)]
+    pub parent_role_id: Option<Option<Uuid>>,
 }
 
 /// Input for assigning roles to a user in a tenant
@@ -327,7 +332,7 @@ mod tests {
         let input = UpdateRoleInput {
             name: Some("Updated Role".to_string()),
             description: Some("Updated description".to_string()),
-            parent_role_id: Some(Uuid::new_v4()),
+            parent_role_id: Some(Some(Uuid::new_v4())),
         };
 
         assert!(input.validate().is_ok());

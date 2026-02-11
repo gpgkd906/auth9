@@ -597,7 +597,7 @@ mod tests {
         let input: UpdateRoleInput = serde_json::from_str(json).unwrap();
         assert!(input.parent_role_id.is_some());
         assert_eq!(
-            input.parent_role_id.unwrap().to_string(),
+            input.parent_role_id.unwrap().unwrap().to_string(),
             "550e8400-e29b-41d4-a716-446655440000"
         );
     }

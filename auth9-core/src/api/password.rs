@@ -39,7 +39,7 @@ pub async fn reset_password<S: HasPasswordManagement>(
 }
 
 /// Change password for authenticated user
-pub async fn change_password<S: HasPasswordManagement>(
+pub async fn change_password<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<ChangePasswordInput>,
@@ -174,7 +174,7 @@ pub async fn update_password_policy<S: HasPasswordManagement + HasServices>(
 }
 
 /// Extract user ID from JWT token in Authorization header
-fn extract_user_id<S: HasPasswordManagement>(
+fn extract_user_id<S: HasPasswordManagement + HasServices>(
     state: &S,
     headers: &HeaderMap,
 ) -> Result<StringUuid, AppError> {
@@ -191,14 +191,25 @@ fn extract_user_id<S: HasPasswordManagement>(
         .ok_or_else(|| AppError::Unauthorized("Invalid authorization header format".to_string()))?;
 
     // Try identity token first, then tenant access token
-    if let Ok(claims) = state.jwt_manager().verify_identity_token(token) {
+    let jwt = HasServices::jwt_manager(state);
+
+    if let Ok(claims) = jwt.verify_identity_token(token) {
         return StringUuid::parse_str(&claims.sub)
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    if let Ok(claims) = state.jwt_manager().verify_tenant_access_token(token, None) {
-        return StringUuid::parse_str(&claims.sub)
-            .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
+    let allowed = &state.config().jwt_tenant_access_allowed_audiences;
+    if !allowed.is_empty() {
+        if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
+            return StringUuid::parse_str(&claims.sub)
+                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
+        }
+    } else if !state.config().is_production() {
+        #[allow(deprecated)]
+        if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
+            return StringUuid::parse_str(&claims.sub)
+                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
+        }
     }
 
     Err(AppError::Unauthorized(

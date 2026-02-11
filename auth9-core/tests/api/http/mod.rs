@@ -71,6 +71,7 @@ use tower::ServiceExt;
 /// Create a test config with the given Keycloak base URL
 pub fn create_test_config(keycloak_url: &str) -> Config {
     Config {
+        environment: "development".to_string(),
         http_host: "127.0.0.1".to_string(),
         http_port: 3000,
         grpc_host: "127.0.0.1".to_string(),
@@ -113,6 +114,9 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             rp_origin: "http://localhost:3000".to_string(),
             challenge_ttl_secs: 300,
         },
+        jwt_tenant_access_allowed_audiences: vec![],
+        security_headers: auth9_core::config::SecurityHeadersConfig::default(),
+        portal_client_id: None,
     }
 }
 

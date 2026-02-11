@@ -99,7 +99,11 @@ impl<R: RbacRepository> RbacService<R> {
         let _ = self.get_role(id).await?;
 
         // Check for circular inheritance if parent_role_id is being updated
-        if let Some(parent_id) = input.parent_role_id {
+        // input.parent_role_id is Option<Option<Uuid>>:
+        // - Some(Some(id)) = explicitly set to a parent role
+        // - Some(None) = explicitly cleared
+        // - None = not provided, keep existing
+        if let Some(Some(parent_id)) = input.parent_role_id {
             let parent_uuid = StringUuid::from(parent_id);
             self.check_circular_inheritance(id, parent_uuid).await?;
         }
@@ -898,7 +902,7 @@ mod tests {
         let input = UpdateRoleInput {
             name: None,
             description: None,
-            parent_role_id: Some(*role_id), // Self-reference
+            parent_role_id: Some(Some(*role_id)), // Self-reference
         };
 
         let result = service.update_role(role_id, input).await;
@@ -950,7 +954,7 @@ mod tests {
         let input = UpdateRoleInput {
             name: None,
             description: None,
-            parent_role_id: Some(*editor_id),
+            parent_role_id: Some(Some(*editor_id)),
         };
 
         let result = service.update_role(viewer_id, input).await;
