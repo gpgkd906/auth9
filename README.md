@@ -144,9 +144,11 @@ ghcr.io/gpgkd906/auth9-portal:latest
 
 ## Documentation
 
+- **[Project Analysis Report](docs/project-analysis-summary.md)** - Comprehensive evaluation: Features, Security, Architecture, Performance (93/100 score) 🆕
 - **[Architecture](docs/architecture.md)** - System design and architecture overview
 - **[Design System](docs/design-system.md)** - Liquid Glass UI design language
 - **[QA Test Cases](docs/qa/README.md)** - Functional testing scenarios (185 scenarios)
+- **[Security Test Cases](docs/security/README.md)** - Security testing scenarios (177 scenarios) 🆕
 - **[UI/UX Test Cases](docs/uiux/README.md)** - UI/UX testing scenarios (27 scenarios)
 - **[Keycloak Theme](docs/keycloak-theme.md)** - Customizing Keycloak login pages
 
