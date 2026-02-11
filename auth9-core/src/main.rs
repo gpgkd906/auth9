@@ -10,7 +10,7 @@
 use anyhow::Result;
 use auth9_core::{config::Config, migration, server, telemetry};
 use clap::{Parser, Subcommand};
-use tracing::info;
+use tracing::{info, warn};
 
 #[derive(Parser)]
 #[command(name = "auth9-core")]
@@ -39,6 +39,10 @@ async fn main() -> Result<()> {
     // Load configuration first (telemetry init needs config)
     dotenvy::dotenv().ok();
     let config = Config::from_env()?;
+    config.validate_security()?;
+    if !config.is_production() && config.jwt_tenant_access_allowed_audiences.is_empty() {
+        warn!("Tenant access token audience allowlist is not configured; REST tenant token aud validation is disabled (non-production). Set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES.");
+    }
 
     // Initialise telemetry (metrics + tracing + structured logging)
     let prometheus_handle = telemetry::init(&config.telemetry);

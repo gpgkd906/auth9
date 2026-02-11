@@ -23,13 +23,21 @@ use std::sync::Arc;
 pub struct AuthMiddlewareState {
     jwt_manager: JwtManager,
     cache: Option<Arc<dyn CacheOperations>>,
+    tenant_access_allowed_audiences: Vec<String>,
+    is_production: bool,
 }
 
 impl AuthMiddlewareState {
-    pub fn new(jwt_manager: JwtManager) -> Self {
+    pub fn new(
+        jwt_manager: JwtManager,
+        tenant_access_allowed_audiences: Vec<String>,
+        is_production: bool,
+    ) -> Self {
         Self {
             jwt_manager,
             cache: None,
+            tenant_access_allowed_audiences,
+            is_production,
         }
     }
 
@@ -87,11 +95,30 @@ pub async fn require_auth_middleware(
     } else if let Ok(claims) = auth_state.jwt_manager.verify_identity_token(token) {
         session_id = claims.sid.clone();
         true
-    } else if let Ok(claims) = auth_state.jwt_manager.verify_tenant_access_token(token, None) {
-        session_id = Some(claims.sub.clone());
-        true
+    } else if !auth_state.tenant_access_allowed_audiences.is_empty() {
+        if let Ok(claims) = auth_state
+            .jwt_manager
+            .verify_tenant_access_token_strict(token, &auth_state.tenant_access_allowed_audiences)
+        {
+            session_id = Some(claims.sub.clone());
+            true
+        } else {
+            false
+        }
     } else {
-        false
+        // Legacy behavior: in non-production, allow tenant access tokens without `aud` validation
+        // when allowlist is not configured yet.
+        if auth_state.is_production {
+            false
+        } else if let Ok(claims) = {
+            #[allow(deprecated)]
+            auth_state.jwt_manager.verify_tenant_access_token(token, None)
+        } {
+            session_id = Some(claims.sub.clone());
+            true
+        } else {
+            false
+        }
     };
 
     if !is_valid {
@@ -159,7 +186,7 @@ mod tests {
     #[tokio::test]
     async fn test_missing_auth_header_returns_401() {
         let jwt_manager = create_test_jwt_manager();
-        let auth_state = AuthMiddlewareState::new(jwt_manager);
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
             .route("/protected", get(protected_handler))
@@ -181,7 +208,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_bearer_scheme_returns_401() {
         let jwt_manager = create_test_jwt_manager();
-        let auth_state = AuthMiddlewareState::new(jwt_manager);
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
             .route("/protected", get(protected_handler))
@@ -204,7 +231,7 @@ mod tests {
     #[tokio::test]
     async fn test_invalid_token_returns_401() {
         let jwt_manager = create_test_jwt_manager();
-        let auth_state = AuthMiddlewareState::new(jwt_manager);
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
             .route("/protected", get(protected_handler))
@@ -234,7 +261,7 @@ mod tests {
             .create_identity_token(user_id, "test@example.com", Some("Test User"))
             .unwrap();
 
-        let auth_state = AuthMiddlewareState::new(jwt_manager);
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
             .route("/protected", get(protected_handler))

@@ -6,7 +6,7 @@ use crate::domain::{
     StringUuid, UpdateIdentityProviderInput,
 };
 use crate::error::AppError;
-use crate::state::HasIdentityProviders;
+use crate::state::{HasIdentityProviders, HasServices};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -81,7 +81,7 @@ pub async fn get_templates<S: HasIdentityProviders>(
 }
 
 /// Get linked identities for the current user
-pub async fn list_my_linked_identities<S: HasIdentityProviders>(
+pub async fn list_my_linked_identities<S: HasIdentityProviders + HasServices>(
     State(state): State<S>,
     headers: HeaderMap,
 ) -> Result<Json<SuccessResponse<Vec<LinkedIdentityInfo>>>, AppError> {
@@ -96,7 +96,7 @@ pub async fn list_my_linked_identities<S: HasIdentityProviders>(
 }
 
 /// Unlink an identity from the current user
-pub async fn unlink_identity<S: HasIdentityProviders>(
+pub async fn unlink_identity<S: HasIdentityProviders + HasServices>(
     State(state): State<S>,
     headers: HeaderMap,
     Path(identity_id): Path<StringUuid>,
@@ -114,7 +114,7 @@ pub async fn unlink_identity<S: HasIdentityProviders>(
 }
 
 /// Extract user ID from JWT token
-fn extract_user_id<S: HasIdentityProviders>(
+fn extract_user_id<S: HasIdentityProviders + HasServices>(
     state: &S,
     headers: &HeaderMap,
 ) -> Result<StringUuid, AppError> {
@@ -130,14 +130,25 @@ fn extract_user_id<S: HasIdentityProviders>(
         .strip_prefix("Bearer ")
         .ok_or_else(|| AppError::Unauthorized("Invalid authorization header format".to_string()))?;
 
-    if let Ok(claims) = state.jwt_manager().verify_identity_token(token) {
+    let jwt = HasServices::jwt_manager(state);
+
+    if let Ok(claims) = jwt.verify_identity_token(token) {
         return StringUuid::parse_str(&claims.sub)
             .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
     }
 
-    if let Ok(claims) = state.jwt_manager().verify_tenant_access_token(token, None) {
-        return StringUuid::parse_str(&claims.sub)
-            .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
+    let allowed = &state.config().jwt_tenant_access_allowed_audiences;
+    if !allowed.is_empty() {
+        if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
+            return StringUuid::parse_str(&claims.sub)
+                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
+        }
+    } else if !state.config().is_production() {
+        #[allow(deprecated)]
+        if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
+            return StringUuid::parse_str(&claims.sub)
+                .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
+        }
     }
 
     Err(AppError::Unauthorized(

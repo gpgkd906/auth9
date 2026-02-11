@@ -5,10 +5,13 @@
 
 use axum::{
     body::Body,
+    extract::State,
     http::{header, Request},
     middleware::Next,
     response::Response,
 };
+
+use crate::config::SecurityHeadersConfig;
 
 /// Security headers middleware function
 ///
@@ -19,7 +22,29 @@ use axum::{
 /// - Referrer-Policy: strict-origin-when-cross-origin
 /// - Cache-Control: no-store (for API responses)
 /// - Permissions-Policy: geolocation=(), microphone=(), camera=()
-pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> Response {
+pub async fn security_headers_middleware(
+    State(config): State<SecurityHeadersConfig>,
+    request: Request<Body>,
+    next: Next,
+) -> Response {
+    // Decide whether this request should receive HSTS before we move `request` into `next.run`.
+    let should_add_hsts = if config.hsts_enabled {
+        if !config.hsts_https_only {
+            true
+        } else if config.hsts_trust_x_forwarded_proto {
+            request
+                .headers()
+                .get("x-forwarded-proto")
+                .and_then(|v| v.to_str().ok())
+                .map(|v| v.eq_ignore_ascii_case("https"))
+                .unwrap_or(false)
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+
     let mut response = next.run(request).await;
     let headers = response.headers_mut();
 
@@ -53,10 +78,19 @@ pub async fn security_headers_middleware(request: Request<Body>, next: Next) -> 
     );
 
     // HTTP Strict Transport Security (browsers will upgrade HTTP to HTTPS)
-    headers.insert(
-        header::STRICT_TRANSPORT_SECURITY,
-        "max-age=31536000; includeSubDomains".parse().unwrap(),
-    );
+    //
+    // IMPORTANT: Only emit HSTS for HTTPS responses. Sending it on HTTP (or in local dev)
+    // can cause long-lived usability issues in browsers.
+    if should_add_hsts {
+        let mut value = format!("max-age={}", config.hsts_max_age_secs);
+        if config.hsts_include_subdomains {
+            value.push_str("; includeSubDomains");
+        }
+        if config.hsts_preload {
+            value.push_str("; preload");
+        }
+        headers.insert(header::STRICT_TRANSPORT_SECURITY, value.parse().unwrap());
+    }
 
     // Content Security Policy for API responses
     headers.insert(
@@ -84,9 +118,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_security_headers_are_added() {
+        let cfg = SecurityHeadersConfig {
+            hsts_enabled: true,
+            hsts_https_only: false, // simplify for this test
+            ..SecurityHeadersConfig::default()
+        };
         let app = Router::new()
             .route("/test", get(dummy_handler))
-            .layer(axum::middleware::from_fn(security_headers_middleware));
+            .layer(axum::middleware::from_fn_with_state(
+                cfg,
+                security_headers_middleware,
+            ));
 
         let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
@@ -127,5 +169,47 @@ mod tests {
             response.headers().get("Content-Security-Policy").unwrap(),
             "default-src 'none'; frame-ancestors 'none'"
         );
+    }
+
+    #[tokio::test]
+    async fn test_hsts_not_added_when_disabled() {
+        let cfg = SecurityHeadersConfig {
+            hsts_enabled: false,
+            ..SecurityHeadersConfig::default()
+        };
+        let app = Router::new()
+            .route("/test", get(dummy_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                cfg,
+                security_headers_middleware,
+            ));
+
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert!(response.headers().get("Strict-Transport-Security").is_none());
+    }
+
+    #[tokio::test]
+    async fn test_hsts_added_only_for_https_via_forwarded_proto() {
+        let cfg = SecurityHeadersConfig {
+            hsts_enabled: true,
+            hsts_https_only: true,
+            hsts_trust_x_forwarded_proto: true,
+            ..SecurityHeadersConfig::default()
+        };
+        let app = Router::new()
+            .route("/test", get(dummy_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                cfg,
+                security_headers_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/test")
+            .header("x-forwarded-proto", "https")
+            .body(Body::empty())
+            .unwrap();
+        let response = app.oneshot(request).await.unwrap();
+        assert!(response.headers().get("Strict-Transport-Security").is_some());
     }
 }

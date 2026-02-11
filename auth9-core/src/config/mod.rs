@@ -5,6 +5,10 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt;
 
+/// Runtime environment name (best-effort; used for security defaults).
+pub const ENV_PRODUCTION: &str = "production";
+pub const ENV_DEVELOPMENT: &str = "development";
+
 /// Telemetry configuration
 #[derive(Debug, Clone)]
 pub struct TelemetryConfig {
@@ -48,6 +52,8 @@ pub struct WebAuthnConfig {
 /// Application configuration
 #[derive(Clone)]
 pub struct Config {
+    /// Runtime environment (e.g. "development" or "production")
+    pub environment: String,
     /// HTTP server host
     pub http_host: String,
     /// HTTP server port
@@ -79,11 +85,24 @@ pub struct Config {
     /// Identity tokens are intentionally tenant-unscoped. Only Identity tokens whose
     /// email is in this allowlist are treated as platform admins.
     pub platform_admin_emails: Vec<String>,
+
+    /// Tenant access token audience allowlist for REST authentication.
+    ///
+    /// If empty, REST tenant access token audience validation is disabled in non-production
+    /// (legacy behavior). In production, this must be non-empty.
+    pub jwt_tenant_access_allowed_audiences: Vec<String>,
+
+    /// Security headers configuration for REST API responses.
+    pub security_headers: SecurityHeadersConfig,
+
+    /// Optional portal client ID (used as a default tenant token audience).
+    pub portal_client_id: Option<String>,
 }
 
 impl fmt::Debug for Config {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Config")
+            .field("environment", &self.environment)
             .field("http_host", &self.http_host)
             .field("http_port", &self.http_port)
             .field("grpc_host", &self.grpc_host)
@@ -97,6 +116,12 @@ impl fmt::Debug for Config {
             .field("cors", &self.cors)
             .field("webauthn", &self.webauthn)
             .field("telemetry", &self.telemetry)
+            .field(
+                "jwt_tenant_access_allowed_audiences",
+                &format!("[{} audiences]", self.jwt_tenant_access_allowed_audiences.len()),
+            )
+            .field("security_headers", &self.security_headers)
+            .field("portal_client_id", &self.portal_client_id)
             .field(
                 "platform_admin_emails",
                 &format!("[{} emails]", self.platform_admin_emails.len()),
@@ -124,6 +149,36 @@ impl Default for CorsConfig {
                 "http://localhost:5173".to_string(),
             ],
             allow_credentials: true,
+        }
+    }
+}
+
+/// Security headers configuration (REST responses)
+#[derive(Debug, Clone)]
+pub struct SecurityHeadersConfig {
+    /// Whether to emit Strict-Transport-Security
+    pub hsts_enabled: bool,
+    /// Only emit HSTS when request is determined to be HTTPS (recommended)
+    pub hsts_https_only: bool,
+    /// Trust `x-forwarded-proto` when determining scheme (recommended behind a proxy)
+    pub hsts_trust_x_forwarded_proto: bool,
+    /// HSTS max-age (seconds)
+    pub hsts_max_age_secs: u64,
+    /// Include subdomains in HSTS policy
+    pub hsts_include_subdomains: bool,
+    /// Add `preload` directive
+    pub hsts_preload: bool,
+}
+
+impl Default for SecurityHeadersConfig {
+    fn default() -> Self {
+        Self {
+            hsts_enabled: false,
+            hsts_https_only: true,
+            hsts_trust_x_forwarded_proto: true,
+            hsts_max_age_secs: 31_536_000, // 365 days
+            hsts_include_subdomains: true,
+            hsts_preload: false,
         }
     }
 }
@@ -310,6 +365,35 @@ pub struct RateLimitEndpointConfig {
 }
 
 impl Config {
+    pub fn is_production(&self) -> bool {
+        self.environment.eq_ignore_ascii_case(ENV_PRODUCTION)
+    }
+
+    /// Validate security-sensitive configuration.
+    ///
+    /// In production, we fail-fast on insecure defaults rather than just logging a warning.
+    pub fn validate_security(&self) -> Result<()> {
+        if self.is_production() {
+            if self.grpc_security.auth_mode == "none" {
+                anyhow::bail!(
+                    "gRPC authentication is disabled (GRPC_AUTH_MODE=none) in production"
+                );
+            }
+            if self.grpc_security.auth_mode == "api_key" && self.grpc_security.api_keys.is_empty()
+            {
+                anyhow::bail!(
+                    "gRPC auth_mode is api_key but no keys configured (GRPC_API_KEYS) in production"
+                );
+            }
+            if self.jwt_tenant_access_allowed_audiences.is_empty() {
+                anyhow::bail!(
+                    "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"
+                );
+            }
+        }
+        Ok(())
+    }
+
     pub fn is_platform_admin_email(&self, email: &str) -> bool {
         let email = email.trim();
         self.platform_admin_emails
@@ -319,7 +403,40 @@ impl Config {
 
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self> {
+        let environment =
+            env::var("ENVIRONMENT").unwrap_or_else(|_| ENV_DEVELOPMENT.to_string());
+
+        let portal_client_id = env::var("AUTH9_PORTAL_CLIENT_ID")
+            .ok()
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty());
+
+        let jwt_tenant_access_allowed_audiences =
+            match env::var("JWT_TENANT_ACCESS_ALLOWED_AUDIENCES") {
+                Ok(v) => {
+                    let items: Vec<String> = v
+                        .split(',')
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string())
+                        .collect();
+                    items
+                }
+                Err(_) => portal_client_id.clone().into_iter().collect(),
+            };
+
+        let hsts_default_enabled = environment.eq_ignore_ascii_case(ENV_PRODUCTION);
+        let security_headers = SecurityHeadersConfig {
+            hsts_enabled: parse_bool_env("HSTS_ENABLED", hsts_default_enabled),
+            hsts_https_only: parse_bool_env("HSTS_HTTPS_ONLY", true),
+            hsts_trust_x_forwarded_proto: parse_bool_env("HSTS_TRUST_X_FORWARDED_PROTO", true),
+            hsts_max_age_secs: parse_u64_env("HSTS_MAX_AGE_SECS", 31_536_000),
+            hsts_include_subdomains: parse_bool_env("HSTS_INCLUDE_SUBDOMAINS", true),
+            hsts_preload: parse_bool_env("HSTS_PRELOAD", false),
+        };
+
         Ok(Self {
+            environment,
             http_host: env::var("HTTP_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
             http_port: env::var("HTTP_PORT")
                 .unwrap_or_else(|_| "8080".to_string())
@@ -491,6 +608,9 @@ impl Config {
                 "PLATFORM_ADMIN_EMAILS",
                 vec!["admin@auth9.local".to_string()],
             ),
+            jwt_tenant_access_allowed_audiences,
+            security_headers,
+            portal_client_id,
         })
     }
 
@@ -524,12 +644,34 @@ fn parse_csv_env(key: &str, default: Vec<String>) -> Vec<String> {
     }
 }
 
+fn parse_bool_env(key: &str, default: bool) -> bool {
+    match env::var(key) {
+        Ok(v) => {
+            let s = v.trim().to_lowercase();
+            match s.as_str() {
+                "true" | "1" | "yes" | "on" => true,
+                "false" | "0" | "no" | "off" => false,
+                _ => default,
+            }
+        }
+        Err(_) => default,
+    }
+}
+
+fn parse_u64_env(key: &str, default: u64) -> u64 {
+    match env::var(key) {
+        Ok(v) => v.trim().parse::<u64>().unwrap_or(default),
+        Err(_) => default,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     fn test_config() -> Config {
         Config {
+            environment: ENV_DEVELOPMENT.to_string(),
             http_host: "127.0.0.1".to_string(),
             http_port: 8080,
             grpc_host: "127.0.0.1".to_string(),
@@ -572,6 +714,9 @@ mod tests {
             },
             telemetry: TelemetryConfig::default(),
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
+            jwt_tenant_access_allowed_audiences: vec![],
+            security_headers: SecurityHeadersConfig::default(),
+            portal_client_id: None,
         }
     }
 
@@ -784,6 +929,7 @@ mod tests {
     #[test]
     fn test_config_different_hosts() {
         let config = Config {
+            environment: ENV_DEVELOPMENT.to_string(),
             http_host: "192.168.1.100".to_string(),
             http_port: 3000,
             grpc_host: "192.168.1.100".to_string(),
@@ -826,6 +972,9 @@ mod tests {
             },
             telemetry: TelemetryConfig::default(),
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
+            jwt_tenant_access_allowed_audiences: vec![],
+            security_headers: SecurityHeadersConfig::default(),
+            portal_client_id: None,
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
@@ -876,6 +1025,14 @@ mod tests {
         assert_eq!(config.auth_mode, "none");
         assert!(config.api_keys.is_empty());
         assert!(config.tls_cert_path.is_none());
+    }
+
+    #[test]
+    fn test_security_headers_config_default() {
+        let c = SecurityHeadersConfig::default();
+        assert!(!c.hsts_enabled);
+        assert!(c.hsts_https_only);
+        assert_eq!(c.hsts_max_age_secs, 31_536_000);
     }
 
     #[test]
@@ -1237,6 +1394,7 @@ mod tests {
     fn test_sensitive_data_redacted_in_debug() {
         // Create a config with sensitive data
         let config = Config {
+            environment: ENV_DEVELOPMENT.to_string(),
             http_host: "127.0.0.1".to_string(),
             http_port: 8080,
             grpc_host: "127.0.0.1".to_string(),
@@ -1290,6 +1448,9 @@ mod tests {
             },
             telemetry: TelemetryConfig::default(),
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
+            jwt_tenant_access_allowed_audiences: vec!["auth9-portal".to_string()],
+            security_headers: SecurityHeadersConfig::default(),
+            portal_client_id: Some("auth9-portal".to_string()),
         };
 
         let debug_str = format!("{:?}", config);

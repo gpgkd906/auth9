@@ -124,6 +124,7 @@ where
     user_repo: Arc<U>,
     service_repo: Arc<S>,
     rbac_repo: Arc<R>,
+    is_production: bool,
 }
 
 impl<U, S, R, C> TokenExchangeService<U, S, R, C>
@@ -139,6 +140,7 @@ where
         user_repo: Arc<U>,
         service_repo: Arc<S>,
         rbac_repo: Arc<R>,
+        is_production: bool,
     ) -> Self {
         Self {
             jwt_manager,
@@ -146,6 +148,7 @@ where
             user_repo,
             service_repo,
             rbac_repo,
+            is_production,
         }
     }
 }
@@ -290,6 +293,11 @@ where
         let req = request.into_inner();
 
         let audience = if req.audience.is_empty() {
+            if self.is_production {
+                return Err(Status::failed_precondition(
+                    "audience is required in production",
+                ));
+            }
             None
         } else {
             Some(req.audience.as_str())
@@ -297,7 +305,7 @@ where
 
         match self
             .jwt_manager
-            .verify_tenant_access_token(&req.access_token, audience)
+            .verify_tenant_access_token_with_optional_audience(&req.access_token, audience)
         {
             Ok(claims) => {
                 metrics::counter!("auth9_auth_token_validation_total", "result" => "valid").increment(1);
@@ -428,7 +436,7 @@ where
         // Try as tenant access token first
         match self
             .jwt_manager
-            .verify_tenant_access_token(&req.token, None)
+            .verify_tenant_access_token_with_optional_audience(&req.token, None)
         {
             Ok(claims) => Ok(Response::new(IntrospectTokenResponse {
                 active: true,

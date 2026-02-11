@@ -269,10 +269,15 @@ impl RbacRepository for RbacRepositoryImpl {
 
         let name = input.name.as_ref().unwrap_or(&existing.name);
         let description = input.description.as_ref().or(existing.description.as_ref());
-        let parent_role_id = input
-            .parent_role_id
-            .map(StringUuid::from)
-            .or(existing.parent_role_id);
+
+        // Handle parent_role_id: Option<Option<Uuid>>
+        // - None: keep existing value
+        // - Some(None): set to NULL
+        // - Some(Some(id)): set to specific id
+        let parent_role_id = match input.parent_role_id {
+            Some(new_parent) => new_parent.map(StringUuid::from),
+            None => existing.parent_role_id,
+        };
 
         sqlx::query(
             r#"

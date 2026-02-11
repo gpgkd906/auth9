@@ -340,6 +340,7 @@ impl GrpcTestBuilder {
             self.user_repo,
             self.service_repo,
             self.rbac_repo,
+            false,
         )
     }
 
@@ -358,6 +359,7 @@ impl GrpcTestBuilder {
             self.user_repo,
             self.service_repo,
             self.rbac_repo,
+            false,
         )
     }
 }

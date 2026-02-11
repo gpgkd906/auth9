@@ -190,10 +190,10 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
-        // Logout from Keycloak
-        self.keycloak.logout_user(&user.keycloak_id).await?;
+        // Logout from Keycloak (ignore if user doesn't exist in Keycloak)
+        let _ = self.keycloak.logout_user(&user.keycloak_id).await;
 
-        // Revoke all sessions in database
+        // Revoke all sessions in database regardless of Keycloak status
         self.session_repo.revoke_all_by_user(user_id).await
     }
 

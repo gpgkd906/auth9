@@ -302,7 +302,10 @@ async fn test_exchange_token_with_multiple_permissions() {
 
     let response = response.unwrap().into_inner();
     let claims = jwt_manager
-        .verify_tenant_access_token(&response.access_token, Some("test-client"))
+        .verify_tenant_access_token_with_optional_audience(
+            &response.access_token,
+            Some("test-client"),
+        )
         .unwrap();
     assert_eq!(claims.roles.len(), 3);
     assert_eq!(claims.permissions.len(), 5);
@@ -518,7 +521,10 @@ async fn test_exchange_token_cache_hit() {
     // Verify the token contains cached roles
     let response = response.unwrap().into_inner();
     let claims = jwt_manager
-        .verify_tenant_access_token(&response.access_token, Some("test-client"))
+        .verify_tenant_access_token_with_optional_audience(
+            &response.access_token,
+            Some("test-client"),
+        )
         .unwrap();
     assert_eq!(claims.roles, vec!["cached-admin"]);
     assert_eq!(claims.permissions, vec!["cached:read"]);

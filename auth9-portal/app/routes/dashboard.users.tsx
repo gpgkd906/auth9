@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useFetcher } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
@@ -71,6 +71,12 @@ export async function action({ request }: ActionFunctionArgs) {
   const accessToken = await getAccessToken(request);
 
   try {
+    if (intent === "get_user_tenants") {
+      const user_id = formData.get("user_id") as string;
+      const tenants = await userApi.getTenants(user_id, accessToken || undefined);
+      return { success: true, intent, data: tenants.data };
+    }
+
     if (intent === "update_user") {
       const id = formData.get("id") as string;
       const display_name = formData.get("display_name") as string;
@@ -207,11 +213,22 @@ export default function UsersPage() {
 
   // Fetch user tenants when opening Manage Tenants dialog
   const [userTenants, setUserTenants] = useState<UserTenant[]>([]);
+  const tenantsFetcher = useFetcher();
+
   useEffect(() => {
     if (managingTenantsUser) {
-      userApi.getTenants(managingTenantsUser.id).then(res => setUserTenants(res.data));
+      tenantsFetcher.submit(
+        { intent: "get_user_tenants", user_id: managingTenantsUser.id },
+        { method: "POST" }
+      );
     }
-  }, [managingTenantsUser, actionData]); // Refresh on actionData change (e.g. after add/remove)
+  }, [managingTenantsUser]);
+
+  useEffect(() => {
+    if (tenantsFetcher.data?.intent === "get_user_tenants" && tenantsFetcher.data?.data) {
+      setUserTenants(tenantsFetcher.data.data);
+    }
+  }, [tenantsFetcher.data]);
 
   // Fetch roles when opening Manage Roles dialog
   // 1. Fetch all assigned roles for this user in this tenant

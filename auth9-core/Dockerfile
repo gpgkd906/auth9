@@ -21,13 +21,20 @@ FROM chef AS builder
 # Install protobuf compiler
 RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
-# Build dependencies using cargo-chef
+# Build dependencies using cargo-chef (mount cache survives --no-cache rebuilds)
 COPY --from=planner /app/recipe.json recipe.json
-RUN cargo chef cook --release --recipe-path recipe.json
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo chef cook --release --recipe-path recipe.json
 
 # Copy source code and build application
 COPY . .
-RUN cargo build --release
+RUN --mount=type=cache,target=/usr/local/cargo/registry \
+    --mount=type=cache,target=/usr/local/cargo/git \
+    --mount=type=cache,target=/app/target \
+    cargo build --release && \
+    cp /app/target/release/auth9-core /app/auth9-core-bin
 
 # ==================== Runtime Stage ====================
 FROM debian:trixie-slim
@@ -45,8 +52,8 @@ RUN useradd -r -s /bin/false auth9
 
 WORKDIR /app
 
-# Copy binary from builder
-COPY --from=builder /app/target/release/auth9-core /usr/local/bin/auth9-core
+# Copy binary from builder (from explicit path, not inside mount cache)
+COPY --from=builder /app/auth9-core-bin /usr/local/bin/auth9-core
 
 # Copy migrations
 COPY migrations ./migrations

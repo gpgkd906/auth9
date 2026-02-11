@@ -207,8 +207,18 @@ where
         }
 
         // Try to validate as tenant access token
-        if let Ok(claims) = jwt_manager.verify_tenant_access_token(token, None) {
-            return AuthUser::from_tenant_access_claims(claims);
+        let allowed_audiences = &state.config().jwt_tenant_access_allowed_audiences;
+        if !allowed_audiences.is_empty() {
+            if let Ok(claims) = jwt_manager.verify_tenant_access_token_strict(token, allowed_audiences)
+            {
+                return AuthUser::from_tenant_access_claims(claims);
+            }
+        } else if !state.config().is_production() {
+            // Legacy behavior for non-production: if allowlist isn't configured, do not validate aud.
+            #[allow(deprecated)]
+            if let Ok(claims) = jwt_manager.verify_tenant_access_token(token, None) {
+                return AuthUser::from_tenant_access_claims(claims);
+            }
         }
 
         Err(AuthError::InvalidToken(

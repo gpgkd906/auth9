@@ -185,8 +185,20 @@ pub(crate) fn extract_actor_id(state: &AppState, headers: &HeaderMap) -> Option<
         return Uuid::parse_str(&claims.sub).ok();
     }
 
-    if let Ok(claims) = state.jwt_manager.verify_tenant_access_token(token, None) {
-        return Uuid::parse_str(&claims.sub).ok();
+    if !state.config.jwt_tenant_access_allowed_audiences.is_empty() {
+        if let Ok(claims) = state.jwt_manager.verify_tenant_access_token_strict(
+            token,
+            &state.config.jwt_tenant_access_allowed_audiences,
+        ) {
+            return Uuid::parse_str(&claims.sub).ok();
+        }
+    } else if !state.config.is_production() {
+        if let Ok(claims) = {
+            #[allow(deprecated)]
+            state.jwt_manager.verify_tenant_access_token(token, None)
+        } {
+            return Uuid::parse_str(&claims.sub).ok();
+        }
     }
 
     None
@@ -205,8 +217,21 @@ pub(crate) fn extract_actor_id_generic<S: HasServices>(
         return Uuid::parse_str(&claims.sub).ok();
     }
 
-    if let Ok(claims) = state.jwt_manager().verify_tenant_access_token(token, None) {
-        return Uuid::parse_str(&claims.sub).ok();
+    let allowed = &state.config().jwt_tenant_access_allowed_audiences;
+    if !allowed.is_empty() {
+        if let Ok(claims) = state
+            .jwt_manager()
+            .verify_tenant_access_token_strict(token, allowed)
+        {
+            return Uuid::parse_str(&claims.sub).ok();
+        }
+    } else if !state.config().is_production() {
+        if let Ok(claims) = {
+            #[allow(deprecated)]
+            state.jwt_manager().verify_tenant_access_token(token, None)
+        } {
+            return Uuid::parse_str(&claims.sub).ok();
+        }
     }
 
     None
