@@ -66,7 +66,7 @@ describe("Login Events Page", () => {
       events: mockEvents,
       pagination: mockPagination,
     });
-    expect(analyticsApi.listEvents).toHaveBeenCalledWith(1, 50, "mock-access-token");
+    expect(analyticsApi.listEvents).toHaveBeenCalledWith(1, 50, undefined, "mock-access-token");
   });
 
   it("loader uses page parameter from URL", async () => {
@@ -80,7 +80,7 @@ describe("Login Events Page", () => {
     );
     const response = await loader({ request, params: {}, context: {} });
 
-    expect(analyticsApi.listEvents).toHaveBeenCalledWith(2, 50, "mock-access-token");
+    expect(analyticsApi.listEvents).toHaveBeenCalledWith(2, 50, undefined, "mock-access-token");
     expect(response.pagination.page).toBe(2);
   });
 

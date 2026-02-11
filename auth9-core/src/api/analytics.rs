@@ -1,6 +1,6 @@
 //! Analytics API handlers
 
-use crate::api::{PaginatedResponse, PaginationQuery, SuccessResponse};
+use crate::api::{default_page, default_per_page, deserialize_page, deserialize_per_page, PaginatedResponse, PaginationQuery, SuccessResponse};
 use crate::domain::{LoginEvent, LoginStats, StringUuid};
 use crate::error::AppError;
 use crate::state::HasAnalytics;
@@ -58,10 +58,14 @@ pub struct StatsQuery {
 }
 
 /// Query parameters for list_events endpoint
+/// Note: pagination fields are inlined because serde_urlencoded (used by axum's Query)
+/// does not support #[serde(flatten)].
 #[derive(Debug, Deserialize)]
 pub struct ListEventsQuery {
-    #[serde(flatten)]
-    pub pagination: PaginationQuery,
+    #[serde(default = "default_page", deserialize_with = "deserialize_page")]
+    pub page: i64,
+    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
+    pub per_page: i64,
     /// Filter events by email address
     pub email: Option<String>,
 }
@@ -74,19 +78,19 @@ pub async fn list_events<S: HasAnalytics>(
     let (events, total) = if let Some(email) = params.email {
         state
             .analytics_service()
-            .list_events_by_email(&email, params.pagination.page, params.pagination.per_page)
+            .list_events_by_email(&email, params.page, params.per_page)
             .await?
     } else {
         state
             .analytics_service()
-            .list_events(params.pagination.page, params.pagination.per_page)
+            .list_events(params.page, params.per_page)
             .await?
     };
 
     Ok(Json(PaginatedResponse::new(
         events,
-        params.pagination.page,
-        params.pagination.per_page,
+        params.page,
+        params.per_page,
         total,
     )))
 }

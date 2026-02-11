@@ -2098,12 +2098,33 @@ impl LoginEventRepository for TestLoginEventRepository {
         Ok(events.iter().filter(|e| e.user_id == Some(user_id)).count() as i64)
     }
 
+    async fn list_by_email(
+        &self,
+        email: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<LoginEvent>> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| e.email.as_deref() == Some(email))
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
     async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64> {
         let events = self.events.read().await;
         Ok(events
             .iter()
             .filter(|e| e.tenant_id == Some(tenant_id))
             .count() as i64)
+    }
+
+    async fn count_by_email(&self, email: &str) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events.iter().filter(|e| e.email.as_deref() == Some(email)).count() as i64)
     }
 
     async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats> {

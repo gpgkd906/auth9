@@ -43,11 +43,11 @@ pub struct PaginationQuery {
     pub per_page: i64,
 }
 
-fn default_page() -> i64 {
+pub(crate) fn default_page() -> i64 {
     1
 }
 
-fn default_per_page() -> i64 {
+pub(crate) fn default_per_page() -> i64 {
     20
 }
 

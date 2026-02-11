@@ -266,6 +266,7 @@ describe("Users Page", () => {
                 path: "/dashboard/users",
                 Component: WrappedPage,
                 loader,
+                action,
             },
         ]);
 
@@ -310,6 +311,7 @@ describe("Users Page", () => {
                 path: "/dashboard/users",
                 Component: WrappedPage,
                 loader,
+                action,
             },
         ]);
 
@@ -339,6 +341,7 @@ describe("Users Page", () => {
                 path: "/dashboard/users",
                 Component: WrappedPage,
                 loader,
+                action,
             },
         ]);
 
@@ -398,6 +401,7 @@ describe("Users Page", () => {
                 path: "/dashboard/users",
                 Component: WrappedPage,
                 loader,
+                action,
             },
         ]);
 
@@ -443,6 +447,7 @@ describe("Users Page", () => {
                 path: "/dashboard/users",
                 Component: WrappedPage,
                 loader,
+                action,
             },
         ]);
 
@@ -489,6 +494,7 @@ describe("Users Page", () => {
                 path: "/dashboard/users",
                 Component: WrappedPage,
                 loader,
+                action,
             },
         ]);
 
@@ -1023,6 +1029,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1058,6 +1065,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1087,6 +1095,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1152,6 +1161,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1177,6 +1187,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1203,6 +1214,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1230,6 +1242,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
@@ -1254,6 +1267,7 @@ describe("Users Page", () => {
                     path: "/dashboard/users",
                     Component: WrappedPage,
                     loader,
+                    action,
                 },
             ]);
 
