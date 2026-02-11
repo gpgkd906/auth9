@@ -10,6 +10,7 @@ use crate::jwt::JwtManager;
 use crate::repository::{RbacRepository, ServiceRepository, UserRepository};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
+use tracing::debug;
 use uuid::Uuid;
 
 /// Trait for cache operations needed by TokenExchangeService
@@ -450,7 +451,8 @@ where
                 iss: claims.iss,
                 aud: claims.aud,
             })),
-            Err(_) => {
+            Err(e) => {
+                debug!("Token introspection as tenant access token failed: {}", e);
                 // Try as identity token
                 match self.jwt_manager.verify_identity_token(&req.token) {
                     Ok(claims) => Ok(Response::new(IntrospectTokenResponse {
@@ -465,18 +467,21 @@ where
                         iss: claims.iss,
                         aud: claims.aud,
                     })),
-                    Err(_) => Ok(Response::new(IntrospectTokenResponse {
-                        active: false,
-                        sub: String::new(),
-                        email: String::new(),
-                        tenant_id: String::new(),
-                        roles: vec![],
-                        permissions: vec![],
-                        exp: 0,
-                        iat: 0,
-                        iss: String::new(),
-                        aud: String::new(),
-                    })),
+                    Err(e2) => {
+                        debug!("Token introspection as identity token failed: {}", e2);
+                        Ok(Response::new(IntrospectTokenResponse {
+                            active: false,
+                            sub: String::new(),
+                            email: String::new(),
+                            tenant_id: String::new(),
+                            roles: vec![],
+                            permissions: vec![],
+                            exp: 0,
+                            iat: 0,
+                            iss: String::new(),
+                            aud: String::new(),
+                        }))
+                    }
                 }
             }
         }
