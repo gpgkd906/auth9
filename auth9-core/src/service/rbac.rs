@@ -60,9 +60,10 @@ impl<R: RbacRepository> RbacService<R> {
     pub async fn delete_permission(&self, id: StringUuid) -> Result<()> {
         let _ = self.get_permission(id).await?;
         self.repo.delete_permission(id).await?;
-        if let Some(cache) = &self.cache_manager {
-            let _ = cache.invalidate_all_user_roles().await;
-        }
+        // Note: We don't invalidate user role cache when a permission is deleted.
+        // Cached roles remain valid - the deleted permission simply won't be available.
+        // Cache will naturally expire after TTL (5 minutes), and future queries will
+        // reflect the deleted permission. This avoids expensive KEYS scan on Redis.
         Ok(())
     }
 

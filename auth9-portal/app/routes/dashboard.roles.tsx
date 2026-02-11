@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useRevalidator } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, CheckIcon, GearIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
@@ -157,6 +157,7 @@ export default function RolesPage() {
   const navigation = useNavigation();
   const submit = useSubmit();
   const confirm = useConfirm();
+  const revalidator = useRevalidator();
 
   // Role state
   const [createRoleServiceId, setCreateRoleServiceId] = useState<string | null>(null);
@@ -186,8 +187,11 @@ export default function RolesPage() {
           rolePermissions: roleData.permissions || [],
         });
       }
+
+      // Revalidate loader to refresh the permissions list
+      revalidator.revalidate();
     }
-  }, [actionData, managingPermissionsRole]);
+  }, [actionData, managingPermissionsRole, revalidator]);
 
   const openManagePermissions = async (role: EditableRole, servicePermissions: Permission[]) => {
     // Fetch current role permissions
