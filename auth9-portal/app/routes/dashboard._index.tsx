@@ -16,7 +16,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const [tenants, users, services, audits] = await Promise.all([
     tenantApi.list(1, 1, undefined, accessToken),
-    userApi.list(1, 1, accessToken),
+    userApi.list(1, 1, undefined, accessToken),
     serviceApi.list(undefined, 1, 1, accessToken),
     auditApi.list(page, perPage, accessToken),
   ]);

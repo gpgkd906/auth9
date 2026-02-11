@@ -266,8 +266,8 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
     let event_type_str = event.event_type.as_deref().unwrap_or("");
 
     debug!(
-        "Received Keycloak event: type={}, user_id={:?}, error={:?}",
-        event_type_str, event.user_id, event.error
+        "Received Keycloak event: type={}, user_id={:?}, error={:?}, details={:?}",
+        event_type_str, event.user_id, event.error, event.details
     );
 
     // 4. Map to our login event type (skip non-login events)

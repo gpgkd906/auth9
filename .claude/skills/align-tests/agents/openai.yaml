@@ -1,0 +1,4 @@
+interface:
+  display_name: "Align Tests"
+  short_description: "Run and repair tests after large refactors"
+  default_prompt: "When the user triggers '-- 对齐测试 --' after large refactors, run relevant unit tests, analyze failing test cases by root cause, apply minimal fixes to tests and/or implementation, rerun until stable, and report causes + final status."

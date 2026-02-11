@@ -66,6 +66,8 @@ Note: Rate limiting is active on some endpoints (e.g., forgot-password: 5 req/mi
 
 ## Workflow
 
+**IMPORTANT: This skill is strictly for testing and reporting. NEVER attempt to fix, patch, or modify any source code during QA testing. If a test fails, create a ticket and move on to the next scenario.**
+
 ```
 1. Confirm QA document with user
 2. List all test scenarios
