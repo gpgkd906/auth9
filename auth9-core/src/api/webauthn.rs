@@ -25,32 +25,22 @@ pub async fn start_registration<S: HasWebAuthn + HasServices>(
     let user_id = crate::domain::StringUuid::parse_str(&claims.sub)
         .map_err(|_| AppError::BadRequest("Invalid user_id in token".to_string()))?;
 
-    let user = state
-        .user_service()
-        .get(user_id)
-        .await?;
+    let user = state.user_service().get(user_id).await?;
 
     let ccr = state
         .webauthn_service()
-        .start_registration(
-            &claims.sub,
-            &user.email,
-            user.display_name.as_deref(),
-        )
+        .start_registration(&claims.sub, &user.email, user.display_name.as_deref())
         .await?;
 
     // Return as raw JSON (webauthn-rs types serialize to the correct WebAuthn format)
-    let mut json = serde_json::to_value(&ccr).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Failed to serialize challenge: {}", e))
-    })?;
+    let mut json = serde_json::to_value(&ccr)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize challenge: {}", e)))?;
 
     // Override residentKey to "required" for discoverable credential support.
     // webauthn-rs 0.5 start_passkey_registration sets residentKey: "discouraged",
     // but Passkey login (discoverable authentication) requires resident keys.
     // finish_passkey_registration ignores this field during verification, so this is safe.
-    if let Some(auth_sel) = json
-        .pointer_mut("/publicKey/authenticatorSelection")
-    {
+    if let Some(auth_sel) = json.pointer_mut("/publicKey/authenticatorSelection") {
         auth_sel["residentKey"] = serde_json::json!("required");
         auth_sel["requireResidentKey"] = serde_json::json!(true);
     }
@@ -93,9 +83,8 @@ pub async fn start_authentication<S: HasWebAuthn>(
 ) -> Result<Json<AuthenticationStartResponse>, AppError> {
     let result = state.webauthn_service().start_authentication().await?;
 
-    let public_key = serde_json::to_value(&result.options).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Failed to serialize challenge: {}", e))
-    })?;
+    let public_key = serde_json::to_value(&result.options)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize challenge: {}", e)))?;
 
     Ok(Json(AuthenticationStartResponse {
         challenge_id: result.challenge_id,
@@ -124,14 +113,10 @@ pub async fn complete_authentication<S: HasWebAuthn + HasServices + HasSessionMa
         .await?;
 
     // Look up the user
-    let user_id = crate::domain::StringUuid::parse_str(&auth_result.user_id).map_err(|_| {
-        AppError::Internal(anyhow::anyhow!("Invalid user_id in stored credential"))
-    })?;
+    let user_id = crate::domain::StringUuid::parse_str(&auth_result.user_id)
+        .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid user_id in stored credential")))?;
 
-    let user = state
-        .user_service()
-        .get(user_id)
-        .await?;
+    let user = state.user_service().get(user_id).await?;
 
     // Create session
     let ip_address = extract_client_ip(&headers);

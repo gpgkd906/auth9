@@ -47,7 +47,9 @@ impl WebAuthnRepository for WebAuthnRepositoryImpl {
 
         self.find_by_credential_id(&input.credential_id)
             .await?
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Failed to create webauthn credential")))
+            .ok_or_else(|| {
+                AppError::Internal(anyhow::anyhow!("Failed to create webauthn credential"))
+            })
     }
 
     async fn find_by_credential_id(&self, credential_id: &str) -> Result<Option<StoredPasskey>> {

@@ -36,7 +36,7 @@ describe("Auth Callback", () => {
       );
     });
 
-    it("handles implicit flow with access_token param", async () => {
+    it("redirects to /login when access_token query is present without code", async () => {
       const request = new Request(
         "http://localhost/auth/callback?access_token=my-token&expires_in=3600"
       );
@@ -44,20 +44,18 @@ describe("Auth Callback", () => {
       const response = await loader({ request, params: {}, context: {} });
       expect(response).toBeInstanceOf(Response);
       expect((response as Response).status).toBe(302);
-      expect((response as Response).headers.get("Location")).toBe("/dashboard");
-      expect(commitSession).toHaveBeenCalledWith(
-        expect.objectContaining({ accessToken: "my-token" })
-      );
+      expect((response as Response).headers.get("Location")).toBe("/login");
+      expect(commitSession).not.toHaveBeenCalled();
     });
 
-    it("handles implicit flow with default expires_in", async () => {
+    it("redirects to /login when only access_token is present", async () => {
       const request = new Request(
         "http://localhost/auth/callback?access_token=my-token"
       );
 
       const response = await loader({ request, params: {}, context: {} });
       expect((response as Response).status).toBe(302);
-      expect((response as Response).headers.get("Location")).toBe("/dashboard");
+      expect((response as Response).headers.get("Location")).toBe("/login");
     });
 
     it("redirects to /login when no code or access_token", async () => {

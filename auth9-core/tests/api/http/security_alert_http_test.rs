@@ -160,8 +160,12 @@ async fn test_get_alert_success() {
 
     let app = build_security_alert_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) =
-        get_json_with_auth(&app, &format!("/api/v1/security/alerts/{}", alert_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/security/alerts/{}", alert_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -187,9 +191,12 @@ async fn test_get_alert_not_found() {
     let app = build_security_alert_test_router(state);
 
     let nonexistent_id = StringUuid::new_v4();
-    let (status, _body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) =
-        get_json_with_auth(&app, &format!("/api/v1/security/alerts/{}", nonexistent_id), &token)
-            .await;
+    let (status, _body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/security/alerts/{}", nonexistent_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

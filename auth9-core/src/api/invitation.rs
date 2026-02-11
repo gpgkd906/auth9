@@ -34,7 +34,10 @@ pub struct AcceptInvitationRequest {
 pub struct InvitationListQuery {
     #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
+    #[serde(
+        default = "default_per_page",
+        deserialize_with = "deserialize_per_page"
+    )]
     pub per_page: i64,
     /// Optional status filter (pending, accepted, expired, revoked)
     pub status: Option<InvitationStatus>,
@@ -73,7 +76,8 @@ pub async fn list<S: HasInvitations>(
         }
     }
     // Identity tokens are only allowed for platform admins
-    if auth.token_type == TokenType::Identity && !state.config().is_platform_admin_email(&auth.email)
+    if auth.token_type == TokenType::Identity
+        && !state.config().is_platform_admin_email(&auth.email)
     {
         return Err(AppError::Forbidden(
             "Platform admin required to list invitations".to_string(),
@@ -132,7 +136,8 @@ pub async fn create<S: HasInvitations>(
         }
     }
     // Identity tokens are only allowed for platform admins
-    if auth.token_type == TokenType::Identity && !state.config().is_platform_admin_email(&auth.email)
+    if auth.token_type == TokenType::Identity
+        && !state.config().is_platform_admin_email(&auth.email)
     {
         return Err(AppError::Forbidden(
             "Platform admin required to create invitations".to_string(),
@@ -152,18 +157,13 @@ pub async fn create<S: HasInvitations>(
             .rbac_service()
             .get_role(*role_id)
             .await
-            .map_err(|_| {
-                AppError::BadRequest(format!("Role '{}' does not exist", role_id))
-            })?;
+            .map_err(|_| AppError::BadRequest(format!("Role '{}' does not exist", role_id)))?;
         let service = state
             .client_service()
             .get(*role.service_id)
             .await
             .map_err(|_| {
-                AppError::BadRequest(format!(
-                    "Service for role '{}' does not exist",
-                    role_id
-                ))
+                AppError::BadRequest(format!("Service for role '{}' does not exist", role_id))
             })?;
         if let Some(ref svc_tenant_id) = service.tenant_id {
             if *svc_tenant_id != tenant_id {
@@ -512,14 +512,14 @@ mod tests {
     fn test_accept_invitation_request_long_token() {
         let long_token = "a".repeat(256);
         let json = format!(r#"{{"token": "{}"}}"#, long_token);
-        let request: AcceptInvitationRequest = serde_json::from_str(&json).unwrap();
+        let request: AcceptInvitationRequest = serde_json::from_str(json.as_str()).unwrap();
         assert_eq!(request.token.len(), 256);
     }
 
     #[test]
     fn test_accept_invitation_request_special_chars() {
         let json = r#"{"token": "abc-123_XYZ.token"}"#;
-        let request: AcceptInvitationRequest = serde_json::from_str(&json).unwrap();
+        let request: AcceptInvitationRequest = serde_json::from_str(json).unwrap();
         assert_eq!(request.token, "abc-123_XYZ.token");
     }
 

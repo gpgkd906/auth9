@@ -245,8 +245,12 @@ async fn test_list_audit_logs_with_actor_filter() {
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json_with_auth(&app, &format!("/api/v1/audit-logs?actor_id={}", actor_id), &token)
-            .await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/audit-logs?actor_id={}", actor_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

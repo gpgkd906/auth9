@@ -159,7 +159,12 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
     }
 
     /// List login events filtered by email address
-    pub async fn list_events_by_email(&self, email: &str, page: i64, per_page: i64) -> Result<(Vec<LoginEvent>, i64)> {
+    pub async fn list_events_by_email(
+        &self,
+        email: &str,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<LoginEvent>, i64)> {
         let offset = (page - 1) * per_page;
         let events = self
             .login_event_repo

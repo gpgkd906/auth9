@@ -32,8 +32,7 @@ fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
             }
         }
         TokenType::TenantAccess | TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Platform admin required: only platform administrators can modify branding"
-                .to_string(),
+            "Platform admin required: only platform administrators can modify branding".to_string(),
         )),
     }
 }

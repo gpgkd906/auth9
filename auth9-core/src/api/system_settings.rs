@@ -6,7 +6,12 @@ use crate::domain::EmailProviderConfig;
 use crate::error::{AppError, Result};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::{HasServices, HasSystemSettings};
-use axum::{extract::State, http::{HeaderMap, StatusCode}, response::IntoResponse, Json};
+use axum::{
+    extract::State,
+    http::{HeaderMap, StatusCode},
+    response::IntoResponse,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 
 /// Request body for updating email settings

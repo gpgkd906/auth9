@@ -1143,9 +1143,7 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service
-            .handle_callback("code", Some(&encoded))
-            .await;
+        let result = service.handle_callback("code", Some(&encoded)).await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1180,9 +1178,7 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service
-            .handle_callback("code", Some(&encoded))
-            .await;
+        let result = service.handle_callback("code", Some(&encoded)).await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1232,9 +1228,7 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service
-            .handle_callback("code", Some(&encoded))
-            .await;
+        let result = service.handle_callback("code", Some(&encoded)).await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1284,9 +1278,7 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service
-            .handle_callback("code", Some(&encoded))
-            .await;
+        let result = service.handle_callback("code", Some(&encoded)).await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1619,9 +1611,7 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service
-            .handle_callback("code", Some(&encoded))
-            .await;
+        let result = service.handle_callback("code", Some(&encoded)).await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 

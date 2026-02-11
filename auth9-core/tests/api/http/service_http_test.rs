@@ -3,7 +3,10 @@
 //! Tests for the service and client HTTP endpoints using mock repositories.
 
 use super::mock_keycloak::MockKeycloakServer;
-use super::{build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth, put_json_with_auth, TestAppState};
+use super::{
+    build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
+    put_json_with_auth, TestAppState,
+};
 use crate::api::create_test_identity_token;
 use crate::api::create_test_service;
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
@@ -99,8 +102,12 @@ async fn test_list_services_with_tenant_filter() {
     let app = build_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) =
-        get_json_with_auth(&app, &format!("/api/v1/services?tenant_id={}", tenant1), &token).await;
+    let (status, body): (StatusCode, Option<PaginatedResponse<Service>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services?tenant_id={}", tenant1),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -184,8 +191,12 @@ async fn test_get_service_not_found() {
     let token = create_test_identity_token();
 
     let nonexistent_id = Uuid::new_v4();
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        get_json_with_auth(&app, &format!("/api/v1/services/{}", nonexistent_id), &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}", nonexistent_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -334,8 +345,13 @@ async fn test_update_service() {
         "name": "Updated Service Name"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        put_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Service>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}", service_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -359,8 +375,13 @@ async fn test_update_service_status() {
         "status": "inactive"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        put_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Service>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}", service_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -426,8 +447,12 @@ async fn test_delete_service_not_found() {
     let token = create_test_identity_token();
 
     let nonexistent_id = Uuid::new_v4();
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json_with_auth(&app, &format!("/api/v1/services/{}", nonexistent_id), &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}", nonexistent_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -470,8 +495,12 @@ async fn test_list_clients() {
     let token = create_test_identity_token();
 
     // Get raw response to debug
-    let (status, raw_body): (StatusCode, Option<serde_json::Value>) =
-        get_json_with_auth(&app, &format!("/api/v1/services/{}/clients", service_id), &token).await;
+    let (status, raw_body): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/clients", service_id),
+        &token,
+    )
+    .await;
 
     println!("Status: {:?}", status);
     println!("Body: {:?}", raw_body);
@@ -507,13 +536,14 @@ async fn test_create_client() {
         "name": "New Client"
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json_with_auth(
-        &app,
-        &format!("/api/v1/services/{}/clients", service_id),
-        &input,
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) =
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/services/{}/clients", service_id),
+            &input,
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -540,13 +570,14 @@ async fn test_create_client_without_name() {
 
     let input = json!({});
 
-    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) = post_json_with_auth(
-        &app,
-        &format!("/api/v1/services/{}/clients", service_id),
-        &input,
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<TestClientWithSecret>>) =
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/services/{}/clients", service_id),
+            &input,
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -620,16 +651,17 @@ async fn test_regenerate_client_secret() {
     let app = build_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = post_json_with_auth(
-        &app,
-        &format!(
-            "/api/v1/services/{}/clients/existing-client/regenerate-secret",
-            service_id
-        ),
-        &json!({}),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
+        post_json_with_auth(
+            &app,
+            &format!(
+                "/api/v1/services/{}/clients/existing-client/regenerate-secret",
+                service_id
+            ),
+            &json!({}),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -694,8 +726,13 @@ async fn test_update_service_redirect_uris() {
         ]
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Service>>) =
-        put_json_with_auth(&app, &format!("/api/v1/services/{}", service_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Service>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}", service_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

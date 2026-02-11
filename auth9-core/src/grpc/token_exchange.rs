@@ -309,7 +309,8 @@ where
             .verify_tenant_access_token_with_optional_audience(&req.access_token, audience)
         {
             Ok(claims) => {
-                metrics::counter!("auth9_auth_token_validation_total", "result" => "valid").increment(1);
+                metrics::counter!("auth9_auth_token_validation_total", "result" => "valid")
+                    .increment(1);
                 Ok(Response::new(ValidateTokenResponse {
                     valid: true,
                     user_id: claims.sub,
@@ -318,7 +319,8 @@ where
                 }))
             }
             Err(e) => {
-                metrics::counter!("auth9_auth_token_validation_total", "result" => "invalid").increment(1);
+                metrics::counter!("auth9_auth_token_validation_total", "result" => "invalid")
+                    .increment(1);
                 Ok(Response::new(ValidateTokenResponse {
                     valid: false,
                     user_id: String::new(),

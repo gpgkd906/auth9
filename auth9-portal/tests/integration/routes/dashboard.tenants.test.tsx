@@ -134,7 +134,7 @@ describe("Tenants Page", () => {
     // ============================================================================
 
     it("meta returns correct title", () => {
-        const result = meta({} as any);
+        const result = meta({} as Parameters<typeof meta>[0]);
         expect(result).toEqual([{ title: "Tenants - Auth9" }]);
     });
 

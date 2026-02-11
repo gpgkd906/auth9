@@ -73,7 +73,11 @@ pub struct KeycloakEventDetails {
 }
 
 /// Map Keycloak event type to Auth9 LoginEventType
-fn map_event_type_with_details(kc_type: &str, error: Option<&str>, details: &KeycloakEventDetails) -> Option<LoginEventType> {
+fn map_event_type_with_details(
+    kc_type: &str,
+    error: Option<&str>,
+    details: &KeycloakEventDetails,
+) -> Option<LoginEventType> {
     match kc_type {
         // Successful logins
         "LOGIN" => Some(LoginEventType::Success),
@@ -91,7 +95,9 @@ fn map_event_type_with_details(kc_type: &str, error: Option<&str>, details: &Key
                     }
                 }
                 Some("user_not_found") => Some(LoginEventType::FailedPassword),
-                Some("invalid_totp") | Some("invalid_otp") | Some("invalid_authenticator") => Some(LoginEventType::FailedMfa),
+                Some("invalid_totp") | Some("invalid_otp") | Some("invalid_authenticator") => {
+                    Some(LoginEventType::FailedMfa)
+                }
                 Some("user_disabled") | Some("user_temporarily_disabled") => {
                     Some(LoginEventType::Locked)
                 }
@@ -138,7 +144,10 @@ fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> 
 }
 
 /// Derive failure reason from Keycloak error
-fn derive_failure_reason_with_details(error: Option<&str>, details: &KeycloakEventDetails) -> Option<String> {
+fn derive_failure_reason_with_details(
+    error: Option<&str>,
+    details: &KeycloakEventDetails,
+) -> Option<String> {
     error.map(|e| {
         match e {
             "invalid_user_credentials" => {
@@ -271,13 +280,14 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
     );
 
     // 4. Map to our login event type (skip non-login events)
-    let login_event_type = match map_event_type_with_details(event_type_str, event.error.as_deref(), &event.details) {
-        Some(t) => t,
-        None => {
-            // Not a login event we track, acknowledge receipt
-            return Ok(StatusCode::NO_CONTENT);
-        }
-    };
+    let login_event_type =
+        match map_event_type_with_details(event_type_str, event.error.as_deref(), &event.details) {
+            Some(t) => t,
+            None => {
+                // Not a login event we track, acknowledge receipt
+                return Ok(StatusCode::NO_CONTENT);
+            }
+        };
 
     // 5. Parse user ID if present (Keycloak uses UUID format)
     let user_id = event

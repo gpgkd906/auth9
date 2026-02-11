@@ -1,6 +1,9 @@
 //! Analytics API handlers
 
-use crate::api::{default_page, default_per_page, deserialize_page, deserialize_per_page, PaginatedResponse, PaginationQuery, SuccessResponse};
+use crate::api::{
+    default_page, default_per_page, deserialize_page, deserialize_per_page, PaginatedResponse,
+    PaginationQuery, SuccessResponse,
+};
 use crate::domain::{LoginEvent, LoginStats, StringUuid};
 use crate::error::AppError;
 use crate::state::HasAnalytics;
@@ -64,7 +67,10 @@ pub struct StatsQuery {
 pub struct ListEventsQuery {
     #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
+    #[serde(
+        default = "default_per_page",
+        deserialize_with = "deserialize_per_page"
+    )]
     pub per_page: i64,
     /// Filter events by email address
     pub email: Option<String>,

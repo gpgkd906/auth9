@@ -500,7 +500,11 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     ));
     let webauthn_instance = {
         let rp_origin = url::Url::parse(&config.webauthn.rp_origin).map_err(|e| {
-            anyhow::anyhow!("Invalid WEBAUTHN_RP_ORIGIN '{}': {}", config.webauthn.rp_origin, e)
+            anyhow::anyhow!(
+                "Invalid WEBAUTHN_RP_ORIGIN '{}': {}",
+                config.webauthn.rp_origin,
+                e
+            )
         })?;
         let builder = webauthn_rs::WebauthnBuilder::new(&config.webauthn.rp_id, &rp_origin)?
             .rp_name(&config.webauthn.rp_name);
@@ -586,7 +590,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
             endpoints,
             tenant_multipliers: std::collections::HashMap::new(),
         };
-        RateLimitState::new(rate_limit_config, cache_manager.get_connection_manager())
+        RateLimitState::new(
+            rate_limit_config,
+            cache_manager.get_connection_manager(),
+            jwt_manager.clone(),
+            config.jwt_tenant_access_allowed_audiences.clone(),
+            config.is_production(),
+        )
     } else {
         RateLimitState::noop()
     };
@@ -773,7 +783,10 @@ fn create_grpc_auth_interceptor(config: &Config) -> Result<AuthInterceptor> {
             if config.is_production() {
                 anyhow::bail!("Unknown gRPC auth_mode '{}'", other);
             }
-            tracing::warn!("Unknown gRPC auth_mode '{}'. Falling back to no auth (non-production).", other);
+            tracing::warn!(
+                "Unknown gRPC auth_mode '{}'. Falling back to no auth (non-production).",
+                other
+            );
             Ok(AuthInterceptor::noop())
         }
     }
@@ -862,7 +875,7 @@ where
         state.config().jwt_tenant_access_allowed_audiences.clone(),
         state.config().is_production(),
     )
-        .with_cache(std::sync::Arc::new(state.cache().clone()));
+    .with_cache(std::sync::Arc::new(state.cache().clone()));
 
     // ============================================================
     // PUBLIC ROUTES (no authentication required)
@@ -919,7 +932,10 @@ where
         // - POST: public registration (handler has internal auth check)
         // - GET: list users (AuthUser extractor enforces auth)
         // Both must be on the same router to avoid axum route merge conflicts.
-        .route("/api/v1/users", get(api::user::list::<S>).post(api::user::create::<S>));
+        .route(
+            "/api/v1/users",
+            get(api::user::list::<S>).post(api::user::create::<S>),
+        );
 
     // ============================================================
     // PROTECTED ROUTES (authentication required)
@@ -1235,7 +1251,9 @@ where
             security_headers_config,
             security_headers_middleware,
         ))
-        .layer(axum::middleware::from_fn(crate::middleware::normalize_error_response))
+        .layer(axum::middleware::from_fn(
+            crate::middleware::normalize_error_response,
+        ))
         .layer(TraceLayer::new_for_http())
         .layer(crate::middleware::metrics::ObservabilityLayer)
         .layer(axum::middleware::from_fn_with_state(

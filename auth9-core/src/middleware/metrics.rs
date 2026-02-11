@@ -93,13 +93,7 @@ where
 /// Collapse UUID-like path segments to `{id}` to prevent high-cardinality labels.
 fn normalize_path(path: &str) -> String {
     path.split('/')
-        .map(|seg| {
-            if looks_like_uuid(seg) {
-                "{id}"
-            } else {
-                seg
-            }
-        })
+        .map(|seg| if looks_like_uuid(seg) { "{id}" } else { seg })
         .collect::<Vec<_>>()
         .join("/")
 }
@@ -127,10 +121,7 @@ mod tests {
     #[test]
     fn test_normalize_path_multiple_uuids() {
         let path = "/api/v1/users/550e8400-e29b-41d4-a716-446655440000/tenants/6ba7b810-9dad-11d1-80b4-00c04fd430c8";
-        assert_eq!(
-            normalize_path(path),
-            "/api/v1/users/{id}/tenants/{id}"
-        );
+        assert_eq!(normalize_path(path), "/api/v1/users/{id}/tenants/{id}");
     }
 
     #[test]

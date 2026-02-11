@@ -10,9 +10,6 @@ pub async fn metrics_handler(
 ) -> impl IntoResponse {
     match handle.as_ref() {
         Some(h) => (StatusCode::OK, h.render()),
-        None => (
-            StatusCode::NOT_FOUND,
-            "Metrics not enabled".to_string(),
-        ),
+        None => (StatusCode::NOT_FOUND, "Metrics not enabled".to_string()),
     }
 }

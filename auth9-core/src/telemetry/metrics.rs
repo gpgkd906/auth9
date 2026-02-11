@@ -22,10 +22,7 @@ pub fn install_prometheus_recorder() -> PrometheusHandle {
 /// includes HELP/TYPE lines for all metrics from startup (not just after first use).
 pub fn describe_metrics() {
     // HTTP metrics
-    describe_counter!(
-        "auth9_http_requests_total",
-        "Total number of HTTP requests"
-    );
+    describe_counter!("auth9_http_requests_total", "Total number of HTTP requests");
     describe_histogram!(
         "auth9_http_request_duration_seconds",
         "HTTP request duration in seconds"
@@ -36,10 +33,7 @@ pub fn describe_metrics() {
     );
 
     // gRPC metrics
-    describe_counter!(
-        "auth9_grpc_requests_total",
-        "Total number of gRPC requests"
-    );
+    describe_counter!("auth9_grpc_requests_total", "Total number of gRPC requests");
     describe_histogram!(
         "auth9_grpc_request_duration_seconds",
         "gRPC request duration in seconds"
@@ -66,10 +60,7 @@ pub fn describe_metrics() {
     );
 
     // Auth metrics
-    describe_counter!(
-        "auth9_auth_login_total",
-        "Total number of login attempts"
-    );
+    describe_counter!("auth9_auth_login_total", "Total number of login attempts");
     describe_counter!(
         "auth9_auth_token_exchange_total",
         "Total number of token exchange requests"
@@ -77,6 +68,10 @@ pub fn describe_metrics() {
     describe_counter!(
         "auth9_auth_token_validation_total",
         "Total number of token validation requests"
+    );
+    describe_counter!(
+        "auth9_auth_invalid_state_total",
+        "Total number of invalid OIDC callback state events"
     );
 
     // Security metrics
@@ -88,20 +83,15 @@ pub fn describe_metrics() {
         "auth9_rate_limit_throttled_total",
         "Total number of rate-limited requests"
     );
+    describe_counter!(
+        "auth9_rate_limit_unavailable_total",
+        "Total number of requests fail-closed because rate-limit backend was unavailable"
+    );
 
     // Business metrics
-    describe_gauge!(
-        "auth9_tenants_active_total",
-        "Number of active tenants"
-    );
-    describe_gauge!(
-        "auth9_users_active_total",
-        "Number of active users"
-    );
-    describe_gauge!(
-        "auth9_sessions_active_total",
-        "Number of active sessions"
-    );
+    describe_gauge!("auth9_tenants_active_total", "Number of active tenants");
+    describe_gauge!("auth9_users_active_total", "Number of active users");
+    describe_gauge!("auth9_sessions_active_total", "Number of active sessions");
 
     // Emit initial zero values for lazily-registered metrics so that
     // HELP/TYPE lines appear in Prometheus output from startup.
@@ -113,8 +103,16 @@ pub fn describe_metrics() {
     counter!("auth9_auth_login_total", "result" => "success").absolute(0);
     counter!("auth9_auth_token_exchange_total", "result" => "success").absolute(0);
     counter!("auth9_auth_token_validation_total", "result" => "valid").absolute(0);
-    counter!("auth9_security_alerts_total", "type" => "brute_force", "severity" => "high").absolute(0);
+    counter!("auth9_auth_invalid_state_total", "reason" => "missing").absolute(0);
+    counter!("auth9_security_alerts_total", "type" => "brute_force", "severity" => "high")
+        .absolute(0);
     counter!("auth9_rate_limit_throttled_total", "endpoint" => "").absolute(0);
+    counter!(
+        "auth9_rate_limit_unavailable_total",
+        "endpoint" => "POST:/api/v1/auth/token",
+        "mode" => "fail_close"
+    )
+    .absolute(0);
     counter!("auth9_redis_operations_total", "operation" => "get").absolute(0);
     histogram!("auth9_redis_operation_duration_seconds", "operation" => "get").record(0.0);
     gauge!("auth9_http_requests_in_flight").set(0.0);

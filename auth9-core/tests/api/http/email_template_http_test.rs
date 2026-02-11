@@ -214,13 +214,14 @@ async fn test_update_template_success() {
         "text_body": "Updated text"
     });
 
-    let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) = put_json_with_auth(
-        &app,
-        "/api/v1/system/email-templates/invitation",
-        &update_request,
-        &token,
-    )
-    .await;
+    let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
+        put_json_with_auth(
+            &app,
+            "/api/v1/system/email-templates/invitation",
+            &update_request,
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     let template = body.unwrap().data;
@@ -336,7 +337,12 @@ async fn test_reset_template_success() {
 
     // Reset the template
     let (status, body): (_, Option<SuccessResponse<EmailTemplateWithContent>>) =
-        delete_json_with_auth(&app, "/api/v1/system/email-templates/password_reset", &token).await;
+        delete_json_with_auth(
+            &app,
+            "/api/v1/system/email-templates/password_reset",
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     let template = body.unwrap().data;
@@ -370,8 +376,12 @@ async fn test_reset_template_invalid_type() {
     let app = build_email_template_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, _): (_, Option<serde_json::Value>) =
-        delete_json_with_auth(&app, "/api/v1/system/email-templates/not_a_template", &token).await;
+    let (status, _): (_, Option<serde_json::Value>) = delete_json_with_auth(
+        &app,
+        "/api/v1/system/email-templates/not_a_template",
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }

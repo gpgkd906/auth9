@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import BrandingSettingsPage, { loader, action } from "~/routes/dashboard.settings.branding";
 import { brandingApi } from "~/services/api";
+import type { BrandingConfig } from "~/services/api";
 
 // Mock branding API
 vi.mock("~/services/api", () => ({
@@ -714,6 +715,14 @@ describe("Branding Settings Page", () => {
 });
 
 describe("Branding action", () => {
+  const mockBrandingConfig: BrandingConfig = {
+    primary_color: "#007AFF",
+    secondary_color: "#5856D6",
+    background_color: "#F5F5F7",
+    text_color: "#1D1D1F",
+    allow_registration: false,
+  };
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -727,7 +736,7 @@ describe("Branding action", () => {
   }
 
   it("saves branding config successfully", async () => {
-    vi.mocked(brandingApi.update).mockResolvedValue({ data: {} as any });
+    vi.mocked(brandingApi.update).mockResolvedValue({ data: mockBrandingConfig });
 
     const request = createFormRequest({
       intent: "save",
@@ -761,7 +770,7 @@ describe("Branding action", () => {
   });
 
   it("resets branding to defaults", async () => {
-    vi.mocked(brandingApi.update).mockResolvedValue({ data: {} as any });
+    vi.mocked(brandingApi.update).mockResolvedValue({ data: mockBrandingConfig });
 
     const request = createFormRequest({
       intent: "reset",
@@ -800,7 +809,7 @@ describe("Branding action", () => {
   });
 
   it("omits empty optional fields", async () => {
-    vi.mocked(brandingApi.update).mockResolvedValue({ data: {} as any });
+    vi.mocked(brandingApi.update).mockResolvedValue({ data: mockBrandingConfig });
 
     const request = createFormRequest({
       intent: "save",

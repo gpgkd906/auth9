@@ -20,6 +20,12 @@ type Pages = {
   "/reset-password": {
     params: {};
   };
+  "/auth/callback": {
+    params: {};
+  };
+  "/invite/accept": {
+    params: {};
+  };
   "/dashboard": {
     params: {};
   };
@@ -72,6 +78,21 @@ type Pages = {
   "/dashboard/settings/email": {
     params: {};
   };
+  "/dashboard/account": {
+    params: {};
+  };
+  "/dashboard/account/identities": {
+    params: {};
+  };
+  "/dashboard/account/passkeys": {
+    params: {};
+  };
+  "/dashboard/account/security": {
+    params: {};
+  };
+  "/dashboard/account/sessions": {
+    params: {};
+  };
   "/dashboard/tenants": {
     params: {};
   };
@@ -80,7 +101,17 @@ type Pages = {
       "tenantId": string;
     };
   };
+  "/dashboard/tenants/:tenantId/services": {
+    params: {
+      "tenantId": string;
+    };
+  };
   "/dashboard/tenants/:tenantId/webhooks": {
+    params: {
+      "tenantId": string;
+    };
+  };
+  "/dashboard/tenants/:tenantId": {
     params: {
       "tenantId": string;
     };
@@ -94,6 +125,9 @@ type Pages = {
   "/register": {
     params: {};
   };
+  "/logout": {
+    params: {};
+  };
   "/login": {
     params: {};
   };
@@ -102,7 +136,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/forgot-password" | "/reset-password" | "/dashboard" | "/dashboard/security/alerts" | "/dashboard/services" | "/dashboard/services/:id" | "/dashboard/audit-logs" | "/dashboard/analytics" | "/dashboard/analytics/events" | "/dashboard/settings" | "/dashboard/settings/email-templates" | "/dashboard/settings/email-templates/:type" | "/dashboard/settings/identity-providers" | "/dashboard/settings/branding" | "/dashboard/settings/passkeys" | "/dashboard/settings/security" | "/dashboard/settings/sessions" | "/dashboard/settings/email" | "/dashboard/tenants" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/roles" | "/dashboard/users" | "/register" | "/login";
+    page: "/" | "/forgot-password" | "/reset-password" | "/auth/callback" | "/invite/accept" | "/dashboard" | "/dashboard/security/alerts" | "/dashboard/services" | "/dashboard/services/:id" | "/dashboard/audit-logs" | "/dashboard/analytics" | "/dashboard/analytics/events" | "/dashboard/settings" | "/dashboard/settings/email-templates" | "/dashboard/settings/email-templates/:type" | "/dashboard/settings/identity-providers" | "/dashboard/settings/branding" | "/dashboard/settings/passkeys" | "/dashboard/settings/security" | "/dashboard/settings/sessions" | "/dashboard/settings/email" | "/dashboard/account" | "/dashboard/account/identities" | "/dashboard/account/passkeys" | "/dashboard/account/security" | "/dashboard/account/sessions" | "/dashboard/tenants" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/services" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/tenants/:tenantId" | "/dashboard/roles" | "/dashboard/users" | "/register" | "/logout" | "/login";
   };
   "routes/forgot-password.tsx": {
     id: "routes/forgot-password";
@@ -112,9 +146,17 @@ type RouteFiles = {
     id: "routes/reset-password";
     page: "/reset-password";
   };
+  "routes/auth.callback.tsx": {
+    id: "routes/auth.callback";
+    page: "/auth/callback";
+  };
+  "routes/invite.accept.tsx": {
+    id: "routes/invite.accept";
+    page: "/invite/accept";
+  };
   "routes/dashboard.tsx": {
     id: "routes/dashboard";
-    page: "/dashboard" | "/dashboard/security/alerts" | "/dashboard/services" | "/dashboard/services/:id" | "/dashboard/audit-logs" | "/dashboard/analytics" | "/dashboard/analytics/events" | "/dashboard/settings" | "/dashboard/settings/email-templates" | "/dashboard/settings/email-templates/:type" | "/dashboard/settings/identity-providers" | "/dashboard/settings/branding" | "/dashboard/settings/passkeys" | "/dashboard/settings/security" | "/dashboard/settings/sessions" | "/dashboard/settings/email" | "/dashboard/tenants" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/roles" | "/dashboard/users";
+    page: "/dashboard" | "/dashboard/security/alerts" | "/dashboard/services" | "/dashboard/services/:id" | "/dashboard/audit-logs" | "/dashboard/analytics" | "/dashboard/analytics/events" | "/dashboard/settings" | "/dashboard/settings/email-templates" | "/dashboard/settings/email-templates/:type" | "/dashboard/settings/identity-providers" | "/dashboard/settings/branding" | "/dashboard/settings/passkeys" | "/dashboard/settings/security" | "/dashboard/settings/sessions" | "/dashboard/settings/email" | "/dashboard/account" | "/dashboard/account/identities" | "/dashboard/account/passkeys" | "/dashboard/account/security" | "/dashboard/account/sessions" | "/dashboard/tenants" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/services" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/tenants/:tenantId" | "/dashboard/roles" | "/dashboard/users";
   };
   "routes/dashboard.security.alerts.tsx": {
     id: "routes/dashboard.security.alerts";
@@ -180,17 +222,53 @@ type RouteFiles = {
     id: "routes/dashboard.settings.email";
     page: "/dashboard/settings/email";
   };
+  "routes/dashboard.account.tsx": {
+    id: "routes/dashboard.account";
+    page: "/dashboard/account" | "/dashboard/account/identities" | "/dashboard/account/passkeys" | "/dashboard/account/security" | "/dashboard/account/sessions";
+  };
+  "routes/dashboard.account.identities.tsx": {
+    id: "routes/dashboard.account.identities";
+    page: "/dashboard/account/identities";
+  };
+  "routes/dashboard.account.passkeys.tsx": {
+    id: "routes/dashboard.account.passkeys";
+    page: "/dashboard/account/passkeys";
+  };
+  "routes/dashboard.account.security.tsx": {
+    id: "routes/dashboard.account.security";
+    page: "/dashboard/account/security";
+  };
+  "routes/dashboard.account.sessions.tsx": {
+    id: "routes/dashboard.account.sessions";
+    page: "/dashboard/account/sessions";
+  };
+  "routes/dashboard.account._index.tsx": {
+    id: "routes/dashboard.account._index";
+    page: "/dashboard/account";
+  };
   "routes/dashboard.tenants.tsx": {
     id: "routes/dashboard.tenants";
-    page: "/dashboard/tenants" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/webhooks";
+    page: "/dashboard/tenants" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/services" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/tenants/:tenantId";
   };
   "routes/dashboard.tenants.$tenantId.invitations.tsx": {
     id: "routes/dashboard.tenants.$tenantId.invitations";
     page: "/dashboard/tenants/:tenantId/invitations";
   };
+  "routes/dashboard.tenants.$tenantId.services.tsx": {
+    id: "routes/dashboard.tenants.$tenantId.services";
+    page: "/dashboard/tenants/:tenantId/services";
+  };
   "routes/dashboard.tenants.$tenantId.webhooks.tsx": {
     id: "routes/dashboard.tenants.$tenantId.webhooks";
     page: "/dashboard/tenants/:tenantId/webhooks";
+  };
+  "routes/dashboard.tenants.$tenantId._index.tsx": {
+    id: "routes/dashboard.tenants.$tenantId._index";
+    page: "/dashboard/tenants/:tenantId";
+  };
+  "routes/dashboard.tenants._index.tsx": {
+    id: "routes/dashboard.tenants._index";
+    page: "/dashboard/tenants";
   };
   "routes/dashboard._index.tsx": {
     id: "routes/dashboard._index";
@@ -212,6 +290,10 @@ type RouteFiles = {
     id: "routes/_index";
     page: "/";
   };
+  "routes/logout.tsx": {
+    id: "routes/logout";
+    page: "/logout";
+  };
   "routes/login.tsx": {
     id: "routes/login";
     page: "/login";
@@ -222,6 +304,8 @@ type RouteModules = {
   "root": typeof import("./app/root.tsx");
   "routes/forgot-password": typeof import("./app/routes/forgot-password.tsx");
   "routes/reset-password": typeof import("./app/routes/reset-password.tsx");
+  "routes/auth.callback": typeof import("./app/routes/auth.callback.tsx");
+  "routes/invite.accept": typeof import("./app/routes/invite.accept.tsx");
   "routes/dashboard": typeof import("./app/routes/dashboard.tsx");
   "routes/dashboard.security.alerts": typeof import("./app/routes/dashboard.security.alerts.tsx");
   "routes/dashboard.services._index": typeof import("./app/routes/dashboard.services._index.tsx");
@@ -239,13 +323,23 @@ type RouteModules = {
   "routes/dashboard.settings.sessions": typeof import("./app/routes/dashboard.settings.sessions.tsx");
   "routes/dashboard.settings._index": typeof import("./app/routes/dashboard.settings._index.tsx");
   "routes/dashboard.settings.email": typeof import("./app/routes/dashboard.settings.email.tsx");
+  "routes/dashboard.account": typeof import("./app/routes/dashboard.account.tsx");
+  "routes/dashboard.account.identities": typeof import("./app/routes/dashboard.account.identities.tsx");
+  "routes/dashboard.account.passkeys": typeof import("./app/routes/dashboard.account.passkeys.tsx");
+  "routes/dashboard.account.security": typeof import("./app/routes/dashboard.account.security.tsx");
+  "routes/dashboard.account.sessions": typeof import("./app/routes/dashboard.account.sessions.tsx");
+  "routes/dashboard.account._index": typeof import("./app/routes/dashboard.account._index.tsx");
   "routes/dashboard.tenants": typeof import("./app/routes/dashboard.tenants.tsx");
   "routes/dashboard.tenants.$tenantId.invitations": typeof import("./app/routes/dashboard.tenants.$tenantId.invitations.tsx");
+  "routes/dashboard.tenants.$tenantId.services": typeof import("./app/routes/dashboard.tenants.$tenantId.services.tsx");
   "routes/dashboard.tenants.$tenantId.webhooks": typeof import("./app/routes/dashboard.tenants.$tenantId.webhooks.tsx");
+  "routes/dashboard.tenants.$tenantId._index": typeof import("./app/routes/dashboard.tenants.$tenantId._index.tsx");
+  "routes/dashboard.tenants._index": typeof import("./app/routes/dashboard.tenants._index.tsx");
   "routes/dashboard._index": typeof import("./app/routes/dashboard._index.tsx");
   "routes/dashboard.roles": typeof import("./app/routes/dashboard.roles.tsx");
   "routes/dashboard.users": typeof import("./app/routes/dashboard.users.tsx");
   "routes/register": typeof import("./app/routes/register.tsx");
   "routes/_index": typeof import("./app/routes/_index.tsx");
+  "routes/logout": typeof import("./app/routes/logout.tsx");
   "routes/login": typeof import("./app/routes/login.tsx");
 };

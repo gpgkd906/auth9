@@ -4,11 +4,11 @@ use crate::api::{
     deserialize_page, deserialize_per_page, write_audit_log_generic, MessageResponse,
     PaginatedResponse, SuccessResponse,
 };
+use crate::config::Config;
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::HasServices;
-use crate::config::Config;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -61,9 +61,7 @@ fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
             if config.is_platform_admin_email(&auth.email) {
                 Ok(())
             } else {
-                Err(AppError::Forbidden(
-                    "Platform admin required".to_string(),
-                ))
+                Err(AppError::Forbidden("Platform admin required".to_string()))
             }
         }
         TokenType::TenantAccess | TokenType::ServiceClient => {
@@ -81,7 +79,10 @@ fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
 pub struct TenantListQuery {
     #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
+    #[serde(
+        default = "default_per_page",
+        deserialize_with = "deserialize_per_page"
+    )]
     pub per_page: i64,
     pub search: Option<String>,
 }

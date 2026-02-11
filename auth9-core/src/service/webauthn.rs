@@ -78,9 +78,8 @@ impl WebAuthnService {
             })
             .collect();
 
-        let user_unique_id = Uuid::parse_str(user_id).map_err(|_| {
-            AppError::BadRequest("Invalid user_id format".to_string())
-        })?;
+        let user_unique_id = Uuid::parse_str(user_id)
+            .map_err(|_| AppError::BadRequest("Invalid user_id format".to_string()))?;
 
         let exclude = if exclude_credentials.is_empty() {
             None
@@ -96,11 +95,17 @@ impl WebAuthnService {
                 display_name.unwrap_or(email),
                 exclude,
             )
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("WebAuthn registration start failed: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("WebAuthn registration start failed: {}", e))
+            })?;
 
         // Serialize registration state and store in Redis
-        let state_json = serde_json::to_string(&reg_state)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize registration state: {}", e)))?;
+        let state_json = serde_json::to_string(&reg_state).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to serialize registration state: {}",
+                e
+            ))
+        })?;
 
         self.cache
             .store_webauthn_reg_state(user_id, &state_json, self.challenge_ttl_secs)
@@ -232,9 +237,7 @@ impl WebAuthnService {
             })?;
 
         // Remove state from Redis (one-time use)
-        self.cache
-            .remove_webauthn_auth_state(challenge_id)
-            .await?;
+        self.cache.remove_webauthn_auth_state(challenge_id).await?;
 
         // Look up the credential by its ID
         // credential.raw_id is Base64UrlSafeData (binary), encode to base64url for DB lookup
@@ -270,7 +273,10 @@ impl WebAuthnService {
 
         // Persist updated credential data (counter increment)
         let updated_data = serde_json::to_value(&passkey).map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to serialize updated passkey: {}", e))
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to serialize updated passkey: {}",
+                e
+            ))
         })?;
 
         self.repo
@@ -364,9 +370,7 @@ mod tests {
         Arc::new(builder.build().unwrap())
     }
 
-    fn create_test_service(
-        mock_repo: MockWebAuthnRepository,
-    ) -> WebAuthnService {
+    fn create_test_service(mock_repo: MockWebAuthnRepository) -> WebAuthnService {
         WebAuthnService::new(
             create_test_webauthn(),
             Arc::new(mock_repo),
@@ -386,9 +390,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_registration() {
         let mut mock_repo = MockWebAuthnRepository::new();
-        mock_repo
-            .expect_list_by_user()
-            .returning(|_| Ok(vec![]));
+        mock_repo.expect_list_by_user().returning(|_| Ok(vec![]));
 
         let service = create_test_service(mock_repo);
 
@@ -403,9 +405,7 @@ mod tests {
     #[tokio::test]
     async fn test_start_registration_invalid_user_id() {
         let mut mock_repo = MockWebAuthnRepository::new();
-        mock_repo
-            .expect_list_by_user()
-            .returning(|_| Ok(vec![]));
+        mock_repo.expect_list_by_user().returning(|_| Ok(vec![]));
 
         let service = create_test_service(mock_repo);
 
@@ -512,9 +512,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_credentials_empty() {
         let mut mock_repo = MockWebAuthnRepository::new();
-        mock_repo
-            .expect_list_by_user()
-            .returning(|_| Ok(vec![]));
+        mock_repo.expect_list_by_user().returning(|_| Ok(vec![]));
 
         let service = create_test_service(mock_repo);
         let result = service.list_credentials("user-1", None).await.unwrap();
@@ -531,9 +529,7 @@ mod tests {
             .returning(|_, _| Ok(()));
 
         let service = create_test_service(mock_repo);
-        let result = service
-            .delete_credential("user-1", "pk-1", None)
-            .await;
+        let result = service.delete_credential("user-1", "pk-1", None).await;
 
         assert!(result.is_ok());
     }

@@ -36,9 +36,7 @@ pub fn init(config: &TelemetryConfig) -> Option<PrometheusHandle> {
         // By default, tracing-subscriber nests event fields under `fields`.
         // For a more conventional JSON log shape (and to align with our QA docs),
         // flatten event fields so `message` is consistently top-level.
-        let fmt_layer = tracing_subscriber::fmt::layer()
-            .json()
-            .flatten_event(true);
+        let fmt_layer = tracing_subscriber::fmt::layer().json().flatten_event(true);
         let otel_layer = tracing_setup::create_otel_layer(config);
         registry.with(fmt_layer).with(otel_layer).init();
     } else {

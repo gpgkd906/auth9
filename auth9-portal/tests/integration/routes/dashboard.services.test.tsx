@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import ServicesPage, { loader, action } from "~/routes/dashboard.services._index";
 import { serviceApi } from "~/services/api";
+import type { Service } from "~/services/api";
 import { ConfirmProvider } from "~/hooks/useConfirm";
 
 // Mock the APIs
@@ -477,7 +478,7 @@ describe("action", () => {
                 status: "active",
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-            } as any,
+            } as Service,
         });
 
         const request = createFormRequest({
@@ -503,7 +504,7 @@ describe("action", () => {
                 status: "active",
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
-            } as any,
+            } as Service,
         });
 
         const request = createFormRequest({

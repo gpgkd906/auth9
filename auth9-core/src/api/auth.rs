@@ -33,6 +33,7 @@ pub struct AuthorizeRequest {
 
 /// Allowed OIDC scopes whitelist
 const ALLOWED_SCOPES: &[&str] = &["openid", "profile", "email"];
+const OIDC_STATE_TTL_SECS: u64 = 300;
 
 /// Filter and validate scope parameter against whitelist
 fn filter_scopes(requested_scope: &str) -> Result<String> {
@@ -52,7 +53,7 @@ fn filter_scopes(requested_scope: &str) -> Result<String> {
 }
 
 /// Login redirect (initiates OIDC flow)
-pub async fn authorize<S: HasServices>(
+pub async fn authorize<S: HasServices + HasCache>(
     State(state): State<S>,
     Query(params): Query<AuthorizeRequest>,
 ) -> Result<Response> {
@@ -74,7 +75,13 @@ pub async fn authorize<S: HasServices>(
         original_state: Some(params.state),
     };
 
-    let encoded_state = encode_state(&state_payload)?;
+    let state_nonce = uuid::Uuid::new_v4().to_string();
+    let state_payload_json =
+        serde_json::to_string(&state_payload).map_err(|e| AppError::Internal(e.into()))?;
+    state
+        .cache()
+        .store_oidc_state(&state_nonce, &state_payload_json, OIDC_STATE_TTL_SECS)
+        .await?;
 
     let auth_url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
         keycloak_public_url: &state.config().keycloak.public_url,
@@ -83,7 +90,7 @@ pub async fn authorize<S: HasServices>(
         client_id: &state_payload.client_id,
         callback_url: &callback_url,
         scope: &filtered_scope,
-        encoded_state: &encoded_state,
+        encoded_state: &state_nonce,
         nonce: params.nonce.as_deref(),
     })?;
 
@@ -106,67 +113,50 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
 }
 
-pub async fn callback<S: HasServices + HasSessionManagement>(
+pub async fn callback<S: HasServices + HasCache>(
     State(state): State<S>,
-    headers: HeaderMap,
     Query(params): Query<CallbackRequest>,
 ) -> Result<Response> {
-    let state_payload = decode_state(params.state.as_deref())?;
-
-    let token_response = exchange_code_for_tokens(&state, &state_payload, &params.code).await?;
-    let userinfo = fetch_userinfo(&state, &token_response.access_token).await?;
-
-    let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
-        Ok(existing) => existing,
-        Err(AppError::NotFound(_)) => {
-            let input = crate::domain::CreateUserInput {
-                email: userinfo.email.clone(),
-                display_name: userinfo.name.clone(),
-                avatar_url: None,
-            };
-            state.user_service().create(&userinfo.sub, input).await?
-        }
-        Err(e) => return Err(e),
-    };
-
-    // Create session record
-    let ip_address = extract_client_ip(&headers);
-    let user_agent = headers
-        .get(axum::http::header::USER_AGENT)
-        .and_then(|v| v.to_str().ok())
-        .map(String::from);
-
-    let session = state
-        .session_service()
-        .create_session(user.id, None, ip_address, user_agent)
-        .await?;
-
-    // Create identity token with session ID
-    let jwt_manager = HasServices::jwt_manager(&state);
-    let identity_token = jwt_manager.create_identity_token_with_session(
-        *user.id,
-        &userinfo.email,
-        userinfo.name.as_deref(),
-        Some(*session.id),
-    )?;
+    let state_nonce = params
+        .state
+        .as_deref()
+        .ok_or_else(|| {
+            metrics::counter!("auth9_auth_invalid_state_total", "reason" => "missing").increment(1);
+            AppError::BadRequest("Missing state".to_string())
+        })?;
+    let state_payload_json = state
+        .cache()
+        .consume_oidc_state(state_nonce)
+        .await?
+        .ok_or_else(|| {
+            metrics::counter!("auth9_auth_invalid_state_total", "reason" => "invalid_or_expired")
+                .increment(1);
+            AppError::BadRequest("Invalid or expired state".to_string())
+        })?;
+    let state_payload: CallbackState =
+        serde_json::from_str(&state_payload_json).map_err(|e| {
+            metrics::counter!("auth9_auth_invalid_state_total", "reason" => "deserialize_error")
+                .increment(1);
+            AppError::Internal(e.into())
+        })?;
 
     let mut redirect_url = Url::parse(&state_payload.redirect_uri)
         .map_err(|e| AppError::BadRequest(format!("Invalid redirect_uri: {}", e)))?;
 
     {
         let mut pairs = redirect_url.query_pairs_mut();
-        pairs.append_pair("access_token", &identity_token);
-        pairs.append_pair("token_type", "Bearer");
-        pairs.append_pair("expires_in", &jwt_manager.access_token_ttl().to_string());
-        if let Some(ref id_token) = token_response.id_token {
-            pairs.append_pair("id_token", id_token);
-        }
+        pairs.append_pair("code", &params.code);
         if let Some(original_state) = state_payload.original_state {
             pairs.append_pair("state", &original_state);
         }
     }
 
-    Ok(Redirect::temporary(redirect_url.as_str()).into_response())
+    let mut response = Redirect::temporary(redirect_url.as_str()).into_response();
+    response.headers_mut().insert(
+        axum::http::header::CACHE_CONTROL,
+        "no-store".parse().unwrap(),
+    );
+    Ok(response)
 }
 
 /// Token endpoint (for client credentials, etc.)
@@ -180,7 +170,7 @@ pub struct TokenRequest {
     pub refresh_token: Option<String>,
 }
 
-pub async fn token<S: HasServices + HasSessionManagement>(
+pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(params): Json<TokenRequest>,
@@ -240,6 +230,14 @@ pub async fn token<S: HasServices + HasSessionManagement>(
                 userinfo.name.as_deref(),
                 Some(*session.id),
             )?;
+
+            if let Some(refresh_token) = token_response.refresh_token.as_deref() {
+                let refresh_ttl = state.config().jwt.refresh_token_ttl_secs.max(1) as u64;
+                state
+                    .cache()
+                    .bind_refresh_token_session(refresh_token, &session.id.to_string(), refresh_ttl)
+                    .await?;
+            }
 
             metrics::counter!("auth9_auth_login_total", "result" => "success").increment(1);
 
@@ -310,11 +308,41 @@ pub async fn token<S: HasServices + HasSessionManagement>(
                 Err(e) => return Err(e),
             };
 
-            let identity_token = jwt_manager.create_identity_token(
+            let session_id = state
+                .cache()
+                .get_refresh_token_session(&refresh_token)
+                .await?
+                .and_then(|sid| uuid::Uuid::parse_str(&sid).ok())
+                .ok_or_else(|| {
+                    AppError::Unauthorized(
+                        "Refresh token is not bound to an active session".to_string(),
+                    )
+                })?;
+
+            let identity_token = jwt_manager.create_identity_token_with_session(
                 *user.id,
                 &userinfo.email,
                 userinfo.name.as_deref(),
+                Some(session_id),
             )?;
+
+            if let Some(new_refresh_token) = token_response.refresh_token.as_deref() {
+                let refresh_ttl = state.config().jwt.refresh_token_ttl_secs.max(1) as u64;
+                if new_refresh_token != refresh_token {
+                    state
+                        .cache()
+                        .remove_refresh_token_session(&refresh_token)
+                        .await?;
+                }
+                state
+                    .cache()
+                    .bind_refresh_token_session(
+                        new_refresh_token,
+                        &session_id.to_string(),
+                        refresh_ttl,
+                    )
+                    .await?;
+            }
 
             Ok(Json(TokenResponse {
                 access_token: identity_token,
@@ -472,12 +500,14 @@ struct CallbackState {
     original_state: Option<String>,
 }
 
-/// Encode callback state to base64
+// Legacy helpers kept for unit tests and backward-compatibility checks.
+#[cfg(test)]
 fn encode_state(state_payload: &CallbackState) -> Result<String> {
     let bytes = serde_json::to_vec(state_payload).map_err(|e| AppError::Internal(e.into()))?;
     Ok(base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(bytes))
 }
 
+#[cfg(test)]
 fn decode_state(state: Option<&str>) -> Result<CallbackState> {
     let encoded = state.ok_or_else(|| AppError::BadRequest("Missing state".to_string()))?;
     let bytes = base64::engine::general_purpose::URL_SAFE_NO_PAD

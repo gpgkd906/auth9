@@ -118,7 +118,10 @@ impl fmt::Debug for Config {
             .field("telemetry", &self.telemetry)
             .field(
                 "jwt_tenant_access_allowed_audiences",
-                &format!("[{} audiences]", self.jwt_tenant_access_allowed_audiences.len()),
+                &format!(
+                    "[{} audiences]",
+                    self.jwt_tenant_access_allowed_audiences.len()
+                ),
             )
             .field("security_headers", &self.security_headers)
             .field("portal_client_id", &self.portal_client_id)
@@ -379,8 +382,7 @@ impl Config {
                     "gRPC authentication is disabled (GRPC_AUTH_MODE=none) in production"
                 );
             }
-            if self.grpc_security.auth_mode == "api_key" && self.grpc_security.api_keys.is_empty()
-            {
+            if self.grpc_security.auth_mode == "api_key" && self.grpc_security.api_keys.is_empty() {
                 anyhow::bail!(
                     "gRPC auth_mode is api_key but no keys configured (GRPC_API_KEYS) in production"
                 );
@@ -403,8 +405,7 @@ impl Config {
 
     /// Load configuration from environment variables
     pub fn from_env() -> Result<Self> {
-        let environment =
-            env::var("ENVIRONMENT").unwrap_or_else(|_| ENV_DEVELOPMENT.to_string());
+        let environment = env::var("ENVIRONMENT").unwrap_or_else(|_| ENV_DEVELOPMENT.to_string());
 
         let portal_client_id = env::var("AUTH9_PORTAL_CLIENT_ID")
             .ok()
@@ -580,12 +581,9 @@ impl Config {
                 let portal_url = env::var("AUTH9_PORTAL_URL")
                     .unwrap_or_else(|_| "http://localhost:3000".to_string());
                 WebAuthnConfig {
-                    rp_id: env::var("WEBAUTHN_RP_ID")
-                        .unwrap_or_else(|_| "localhost".to_string()),
-                    rp_name: env::var("WEBAUTHN_RP_NAME")
-                        .unwrap_or_else(|_| "Auth9".to_string()),
-                    rp_origin: env::var("WEBAUTHN_RP_ORIGIN")
-                        .unwrap_or(portal_url),
+                    rp_id: env::var("WEBAUTHN_RP_ID").unwrap_or_else(|_| "localhost".to_string()),
+                    rp_name: env::var("WEBAUTHN_RP_NAME").unwrap_or_else(|_| "Auth9".to_string()),
+                    rp_origin: env::var("WEBAUTHN_RP_ORIGIN").unwrap_or(portal_url),
                     challenge_ttl_secs: env::var("WEBAUTHN_CHALLENGE_TTL_SECS")
                         .unwrap_or_else(|_| "300".to_string())
                         .parse()

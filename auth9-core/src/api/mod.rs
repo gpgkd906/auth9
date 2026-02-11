@@ -3,13 +3,13 @@
 pub mod analytics;
 pub mod audit;
 pub mod auth;
-pub mod metrics;
 pub mod branding;
 pub mod email_template;
 pub mod health;
 pub mod identity_provider;
 pub mod invitation;
 pub mod keycloak_event;
+pub mod metrics;
 pub mod password;
 pub mod role;
 pub mod security_alert;
@@ -39,7 +39,10 @@ pub(crate) const MAX_PER_PAGE: i64 = 100;
 pub struct PaginationQuery {
     #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
+    #[serde(
+        default = "default_per_page",
+        deserialize_with = "deserialize_per_page"
+    )]
     pub per_page: i64,
 }
 

@@ -1,5 +1,5 @@
 import { createRoutesStub } from "react-router";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import UsersPage, { loader, action } from "~/routes/dashboard.users";
@@ -1139,12 +1139,15 @@ describe("Users Page", () => {
         async function openRolesDialog(user: ReturnType<typeof userEvent.setup>) {
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
+            const aliceEmailCell = screen.getByText("alice@example.com");
+            const aliceRow = aliceEmailCell.closest("tr");
+            expect(aliceRow).not.toBeNull();
+            await user.click(within(aliceRow as HTMLTableRowElement).getByRole("button", { name: /open menu/i }));
             await user.click(await screen.findByText("Manage Tenants"));
 
-            await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
-            await user.click(screen.getByRole("button", { name: /Roles/i }));
+            const manageTenantsDialog = await screen.findByRole("dialog", { name: /Manage Tenants for/i });
+            await waitFor(() => expect(within(manageTenantsDialog).getByText("Tenant 1")).toBeInTheDocument());
+            await user.click(within(manageTenantsDialog).getByRole("button", { name: /Roles/i }));
 
             await waitFor(() => expect(screen.getByText("Assign Roles")).toBeInTheDocument());
         }
@@ -1507,4 +1510,3 @@ describe("Users Page", () => {
         });
     });
 });
-

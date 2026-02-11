@@ -5,6 +5,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import SettingsLayout, { meta } from "~/routes/dashboard.settings";
 import OrganizationSettingsPage, { loader, action } from "~/routes/dashboard.settings._index";
 import { tenantApi } from "~/services/api";
+import type { Tenant } from "~/services/api";
 
 // Mock tenant API
 vi.mock("~/services/api", () => ({
@@ -342,6 +343,16 @@ describe("Settings Page", () => {
 });
 
 describe("Settings action", () => {
+    const mockTenant: Tenant = {
+        id: "tenant-1",
+        name: "Acme Corp",
+        slug: "acme",
+        status: "active",
+        settings: {},
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+    };
+
     beforeEach(() => {
         vi.clearAllMocks();
     });
@@ -355,7 +366,7 @@ describe("Settings action", () => {
     }
 
     it("updates tenant settings successfully", async () => {
-        vi.mocked(tenantApi.update).mockResolvedValue({ data: {} as any });
+        vi.mocked(tenantApi.update).mockResolvedValue({ data: mockTenant });
 
         const request = createFormRequest({
             intent: "update_settings",
@@ -381,7 +392,7 @@ describe("Settings action", () => {
     });
 
     it("omits empty branding values", async () => {
-        vi.mocked(tenantApi.update).mockResolvedValue({ data: {} as any });
+        vi.mocked(tenantApi.update).mockResolvedValue({ data: mockTenant });
 
         const request = createFormRequest({
             intent: "update_settings",

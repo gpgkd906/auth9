@@ -133,13 +133,12 @@ async fn test_get_password_policy_default() {
     let app = build_password_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        get_json_with_auth(
-            &app,
-            &format!("/api/v1/tenants/{}/password-policy", tenant.id),
-            &token,
-        )
-        .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant.id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -250,14 +249,13 @@ async fn test_update_password_policy_member_forbidden() {
         "max_age_days": 0
     });
 
-    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        put_json_with_auth(
-            &app,
-            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
-            &input,
-            &token,
-        )
-        .await;
+    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -295,14 +293,13 @@ async fn test_update_password_policy_owner_success() {
         "max_age_days": 90
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        put_json_with_auth(
-            &app,
-            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
-            &input,
-            &token,
-        )
-        .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -343,14 +340,13 @@ async fn test_update_password_policy_admin_success() {
         "max_age_days": 60
     });
 
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        put_json_with_auth(
-            &app,
-            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
-            &input,
-            &token,
-        )
-        .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -370,11 +366,7 @@ async fn test_update_password_policy_service_client_forbidden() {
     // Create a service client token
     let jwt_manager = crate::api::create_test_jwt_manager();
     let token = jwt_manager
-        .create_service_client_token(
-            uuid::Uuid::new_v4(),
-            "service@test.com",
-            Some(tenant_id),
-        )
+        .create_service_client_token(uuid::Uuid::new_v4(), "service@test.com", Some(tenant_id))
         .unwrap();
 
     let app = build_password_test_router(state);
@@ -388,14 +380,13 @@ async fn test_update_password_policy_service_client_forbidden() {
         "max_age_days": 0
     });
 
-    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        put_json_with_auth(
-            &app,
-            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
-            &input,
-            &token,
-        )
-        .await;
+    let (status, _): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -424,13 +415,12 @@ async fn test_get_password_policy_member_allowed() {
 
     let app = build_password_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) =
-        get_json_with_auth(
-            &app,
-            &format!("/api/v1/tenants/{}/password-policy", tenant_id),
-            &token,
-        )
-        .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<PasswordPolicy>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/password-policy", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
