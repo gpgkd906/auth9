@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, useSearchParams } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
@@ -56,9 +56,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
+  const search = url.searchParams.get("search") || undefined;
   const accessToken = await getAccessToken(request);
   const [users, tenants, services] = await Promise.all([
-    userApi.list(page, perPage, accessToken || undefined),
+    userApi.list(page, perPage, search, accessToken || undefined),
     tenantApi.list(1, 100, undefined, accessToken || undefined), // List first 100 tenants for now
     serviceApi.list(undefined, 1, 100, accessToken || undefined) // List first 100 services
   ]);
@@ -145,6 +146,18 @@ export async function action({ request }: ActionFunctionArgs) {
       return { success: true, data: tenants.data, intent };
     }
 
+    if (intent === "enable_mfa") {
+      const id = formData.get("id") as string;
+      await userApi.enableMfa(id, accessToken || undefined);
+      return { success: true, intent };
+    }
+
+    if (intent === "disable_mfa") {
+      const id = formData.get("id") as string;
+      await userApi.disableMfa(id, accessToken || undefined);
+      return { success: true, intent };
+    }
+
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return Response.json({ error: message, intent }, { status: 400 });
@@ -159,7 +172,11 @@ export default function UsersPage() {
   const navigation = useNavigation();
   const submit = useSubmit();
   const confirm = useConfirm();
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
 
+  const currentSearch = searchParams.get("search") || "";
+  const [searchInput, setSearchInput] = useState(currentSearch);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [managingTenantsUser, setManagingTenantsUser] = useState<User | null>(null);
@@ -282,6 +299,16 @@ export default function UsersPage() {
     );
   };
 
+  const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (searchInput.trim()) {
+      params.set("search", searchInput);
+    }
+    params.set("page", "1");
+    navigate(`/dashboard/users?${params.toString()}`);
+  };
+
   return (
     <div className="space-y-6">
 
@@ -292,6 +319,18 @@ export default function UsersPage() {
         </div>
         <Button onClick={() => setCreatingUser(true)} className="w-full sm:w-auto">+ Create User</Button>
       </div>
+
+      <Form onSubmit={handleSearchSubmit} className="flex gap-2">
+        <Input
+          type="search"
+          placeholder="Search by email or name..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="flex-1"
+        />
+        <Button type="submit" variant="outline">Search</Button>
+      </Form>
+
       <Card>
         <CardHeader>
           <CardTitle>User Directory</CardTitle>
@@ -337,6 +376,37 @@ export default function UsersPage() {
                           <DropdownMenuItem onClick={() => setManagingTenantsUser(user)}>
                             <PersonIcon className="mr-2 h-3.5 w-3.5" /> Manage Tenants
                           </DropdownMenuItem>
+                          {user.mfa_enabled ? (
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: "Disable MFA",
+                                  description: "Are you sure you want to disable MFA for this user?",
+                                  confirmLabel: "Disable MFA",
+                                });
+                                if (ok) {
+                                  submit({ intent: "disable_mfa", id: user.id }, { method: "post" });
+                                }
+                              }}
+                            >
+                              Disable MFA
+                            </DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: "Enable MFA",
+                                  description: "Are you sure you want to enable MFA for this user?",
+                                  confirmLabel: "Enable MFA",
+                                });
+                                if (ok) {
+                                  submit({ intent: "enable_mfa", id: user.id }, { method: "post" });
+                                }
+                              }}
+                            >
+                              Enable MFA
+                            </DropdownMenuItem>
+                          )}
                           <DropdownMenuItem
                             onClick={async () => {
                               const ok = await confirm({

@@ -119,9 +119,11 @@ export interface CreateUserInput {
 }
 
 export const userApi = {
-  list: async (page = 1, perPage = 20, accessToken?: string): Promise<PaginatedResponse<User>> => {
+  list: async (page = 1, perPage = 20, search?: string, accessToken?: string): Promise<PaginatedResponse<User>> => {
+    let url = `${API_BASE_URL}/api/v1/users?page=${page}&per_page=${perPage}`;
+    if (search) url += `&search=${encodeURIComponent(search)}`;
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/users?page=${page}&per_page=${perPage}`,
+      url,
       { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);
@@ -201,6 +203,22 @@ export const userApi = {
       method: "PUT",
       headers: getHeaders(accessToken),
       body: JSON.stringify(input),
+    });
+    return handleResponse(response);
+  },
+
+  enableMfa: async (id: string, accessToken?: string): Promise<{ data: User }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}/mfa`, {
+      method: "POST",
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
+
+  disableMfa: async (id: string, accessToken?: string): Promise<{ data: User }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}/mfa`, {
+      method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
@@ -1257,11 +1275,14 @@ export const analyticsApi = {
   listEvents: async (
     page = 1,
     perPage = 50,
+    email?: string,
     accessToken?: string
   ): Promise<PaginatedResponse<LoginEvent>> => {
     const offset = (page - 1) * perPage;
+    let url = `${API_BASE_URL}/api/v1/analytics/login-events?limit=${perPage}&offset=${offset}`;
+    if (email) url += `&email=${encodeURIComponent(email)}`;
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/analytics/login-events?limit=${perPage}&offset=${offset}`,
+      url,
       { headers: getHeaders(accessToken) }
     );
     return handleResponse(response);

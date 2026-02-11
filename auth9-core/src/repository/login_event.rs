@@ -25,9 +25,11 @@ pub trait LoginEventRepository: Send + Sync {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<LoginEvent>>;
+    async fn list_by_email(&self, email: &str, offset: i64, limit: i64) -> Result<Vec<LoginEvent>>;
     async fn count(&self) -> Result<i64>;
     async fn count_by_user(&self, user_id: StringUuid) -> Result<i64>;
     async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64>;
+    async fn count_by_email(&self, email: &str) -> Result<i64>;
     async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats>;
     async fn count_failed_by_ip(&self, ip_address: &str, since: DateTime<Utc>) -> Result<i64>;
     async fn count_failed_by_ip_multi_user(
@@ -167,6 +169,34 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
     async fn count_by_tenant(&self, tenant_id: StringUuid) -> Result<i64> {
         let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM login_events WHERE tenant_id = ?")
             .bind(tenant_id)
+            .fetch_one(&self.pool)
+            .await?;
+        Ok(row.0)
+    }
+
+    async fn list_by_email(&self, email: &str, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {
+        let events = sqlx::query_as::<_, LoginEvent>(
+            r#"
+            SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
+                   device_type, location, session_id, failure_reason, created_at
+            FROM login_events
+            WHERE email = ?
+            ORDER BY created_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(email)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(events)
+    }
+
+    async fn count_by_email(&self, email: &str) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM login_events WHERE email = ?")
+            .bind(email)
             .fetch_one(&self.pool)
             .await?;
         Ok(row.0)

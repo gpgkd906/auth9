@@ -57,20 +57,36 @@ pub struct StatsQuery {
     pub end: Option<String>,
 }
 
+/// Query parameters for list_events endpoint
+#[derive(Debug, Deserialize)]
+pub struct ListEventsQuery {
+    #[serde(flatten)]
+    pub pagination: PaginationQuery,
+    /// Filter events by email address
+    pub email: Option<String>,
+}
+
 /// List login events with pagination
 pub async fn list_events<S: HasAnalytics>(
     State(state): State<S>,
-    Query(pagination): Query<PaginationQuery>,
+    Query(params): Query<ListEventsQuery>,
 ) -> Result<Json<PaginatedResponse<LoginEvent>>, AppError> {
-    let (events, total) = state
-        .analytics_service()
-        .list_events(pagination.page, pagination.per_page)
-        .await?;
+    let (events, total) = if let Some(email) = params.email {
+        state
+            .analytics_service()
+            .list_events_by_email(&email, params.pagination.page, params.pagination.per_page)
+            .await?
+    } else {
+        state
+            .analytics_service()
+            .list_events(params.pagination.page, params.pagination.per_page)
+            .await?
+    };
 
     Ok(Json(PaginatedResponse::new(
         events,
-        pagination.page,
-        pagination.per_page,
+        params.pagination.page,
+        params.pagination.per_page,
         total,
     )))
 }
