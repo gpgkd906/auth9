@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { Form, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
 import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -10,13 +10,46 @@ import { passwordApi, tenantApi, type PasswordPolicy, type Tenant } from "~/serv
 import { getAccessToken } from "~/services/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  // Load tenants for password policy management (admin only)
   const accessToken = await getAccessToken(request);
-  const tenantsResponse = await tenantApi.list(1, 100, undefined, accessToken || undefined);
-  return { tenants: tenantsResponse.data };
+  const url = new URL(request.url);
+  const tenantId = url.searchParams.get("tenantId");
+  const isDataRequest = url.pathname.endsWith(".data");
+
+  let tenants: Tenant[] = [];
+  let tenantsError: string | null = null;
+
+  if (!isDataRequest) {
+    try {
+      const tenantsResponse = await tenantApi.list(1, 100, undefined, accessToken || undefined);
+      tenants = tenantsResponse.data;
+    } catch (error) {
+      tenantsError = error instanceof Error ? error.message : "Failed to load tenants";
+    }
+  }
+
+  let policy: PasswordPolicy | null = null;
+  let policyError: string | null = null;
+
+  if (tenantId) {
+    try {
+      const policyResponse = await passwordApi.getPasswordPolicy(tenantId, accessToken || undefined);
+      policy = policyResponse.data;
+    } catch (error) {
+      policyError = error instanceof Error ? error.message : "Failed to load password policy";
+    }
+  }
+
+  return {
+    tenants,
+    tenantsError,
+    selectedTenantId: tenantId || "",
+    policy,
+    policyError,
+  };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -35,7 +68,7 @@ export async function action({ request }: ActionFunctionArgs) {
         lockout_duration_mins: parseInt(formData.get("lockoutDurationMins") as string) || 15,
       };
 
-      await passwordApi.updatePasswordPolicy(tenantId, policy);
+      await passwordApi.updatePasswordPolicy(tenantId, policy, accessToken || undefined);
       return { success: true, message: "Password policy updated" };
     }
   } catch (error) {
@@ -47,29 +80,32 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SecuritySettingsPage() {
-  const { tenants } = useLoaderData<typeof loader>();
+  const { tenants, tenantsError, selectedTenantId, policy: loadedPolicy, policyError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const policyFetcher = useFetcher<typeof loader>();
+  const loadPolicy = policyFetcher.load;
 
-  const [selectedTenant, setSelectedTenant] = useState<string>("");
-  const [policy, setPolicy] = useState<PasswordPolicy | null>(null);
-  const [loadingPolicy, setLoadingPolicy] = useState(false);
+  const [selectedTenant, setSelectedTenant] = useState<string>(selectedTenantId);
+  const [policy, setPolicy] = useState<PasswordPolicy | null>(loadedPolicy);
 
   const isSubmitting = navigation.state === "submitting";
+  const loadingPolicy = policyFetcher.state === "loading";
 
-  // Load policy when tenant is selected
+  // Load policy through route loader so requests always carry server-side auth token.
   useEffect(() => {
     if (selectedTenant) {
-      setLoadingPolicy(true);
-      passwordApi
-        .getPasswordPolicy(selectedTenant)
-        .then((res) => setPolicy(res.data))
-        .catch(() => setPolicy(null))
-        .finally(() => setLoadingPolicy(false));
+      loadPolicy(`/dashboard/settings/security?tenantId=${encodeURIComponent(selectedTenant)}`);
     } else {
       setPolicy(null);
     }
-  }, [selectedTenant]);
+  }, [selectedTenant, loadPolicy]);
+
+  useEffect(() => {
+    if (policyFetcher.data) {
+      setPolicy(policyFetcher.data.policy || null);
+    }
+  }, [policyFetcher.data]);
 
   return (
     <div className="space-y-6">
@@ -100,8 +136,20 @@ export default function SecuritySettingsPage() {
               </select>
             </div>
 
+            {tenantsError && (
+              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+                {tenantsError}
+              </div>
+            )}
+
             {loadingPolicy && (
               <p className="text-sm text-[var(--text-secondary)]">Loading policy...</p>
+            )}
+
+            {selectedTenant && policyError && !policy && (
+              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+                {policyError}
+              </div>
             )}
 
             {selectedTenant && policy && (

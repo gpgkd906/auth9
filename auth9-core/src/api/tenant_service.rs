@@ -3,6 +3,8 @@
 use crate::api::SuccessResponse;
 use crate::domain::{ServiceWithStatus, StringUuid, ToggleServiceInput};
 use crate::error::{AppError, Result};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
 use crate::state::{HasDbPool, HasServices};
 use axum::{
     extract::{Path, State},
@@ -14,9 +16,19 @@ use uuid::Uuid;
 /// List all global services with their enabled status for a tenant
 pub async fn list_services<S: HasServices + HasDbPool>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
+
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::TenantServiceRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
 
     // Verify tenant exists
     state.tenant_service().get(tenant_id).await?;
@@ -48,11 +60,21 @@ pub async fn list_services<S: HasServices + HasDbPool>(
 /// Toggle a service for a tenant (enable/disable)
 pub async fn toggle_service<S: HasServices + HasDbPool>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<Uuid>,
     Json(input): Json<ToggleServiceInput>,
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
     let service_id = StringUuid::from(input.service_id);
+
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::TenantServiceWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
 
     // Verify tenant exists
     state.tenant_service().get(tenant_id).await?;
@@ -113,9 +135,19 @@ pub async fn toggle_service<S: HasServices + HasDbPool>(
 /// Get enabled services for a tenant (used by invitation)
 pub async fn get_enabled_services<S: HasServices + HasDbPool>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
+
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::TenantServiceRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
 
     // Verify tenant exists
     state.tenant_service().get(tenant_id).await?;

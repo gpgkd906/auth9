@@ -22,6 +22,14 @@ use chrono::Utc;
 async fn test_list_user_sessions_admin() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add a test user and sessions
     let user = create_test_user(None);
@@ -49,7 +57,8 @@ async fn test_list_user_sessions_admin() {
     let app = build_session_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<SessionInfo>>>) =
-        get_json(&app, &format!("/api/v1/admin/users/{}/sessions", user_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/admin/users/{}/sessions", user_id), &token)
+            .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -61,6 +70,14 @@ async fn test_list_user_sessions_admin() {
 async fn test_list_user_sessions_admin_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add a test user with no sessions
     let user = create_test_user(None);
@@ -70,7 +87,8 @@ async fn test_list_user_sessions_admin_empty() {
     let app = build_session_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<SessionInfo>>>) =
-        get_json(&app, &format!("/api/v1/admin/users/{}/sessions", user_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/admin/users/{}/sessions", user_id), &token)
+            .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -88,6 +106,14 @@ async fn test_force_logout_user() {
     // Mock the logout endpoint in Keycloak
     mock_kc.mock_logout_user_success().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add a test user and sessions
     let user = create_test_user(None);
@@ -114,12 +140,14 @@ async fn test_force_logout_user() {
 
     let app = build_session_test_router(state.clone());
 
-    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) = post_json(
-        &app,
-        &format!("/api/v1/admin/users/{}/logout", user_id),
-        &(),
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) =
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/admin/users/{}/logout", user_id),
+            &(),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -141,6 +169,14 @@ async fn test_force_logout_user_no_sessions() {
     // Mock the logout endpoint in Keycloak
     mock_kc.mock_logout_user_success().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -148,12 +184,14 @@ async fn test_force_logout_user_no_sessions() {
 
     let app = build_session_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) = post_json(
-        &app,
-        &format!("/api/v1/admin/users/{}/logout", user_id),
-        &(),
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<RevokeSessionsResponse>>) =
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/admin/users/{}/logout", user_id),
+            &(),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -169,6 +207,14 @@ async fn test_force_logout_user_no_sessions() {
 async fn test_session_info_device_details() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     let user = create_test_user(None);
     let user_id = user.id;
@@ -192,7 +238,8 @@ async fn test_session_info_device_details() {
     let app = build_session_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<SessionInfo>>>) =
-        get_json(&app, &format!("/api/v1/admin/users/{}/sessions", user_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/admin/users/{}/sessions", user_id), &token)
+            .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

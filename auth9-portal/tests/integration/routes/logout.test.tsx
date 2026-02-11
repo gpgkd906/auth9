@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render } from "@testing-library/react";
-import { createRoutesStub } from "react-router";
 import Logout, { loader } from "~/routes/logout";
 
 // Mock fetch globally

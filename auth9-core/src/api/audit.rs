@@ -2,6 +2,8 @@
 
 use crate::api::PaginatedResponse;
 use crate::error::Result;
+use crate::middleware::auth::AuthUser;
+use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
 use crate::repository::audit::AuditLogQuery;
 use crate::repository::AuditRepository;
 use crate::state::HasServices;
@@ -14,8 +16,18 @@ use axum::{
 /// List audit logs with actor information (email, display_name)
 pub async fn list<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Query(query): Query<AuditLogQuery>,
 ) -> Result<impl IntoResponse> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::AuditRead,
+            scope: ResourceScope::Global,
+        },
+    )?;
+
     // Use find_with_actor to include actor email/display_name in response
     let logs = state.audit_repo().find_with_actor(&query).await?;
     let total = state.audit_repo().count(&query).await?;

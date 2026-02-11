@@ -3,7 +3,9 @@
 use crate::api::{MessageResponse, SuccessResponse};
 use crate::domain::{SessionInfo, StringUuid};
 use crate::error::AppError;
-use crate::state::HasSessionManagement;
+use crate::middleware::auth::AuthUser;
+use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
+use crate::state::{HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -59,10 +61,20 @@ pub async fn revoke_other_sessions<S: HasSessionManagement>(
 }
 
 /// Admin: Force logout a user (revoke all sessions)
-pub async fn force_logout_user<S: HasSessionManagement>(
+pub async fn force_logout_user<S: HasSessionManagement + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(user_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<RevokeSessionsResponse>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SessionForceLogout,
+            scope: ResourceScope::User(user_id),
+        },
+    )?;
+
     let count = state.session_service().force_logout_user(user_id).await?;
 
     Ok(Json(SuccessResponse::new(RevokeSessionsResponse {
@@ -71,10 +83,20 @@ pub async fn force_logout_user<S: HasSessionManagement>(
 }
 
 /// Admin: List sessions for a specific user
-pub async fn list_user_sessions<S: HasSessionManagement>(
+pub async fn list_user_sessions<S: HasSessionManagement + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(user_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<Vec<SessionInfo>>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SessionForceLogout,
+            scope: ResourceScope::User(user_id),
+        },
+    )?;
+
     let sessions = state
         .session_service()
         .get_user_sessions_admin(user_id)

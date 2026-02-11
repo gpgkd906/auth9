@@ -519,10 +519,7 @@ describe("Webhooks Page", () => {
       // Find the edit button (pencil icon)
       const editButtons = screen.getAllByRole("button");
       // The edit button contains a Pencil2Icon, look for it among the action buttons
-      const editButton = editButtons.find(
-        (btn) => btn.querySelector("svg") && !btn.textContent?.includes("Test") && btn.getAttribute("title") !== "Regenerate Secret" && !btn.classList.contains("text-[var(--accent-red)]") && btn.closest(".flex.items-center.gap-2") && !btn.querySelector("form") && !btn.textContent
-      );
-      // Alternatively, let's just use a simpler approach - the edit button is the one after regenerate
+      // The edit button is the one after regenerate
       // The button order in each webhook row: Test, Regenerate Secret (title), Edit (no title), Delete (red)
       // Let's just click the 4th button-like element in the action area
 

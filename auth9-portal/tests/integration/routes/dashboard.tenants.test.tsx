@@ -649,7 +649,7 @@ describe("Tenants Page", () => {
 
     it("closes create dialog on successful action (useEffect)", async () => {
         let resolveAction: (value: { success: boolean }) => void;
-        const actionPromise = new Promise<{ success: boolean }>((resolve) => {
+        void new Promise<{ success: boolean }>((resolve) => {
             resolveAction = resolve;
         });
 
