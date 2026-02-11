@@ -42,13 +42,14 @@
 | [invitation/02-accept.md](./invitation/02-accept.md) | 接受邀请流程 | 5 |
 | [invitation/03-manage.md](./invitation/03-manage.md) | 撤销、删除、过滤 | 5 |
 
-### 会话与安全 (4 个文档, 20 个场景)
+### 会话与安全 (5 个文档, 25 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [session/01-session.md](./session/01-session.md) | 会话管理、撤销 | 5 |
 | [session/02-login-events.md](./session/02-login-events.md) | 登录事件记录 | 5 |
 | [session/03-alerts.md](./session/03-alerts.md) | 安全告警检测 | 5 |
 | [session/04-boundary.md](./session/04-boundary.md) | 边界测试 | 5 |
+| [session/05-auth-security-regression.md](./session/05-auth-security-regression.md) | 鉴权与令牌安全回归（越权强退、refresh 撤销一致性、callback token 泄露、限流绕过） | 5 |
 
 ### Webhook (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 |
@@ -129,7 +130,7 @@
 | RBAC 角色权限 | 4 | 17 |
 | 服务与客户端 | 3 | 15 |
 | 邀请管理 | 3 | 15 |
-| 会话与安全 | 4 | 20 |
+| 会话与安全 | 5 | 25 |
 | Webhook | 4 | 17 |
 | 认证流程 | 5 | 23 |
 | 系统设置 | 3 | 15 |
@@ -139,7 +140,7 @@
 | 审计日志 | 1 | 5 |
 | SDK | 6 | 30 |
 | 集成测试 | 6 | 30 |
-| **总计** | **54** | **260** |
+| **总计** | **55** | **265** |
 
 ---
 
@@ -283,6 +284,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-11 | 3.7.0 | 新增会话与安全回归测试（管理员端点越权、refresh 撤销一致性、OIDC callback token 泄露、限流 header 绕过与高基数 key），共 55 个文档 265 个场景 |
 | 2026-02-11 | 3.6.0 | 新增安全加固集成测试（production 启动 fail-fast、gRPC 鉴权配置校验、REST tenant token aud 严格校验、HSTS 条件下发、gRPC validate_token audience 必填），共 54 个文档 260 个场景 |
 | 2026-02-11 | 3.5.0 | 新增全栈可观测性集成测试（Prometheus /metrics 端点、HTTP 指标、X-Request-ID、路径折叠、可观测性栈启动、Grafana 仪表盘、业务指标、限流指标），共 53 个文档 255 个场景 |
 | 2026-02-10 | 3.4.0 | 新增 Init 种子数据集成测试（首次创建、幂等性、自定义邮箱、Keycloak 重置恢复、Portal 登录验证），共 45 个文档 215 个场景 |
