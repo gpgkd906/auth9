@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { tenantApi, type Tenant } from "~/services/api";
-import { requireAuth } from "~/services/session.server";
+import { requireAuthWithUpdate } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 
 export const meta: MetaFunction = () => {
@@ -33,21 +33,40 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const session = await requireAuth(request);
-  const accessToken = session.accessToken;
+  const { session, headers } = await requireAuthWithUpdate(request);
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
   const search = url.searchParams.get("search") || undefined;
-  const tenants = await tenantApi.list(page, perPage, search, accessToken);
-  return { ...tenants, search: search || "" };
+  const tenants = await tenantApi.list(page, perPage, search, session.accessToken);
+  const data = { ...tenants, search: search || "" };
+
+  if (headers) {
+    return Response.json(data, { headers });
+  }
+  return data;
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const session = await requireAuth(request);
+  const { session, headers } = await requireAuthWithUpdate(request);
   const accessToken = session.accessToken;
+
+  const returnSuccess = () => {
+    if (headers) {
+      return Response.json({ success: true }, { headers });
+    }
+    return { success: true };
+  };
+
+  const returnError = (message: string, status = 400) => {
+    const errorData = { error: message, intent: String(intent) };
+    if (headers) {
+      return Response.json(errorData, { status, headers });
+    }
+    return Response.json(errorData, { status });
+  };
 
   try {
     if (intent === "create") {
@@ -56,7 +75,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const logo_url = formData.get("logo_url") as string;
 
       await tenantApi.create({ name, slug, logo_url: logo_url || undefined }, accessToken);
-      return { success: true };
+      return returnSuccess();
     }
 
     if (intent === "update") {
@@ -66,20 +85,20 @@ export async function action({ request }: ActionFunctionArgs) {
       const logo_url = formData.get("logo_url") as string;
 
       await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined }, accessToken);
-      return { success: true };
+      return returnSuccess();
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await tenantApi.delete(id, accessToken);
-      return { success: true };
+      return returnSuccess();
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return Response.json({ error: message, intent }, { status: 400 });
+    return returnError(message);
   }
 
-  return Response.json({ error: "Invalid intent", intent }, { status: 400 });
+  return returnError("Invalid intent");
 }
 
 export default function TenantsIndexPage() {
@@ -321,7 +340,7 @@ export default function TenantsIndexPage() {
                 defaultValue={editingTenant?.logo_url}
               />
             </div>
-            {actionData && "error" in actionData && actionData.intent === "update" && (
+            {actionData && "error" in actionData && "intent" in actionData && actionData.intent === "update" && (
               <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
             )}
             <DialogFooter>

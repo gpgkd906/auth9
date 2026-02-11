@@ -110,7 +110,7 @@
 
 #### docs/security/advanced-attacks/02-grpc-security.md 🔴
 gRPC 安全测试，包括：
-1. 未认证的 gRPC 调用 - **当前已知漏洞**（P0）
+1. gRPC 认证配置回归与绕过 - **高优先级风险**（P0）
 2. mTLS 证书验证绕过 - 证书链验证
 3. gRPC 元数据注入攻击 - Header 注入
 4. gRPC 拒绝服务攻击 - Slowloris, 大 payload
@@ -118,7 +118,7 @@ gRPC 安全测试，包括：
 
 **工具**: grpcurl, ghz, Burp Suite
 
-**标准**: CWE-306 (Missing Authentication), OWASP API Security
+**标准**: CWE-287, CWE-306（误配置退化路径）, OWASP API Security
 
 ### 3. 测试数据种子基础设施
 
@@ -208,20 +208,23 @@ weak@security.local / 1
 
 ## 🎓 关键发现
 
-### 1. gRPC API 无认证（极高风险）
+### 1. gRPC 认证配置与回归风险（高风险）
 
-**现状**: 根据 `docs/api-access-control.md`，gRPC API（端口 50051）目前**无认证保护**。
+**现状**:
+- gRPC 支持 `GRPC_AUTH_MODE`（`none`/`api_key`/`mtls`）
+- 生产环境下 `GRPC_AUTH_MODE=none` 会启动失败
+- 生产环境下 `api_key` 且 `GRPC_API_KEYS` 为空会启动失败
+- 主要风险转为“非生产误配置、配置回归或绕过路径”
 
 **风险**:
-- 任何人可以调用 gRPC 方法
-- 可能导致数据泄露、权限绕过
-- OWASP API Security Top 10: API1 - Broken Object Level Authorization
-- CWE-306: Missing Authentication for Critical Function
+- 认证模式被错误回退到 `none` 时，可能出现匿名访问
+- mTLS 路径若未严格证书校验，可能被伪造客户端绕过
+- gRPC 反射在错误环境暴露时可能放大信息泄露面
 
 **建议**:
-- 实施 gRPC Interceptor 进行认证（JWT 验证）
-- 使用 mTLS 进行双向认证
-- 实施 IP 白名单限制
+- 固化部署基线：生产强制 `api_key` 或完整 `mTLS`
+- 将 `GRPC_AUTH_MODE`、`GRPC_API_KEYS` 纳入 CI/CD 配置审计
+- 生产关闭反射并保留最小可观测日志
 
 **测试场景**: docs/security/advanced-attacks/02-grpc-security.md 场景 1
 
@@ -319,7 +322,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy image
 参考 `docs/security/` 目录下的测试文档，按风险等级执行。
 
 **优先级**:
-1. gRPC 安全（无认证漏洞）
+1. gRPC 安全（认证配置回归与绕过）
 2. 供应链安全
 3. Token 安全
 4. 租户隔离

@@ -40,43 +40,61 @@ function isTokenExpired(session: SessionData): boolean {
   return Date.now() > (session.expiresAt - 60000);
 }
 
+// In-memory refresh lock to prevent concurrent refresh requests (per Node.js instance)
+const refreshLocks = new Map<string, Promise<SessionData | null>>();
+
 async function refreshAccessToken(session: SessionData): Promise<SessionData | null> {
   if (!session.refreshToken) return null;
 
-  try {
-    const tokenUrl = `${process.env.AUTH9_CORE_URL || "http://localhost:8080"}/api/v1/auth/token`;
+  const lockKey = session.refreshToken || session.accessToken;
 
-    // Refresh Token Exchange
-    const response = await fetch(tokenUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        grant_type: "refresh_token",
-        client_id: process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal",
-        refresh_token: session.refreshToken,
-      }),
-    });
-
-    if (!response.ok) {
-      console.error("Failed to refresh token:", response.status);
-      return null;
-    }
-
-    const data = await response.json();
-
-    // Return updated session
-    return {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token || session.refreshToken, // Use new refresh token if provided, else keep old
-      idToken: data.id_token || session.idToken,
-      expiresAt: Date.now() + (data.expires_in * 1000),
-    };
-  } catch (err) {
-    console.error("Refresh exception:", err);
-    return null;
+  // Check if refresh already in progress for this token
+  if (refreshLocks.has(lockKey)) {
+    console.log("Refresh already in progress, awaiting...");
+    return await refreshLocks.get(lockKey)!;
   }
+
+  const refreshPromise = (async () => {
+    try {
+      const tokenUrl = `${process.env.AUTH9_CORE_URL || "http://localhost:8080"}/api/v1/auth/token`;
+
+      // Refresh Token Exchange
+      const response = await fetch(tokenUrl, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          grant_type: "refresh_token",
+          client_id: process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal",
+          refresh_token: session.refreshToken,
+        }),
+      });
+
+      if (!response.ok) {
+        console.error("Failed to refresh token:", response.status);
+        return null;
+      }
+
+      const data = await response.json();
+
+      // Return updated session
+      return {
+        accessToken: data.access_token,
+        refreshToken: data.refresh_token || session.refreshToken, // Use new refresh token if provided, else keep old
+        idToken: data.id_token || session.idToken,
+        expiresAt: Date.now() + (data.expires_in * 1000),
+      };
+    } catch (err) {
+      console.error("Refresh exception:", err);
+      return null;
+    } finally {
+      refreshLocks.delete(lockKey);
+    }
+  })();
+
+  refreshLocks.set(lockKey, refreshPromise);
+  return await refreshPromise;
 }
 
 export async function getAccessToken(request: Request): Promise<string | null> {
@@ -101,24 +119,74 @@ export async function getAccessToken(request: Request): Promise<string | null> {
   return session.accessToken;
 }
 
+/**
+ * @deprecated Use requireAuthWithUpdate to properly handle token refresh.
+ * This function refreshes tokens but does not update the cookie in the browser.
+ */
 export async function requireAuth(request: Request) {
+  console.warn("requireAuth is deprecated, use requireAuthWithUpdate instead");
+  const { session } = await requireAuthWithUpdate(request);
+  return session;
+}
+
+export interface SessionUpdateResult {
+  session: SessionData;
+  headers?: HeadersInit;
+}
+
+/**
+ * Get access token and return Set-Cookie header if refreshed.
+ * Callers must apply returned headers to response.
+ */
+export async function getAccessTokenWithUpdate(
+  request: Request
+): Promise<{ token: string | null; headers?: HeadersInit }> {
+  const session = await getSession(request);
+  if (!session || !session.accessToken) {
+    return { token: null };
+  }
+
+  if (isTokenExpired(session)) {
+    const newSession = await refreshAccessToken(session);
+    if (newSession) {
+      return {
+        token: newSession.accessToken,
+        headers: {
+          "Set-Cookie": await commitSession(newSession),
+        },
+      };
+    } else {
+      return { token: null };
+    }
+  }
+
+  return { token: session.accessToken };
+}
+
+/**
+ * Require authentication and return Set-Cookie header if refreshed.
+ * Throws redirect to /login if session invalid.
+ */
+export async function requireAuthWithUpdate(
+  request: Request
+): Promise<SessionUpdateResult> {
   const session = await getSession(request);
   if (!session || !session.accessToken) {
     throw redirect("/login");
   }
 
-  // Check Expiry and Refresh
   if (isTokenExpired(session)) {
     const newSession = await refreshAccessToken(session);
     if (!newSession) {
-      // Refresh failed, redirect to login
       throw redirect("/login");
     }
-    // Ideally we would commit the new session here, but we can't easily 
-    // set headers on the response from here without changing the return type.
-    // We return the new session so the loader uses the fresh token.
-    return newSession;
+    return {
+      session: newSession,
+      headers: {
+        "Set-Cookie": await commitSession(newSession),
+      },
+    };
   }
 
-  return session;
+  return { session };
 }

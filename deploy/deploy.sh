@@ -524,6 +524,18 @@ generate_secrets() {
         print_info "GRPC_API_KEYS 已存在（不会重新生成）"
     fi
 
+    # PASSWORD_RESET_HMAC_KEY (for password reset token signing)
+    if [ -z "${AUTH9_SECRETS[PASSWORD_RESET_HMAC_KEY]}" ]; then
+        AUTH9_SECRETS[PASSWORD_RESET_HMAC_KEY]=$(openssl rand -hex 32)
+        echo ""
+        print_warning "已生成 PASSWORD_RESET_HMAC_KEY - 请安全保存："
+        echo -e "${GREEN}${AUTH9_SECRETS[PASSWORD_RESET_HMAC_KEY]}${NC}"
+        echo ""
+        read "?保存后按 Enter 继续..."
+    else
+        print_info "PASSWORD_RESET_HMAC_KEY 已存在（不会重新生成）"
+    fi
+
     # SETTINGS_ENCRYPTION_KEY (AES-256 for encrypting sensitive settings)
     if [ -z "${AUTH9_SECRETS[SETTINGS_ENCRYPTION_KEY]}" ]; then
         AUTH9_SECRETS[SETTINGS_ENCRYPTION_KEY]=$(openssl rand -base64 32)
@@ -634,6 +646,7 @@ data:
   JWT_ISSUER: "$jwt_issuer"
   JWT_ACCESS_TOKEN_TTL_SECS: "3600"
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"
+  PASSWORD_RESET_TOKEN_TTL_SECS: "3600"
   KEYCLOAK_REALM: "auth9"
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
   KEYCLOAK_SSL_REQUIRED: "none"

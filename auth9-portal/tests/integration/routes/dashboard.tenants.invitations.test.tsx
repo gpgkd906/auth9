@@ -28,6 +28,15 @@ vi.mock("~/services/api", () => ({
 
 vi.mock("~/services/session.server", () => ({
   getAccessToken: vi.fn().mockResolvedValue(null),
+    requireAuthWithUpdate: vi.fn().mockResolvedValue({
+        session: {
+            accessToken: "test-token",
+            refreshToken: "test-refresh-token",
+            idToken: "test-id-token",
+            expiresAt: Date.now() + 3600000,
+        },
+        headers: undefined,
+    }),
 }));
 
 import { getAccessToken } from "~/services/session.server";

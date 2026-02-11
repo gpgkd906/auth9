@@ -26,6 +26,9 @@ services:
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
       AUTH9_ADMIN_PASSWORD: Admin123!  # Fixed password for local development
       DEV_SMTP_HOST: mailpit  # Enable dev email config seeding
+      # Password Reset Security
+      PASSWORD_RESET_HMAC_KEY: dev-password-reset-hmac-key-change-in-production
+      PASSWORD_RESET_TOKEN_TTL_SECS: 3600
     depends_on:
       tidb:
         condition: service_healthy
@@ -79,6 +82,9 @@ services:
       GRPC_API_KEYS: ${GRPC_API_KEYS:-dev-grpc-api-key}
       # gRPC reflection should be off by default for security
       GRPC_ENABLE_REFLECTION: "false"
+      # Password Reset Security
+      PASSWORD_RESET_HMAC_KEY: dev-password-reset-hmac-key-change-in-production
+      PASSWORD_RESET_TOKEN_TTL_SECS: 3600
     depends_on:
       auth9-init:
         condition: service_completed_successfully

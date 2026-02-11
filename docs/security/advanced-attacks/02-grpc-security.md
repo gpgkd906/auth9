@@ -11,22 +11,23 @@
 
 Auth9 Core 提供 gRPC API (端口 50051) 供业务服务调用。gRPC 使用 HTTP/2 和 Protocol Buffers，具有独特的安全挑战。
 
-**当前状态**: 根据 `docs/api-access-control.md`，gRPC 端点目前**无认证保护**（P0 待实现）。
+**当前状态**: gRPC 已支持 `GRPC_AUTH_MODE`（`none`/`api_key`/`mtls`），且生产环境对 `none` 与空 `GRPC_API_KEYS` 有启动失败保护；当前重点是防止认证配置回归与绕过。
 
 **相关标准**:
 - OWASP API Security Top 10: API1 - Broken Object Level Authorization
-- CWE-306: Missing Authentication for Critical Function
+- CWE-287: Improper Authentication
+- CWE-306: Missing Authentication for Critical Function（主要关注误配置退化路径）
 
 ---
 
-## 场景 1：未认证的 gRPC 调用（当前已知漏洞）
+## 场景 1：未认证的 gRPC 调用（认证配置回归）
 
 ### 前置条件
 - Auth9 Core gRPC 服务运行在 localhost:50051
 - 安装 grpcurl 工具
 
 ### 攻击目标
-验证 gRPC 端点是否允许未认证的访问
+验证 gRPC 端点在不同认证配置下是否出现未认证访问回归
 
 ### 攻击步骤
 1. 列出可用的 gRPC 服务：
@@ -36,35 +37,31 @@ Auth9 Core 提供 gRPC API (端口 50051) 供业务服务调用。gRPC 使用 HT
 
 2. 查看服务方法：
    ```bash
-   grpcurl -plaintext localhost:50051 list auth9.Auth9Service
+   grpcurl -plaintext localhost:50051 list auth9.TokenExchange
    ```
 
-3. 调用敏感方法（无认证）：
+3. 调用核心方法（无认证）：
    ```bash
-   # 尝试列出所有租户
-   grpcurl -plaintext -d '{"page": 1, "page_size": 100}' \
-     localhost:50051 auth9.Auth9Service/ListTenants
+   # 不带认证调用 ValidateToken（仅示例）
+   grpcurl -plaintext -d '{"access_token":"dummy"}' \
+     localhost:50051 auth9.TokenExchange/ValidateToken
    
-   # 尝试获取用户信息
-   grpcurl -plaintext -d '{"user_id": "some-uuid"}' \
-     localhost:50051 auth9.Auth9Service/GetUser
-   
-   # 尝试创建用户（未授权）
-   grpcurl -plaintext -d '{"email": "attacker@evil.com", "password": "Hack123!"}' \
-     localhost:50051 auth9.Auth9Service/CreateUser
+   # 不带认证调用 ExchangeToken（仅示例）
+   grpcurl -plaintext -d '{"identity_token":"dummy","tenant_id":"dummy","service_id":"dummy"}' \
+     localhost:50051 auth9.TokenExchange/ExchangeToken
    ```
 
 4. 使用 Python grpc 客户端绕过限制：
    ```python
    import grpc
-   from auth9_pb2 import ListTenantsRequest
-   from auth9_pb2_grpc import Auth9ServiceStub
+   from auth9_pb2 import ValidateTokenRequest
+   from auth9_pb2_grpc import TokenExchangeStub
    
    channel = grpc.insecure_channel('localhost:50051')
-   stub = Auth9ServiceStub(channel)
+   stub = TokenExchangeStub(channel)
    
-   # 无需凭证即可调用
-   response = stub.ListTenants(ListTenantsRequest(page=1, page_size=100))
+   # 回归检查：无凭证调用
+   response = stub.ValidateToken(ValidateTokenRequest(access_token="dummy"))
    print(response)
    ```
 
@@ -75,11 +72,12 @@ Auth9 Core 提供 gRPC API (端口 50051) 供业务服务调用。gRPC 使用 HT
 
 ### 验证方法
 ```bash
-# 修复前：应成功返回数据（漏洞）
-grpcurl -plaintext localhost:50051 list  # 返回服务列表
+# 安全基线（production + api_key）：未认证请求应失败
+grpcurl -plaintext localhost:50051 list
 
-# 修复后：应返回认证错误
-grpcurl -plaintext localhost:50051 list  # 返回 "authentication required"
+# 非生产/误配置回归检查：若出现可匿名调用，应标记高风险缺陷
+grpcurl -plaintext -d '{"access_token":"dummy"}' \
+  localhost:50051 auth9.TokenExchange/ValidateToken
 ```
 
 ### 修复建议

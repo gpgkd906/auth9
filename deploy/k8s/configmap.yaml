@@ -25,7 +25,10 @@ data:
   JWT_ISSUER: "https://api.auth9.example.com"
   JWT_ACCESS_TOKEN_TTL_SECS: "3600"
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"
-  
+
+  # Password Reset configuration
+  PASSWORD_RESET_TOKEN_TTL_SECS: "3600"
+
   # Keycloak configuration
   KEYCLOAK_REALM: "auth9"
   KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"

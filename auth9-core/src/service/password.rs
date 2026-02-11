@@ -32,6 +32,7 @@ pub struct PasswordService<
     email_service: Arc<EmailService<S>>,
     keycloak: Arc<KeycloakClient>,
     tenant_repo: Option<Arc<T>>,
+    hmac_key: String,
 }
 
 impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
@@ -42,6 +43,7 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
         user_repo: Arc<U>,
         email_service: Arc<EmailService<S>>,
         keycloak: Arc<KeycloakClient>,
+        hmac_key: String,
     ) -> Self {
         Self {
             password_reset_repo,
@@ -49,6 +51,7 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
             email_service,
             keycloak,
             tenant_repo: None,
+            hmac_key,
         }
     }
 }
@@ -66,6 +69,7 @@ impl<
         email_service: Arc<EmailService<S>>,
         keycloak: Arc<KeycloakClient>,
         tenant_repo: Arc<T>,
+        hmac_key: String,
     ) -> Self {
         Self {
             password_reset_repo,
@@ -73,6 +77,7 @@ impl<
             email_service,
             keycloak,
             tenant_repo: Some(tenant_repo),
+            hmac_key,
         }
     }
 
@@ -91,7 +96,7 @@ impl<
 
         // Generate a secure random token
         let token = generate_reset_token();
-        let token_hash = hash_token(&token)?;
+        let token_hash = hash_token(&token, self.hmac_key.as_bytes())?;
 
         // Atomically delete old tokens and create new one (prevents race condition)
         let expires_at = Utc::now() + Duration::hours(1);
@@ -117,7 +122,7 @@ impl<
         input.validate()?;
 
         // Hash the provided token to look up in database
-        let token_hash = hash_token(&input.token)?;
+        let token_hash = hash_token(&input.token, self.hmac_key.as_bytes())?;
 
         // Find valid token
         let reset_token = self
@@ -261,11 +266,7 @@ fn generate_reset_token() -> String {
 /// Hash a token for secure storage using HMAC-SHA256
 /// Uses a deterministic hash so the same token always produces the same hash,
 /// enabling lookup by hash in the database.
-fn hash_token(token: &str) -> Result<String> {
-    // Use a fixed key for HMAC to ensure deterministic hashing.
-    // The token itself has 256 bits of entropy (32 random bytes),
-    // so HMAC-SHA256 provides sufficient security for lookup.
-    let key = b"auth9-password-reset-token-hmac-key";
+fn hash_token(token: &str, key: &[u8]) -> Result<String> {
     let mut mac = Hmac::<Sha256>::new_from_slice(key)
         .map_err(|e| AppError::Internal(anyhow::anyhow!("HMAC init error: {}", e)))?;
     mac.update(token.as_bytes());
@@ -310,8 +311,9 @@ mod tests {
     #[test]
     fn test_hash_token_deterministic() {
         let token = generate_reset_token();
-        let hash1 = hash_token(&token).unwrap();
-        let hash2 = hash_token(&token).unwrap();
+        let key = b"test-hmac-key";
+        let hash1 = hash_token(&token, key).unwrap();
+        let hash2 = hash_token(&token, key).unwrap();
 
         // HMAC-SHA256 hash should be a hex string (64 chars = 32 bytes)
         assert_eq!(hash1.len(), 64);
@@ -321,8 +323,16 @@ mod tests {
 
         // Different token should produce different hash
         let other_token = generate_reset_token();
-        let other_hash = hash_token(&other_token).unwrap();
+        let other_hash = hash_token(&other_token, key).unwrap();
         assert_ne!(hash1, other_hash);
+    }
+
+    #[test]
+    fn test_hash_token_different_keys() {
+        let token = "test-token-123";
+        let hash1 = hash_token(token, b"key1").unwrap();
+        let hash2 = hash_token(token, b"key2").unwrap();
+        assert_ne!(hash1, hash2, "Different keys should produce different hashes");
     }
 
     #[test]
@@ -639,6 +649,7 @@ mod tests {
             Arc::new(user_mock),
             email_service,
             keycloak.clone(),
+            "test-password-reset-hmac-key".to_string(),
         );
 
         (service, keycloak)
@@ -658,5 +669,73 @@ mod tests {
             portal_url: None,
             webhook_secret: None,
         })
+    }
+
+    // ========================================================================
+    // Security Fix Tests: Configurable HMAC Key
+    // ========================================================================
+
+    #[test]
+    fn test_hash_token_with_custom_key() {
+        // Test that custom keys work correctly
+        let token = "reset-token-12345";
+        let key1 = b"production-key-1";
+        let key2 = b"production-key-2";
+
+        let hash1 = hash_token(token, key1).unwrap();
+        let hash2 = hash_token(token, key2).unwrap();
+
+        // Same token with different keys produces different hashes
+        assert_ne!(hash1, hash2);
+
+        // Same token with same key produces same hash
+        let hash1_again = hash_token(token, key1).unwrap();
+        assert_eq!(hash1, hash1_again);
+    }
+
+    #[test]
+    fn test_hash_token_key_rotation() {
+        // Simulate key rotation scenario
+        let token = "user-reset-token";
+        let old_key = b"old-production-key";
+        let new_key = b"new-production-key";
+
+        let old_hash = hash_token(token, old_key).unwrap();
+        let new_hash = hash_token(token, new_key).unwrap();
+
+        // After key rotation, same token produces different hash
+        assert_ne!(old_hash, new_hash);
+
+        // Old key still produces old hash (for transition period)
+        let old_hash_verify = hash_token(token, old_key).unwrap();
+        assert_eq!(old_hash, old_hash_verify);
+    }
+
+    #[tokio::test]
+    async fn test_password_service_with_custom_hmac_key() {
+        // Test that PasswordService uses the configured HMAC key
+        let password_reset_mock = MockPasswordResetRepository::new();
+        let user_mock = MockUserRepository::new();
+
+        let system_settings_mock = MockSystemSettingsRepository::new();
+        let settings_service = Arc::new(SystemSettingsService::new(
+            Arc::new(system_settings_mock),
+            None,
+        ));
+        let email_service = Arc::new(EmailService::new(settings_service));
+        let keycloak = Arc::new(create_test_keycloak_client());
+
+        // Create service with custom key
+        let custom_key = "my-secure-production-key";
+        let service = PasswordService::new(
+            Arc::new(password_reset_mock),
+            Arc::new(user_mock),
+            email_service,
+            keycloak,
+            custom_key.to_string(),
+        );
+
+        // Verify service was created (HMAC key is stored internally)
+        assert_eq!(service.hmac_key, custom_key);
     }
 }

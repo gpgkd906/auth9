@@ -254,7 +254,7 @@ export default function UsersPage() {
       if ("success" in actionData && actionData.success) {
         setUserTenants(actionData.data || []);
       } else if ("error" in actionData) {
-        setTenantsError(actionData.error);
+        setTenantsError(String(actionData.error));
       }
     }
   }, [actionData]);

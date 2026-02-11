@@ -37,7 +37,7 @@ use crate::api::{
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
     Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig,
-    RateLimitConfig, RedisConfig,
+    RateLimitConfig, RedisConfig, ServerConfig,
 };
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
@@ -80,6 +80,8 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             url: "mysql://test:test@localhost/test".to_string(),
             max_connections: 1,
             min_connections: 1,
+            acquire_timeout_secs: 30,
+            idle_timeout_secs: 600,
         },
         redis: RedisConfig {
             url: "redis://localhost".to_string(),
@@ -114,9 +116,14 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             rp_origin: "http://localhost:3000".to_string(),
             challenge_ttl_secs: 300,
         },
+        server: ServerConfig::default(),
         jwt_tenant_access_allowed_audiences: vec![],
         security_headers: auth9_core::config::SecurityHeadersConfig::default(),
         portal_client_id: None,
+        password_reset: auth9_core::config::PasswordResetConfig {
+            hmac_key: "test-password-reset-hmac-key".to_string(),
+            token_ttl_secs: 3600,
+        },
     }
 }
 
@@ -280,6 +287,7 @@ impl TestAppState {
             email_service.clone(),
             Arc::new(KeycloakClient::new(config.keycloak.clone())),
             tenant_repo.clone(),
+            config.password_reset.hmac_key.clone(),
         ));
         let session_service = Arc::new(SessionService::new(
             session_repo.clone(),

@@ -10,13 +10,13 @@ description = "Identity Service Backend - The Brain of Auth9"
 axum = { version = "0.8", features = ["macros", "multipart"] }
 axum-extra = { version = "0.10", features = ["typed-header"] }
 tower = { version = "0.5", features = ["full"] }
-tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip"] }
+tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip", "timeout"] }
 
 # Async Runtime
 tokio = { version = "1", features = ["full"] }
 
 # gRPC
-tonic = "0.12"
+tonic = { version = "0.12", features = ["tls"] }
 tonic-reflection = "0.12"
 prost = "0.13"
 
