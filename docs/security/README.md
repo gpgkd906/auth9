@@ -38,13 +38,14 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [input-validation/05-ssrf.md](./input-validation/05-ssrf.md) | 服务器端请求伪造 (SSRF) 测试 | 5 | 极高 | 🆕
 | [input-validation/06-deserialization.md](./input-validation/06-deserialization.md) | 反序列化安全测试 | 3 | 高 | 🆕
 
-### API 安全 (4 个文档, 19 个场景)
+### API 安全 (5 个文档, 24 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [api-security/01-rest-api.md](./api-security/01-rest-api.md) | REST API 安全测试 | 5 | 高 |
 | [api-security/02-grpc-api.md](./api-security/02-grpc-api.md) | gRPC API 安全测试 | 5 | 极高 |
 | [api-security/03-rate-limiting.md](./api-security/03-rate-limiting.md) | 限流与 DoS 防护测试 | 5 | 高 |
 | [api-security/04-cors-headers.md](./api-security/04-cors-headers.md) | CORS 与安全头测试 | 4 | 中 |
+| [api-security/05-rate-limit-bypass-hardening.md](./api-security/05-rate-limit-bypass-hardening.md) | 限流绕过与 DoS 放大专项测试 | 5 | 极高 | 🆕
 
 ### 数据安全 (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -68,11 +69,12 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [infrastructure/02-security-headers.md](./infrastructure/02-security-headers.md) | HTTP 安全头测试 | 5 | 中 |
 | [infrastructure/03-dependency-audit.md](./infrastructure/03-dependency-audit.md) | 依赖漏洞审计 | 4 | 高 |
 
-### 业务逻辑安全 (2 个文档, 9 个场景) 🆕
+### 业务逻辑安全 (3 个文档, 14 个场景) 🆕
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [business-logic/01-workflow-abuse.md](./business-logic/01-workflow-abuse.md) | 工作流滥用测试 | 5 | 极高 | 🆕
 | [business-logic/02-race-conditions.md](./business-logic/02-race-conditions.md) | 竞态条件测试 | 4 | 极高 | 🆕
+| [business-logic/03-admin-operational-endpoint-abuse.md](./business-logic/03-admin-operational-endpoint-abuse.md) | 管理运营端点越权滥用测试 | 5 | 极高 | 🆕
 
 ### 日志与监控安全 (1 个文档, 5 个场景) 🆕
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -103,15 +105,15 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | 认证安全 | 5 | 24 |
 | 授权安全 | 4 | 20 |
 | 输入验证 | 6 | 27 |
-| API 安全 | 4 | 19 |
+| API 安全 | 5 | 24 |
 | 数据安全 | 4 | 17 |
 | 会话管理 | 3 | 14 |
 | 基础设施安全 | 3 | 14 |
-| 业务逻辑安全 | 2 | 9 |
+| 业务逻辑安全 | 3 | 14 |
 | 日志与监控安全 | 1 | 5 |
 | 文件安全 | 1 | 4 |
 | 高级攻击 | 6 | 24 |
-| **总计** | **39** | **177** |
+| **总计** | **41** | **187** |
 
 ---
 
@@ -328,6 +330,7 @@ cargo run --bin seed-data -- --dataset=security-vulnerable --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-11 | 2.1.0 | 新增两类高优先专项安全测试：管理员运营端点越权滥用、限流绕过与 DoS 放大（trusted header、高基数 key、Redis 故障窗口），共 41 个文档 187 个场景 |
 | 2026-02-11 | 2.0.1 | 统一测试覆盖率要求：新增 ASVS 矩阵“目标覆盖率”列，项目最低要求调整为 >=90%，并保留当前覆盖率现状值 |
 | 2026-02-07 | 2.0.0 | 基于 OWASP ASVS 差距分析，新增 12 个文档 47 个场景：SSRF、业务逻辑、竞态条件、日志安全、文件上传、反序列化、加密实现、检测规避、OIDC 高级攻击、Webhook 伪造、HTTP 走私、IdP 安全；共 39 个文档 177 个场景 |
 | 2026-02-05 | 1.1.0 | 新增高级攻击模块（供应链安全、gRPC 安全），共 27 个文档 130 个场景；新增安全测试专用种子数据 |
