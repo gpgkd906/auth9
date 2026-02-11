@@ -91,7 +91,7 @@ fn map_event_type_with_details(kc_type: &str, error: Option<&str>, details: &Key
                     }
                 }
                 Some("user_not_found") => Some(LoginEventType::FailedPassword),
-                Some("invalid_totp") | Some("invalid_otp") => Some(LoginEventType::FailedMfa),
+                Some("invalid_totp") | Some("invalid_otp") | Some("invalid_authenticator") => Some(LoginEventType::FailedMfa),
                 Some("user_disabled") | Some("user_temporarily_disabled") => {
                     Some(LoginEventType::Locked)
                 }
@@ -150,7 +150,7 @@ fn derive_failure_reason_with_details(error: Option<&str>, details: &KeycloakEve
                 }
             }
             "user_not_found" => "User not found",
-            "invalid_totp" | "invalid_otp" => "Invalid MFA code",
+            "invalid_totp" | "invalid_otp" | "invalid_authenticator" => "Invalid MFA code",
             "user_disabled" => "Account disabled",
             "user_temporarily_disabled" => "Account temporarily locked",
             "expired_code" => "Authentication code expired",

@@ -1,9 +1,12 @@
 import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, Link, redirect } from "react-router";
+import { useLoaderData, Link, redirect, useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { Input } from "~/components/ui/input";
+import { Form } from "react-router";
 import { analyticsApi, type LoginEvent } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { useState } from "react";
 import {
   CheckCircledIcon,
   CrossCircledIcon,
@@ -20,15 +23,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = 50;
+  const email = url.searchParams.get("email") || undefined;
 
   try {
-    const response = await analyticsApi.listEvents(page, perPage, accessToken);
-    return { events: response.data, pagination: response.pagination };
+    const response = await analyticsApi.listEvents(page, perPage, email, accessToken);
+    return { events: response.data, pagination: response.pagination, email };
   } catch {
     return {
       events: [],
       pagination: { page: 1, per_page: perPage, total: 0, total_pages: 0 },
       error: "Failed to load events",
+      email,
     };
   }
 }
@@ -86,7 +91,19 @@ function formatDate(dateString: string) {
 }
 
 export default function LoginEventsPage() {
-  const { events, pagination, error } = useLoaderData<typeof loader>();
+  const { events, pagination, error, email } = useLoaderData<typeof loader>();
+  const navigate = useNavigate();
+  const [emailFilter, setEmailFilter] = useState(email || "");
+
+  const handleFilterSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const params = new URLSearchParams();
+    if (emailFilter.trim()) {
+      params.set("email", emailFilter);
+    }
+    params.set("page", "1");
+    navigate(`/dashboard/analytics/events?${params.toString()}`);
+  };
 
   return (
     <div className="space-y-6">
@@ -106,6 +123,18 @@ export default function LoginEventsPage() {
       {error && (
         <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{error}</div>
       )}
+
+      {/* Filter */}
+      <Form onSubmit={handleFilterSubmit} className="flex gap-2">
+        <Input
+          type="email"
+          placeholder="Filter by email address..."
+          value={emailFilter}
+          onChange={(e) => setEmailFilter(e.target.value)}
+          className="flex-1"
+        />
+        <Button type="submit" variant="outline">Filter</Button>
+      </Form>
 
       {/* Events Table */}
       <Card>

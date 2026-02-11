@@ -158,6 +158,17 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
         Ok((events, total))
     }
 
+    /// List login events filtered by email address
+    pub async fn list_events_by_email(&self, email: &str, page: i64, per_page: i64) -> Result<(Vec<LoginEvent>, i64)> {
+        let offset = (page - 1) * per_page;
+        let events = self
+            .login_event_repo
+            .list_by_email(email, offset, per_page)
+            .await?;
+        let total = self.login_event_repo.count_by_email(email).await?;
+        Ok((events, total))
+    }
+
     /// List login events for a specific tenant
     pub async fn list_tenant_events(
         &self,
