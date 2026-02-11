@@ -21,6 +21,34 @@ use crate::service::{
     WebAuthnService, WebhookService,
 };
 
+// ============================================================
+// Generic Service Type Aliases for Trait Bounds
+// ============================================================
+
+/// Generic TenantService type parameterized by trait associated types
+pub type TenantServiceType<S> = TenantService<
+    <S as HasServices>::TenantRepo,
+    <S as HasServices>::ServiceRepo,
+    <S as HasServices>::WebhookRepo,
+    <S as HasServices>::CascadeInvitationRepo,
+    <S as HasServices>::UserRepo,
+    <S as HasServices>::RbacRepo,
+    <S as HasServices>::LoginEventRepo,
+    <S as HasServices>::SecurityAlertRepo,
+>;
+
+/// Generic UserService type parameterized by trait associated types
+pub type UserServiceType<S> = UserService<
+    <S as HasServices>::UserRepo,
+    <S as HasServices>::SessionRepo,
+    <S as HasServices>::PasswordResetRepo,
+    <S as HasServices>::LinkedIdentityRepo,
+    <S as HasServices>::LoginEventRepo,
+    <S as HasServices>::SecurityAlertRepo,
+    <S as HasServices>::AuditRepo,
+    <S as HasServices>::RbacRepo,
+>;
+
 /// Trait for application state that provides access to all services.
 ///
 /// This trait enables dependency injection by allowing handlers to work
@@ -56,32 +84,10 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     fn config(&self) -> &Config;
 
     /// Get the tenant service
-    fn tenant_service(
-        &self,
-    ) -> &TenantService<
-        Self::TenantRepo,
-        Self::ServiceRepo,
-        Self::WebhookRepo,
-        Self::CascadeInvitationRepo,
-        Self::UserRepo,
-        Self::RbacRepo,
-        Self::LoginEventRepo,
-        Self::SecurityAlertRepo,
-    >;
+    fn tenant_service(&self) -> &TenantServiceType<Self>;
 
     /// Get the user service
-    fn user_service(
-        &self,
-    ) -> &UserService<
-        Self::UserRepo,
-        Self::SessionRepo,
-        Self::PasswordResetRepo,
-        Self::LinkedIdentityRepo,
-        Self::LoginEventRepo,
-        Self::SecurityAlertRepo,
-        Self::AuditRepo,
-        Self::RbacRepo,
-    >;
+    fn user_service(&self) -> &UserServiceType<Self>;
 
     /// Get the client/service service
     fn client_service(&self) -> &ClientService<Self::ServiceRepo, Self::RbacRepo>;

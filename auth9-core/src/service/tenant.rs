@@ -12,6 +12,61 @@ use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
+/// Repository bundle for TenantService
+pub struct TenantRepositoryBundle<
+    R: TenantRepository,
+    SR: ServiceRepository,
+    WR: WebhookRepository,
+    IR: InvitationRepository,
+    UR: UserRepository,
+    RR: RbacRepository,
+    LR: LoginEventRepository,
+    SAR: SecurityAlertRepository,
+> {
+    pub tenant: Arc<R>,
+    pub service: Arc<SR>,
+    pub webhook: Arc<WR>,
+    pub invitation: Arc<IR>,
+    pub user: Arc<UR>,
+    pub rbac: Arc<RR>,
+    pub login_event: Arc<LR>,
+    pub security_alert: Arc<SAR>,
+}
+
+impl<R, SR, WR, IR, UR, RR, LR, SAR> TenantRepositoryBundle<R, SR, WR, IR, UR, RR, LR, SAR>
+where
+    R: TenantRepository,
+    SR: ServiceRepository,
+    WR: WebhookRepository,
+    IR: InvitationRepository,
+    UR: UserRepository,
+    RR: RbacRepository,
+    LR: LoginEventRepository,
+    SAR: SecurityAlertRepository,
+{
+    pub fn new(
+        tenant: Arc<R>,
+        service: Arc<SR>,
+        webhook: Arc<WR>,
+        invitation: Arc<IR>,
+        user: Arc<UR>,
+        rbac: Arc<RR>,
+        login_event: Arc<LR>,
+        security_alert: Arc<SAR>,
+    ) -> Self {
+        Self {
+            tenant,
+            service,
+            webhook,
+            invitation,
+            user,
+            rbac,
+            login_event,
+            security_alert,
+        }
+    }
+}
+
 pub struct TenantService<
     R: TenantRepository,
     SR: ServiceRepository,
@@ -44,26 +99,20 @@ impl<
         SAR: SecurityAlertRepository,
     > TenantService<R, SR, WR, IR, UR, RR, LR, SAR>
 {
+    /// Create a new TenantService with repository bundle and cache manager
     pub fn new(
-        repo: Arc<R>,
-        service_repo: Arc<SR>,
-        webhook_repo: Arc<WR>,
-        invitation_repo: Arc<IR>,
-        user_repo: Arc<UR>,
-        rbac_repo: Arc<RR>,
-        login_event_repo: Arc<LR>,
-        security_alert_repo: Arc<SAR>,
+        repos: TenantRepositoryBundle<R, SR, WR, IR, UR, RR, LR, SAR>,
         cache_manager: Option<CacheManager>,
     ) -> Self {
         Self {
-            repo,
-            service_repo,
-            webhook_repo,
-            invitation_repo,
-            user_repo,
-            rbac_repo,
-            login_event_repo,
-            security_alert_repo,
+            repo: repos.tenant,
+            service_repo: repos.service,
+            webhook_repo: repos.webhook,
+            invitation_repo: repos.invitation,
+            user_repo: repos.user,
+            rbac_repo: repos.rbac,
+            login_event_repo: repos.login_event,
+            security_alert_repo: repos.security_alert,
             cache_manager,
         }
     }
@@ -303,7 +352,7 @@ mod tests {
         MockLoginEventRepository,
         MockSecurityAlertRepository,
     > {
-        TenantService::new(
+        let repos = TenantRepositoryBundle::new(
             Arc::new(tenant_repo),
             Arc::new(MockServiceRepository::new()),
             Arc::new(MockWebhookRepository::new()),
@@ -312,12 +361,11 @@ mod tests {
             Arc::new(MockRbacRepository::new()),
             Arc::new(MockLoginEventRepository::new()),
             Arc::new(MockSecurityAlertRepository::new()),
-            None,
-        )
+        );
+        TenantService::new(repos, None)
     }
 
     /// Helper function to create a TenantService with all mock repositories customizable
-    #[allow(clippy::too_many_arguments)]
     fn create_test_service_full(
         tenant_repo: MockTenantRepository,
         service_repo: MockServiceRepository,
@@ -337,7 +385,7 @@ mod tests {
         MockLoginEventRepository,
         MockSecurityAlertRepository,
     > {
-        TenantService::new(
+        let repos = TenantRepositoryBundle::new(
             Arc::new(tenant_repo),
             Arc::new(service_repo),
             Arc::new(webhook_repo),
@@ -346,8 +394,8 @@ mod tests {
             Arc::new(rbac_repo),
             Arc::new(login_event_repo),
             Arc::new(security_alert_repo),
-            None,
-        )
+        );
+        TenantService::new(repos, None)
     }
 
     #[tokio::test]

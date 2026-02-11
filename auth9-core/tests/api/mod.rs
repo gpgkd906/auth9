@@ -37,7 +37,10 @@ use auth9_core::repository::{
     SystemSettingsRepository, TenantRepository, UserRepository, WebAuthnRepository,
     WebhookRepository,
 };
-use auth9_core::service::{ClientService, RbacService, TenantService, UserService};
+use auth9_core::service::{
+    tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ClientService, RbacService,
+    TenantService, UserService,
+};
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -2621,7 +2624,7 @@ impl TestServicesBuilder {
         TestLoginEventRepository,
         TestSecurityAlertRepository,
     > {
-        TenantService::new(
+        let repos = TenantRepositoryBundle::new(
             self.tenant_repo.clone(),
             self.service_repo.clone(),
             self.webhook_repo.clone(),
@@ -2630,8 +2633,8 @@ impl TestServicesBuilder {
             self.rbac_repo.clone(),
             self.login_event_repo.clone(),
             self.security_alert_repo.clone(),
-            None,
-        )
+        );
+        TenantService::new(repos, None)
     }
 
     pub fn build_user_service(
@@ -2646,7 +2649,7 @@ impl TestServicesBuilder {
         TestAuditRepository,
         TestRbacRepository,
     > {
-        UserService::new(
+        let repos = UserRepositoryBundle::new(
             self.user_repo.clone(),
             self.session_repo.clone(),
             self.password_reset_repo.clone(),
@@ -2655,9 +2658,8 @@ impl TestServicesBuilder {
             self.security_alert_repo.clone(),
             self.audit_repo.clone(),
             self.rbac_repo.clone(),
-            None,
-            None, // webhook_publisher
-        )
+        );
+        UserService::new(repos, None, None)
     }
 
     pub fn build_client_service(&self) -> ClientService<TestServiceRepository, TestRbacRepository> {

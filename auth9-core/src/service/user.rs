@@ -16,6 +16,61 @@ use std::sync::Arc;
 use tracing::warn;
 use validator::Validate;
 
+/// Repository bundle for UserService
+pub struct UserRepositoryBundle<
+    R: UserRepository,
+    S: SessionRepository,
+    P: PasswordResetRepository,
+    L: LinkedIdentityRepository,
+    LE: LoginEventRepository,
+    SA: SecurityAlertRepository,
+    A: AuditRepository,
+    Rbac: RbacRepository,
+> {
+    pub user: Arc<R>,
+    pub session: Arc<S>,
+    pub password_reset: Arc<P>,
+    pub linked_identity: Arc<L>,
+    pub login_event: Arc<LE>,
+    pub security_alert: Arc<SA>,
+    pub audit: Arc<A>,
+    pub rbac: Arc<Rbac>,
+}
+
+impl<R, S, P, L, LE, SA, A, Rbac> UserRepositoryBundle<R, S, P, L, LE, SA, A, Rbac>
+where
+    R: UserRepository,
+    S: SessionRepository,
+    P: PasswordResetRepository,
+    L: LinkedIdentityRepository,
+    LE: LoginEventRepository,
+    SA: SecurityAlertRepository,
+    A: AuditRepository,
+    Rbac: RbacRepository,
+{
+    pub fn new(
+        user: Arc<R>,
+        session: Arc<S>,
+        password_reset: Arc<P>,
+        linked_identity: Arc<L>,
+        login_event: Arc<LE>,
+        security_alert: Arc<SA>,
+        audit: Arc<A>,
+        rbac: Arc<Rbac>,
+    ) -> Self {
+        Self {
+            user,
+            session,
+            password_reset,
+            linked_identity,
+            login_event,
+            security_alert,
+            audit,
+            rbac,
+        }
+    }
+}
+
 pub struct UserService<
     R: UserRepository,
     S: SessionRepository,
@@ -49,27 +104,21 @@ impl<
         Rbac: RbacRepository,
     > UserService<R, S, P, L, LE, SA, A, Rbac>
 {
+    /// Create a new UserService with repository bundle, keycloak client, and webhook publisher
     pub fn new(
-        repo: Arc<R>,
-        session_repo: Arc<S>,
-        password_reset_repo: Arc<P>,
-        linked_identity_repo: Arc<L>,
-        login_event_repo: Arc<LE>,
-        security_alert_repo: Arc<SA>,
-        audit_repo: Arc<A>,
-        rbac_repo: Arc<Rbac>,
+        repos: UserRepositoryBundle<R, S, P, L, LE, SA, A, Rbac>,
         keycloak: Option<KeycloakClient>,
         webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
     ) -> Self {
         Self {
-            repo,
-            session_repo,
-            password_reset_repo,
-            linked_identity_repo,
-            login_event_repo,
-            security_alert_repo,
-            audit_repo,
-            rbac_repo,
+            repo: repos.user,
+            session_repo: repos.session,
+            password_reset_repo: repos.password_reset,
+            linked_identity_repo: repos.linked_identity,
+            login_event_repo: repos.login_event,
+            security_alert_repo: repos.security_alert,
+            audit_repo: repos.audit,
+            rbac_repo: repos.rbac,
             keycloak,
             webhook_publisher,
         }
@@ -381,7 +430,7 @@ mod tests {
         MockAuditRepository,
         MockRbacRepository,
     > {
-        UserService::new(
+        let repos = UserRepositoryBundle::new(
             Arc::new(mock_user),
             Arc::new(MockSessionRepository::new()),
             Arc::new(MockPasswordResetRepository::new()),
@@ -390,9 +439,8 @@ mod tests {
             Arc::new(MockSecurityAlertRepository::new()),
             Arc::new(MockAuditRepository::new()),
             Arc::new(MockRbacRepository::new()),
-            None,
-            None, // webhook_publisher
-        )
+        );
+        UserService::new(repos, None, None)
     }
 
     #[tokio::test]
@@ -749,7 +797,7 @@ mod tests {
         // Delete user record
         mock_user.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
-        let service = UserService::new(
+        let repos = UserRepositoryBundle::new(
             Arc::new(mock_user),
             Arc::new(mock_session),
             Arc::new(mock_password_reset),
@@ -758,9 +806,8 @@ mod tests {
             Arc::new(mock_security_alert),
             Arc::new(mock_audit),
             Arc::new(mock_rbac),
-            None,
-            None, // webhook_publisher
         );
+        let service = UserService::new(repos, None, None);
 
         let result = service.delete(id).await;
         assert!(result.is_ok());
@@ -861,7 +908,7 @@ mod tests {
         // Delete user record
         mock_user.expect_delete().with(eq(id)).returning(|_| Ok(()));
 
-        let service = UserService::new(
+        let repos = UserRepositoryBundle::new(
             Arc::new(mock_user),
             Arc::new(mock_session),
             Arc::new(mock_password_reset),
@@ -870,9 +917,8 @@ mod tests {
             Arc::new(mock_security_alert),
             Arc::new(mock_audit),
             Arc::new(mock_rbac),
-            None,
-            None, // webhook_publisher
         );
+        let service = UserService::new(repos, None, None);
 
         let result = service.delete(id).await;
         assert!(result.is_ok());
@@ -1005,7 +1051,7 @@ mod tests {
             .with(eq(user_id), eq(tenant_id))
             .returning(|_, _| Ok(()));
 
-        let service = UserService::new(
+        let repos = UserRepositoryBundle::new(
             Arc::new(mock_user),
             Arc::new(MockSessionRepository::new()),
             Arc::new(MockPasswordResetRepository::new()),
@@ -1014,9 +1060,8 @@ mod tests {
             Arc::new(MockSecurityAlertRepository::new()),
             Arc::new(MockAuditRepository::new()),
             Arc::new(mock_rbac),
-            None,
-            None, // webhook_publisher
         );
+        let service = UserService::new(repos, None, None);
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());
@@ -1041,7 +1086,7 @@ mod tests {
             .with(eq(user_id), eq(tenant_id))
             .returning(|_, _| Ok(()));
 
-        let service = UserService::new(
+        let repos = UserRepositoryBundle::new(
             Arc::new(mock_user),
             Arc::new(MockSessionRepository::new()),
             Arc::new(MockPasswordResetRepository::new()),
@@ -1050,9 +1095,8 @@ mod tests {
             Arc::new(MockSecurityAlertRepository::new()),
             Arc::new(MockAuditRepository::new()),
             Arc::new(mock_rbac),
-            None,
-            None, // webhook_publisher
         );
+        let service = UserService::new(repos, None, None);
 
         let result = service.remove_from_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());

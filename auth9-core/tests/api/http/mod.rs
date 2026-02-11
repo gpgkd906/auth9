@@ -44,10 +44,10 @@ use auth9_core::keycloak::KeycloakClient;
 use auth9_core::middleware::RateLimitState;
 use auth9_core::server::build_full_router;
 use auth9_core::service::{
-    AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
-    IdentityProviderService, InvitationService, PasswordService, RbacService,
-    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
-    WebAuthnService, WebhookService,
+    tenant::TenantRepositoryBundle, user::UserRepositoryBundle, AnalyticsService, BrandingService,
+    ClientService, EmailService, EmailTemplateService, IdentityProviderService, InvitationService,
+    PasswordService, RbacService, SecurityDetectionService, SessionService, SystemSettingsService,
+    TenantService, UserService, WebAuthnService, WebhookService,
 };
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -131,34 +131,35 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
 // Test AppState (uses test repositories)
 // ============================================================================
 
+// Test Service Type Aliases
+pub type TestTenantService = TenantService<
+    TestTenantRepository,
+    TestServiceRepository,
+    TestWebhookRepository,
+    TestInvitationRepository,
+    TestUserRepository,
+    TestRbacRepository,
+    TestLoginEventRepository,
+    TestSecurityAlertRepository,
+>;
+
+pub type TestUserService = UserService<
+    TestUserRepository,
+    TestSessionRepository,
+    TestPasswordResetRepository,
+    TestLinkedIdentityRepository,
+    TestLoginEventRepository,
+    TestSecurityAlertRepository,
+    TestAuditRepository,
+    TestRbacRepository,
+>;
+
 /// Test-friendly version of AppState using test repository implementations
 #[derive(Clone)]
 pub struct TestAppState {
     pub config: Arc<Config>,
-    pub tenant_service: Arc<
-        TenantService<
-            TestTenantRepository,
-            TestServiceRepository,
-            TestWebhookRepository,
-            TestInvitationRepository,
-            TestUserRepository,
-            TestRbacRepository,
-            TestLoginEventRepository,
-            TestSecurityAlertRepository,
-        >,
-    >,
-    pub user_service: Arc<
-        UserService<
-            TestUserRepository,
-            TestSessionRepository,
-            TestPasswordResetRepository,
-            TestLinkedIdentityRepository,
-            TestLoginEventRepository,
-            TestSecurityAlertRepository,
-            TestAuditRepository,
-            TestRbacRepository,
-        >,
-    >,
+    pub tenant_service: Arc<TestTenantService>,
+    pub user_service: Arc<TestUserService>,
     pub client_service: Arc<ClientService<TestServiceRepository, TestRbacRepository>>,
     pub rbac_service: Arc<RbacService<TestRbacRepository>>,
     pub system_settings_service: Arc<SystemSettingsService<TestSystemSettingsRepository>>,
@@ -237,7 +238,8 @@ impl TestAppState {
         // Create webhook service first (needed for webhook event publishing)
         let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
 
-        let tenant_service = Arc::new(TenantService::new(
+        // Create TenantService with repository bundle
+        let tenant_repos = TenantRepositoryBundle::new(
             tenant_repo.clone(),
             service_repo.clone(),
             webhook_repo.clone(),
@@ -246,9 +248,11 @@ impl TestAppState {
             rbac_repo.clone(),
             login_event_repo.clone(),
             security_alert_repo.clone(),
-            None,
-        ));
-        let user_service = Arc::new(UserService::new(
+        );
+        let tenant_service = Arc::new(TenantService::new(tenant_repos, None));
+
+        // Create UserService with repository bundle
+        let user_repos = UserRepositoryBundle::new(
             user_repo.clone(),
             session_repo.clone(),
             password_reset_repo.clone(),
@@ -257,6 +261,9 @@ impl TestAppState {
             security_alert_repo.clone(),
             audit_repo.clone(),
             rbac_repo.clone(),
+        );
+        let user_service = Arc::new(UserService::new(
+            user_repos,
             None,
             Some(webhook_service.clone()), // webhook event publisher
         ));
