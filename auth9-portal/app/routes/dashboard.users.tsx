@@ -1,5 +1,5 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useFetcher } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
@@ -71,12 +71,6 @@ export async function action({ request }: ActionFunctionArgs) {
   const accessToken = await getAccessToken(request);
 
   try {
-    if (intent === "get_user_tenants") {
-      const user_id = formData.get("user_id") as string;
-      const tenants = await userApi.getTenants(user_id, accessToken || undefined);
-      return { success: true, intent, data: tenants.data };
-    }
-
     if (intent === "update_user") {
       const id = formData.get("id") as string;
       const display_name = formData.get("display_name") as string;
@@ -143,6 +137,12 @@ export async function action({ request }: ActionFunctionArgs) {
       const id = formData.get("id") as string;
       await sessionApi.forceLogoutUser(id, accessToken || undefined);
       return { success: true, intent };
+    }
+
+    if (intent === "get_user_tenants") {
+      const user_id = formData.get("user_id") as string;
+      const tenants = await userApi.getTenants(user_id, accessToken || undefined);
+      return { success: true, data: tenants.data, intent };
     }
 
   } catch (error) {
@@ -213,22 +213,34 @@ export default function UsersPage() {
 
   // Fetch user tenants when opening Manage Tenants dialog
   const [userTenants, setUserTenants] = useState<UserTenant[]>([]);
-  const tenantsFetcher = useFetcher();
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [tenantsError, setTenantsError] = useState<string | null>(null);
 
+  // Load user tenants when dialog opens
   useEffect(() => {
     if (managingTenantsUser) {
-      tenantsFetcher.submit(
-        { intent: "get_user_tenants", user_id: managingTenantsUser.id },
-        { method: "POST" }
-      );
+      setLoadingTenants(true);
+      setTenantsError(null);
+      // Submit form to get user tenants via action
+      const formData = new FormData();
+      formData.append("intent", "get_user_tenants");
+      formData.append("user_id", managingTenantsUser.id);
+      submit(formData, { method: "post" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [managingTenantsUser]);
 
+  // Update userTenants when action returns data
   useEffect(() => {
-    if (tenantsFetcher.data?.intent === "get_user_tenants" && tenantsFetcher.data?.data) {
-      setUserTenants(tenantsFetcher.data.data);
+    if (actionData && actionData.intent === "get_user_tenants") {
+      setLoadingTenants(false);
+      if ("success" in actionData && actionData.success) {
+        setUserTenants(actionData.data || []);
+      } else if ("error" in actionData) {
+        setTenantsError(actionData.error);
+      }
     }
-  }, [tenantsFetcher.data]);
+  }, [actionData]);
 
   // Fetch roles when opening Manage Roles dialog
   // 1. Fetch all assigned roles for this user in this tenant
@@ -272,6 +284,7 @@ export default function UsersPage() {
 
   return (
     <div className="space-y-6">
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
@@ -506,7 +519,13 @@ export default function UsersPage() {
             <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4">
               <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">Joined Tenants</h4>
               <div className="space-y-2">
-                {userTenants.map((ut: UserTenant) => (
+                {loadingTenants && (
+                  <p className="text-sm text-[var(--text-tertiary)]">Loading tenant information...</p>
+                )}
+                {tenantsError && (
+                  <p className="text-sm text-[var(--accent-red)]">Error loading tenants: {tenantsError}</p>
+                )}
+                {!loadingTenants && userTenants.map((ut: UserTenant) => (
                   <div key={ut.tenant_id} className="flex items-center justify-between rounded-lg bg-[var(--sidebar-item-hover)] p-2 text-sm">
                     <div className="flex items-center gap-2">
                       {ut.tenant?.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
@@ -528,7 +547,7 @@ export default function UsersPage() {
                     </div>
                   </div>
                 ))}
-                {userTenants.length === 0 && <p className="text-sm text-[var(--text-tertiary)]">Not a member of any tenant.</p>}
+                {!loadingTenants && !tenantsError && userTenants.length === 0 && <p className="text-sm text-[var(--text-tertiary)]">Not a member of any tenant.</p>}
               </div>
             </div>
 

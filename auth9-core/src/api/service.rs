@@ -22,6 +22,7 @@ use axum::{
 use serde::Deserialize;
 use std::collections::HashMap;
 use uuid::Uuid;
+use validator::Validate;
 
 // ============================================================================
 // Helper functions (testable without AppState)
@@ -265,6 +266,7 @@ pub async fn create<S: HasServices>(
     headers: HeaderMap,
     Json(input): Json<CreateServiceInput>,
 ) -> Result<impl IntoResponse> {
+    input.validate()?;
     require_service_access(state.config(), &auth, input.tenant_id)?;
     let keycloak_client = build_keycloak_client_from_create_input(&input);
 
@@ -307,6 +309,7 @@ pub async fn update<S: HasServices>(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateServiceInput>,
 ) -> Result<impl IntoResponse> {
+    input.validate()?;
     let before = state.client_service().get(id).await?;
     require_service_access(state.config(), &auth, before.tenant_id.as_ref().map(|t| t.0))?;
     let merged = merge_service_update(&before, &input);

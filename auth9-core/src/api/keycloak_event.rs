@@ -73,7 +73,7 @@ pub struct KeycloakEventDetails {
 }
 
 /// Map Keycloak event type to Auth9 LoginEventType
-fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> {
+fn map_event_type_with_details(kc_type: &str, error: Option<&str>, details: &KeycloakEventDetails) -> Option<LoginEventType> {
     match kc_type {
         // Successful logins
         "LOGIN" => Some(LoginEventType::Success),
@@ -82,9 +82,15 @@ fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> 
         // Failed logins
         "LOGIN_ERROR" => {
             match error {
-                Some("invalid_user_credentials") | Some("user_not_found") => {
-                    Some(LoginEventType::FailedPassword)
+                Some("invalid_user_credentials") => {
+                    // Check auth_method to distinguish TOTP failures from password failures
+                    if details.auth_method.as_deref() == Some("otp") {
+                        Some(LoginEventType::FailedMfa)
+                    } else {
+                        Some(LoginEventType::FailedPassword)
+                    }
                 }
+                Some("user_not_found") => Some(LoginEventType::FailedPassword),
                 Some("invalid_totp") | Some("invalid_otp") => Some(LoginEventType::FailedMfa),
                 Some("user_disabled") | Some("user_temporarily_disabled") => {
                     Some(LoginEventType::Locked)
@@ -125,11 +131,24 @@ fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> 
     }
 }
 
+/// Map Keycloak event type to Auth9 LoginEventType (backward-compatible wrapper for tests)
+#[allow(dead_code)]
+fn map_event_type(kc_type: &str, error: Option<&str>) -> Option<LoginEventType> {
+    map_event_type_with_details(kc_type, error, &KeycloakEventDetails::default())
+}
+
 /// Derive failure reason from Keycloak error
-fn derive_failure_reason(error: Option<&str>) -> Option<String> {
+fn derive_failure_reason_with_details(error: Option<&str>, details: &KeycloakEventDetails) -> Option<String> {
     error.map(|e| {
         match e {
-            "invalid_user_credentials" => "Invalid password",
+            "invalid_user_credentials" => {
+                // Check auth_method to distinguish TOTP failures from password failures
+                if details.auth_method.as_deref() == Some("otp") {
+                    "Invalid MFA code"
+                } else {
+                    "Invalid password"
+                }
+            }
             "user_not_found" => "User not found",
             "invalid_totp" | "invalid_otp" => "Invalid MFA code",
             "user_disabled" => "Account disabled",
@@ -141,6 +160,11 @@ fn derive_failure_reason(error: Option<&str>) -> Option<String> {
         }
         .to_string()
     })
+}
+
+#[allow(dead_code)]
+fn derive_failure_reason(error: Option<&str>) -> Option<String> {
+    derive_failure_reason_with_details(error, &KeycloakEventDetails::default())
 }
 
 /// Verify HMAC-SHA256 signature from Keycloak webhook
@@ -247,7 +271,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
     );
 
     // 4. Map to our login event type (skip non-login events)
-    let login_event_type = match map_event_type(event_type_str, event.error.as_deref()) {
+    let login_event_type = match map_event_type_with_details(event_type_str, event.error.as_deref(), &event.details) {
         Some(t) => t,
         None => {
             // Not a login event we track, acknowledge receipt
@@ -288,7 +312,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
             .as_ref()
             .and_then(|id| uuid::Uuid::parse_str(id).ok())
             .map(StringUuid::from),
-        failure_reason: derive_failure_reason(event.error.as_deref()),
+        failure_reason: derive_failure_reason_with_details(event.error.as_deref(), &event.details),
     };
 
     // 8. Record the login event

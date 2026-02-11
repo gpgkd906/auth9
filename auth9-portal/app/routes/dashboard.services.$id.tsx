@@ -110,17 +110,19 @@ export default function ServiceDetailPage() {
     const isSubmitting = navigation.state === "submitting";
 
     useEffect(() => {
-        if (actionData && "success" in actionData && actionData.success) {
-            if (actionData.intent === "create_client" && "secret" in actionData && "clientId" in actionData && actionData.secret && actionData.clientId) {
-                setIsAddClientOpen(false);
-                setSecretDialog({ clientId: actionData.clientId as string, secret: actionData.secret as string, isNew: true });
-            }
-            if (actionData.intent === "regenerate_secret" && "secret" in actionData && "regeneratedClientId" in actionData) {
-                setSecretDialog({
-                    clientId: actionData.regeneratedClientId as string,
-                    secret: actionData.secret as string,
-                    isNew: false
-                });
+        if (actionData) {
+            if ("success" in actionData && actionData.success) {
+                if (actionData.intent === "create_client" && "secret" in actionData && "clientId" in actionData && actionData.secret && actionData.clientId) {
+                    setIsAddClientOpen(false);
+                    setSecretDialog({ clientId: actionData.clientId as string, secret: actionData.secret as string, isNew: true });
+                }
+                if (actionData.intent === "regenerate_secret" && "secret" in actionData && "regeneratedClientId" in actionData) {
+                    setSecretDialog({
+                        clientId: actionData.regeneratedClientId as string,
+                        secret: actionData.secret as string,
+                        isNew: false
+                    });
+                }
             }
         }
     }, [actionData]);
@@ -152,6 +154,11 @@ export default function ServiceDetailPage() {
                             <CardDescription>General settings for the service</CardDescription>
                         </CardHeader>
                         <div className="p-6">
+                            {actionData && "error" in actionData && (
+                                <div className="mb-4 p-3 rounded-lg bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/30 text-[var(--accent-red)] text-sm">
+                                    {actionData.error}
+                                </div>
+                            )}
                             <Form method="post" className="space-y-4">
                                 <input type="hidden" name="intent" value="update_service" />
                                 <div className="space-y-2">
