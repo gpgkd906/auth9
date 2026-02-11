@@ -21,10 +21,11 @@ use crate::repository::{
     tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
 use crate::service::{
-    security_detection::SecurityDetectionConfig, AnalyticsService, BrandingService, ClientService,
-    EmailService, EmailTemplateService, IdentityProviderService, InvitationService,
-    KeycloakSyncService, PasswordService, RbacService, SecurityDetectionService, SessionService,
-    SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
+    security_detection::SecurityDetectionConfig, tenant::TenantRepositoryBundle,
+    user::UserRepositoryBundle, AnalyticsService, BrandingService, ClientService, EmailService,
+    EmailTemplateService, IdentityProviderService, InvitationService, KeycloakSyncService,
+    PasswordService, RbacService, SecurityDetectionService, SessionService, SystemSettingsService,
+    TenantService, UserService, WebAuthnService, WebhookService,
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -59,35 +60,41 @@ use crate::middleware::rate_limit::{
 use crate::middleware::require_auth::AuthMiddlewareState;
 use crate::middleware::security_headers::security_headers_middleware;
 
+// ============================================================
+// Production Service Type Aliases
+// ============================================================
+
+/// Production TenantService type with all concrete repository implementations
+pub type ProductionTenantService = TenantService<
+    TenantRepositoryImpl,
+    ServiceRepositoryImpl,
+    WebhookRepositoryImpl,
+    InvitationRepositoryImpl,
+    UserRepositoryImpl,
+    RbacRepositoryImpl,
+    LoginEventRepositoryImpl,
+    SecurityAlertRepositoryImpl,
+>;
+
+/// Production UserService type with all concrete repository implementations
+pub type ProductionUserService = UserService<
+    UserRepositoryImpl,
+    SessionRepositoryImpl,
+    PasswordResetRepositoryImpl,
+    LinkedIdentityRepositoryImpl,
+    LoginEventRepositoryImpl,
+    SecurityAlertRepositoryImpl,
+    AuditRepositoryImpl,
+    RbacRepositoryImpl,
+>;
+
 /// Application state shared across handlers
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
     pub db_pool: MySqlPool,
-    pub tenant_service: Arc<
-        TenantService<
-            TenantRepositoryImpl,
-            ServiceRepositoryImpl,
-            WebhookRepositoryImpl,
-            InvitationRepositoryImpl,
-            UserRepositoryImpl,
-            RbacRepositoryImpl,
-            LoginEventRepositoryImpl,
-            SecurityAlertRepositoryImpl,
-        >,
-    >,
-    pub user_service: Arc<
-        UserService<
-            UserRepositoryImpl,
-            SessionRepositoryImpl,
-            PasswordResetRepositoryImpl,
-            LinkedIdentityRepositoryImpl,
-            LoginEventRepositoryImpl,
-            SecurityAlertRepositoryImpl,
-            AuditRepositoryImpl,
-            RbacRepositoryImpl,
-        >,
-    >,
+    pub tenant_service: Arc<ProductionTenantService>,
+    pub user_service: Arc<ProductionUserService>,
     pub client_service: Arc<ClientService<ServiceRepositoryImpl, RbacRepositoryImpl>>,
     pub rbac_service: Arc<RbacService<RbacRepositoryImpl>>,
     pub audit_repo: Arc<AuditRepositoryImpl>,
@@ -409,7 +416,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
 
-    let tenant_service = Arc::new(TenantService::new(
+    // Create TenantService with repository bundle
+    let tenant_repos = TenantRepositoryBundle::new(
         tenant_repo.clone(),
         service_repo.clone(),
         webhook_repo.clone(),
@@ -418,9 +426,14 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         rbac_repo.clone(),
         login_event_repo.clone(),
         security_alert_repo.clone(),
+    );
+    let tenant_service = Arc::new(TenantService::new(
+        tenant_repos,
         Some(cache_manager.clone()),
     ));
-    let user_service = Arc::new(UserService::new(
+
+    // Create UserService with repository bundle
+    let user_repos = UserRepositoryBundle::new(
         user_repo.clone(),
         session_repo.clone(),
         password_reset_repo.clone(),
@@ -429,6 +442,9 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         security_alert_repo.clone(),
         audit_repo.clone(),
         rbac_repo.clone(),
+    );
+    let user_service = Arc::new(UserService::new(
+        user_repos,
         Some(keycloak_client.clone()),
         Some(webhook_service.clone()), // webhook event publisher
     ));

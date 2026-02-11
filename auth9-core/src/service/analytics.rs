@@ -6,6 +6,63 @@ use crate::repository::LoginEventRepository;
 use chrono::{DateTime, Duration, Utc};
 use std::sync::Arc;
 
+/// Metadata for recording login events
+#[derive(Debug, Clone)]
+pub struct LoginEventMetadata {
+    pub user_id: StringUuid,
+    pub email: String,
+    pub tenant_id: Option<StringUuid>,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub device_type: Option<String>,
+    pub session_id: Option<StringUuid>,
+}
+
+impl LoginEventMetadata {
+    /// Create a new LoginEventMetadata with required fields
+    pub fn new(user_id: StringUuid, email: impl Into<String>) -> Self {
+        Self {
+            user_id,
+            email: email.into(),
+            tenant_id: None,
+            ip_address: None,
+            user_agent: None,
+            device_type: None,
+            session_id: None,
+        }
+    }
+
+    /// Builder method: set tenant_id
+    pub fn with_tenant_id(mut self, tenant_id: StringUuid) -> Self {
+        self.tenant_id = Some(tenant_id);
+        self
+    }
+
+    /// Builder method: set ip_address
+    pub fn with_ip_address(mut self, ip_address: impl Into<String>) -> Self {
+        self.ip_address = Some(ip_address.into());
+        self
+    }
+
+    /// Builder method: set user_agent
+    pub fn with_user_agent(mut self, user_agent: impl Into<String>) -> Self {
+        self.user_agent = Some(user_agent.into());
+        self
+    }
+
+    /// Builder method: set device_type
+    pub fn with_device_type(mut self, device_type: impl Into<String>) -> Self {
+        self.device_type = Some(device_type.into());
+        self
+    }
+
+    /// Builder method: set session_id
+    pub fn with_session_id(mut self, session_id: StringUuid) -> Self {
+        self.session_id = Some(session_id);
+        self
+    }
+}
+
 pub struct AnalyticsService<R: LoginEventRepository> {
     login_event_repo: Arc<R>,
 }
@@ -21,26 +78,17 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
     }
 
     /// Record a successful login
-    pub async fn record_successful_login(
-        &self,
-        user_id: StringUuid,
-        email: &str,
-        tenant_id: Option<StringUuid>,
-        ip_address: Option<String>,
-        user_agent: Option<String>,
-        device_type: Option<String>,
-        session_id: Option<StringUuid>,
-    ) -> Result<i64> {
+    pub async fn record_successful_login(&self, metadata: LoginEventMetadata) -> Result<i64> {
         let input = CreateLoginEventInput {
-            user_id: Some(user_id),
-            email: Some(email.to_string()),
-            tenant_id,
+            user_id: Some(metadata.user_id),
+            email: Some(metadata.email),
+            tenant_id: metadata.tenant_id,
             event_type: LoginEventType::Success,
-            ip_address,
-            user_agent,
-            device_type,
+            ip_address: metadata.ip_address,
+            user_agent: metadata.user_agent,
+            device_type: metadata.device_type,
             location: None,
-            session_id,
+            session_id: metadata.session_id,
             failure_reason: None,
         };
 
@@ -212,17 +260,11 @@ mod tests {
 
         let service = AnalyticsService::new(Arc::new(mock));
 
-        let result = service
-            .record_successful_login(
-                user_id,
-                "test@example.com",
-                None,
-                Some("192.168.1.1".to_string()),
-                None,
-                Some("desktop".to_string()),
-                None,
-            )
-            .await;
+        let metadata = LoginEventMetadata::new(user_id, "test@example.com")
+            .with_ip_address("192.168.1.1")
+            .with_device_type("desktop");
+
+        let result = service.record_successful_login(metadata).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap(), 1);
@@ -488,17 +530,14 @@ mod tests {
 
         let service = AnalyticsService::new(Arc::new(mock));
 
-        let result = service
-            .record_successful_login(
-                user_id,
-                "user@example.com",
-                Some(tenant_id),
-                Some("192.168.1.1".to_string()),
-                Some("Mozilla/5.0".to_string()),
-                Some("mobile".to_string()),
-                Some(session_id),
-            )
-            .await;
+        let metadata = LoginEventMetadata::new(user_id, "user@example.com")
+            .with_tenant_id(tenant_id)
+            .with_ip_address("192.168.1.1")
+            .with_user_agent("Mozilla/5.0")
+            .with_device_type("mobile")
+            .with_session_id(session_id);
+
+        let result = service.record_successful_login(metadata).await;
 
         assert!(result.is_ok());
     }
