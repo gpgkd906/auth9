@@ -1442,7 +1442,10 @@ describe('API Service', () => {
       const result = await passwordApi.getPasswordPolicy('tenant-1');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/tenants/tenant-1/password-policy')
+        expect.stringContaining('/api/v1/tenants/tenant-1/password-policy'),
+        expect.objectContaining({
+          headers: expect.objectContaining({ "Content-Type": "application/json" }),
+        })
       );
       expect(result.data.min_length).toBe(8);
     });

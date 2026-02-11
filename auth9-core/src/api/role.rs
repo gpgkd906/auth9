@@ -3,10 +3,10 @@
 use crate::api::{
     extract_actor_id_generic, write_audit_log_generic, MessageResponse, SuccessResponse,
 };
+use crate::config::Config;
 use crate::domain::{
     AssignRolesInput, CreatePermissionInput, CreateRoleInput, StringUuid, UpdateRoleInput,
 };
-use crate::config::Config;
 use crate::error::{AppError, Result};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::HasServices;
@@ -97,12 +97,13 @@ pub async fn create_permission<S: HasServices>(
     require_platform_admin(state.config(), &auth)?;
 
     // Validate that the service_id references an existing service
-    state.client_service().get(input.service_id).await.map_err(|_| {
-        AppError::BadRequest(format!(
-            "Service '{}' does not exist",
-            input.service_id
-        ))
-    })?;
+    state
+        .client_service()
+        .get(input.service_id)
+        .await
+        .map_err(|_| {
+            AppError::BadRequest(format!("Service '{}' does not exist", input.service_id))
+        })?;
 
     let permission = state.rbac_service().create_permission(input).await?;
     let _ = write_audit_log_generic(
@@ -181,12 +182,13 @@ pub async fn create_role<S: HasServices>(
     require_platform_admin(state.config(), &auth)?;
 
     // Validate that the service_id references an existing service
-    state.client_service().get(input.service_id).await.map_err(|_| {
-        AppError::BadRequest(format!(
-            "Service '{}' does not exist",
-            input.service_id
-        ))
-    })?;
+    state
+        .client_service()
+        .get(input.service_id)
+        .await
+        .map_err(|_| {
+            AppError::BadRequest(format!("Service '{}' does not exist", input.service_id))
+        })?;
 
     let role = state.rbac_service().create_role(input).await?;
     let _ = write_audit_log_generic(
@@ -350,7 +352,10 @@ pub async fn assign_roles<S: HasServices>(
     // Validate that all role_ids belong to services within the target tenant
     let target_tenant = StringUuid::from(input.tenant_id);
     for role_id in &input.role_ids {
-        let role = state.rbac_service().get_role(StringUuid::from(*role_id)).await?;
+        let role = state
+            .rbac_service()
+            .get_role(StringUuid::from(*role_id))
+            .await?;
         let service = state.client_service().get(*role.service_id).await?;
         if let Some(ref svc_tenant_id) = service.tenant_id {
             if *svc_tenant_id != target_tenant {

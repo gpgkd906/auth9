@@ -399,7 +399,8 @@ mod tests {
 
     #[test]
     fn test_password_policy_deserialization_explicit_false_preserved() {
-        let json = r#"{"require_uppercase": false, "require_lowercase": false, "require_numbers": false}"#;
+        let json =
+            r#"{"require_uppercase": false, "require_lowercase": false, "require_numbers": false}"#;
         let policy: PasswordPolicy = serde_json::from_str(json).unwrap();
 
         assert!(!policy.require_uppercase);

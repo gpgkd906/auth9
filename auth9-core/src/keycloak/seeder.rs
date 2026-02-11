@@ -352,17 +352,11 @@ impl KeycloakSeeder {
         // Merge security settings into full representation
         let mut updated = current;
         if let Some(obj) = updated.as_object_mut() {
-            obj.insert(
-                "bruteForceProtected".to_string(),
-                serde_json::json!(true),
-            );
+            obj.insert("bruteForceProtected".to_string(), serde_json::json!(true));
             obj.insert("failureFactor".to_string(), serde_json::json!(5));
             obj.insert("maxDeltaTimeSeconds".to_string(), serde_json::json!(600));
             obj.insert("waitIncrementSeconds".to_string(), serde_json::json!(60));
-            obj.insert(
-                "maxFailureWaitSeconds".to_string(),
-                serde_json::json!(900),
-            );
+            obj.insert("maxFailureWaitSeconds".to_string(), serde_json::json!(900));
             obj.insert(
                 "minimumQuickLoginWaitSeconds".to_string(),
                 serde_json::json!(60),

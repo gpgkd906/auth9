@@ -19,6 +19,10 @@ vi.mock("~/services/api", () => ({
   },
 }));
 
+vi.mock("~/services/session.server", () => ({
+  getAccessToken: vi.fn().mockResolvedValue(undefined),
+}));
+
 const mockTenants = [
   { id: "tenant-1", name: "Acme Corp", slug: "acme" },
   { id: "tenant-2", name: "Beta Inc", slug: "beta" },
@@ -52,7 +56,13 @@ describe("Security Settings Page", () => {
   it("loader returns tenants list", async () => {
     const response = await loader({ request: new Request("http://localhost"), params: {}, context: {} });
 
-    expect(response).toEqual({ tenants: mockTenants });
+    expect(response).toEqual({
+      tenants: mockTenants,
+      tenantsError: null,
+      selectedTenantId: "",
+      policy: null,
+      policyError: null,
+    });
     expect(tenantApi.list).toHaveBeenCalledWith(1, 100, undefined, undefined);
   });
 
@@ -111,7 +121,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -130,7 +140,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -186,7 +196,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -221,7 +231,7 @@ describe("Security Settings Page", () => {
     expect(screen.getByRole("button", { name: "Save policy" })).toBeInTheDocument();
 
     // Verify the API was called with the selected tenant
-    expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-1");
+    expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-1", undefined);
   });
 
   it("displays policy form fields with correct default values from loaded policy", async () => {
@@ -231,7 +241,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -271,7 +281,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -312,7 +322,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -327,7 +337,7 @@ describe("Security Settings Page", () => {
 
     // Wait for the API call to complete (and fail)
     await waitFor(() => {
-      expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-1");
+      expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-1", undefined);
     });
 
     // The form should not be shown because policy is null after error
@@ -354,7 +364,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -389,7 +399,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -406,12 +416,12 @@ describe("Security Settings Page", () => {
     await waitFor(() => {
       expect(screen.getByLabelText("Minimum length")).toBeInTheDocument();
     });
-    expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-1");
+    expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-1", undefined);
 
     // Switch to second tenant - this triggers useEffect again
     await user.selectOptions(select, "tenant-2");
     await waitFor(() => {
-      expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-2");
+      expect(passwordApi.getPasswordPolicy).toHaveBeenCalledWith("tenant-2", undefined);
     });
 
     // Verify the policy form is still visible (loaded for second tenant)
@@ -426,7 +436,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -489,7 +499,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -531,7 +541,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
         action: async ({ request }) => {
           const formData = await request.formData();
           const intent = formData.get("intent");
@@ -579,7 +589,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -617,7 +627,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -654,7 +664,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -691,7 +701,7 @@ describe("Security Settings Page", () => {
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: mockTenants }),
+        loader,
       },
     ]);
 
@@ -722,11 +732,13 @@ describe("Security Settings Page", () => {
   });
 
   it("renders empty tenants list correctly", async () => {
+    vi.mocked(tenantApi.list).mockResolvedValueOnce({ data: [] });
+
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
         Component: SecuritySettingsPage,
-        loader: () => ({ tenants: [] }),
+        loader,
       },
     ]);
 

@@ -151,8 +151,7 @@ fn require_service_access(
             match service_tenant_id {
                 Some(tid) if tid == token_tenant => {
                     // Check if user has admin/owner role or service:write permissions
-                    let has_admin_role =
-                        auth.roles.iter().any(|r| r == "admin" || r == "owner");
+                    let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
                     let has_service_permission = auth
                         .permissions
                         .iter()
@@ -188,7 +187,10 @@ fn require_service_access(
 pub struct ListServicesQuery {
     #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
-    #[serde(default = "default_per_page", deserialize_with = "deserialize_per_page")]
+    #[serde(
+        default = "default_per_page",
+        deserialize_with = "deserialize_per_page"
+    )]
     pub per_page: i64,
     pub tenant_id: Option<Uuid>,
 }
@@ -255,7 +257,11 @@ pub async fn get<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service().get(id).await?;
-    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
     Ok(Json(SuccessResponse::new(service)))
 }
 
@@ -311,7 +317,11 @@ pub async fn update<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     input.validate()?;
     let before = state.client_service().get(id).await?;
-    require_service_access(state.config(), &auth, before.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        before.tenant_id.as_ref().map(|t| t.0),
+    )?;
     let merged = merge_service_update(&before, &input);
 
     // Update all associated Keycloak clients with new service settings
@@ -351,7 +361,11 @@ pub async fn list_clients<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service().get(id).await?;
-    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
     let clients = state.client_service().list_clients(id).await?;
     Ok(Json(SuccessResponse::new(clients)))
 }
@@ -365,7 +379,11 @@ pub async fn create_client<S: HasServices>(
     Json(input): Json<CreateClientInput>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service().get(id).await?;
-    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
 
     // Create new Keycloak client
     // We need to generate a client_id logic or let Keycloak do it?
@@ -446,7 +464,11 @@ pub async fn delete_client<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     // Check if client exists and belongs to service
     let service = state.client_service().get(service_id).await?;
-    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
 
     // Also delete from Keycloak
     if let Ok(kc_uuid) = state
@@ -484,7 +506,11 @@ pub async fn delete<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let service = state.client_service().get(id).await?;
-    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
     // Also delete all Keycloak clients associated with this service
     // If we assume a name prefix or just delete clients in DB...
     // The clients in DB have `client_id` which maps to Keycloak.
@@ -523,7 +549,11 @@ pub async fn regenerate_client_secret<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     // Verify service exists and check access
     let service = state.client_service().get(service_id).await?;
-    require_service_access(state.config(), &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
 
     // Regenerate in Keycloak first (if it exists there)
     let new_secret = if let Ok(kc_uuid) = state

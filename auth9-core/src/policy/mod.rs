@@ -109,9 +109,9 @@ fn require_platform_admin(config: &Config, auth: &AuthUser) -> PolicyResult<()> 
                 Err(AppError::Forbidden("Platform admin required".to_string()))
             }
         }
-        TokenType::TenantAccess | TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Platform admin required".to_string(),
-        )),
+        TokenType::TenantAccess | TokenType::ServiceClient => {
+            Err(AppError::Forbidden("Platform admin required".to_string()))
+        }
     }
 }
 
@@ -154,7 +154,11 @@ fn require_tenant_admin_or_permission(
     }
 }
 
-fn require_system_config_read(config: &Config, auth: &AuthUser, tenant_id: StringUuid) -> PolicyResult<()> {
+fn require_system_config_read(
+    config: &Config,
+    auth: &AuthUser,
+    tenant_id: StringUuid,
+) -> PolicyResult<()> {
     match auth.token_type {
         TokenType::Identity => {
             if config.is_platform_admin_email(&auth.email) {

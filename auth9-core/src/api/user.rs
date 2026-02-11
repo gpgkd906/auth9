@@ -3,12 +3,12 @@
 use crate::api::{
     write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
+use crate::config::Config;
 use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput};
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::state::{HasBranding, HasServices};
-use crate::config::Config;
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -23,15 +23,25 @@ use validator::Validate;
 /// User list query parameters (extends PaginationQuery with search)
 #[derive(Debug, Clone, Deserialize)]
 pub struct UserListQuery {
-    #[serde(default = "default_page", deserialize_with = "crate::api::deserialize_page")]
+    #[serde(
+        default = "default_page",
+        deserialize_with = "crate::api::deserialize_page"
+    )]
     pub page: i64,
-    #[serde(default = "default_per_page", deserialize_with = "crate::api::deserialize_per_page")]
+    #[serde(
+        default = "default_per_page",
+        deserialize_with = "crate::api::deserialize_per_page"
+    )]
     pub per_page: i64,
     pub search: Option<String>,
 }
 
-fn default_page() -> i64 { 1 }
-fn default_per_page() -> i64 { 20 }
+fn default_page() -> i64 {
+    1
+}
+fn default_per_page() -> i64 {
+    20
+}
 
 /// Check if user can manage the target tenant
 /// Requires the user to be an owner of the target tenant or a platform admin
@@ -49,10 +59,8 @@ async fn require_tenant_owner<S: HasServices>(
 
     // For TenantAccess tokens, check if the token is for this tenant with owner role
     if auth.token_type == TokenType::TenantAccess {
-        if auth.tenant_id == Some(target_tenant_id) {
-            if auth.roles.iter().any(|r| r == "owner") {
-                return Ok(());
-            }
+        if auth.tenant_id == Some(target_tenant_id) && auth.roles.iter().any(|r| r == "owner") {
+            return Ok(());
         }
         return Err(AppError::Forbidden(
             "Owner access required: you must be an owner of this tenant".to_string(),
@@ -119,7 +127,7 @@ fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Resul
 /// List users
 /// - Platform admin (Identity token): can list all users
 /// - Tenant user (TenantAccess token): can only list users in their tenant
-/// Supports optional `search` query parameter to filter by email or display_name
+/// - Supports optional `search` query parameter to filter by email or display_name
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -161,20 +169,12 @@ pub async fn list<S: HasServices>(
         }
         TokenType::ServiceClient => {
             // Service client: can only list users in their service's tenant
-            let tenant_id = auth
-                .tenant_id
-                .ok_or_else(|| {
-                    AppError::Forbidden(
-                        "Service client token has no tenant context".to_string(),
-                    )
-                })?;
+            let tenant_id = auth.tenant_id.ok_or_else(|| {
+                AppError::Forbidden("Service client token has no tenant context".to_string())
+            })?;
             let users = state
                 .user_service()
-                .list_tenant_users(
-                    StringUuid::from(tenant_id),
-                    query.page,
-                    query.per_page,
-                )
+                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
                 .await?;
             let total = users.len() as i64;
             Ok(Json(PaginatedResponse::new(
@@ -191,11 +191,7 @@ pub async fn list<S: HasServices>(
                 .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
             let users = state
                 .user_service()
-                .list_tenant_users(
-                    StringUuid::from(tenant_id),
-                    query.page,
-                    query.per_page,
-                )
+                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
                 .await?;
             // list_tenant_users returns Vec, wrap in PaginatedResponse
             let total = users.len() as i64;
@@ -347,7 +343,9 @@ pub async fn create<S: HasServices + HasBranding>(
         // If an Authorization header existed but we couldn't parse a supported token,
         // treat it as an authentication error (don't fall back to public registration).
         if headers.get(axum::http::header::AUTHORIZATION).is_some() {
-            return Err(AppError::Unauthorized("Invalid authorization token".to_string()));
+            return Err(AppError::Unauthorized(
+                "Invalid authorization token".to_string(),
+            ));
         }
 
         let branding = state.branding_service().get_branding().await?;
@@ -364,9 +362,9 @@ pub async fn create<S: HasServices + HasBranding>(
     // Validate password against tenant password policy if provided
     if let Some(ref password) = input.password {
         // Determine tenant for policy: explicit tenant_id > caller's token tenant > default
-        let effective_tenant_id = input.tenant_id.or_else(|| {
-            auth_user.as_ref().and_then(|a| a.tenant_id)
-        });
+        let effective_tenant_id = input
+            .tenant_id
+            .or_else(|| auth_user.as_ref().and_then(|a| a.tenant_id));
         let policy = if let Some(tenant_id) = effective_tenant_id {
             let tenant = state
                 .tenant_service()
@@ -438,7 +436,9 @@ pub async fn update_me<S: HasServices>(
     Json(input): Json<UpdateUserInput>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(auth.user_id);
-    input.validate().map_err(|e| AppError::Validation(e.to_string()))?;
+    input
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
     let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
         let update = KeycloakUserUpdate {
@@ -487,7 +487,9 @@ pub async fn update<S: HasServices>(
 
     let id = StringUuid::from(id);
     // Validate input before sending to Keycloak (prevent invalid data reaching external service)
-    input.validate().map_err(|e| AppError::Validation(e.to_string()))?;
+    input
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
     let before = state.user_service().get(id).await?;
     if input.display_name.is_some() {
         let update = KeycloakUserUpdate {

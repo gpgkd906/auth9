@@ -4,8 +4,8 @@
 
 use super::mock_keycloak::MockKeycloakServer;
 use super::{
-    build_test_router, delete_json_with_auth, get_json_with_auth, post_json,
-    post_json_with_auth, put_json_with_auth, TestAppState,
+    build_test_router, delete_json_with_auth, get_json_with_auth, post_json, post_json_with_auth,
+    put_json_with_auth, TestAppState,
 };
 use crate::api::{
     create_test_identity_token, create_test_identity_token_for_user, create_test_user,
@@ -541,8 +541,12 @@ async fn test_list_users_by_tenant() {
     let app = build_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<User>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/users", tenant_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<User>>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/users", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -745,8 +749,13 @@ async fn test_update_other_user_requires_admin() {
         "display_name": "Hacked Name"
     });
 
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        put_json_with_auth(&app, &format!("/api/v1/users/{}", other_user_id), &input, &token).await;
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = put_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}", other_user_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }

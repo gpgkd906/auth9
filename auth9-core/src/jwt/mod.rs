@@ -239,8 +239,7 @@ impl JwtManager {
         validation.set_audience(&["auth9-service"]);
         validation.set_issuer(&[&self.config.issuer]);
 
-        let token_data =
-            decode::<ServiceClientClaims>(token, &self.decoding_key, &validation)?;
+        let token_data = decode::<ServiceClientClaims>(token, &self.decoding_key, &validation)?;
         Ok(token_data.claims)
     }
 
@@ -375,7 +374,7 @@ mod tests {
             .unwrap();
 
         let claims = manager
-            .verify_tenant_access_token_strict(&token, &vec!["my-service".to_string()])
+            .verify_tenant_access_token_strict(&token, &["my-service".to_string()])
             .unwrap();
 
         assert_eq!(claims.sub, user_id.to_string());
@@ -410,7 +409,7 @@ mod tests {
             .unwrap();
 
         let result =
-            manager.verify_tenant_access_token_strict(&token, &vec!["other-service".to_string()]);
+            manager.verify_tenant_access_token_strict(&token, &["other-service".to_string()]);
         assert!(result.is_err());
     }
 
@@ -481,7 +480,7 @@ mod tests {
             .unwrap();
 
         let claims = manager
-            .verify_tenant_access_token_strict(&token, &vec!["any-service".to_string()])
+            .verify_tenant_access_token_strict(&token, &["any-service".to_string()])
             .unwrap();
         assert_eq!(claims.aud, "any-service");
     }
@@ -504,7 +503,7 @@ mod tests {
             .unwrap();
 
         let claims = manager
-            .verify_tenant_access_token_strict(&token, &vec!["service".to_string()])
+            .verify_tenant_access_token_strict(&token, &["service".to_string()])
             .unwrap();
         assert!(claims.roles.is_empty());
         assert!(claims.permissions.is_empty());

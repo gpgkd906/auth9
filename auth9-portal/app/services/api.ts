@@ -269,8 +269,9 @@ export const serviceApi = {
     return handleResponse(response);
   },
 
-  // Note: Backend uses #[serde(flatten)] on ServiceWithClient, so Service fields are at root level
-  create: async (input: CreateServiceInput, accessToken?: string): Promise<{ data: Service & { client: ClientWithSecret } }> => {
+  // Note: Backend uses #[serde(flatten)] on ServiceWithClient, so Service fields are at root level.
+  // Some code paths can return service data without client details.
+  create: async (input: CreateServiceInput, accessToken?: string): Promise<{ data: Service & { client?: ClientWithSecret } }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/services`, {
       method: "POST",
       headers: getHeaders(accessToken),

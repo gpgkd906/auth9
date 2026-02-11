@@ -14,10 +14,10 @@ use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
 };
-use hmac::{Hmac, Mac};
-use sha2::Sha256;
 use chrono::{Duration, Utc};
+use hmac::{Hmac, Mac};
 use rand::Rng;
+use sha2::Sha256;
 use std::sync::Arc;
 use validator::Validate;
 

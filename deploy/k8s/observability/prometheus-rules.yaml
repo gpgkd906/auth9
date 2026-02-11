@@ -68,3 +68,23 @@ spec:
           annotations:
             summary: "Database connection pool near exhaustion"
             description: "More than 90% of database pool connections are active, indicating potential pool exhaustion."
+
+        - alert: OidcInvalidStateSpike
+          expr: |
+            sum(rate(auth9_auth_invalid_state_total[5m])) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+          annotations:
+            summary: "OIDC invalid_state events are elevated"
+            description: "Invalid/expired OIDC callback state events exceed 0.1/s over the last 5 minutes."
+
+        - alert: RateLimitBackendUnavailable
+          expr: |
+            sum(rate(auth9_rate_limit_unavailable_total[2m])) > 0
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "Rate-limit backend unavailable on sensitive endpoints"
+            description: "Requests are being fail-closed due to rate-limit backend unavailability."

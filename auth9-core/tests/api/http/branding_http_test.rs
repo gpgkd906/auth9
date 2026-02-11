@@ -391,7 +391,8 @@ async fn test_branding_public_and_admin_match() {
         }
     });
 
-    put_json_with_auth::<_, serde_json::Value>(&app, "/api/v1/system/branding", &input, &token).await;
+    put_json_with_auth::<_, serde_json::Value>(&app, "/api/v1/system/branding", &input, &token)
+        .await;
 
     // Read from public endpoint
     let (_, public_body): (StatusCode, Option<serde_json::Value>) =

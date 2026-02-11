@@ -688,8 +688,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let message = EmailMessage::new(
             EmailAddress::new("user@example.com"),
@@ -708,13 +707,12 @@ mod tests {
 
         let mut factory = MockEmailProviderFactory::new();
         factory.expect_create().returning(|_| {
-            Ok(Box::new(FailingProvider(
-                EmailProviderError::SendFailed("boom".into()),
-            )))
+            Ok(Box::new(FailingProvider(EmailProviderError::SendFailed(
+                "boom".into(),
+            ))))
         });
 
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let message = EmailMessage::new(
             EmailAddress::new("user@example.com"),
@@ -730,8 +728,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_with_from(
@@ -750,8 +747,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_with_from(
@@ -770,8 +766,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_password_reset("user@example.com", "reset-token-123", Some("Alice"))
@@ -784,8 +779,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_password_reset("user@example.com", "token-abc", None)
@@ -798,8 +792,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_password_changed("user@example.com", Some("Bob"))
@@ -812,8 +805,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_password_changed("user@example.com", None)
@@ -826,8 +818,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service
             .send_test_email("user@example.com", None)
@@ -840,8 +831,7 @@ mod tests {
         let mock = MockSystemSettingsRepository::new(); // should not be called
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let tenant_settings = TenantEmailSettings {
             provider: Some(EmailProviderConfig::Smtp(SmtpConfig {
@@ -875,8 +865,7 @@ mod tests {
             )))
         });
 
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service.test_connection(None).await;
         assert!(matches!(result, Err(AppError::Unauthorized(_))));
@@ -894,8 +883,7 @@ mod tests {
             )))
         });
 
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service.test_connection(None).await;
         assert!(matches!(result, Err(AppError::BadRequest(_))));
@@ -913,8 +901,7 @@ mod tests {
             )))
         });
 
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service.test_connection(None).await;
         assert!(matches!(result, Err(AppError::Validation(_))));
@@ -927,13 +914,12 @@ mod tests {
 
         let mut factory = MockEmailProviderFactory::new();
         factory.expect_create().returning(|_| {
-            Ok(Box::new(FailingProvider(
-                EmailProviderError::SendFailed("unexpected".into()),
-            )))
+            Ok(Box::new(FailingProvider(EmailProviderError::SendFailed(
+                "unexpected".into(),
+            ))))
         });
 
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service.test_connection(None).await;
         assert!(matches!(result, Err(AppError::Internal(_))));
@@ -944,8 +930,7 @@ mod tests {
         let mock = smtp_system_settings_mock();
         let settings_service = Arc::new(SystemSettingsService::new(Arc::new(mock), None));
         let factory = create_stub_factory();
-        let email_service =
-            EmailService::new_with_factory(settings_service, Arc::new(factory));
+        let email_service = EmailService::new_with_factory(settings_service, Arc::new(factory));
 
         let result = email_service.test_connection(None).await;
         assert!(result.is_ok());

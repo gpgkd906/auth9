@@ -112,7 +112,9 @@ pub async fn require_auth_middleware(
             false
         } else if let Ok(claims) = {
             #[allow(deprecated)]
-            auth_state.jwt_manager.verify_tenant_access_token(token, None)
+            auth_state
+                .jwt_manager
+                .verify_tenant_access_token(token, None)
         } {
             session_id = Some(claims.sub.clone());
             true

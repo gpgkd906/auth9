@@ -355,8 +355,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to connect to database")?;
 
-    let default_settings =
-        serde_json::json!({"require_mfa": false, "allowed_auth_methods": [], "session_timeout_secs": 3600, "branding": {}});
+    let default_settings = serde_json::json!({"require_mfa": false, "allowed_auth_methods": [], "session_timeout_secs": 3600, "branding": {}});
     let settings_json = default_settings.to_string();
 
     // 2. INSERT IGNORE two tenants
@@ -404,12 +403,11 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     .context("Failed to seed admin user")?;
 
     // 4. SELECT actual IDs (handles case where records already existed)
-    let (actual_platform_id,): (String,) =
-        sqlx::query_as("SELECT id FROM tenants WHERE slug = ?")
-            .bind(DEFAULT_PLATFORM_TENANT_SLUG)
-            .fetch_one(&pool)
-            .await
-            .context("Failed to get platform tenant ID")?;
+    let (actual_platform_id,): (String,) = sqlx::query_as("SELECT id FROM tenants WHERE slug = ?")
+        .bind(DEFAULT_PLATFORM_TENANT_SLUG)
+        .fetch_one(&pool)
+        .await
+        .context("Failed to get platform tenant ID")?;
 
     let (actual_demo_id,): (String,) = sqlx::query_as("SELECT id FROM tenants WHERE slug = ?")
         .bind(DEFAULT_DEMO_TENANT_SLUG)
@@ -417,12 +415,11 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to get demo tenant ID")?;
 
-    let (actual_user_id,): (String,) =
-        sqlx::query_as("SELECT id FROM users WHERE keycloak_id = ?")
-            .bind(&keycloak_id)
-            .fetch_one(&pool)
-            .await
-            .context("Failed to get admin user ID")?;
+    let (actual_user_id,): (String,) = sqlx::query_as("SELECT id FROM users WHERE keycloak_id = ?")
+        .bind(&keycloak_id)
+        .fetch_one(&pool)
+        .await
+        .context("Failed to get admin user ID")?;
 
     // 5. INSERT IGNORE tenant_users (admin → both tenants)
     sqlx::query(

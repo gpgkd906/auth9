@@ -57,8 +57,12 @@ async fn test_list_user_sessions_admin() {
     let app = build_session_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<SessionInfo>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/admin/users/{}/sessions", user_id), &token)
-            .await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/admin/users/{}/sessions", user_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -87,8 +91,12 @@ async fn test_list_user_sessions_admin_empty() {
     let app = build_session_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<SessionInfo>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/admin/users/{}/sessions", user_id), &token)
-            .await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/admin/users/{}/sessions", user_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -238,8 +246,12 @@ async fn test_session_info_device_details() {
     let app = build_session_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<SessionInfo>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/admin/users/{}/sessions", user_id), &token)
-            .await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/admin/users/{}/sessions", user_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

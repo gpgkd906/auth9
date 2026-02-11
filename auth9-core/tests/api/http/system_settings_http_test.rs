@@ -3,8 +3,8 @@
 //! Tests for the system settings HTTP endpoints using mock repositories.
 
 use super::{
-    build_system_settings_test_router, get_json_with_auth, post_json_with_auth,
-    put_json_with_auth, MockKeycloakServer, TestAppState,
+    build_system_settings_test_router, get_json_with_auth, post_json_with_auth, put_json_with_auth,
+    MockKeycloakServer, TestAppState,
 };
 use crate::api::create_test_identity_token;
 use auth9_core::api::system_settings::TestEmailResponse;

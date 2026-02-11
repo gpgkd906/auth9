@@ -127,8 +127,10 @@ mod tests {
         let config = BrandingConfig::default();
         assert!(config.is_default());
 
-        let mut custom = BrandingConfig::default();
-        custom.company_name = Some("Test Corp".to_string());
+        let custom = BrandingConfig {
+            company_name: Some("Test Corp".to_string()),
+            ..BrandingConfig::default()
+        };
         assert!(!custom.is_default());
     }
 

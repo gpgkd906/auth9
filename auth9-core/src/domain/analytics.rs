@@ -341,8 +341,7 @@ fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
     if scheme == "https" {
         if is_loopback || is_private {
             let mut err = ValidationError::new("internal_ip_blocked");
-            err.message =
-                Some("Internal IP addresses are not allowed for webhook URLs".into());
+            err.message = Some("Internal IP addresses are not allowed for webhook URLs".into());
             return Err(err);
         }
         return Ok(());

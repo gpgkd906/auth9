@@ -21,7 +21,9 @@ where
     let endpoint = match &config.otlp_endpoint {
         Some(ep) => ep.clone(),
         None => {
-            eprintln!("WARN: OTEL_TRACING_ENABLED=true but OTEL_EXPORTER_OTLP_ENDPOINT not set, skipping");
+            eprintln!(
+                "WARN: OTEL_TRACING_ENABLED=true but OTEL_EXPORTER_OTLP_ENDPOINT not set, skipping"
+            );
             return None;
         }
     };
@@ -38,9 +40,10 @@ where
         }
     };
 
-    let resource = opentelemetry_sdk::Resource::new(vec![
-        KeyValue::new("service.name", config.service_name.clone()),
-    ]);
+    let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new(
+        "service.name",
+        config.service_name.clone(),
+    )]);
 
     let provider = opentelemetry_sdk::trace::TracerProvider::builder()
         .with_batch_exporter(exporter, Tokio)

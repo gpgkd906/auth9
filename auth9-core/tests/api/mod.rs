@@ -16,14 +16,15 @@ use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
     AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateInvitationInput,
-    CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasswordResetTokenInput,
-    CreatePasskeyInput, CreatePermissionInput, CreateRoleInput, CreateSecurityAlertInput,
-    CreateServiceInput, CreateSessionInput, CreateTenantInput, CreateUserInput, CreateWebhookInput,
-    Invitation, InvitationStatus, LinkedIdentity, LoginEvent, LoginEventType, LoginStats,
-    PasswordResetToken, Permission, Role, SecurityAlert, Service, ServiceStatus, Session,
-    StoredPasskey, StringUuid, SystemSettingRow, Tenant, TenantSettings, TenantStatus, TenantUser,
-    UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
-    UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
+    CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasskeyInput,
+    CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
+    CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput,
+    CreateUserInput, CreateWebhookInput, Invitation, InvitationStatus, LinkedIdentity, LoginEvent,
+    LoginEventType, LoginStats, PasswordResetToken, Permission, Role, SecurityAlert, Service,
+    ServiceStatus, Session, StoredPasskey, StringUuid, SystemSettingRow, Tenant, TenantSettings,
+    TenantStatus, TenantUser, UpdateRoleInput, UpdateServiceInput, UpdateTenantInput,
+    UpdateUserInput, UpdateWebhookInput, UpsertSystemSettingInput, User, UserRolesInTenant,
+    Webhook,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
@@ -342,7 +343,11 @@ impl UserRepository for TestUserRepository {
             .cloned()
             .collect();
         let start = offset as usize;
-        Ok(filtered.into_iter().skip(start).take(limit as usize).collect())
+        Ok(filtered
+            .into_iter()
+            .skip(start)
+            .take(limit as usize)
+            .collect())
     }
 
     async fn search_count(&self, query: &str) -> Result<i64> {
@@ -2098,12 +2103,7 @@ impl LoginEventRepository for TestLoginEventRepository {
         Ok(events.iter().filter(|e| e.user_id == Some(user_id)).count() as i64)
     }
 
-    async fn list_by_email(
-        &self,
-        email: &str,
-        offset: i64,
-        limit: i64,
-    ) -> Result<Vec<LoginEvent>> {
+    async fn list_by_email(&self, email: &str, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {
         let events = self.events.read().await;
         Ok(events
             .iter()
@@ -2124,7 +2124,10 @@ impl LoginEventRepository for TestLoginEventRepository {
 
     async fn count_by_email(&self, email: &str) -> Result<i64> {
         let events = self.events.read().await;
-        Ok(events.iter().filter(|e| e.email.as_deref() == Some(email)).count() as i64)
+        Ok(events
+            .iter()
+            .filter(|e| e.email.as_deref() == Some(email))
+            .count() as i64)
     }
 
     async fn get_stats(&self, start: DateTime<Utc>, end: DateTime<Utc>) -> Result<LoginStats> {
@@ -2569,7 +2572,6 @@ pub fn create_test_permission(id: Option<Uuid>, service_id: Uuid) -> Permission 
 // ============================================================================
 
 /// Builder for creating test services with mocked repositories
-#[allow(dead_code)]
 #[allow(dead_code)]
 pub struct TestServicesBuilder {
     pub tenant_repo: Arc<TestTenantRepository>,

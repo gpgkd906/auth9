@@ -3,9 +3,12 @@
 //! Implements sliding window rate limiting with Redis backend.
 //! Supports tenant-level and per-client rate limiting.
 
+use crate::jwt::JwtManager;
 use axum::{
     body::Body,
+    extract::MatchedPath,
     extract::State,
+    http::header::AUTHORIZATION,
     http::{Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
@@ -109,14 +112,26 @@ impl RateLimitKey {
 pub struct RateLimitState {
     config: Arc<RateLimitConfig>,
     redis: Option<ConnectionManager>,
+    jwt_manager: Option<JwtManager>,
+    allowed_audiences: Arc<Vec<String>>,
+    is_production: bool,
 }
 
 impl RateLimitState {
     /// Create a new rate limit state with Redis backend
-    pub fn new(config: RateLimitConfig, redis: ConnectionManager) -> Self {
+    pub fn new(
+        config: RateLimitConfig,
+        redis: ConnectionManager,
+        jwt_manager: JwtManager,
+        allowed_audiences: Vec<String>,
+        is_production: bool,
+    ) -> Self {
         Self {
             config: Arc::new(config),
             redis: Some(redis),
+            jwt_manager: Some(jwt_manager),
+            allowed_audiences: Arc::new(allowed_audiences),
+            is_production,
         }
     }
 
@@ -128,6 +143,9 @@ impl RateLimitState {
                 ..Default::default()
             }),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         }
     }
 
@@ -274,6 +292,109 @@ pub enum RateLimitError {
     RedisError(String),
 }
 
+fn extract_client_ip(request: &Request<Body>) -> String {
+    request
+        .headers()
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.split(',').next())
+        .map(|s| s.trim().to_string())
+        .or_else(|| {
+            request
+                .headers()
+                .get("x-real-ip")
+                .and_then(|v| v.to_str().ok())
+                .map(|s| s.to_string())
+        })
+        .unwrap_or_else(|| "unknown".to_string())
+}
+
+fn normalize_path(path: &str) -> String {
+    if path.contains('{') {
+        return path.to_string();
+    }
+    let normalized: Vec<String> = path
+        .split('/')
+        .map(|segment| {
+            if segment.is_empty() {
+                String::new()
+            } else if segment.parse::<u64>().is_ok() || uuid::Uuid::parse_str(segment).is_ok() {
+                ":id".to_string()
+            } else {
+                segment.to_string()
+            }
+        })
+        .collect();
+    normalized.join("/")
+}
+
+fn endpoint_key(request: &Request<Body>) -> String {
+    let method = request.method().as_str();
+    let path = request
+        .extensions()
+        .get::<MatchedPath>()
+        .map(|p| p.as_str().to_string())
+        .unwrap_or_else(|| normalize_path(request.uri().path()));
+    format!("{}:{}", method, path)
+}
+
+fn is_sensitive_endpoint(endpoint: &str) -> bool {
+    matches!(
+        endpoint,
+        "POST:/api/v1/auth/token"
+            | "POST:/api/v1/auth/forgot-password"
+            | "POST:/api/v1/auth/reset-password"
+    )
+}
+
+fn extract_key_from_verified_token(
+    rate_limit: &RateLimitState,
+    request: &Request<Body>,
+) -> Option<(RateLimitKey, Option<String>)> {
+    let jwt_manager = rate_limit.jwt_manager.as_ref()?;
+    let auth_value = request.headers().get(AUTHORIZATION)?.to_str().ok()?;
+    let token = auth_value.strip_prefix("Bearer ")?;
+
+    if let Ok(claims) = jwt_manager.verify_identity_token(token) {
+        return Some((
+            RateLimitKey::User {
+                user_id: claims.sub,
+            },
+            None,
+        ));
+    }
+
+    if let Ok(claims) =
+        jwt_manager.verify_tenant_access_token_strict(token, &rate_limit.allowed_audiences)
+    {
+        let tenant_id = claims.tenant_id;
+        return Some((
+            RateLimitKey::TenantClient {
+                tenant_id: tenant_id.clone(),
+                client_id: claims.sub,
+            },
+            Some(tenant_id),
+        ));
+    }
+
+    if !rate_limit.is_production {
+        if let Ok(claims) =
+            jwt_manager.verify_tenant_access_token_with_optional_audience(token, None)
+        {
+            let tenant_id = claims.tenant_id;
+            return Some((
+                RateLimitKey::TenantClient {
+                    tenant_id: tenant_id.clone(),
+                    client_id: claims.sub,
+                },
+                Some(tenant_id),
+            ));
+        }
+    }
+
+    None
+}
+
 /// Rate limit exceeded response
 #[derive(Debug, Serialize)]
 struct RateLimitExceededResponse {
@@ -322,40 +443,18 @@ pub async fn rate_limit_middleware(
         return next.run(request).await;
     }
 
-    // Extract rate limit key from request
-    // Priority: tenant_id from header > user_id from token > IP address
-    let tenant_id = request
-        .headers()
-        .get("x-tenant-id")
-        .and_then(|v| v.to_str().ok())
-        .map(|s| s.to_string());
-
-    let client_ip = request
-        .headers()
-        .get("x-forwarded-for")
-        .and_then(|v| v.to_str().ok())
-        .and_then(|s| s.split(',').next())
-        .map(|s| s.trim().to_string())
-        .or_else(|| {
-            request
-                .headers()
-                .get("x-real-ip")
-                .and_then(|v| v.to_str().ok())
-                .map(|s| s.to_string())
-        })
-        .unwrap_or_else(|| "unknown".to_string());
-
-    let key = if let Some(ref tid) = tenant_id {
-        RateLimitKey::Tenant {
-            tenant_id: tid.clone(),
-        }
-    } else {
-        RateLimitKey::Ip { ip: client_ip }
-    };
-
-    let method = request.method().as_str();
-    let path = request.uri().path();
-    let endpoint = format!("{}:{}", method, path);
+    let endpoint = endpoint_key(&request);
+    let (key, tenant_id) =
+        if let Some((key, tenant_id)) = extract_key_from_verified_token(&rate_limit, &request) {
+            (key, tenant_id)
+        } else {
+            (
+                RateLimitKey::Ip {
+                    ip: extract_client_ip(&request),
+                },
+                None,
+            )
+        };
 
     match rate_limit
         .check_and_increment(&key, &endpoint, tenant_id.as_deref())
@@ -378,7 +477,8 @@ pub async fn rate_limit_middleware(
         }
         Ok(result) => {
             // Rate limit exceeded
-            metrics::counter!("auth9_rate_limit_throttled_total", "endpoint" => endpoint.clone()).increment(1);
+            metrics::counter!("auth9_rate_limit_throttled_total", "endpoint" => endpoint.clone())
+                .increment(1);
             let now = SystemTime::now()
                 .duration_since(UNIX_EPOCH)
                 .unwrap()
@@ -393,7 +493,23 @@ pub async fn rate_limit_middleware(
             .into_response()
         }
         Err(_) => {
-            // On error, allow the request through (fail open)
+            if is_sensitive_endpoint(&endpoint) {
+                metrics::counter!(
+                    "auth9_rate_limit_unavailable_total",
+                    "endpoint" => endpoint.clone(),
+                    "mode" => "fail_close"
+                )
+                .increment(1);
+                let mut response = Response::new(
+                    r#"{"error":"Rate limit backend unavailable","code":"RATE_LIMIT_UNAVAILABLE"}"#
+                        .into(),
+                );
+                *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
+                response
+                    .headers_mut()
+                    .insert("Content-Type", "application/json".parse().unwrap());
+                return response;
+            }
             next.run(request).await
         }
     }
@@ -481,6 +597,9 @@ mod tests {
         let state = RateLimitState {
             config: Arc::new(config),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         };
 
         let _rule = state.get_rule("POST", "/api/v1/auth/token");
@@ -509,6 +628,9 @@ mod tests {
         let state = RateLimitState {
             config: Arc::new(config),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         };
 
         assert_eq!(state.get_tenant_multiplier("premium-tenant"), 2.0);
@@ -593,6 +715,9 @@ mod tests {
         let state = RateLimitState {
             config: Arc::new(config),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         };
         assert!(!state.is_enabled());
     }
@@ -606,6 +731,9 @@ mod tests {
         let state = RateLimitState {
             config: Arc::new(config),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         };
         // enabled=true but no redis => still disabled
         assert!(!state.is_enabled());
@@ -625,6 +753,9 @@ mod tests {
         let state = RateLimitState {
             config: Arc::new(config),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         };
         // Non-matching endpoint should fall back to default
         let rule = state.get_rule("GET", "/api/v1/unknown");
@@ -651,6 +782,9 @@ mod tests {
         let state = RateLimitState {
             config: Arc::new(config),
             redis: None,
+            jwt_manager: None,
+            allowed_audiences: Arc::new(Vec::new()),
+            is_production: true,
         };
         let rule = state.get_rule("POST", "/api/v1/auth/login");
         assert_eq!(rule.requests, 5);

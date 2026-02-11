@@ -95,7 +95,9 @@ pub async fn security_headers_middleware(
     // Content Security Policy for API responses
     headers.insert(
         header::CONTENT_SECURITY_POLICY,
-        "default-src 'none'; frame-ancestors 'none'".parse().unwrap(),
+        "default-src 'none'; frame-ancestors 'none'"
+            .parse()
+            .unwrap(),
     );
 
     response
@@ -123,12 +125,9 @@ mod tests {
             hsts_https_only: false, // simplify for this test
             ..SecurityHeadersConfig::default()
         };
-        let app = Router::new()
-            .route("/test", get(dummy_handler))
-            .layer(axum::middleware::from_fn_with_state(
-                cfg,
-                security_headers_middleware,
-            ));
+        let app = Router::new().route("/test", get(dummy_handler)).layer(
+            axum::middleware::from_fn_with_state(cfg, security_headers_middleware),
+        );
 
         let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
 
@@ -159,10 +158,7 @@ mod tests {
             .contains("no-store"));
         assert!(response.headers().get("Permissions-Policy").is_some());
         assert_eq!(
-            response
-                .headers()
-                .get("Strict-Transport-Security")
-                .unwrap(),
+            response.headers().get("Strict-Transport-Security").unwrap(),
             "max-age=31536000; includeSubDomains"
         );
         assert_eq!(
@@ -177,16 +173,16 @@ mod tests {
             hsts_enabled: false,
             ..SecurityHeadersConfig::default()
         };
-        let app = Router::new()
-            .route("/test", get(dummy_handler))
-            .layer(axum::middleware::from_fn_with_state(
-                cfg,
-                security_headers_middleware,
-            ));
+        let app = Router::new().route("/test", get(dummy_handler)).layer(
+            axum::middleware::from_fn_with_state(cfg, security_headers_middleware),
+        );
 
         let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
         let response = app.oneshot(request).await.unwrap();
-        assert!(response.headers().get("Strict-Transport-Security").is_none());
+        assert!(response
+            .headers()
+            .get("Strict-Transport-Security")
+            .is_none());
     }
 
     #[tokio::test]
@@ -197,12 +193,9 @@ mod tests {
             hsts_trust_x_forwarded_proto: true,
             ..SecurityHeadersConfig::default()
         };
-        let app = Router::new()
-            .route("/test", get(dummy_handler))
-            .layer(axum::middleware::from_fn_with_state(
-                cfg,
-                security_headers_middleware,
-            ));
+        let app = Router::new().route("/test", get(dummy_handler)).layer(
+            axum::middleware::from_fn_with_state(cfg, security_headers_middleware),
+        );
 
         let request = Request::builder()
             .uri("/test")
@@ -210,6 +203,9 @@ mod tests {
             .body(Body::empty())
             .unwrap();
         let response = app.oneshot(request).await.unwrap();
-        assert!(response.headers().get("Strict-Transport-Security").is_some());
+        assert!(response
+            .headers()
+            .get("Strict-Transport-Security")
+            .is_some());
     }
 }

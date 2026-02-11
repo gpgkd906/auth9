@@ -6,7 +6,11 @@ use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use redis::{aio::ConnectionManager, AsyncCommands};
 use serde::{de::DeserializeOwned, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::HashMap;
+use std::sync::Arc;
 use std::time::Duration;
+use tokio::sync::RwLock;
 use uuid::Uuid;
 
 /// Cache operations trait for dependency injection and testing
@@ -45,7 +49,12 @@ pub trait CacheOperations: Send + Sync {
     // ==================== WebAuthn Challenge State ====================
 
     /// Store WebAuthn registration state (keyed by user_id, one active per user)
-    async fn store_webauthn_reg_state(&self, user_id: &str, state: &str, ttl_secs: u64) -> Result<()>;
+    async fn store_webauthn_reg_state(
+        &self,
+        user_id: &str,
+        state: &str,
+        ttl_secs: u64,
+    ) -> Result<()>;
 
     /// Get WebAuthn registration state
     async fn get_webauthn_reg_state(&self, user_id: &str) -> Result<Option<String>>;
@@ -54,13 +63,33 @@ pub trait CacheOperations: Send + Sync {
     async fn remove_webauthn_reg_state(&self, user_id: &str) -> Result<()>;
 
     /// Store WebAuthn authentication state (keyed by challenge_id)
-    async fn store_webauthn_auth_state(&self, challenge_id: &str, state: &str, ttl_secs: u64) -> Result<()>;
+    async fn store_webauthn_auth_state(
+        &self,
+        challenge_id: &str,
+        state: &str,
+        ttl_secs: u64,
+    ) -> Result<()>;
 
     /// Get WebAuthn authentication state
     async fn get_webauthn_auth_state(&self, challenge_id: &str) -> Result<Option<String>>;
 
     /// Remove WebAuthn authentication state
     async fn remove_webauthn_auth_state(&self, challenge_id: &str) -> Result<()>;
+
+    // ==================== OIDC State ====================
+    async fn store_oidc_state(&self, state_nonce: &str, payload: &str, ttl_secs: u64)
+        -> Result<()>;
+    async fn consume_oidc_state(&self, state_nonce: &str) -> Result<Option<String>>;
+
+    // ==================== Refresh Token Session Binding ====================
+    async fn bind_refresh_token_session(
+        &self,
+        refresh_token: &str,
+        session_id: &str,
+        ttl_secs: u64,
+    ) -> Result<()>;
+    async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>>;
+    async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()>;
 }
 
 /// Cache key prefixes
@@ -72,6 +101,8 @@ mod keys {
     pub const TOKEN_BLACKLIST: &str = "auth9:token_blacklist";
     pub const WEBAUTHN_REG: &str = "auth9:webauthn_reg";
     pub const WEBAUTHN_AUTH: &str = "auth9:webauthn_auth";
+    pub const OIDC_STATE: &str = "auth9:oidc_state";
+    pub const REFRESH_TOKEN_SESSION: &str = "auth9:refresh_session";
 }
 
 /// Default TTLs
@@ -89,6 +120,12 @@ pub struct CacheManager {
 }
 
 impl CacheManager {
+    fn refresh_token_hash(refresh_token: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(refresh_token.as_bytes());
+        hex::encode(hasher.finalize())
+    }
+
     /// Create a new cache manager
     pub async fn new(config: &RedisConfig) -> Result<Self> {
         let client = redis::Client::open(config.url.as_str()).map_err(|e| {
@@ -120,7 +157,8 @@ impl CacheManager {
         let value: Option<String> = conn.get(key).await?;
 
         metrics::counter!("auth9_redis_operations_total", "operation" => "get").increment(1);
-        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "get").record(start.elapsed().as_secs_f64());
+        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "get")
+            .record(start.elapsed().as_secs_f64());
 
         match value {
             Some(v) => {
@@ -142,7 +180,8 @@ impl CacheManager {
 
         let _: () = conn.set_ex(key, serialized, ttl.as_secs()).await?;
         metrics::counter!("auth9_redis_operations_total", "operation" => "set").increment(1);
-        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "set").record(start.elapsed().as_secs_f64());
+        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "set")
+            .record(start.elapsed().as_secs_f64());
         Ok(())
     }
 
@@ -152,7 +191,8 @@ impl CacheManager {
         let mut conn = self.conn.clone();
         let _: () = conn.del(key).await?;
         metrics::counter!("auth9_redis_operations_total", "operation" => "del").increment(1);
-        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "del").record(start.elapsed().as_secs_f64());
+        metrics::histogram!("auth9_redis_operation_duration_seconds", "operation" => "del")
+            .record(start.elapsed().as_secs_f64());
         Ok(())
     }
 
@@ -335,7 +375,12 @@ impl CacheManager {
 
     // ==================== WebAuthn Challenge State ====================
 
-    pub async fn store_webauthn_reg_state(&self, user_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+    pub async fn store_webauthn_reg_state(
+        &self,
+        user_id: &str,
+        state: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
         let key = format!("{}:{}", keys::WEBAUTHN_REG, user_id);
         let mut conn = self.conn.clone();
         let _: () = conn.set_ex(&key, state, ttl_secs).await?;
@@ -354,7 +399,12 @@ impl CacheManager {
         self.delete(&key).await
     }
 
-    pub async fn store_webauthn_auth_state(&self, challenge_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+    pub async fn store_webauthn_auth_state(
+        &self,
+        challenge_id: &str,
+        state: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
         let key = format!("{}:{}", keys::WEBAUTHN_AUTH, challenge_id);
         let mut conn = self.conn.clone();
         let _: () = conn.set_ex(&key, state, ttl_secs).await?;
@@ -370,6 +420,58 @@ impl CacheManager {
 
     pub async fn remove_webauthn_auth_state(&self, challenge_id: &str) -> Result<()> {
         let key = format!("{}:{}", keys::WEBAUTHN_AUTH, challenge_id);
+        self.delete(&key).await
+    }
+
+    // ==================== OIDC State ====================
+
+    pub async fn store_oidc_state(
+        &self,
+        state_nonce: &str,
+        payload: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::OIDC_STATE, state_nonce);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, payload, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_oidc_state(&self, state_nonce: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::OIDC_STATE, state_nonce);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
+    // ==================== Refresh Token Session Binding ====================
+
+    pub async fn bind_refresh_token_session(
+        &self,
+        refresh_token: &str,
+        session_id: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let token_hash = Self::refresh_token_hash(refresh_token);
+        let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, token_hash);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, session_id, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>> {
+        let token_hash = Self::refresh_token_hash(refresh_token);
+        let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, token_hash);
+        let mut conn = self.conn.clone();
+        conn.get(&key).await.map_err(AppError::from)
+    }
+
+    pub async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
+        let token_hash = Self::refresh_token_hash(refresh_token);
+        let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, token_hash);
         self.delete(&key).await
     }
 }
@@ -429,7 +531,12 @@ impl CacheOperations for CacheManager {
         CacheManager::is_token_blacklisted(self, jti).await
     }
 
-    async fn store_webauthn_reg_state(&self, user_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+    async fn store_webauthn_reg_state(
+        &self,
+        user_id: &str,
+        state: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
         CacheManager::store_webauthn_reg_state(self, user_id, state, ttl_secs).await
     }
 
@@ -441,7 +548,12 @@ impl CacheOperations for CacheManager {
         CacheManager::remove_webauthn_reg_state(self, user_id).await
     }
 
-    async fn store_webauthn_auth_state(&self, challenge_id: &str, state: &str, ttl_secs: u64) -> Result<()> {
+    async fn store_webauthn_auth_state(
+        &self,
+        challenge_id: &str,
+        state: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
         CacheManager::store_webauthn_auth_state(self, challenge_id, state, ttl_secs).await
     }
 
@@ -452,15 +564,57 @@ impl CacheOperations for CacheManager {
     async fn remove_webauthn_auth_state(&self, challenge_id: &str) -> Result<()> {
         CacheManager::remove_webauthn_auth_state(self, challenge_id).await
     }
+
+    async fn store_oidc_state(
+        &self,
+        state_nonce: &str,
+        payload: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        CacheManager::store_oidc_state(self, state_nonce, payload, ttl_secs).await
+    }
+
+    async fn consume_oidc_state(&self, state_nonce: &str) -> Result<Option<String>> {
+        CacheManager::consume_oidc_state(self, state_nonce).await
+    }
+
+    async fn bind_refresh_token_session(
+        &self,
+        refresh_token: &str,
+        session_id: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        CacheManager::bind_refresh_token_session(self, refresh_token, session_id, ttl_secs).await
+    }
+
+    async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>> {
+        CacheManager::get_refresh_token_session(self, refresh_token).await
+    }
+
+    async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
+        CacheManager::remove_refresh_token_session(self, refresh_token).await
+    }
 }
 
 /// No-op cache manager for testing without Redis
 #[derive(Clone)]
-pub struct NoOpCacheManager;
+pub struct NoOpCacheManager {
+    oidc_states: Arc<RwLock<HashMap<String, String>>>,
+    refresh_sessions: Arc<RwLock<HashMap<String, String>>>,
+}
 
 impl NoOpCacheManager {
     pub fn new() -> Self {
-        Self
+        Self {
+            oidc_states: Arc::new(RwLock::new(HashMap::new())),
+            refresh_sessions: Arc::new(RwLock::new(HashMap::new())),
+        }
+    }
+
+    fn refresh_token_hash(refresh_token: &str) -> String {
+        let mut hasher = Sha256::new();
+        hasher.update(refresh_token.as_bytes());
+        hex::encode(hasher.finalize())
     }
 
     pub async fn ping(&self) -> Result<()> {
@@ -524,7 +678,12 @@ impl NoOpCacheManager {
         Ok(false)
     }
 
-    pub async fn store_webauthn_reg_state(&self, _user_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+    pub async fn store_webauthn_reg_state(
+        &self,
+        _user_id: &str,
+        _state: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -536,7 +695,12 @@ impl NoOpCacheManager {
         Ok(())
     }
 
-    pub async fn store_webauthn_auth_state(&self, _challenge_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+    pub async fn store_webauthn_auth_state(
+        &self,
+        _challenge_id: &str,
+        _state: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -545,6 +709,48 @@ impl NoOpCacheManager {
     }
 
     pub async fn remove_webauthn_auth_state(&self, _challenge_id: &str) -> Result<()> {
+        Ok(())
+    }
+
+    pub async fn store_oidc_state(
+        &self,
+        state_nonce: &str,
+        payload: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
+        self.oidc_states
+            .write()
+            .await
+            .insert(state_nonce.to_string(), payload.to_string());
+        Ok(())
+    }
+
+    pub async fn consume_oidc_state(&self, state_nonce: &str) -> Result<Option<String>> {
+        Ok(self.oidc_states.write().await.remove(state_nonce))
+    }
+
+    pub async fn bind_refresh_token_session(
+        &self,
+        refresh_token: &str,
+        session_id: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
+        let key = Self::refresh_token_hash(refresh_token);
+        self.refresh_sessions
+            .write()
+            .await
+            .insert(key, session_id.to_string());
+        Ok(())
+    }
+
+    pub async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>> {
+        let key = Self::refresh_token_hash(refresh_token);
+        Ok(self.refresh_sessions.read().await.get(&key).cloned())
+    }
+
+    pub async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
+        let key = Self::refresh_token_hash(refresh_token);
+        self.refresh_sessions.write().await.remove(&key);
         Ok(())
     }
 }
@@ -614,7 +820,12 @@ impl CacheOperations for NoOpCacheManager {
         Ok(false)
     }
 
-    async fn store_webauthn_reg_state(&self, _user_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+    async fn store_webauthn_reg_state(
+        &self,
+        _user_id: &str,
+        _state: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -626,7 +837,12 @@ impl CacheOperations for NoOpCacheManager {
         Ok(())
     }
 
-    async fn store_webauthn_auth_state(&self, _challenge_id: &str, _state: &str, _ttl_secs: u64) -> Result<()> {
+    async fn store_webauthn_auth_state(
+        &self,
+        _challenge_id: &str,
+        _state: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
         Ok(())
     }
 
@@ -636,6 +852,37 @@ impl CacheOperations for NoOpCacheManager {
 
     async fn remove_webauthn_auth_state(&self, _challenge_id: &str) -> Result<()> {
         Ok(())
+    }
+
+    async fn store_oidc_state(
+        &self,
+        state_nonce: &str,
+        payload: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        NoOpCacheManager::store_oidc_state(self, state_nonce, payload, ttl_secs).await
+    }
+
+    async fn consume_oidc_state(&self, state_nonce: &str) -> Result<Option<String>> {
+        NoOpCacheManager::consume_oidc_state(self, state_nonce).await
+    }
+
+    async fn bind_refresh_token_session(
+        &self,
+        refresh_token: &str,
+        session_id: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        NoOpCacheManager::bind_refresh_token_session(self, refresh_token, session_id, ttl_secs)
+            .await
+    }
+
+    async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>> {
+        NoOpCacheManager::get_refresh_token_session(self, refresh_token).await
+    }
+
+    async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
+        NoOpCacheManager::remove_refresh_token_session(self, refresh_token).await
     }
 }
 
@@ -949,7 +1196,10 @@ mod tests {
     #[tokio::test]
     async fn test_noop_cache_webauthn_reg_state() {
         let cache = NoOpCacheManager::new();
-        assert!(cache.store_webauthn_reg_state("user-1", "{}", 300).await.is_ok());
+        assert!(cache
+            .store_webauthn_reg_state("user-1", "{}", 300)
+            .await
+            .is_ok());
         let result = cache.get_webauthn_reg_state("user-1").await.unwrap();
         assert!(result.is_none());
         assert!(cache.remove_webauthn_reg_state("user-1").await.is_ok());
@@ -958,25 +1208,72 @@ mod tests {
     #[tokio::test]
     async fn test_noop_cache_webauthn_auth_state() {
         let cache = NoOpCacheManager::new();
-        assert!(cache.store_webauthn_auth_state("challenge-1", "{}", 300).await.is_ok());
+        assert!(cache
+            .store_webauthn_auth_state("challenge-1", "{}", 300)
+            .await
+            .is_ok());
         let result = cache.get_webauthn_auth_state("challenge-1").await.unwrap();
         assert!(result.is_none());
-        assert!(cache.remove_webauthn_auth_state("challenge-1").await.is_ok());
+        assert!(cache
+            .remove_webauthn_auth_state("challenge-1")
+            .await
+            .is_ok());
     }
 
     #[tokio::test]
     async fn test_noop_cache_operations_trait_webauthn_reg() {
         let cache: &dyn CacheOperations = &NoOpCacheManager::new();
-        assert!(cache.store_webauthn_reg_state("user-1", "{\"test\": true}", 300).await.is_ok());
-        assert!(cache.get_webauthn_reg_state("user-1").await.unwrap().is_none());
+        assert!(cache
+            .store_webauthn_reg_state("user-1", "{\"test\": true}", 300)
+            .await
+            .is_ok());
+        assert!(cache
+            .get_webauthn_reg_state("user-1")
+            .await
+            .unwrap()
+            .is_none());
         assert!(cache.remove_webauthn_reg_state("user-1").await.is_ok());
     }
 
     #[tokio::test]
     async fn test_noop_cache_operations_trait_webauthn_auth() {
         let cache: &dyn CacheOperations = &NoOpCacheManager::new();
-        assert!(cache.store_webauthn_auth_state("ch-1", "{\"test\": true}", 300).await.is_ok());
-        assert!(cache.get_webauthn_auth_state("ch-1").await.unwrap().is_none());
+        assert!(cache
+            .store_webauthn_auth_state("ch-1", "{\"test\": true}", 300)
+            .await
+            .is_ok());
+        assert!(cache
+            .get_webauthn_auth_state("ch-1")
+            .await
+            .unwrap()
+            .is_none());
         assert!(cache.remove_webauthn_auth_state("ch-1").await.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_oidc_state_consume_once() {
+        let cache = NoOpCacheManager::new();
+        cache
+            .store_oidc_state("nonce-1", "{\"redirect_uri\":\"https://a\"}", 300)
+            .await
+            .unwrap();
+        let first = cache.consume_oidc_state("nonce-1").await.unwrap();
+        let second = cache.consume_oidc_state("nonce-1").await.unwrap();
+        assert!(first.is_some());
+        assert!(second.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_refresh_session_binding() {
+        let cache = NoOpCacheManager::new();
+        cache
+            .bind_refresh_token_session("rt-1", "sid-1", 300)
+            .await
+            .unwrap();
+        let found = cache.get_refresh_token_session("rt-1").await.unwrap();
+        assert_eq!(found.as_deref(), Some("sid-1"));
+        cache.remove_refresh_token_session("rt-1").await.unwrap();
+        let missing = cache.get_refresh_token_session("rt-1").await.unwrap();
+        assert!(missing.is_none());
     }
 }

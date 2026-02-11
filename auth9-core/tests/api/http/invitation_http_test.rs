@@ -6,7 +6,9 @@ use super::{
     delete_json, get_json, get_json_with_auth, post_json, post_json_with_auth, MockKeycloakServer,
     TestAppState,
 };
-use crate::api::{create_test_identity_token, create_test_role, create_test_service, create_test_tenant};
+use crate::api::{
+    create_test_identity_token, create_test_role, create_test_service, create_test_tenant,
+};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Invitation, InvitationResponse, InvitationStatus, StringUuid};
 use axum::http::StatusCode;
@@ -29,7 +31,12 @@ async fn test_list_invitations_empty() {
     let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/invitations", tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -69,7 +76,12 @@ async fn test_list_invitations_with_data() {
     let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/invitations", tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -125,12 +137,13 @@ async fn test_list_invitations_filter_by_status() {
     let app = build_invitation_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) = get_json_with_auth(
-        &app,
-        &format!("/api/v1/tenants/{}/invitations?status=pending", tenant_id),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/invitations?status=pending", tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -527,8 +540,12 @@ async fn test_list_invitations_service_client_returns_403() {
 
     let app = build_invitation_test_router(state);
 
-    let (status, _): (StatusCode, Option<serde_json::Value>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+    let (status, _): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -546,8 +563,12 @@ async fn test_list_invitations_non_admin_identity_returns_403() {
     let token = crate::api::create_test_identity_token_for_user(uuid::Uuid::new_v4());
     let app = build_invitation_test_router(state);
 
-    let (status, _): (StatusCode, Option<serde_json::Value>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+    let (status, _): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -576,8 +597,12 @@ async fn test_list_invitations_tenant_access_wrong_tenant_returns_403() {
 
     let app = build_invitation_test_router(state);
 
-    let (status, _): (StatusCode, Option<serde_json::Value>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+    let (status, _): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/invitations", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -606,7 +631,12 @@ async fn test_list_invitations_tenant_access_same_tenant_succeeds() {
     let app = build_invitation_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/invitations", tenant_id), &token).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/invitations", tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -861,15 +891,16 @@ async fn test_list_invitations_with_pagination() {
     let app = build_invitation_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) = get_json_with_auth(
-        &app,
-        &format!(
-            "/api/v1/tenants/{}/invitations?page=1&per_page=5",
-            tenant_id
-        ),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<PaginatedResponse<InvitationResponse>>) =
+        get_json_with_auth(
+            &app,
+            &format!(
+                "/api/v1/tenants/{}/invitations?page=1&per_page=5",
+                tenant_id
+            ),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

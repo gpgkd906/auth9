@@ -7,7 +7,9 @@ use super::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
 };
-use crate::api::{create_test_identity_token, create_test_permission, create_test_role, create_test_service};
+use crate::api::{
+    create_test_identity_token, create_test_permission, create_test_role, create_test_service,
+};
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{Permission, Role, UserRolesInTenant};
 use auth9_core::repository::RbacRepository;
@@ -48,12 +50,13 @@ async fn test_list_permissions() {
     let app = build_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json_with_auth(
-        &app,
-        &format!("/api/v1/services/{}/permissions", service_id),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/services/{}/permissions", service_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -70,12 +73,13 @@ async fn test_list_permissions_empty() {
 
     let service_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) = get_json_with_auth(
-        &app,
-        &format!("/api/v1/services/{}/permissions", service_id),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/services/{}/permissions", service_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -90,7 +94,10 @@ async fn test_create_permission() {
     let token = create_test_identity_token(); // Platform admin can create permissions
 
     let service_id = Uuid::new_v4();
-    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
 
     let app = build_test_router(state);
     let input = json!({
@@ -121,7 +128,10 @@ async fn test_create_permission_minimal() {
     let token = create_test_identity_token(); // Platform admin can create permissions
 
     let service_id = Uuid::new_v4();
-    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
 
     let app = build_test_router(state);
     let input = json!({
@@ -206,8 +216,12 @@ async fn test_list_roles() {
     let app = build_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/services/{}/roles", service_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/roles", service_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -224,8 +238,12 @@ async fn test_list_roles_empty() {
 
     let service_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/services/{}/roles", service_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/roles", service_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -283,7 +301,10 @@ async fn test_create_role() {
     let token = create_test_identity_token(); // Platform admin can create roles
 
     let service_id = Uuid::new_v4();
-    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
 
     let app = build_test_router(state);
     let input = json!({
@@ -308,7 +329,10 @@ async fn test_create_role_minimal() {
     let token = create_test_identity_token(); // Platform admin can create roles
 
     let service_id = Uuid::new_v4();
-    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
 
     let app = build_test_router(state);
     let input = json!({
@@ -559,12 +583,13 @@ async fn test_get_user_roles() {
     let app = build_test_router(state);
     let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) = get_json_with_auth(
-        &app,
-        &format!("/api/v1/users/{}/tenants/{}/roles", user_id, tenant_id),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/users/{}/tenants/{}/roles", user_id, tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -583,12 +608,13 @@ async fn test_get_user_roles_empty() {
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) = get_json_with_auth(
-        &app,
-        &format!("/api/v1/users/{}/tenants/{}/roles", user_id, tenant_id),
-        &token,
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<UserRolesInTenant>>) =
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/users/{}/tenants/{}/roles", user_id, tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -671,7 +697,10 @@ async fn test_create_role_with_parent() {
     let token = create_test_identity_token(); // Platform admin can create roles
 
     let service_id = Uuid::new_v4();
-    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
 
     let parent_role = create_test_role(None, service_id);
     let parent_role_id = parent_role.id.0;
@@ -706,7 +735,10 @@ async fn test_permission_code_formats() {
     let token = create_test_identity_token(); // Platform admin can create permissions
 
     let service_id = Uuid::new_v4();
-    state.service_repo.add_service(create_test_service(Some(service_id), None)).await;
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
 
     let app = build_test_router(state);
 

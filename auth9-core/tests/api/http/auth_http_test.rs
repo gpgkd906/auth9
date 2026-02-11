@@ -926,7 +926,8 @@ async fn test_token_client_credentials_success() {
     state.service_repo.add_service(service.clone()).await;
 
     let client_secret = "test-secret-for-credentials";
-    let salt = argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let salt =
+        argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
     let argon2 = argon2::Argon2::default();
     let hashed = argon2::PasswordHasher::hash_password(&argon2, client_secret.as_bytes(), &salt)
         .unwrap()
@@ -972,7 +973,8 @@ async fn test_token_client_credentials_wrong_secret() {
     let service = create_test_service(Some(service_id), None);
     state.service_repo.add_service(service.clone()).await;
 
-    let salt = argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let salt =
+        argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
     let argon2_hasher = argon2::Argon2::default();
     let hashed = argon2::PasswordHasher::hash_password(&argon2_hasher, b"correct-secret", &salt)
         .unwrap()
@@ -1013,11 +1015,13 @@ async fn test_token_client_credentials_with_tenant() {
     state.service_repo.add_service(service.clone()).await;
 
     let client_secret = "tenant-client-secret";
-    let salt = argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
+    let salt =
+        argon2::password_hash::SaltString::generate(&mut argon2::password_hash::rand_core::OsRng);
     let argon2_hasher = argon2::Argon2::default();
-    let hashed = argon2::PasswordHasher::hash_password(&argon2_hasher, client_secret.as_bytes(), &salt)
-        .unwrap()
-        .to_string();
+    let hashed =
+        argon2::PasswordHasher::hash_password(&argon2_hasher, client_secret.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
 
     let client = Client {
         id: StringUuid::new_v4(),
@@ -1050,15 +1054,24 @@ async fn test_token_client_credentials_with_tenant() {
 // Callback Success Tests (with mock Keycloak OIDC endpoints)
 // ============================================================================
 
-/// Helper to create an encoded state for callback tests
-fn create_encoded_callback_state(redirect_uri: &str, client_id: &str) -> String {
+/// Helper to prime callback state in cache and return nonce.
+async fn create_callback_state_nonce(
+    state: &TestAppState,
+    redirect_uri: &str,
+    client_id: &str,
+) -> String {
+    let nonce = Uuid::new_v4().to_string();
     let state_payload = serde_json::json!({
         "redirect_uri": redirect_uri,
         "client_id": client_id,
         "original_state": "test-state"
     });
-    base64::engine::general_purpose::URL_SAFE_NO_PAD
-        .encode(serde_json::to_vec(&state_payload).unwrap())
+    state
+        .cache_manager
+        .store_oidc_state(&nonce, &state_payload.to_string(), 300)
+        .await
+        .unwrap();
+    nonce
 }
 
 #[tokio::test]
@@ -1074,7 +1087,11 @@ async fn test_callback_success_existing_user() {
         .mock_get_client_secret(&client_uuid, "kc-client-secret")
         .await;
     mock_kc
-        .mock_token_exchange_success("kc-access-token", Some("kc-refresh-token"), Some("kc-id-token"))
+        .mock_token_exchange_success(
+            "kc-access-token",
+            Some("kc-refresh-token"),
+            Some("kc-id-token"),
+        )
         .await;
     mock_kc
         .mock_userinfo_endpoint(kc_sub, "existing@example.com", Some("Existing User"))
@@ -1098,20 +1115,24 @@ async fn test_callback_success_existing_user() {
     };
     state.user_repo.add_user(user).await;
 
+    let state_nonce = create_callback_state_nonce(
+        &state,
+        "https://app.example.com/callback",
+        "callback-client",
+    )
+    .await;
     let app = build_test_router(state);
-
-    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "callback-client");
 
     let (status, _body) = get_raw(
         &app,
         &format!(
             "/api/v1/auth/callback?code=auth-code-123&state={}",
-            encoded_state
+            state_nonce
         ),
     )
     .await;
 
-    // Should redirect to the redirect_uri with tokens
+    // Should redirect to the redirect_uri with code
     assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
 }
 
@@ -1136,16 +1157,19 @@ async fn test_callback_success_new_user_created() {
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
-    // Don't pre-create user - should be created automatically
+    let state_nonce = create_callback_state_nonce(
+        &state,
+        "https://app.example.com/callback",
+        "callback-new-client",
+    )
+    .await;
     let app = build_test_router(state);
-
-    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "callback-new-client");
 
     let (status, _body) = get_raw(
         &app,
         &format!(
             "/api/v1/auth/callback?code=new-auth-code&state={}",
-            encoded_state
+            state_nonce
         ),
     )
     .await;
@@ -1154,7 +1178,7 @@ async fn test_callback_success_new_user_created() {
 }
 
 #[tokio::test]
-async fn test_callback_token_exchange_failure() {
+async fn test_callback_missing_cached_state_returns_error() {
     let mock_kc = MockKeycloakServer::new().await;
 
     let client_uuid = Uuid::new_v4().to_string();
@@ -1171,23 +1195,21 @@ async fn test_callback_token_exchange_failure() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
-    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "fail-client");
-
     let (status, _body) = get_raw(
         &app,
         &format!(
             "/api/v1/auth/callback?code=expired-code&state={}",
-            encoded_state
+            "missing-state"
         ),
     )
     .await;
 
-    // Token exchange failure should return an error
+    // State is one-time and server-side. Unknown state should fail.
     assert!(status.as_u16() >= 400);
 }
 
 #[tokio::test]
-async fn test_callback_userinfo_failure() {
+async fn test_callback_does_not_depend_on_userinfo() {
     let mock_kc = MockKeycloakServer::new().await;
 
     let client_uuid = Uuid::new_v4().to_string();
@@ -1203,21 +1225,25 @@ async fn test_callback_userinfo_failure() {
         .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let state_nonce = create_callback_state_nonce(
+        &state,
+        "https://app.example.com/callback",
+        "userinfo-fail-client",
+    )
+    .await;
     let app = build_test_router(state);
-
-    let encoded_state = create_encoded_callback_state("https://app.example.com/callback", "userinfo-fail-client");
 
     let (status, _body) = get_raw(
         &app,
         &format!(
             "/api/v1/auth/callback?code=valid-code&state={}",
-            encoded_state
+            state_nonce
         ),
     )
     .await;
 
-    // Userinfo failure should return an error
-    assert!(status.as_u16() >= 400);
+    // Callback now only validates one-time state and forwards authorization code.
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
 }
 
 // ============================================================================
@@ -1234,7 +1260,11 @@ async fn test_token_authorization_code_success_existing_user() {
         .mock_get_client_secret(&client_uuid, "kc-client-secret")
         .await;
     mock_kc
-        .mock_token_exchange_success("kc-access-token-auth", Some("kc-refresh-token-auth"), Some("kc-id-token-auth"))
+        .mock_token_exchange_success(
+            "kc-access-token-auth",
+            Some("kc-refresh-token-auth"),
+            Some("kc-id-token-auth"),
+        )
         .await;
     mock_kc
         .mock_userinfo_endpoint(kc_sub, "tokenuser@example.com", Some("Token User"))
@@ -1343,6 +1373,15 @@ async fn test_token_refresh_success() {
         .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state
+        .cache_manager
+        .bind_refresh_token_session(
+            "original-refresh-token",
+            &StringUuid::new_v4().to_string(),
+            300,
+        )
+        .await
+        .unwrap();
 
     // Pre-create the user
     let user = auth9_core::domain::User {
@@ -1396,6 +1435,15 @@ async fn test_token_refresh_new_user() {
         .await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    state
+        .cache_manager
+        .bind_refresh_token_session(
+            "refresh-token-for-new-user",
+            &StringUuid::new_v4().to_string(),
+            300,
+        )
+        .await
+        .unwrap();
     // Don't pre-create user
     let app = build_test_router(state);
 
