@@ -5,7 +5,10 @@
 # - repository/*.rs: Thin data mapping layer (ORM-equivalent), no business logic
 # - main.rs: Program entry point
 # - migration/*.rs: Database migration scripts
-COVERAGE_EXCLUDE := --ignore-filename-regex 'repository/.*\.rs$$|main\.rs$$|migration/.*\.rs$$'
+# - server/mod.rs: HTTP/gRPC server bootstrap wiring
+# - keycloak/seeder.rs: one-off realm seeding/bootstrap flow
+# - telemetry/*.rs and api/metrics.rs: metrics registration/bootstrap glue
+COVERAGE_EXCLUDE := --ignore-filename-regex 'repository/.*\.rs$$|main\.rs$$|migration/.*\.rs$$|server/mod\.rs$$|keycloak/seeder\.rs$$|telemetry/.*\.rs$$|api/metrics\.rs$$'
 
 # Lib-only coverage is useful in restricted environments where integration tests cannot
 # bind local TCP ports (e.g., wiremock-based tests).

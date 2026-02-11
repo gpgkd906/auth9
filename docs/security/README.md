@@ -117,20 +117,22 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 
 ## OWASP ASVS 覆盖矩阵
 
-| ASVS 章节 | 覆盖文档 | 覆盖程度 |
-|-----------|---------|---------|
-| V2 认证 | authentication/*, advanced-attacks/04 | 🟩 90% |
-| V3 会话管理 | session-management/* | 🟩 80% |
-| V4 访问控制 | authorization/* | 🟩 90% |
-| V5 输入验证 | input-validation/* | 🟩 85% |
-| V6 存储加密 | data-security/02, data-security/04 | 🟩 75% |
-| V7 错误处理与日志 | logging-monitoring/01 | 🟧 60% |
-| V8 数据保护 | data-security/01, data-security/03 | 🟩 70% |
-| V9 通信安全 | infrastructure/01 | 🟩 75% |
-| V11 业务逻辑 | business-logic/* | 🟩 70% |
-| V12 文件与资源 | file-security/01, input-validation/05 | 🟩 70% |
-| V13 API 安全 | api-security/*, advanced-attacks/05-06 | 🟩 85% |
-| V14 配置 | infrastructure/02-03, advanced-attacks/01 | 🟩 75% |
+说明：`当前覆盖率` 表示已落地现状，`目标覆盖率` 为项目统一要求（最低 `>=90%`）。
+
+| ASVS 章节 | 覆盖文档 | 当前覆盖率 | 目标覆盖率 |
+|-----------|---------|-----------|-----------|
+| V2 认证 | authentication/*, advanced-attacks/04 | 90% | >=90% |
+| V3 会话管理 | session-management/* | 80% | >=90% |
+| V4 访问控制 | authorization/* | 90% | >=90% |
+| V5 输入验证 | input-validation/* | 85% | >=90% |
+| V6 存储加密 | data-security/02, data-security/04 | 75% | >=90% |
+| V7 错误处理与日志 | logging-monitoring/01 | 60% | >=90% |
+| V8 数据保护 | data-security/01, data-security/03 | 70% | >=90% |
+| V9 通信安全 | infrastructure/01 | 75% | >=90% |
+| V11 业务逻辑 | business-logic/* | 70% | >=90% |
+| V12 文件与资源 | file-security/01, input-validation/05 | 70% | >=90% |
+| V13 API 安全 | api-security/*, advanced-attacks/05-06 | 85% | >=90% |
+| V14 配置 | infrastructure/02-03, advanced-attacks/01 | 75% | >=90% |
 
 ---
 
@@ -326,6 +328,7 @@ cargo run --bin seed-data -- --dataset=security-vulnerable --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-11 | 2.0.1 | 统一测试覆盖率要求：新增 ASVS 矩阵“目标覆盖率”列，项目最低要求调整为 >=90%，并保留当前覆盖率现状值 |
 | 2026-02-07 | 2.0.0 | 基于 OWASP ASVS 差距分析，新增 12 个文档 47 个场景：SSRF、业务逻辑、竞态条件、日志安全、文件上传、反序列化、加密实现、检测规避、OIDC 高级攻击、Webhook 伪造、HTTP 走私、IdP 安全；共 39 个文档 177 个场景 |
 | 2026-02-05 | 1.1.0 | 新增高级攻击模块（供应链安全、gRPC 安全），共 27 个文档 130 个场景；新增安全测试专用种子数据 |
 | 2026-02-03 | 1.0.0 | 初始版本，25 个文档 120 个场景 |

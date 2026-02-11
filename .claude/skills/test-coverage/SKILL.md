@@ -399,15 +399,17 @@ async fn test_keycloak_operation() {
 
 ## Coverage Targets
 
+All test coverage targets in this skill follow the project minimum requirement: `>=90%`.
+
 | Layer | Target | Notes |
 |-------|--------|-------|
-| Domain/Business logic | 95%+ | Pure validation, no I/O |
-| Service layer | 90%+ | Core business logic |
-| API handlers | 80%+ | HTTP routing |
-| gRPC handlers | 85%+ | Token exchange, validation |
+| Domain/Business logic | >=90% | Pure validation, no I/O |
+| Service layer | >=90% | Core business logic |
+| API handlers | >=90% | HTTP routing |
+| gRPC handlers | >=90% | Token exchange, validation |
 | Repository layer | N/A | Excluded from tracking (thin data mapping) |
-| SDK @auth9/core | 90%+ | Utils, errors, HTTP client |
-| SDK @auth9/node | 70%+ | Token verifier, gRPC client, middleware, testing |
+| SDK @auth9/core | >=90% | Utils, errors, HTTP client |
+| SDK @auth9/node | >=90% | Token verifier, gRPC client, middleware, testing |
 
 ---
 
