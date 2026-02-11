@@ -18,6 +18,15 @@ vi.mock("~/services/api", () => ({
 
 vi.mock("~/services/session.server", () => ({
     requireAuth: vi.fn().mockResolvedValue({ accessToken: "test-token" }),
+    requireAuthWithUpdate: vi.fn().mockResolvedValue({
+        session: {
+            accessToken: "test-token",
+            refreshToken: "test-refresh-token",
+            idToken: "test-id-token",
+            expiresAt: Date.now() + 3600000,
+        },
+        headers: undefined,
+    }),
 }));
 
 function WrappedPage() {

@@ -33,16 +33,20 @@ use crate::state::{
 };
 use anyhow::Result;
 use axum::{
+    extract::DefaultBodyLimit,
     routing::{delete, get, post},
     Router,
 };
 use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::net::TcpListener;
 use tonic::transport::Server as TonicServer;
+use tower::ServiceBuilder;
 use tower_http::{
     cors::{AllowOrigin, Any, CorsLayer},
+    timeout::TimeoutLayer,
     trace::TraceLayer,
 };
 use tracing::info;
@@ -365,6 +369,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let db_pool = MySqlPoolOptions::new()
         .max_connections(config.database.max_connections)
         .min_connections(config.database.min_connections)
+        .acquire_timeout(Duration::from_secs(config.database.acquire_timeout_secs))
+        .idle_timeout(Duration::from_secs(config.database.idle_timeout_secs))
         .connect(&config.database.url)
         .await?;
 
@@ -485,6 +491,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         email_service.clone(),
         keycloak_arc.clone(),
         tenant_repo.clone(),
+        config.password_reset.hmac_key.clone(),
     ));
 
     let session_service = Arc::new(SessionService::new(
@@ -692,11 +699,28 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         info!("CORS allowed origins: {:?}", config.cors.allowed_origins);
     }
 
+    // Log server resource limits
+    info!(
+        "Server resource limits: body={}KB, concurrency={}, timeout={}s",
+        config.server.body_limit_bytes / 1024,
+        config.server.concurrency_limit,
+        config.server.request_timeout_secs
+    );
+    info!(
+        "DB pool: max={}, min={}, acquire_timeout={}s, idle_timeout={}s",
+        config.database.max_connections,
+        config.database.min_connections,
+        config.database.acquire_timeout_secs,
+        config.database.idle_timeout_secs
+    );
+
     // Run HTTP and gRPC servers concurrently
     let http_server = async {
         let listener = TcpListener::bind(&http_addr).await?;
         info!("HTTP server started on {}", http_addr);
-        axum::serve(listener, app).await?;
+        axum::serve(listener, app)
+            .with_graceful_shutdown(shutdown_signal())
+            .await?;
         Ok::<_, anyhow::Error>(())
     };
 
@@ -704,13 +728,53 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let grpc_auth_interceptor = create_grpc_auth_interceptor(&config)?;
 
     let grpc_server = async {
-        let addr = grpc_addr.parse()?;
-        info!(
-            "gRPC server started on {} (auth_mode: {}, reflection: {})",
-            grpc_addr, config.grpc_security.auth_mode, config.grpc_security.enable_reflection
-        );
+        use anyhow::Context as _;
 
-        let mut builder = TonicServer::builder();
+        let addr = grpc_addr.parse()?;
+
+        // Load TLS configuration if mTLS mode is enabled
+        let tls_config = if config.grpc_security.auth_mode == "mtls" {
+            let cert_path = config.grpc_security.tls_cert_path
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("mTLS mode requires GRPC_TLS_CERT_PATH"))?;
+            let key_path = config.grpc_security.tls_key_path
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("mTLS mode requires GRPC_TLS_KEY_PATH"))?;
+            let ca_cert_path = config.grpc_security.tls_ca_cert_path
+                .as_ref()
+                .ok_or_else(|| anyhow::anyhow!("mTLS mode requires GRPC_TLS_CA_CERT_PATH"))?;
+
+            info!("Loading gRPC mTLS certificates: cert={}, key={}, ca={}", cert_path, key_path, ca_cert_path);
+
+            let cert = tokio::fs::read(cert_path).await.context("Failed to read TLS certificate")?;
+            let key = tokio::fs::read(key_path).await.context("Failed to read TLS private key")?;
+            let ca_cert = tokio::fs::read(ca_cert_path).await.context("Failed to read CA certificate")?;
+
+            let identity = tonic::transport::Identity::from_pem(&cert, &key);
+            let ca = tonic::transport::Certificate::from_pem(&ca_cert);
+
+            let tls = tonic::transport::ServerTlsConfig::new()
+                .identity(identity)
+                .client_ca_root(ca);
+
+            info!("gRPC server starting with mTLS on {} (client verification enabled)", grpc_addr);
+            Some(tls)
+        } else {
+            info!(
+                "gRPC server starting on {} (auth_mode: {}, reflection: {})",
+                grpc_addr, config.grpc_security.auth_mode, config.grpc_security.enable_reflection
+            );
+            None
+        };
+
+        // Build server with optional TLS
+        let mut server_builder = if let Some(tls) = tls_config {
+            TonicServer::builder()
+                .tls_config(tls)
+                .context("Failed to configure TLS")?
+        } else {
+            TonicServer::builder()
+        };
 
         // Add services based on configuration
         if config.grpc_security.enable_reflection {
@@ -719,21 +783,21 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
                 .build_v1()?;
             info!("gRPC reflection enabled");
 
-            builder
+            server_builder
                 .add_service(reflection_service)
                 .add_service(TokenExchangeServer::with_interceptor(
                     grpc_service,
                     grpc_auth_interceptor,
                 ))
-                .serve(addr)
+                .serve_with_shutdown(addr, shutdown_signal())
                 .await?;
         } else {
-            builder
+            server_builder
                 .add_service(TokenExchangeServer::with_interceptor(
                     grpc_service,
                     grpc_auth_interceptor,
                 ))
-                .serve(addr)
+                .serve_with_shutdown(addr, shutdown_signal())
                 .await?;
         }
 
@@ -790,6 +854,36 @@ fn create_grpc_auth_interceptor(config: &Config) -> Result<AuthInterceptor> {
             Ok(AuthInterceptor::noop())
         }
     }
+}
+
+/// Wait for a shutdown signal (Ctrl+C or SIGTERM).
+///
+/// Each call registers independent signal listeners, so both the HTTP and gRPC
+/// servers can await their own copy of this future.
+async fn shutdown_signal() {
+    let ctrl_c = async {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("failed to install Ctrl+C handler");
+    };
+
+    #[cfg(unix)]
+    let terminate = async {
+        tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate())
+            .expect("failed to install SIGTERM handler")
+            .recv()
+            .await;
+    };
+
+    #[cfg(not(unix))]
+    let terminate = std::future::pending::<()>();
+
+    tokio::select! {
+        _ = ctrl_c => {},
+        _ = terminate => {},
+    }
+
+    info!("Shutdown signal received, starting graceful shutdown");
 }
 
 /// Build CORS layer from configuration
@@ -1230,36 +1324,63 @@ where
         .route("/metrics", get(crate::api::metrics::metrics_handler))
         .with_state(prometheus_handle);
 
+    // Server resource limits
+    let body_limit = state.config().server.body_limit_bytes;
+    let concurrency_limit = state.config().server.concurrency_limit;
+    let request_timeout = Duration::from_secs(state.config().server.request_timeout_secs);
+
     // ============================================================
     // COMBINE ROUTES AND APPLY GLOBAL MIDDLEWARE
     // ============================================================
+    // Layers are applied bottom-to-top: the last `.layer()` call is the outermost.
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
         // Explicit fallback so unmatched routes pass through middleware layers
         // (axum skips .layer() middleware for its implicit 404 fallback)
         .fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not Found") })
-        // Add global middleware (order matters: bottom layer runs first)
-        // 1. CORS - must be outermost for preflight requests
-        // 2. Rate limiting - reject excessive requests early
-        // 3. Request ID - propagate or generate request IDs
-        // 4. HTTP Metrics - record request count/duration/in-flight
-        // 5. Tracing - for request logging
-        // 6. Error response normalization - consistent JSON error format
-        // 7. Security headers - adds security headers to all responses
+        // --- Innermost layers (run first on request, last on response) ---
+        // 1. Body size limit - reject oversized request bodies (prevents OOM)
+        .layer(DefaultBodyLimit::max(body_limit))
+        // 2. Security headers - adds security headers to all responses
         .layer(axum::middleware::from_fn_with_state(
             security_headers_config,
             security_headers_middleware,
         ))
+        // 3. Error response normalization - consistent JSON error format
         .layer(axum::middleware::from_fn(
             crate::middleware::normalize_error_response,
         ))
+        // 4. Tracing - for request logging
         .layer(TraceLayer::new_for_http())
+        // 5. Request ID + HTTP Metrics - record request count/duration/in-flight
         .layer(crate::middleware::metrics::ObservabilityLayer)
+        // 6. Request timeout - return 408 if handler exceeds limit (prevents slow-loris)
+        .layer(TimeoutLayer::with_status_code(
+            axum::http::StatusCode::REQUEST_TIMEOUT,
+            request_timeout,
+        ))
+        // 7. Rate limiting - reject excessive requests early
         .layer(axum::middleware::from_fn_with_state(
             rate_limit_state,
             rate_limit_middleware,
         ))
+        // 8. Concurrency limit with load shedding - returns 503 when at capacity.
+        //    HandleErrorLayer converts tower BoxError → HTTP response.
+        //    load_shed() rejects immediately when inner service is not ready.
+        //    concurrency_limit() caps in-flight requests via semaphore.
+        .layer(
+            ServiceBuilder::new()
+                .layer(axum::error_handling::HandleErrorLayer::new(
+                    |_: tower::BoxError| async {
+                        axum::http::StatusCode::SERVICE_UNAVAILABLE
+                    },
+                ))
+                .load_shed()
+                .concurrency_limit(concurrency_limit),
+        )
+        // --- Outermost layer (runs first on response, last on request) ---
+        // 9. CORS - must be outermost for preflight requests
         .layer(cors)
         .with_state(state)
         // Nest the metrics route outside .with_state() since it uses its own state

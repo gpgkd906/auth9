@@ -12,7 +12,7 @@
 Auth9 gRPC API 概况：
 - 端口: 50051
 - 方法数: 4 个
-- **当前状态**: 全部无认证保护 (P0 安全风险)
+- **当前状态**: 已支持 `GRPC_AUTH_MODE`（`none`/`api_key`/`mtls`），生产环境要求开启认证；主要风险为配置回归与绕过
 
 关键方法：
 - `ExchangeToken` - Identity Token → Tenant Access Token
@@ -22,7 +22,7 @@ Auth9 gRPC API 概况：
 
 ---
 
-## 场景 1：未认证 gRPC 访问
+## 场景 1：未认证 gRPC 访问与认证配置回归
 
 ### 前置条件
 - gRPC 端口可访问
@@ -52,20 +52,20 @@ grpcurl -plaintext localhost:50051 list
 grpcurl -plaintext \
   -d '{"identity_token":"dummy"}' \
   localhost:50051 auth9.TokenExchange/ExchangeToken
-# 当前: 可能返回 invalid token 错误
-# 预期修复后: UNAUTHENTICATED
+# 预期（生产安全基线）: 未带 x-api-key 时返回 UNAUTHENTICATED
+# 回归风险（非生产/误配置）: 可能退化为业务错误而非 UNAUTHENTICATED
 
 # 未认证调用 GetUserRoles
 grpcurl -plaintext \
   -d '{"user_id":"user-uuid","tenant_id":"tenant-uuid"}' \
   localhost:50051 auth9.TokenExchange/GetUserRoles
-# 当前: 可能返回用户角色信息
-# 预期修复后: UNAUTHENTICATED
+# 预期（生产安全基线）: 未带 x-api-key 时返回 UNAUTHENTICATED
+# 回归风险（非生产/误配置）: 可能返回业务层错误
 ```
 
 ### 修复建议
-- 实现 mTLS (推荐生产环境)
-- 或实现 API Key Interceptor
+- 固化生产基线：`ENVIRONMENT=production` + `GRPC_AUTH_MODE=api_key` + `GRPC_API_KEYS` 非空
+- mTLS 场景下补齐证书链校验与轮换流程
 - 禁用 gRPC 反射 (生产环境)
 - 添加调用方身份日志
 

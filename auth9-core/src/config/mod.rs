@@ -36,6 +36,27 @@ impl Default for TelemetryConfig {
     }
 }
 
+/// HTTP server resource limit configuration
+#[derive(Debug, Clone)]
+pub struct ServerConfig {
+    /// Maximum request body size in bytes (default: 2 MB)
+    pub body_limit_bytes: usize,
+    /// Maximum concurrent in-flight requests (default: 1024)
+    pub concurrency_limit: usize,
+    /// Per-request timeout in seconds (default: 30)
+    pub request_timeout_secs: u64,
+}
+
+impl Default for ServerConfig {
+    fn default() -> Self {
+        Self {
+            body_limit_bytes: 2 * 1024 * 1024, // 2 MB
+            concurrency_limit: 1024,
+            request_timeout_secs: 30,
+        }
+    }
+}
+
 /// WebAuthn configuration
 #[derive(Debug, Clone)]
 pub struct WebAuthnConfig {
@@ -47,6 +68,24 @@ pub struct WebAuthnConfig {
     pub rp_origin: String,
     /// Challenge TTL in seconds (default 300)
     pub challenge_ttl_secs: u64,
+}
+
+/// Password reset security configuration
+#[derive(Clone)]
+pub struct PasswordResetConfig {
+    /// HMAC key for password reset token hashing
+    pub hmac_key: String,
+    /// Token TTL in seconds (default: 3600 = 1 hour)
+    pub token_ttl_secs: u64,
+}
+
+impl fmt::Debug for PasswordResetConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PasswordResetConfig")
+            .field("hmac_key", &"<REDACTED>")
+            .field("token_ttl_secs", &self.token_ttl_secs)
+            .finish()
+    }
 }
 
 /// Application configuration
@@ -78,8 +117,12 @@ pub struct Config {
     pub cors: CorsConfig,
     /// WebAuthn configuration
     pub webauthn: WebAuthnConfig,
+    /// HTTP server resource limits
+    pub server: ServerConfig,
     /// Telemetry configuration
     pub telemetry: TelemetryConfig,
+    /// Password reset configuration
+    pub password_reset: PasswordResetConfig,
     /// Platform admin email allowlist.
     ///
     /// Identity tokens are intentionally tenant-unscoped. Only Identity tokens whose
@@ -115,7 +158,9 @@ impl fmt::Debug for Config {
             .field("rate_limit", &self.rate_limit)
             .field("cors", &self.cors)
             .field("webauthn", &self.webauthn)
+            .field("server", &self.server)
             .field("telemetry", &self.telemetry)
+            .field("password_reset", &self.password_reset)
             .field(
                 "jwt_tenant_access_allowed_audiences",
                 &format!(
@@ -191,6 +236,10 @@ pub struct DatabaseConfig {
     pub url: String,
     pub max_connections: u32,
     pub min_connections: u32,
+    /// Timeout for acquiring a connection from the pool (seconds, default: 30)
+    pub acquire_timeout_secs: u64,
+    /// Maximum idle time before a connection is closed (seconds, default: 600)
+    pub idle_timeout_secs: u64,
 }
 
 impl fmt::Debug for DatabaseConfig {
@@ -199,6 +248,8 @@ impl fmt::Debug for DatabaseConfig {
             .field("url", &"<REDACTED>")
             .field("max_connections", &self.max_connections)
             .field("min_connections", &self.min_connections)
+            .field("acquire_timeout_secs", &self.acquire_timeout_secs)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
             .finish()
     }
 }
@@ -387,6 +438,16 @@ impl Config {
                     "gRPC auth_mode is api_key but no keys configured (GRPC_API_KEYS) in production"
                 );
             }
+            if self.grpc_security.auth_mode == "mtls" {
+                if self.grpc_security.tls_cert_path.is_none()
+                    || self.grpc_security.tls_key_path.is_none()
+                    || self.grpc_security.tls_ca_cert_path.is_none()
+                {
+                    anyhow::bail!(
+                        "mTLS mode requires GRPC_TLS_CERT_PATH, GRPC_TLS_KEY_PATH, and GRPC_TLS_CA_CERT_PATH"
+                    );
+                }
+            }
             if self.jwt_tenant_access_allowed_audiences.is_empty() {
                 anyhow::bail!(
                     "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"
@@ -436,6 +497,12 @@ impl Config {
             hsts_preload: parse_bool_env("HSTS_PRELOAD", false),
         };
 
+        let password_reset = PasswordResetConfig {
+            hmac_key: env::var("PASSWORD_RESET_HMAC_KEY")
+                .context("PASSWORD_RESET_HMAC_KEY is required")?,
+            token_ttl_secs: parse_u64_env("PASSWORD_RESET_TOKEN_TTL_SECS", 3600),
+        };
+
         Ok(Self {
             environment,
             http_host: env::var("HTTP_HOST").unwrap_or_else(|_| "0.0.0.0".to_string()),
@@ -458,6 +525,8 @@ impl Config {
                     .unwrap_or_else(|_| "2".to_string())
                     .parse()
                     .unwrap_or(2),
+                acquire_timeout_secs: parse_u64_env("DATABASE_ACQUIRE_TIMEOUT_SECS", 30),
+                idle_timeout_secs: parse_u64_env("DATABASE_IDLE_TIMEOUT_SECS", 600),
             },
             redis: RedisConfig {
                 url: env::var("REDIS_URL").unwrap_or_else(|_| "redis://localhost:6379".to_string()),
@@ -577,6 +646,11 @@ impl Config {
                     allow_credentials,
                 }
             },
+            server: ServerConfig {
+                body_limit_bytes: parse_u64_env("HTTP_BODY_LIMIT_BYTES", 2 * 1024 * 1024) as usize,
+                concurrency_limit: parse_u64_env("HTTP_CONCURRENCY_LIMIT", 1024) as usize,
+                request_timeout_secs: parse_u64_env("HTTP_REQUEST_TIMEOUT_SECS", 30),
+            },
             webauthn: {
                 let portal_url = env::var("AUTH9_PORTAL_URL")
                     .unwrap_or_else(|_| "http://localhost:3000".to_string());
@@ -602,6 +676,7 @@ impl Config {
                 service_name: env::var("OTEL_SERVICE_NAME")
                     .unwrap_or_else(|_| "auth9-core".to_string()),
             },
+            password_reset,
             platform_admin_emails: parse_csv_env(
                 "PLATFORM_ADMIN_EMAILS",
                 vec!["admin@auth9.local".to_string()],
@@ -678,6 +753,8 @@ mod tests {
                 url: "mysql://localhost/test".to_string(),
                 max_connections: 10,
                 min_connections: 2,
+                acquire_timeout_secs: 30,
+                idle_timeout_secs: 600,
             },
             redis: RedisConfig {
                 url: "redis://localhost:6379".to_string(),
@@ -710,7 +787,12 @@ mod tests {
                 rp_origin: "http://localhost:3000".to_string(),
                 challenge_ttl_secs: 300,
             },
+            server: ServerConfig::default(),
             telemetry: TelemetryConfig::default(),
+            password_reset: PasswordResetConfig {
+                hmac_key: "test-password-reset-key".to_string(),
+                token_ttl_secs: 3600,
+            },
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
             jwt_tenant_access_allowed_audiences: vec![],
             security_headers: SecurityHeadersConfig::default(),
@@ -770,6 +852,8 @@ mod tests {
             url: "mysql://user:pass@host/db".to_string(),
             max_connections: 20,
             min_connections: 5,
+            acquire_timeout_secs: 30,
+            idle_timeout_secs: 600,
         };
         let db2 = db.clone();
 
@@ -784,6 +868,8 @@ mod tests {
             url: "mysql://localhost/test".to_string(),
             max_connections: 10,
             min_connections: 2,
+            acquire_timeout_secs: 30,
+            idle_timeout_secs: 600,
         };
         let debug_str = format!("{:?}", db);
 
@@ -936,6 +1022,8 @@ mod tests {
                 url: "mysql://db.example.com/prod".to_string(),
                 max_connections: 50,
                 min_connections: 10,
+                acquire_timeout_secs: 30,
+                idle_timeout_secs: 600,
             },
             redis: RedisConfig {
                 url: "redis://cache.example.com:6379".to_string(),
@@ -968,7 +1056,12 @@ mod tests {
                 rp_origin: "http://localhost:3000".to_string(),
                 challenge_ttl_secs: 300,
             },
+            server: ServerConfig::default(),
             telemetry: TelemetryConfig::default(),
+            password_reset: PasswordResetConfig {
+                hmac_key: "production-hmac-key".to_string(),
+                token_ttl_secs: 3600,
+            },
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
             jwt_tenant_access_allowed_audiences: vec![],
             security_headers: SecurityHeadersConfig::default(),
@@ -1139,7 +1232,11 @@ mod tests {
     #[test]
     fn test_from_env_missing_database_url() {
         with_env_vars(
-            &[("DATABASE_URL", None), ("JWT_SECRET", Some("test-secret"))],
+            &[
+                ("DATABASE_URL", None),
+                ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
+            ],
             || {
                 let result = Config::from_env();
                 assert!(result.is_err());
@@ -1155,6 +1252,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/test")),
                 ("JWT_SECRET", None),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
             ],
             || {
                 let result = Config::from_env();
@@ -1171,6 +1269,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("minimal-test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("RATE_LIMIT_ENABLED", None),
                 ("GRPC_AUTH_MODE", None),
                 ("HTTP_HOST", None),
@@ -1192,6 +1291,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("CORS_ALLOWED_ORIGINS", Some("*")),
             ],
             || {
@@ -1207,6 +1307,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 (
                     "CORS_ALLOWED_ORIGINS",
                     Some("https://app.example.com, https://admin.example.com"),
@@ -1233,6 +1334,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("RATE_LIMIT_ENABLED", Some("false")),
             ],
             || {
@@ -1248,6 +1350,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("GRPC_AUTH_MODE", Some("api_key")),
                 ("GRPC_API_KEYS", Some("key-alpha, key-beta , key-gamma")),
             ],
@@ -1268,6 +1371,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 (
                     "JWT_PRIVATE_KEY",
                     Some("-----BEGIN PRIVATE KEY-----\\nMIIEvg\\n-----END PRIVATE KEY-----"),
@@ -1295,6 +1399,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("GRPC_ENABLE_REFLECTION", Some("true")),
             ],
             || {
@@ -1310,6 +1415,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("CORS_ALLOW_CREDENTIALS", Some("false")),
             ],
             || {
@@ -1325,6 +1431,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 ("KEYCLOAK_WEBHOOK_SECRET", Some("my-webhook-hmac-secret")),
             ],
             || {
@@ -1343,6 +1450,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 (
                     "RATE_LIMIT_ENDPOINTS",
                     Some(r#"{"POST:/api/v1/auth/token":{"requests":10,"window_secs":30}}"#),
@@ -1368,6 +1476,7 @@ mod tests {
             &[
                 ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
                 ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
                 (
                     "RATE_LIMIT_TENANT_MULTIPLIERS",
                     Some(r#"{"premium":2.0,"enterprise":5.0}"#),
@@ -1388,6 +1497,86 @@ mod tests {
         );
     }
 
+    // ========================================================================
+    // Security Fix Tests: gRPC mTLS Configuration Validation
+    // ========================================================================
+
+    #[test]
+    fn test_validate_security_mtls_missing_cert_path() {
+        let mut config = test_config();
+        config.environment = ENV_PRODUCTION.to_string();
+        config.grpc_security.auth_mode = "mtls".to_string();
+        config.grpc_security.tls_cert_path = None; // Missing cert
+        config.grpc_security.tls_key_path = Some("/path/to/key.pem".to_string());
+        config.grpc_security.tls_ca_cert_path = Some("/path/to/ca.pem".to_string());
+        config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+
+        let result = config.validate_security();
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("GRPC_TLS_CERT_PATH"));
+    }
+
+    #[test]
+    fn test_validate_security_mtls_missing_key_path() {
+        let mut config = test_config();
+        config.environment = ENV_PRODUCTION.to_string();
+        config.grpc_security.auth_mode = "mtls".to_string();
+        config.grpc_security.tls_cert_path = Some("/path/to/cert.pem".to_string());
+        config.grpc_security.tls_key_path = None; // Missing key
+        config.grpc_security.tls_ca_cert_path = Some("/path/to/ca.pem".to_string());
+        config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+
+        let result = config.validate_security();
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("GRPC_TLS_KEY_PATH"));
+    }
+
+    #[test]
+    fn test_validate_security_mtls_missing_ca_path() {
+        let mut config = test_config();
+        config.environment = ENV_PRODUCTION.to_string();
+        config.grpc_security.auth_mode = "mtls".to_string();
+        config.grpc_security.tls_cert_path = Some("/path/to/cert.pem".to_string());
+        config.grpc_security.tls_key_path = Some("/path/to/key.pem".to_string());
+        config.grpc_security.tls_ca_cert_path = None; // Missing CA
+        config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+
+        let result = config.validate_security();
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("GRPC_TLS_CA_CERT_PATH"));
+    }
+
+    #[test]
+    fn test_validate_security_mtls_all_paths_provided() {
+        let mut config = test_config();
+        config.environment = ENV_PRODUCTION.to_string();
+        config.grpc_security.auth_mode = "mtls".to_string();
+        config.grpc_security.tls_cert_path = Some("/path/to/cert.pem".to_string());
+        config.grpc_security.tls_key_path = Some("/path/to/key.pem".to_string());
+        config.grpc_security.tls_ca_cert_path = Some("/path/to/ca.pem".to_string());
+        config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+
+        let result = config.validate_security();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_security_mtls_dev_environment_allows_missing_certs() {
+        let mut config = test_config();
+        config.environment = ENV_DEVELOPMENT.to_string(); // Development
+        config.grpc_security.auth_mode = "mtls".to_string();
+        config.grpc_security.tls_cert_path = None; // Missing in dev is OK
+        config.grpc_security.tls_key_path = None;
+        config.grpc_security.tls_ca_cert_path = None;
+
+        // Should not fail validation in development
+        let result = config.validate_security();
+        assert!(result.is_ok());
+    }
+
     #[test]
     fn test_sensitive_data_redacted_in_debug() {
         // Create a config with sensitive data
@@ -1401,6 +1590,8 @@ mod tests {
                 url: "mysql://user:supersecretpassword@host/db".to_string(),
                 max_connections: 10,
                 min_connections: 2,
+                acquire_timeout_secs: 30,
+                idle_timeout_secs: 600,
             },
             redis: RedisConfig {
                 url: "redis://:redispassword@localhost:6379".to_string(),
@@ -1444,7 +1635,12 @@ mod tests {
                 rp_origin: "http://localhost:3000".to_string(),
                 challenge_ttl_secs: 300,
             },
+            server: ServerConfig::default(),
             telemetry: TelemetryConfig::default(),
+            password_reset: PasswordResetConfig {
+                hmac_key: "password-reset-hmac-secret".to_string(),
+                token_ttl_secs: 3600,
+            },
             platform_admin_emails: vec!["admin@auth9.local".to_string()],
             jwt_tenant_access_allowed_audiences: vec!["auth9-portal".to_string()],
             security_headers: SecurityHeadersConfig::default(),
@@ -1485,6 +1681,10 @@ mod tests {
         assert!(
             !debug_str.contains("api-key-2"),
             "API keys should be redacted"
+        );
+        assert!(
+            !debug_str.contains("password-reset-hmac-secret"),
+            "Password reset HMAC key should be redacted"
         );
 
         // Verify non-sensitive data IS present

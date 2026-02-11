@@ -157,7 +157,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 1. authentication/02-token-security.md - Token 是系统核心
 2. authorization/01-tenant-isolation.md - 多租户隔离是关键
 3. authorization/02-rbac-bypass.md - RBAC 权限模型安全
-4. api-security/02-grpc-api.md - gRPC 目前无认证保护
+4. api-security/02-grpc-api.md - gRPC 认证配置回归与绕过风险（api_key/mTLS/反射）
 5. input-validation/05-ssrf.md - Webhook SSRF 风险 🆕
 6. business-logic/01-workflow-abuse.md - Token Exchange 流程安全 🆕
 7. business-logic/02-race-conditions.md - 竞态条件 🆕

@@ -11,6 +11,15 @@ vi.mock("~/services/session.server", () => ({
   getAccessToken: vi.fn(),
   getSession: vi.fn(),
   destroySession: vi.fn().mockResolvedValue("destroyed-cookie"),
+    requireAuthWithUpdate: vi.fn().mockResolvedValue({
+        session: {
+            accessToken: "test-token",
+            refreshToken: "test-refresh-token",
+            idToken: "test-id-token",
+            expiresAt: Date.now() + 3600000,
+        },
+        headers: undefined,
+    }),
 }));
 
 import { getAccessToken, getSession, destroySession } from "~/services/session.server";

@@ -156,7 +156,7 @@ export default function ServiceDetailPage() {
                         <div className="p-6">
                             {actionData && "error" in actionData && (
                                 <div className="mb-4 p-3 rounded-lg bg-[var(--accent-red)]/10 border border-[var(--accent-red)]/30 text-[var(--accent-red)] text-sm">
-                                    {actionData.error}
+                                    {String(actionData.error)}
                                 </div>
                             )}
                             <Form method="post" className="space-y-4">

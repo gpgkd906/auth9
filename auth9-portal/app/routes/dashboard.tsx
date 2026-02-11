@@ -4,7 +4,7 @@ import { Link, Outlet, useLocation, useLoaderData } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
-import { requireAuth, getAccessToken } from "~/services/session.server";
+import { requireAuthWithUpdate } from "~/services/session.server";
 import { userApi, type User } from "~/services/api";
 
 export const meta: MetaFunction = () => {
@@ -13,16 +13,19 @@ export const meta: MetaFunction = () => {
 
 // Protect all dashboard routes - redirects to /login if not authenticated
 export async function loader({ request }: LoaderFunctionArgs) {
-  await requireAuth(request);
-  const accessToken = await getAccessToken(request);
+  const { session, headers } = await requireAuthWithUpdate(request);
+
   let currentUser: User | null = null;
-  if (accessToken) {
-    try {
-      const response = await userApi.getMe(accessToken);
-      currentUser = response.data;
-    } catch {
-      // fallback to null
-    }
+  try {
+    const response = await userApi.getMe(session.accessToken);
+    currentUser = response.data;
+  } catch {
+    // fallback to null
+  }
+
+  // Return with updated cookie if session was refreshed
+  if (headers) {
+    return Response.json({ currentUser }, { headers });
   }
   return { currentUser };
 }

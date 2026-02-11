@@ -88,7 +88,7 @@ export async function action({ request }: ActionFunctionArgs) {
       await rbacApi.updateRole(serviceId, roleId, {
         name,
         description: description || undefined,
-        parent_role_id: parentRoleId ? parentRoleId : null,
+        parent_role_id: parentRoleId || undefined,
       }, accessToken || undefined);
       return { success: true };
     }

@@ -4,6 +4,15 @@ import { loader } from "~/routes/auth.callback";
 // Mock session.server
 vi.mock("~/services/session.server", () => ({
   commitSession: vi.fn().mockResolvedValue("mocked-cookie"),
+    requireAuthWithUpdate: vi.fn().mockResolvedValue({
+        session: {
+            accessToken: "test-token",
+            refreshToken: "test-refresh-token",
+            idToken: "test-id-token",
+            expiresAt: Date.now() + 3600000,
+        },
+        headers: undefined,
+    }),
 }));
 
 import { commitSession } from "~/services/session.server";

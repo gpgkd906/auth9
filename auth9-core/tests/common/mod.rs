@@ -5,7 +5,7 @@
 
 use auth9_core::config::{
     Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RedisConfig,
-    SecurityHeadersConfig, TelemetryConfig, WebAuthnConfig, RateLimitConfig,
+    SecurityHeadersConfig, ServerConfig, TelemetryConfig, WebAuthnConfig, RateLimitConfig,
 };
 
 /// Test configuration (no real connections needed)
@@ -20,6 +20,8 @@ pub fn test_config() -> Config {
             url: "mysql://test@localhost/test".to_string(),
             max_connections: 1,
             min_connections: 1,
+            acquire_timeout_secs: 30,
+            idle_timeout_secs: 600,
         },
         redis: RedisConfig {
             url: "redis://localhost:6379".to_string(),
@@ -52,6 +54,7 @@ pub fn test_config() -> Config {
             rp_origin: "http://localhost:3000".to_string(),
             challenge_ttl_secs: 300,
         },
+        server: ServerConfig::default(),
         telemetry: TelemetryConfig::default(),
         platform_admin_emails: vec!["admin@auth9.local".to_string()],
         jwt_tenant_access_allowed_audiences: vec![],
