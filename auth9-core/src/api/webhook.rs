@@ -3,27 +3,49 @@
 use crate::api::{MessageResponse, SuccessResponse};
 use crate::domain::{CreateWebhookInput, StringUuid, UpdateWebhookInput, Webhook};
 use crate::error::AppError;
+use crate::middleware::auth::AuthUser;
+use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
 use crate::service::WebhookTestResult;
-use crate::state::HasWebhooks;
+use crate::state::{HasServices, HasWebhooks};
 use axum::{
     extract::{Path, State},
     Json,
 };
 
 /// List webhooks for a tenant
-pub async fn list_webhooks<S: HasWebhooks>(
+pub async fn list_webhooks<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<Vec<Webhook>>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     let webhooks = state.webhook_service().list_by_tenant(tenant_id).await?;
     Ok(Json(SuccessResponse::new(webhooks)))
 }
 
 /// Get a webhook by ID
-pub async fn get_webhook<S: HasWebhooks>(
+pub async fn get_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<Webhook>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     let webhook = state.webhook_service().get(webhook_id).await?;
 
     // Verify the webhook belongs to the tenant
@@ -35,21 +57,41 @@ pub async fn get_webhook<S: HasWebhooks>(
 }
 
 /// Create a new webhook
-pub async fn create_webhook<S: HasWebhooks>(
+pub async fn create_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<StringUuid>,
     Json(input): Json<CreateWebhookInput>,
 ) -> Result<Json<SuccessResponse<Webhook>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     let webhook = state.webhook_service().create(tenant_id, input).await?;
     Ok(Json(SuccessResponse::new(webhook)))
 }
 
 /// Update a webhook
-pub async fn update_webhook<S: HasWebhooks>(
+pub async fn update_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
     Json(input): Json<UpdateWebhookInput>,
 ) -> Result<Json<SuccessResponse<Webhook>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     // Verify the webhook belongs to the tenant
     let existing = state.webhook_service().get(webhook_id).await?;
     if existing.tenant_id != tenant_id {
@@ -61,10 +103,20 @@ pub async fn update_webhook<S: HasWebhooks>(
 }
 
 /// Delete a webhook
-pub async fn delete_webhook<S: HasWebhooks>(
+pub async fn delete_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<MessageResponse>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     // Verify the webhook belongs to the tenant
     let existing = state.webhook_service().get(webhook_id).await?;
     if existing.tenant_id != tenant_id {
@@ -76,10 +128,20 @@ pub async fn delete_webhook<S: HasWebhooks>(
 }
 
 /// Regenerate a webhook's secret
-pub async fn regenerate_webhook_secret<S: HasWebhooks>(
+pub async fn regenerate_webhook_secret<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<Webhook>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     // Verify the webhook belongs to the tenant
     let existing = state.webhook_service().get(webhook_id).await?;
     if existing.tenant_id != tenant_id {
@@ -94,10 +156,20 @@ pub async fn regenerate_webhook_secret<S: HasWebhooks>(
 }
 
 /// Test a webhook by sending a test event
-pub async fn test_webhook<S: HasWebhooks>(
+pub async fn test_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<WebhookTestResult>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::WebhookWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     // Verify the webhook belongs to the tenant
     let existing = state.webhook_service().get(webhook_id).await?;
     if existing.tenant_id != tenant_id {

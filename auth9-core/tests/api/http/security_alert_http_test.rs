@@ -2,7 +2,7 @@
 //!
 //! Tests for security alert listing, retrieval, and resolution endpoints.
 
-use super::{get_json, MockKeycloakServer, TestAppState};
+use super::{get_json_with_auth, MockKeycloakServer, TestAppState};
 use crate::api::{create_test_jwt_manager, create_test_user};
 use auth9_core::api::security_alert::UnresolvedCountResponse;
 use auth9_core::api::{PaginatedResponse, SuccessResponse};
@@ -20,6 +20,14 @@ use tower::ServiceExt;
 async fn test_list_alerts_default() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add some test alerts
     add_test_security_alerts(&state, 5).await;
@@ -27,7 +35,7 @@ async fn test_list_alerts_default() {
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<SecurityAlert>>) =
-        get_json(&app, "/api/v1/security/alerts").await;
+        get_json_with_auth(&app, "/api/v1/security/alerts", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -40,13 +48,21 @@ async fn test_list_alerts_default() {
 async fn test_list_alerts_with_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     add_test_security_alerts(&state, 25).await;
 
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<SecurityAlert>>) =
-        get_json(&app, "/api/v1/security/alerts?page=1&per_page=10").await;
+        get_json_with_auth(&app, "/api/v1/security/alerts?page=1&per_page=10", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -61,6 +77,14 @@ async fn test_list_alerts_with_pagination() {
 async fn test_list_alerts_unresolved_only() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add mix of resolved and unresolved alerts
     add_test_security_alerts(&state, 5).await;
@@ -69,7 +93,7 @@ async fn test_list_alerts_unresolved_only() {
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<SecurityAlert>>) =
-        get_json(&app, "/api/v1/security/alerts?unresolved_only=true").await;
+        get_json_with_auth(&app, "/api/v1/security/alerts?unresolved_only=true", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -82,11 +106,19 @@ async fn test_list_alerts_unresolved_only() {
 async fn test_list_alerts_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<SecurityAlert>>) =
-        get_json(&app, "/api/v1/security/alerts").await;
+        get_json_with_auth(&app, "/api/v1/security/alerts", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -103,6 +135,14 @@ async fn test_list_alerts_empty() {
 async fn test_get_alert_success() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     let alert_id = StringUuid::new_v4();
     let alert = SecurityAlert {
@@ -121,7 +161,7 @@ async fn test_get_alert_success() {
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) =
-        get_json(&app, &format!("/api/v1/security/alerts/{}", alert_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/security/alerts/{}", alert_id), &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -135,12 +175,21 @@ async fn test_get_alert_success() {
 async fn test_get_alert_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     let app = build_security_alert_test_router(state);
 
     let nonexistent_id = StringUuid::new_v4();
     let (status, _body): (StatusCode, Option<SuccessResponse<SecurityAlert>>) =
-        get_json(&app, &format!("/api/v1/security/alerts/{}", nonexistent_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/security/alerts/{}", nonexistent_id), &token)
+            .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -177,7 +226,7 @@ async fn test_resolve_alert_success() {
     // Generate a token for the user
     let jwt_manager = create_test_jwt_manager();
     let token = jwt_manager
-        .create_identity_token(*user_id, "test@example.com", Some("Test User"))
+        .create_identity_token(*user_id, "admin@auth9.local", Some("Platform Admin"))
         .unwrap();
 
     let app = build_security_alert_test_router(state);
@@ -221,7 +270,7 @@ async fn test_resolve_alert_unauthorized() {
     // Try to resolve without authorization
     let request = Request::builder()
         .method(Method::POST)
-        .uri(&format!("/api/v1/security/alerts/{}/resolve", alert_id))
+        .uri(format!("/api/v1/security/alerts/{}/resolve", alert_id))
         .body(Body::empty())
         .unwrap();
 
@@ -237,6 +286,14 @@ async fn test_resolve_alert_unauthorized() {
 async fn test_get_unresolved_count() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add mix of resolved and unresolved alerts
     add_test_security_alerts(&state, 7).await;
@@ -245,7 +302,7 @@ async fn test_get_unresolved_count() {
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<UnresolvedCountResponse>>) =
-        get_json(&app, "/api/v1/security/alerts/unresolved-count").await;
+        get_json_with_auth(&app, "/api/v1/security/alerts/unresolved-count", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -257,6 +314,14 @@ async fn test_get_unresolved_count() {
 async fn test_get_unresolved_count_zero() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(
+            uuid::Uuid::new_v4(),
+            "admin@auth9.local",
+            Some("Platform Admin"),
+        )
+        .unwrap();
 
     // Add only resolved alerts
     add_resolved_security_alerts(&state, 5).await;
@@ -264,7 +329,7 @@ async fn test_get_unresolved_count_zero() {
     let app = build_security_alert_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<UnresolvedCountResponse>>) =
-        get_json(&app, "/api/v1/security/alerts/unresolved-count").await;
+        get_json_with_auth(&app, "/api/v1/security/alerts/unresolved-count", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

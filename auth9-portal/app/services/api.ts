@@ -939,18 +939,21 @@ export const passwordApi = {
     return handleResponse(response);
   },
 
-  getPasswordPolicy: async (tenantId: string): Promise<{ data: PasswordPolicy }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/password-policy`);
+  getPasswordPolicy: async (tenantId: string, accessToken?: string): Promise<{ data: PasswordPolicy }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/password-policy`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
   updatePasswordPolicy: async (
     tenantId: string,
-    policy: Partial<PasswordPolicy>
+    policy: Partial<PasswordPolicy>,
+    accessToken?: string
   ): Promise<{ data: PasswordPolicy }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/password-policy`, {
       method: "PUT",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(policy),
     });
     return handleResponse(response);

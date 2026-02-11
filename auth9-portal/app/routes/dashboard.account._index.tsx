@@ -5,7 +5,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
-import { userApi, type User } from "~/services/api";
+import { userApi } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { redirect } from "react-router";
 

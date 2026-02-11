@@ -2,14 +2,52 @@
 //!
 //! Tests for webhook management endpoints.
 
-use super::{delete_json, get_json, post_json, put_json, MockKeycloakServer, TestAppState};
-use crate::api::create_test_tenant;
+use super::{
+    delete_json_with_auth, get_json_with_auth, post_json_with_auth, put_json_with_auth,
+    MockKeycloakServer, TestAppState,
+};
+use crate::api::{create_test_identity_token, create_test_tenant};
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{StringUuid, Webhook};
 use auth9_core::repository::WebhookRepository;
 use auth9_core::service::WebhookTestResult;
 use axum::http::StatusCode;
 use chrono::Utc;
+use serde::{de::DeserializeOwned, Serialize};
+
+async fn get_json<T>(app: &axum::Router, path: &str) -> (StatusCode, Option<T>)
+where
+    T: DeserializeOwned,
+{
+    let token = create_test_identity_token();
+    get_json_with_auth(app, path, &token).await
+}
+
+async fn post_json<B, T>(app: &axum::Router, path: &str, body: &B) -> (StatusCode, Option<T>)
+where
+    B: Serialize,
+    T: DeserializeOwned,
+{
+    let token = create_test_identity_token();
+    post_json_with_auth(app, path, body, &token).await
+}
+
+async fn put_json<B, T>(app: &axum::Router, path: &str, body: &B) -> (StatusCode, Option<T>)
+where
+    B: Serialize,
+    T: DeserializeOwned,
+{
+    let token = create_test_identity_token();
+    put_json_with_auth(app, path, body, &token).await
+}
+
+async fn delete_json<T>(app: &axum::Router, path: &str) -> (StatusCode, Option<T>)
+where
+    T: DeserializeOwned,
+{
+    let token = create_test_identity_token();
+    delete_json_with_auth(app, path, &token).await
+}
 
 // ============================================================================
 // List Webhooks Tests

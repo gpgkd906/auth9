@@ -221,14 +221,12 @@ describe("Services Page", () => {
             pagination: { total: 0, page: 1, per_page: 20, total_pages: 1 },
         });
 
-        let callCount = 0;
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/services",
                 Component: WrappedPage,
                 loader,
                 action: () => {
-                    callCount++;
                     return { success: true, intent: "create", secret: "my-secret-value-123" };
                 },
             },

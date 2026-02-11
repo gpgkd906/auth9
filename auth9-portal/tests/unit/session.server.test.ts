@@ -16,7 +16,7 @@ vi.mock("react-router", () => ({
 }));
 
 // We need to import after mocking
-import { createCookie, redirect } from "react-router";
+import { redirect } from "react-router";
 import {
   getSession,
   commitSession,

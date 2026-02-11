@@ -1,6 +1,6 @@
 //! Audit HTTP API handler tests
 
-use super::{get_json, MockKeycloakServer, TestAppState};
+use super::{get_json_with_auth, MockKeycloakServer, TestAppState};
 use auth9_core::api::PaginatedResponse;
 use auth9_core::repository::audit::{AuditLogWithActor, CreateAuditLogInput};
 use auth9_core::repository::AuditRepository;
@@ -15,11 +15,15 @@ use uuid::Uuid;
 async fn test_list_audit_logs_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
+        .unwrap();
 
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json(&app, "/api/v1/audit-logs").await;
+        get_json_with_auth(&app, "/api/v1/audit-logs", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -32,6 +36,10 @@ async fn test_list_audit_logs_empty() {
 async fn test_list_audit_logs_with_data() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
+        .unwrap();
 
     // Create audit logs using the repo directly
     for i in 0..5 {
@@ -53,7 +61,7 @@ async fn test_list_audit_logs_with_data() {
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json(&app, "/api/v1/audit-logs").await;
+        get_json_with_auth(&app, "/api/v1/audit-logs", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -66,6 +74,10 @@ async fn test_list_audit_logs_with_data() {
 async fn test_list_audit_logs_with_resource_type_filter() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
+        .unwrap();
 
     // Create audit logs with different resource types
     state
@@ -98,7 +110,7 @@ async fn test_list_audit_logs_with_resource_type_filter() {
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json(&app, "/api/v1/audit-logs?resource_type=tenant").await;
+        get_json_with_auth(&app, "/api/v1/audit-logs?resource_type=tenant", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -111,6 +123,10 @@ async fn test_list_audit_logs_with_resource_type_filter() {
 async fn test_list_audit_logs_with_action_filter() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
+        .unwrap();
 
     state
         .audit_repo
@@ -142,7 +158,7 @@ async fn test_list_audit_logs_with_action_filter() {
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json(&app, "/api/v1/audit-logs?action=create").await;
+        get_json_with_auth(&app, "/api/v1/audit-logs?action=create", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -155,6 +171,10 @@ async fn test_list_audit_logs_with_action_filter() {
 async fn test_list_audit_logs_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
+        .unwrap();
 
     // Create 15 audit log entries
     for i in 0..15 {
@@ -176,7 +196,7 @@ async fn test_list_audit_logs_pagination() {
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json(&app, "/api/v1/audit-logs?limit=5").await;
+        get_json_with_auth(&app, "/api/v1/audit-logs?limit=5", &token).await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -189,6 +209,10 @@ async fn test_list_audit_logs_pagination() {
 async fn test_list_audit_logs_with_actor_filter() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = state
+        .jwt_manager
+        .create_identity_token(Uuid::new_v4(), "admin@auth9.local", Some("Platform Admin"))
+        .unwrap();
 
     let actor_id = Uuid::new_v4();
     state
@@ -221,7 +245,8 @@ async fn test_list_audit_logs_with_actor_filter() {
     let app = build_audit_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<AuditLogWithActor>>) =
-        get_json(&app, &format!("/api/v1/audit-logs?actor_id={}", actor_id)).await;
+        get_json_with_auth(&app, &format!("/api/v1/audit-logs?actor_id={}", actor_id), &token)
+            .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

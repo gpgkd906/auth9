@@ -1,17 +1,16 @@
 //! Password management API handlers
 
 use crate::api::{write_audit_log_generic, MessageResponse, SuccessResponse};
-use crate::config::Config;
 use crate::domain::{ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput, StringUuid};
 use crate::error::AppError;
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
 use crate::state::{HasPasswordManagement, HasServices};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
     Json,
 };
-use uuid::Uuid;
 
 /// Request password reset email
 pub async fn forgot_password<S: HasPasswordManagement>(
@@ -57,87 +56,21 @@ pub async fn change_password<S: HasPasswordManagement + HasServices>(
     )))
 }
 
-/// Check if user has access to read tenant password policy (platform admin or tenant member)
-fn check_tenant_read_access(
-    config: &Config,
-    auth: &AuthUser,
-    tenant_id: Uuid,
-) -> Result<(), AppError> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Platform admin or tenant-scoped token required".to_string(),
-                ))
-            }
-        }
-        TokenType::TenantAccess => {
-            if auth.tenant_id == Some(tenant_id) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Access denied: you don't have permission to access this tenant".to_string(),
-                ))
-            }
-        }
-        TokenType::ServiceClient => {
-            if auth.tenant_id == Some(tenant_id) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Service client tokens can only access their own tenant".to_string(),
-                ))
-            }
-        }
-    }
-}
-
-/// Check if user has access to modify tenant password policy (platform admin or tenant owner/admin)
-fn check_tenant_write_access(
-    config: &Config,
-    auth: &AuthUser,
-    tenant_id: Uuid,
-) -> Result<(), AppError> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Platform admin or tenant-scoped token required".to_string(),
-                ))
-            }
-        }
-        TokenType::TenantAccess => {
-            if auth.tenant_id == Some(tenant_id) {
-                if auth.has_role("owner") || auth.has_role("admin") {
-                    Ok(())
-                } else {
-                    Err(AppError::Forbidden(
-                        "Only tenant owner or admin can modify password policy".to_string(),
-                    ))
-                }
-            } else {
-                Err(AppError::Forbidden(
-                    "Access denied: you don't have permission to access this tenant".to_string(),
-                ))
-            }
-        }
-        TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Service client tokens cannot modify password policy".to_string(),
-        )),
-    }
-}
-
 /// Get password policy for a tenant
 pub async fn get_password_policy<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     Path(tenant_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<crate::domain::PasswordPolicy>>, AppError> {
-    check_tenant_read_access(state.config(), &auth, *tenant_id)?;
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SystemConfigRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     let policy = state.password_service().get_policy(tenant_id).await?;
     Ok(Json(SuccessResponse::new(policy)))
 }
@@ -151,7 +84,15 @@ pub async fn update_password_policy<S: HasPasswordManagement + HasServices>(
     Json(body): Json<serde_json::Value>,
 ) -> Result<Json<SuccessResponse<crate::domain::PasswordPolicy>>, AppError> {
     // Authorization check MUST run before input validation
-    check_tenant_write_access(state.config(), &auth, *tenant_id)?;
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SystemConfigWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )?;
+
     let input: crate::domain::UpdatePasswordPolicyInput =
         serde_json::from_value(body).map_err(|e| AppError::Validation(e.to_string()))?;
     let policy = state

@@ -3,19 +3,30 @@
 use crate::api::{PaginatedResponse, SuccessResponse};
 use crate::domain::{SecurityAlert, StringUuid};
 use crate::error::AppError;
-use crate::state::HasSecurityAlerts;
+use crate::middleware::auth::AuthUser;
+use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
+use crate::state::{HasSecurityAlerts, HasServices};
 use axum::{
     extract::{Path, Query, State},
-    http::HeaderMap,
     Json,
 };
 use serde::Deserialize;
 
 /// List security alerts with pagination
-pub async fn list_alerts<S: HasSecurityAlerts>(
+pub async fn list_alerts<S: HasSecurityAlerts + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Query(params): Query<AlertsQuery>,
 ) -> Result<Json<PaginatedResponse<SecurityAlert>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SecurityAlertRead,
+            scope: ResourceScope::Global,
+        },
+    )?;
+
     let page = params.page.unwrap_or(1);
     let per_page = params.per_page.unwrap_or(20);
 
@@ -44,21 +55,40 @@ pub struct AlertsQuery {
 }
 
 /// Get a security alert by ID
-pub async fn get_alert<S: HasSecurityAlerts>(
+pub async fn get_alert<S: HasSecurityAlerts + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(alert_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<SecurityAlert>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SecurityAlertRead,
+            scope: ResourceScope::Global,
+        },
+    )?;
+
     let alert = state.security_detection_service().get(alert_id).await?;
     Ok(Json(SuccessResponse::new(alert)))
 }
 
 /// Resolve a security alert
-pub async fn resolve_alert<S: HasSecurityAlerts>(
+pub async fn resolve_alert<S: HasSecurityAlerts + HasServices>(
     State(state): State<S>,
-    headers: HeaderMap,
+    auth: AuthUser,
     Path(alert_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<SecurityAlert>>, AppError> {
-    let resolved_by = extract_user_id(&state, &headers)?;
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SecurityAlertResolve,
+            scope: ResourceScope::Global,
+        },
+    )?;
+
+    let resolved_by = StringUuid::from(auth.user_id);
 
     let alert = state
         .security_detection_service()
@@ -69,9 +99,19 @@ pub async fn resolve_alert<S: HasSecurityAlerts>(
 }
 
 /// Get count of unresolved alerts (for dashboard badge)
-pub async fn get_unresolved_count<S: HasSecurityAlerts>(
+pub async fn get_unresolved_count<S: HasSecurityAlerts + HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
 ) -> Result<Json<SuccessResponse<UnresolvedCountResponse>>, AppError> {
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::SecurityAlertRead,
+            scope: ResourceScope::Global,
+        },
+    )?;
+
     let (_, total) = state
         .security_detection_service()
         .list_unresolved(1, 1)
@@ -86,33 +126,6 @@ pub async fn get_unresolved_count<S: HasSecurityAlerts>(
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct UnresolvedCountResponse {
     pub unresolved_count: i64,
-}
-
-/// Extract user ID from JWT token
-fn extract_user_id<S: HasSecurityAlerts>(
-    state: &S,
-    headers: &HeaderMap,
-) -> Result<StringUuid, AppError> {
-    let auth_header = headers
-        .get(axum::http::header::AUTHORIZATION)
-        .ok_or_else(|| AppError::Unauthorized("Missing authorization header".to_string()))?;
-
-    let auth_str = auth_header
-        .to_str()
-        .map_err(|_| AppError::Unauthorized("Invalid authorization header".to_string()))?;
-
-    let token = auth_str
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| AppError::Unauthorized("Invalid authorization header format".to_string()))?;
-
-    if let Ok(claims) = state.jwt_manager().verify_identity_token(token) {
-        return StringUuid::parse_str(&claims.sub)
-            .map_err(|_| AppError::Unauthorized("Invalid user ID in token".to_string()));
-    }
-
-    Err(AppError::Unauthorized(
-        "Invalid or expired token".to_string(),
-    ))
 }
 
 #[cfg(test)]
