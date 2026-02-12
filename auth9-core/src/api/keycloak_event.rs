@@ -64,6 +64,9 @@ pub struct KeycloakEventDetails {
     pub email: Option<String>,
     /// Authentication method (e.g., "password", "otp")
     pub auth_method: Option<String>,
+    /// Credential type used in authentication (e.g., "password", "otp", "totp")
+    /// Keycloak 21+ sends this for TOTP failures instead of auth_method
+    pub credential_type: Option<String>,
     /// Identity provider alias for social logins
     pub identity_provider: Option<String>,
     /// Redirect URI
@@ -87,8 +90,14 @@ fn map_event_type_with_details(
         "LOGIN_ERROR" => {
             match error {
                 Some("invalid_user_credentials") => {
-                    // Check auth_method to distinguish TOTP failures from password failures
-                    if details.auth_method.as_deref() == Some("otp") {
+                    // Check auth_method or credential_type to distinguish TOTP failures
+                    // Keycloak may send "otp" via authMethod or credentialType depending on version
+                    if details.auth_method.as_deref() == Some("otp")
+                        || matches!(
+                            details.credential_type.as_deref(),
+                            Some("otp") | Some("totp")
+                        )
+                    {
                         Some(LoginEventType::FailedMfa)
                     } else {
                         Some(LoginEventType::FailedPassword)
@@ -151,8 +160,13 @@ fn derive_failure_reason_with_details(
     error.map(|e| {
         match e {
             "invalid_user_credentials" => {
-                // Check auth_method to distinguish TOTP failures from password failures
-                if details.auth_method.as_deref() == Some("otp") {
+                // Check auth_method or credential_type to distinguish TOTP failures
+                if details.auth_method.as_deref() == Some("otp")
+                    || matches!(
+                        details.credential_type.as_deref(),
+                        Some("otp") | Some("totp")
+                    )
+                {
                     "Invalid MFA code"
                 } else {
                     "Invalid password"
@@ -379,6 +393,69 @@ mod tests {
         assert_eq!(
             map_event_type("LOGIN_ERROR", Some("user_disabled")),
             Some(LoginEventType::Locked)
+        );
+    }
+
+    #[test]
+    fn test_map_event_type_mfa_via_credential_type() {
+        // Keycloak 21+ sends credential_type instead of auth_method for TOTP failures
+        let details_otp = KeycloakEventDetails {
+            credential_type: Some("otp".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            map_event_type_with_details(
+                "LOGIN_ERROR",
+                Some("invalid_user_credentials"),
+                &details_otp
+            ),
+            Some(LoginEventType::FailedMfa)
+        );
+
+        let details_totp = KeycloakEventDetails {
+            credential_type: Some("totp".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            map_event_type_with_details(
+                "LOGIN_ERROR",
+                Some("invalid_user_credentials"),
+                &details_totp
+            ),
+            Some(LoginEventType::FailedMfa)
+        );
+
+        // auth_method=otp still works
+        let details_auth_method = KeycloakEventDetails {
+            auth_method: Some("otp".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            map_event_type_with_details(
+                "LOGIN_ERROR",
+                Some("invalid_user_credentials"),
+                &details_auth_method
+            ),
+            Some(LoginEventType::FailedMfa)
+        );
+    }
+
+    #[test]
+    fn test_derive_failure_reason_mfa_via_credential_type() {
+        let details_otp = KeycloakEventDetails {
+            credential_type: Some("otp".to_string()),
+            ..Default::default()
+        };
+        assert_eq!(
+            derive_failure_reason_with_details(Some("invalid_user_credentials"), &details_otp),
+            Some("Invalid MFA code".to_string())
+        );
+
+        // Without credential_type, defaults to password
+        let details_none = KeycloakEventDetails::default();
+        assert_eq!(
+            derive_failure_reason_with_details(Some("invalid_user_credentials"), &details_none),
+            Some("Invalid password".to_string())
         );
     }
 
@@ -681,6 +758,7 @@ mod tests {
                 "username": "user1",
                 "email": "user1@test.com",
                 "authMethod": "password",
+                "credentialType": "password",
                 "identityProvider": "google",
                 "redirectUri": "https://app.com/cb",
                 "codeId": "code-123"
@@ -691,6 +769,10 @@ mod tests {
         assert_eq!(event.details.username, Some("user1".to_string()));
         assert_eq!(event.details.email, Some("user1@test.com".to_string()));
         assert_eq!(event.details.auth_method, Some("password".to_string()));
+        assert_eq!(
+            event.details.credential_type,
+            Some("password".to_string())
+        );
         assert_eq!(event.details.identity_provider, Some("google".to_string()));
         assert_eq!(
             event.details.redirect_uri,

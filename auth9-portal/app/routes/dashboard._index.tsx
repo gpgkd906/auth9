@@ -14,21 +14,29 @@ export async function loader({ request }: LoaderFunctionArgs) {
     throw redirect("/login");
   }
 
-  const [tenants, users, services, audits] = await Promise.all([
-    tenantApi.list(1, 1, undefined, accessToken),
-    userApi.list(1, 1, undefined, accessToken),
-    serviceApi.list(undefined, 1, 1, accessToken),
-    auditApi.list(page, perPage, accessToken),
-  ]);
+  try {
+    const [tenants, users, services, audits] = await Promise.all([
+      tenantApi.list(1, 1, undefined, accessToken),
+      userApi.list(1, 1, undefined, accessToken),
+      serviceApi.list(undefined, 1, 1, accessToken),
+      auditApi.list(page, perPage, accessToken),
+    ]);
 
-  return {
-    totals: {
-      tenants: tenants.pagination.total,
-      users: users.pagination.total,
-      services: services.pagination.total,
-    },
-    audits: audits.data,
-  };
+    return {
+      totals: {
+        tenants: tenants.pagination.total,
+        users: users.pagination.total,
+        services: services.pagination.total,
+      },
+      audits: audits.data,
+    };
+  } catch {
+    // Handle case where user may not have permissions (e.g., no tenant association)
+    return {
+      totals: { tenants: 0, users: 0, services: 0 },
+      audits: [],
+    };
+  }
 }
 
 export default function DashboardIndex() {

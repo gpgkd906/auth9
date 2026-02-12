@@ -392,7 +392,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     sqlx::query(
         r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
         VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
-        ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id)"#,
+        ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), mfa_enabled = FALSE"#,
     )
     .bind(&admin_user_id)
     .bind(&keycloak_id)
@@ -483,6 +483,9 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .context("Failed to seed demo tenant_service")?;
 
         info!("Seeded tenant_services for both tenants → Auth9 Admin Portal");
+
+        // 7. Seed RBAC: default roles, permissions, and assignments for admin user
+        seed_rbac_for_service(&pool, &service_id, &actual_platform_id, &actual_demo_id, &actual_user_id).await?;
     } else {
         warn!("Auth9 Admin Portal service not found in database, skipping tenant_services seed");
     }
@@ -494,6 +497,92 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         DEFAULT_PLATFORM_TENANT_SLUG, DEFAULT_DEMO_TENANT_SLUG, keycloak_id, admin_email
     );
 
+    Ok(())
+}
+
+/// Seed RBAC data: admin role with full permission, assigned to admin user in both tenants
+async fn seed_rbac_for_service(
+    pool: &Pool<MySql>,
+    service_id: &str,
+    platform_tenant_id: &str,
+    demo_tenant_id: &str,
+    admin_user_id: &str,
+) -> Result<()> {
+    // Create "admin:full" permission (idempotent via INSERT IGNORE on unique key)
+    let permission_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"INSERT IGNORE INTO permissions (id, service_id, code, name, description)
+        VALUES (?, ?, 'admin:full', 'Full Admin Access', 'Full administrative access to all resources')"#,
+    )
+    .bind(&permission_id)
+    .bind(service_id)
+    .execute(pool)
+    .await
+    .context("Failed to seed admin permission")?;
+
+    // Get actual permission ID (may already exist)
+    let (actual_permission_id,): (String,) =
+        sqlx::query_as("SELECT id FROM permissions WHERE service_id = ? AND code = 'admin:full'")
+            .bind(service_id)
+            .fetch_one(pool)
+            .await
+            .context("Failed to get admin permission ID")?;
+
+    // Create "admin" role (idempotent via INSERT IGNORE on unique key)
+    let role_id = uuid::Uuid::new_v4().to_string();
+    sqlx::query(
+        r#"INSERT IGNORE INTO roles (id, service_id, name, description, created_at, updated_at)
+        VALUES (?, ?, 'admin', 'Administrator role with full access', NOW(), NOW())"#,
+    )
+    .bind(&role_id)
+    .bind(service_id)
+    .execute(pool)
+    .await
+    .context("Failed to seed admin role")?;
+
+    // Get actual role ID (may already exist)
+    let (actual_role_id,): (String,) =
+        sqlx::query_as("SELECT id FROM roles WHERE service_id = ? AND name = 'admin'")
+            .bind(service_id)
+            .fetch_one(pool)
+            .await
+            .context("Failed to get admin role ID")?;
+
+    // Link permission to role (idempotent via INSERT IGNORE on composite PK)
+    sqlx::query("INSERT IGNORE INTO role_permissions (role_id, permission_id) VALUES (?, ?)")
+        .bind(&actual_role_id)
+        .bind(&actual_permission_id)
+        .execute(pool)
+        .await
+        .context("Failed to seed role_permission")?;
+
+    // Assign admin role to admin user in both tenants
+    for tenant_id in [platform_tenant_id, demo_tenant_id] {
+        // Get tenant_user_id for this user+tenant pair
+        let tenant_user: Option<(String,)> = sqlx::query_as(
+            "SELECT id FROM tenant_users WHERE tenant_id = ? AND user_id = ?",
+        )
+        .bind(tenant_id)
+        .bind(admin_user_id)
+        .fetch_optional(pool)
+        .await
+        .context("Failed to query tenant_user")?;
+
+        if let Some((tenant_user_id,)) = tenant_user {
+            sqlx::query(
+                r#"INSERT IGNORE INTO user_tenant_roles (id, tenant_user_id, role_id, granted_at)
+                VALUES (?, ?, ?, NOW())"#,
+            )
+            .bind(uuid::Uuid::new_v4().to_string())
+            .bind(&tenant_user_id)
+            .bind(&actual_role_id)
+            .execute(pool)
+            .await
+            .context("Failed to seed user_tenant_role")?;
+        }
+    }
+
+    info!("Seeded RBAC: admin role with admin:full permission assigned to admin user");
     Ok(())
 }
 

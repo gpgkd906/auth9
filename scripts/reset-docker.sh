@@ -149,7 +149,7 @@ if [ "$PURGE" = true ]; then
   docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-theme-builder auth9-auth9-keycloak-events-builder 2>/dev/null || true
   docker rmi $(docker images -q 'auth9-*' 2>/dev/null) 2>/dev/null || true
 else
-  [ "$REBUILD_CORE" = true ]   && { docker rmi auth9-auth9-core 2>/dev/null || true; }
+  [ "$REBUILD_CORE" = true ]   && { docker rmi auth9-auth9-core auth9-auth9-init 2>/dev/null || true; }
   [ "$REBUILD_PORTAL" = true ] && { docker rmi auth9-auth9-portal 2>/dev/null || true; }
   [ "$REBUILD_THEME" = true ]  && { docker rmi auth9-auth9-theme-builder 2>/dev/null || true; }
   [ "$REBUILD_EVENTS" = true ] && { docker rmi auth9-auth9-keycloak-events-builder 2>/dev/null || true; }
@@ -182,8 +182,7 @@ APP_BUILD_TARGETS=""
 [ "$REBUILD_CORE" = true ]   && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-core"
 [ "$REBUILD_PORTAL" = true ] && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-portal"
 
-# Also build auth9-init if core changed (they share the same Dockerfile)
-[ "$REBUILD_CORE" = true ]   && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-init"
+# auth9-init shares the same Dockerfile as auth9-core; tag it after build instead of building twice
 
 BUILD_PLUGINS_PID=""
 BUILD_APP_PID=""
@@ -210,6 +209,11 @@ if [ -n "$BUILD_PLUGINS_PID" ]; then
 fi
 if [ -n "$BUILD_APP_PID" ]; then
   wait $BUILD_APP_PID || { echo "ERROR: App build failed"; exit 1; }
+fi
+
+# Tag auth9-core image as auth9-init (same binary, different command at runtime)
+if [ "$REBUILD_CORE" = true ]; then
+  docker tag auth9-auth9-core auth9-auth9-init
 fi
 
 # Save hashes for successfully built components

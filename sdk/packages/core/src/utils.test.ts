@@ -96,6 +96,17 @@ describe("toCamelCase", () => {
     expect(toCamelCase(42)).toBe(42);
   });
 
+  it("converts keys with numeric segments", () => {
+    const input = {
+      last_24h_count: 42,
+      field_1_value: "test",
+    };
+    expect(toCamelCase(input)).toEqual({
+      last24hCount: 42,
+      field1Value: "test",
+    });
+  });
+
   it("roundtrips with toSnakeCase", () => {
     const original = {
       tenantId: "123",

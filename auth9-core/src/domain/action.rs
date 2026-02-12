@@ -130,6 +130,7 @@ pub struct CreateActionInput {
     pub enabled: bool,
     #[serde(default)]
     pub execution_order: i32,
+    #[validate(range(min = 1, max = 30000))]
     #[serde(default = "default_timeout")]
     pub timeout_ms: i32,
 }
@@ -153,6 +154,7 @@ pub struct UpdateActionInput {
     pub script: Option<String>,
     pub enabled: Option<bool>,
     pub execution_order: Option<i32>,
+    #[validate(range(min = 1, max = 30000))]
     pub timeout_ms: Option<i32>,
 }
 
@@ -221,6 +223,7 @@ pub struct UpsertActionInput {
     pub enabled: bool,
     #[serde(default)]
     pub execution_order: i32,
+    #[validate(range(min = 1, max = 30000))]
     #[serde(default = "default_timeout")]
     pub timeout_ms: i32,
 }
