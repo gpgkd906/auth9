@@ -345,28 +345,49 @@ oathtool --totp -b "$SECRET"
 
 ## Token Exchange gRPC Testing
 
-- **Port**: 50051
-- **Service**: `auth9.TokenExchange`
+**IMPORTANT**: See `references/api-testing-cookbook.md` for full recipes and common pitfalls.
+
+- **Service name**: `auth9.TokenExchange` (NOT `auth9.token_exchange.TokenExchange`)
+- **API key**: `x-api-key: dev-grpc-api-key` (required)
+- **Host port 50051 is blocked**: Must use `grpcurl-docker.sh` or Docker network
+- **Reflection disabled**: Must pass `-import-path /proto -proto auth9.proto`
+- **`service_id`**: Use OAuth client_id string (e.g. `auth9-portal`), NOT service UUID
+- **Portal service → `auth9-platform` tenant**: Use `auth9-platform` tenant ID, not `demo`
 
 ```bash
-# List methods
-grpcurl -plaintext localhost:50051 list auth9.TokenExchange
+TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+PLATFORM_TENANT_ID=$(mysql -u root -h 127.0.0.1 -P 4000 auth9 -N -e \
+  "SELECT id FROM tenants WHERE slug = 'auth9-platform';")
 
-# Exchange token
-grpcurl -plaintext -d '{"identity_token":"<TOKEN>","tenant_id":"<ID>","service_id":"<ID>"}' \
-  localhost:50051 auth9.TokenExchange/ExchangeToken
-
-# Validate token
-grpcurl -plaintext -d '{"access_token":"<TOKEN>","audience":"<SERVICE_ID>"}' \
-  localhost:50051 auth9.TokenExchange/ValidateToken
-
-# Introspect token
-grpcurl -plaintext -d '{"token":"<TOKEN>"}' \
-  localhost:50051 auth9.TokenExchange/IntrospectToken
+.claude/skills/tools/grpcurl-docker.sh \
+  -insecure -import-path /proto -proto auth9.proto \
+  -H "x-api-key: dev-grpc-api-key" \
+  -d "{\"identity_token\": \"$TOKEN\", \"tenant_id\": \"$PLATFORM_TENANT_ID\", \"service_id\": \"auth9-portal\"}" \
+  auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken
 ```
 
-**Get test data**:
+## Keycloak Webhook Event Simulation
+
+**IMPORTANT**: See `references/api-testing-cookbook.md` for event type mapping and all recipes.
+
+- **Endpoint**: `POST http://localhost:8080/api/v1/keycloak/events`
+- **Secret**: `dev-webhook-secret`
+- **Signature**: `x-keycloak-signature: sha256=<HMAC-SHA256 hex>`
+- **JSON fields**: camelCase (`credentialType`, `authMethod`, `ipAddress`)
+
 ```bash
-mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;"
-mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM services WHERE tenant_id = '<ID>' LIMIT 1;"
+BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-000000000001","error":"invalid_user_credentials","time":1704067200000,"details":{"username":"test","email":"test@example.com","credentialType":"otp"}}'
+SECRET="dev-webhook-secret"
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+  -H "Content-Type: application/json" \
+  -H "x-keycloak-signature: sha256=$SIG" \
+  -d "$BODY"
 ```
+
+## Keycloak Admin API Pitfalls
+
+- **Keycloak 23**: `reset-password` endpoint returns 400 when password policy is active (no detailed error)
+- **Workaround**: Use seeded admin user (`admin / Admin123!`) or create users without passwords
+- **Realm update**: Partial PUT may fail; use GET-merge-PUT pattern for safe updates

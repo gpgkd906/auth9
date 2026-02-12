@@ -355,8 +355,9 @@ SELECT COUNT(*) FROM action_executions WHERE action_id = '{action_id}';
 ## 边界条件测试
 
 ### 1. 重复名称
-- **操作**: 创建同租户下同名 Action
-- **预期**: 允许（名称不唯一）
+- **操作**: 创建同租户、同触发器类型下同名 Action
+- **API 预期**: HTTP 409 Conflict，返回错误信息
+- **实际约束**: 同一租户和触发器类型组合下名称必须唯一，不同触发器类型下允许重复
 
 ### 2. 无效触发器
 - **操作**: 使用不存在的 trigger_id
@@ -370,7 +371,8 @@ SELECT COUNT(*) FROM action_executions WHERE action_id = '{action_id}';
 
 ### 4. 超时范围
 - **操作**: 设置 timeout_ms = 100000（超过最大值 30000）
-- **预期**: 自动限制为最大值或返回错误
+- **API 预期**: HTTP 422，验证错误 `timeout_ms` 必须在 1-30000 范围内
+- **有效范围**: 1 ≤ timeout_ms ≤ 30000（默认值 3000）
 
 ### 5. 执行顺序冲突
 - **操作**: 多个 Actions 使用相同 execution_order

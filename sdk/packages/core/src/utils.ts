@@ -5,7 +5,7 @@ function camelToSnake(str: string): string {
 
 /** Convert a snake_case string to camelCase */
 function snakeToCamel(str: string): string {
-  return str.replace(/_([a-z])/g, (_, letter: string) => letter.toUpperCase());
+  return str.replace(/_([a-z0-9])/g, (_, char: string) => char.toUpperCase());
 }
 
 /** Recursively convert all object keys to snake_case */

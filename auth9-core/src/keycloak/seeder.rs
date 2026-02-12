@@ -540,15 +540,74 @@ impl KeycloakSeeder {
         Ok(Some(password))
     }
 
+    /// Remove TOTP credentials from a user to ensure clean login
+    /// This prevents MFA blockers after environment resets
+    async fn remove_totp_credentials(&self, token: &str, user_uuid: &str) -> anyhow::Result<()> {
+        let creds_url = format!(
+            "{}/admin/realms/{}/users/{}/credentials",
+            self.config.url, self.config.realm, user_uuid
+        );
+
+        let response = self
+            .http_client
+            .get(&creds_url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to list user credentials")?;
+
+        if !response.status().is_success() {
+            return Ok(()); // Non-fatal: skip if we can't list credentials
+        }
+
+        let credentials: Vec<serde_json::Value> = response.json().await.unwrap_or_default();
+
+        for cred in &credentials {
+            let cred_type = cred["type"].as_str().unwrap_or("");
+            if cred_type == "otp" || cred_type == "totp" {
+                if let Some(cred_id) = cred["id"].as_str() {
+                    let delete_url = format!(
+                        "{}/admin/realms/{}/users/{}/credentials/{}",
+                        self.config.url, self.config.realm, user_uuid, cred_id
+                    );
+
+                    let del_response = self
+                        .http_client
+                        .delete(&delete_url)
+                        .bearer_auth(token)
+                        .send()
+                        .await;
+
+                    match del_response {
+                        Ok(r) if r.status().is_success() => {
+                            info!("Removed {} credential from admin user", cred_type);
+                        }
+                        _ => {
+                            warn!("Failed to remove {} credential from admin user", cred_type);
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
     /// Seed default admin user (idempotent)
     pub async fn seed_admin_user(&self) -> anyhow::Result<()> {
         let token = self.get_master_admin_token().await?;
 
         if self.admin_user_exists(&token).await? {
             info!(
-                "Admin user '{}' already exists, skipping",
+                "Admin user '{}' already exists, skipping creation",
                 DEFAULT_ADMIN_USERNAME
             );
+
+            // Remove stale TOTP credentials to prevent MFA blockers after env reset
+            if let Ok(Some((user_uuid, _))) = self.get_admin_user_keycloak_id().await {
+                self.remove_totp_credentials(&token, &user_uuid).await?;
+            }
+
             return Ok(());
         }
 
