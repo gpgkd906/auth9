@@ -96,4 +96,53 @@ describe("createMockAuth9", () => {
     expect(auth.userId).toBe("default-user");
     expect(auth.email).toBe("default@test.com");
   });
+
+  // ============================================================================
+  // Edge Case Tests
+  // ============================================================================
+
+  it("handles empty Bearer token gracefully", () => {
+    const mock = createMockAuth9();
+    const req = {
+      headers: { authorization: "Bearer " },
+      auth: undefined as unknown,
+    };
+    const res = {};
+
+    mock.middleware()(req as never, res as never, (() => {}) as never);
+
+    // Should handle empty token
+    expect((req.auth as { userId: string }).userId).toBeDefined();
+  });
+
+  it("handles array audiences in token", () => {
+    const token = createMockToken({
+      aud: ["service1", "service2"] as unknown as string,
+    });
+
+    const parts = token.split(".");
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf-8"),
+    );
+    expect(payload.aud).toEqual(["service1", "service2"]);
+  });
+
+  it("handles missing optional claims fields", () => {
+    const token = createMockToken({
+      sub: "user-1",
+      email: "test@example.com",
+      iss: "https://auth9.test",
+      aud: "auth9",
+      iat: Date.now() / 1000,
+      exp: (Date.now() / 1000) + 3600,
+      // No displayName, roles, permissions
+    } as Parameters<typeof createMockToken>[0]);
+
+    const parts = token.split(".");
+    const payload = JSON.parse(
+      Buffer.from(parts[1], "base64url").toString("utf-8"),
+    );
+    expect(payload.sub).toBe("user-1");
+    // Optional fields should be handled gracefully
+  });
 });

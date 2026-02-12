@@ -19,6 +19,8 @@ pub enum PolicyAction {
     SecurityAlertResolve,
     SystemConfigRead,
     SystemConfigWrite,
+    ActionRead,
+    ActionWrite,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -87,6 +89,20 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
         PolicyAction::SystemConfigWrite => {
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_system_config_write(config, auth, tenant_id)
+        }
+        PolicyAction::ActionRead => {
+            if auth.token_type == TokenType::Identity {
+                return require_platform_admin(config, auth);
+            }
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(auth, tenant_id, &["action:read", "action:*"])
+        }
+        PolicyAction::ActionWrite => {
+            if auth.token_type == TokenType::Identity {
+                return require_platform_admin(config, auth);
+            }
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(auth, tenant_id, &["action:write", "action:*"])
         }
     }
 }
@@ -819,5 +835,175 @@ mod tests {
         let result =
             require_tenant_admin_or_permission(&client, tenant_id, &["test:read", "test:write"]);
         assert!(result.is_err());
+    }
+
+    // ============================================================
+    // Action Permission Tests
+    // ============================================================
+
+    #[test]
+    fn test_action_read_platform_admin_can_access() {
+        let config = create_test_config(vec!["admin@platform.com".to_string()]);
+        let admin = create_platform_admin();
+        let tenant_id = StringUuid::new_v4();
+        let input = PolicyInput {
+            action: PolicyAction::ActionRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &admin, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_read_tenant_admin_can_access() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let admin = create_tenant_admin(tenant_id);
+        let input = PolicyInput {
+            action: PolicyAction::ActionRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &admin, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_read_with_permission() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec!["action:read".to_string()]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &user, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_read_with_wildcard_permission() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec!["action:*".to_string()]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &user, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_read_rejects_wrong_tenant() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let wrong_tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec!["action:read".to_string()]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionRead,
+            scope: ResourceScope::Tenant(wrong_tenant_id),
+        };
+
+        let result = enforce(&config, &user, &input);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+    }
+
+    #[test]
+    fn test_action_read_rejects_without_permission() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec![]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionRead,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        let result = enforce(&config, &user, &input);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+    }
+
+    #[test]
+    fn test_action_write_platform_admin_can_access() {
+        let config = create_test_config(vec!["admin@platform.com".to_string()]);
+        let admin = create_platform_admin();
+        let tenant_id = StringUuid::new_v4();
+        let input = PolicyInput {
+            action: PolicyAction::ActionWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &admin, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_write_tenant_admin_can_access() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let admin = create_tenant_admin(tenant_id);
+        let input = PolicyInput {
+            action: PolicyAction::ActionWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &admin, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_write_with_permission() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec!["action:write".to_string()]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &user, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_write_with_wildcard_permission() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec!["action:*".to_string()]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        assert!(enforce(&config, &user, &input).is_ok());
+    }
+
+    #[test]
+    fn test_action_write_rejects_wrong_tenant() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let wrong_tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec!["action:write".to_string()]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionWrite,
+            scope: ResourceScope::Tenant(wrong_tenant_id),
+        };
+
+        let result = enforce(&config, &user, &input);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
+    }
+
+    #[test]
+    fn test_action_write_rejects_without_permission() {
+        let config = create_test_config(vec![]);
+        let tenant_id = StringUuid::new_v4();
+        let user = create_tenant_user(tenant_id, vec![]);
+        let input = PolicyInput {
+            action: PolicyAction::ActionWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        };
+
+        let result = enforce(&config, &user, &input);
+        assert!(result.is_err());
+        assert!(matches!(result.unwrap_err(), AppError::Forbidden(_)));
     }
 }

@@ -4,8 +4,9 @@ use crate::cache::CacheManager;
 use crate::domain::{CreateTenantInput, StringUuid, Tenant, TenantStatus, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::repository::{
-    InvitationRepository, LoginEventRepository, RbacRepository, SecurityAlertRepository,
-    ServiceRepository, TenantRepository, UserRepository, WebhookRepository,
+    ActionRepository, InvitationRepository, LoginEventRepository, RbacRepository,
+    SecurityAlertRepository, ServiceRepository, TenantRepository, UserRepository,
+    WebhookRepository,
 };
 use std::sync::Arc;
 use tracing::warn;
@@ -22,6 +23,7 @@ pub struct TenantRepositoryBundle<
     RR: RbacRepository,
     LR: LoginEventRepository,
     SAR: SecurityAlertRepository,
+    AR: ActionRepository,
 > {
     pub tenant: Arc<R>,
     pub service: Arc<SR>,
@@ -31,9 +33,10 @@ pub struct TenantRepositoryBundle<
     pub rbac: Arc<RR>,
     pub login_event: Arc<LR>,
     pub security_alert: Arc<SAR>,
+    pub action: Arc<AR>,
 }
 
-impl<R, SR, WR, IR, UR, RR, LR, SAR> TenantRepositoryBundle<R, SR, WR, IR, UR, RR, LR, SAR>
+impl<R, SR, WR, IR, UR, RR, LR, SAR, AR> TenantRepositoryBundle<R, SR, WR, IR, UR, RR, LR, SAR, AR>
 where
     R: TenantRepository,
     SR: ServiceRepository,
@@ -43,6 +46,7 @@ where
     RR: RbacRepository,
     LR: LoginEventRepository,
     SAR: SecurityAlertRepository,
+    AR: ActionRepository,
 {
     pub fn new(
         tenant: Arc<R>,
@@ -53,6 +57,7 @@ where
         rbac: Arc<RR>,
         login_event: Arc<LR>,
         security_alert: Arc<SAR>,
+        action: Arc<AR>,
     ) -> Self {
         Self {
             tenant,
@@ -63,6 +68,7 @@ where
             rbac,
             login_event,
             security_alert,
+            action,
         }
     }
 }
@@ -76,6 +82,7 @@ pub struct TenantService<
     RR: RbacRepository,
     LR: LoginEventRepository,
     SAR: SecurityAlertRepository,
+    AR: ActionRepository,
 > {
     repo: Arc<R>,
     service_repo: Arc<SR>,
@@ -85,6 +92,7 @@ pub struct TenantService<
     rbac_repo: Arc<RR>,
     login_event_repo: Arc<LR>,
     security_alert_repo: Arc<SAR>,
+    action_repo: Arc<AR>,
     cache_manager: Option<CacheManager>,
 }
 
@@ -97,11 +105,12 @@ impl<
         RR: RbacRepository,
         LR: LoginEventRepository,
         SAR: SecurityAlertRepository,
-    > TenantService<R, SR, WR, IR, UR, RR, LR, SAR>
+        AR: ActionRepository,
+    > TenantService<R, SR, WR, IR, UR, RR, LR, SAR, AR>
 {
     /// Create a new TenantService with repository bundle and cache manager
     pub fn new(
-        repos: TenantRepositoryBundle<R, SR, WR, IR, UR, RR, LR, SAR>,
+        repos: TenantRepositoryBundle<R, SR, WR, IR, UR, RR, LR, SAR, AR>,
         cache_manager: Option<CacheManager>,
     ) -> Self {
         Self {
@@ -113,6 +122,7 @@ impl<
             rbac_repo: repos.rbac,
             login_event_repo: repos.login_event,
             security_alert_repo: repos.security_alert,
+            action_repo: repos.action,
             cache_manager,
         }
     }
@@ -298,10 +308,14 @@ impl<
         let deleted_alerts = self.security_alert_repo.delete_by_tenant(id).await?;
         warn!(tenant_id = %id, deleted_alerts = deleted_alerts, "Deleted security alerts");
 
-        // 8. Delete the tenant itself
+        // 8. Delete actions for this tenant
+        let deleted_actions = self.action_repo.delete_by_tenant(id).await?;
+        warn!(tenant_id = %id, deleted_actions = deleted_actions, "Deleted actions");
+
+        // 9. Delete the tenant itself
         self.repo.delete(id).await?;
 
-        // 9. Clear cache
+        // 10. Clear cache
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_tenant_config(Uuid::from(id)).await;
         }
@@ -329,6 +343,7 @@ impl<
 mod tests {
     use super::*;
     use crate::domain::{StringUuid, TenantSettings};
+    use crate::repository::action::MockActionRepository;
     use crate::repository::invitation::MockInvitationRepository;
     use crate::repository::login_event::MockLoginEventRepository;
     use crate::repository::rbac::MockRbacRepository;
@@ -351,6 +366,7 @@ mod tests {
         MockRbacRepository,
         MockLoginEventRepository,
         MockSecurityAlertRepository,
+        MockActionRepository,
     > {
         let repos = TenantRepositoryBundle::new(
             Arc::new(tenant_repo),
@@ -361,6 +377,7 @@ mod tests {
             Arc::new(MockRbacRepository::new()),
             Arc::new(MockLoginEventRepository::new()),
             Arc::new(MockSecurityAlertRepository::new()),
+            Arc::new(MockActionRepository::new()),
         );
         TenantService::new(repos, None)
     }
@@ -375,6 +392,7 @@ mod tests {
         rbac_repo: MockRbacRepository,
         login_event_repo: MockLoginEventRepository,
         security_alert_repo: MockSecurityAlertRepository,
+        action_repo: MockActionRepository,
     ) -> TenantService<
         MockTenantRepository,
         MockServiceRepository,
@@ -384,6 +402,7 @@ mod tests {
         MockRbacRepository,
         MockLoginEventRepository,
         MockSecurityAlertRepository,
+        MockActionRepository,
     > {
         let repos = TenantRepositoryBundle::new(
             Arc::new(tenant_repo),
@@ -394,6 +413,7 @@ mod tests {
             Arc::new(rbac_repo),
             Arc::new(login_event_repo),
             Arc::new(security_alert_repo),
+            Arc::new(action_repo),
         );
         TenantService::new(repos, None)
     }
@@ -771,6 +791,11 @@ mod tests {
             .expect_delete_by_tenant()
             .returning(|_| Ok(0));
 
+        let mut action_repo = MockActionRepository::new();
+        action_repo
+            .expect_delete_by_tenant()
+            .returning(|_| Ok(0));
+
         let service = create_test_service_full(
             tenant_repo,
             service_repo,
@@ -780,6 +805,7 @@ mod tests {
             rbac_repo,
             login_event_repo,
             security_alert_repo,
+            action_repo,
         );
 
         let result = service.delete(id).await;
@@ -866,6 +892,11 @@ mod tests {
             .expect_delete_by_tenant()
             .returning(|_| Ok(5));
 
+        let mut action_repo = MockActionRepository::new();
+        action_repo
+            .expect_delete_by_tenant()
+            .returning(|_| Ok(3));
+
         let service = create_test_service_full(
             tenant_repo,
             service_repo,
@@ -875,6 +906,7 @@ mod tests {
             rbac_repo,
             login_event_repo,
             security_alert_repo,
+            action_repo,
         );
 
         let result = service.delete(id).await;

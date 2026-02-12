@@ -270,6 +270,7 @@ mod tests {
             aud: "auth9".to_string(),
             iat: 1000000,
             exp: 1003600,
+            extra: None,
         };
 
         let user = AuthUser::from_identity_claims(claims).unwrap();
@@ -326,6 +327,7 @@ mod tests {
             aud: "auth9".to_string(),
             iat: 1000000,
             exp: 1003600,
+            extra: None,
         };
 
         let result = AuthUser::from_identity_claims(claims);

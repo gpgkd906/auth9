@@ -8,6 +8,7 @@
 //! - Uses production `build_full_router()` with `TestAppState` for actual handler coverage
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
+pub mod action_http_test;
 pub mod analytics_http_test;
 pub mod audit_http_test;
 pub mod auth_http_test;
@@ -29,7 +30,7 @@ pub mod webauthn_http_test;
 pub mod webhook_http_test;
 
 use crate::api::{
-    create_test_jwt_manager, TestAuditRepository, TestInvitationRepository,
+    create_test_jwt_manager, TestActionRepository, TestAuditRepository, TestInvitationRepository,
     TestLinkedIdentityRepository, TestLoginEventRepository, TestPasswordResetRepository,
     TestRbacRepository, TestSecurityAlertRepository, TestServiceRepository, TestSessionRepository,
     TestSystemSettingsRepository, TestTenantRepository, TestUserRepository, TestWebhookRepository,
@@ -44,10 +45,10 @@ use auth9_core::keycloak::KeycloakClient;
 use auth9_core::middleware::RateLimitState;
 use auth9_core::server::build_full_router;
 use auth9_core::service::{
-    tenant::TenantRepositoryBundle, user::UserRepositoryBundle, AnalyticsService, BrandingService,
-    ClientService, EmailService, EmailTemplateService, IdentityProviderService, InvitationService,
-    PasswordService, RbacService, SecurityDetectionService, SessionService, SystemSettingsService,
-    TenantService, UserService, WebAuthnService, WebhookService,
+    tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ActionService, AnalyticsService,
+    BrandingService, ClientService, EmailService, EmailTemplateService, IdentityProviderService,
+    InvitationService, PasswordService, RbacService, SecurityDetectionService, SessionService,
+    SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
 };
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -141,6 +142,7 @@ pub type TestTenantService = TenantService<
     TestRbacRepository,
     TestLoginEventRepository,
     TestSecurityAlertRepository,
+    TestActionRepository,
 >;
 
 pub type TestUserService = UserService<
@@ -194,6 +196,7 @@ pub struct TestAppState {
             TestWebhookRepository,
         >,
     >,
+    pub action_service: Arc<ActionService<TestActionRepository>>,
     pub audit_repo: Arc<TestAuditRepository>,
     pub jwt_manager: auth9_core::jwt::JwtManager,
     pub keycloak_client: KeycloakClient,
@@ -215,6 +218,7 @@ pub struct TestAppState {
     pub security_alert_repo: Arc<TestSecurityAlertRepository>,
     #[allow(dead_code)]
     pub invitation_repo: Arc<TestInvitationRepository>,
+    pub action_repo: Arc<TestActionRepository>,
 }
 
 impl TestAppState {
@@ -234,6 +238,7 @@ impl TestAppState {
         let login_event_repo = Arc::new(TestLoginEventRepository::new());
         let security_alert_repo = Arc::new(TestSecurityAlertRepository::new());
         let invitation_repo = Arc::new(TestInvitationRepository::new());
+        let action_repo = Arc::new(TestActionRepository::new());
 
         // Create webhook service first (needed for webhook event publishing)
         let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
@@ -248,6 +253,7 @@ impl TestAppState {
             rbac_repo.clone(),
             login_event_repo.clone(),
             security_alert_repo.clone(),
+            action_repo.clone(),
         );
         let tenant_service = Arc::new(TenantService::new(tenant_repos, None));
 
@@ -338,6 +344,8 @@ impl TestAppState {
             webhook_service.clone(),
             Default::default(),
         ));
+        // Use None for action_engine in tests to avoid slow V8 initialization
+        let action_service = Arc::new(ActionService::new(action_repo.clone(), None));
 
         Self {
             config,
@@ -357,6 +365,7 @@ impl TestAppState {
             invitation_service,
             analytics_service,
             security_detection_service,
+            action_service,
             audit_repo,
             jwt_manager,
             keycloak_client,
@@ -374,6 +383,7 @@ impl TestAppState {
             login_event_repo,
             security_alert_repo,
             invitation_repo,
+            action_repo,
         }
     }
 
@@ -406,6 +416,7 @@ impl HasServices for TestAppState {
     type SecurityAlertRepo = TestSecurityAlertRepository;
     type WebhookRepo = TestWebhookRepository;
     type CascadeInvitationRepo = TestInvitationRepository;
+    type ActionRepo = TestActionRepository;
 
     fn config(&self) -> &Config {
         &self.config
@@ -422,6 +433,7 @@ impl HasServices for TestAppState {
         Self::RbacRepo,
         Self::LoginEventRepo,
         Self::SecurityAlertRepo,
+        Self::ActionRepo,
     > {
         &self.tenant_service
     }
@@ -459,6 +471,10 @@ impl HasServices for TestAppState {
 
     fn keycloak_client(&self) -> &KeycloakClient {
         &self.keycloak_client
+    }
+
+    fn action_service(&self) -> &ActionService<Self::ActionRepo> {
+        &self.action_service
     }
 
     async fn check_ready(&self) -> (bool, bool) {
@@ -889,6 +905,38 @@ pub async fn put_json_with_auth<T: Serialize, R: DeserializeOwned>(
 ) -> (StatusCode, Option<R>) {
     let request = Request::builder()
         .method(Method::PUT)
+        .uri(path)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_string(body).unwrap()))
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_default();
+
+    if body_bytes.is_empty() {
+        return (status, None);
+    }
+
+    match serde_json::from_slice(&body_bytes) {
+        Ok(data) => (status, Some(data)),
+        Err(_) => (status, None),
+    }
+}
+
+/// Make a PATCH request with JSON body and auth header
+pub async fn patch_json_with_auth<T: Serialize, R: DeserializeOwned>(
+    app: &Router,
+    path: &str,
+    body: &T,
+    token: &str,
+) -> (StatusCode, Option<R>) {
+    let request = Request::builder()
+        .method(Method::PATCH)
         .uri(path)
         .header("Content-Type", "application/json")
         .header("Authorization", format!("Bearer {}", token))

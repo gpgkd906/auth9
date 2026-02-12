@@ -1,5 +1,6 @@
 //! Data access layer (Repository pattern)
 
+pub mod action;
 pub mod audit;
 pub mod invitation;
 pub mod linked_identity;
@@ -16,6 +17,7 @@ pub mod user;
 pub mod webauthn;
 pub mod webhook;
 
+pub use action::ActionRepository;
 pub use audit::AuditRepository;
 pub use invitation::InvitationRepository;
 pub use linked_identity::LinkedIdentityRepository;

@@ -70,6 +70,10 @@ jobs:
           cache: 'npm'
           cache-dependency-path: auth9-portal/package-lock.json
 
+      - name: Build SDK dependency
+        working-directory: sdk/packages/core
+        run: npm install && npm run build
+
       - name: Install dependencies
         working-directory: auth9-portal
         run: npm ci
@@ -116,7 +120,8 @@ jobs:
       - name: Build auth9-portal image
         uses: docker/build-push-action@v5
         with:
-          context: ./auth9-portal
+          context: .
+          file: auth9-portal/Dockerfile
           push: false
           tags: auth9-portal:test
           cache-from: type=gha

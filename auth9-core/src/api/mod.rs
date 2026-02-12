@@ -1,5 +1,6 @@
 //! REST API handlers
 
+pub mod action;
 pub mod analytics;
 pub mod audit;
 pub mod auth;

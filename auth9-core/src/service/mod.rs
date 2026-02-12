@@ -1,5 +1,7 @@
 //! Business logic layer
 
+pub mod action;
+pub mod action_engine;
 pub mod analytics;
 pub mod branding;
 pub mod client;
@@ -19,6 +21,8 @@ pub mod user;
 pub mod webauthn;
 pub mod webhook;
 
+pub use action::ActionService;
+pub use action_engine::ActionEngine;
 pub use analytics::AnalyticsService;
 pub use branding::BrandingService;
 pub use client::ClientService;

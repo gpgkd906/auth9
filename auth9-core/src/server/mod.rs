@@ -13,19 +13,20 @@ pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
-    audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl,
-    linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
-    password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
-    security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
-    session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
-    tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
+    action::ActionRepositoryImpl, audit::AuditRepositoryImpl,
+    invitation::InvitationRepositoryImpl, linked_identity::LinkedIdentityRepositoryImpl,
+    login_event::LoginEventRepositoryImpl, password_reset::PasswordResetRepositoryImpl,
+    rbac::RbacRepositoryImpl, security_alert::SecurityAlertRepositoryImpl,
+    service::ServiceRepositoryImpl, session::SessionRepositoryImpl,
+    system_settings::SystemSettingsRepositoryImpl, tenant::TenantRepositoryImpl,
+    user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
 use crate::service::{
     security_detection::SecurityDetectionConfig, tenant::TenantRepositoryBundle,
-    user::UserRepositoryBundle, AnalyticsService, BrandingService, ClientService, EmailService,
-    EmailTemplateService, IdentityProviderService, InvitationService, KeycloakSyncService,
-    PasswordService, RbacService, SecurityDetectionService, SessionService, SystemSettingsService,
-    TenantService, UserService, WebAuthnService, WebhookService,
+    user::UserRepositoryBundle, ActionEngine, ActionService, AnalyticsService, BrandingService,
+    ClientService, EmailService, EmailTemplateService, IdentityProviderService, InvitationService,
+    KeycloakSyncService, PasswordService, RbacService, SecurityDetectionService, SessionService,
+    SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -74,6 +75,7 @@ pub type ProductionTenantService = TenantService<
     RbacRepositoryImpl,
     LoginEventRepositoryImpl,
     SecurityAlertRepositoryImpl,
+    ActionRepositoryImpl,
 >;
 
 /// Production UserService type with all concrete repository implementations
@@ -134,6 +136,7 @@ pub struct AppState {
             WebhookRepositoryImpl,
         >,
     >,
+    pub action_service: Arc<ActionService<ActionRepositoryImpl>>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -150,6 +153,7 @@ impl HasServices for AppState {
     type SecurityAlertRepo = SecurityAlertRepositoryImpl;
     type WebhookRepo = WebhookRepositoryImpl;
     type CascadeInvitationRepo = InvitationRepositoryImpl;
+    type ActionRepo = ActionRepositoryImpl;
 
     fn config(&self) -> &Config {
         &self.config
@@ -166,6 +170,7 @@ impl HasServices for AppState {
         Self::RbacRepo,
         Self::LoginEventRepo,
         Self::SecurityAlertRepo,
+        Self::ActionRepo,
     > {
         &self.tenant_service
     }
@@ -203,6 +208,10 @@ impl HasServices for AppState {
 
     fn keycloak_client(&self) -> &KeycloakClient {
         &self.keycloak_client
+    }
+
+    fn action_service(&self) -> &ActionService<Self::ActionRepo> {
+        &self.action_service
     }
 
     async fn check_ready(&self) -> (bool, bool) {
@@ -402,6 +411,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let login_event_repo = Arc::new(LoginEventRepositoryImpl::new(db_pool.clone()));
     let webhook_repo = Arc::new(WebhookRepositoryImpl::new(db_pool.clone()));
     let security_alert_repo = Arc::new(SecurityAlertRepositoryImpl::new(db_pool.clone()));
+    let action_repo = Arc::new(ActionRepositoryImpl::new(db_pool.clone()));
 
     // Create JWT manager
     let jwt_manager = JwtManager::new(config.jwt.clone());
@@ -416,6 +426,14 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
 
+    // Create ActionEngine (for Auth9 Actions system)
+    let action_engine = Arc::new(ActionEngine::new(action_repo.clone()));
+    info!("ActionEngine initialized");
+
+    // Create ActionService
+    let action_service = Arc::new(ActionService::new(action_repo.clone(), Some(action_engine.clone())));
+    info!("ActionService initialized");
+
     // Create TenantService with repository bundle
     let tenant_repos = TenantRepositoryBundle::new(
         tenant_repo.clone(),
@@ -426,6 +444,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         rbac_repo.clone(),
         login_event_repo.clone(),
         security_alert_repo.clone(),
+        action_repo.clone(),
     );
     let tenant_service = Arc::new(TenantService::new(
         tenant_repos,
@@ -581,6 +600,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         analytics_service,
         webhook_service,
         security_detection_service,
+        action_service,
     };
 
     // Create rate limit state for middleware
@@ -1307,6 +1327,37 @@ where
         .route(
             "/api/v1/tenants/{tenant_id}/webhooks/{id}/regenerate-secret",
             post(api::webhook::regenerate_webhook_secret::<S>),
+        )
+        // Action endpoints (Auth9 Actions system)
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions",
+            get(api::action::list_actions::<S>).post(api::action::create_action::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions/{action_id}",
+            get(api::action::get_action::<S>)
+                .patch(api::action::update_action::<S>)
+                .delete(api::action::delete_action::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions/batch",
+            post(api::action::batch_upsert_actions::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions/{action_id}/test",
+            post(api::action::test_action::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions/{action_id}/stats",
+            get(api::action::get_action_stats::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions/logs",
+            get(api::action::query_action_logs::<S>),
+        )
+        .route(
+            "/api/v1/actions/triggers",
+            get(api::action::get_triggers::<S>),
         )
         // Security Alert endpoints
         .route(

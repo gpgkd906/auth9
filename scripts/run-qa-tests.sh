@@ -1,19 +1,6 @@
 #!/usr/bin/env bash
-# Run QA tests for each document in docs/qa/ using codex exec
+# Run QA tests for each document in docs/qa/ using opencode
 set -euo pipefail
-
-# ============================================================
-# Prompt template — edit here to change what codex exec runs
-# ============================================================
-# Available placeholder: {file} — replaced with the relative path of each QA doc
-PROMPT_TEMPLATE='读取{file}的文档，执行QA测试。
-
-环境信息:
-  Portal:     http://localhost:3000  (admin / Admin123!)
-  Keycloak:   http://localhost:8081  (admin / admin)
-  Mailpit:    http://localhost:8025
-  Grafana:    http://localhost:3001
-  Prometheus: http://localhost:9090'
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -53,14 +40,11 @@ for file in "${qa_files[@]}"; do
     # Convert to relative path from project root
     rel_path="${file#"$PROJECT_ROOT"/}"
 
-    # Build prompt by replacing {file} placeholder
-    prompt="${PROMPT_TEMPLATE//\{file\}/$rel_path}"
-
     echo -e "${CYAN}----------------------------------------${NC}"
     echo -e "${CYAN}[$total/${#qa_files[@]}] Processing: ${rel_path}${NC}"
     echo -e "${CYAN}----------------------------------------${NC}"
 
-    if codex exec -m gpt-5.1-codex-mini --full-auto "$prompt"; then
+    if opencode run "读取文档：${rel_path}，执行QA测试" -m "deepseek/deepseek-chat"; then
         passed=$((passed + 1))
         echo -e "${GREEN}✓ PASSED: ${rel_path}${NC}"
     else
@@ -70,6 +54,7 @@ for file in "${qa_files[@]}"; do
     fi
 
     echo ""
+    sleep 2
 done
 
 # Summary

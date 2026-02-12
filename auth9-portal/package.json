@@ -19,6 +19,7 @@
     "test:e2e:full:reset": "cd .. && ./scripts/reset-docker.sh && cd auth9-portal && npm run test:e2e:full"
   },
   "dependencies": {
+    "@auth9/core": "file:../sdk/packages/core",
     "@conform-to/react": "^1.0.0",
     "@conform-to/zod": "^1.0.0",
     "@radix-ui/react-alert-dialog": "^1.1.0",

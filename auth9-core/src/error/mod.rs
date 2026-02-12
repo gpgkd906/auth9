@@ -44,6 +44,9 @@ pub enum AppError {
     #[error("Keycloak error: {0}")]
     Keycloak(String),
 
+    #[error("Action execution failed: {0}")]
+    ActionExecutionFailed(String),
+
     #[error("Internal error: {0}")]
     Internal(#[from] anyhow::Error),
 }
@@ -98,6 +101,14 @@ impl IntoResponse for AppError {
                     StatusCode::BAD_GATEWAY,
                     "keycloak_error",
                     "Authentication service error".to_string(),
+                )
+            }
+            AppError::ActionExecutionFailed(msg) => {
+                tracing::error!("Action execution failed: {}", msg);
+                (
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "action_execution_failed",
+                    msg.clone(),
                 )
             }
             AppError::Internal(e) => {

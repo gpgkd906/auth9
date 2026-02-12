@@ -52,6 +52,23 @@ export type {
   AuditLog,
   SecurityAlert,
 } from "./types/analytics.js";
+export type {
+  Action,
+  CreateActionInput,
+  UpdateActionInput,
+  ActionContext,
+  ActionContextUser,
+  ActionContextTenant,
+  ActionContextRequest,
+  TestActionResponse,
+  ActionExecution,
+  ActionStats,
+  UpsertActionInput,
+  BatchUpsertResponse,
+  BatchError,
+  LogQueryFilter,
+} from "./types/action.js";
+export { ActionTrigger } from "./types/action.js";
 
 // HTTP Client
 export { Auth9HttpClient } from "./http-client.js";

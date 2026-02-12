@@ -115,6 +115,10 @@ export class Auth9HttpClient {
     return this.request<T>("PUT", path, body);
   }
 
+  async patch<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>("PATCH", path, body);
+  }
+
   async delete(path: string): Promise<void> {
     await this.request<void>("DELETE", path);
   }
