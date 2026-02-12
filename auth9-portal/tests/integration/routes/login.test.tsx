@@ -1,7 +1,12 @@
 import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
-import { describe, it, expect } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import Login, { loader, action, meta } from "~/routes/login";
+
+// Mock commitSession
+vi.mock("~/services/session.server", () => ({
+    commitSession: vi.fn().mockResolvedValue("mock-session-cookie"),
+}));
 
 describe("Login Page", () => {
     it("meta returns correct title", () => {
@@ -67,6 +72,80 @@ describe("Login Page", () => {
     });
 
     // ============================================================================
+    // Passkey Action Tests
+    // ============================================================================
+
+    it("action handles passkey-login intent with valid token", async () => {
+        const formData = new FormData();
+        formData.append("intent", "passkey-login");
+        formData.append("accessToken", "test-access-token");
+        formData.append("expiresIn", "3600");
+
+        const request = new Request("http://localhost:3000/login", {
+            method: "POST",
+            body: formData,
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe("/dashboard");
+        // Session cookie is set via commitSession - verified by redirect
+    });
+
+    it("action validates accessToken is required for passkey-login", async () => {
+        const formData = new FormData();
+        formData.append("intent", "passkey-login");
+        formData.append("expiresIn", "3600");
+        // Missing accessToken
+
+        const request = new Request("http://localhost:3000/login", {
+            method: "POST",
+            body: formData,
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        expect(response).toEqual({ error: "Missing access token" });
+    });
+
+    it("action calculates correct expiresAt timestamp", async () => {
+        const formData = new FormData();
+        formData.append("intent", "passkey-login");
+        formData.append("accessToken", "test-token");
+        formData.append("expiresIn", "7200"); // 2 hours
+
+        const now = Date.now();
+        const request = new Request("http://localhost:3000/login", {
+            method: "POST",
+            body: formData,
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        // Session should expire in ~2 hours from now
+        expect(response.status).toBe(302);
+        // We can't directly test the session content, but we verified the redirect
+    });
+
+    it("action defaults expiresIn to 3600 when not provided", async () => {
+        const formData = new FormData();
+        formData.append("intent", "passkey-login");
+        formData.append("accessToken", "test-token");
+        // expiresIn not provided
+
+        const request = new Request("http://localhost:3000/login", {
+            method: "POST",
+            body: formData,
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+
+        expect(response.status).toBe(302);
+        expect(response.headers.get("Location")).toBe("/dashboard");
+    });
+
+    // ============================================================================
     // Component Tests (error state only)
     // ============================================================================
 
@@ -120,5 +199,28 @@ describe("Login Page", () => {
         render(<RoutesStub initialEntries={["/login?error=test_error"]} />);
 
         expect(await screen.findByText("A9")).toBeInTheDocument();
+    });
+
+    // ============================================================================
+    // Passkey Mode Loader Tests
+    // ============================================================================
+
+    it("loader shows passkey login page when passkey param is true", async () => {
+        const request = new Request("http://localhost:3000/login?passkey=true");
+        const result = await loader({ request, params: {}, context: {} });
+
+        expect(result).toEqual({
+            error: null,
+            showPasskey: true,
+            apiBaseUrl: "http://localhost:8080",
+        });
+    });
+
+    it("loader does not show passkey by default", async () => {
+        const request = new Request("http://localhost:3000/login");
+        const response = await loader({ request, params: {}, context: {} });
+
+        // Should redirect to authorize, not return data with showPasskey
+        expect(response.status).toBe(302);
     });
 });

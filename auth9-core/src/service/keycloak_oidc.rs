@@ -5,13 +5,18 @@
 //! token exchange, and logout operations.
 
 use crate::config::KeycloakConfig;
-use crate::domain::CreateUserInput;
+use crate::domain::{
+    ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser, CreateUserInput,
+    StringUuid,
+};
 use crate::error::{AppError, Result};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
-use crate::repository::{ServiceRepository, UserRepository};
+use crate::repository::{ActionRepository, ServiceRepository, UserRepository};
+use crate::service::ActionEngine;
 use async_trait::async_trait;
 use base64::Engine;
+use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use std::sync::Arc;
 use url::Url;
@@ -157,7 +162,7 @@ struct KeycloakUserInfo {
 /// - Token exchange
 /// - Token refresh
 /// - Logout URL building
-pub struct KeycloakOidcService<U: UserRepository, S: ServiceRepository> {
+pub struct KeycloakOidcService<U: UserRepository, S: ServiceRepository, A: ActionRepository> {
     keycloak: Arc<dyn KeycloakOidcAdminApi>,
     jwt_manager: Arc<JwtManager>,
     user_repo: Arc<U>,
@@ -165,9 +170,12 @@ pub struct KeycloakOidcService<U: UserRepository, S: ServiceRepository> {
     config: KeycloakConfig,
     issuer: String,
     http_client: Arc<dyn OidcHttpClient>,
+    action_engine: Option<Arc<ActionEngine<A>>>,
 }
 
-impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
+impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
+    KeycloakOidcService<U, S, A>
+{
     /// Create a new KeycloakOidcService
     pub fn new(
         keycloak: Arc<dyn KeycloakOidcAdminApi>,
@@ -176,6 +184,7 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
         service_repo: Arc<S>,
         config: KeycloakConfig,
         issuer: String,
+        action_engine: Option<Arc<ActionEngine<A>>>,
     ) -> Self {
         let http_client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -192,6 +201,7 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
             http_client: Arc::new(ReqwestOidcHttpClient {
                 client: http_client,
             }),
+            action_engine,
         }
     }
 
@@ -204,6 +214,7 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
         config: KeycloakConfig,
         issuer: String,
         http_client: Arc<dyn OidcHttpClient>,
+        action_engine: Option<Arc<ActionEngine<A>>>,
     ) -> Self {
         Self {
             keycloak,
@@ -213,6 +224,7 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
             config,
             issuer,
             http_client,
+            action_engine,
         }
     }
 
@@ -277,6 +289,19 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
         // Fetch user info from Keycloak
         let userinfo = self.fetch_userinfo(&token_response.access_token).await?;
 
+        // Get service to determine tenant_id (moved before user creation for action triggers)
+        let service = self
+            .service_repo
+            .find_by_client_id(&state_payload.client_id)
+            .await?
+            .ok_or_else(|| {
+                AppError::BadRequest(format!("Service not found: {}", state_payload.client_id))
+            })?;
+
+        let tenant_id = service
+            .tenant_id
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Service has no tenant_id")))?;
+
         // Find or create user
         let user = match self.user_repo.find_by_keycloak_id(&userinfo.sub).await? {
             Some(existing) => existing,
@@ -286,16 +311,143 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
                     display_name: userinfo.name.clone(),
                     avatar_url: None,
                 };
-                self.user_repo.create(&userinfo.sub, &input).await?
+
+                // Execute PreUserRegistration action (before creating user)
+                if let Some(ref action_engine) = self.action_engine {
+                    let pre_reg_context = ActionContext {
+                        user: ActionContextUser {
+                            id: StringUuid::new_v4().to_string(), // Temporary ID for pre-registration
+                            email: input.email.clone(),
+                            display_name: input.display_name.clone(),
+                            mfa_enabled: false,
+                        },
+                        tenant: ActionContextTenant {
+                            id: tenant_id.to_string(),
+                            slug: "unknown".to_string(), // TODO: Fetch tenant details if needed
+                            name: "Unknown Tenant".to_string(),
+                        },
+                        request: ActionContextRequest {
+                            ip: None, // TODO: Extract from request context
+                            user_agent: None,
+                            timestamp: Utc::now(),
+                        },
+                        claims: None,
+                    };
+
+                    // Execute pre-registration trigger (can block registration)
+                    match action_engine
+                        .execute_trigger(tenant_id, "pre-user-registration", pre_reg_context)
+                        .await
+                    {
+                        Ok(_) => {
+                            tracing::info!("PreUserRegistration actions passed for email {}", input.email);
+                        }
+                        Err(e) => {
+                            // Strict mode: abort registration on action failure
+                            tracing::error!("PreUserRegistration action failed for email {}: {}", input.email, e);
+                            return Err(e);
+                        }
+                    }
+                }
+
+                // Create user in repository
+                let new_user = self.user_repo.create(&userinfo.sub, &input).await?;
+
+                // Execute PostUserRegistration action (after creating user)
+                if let Some(ref action_engine) = self.action_engine {
+                    let post_reg_context = ActionContext {
+                        user: ActionContextUser {
+                            id: new_user.id.to_string(),
+                            email: new_user.email.clone(),
+                            display_name: new_user.display_name.clone(),
+                            mfa_enabled: false,
+                        },
+                        tenant: ActionContextTenant {
+                            id: tenant_id.to_string(),
+                            slug: "unknown".to_string(),
+                            name: "Unknown Tenant".to_string(),
+                        },
+                        request: ActionContextRequest {
+                            ip: None,
+                            user_agent: None,
+                            timestamp: Utc::now(),
+                        },
+                        claims: None,
+                    };
+
+                    // Execute post-registration trigger (failure won't block, but will log)
+                    if let Err(e) = action_engine
+                        .execute_trigger(tenant_id, "post-user-registration", post_reg_context)
+                        .await
+                    {
+                        // Log error but don't abort (user already created)
+                        tracing::error!("PostUserRegistration action failed for user {}: {}", new_user.id, e);
+                    } else {
+                        tracing::info!("PostUserRegistration actions executed for user {}", new_user.id);
+                    }
+                }
+
+                new_user
             }
         };
 
-        // Create identity token
-        let identity_token = self.jwt_manager.create_identity_token(
-            *user.id,
-            &userinfo.email,
-            userinfo.name.as_deref(),
-        )?;
+        // Execute PostLogin Actions (if ActionEngine is configured)
+        let custom_claims = if let Some(ref action_engine) = self.action_engine {
+            // Build action context (tenant_id already obtained above)
+            let action_context = ActionContext {
+                user: ActionContextUser {
+                    id: user.id.to_string(),
+                    email: user.email.clone(),
+                    display_name: user.display_name.clone(),
+                    mfa_enabled: false, // TODO: Get actual MFA status when implemented
+                },
+                tenant: ActionContextTenant {
+                    id: tenant_id.to_string(),
+                    slug: "unknown".to_string(), // TODO: Fetch tenant details if needed
+                    name: "Unknown Tenant".to_string(),
+                },
+                request: ActionContextRequest {
+                    ip: None, // TODO: Extract from request context
+                    user_agent: None,
+                    timestamp: Utc::now(),
+                },
+                claims: None,
+            };
+
+            // Execute PostLogin trigger
+            match action_engine
+                .execute_trigger(tenant_id, "post-login", action_context)
+                .await
+            {
+                Ok(modified_context) => {
+                    tracing::info!("PostLogin actions executed successfully for user {}", user.id);
+                    modified_context.claims
+                }
+                Err(e) => {
+                    // Strict mode: abort login on action failure
+                    tracing::error!("PostLogin action failed for user {}: {}", user.id, e);
+                    return Err(e);
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create identity token with custom claims
+        let identity_token = if let Some(claims) = custom_claims {
+            self.jwt_manager.create_identity_token_with_claims(
+                *user.id,
+                &userinfo.email,
+                userinfo.name.as_deref(),
+                claims,
+            )?
+        } else {
+            self.jwt_manager.create_identity_token(
+                *user.id,
+                &userinfo.email,
+                userinfo.name.as_deref(),
+            )?
+        };
 
         // Build redirect URL with tokens
         let mut redirect_url = Url::parse(&state_payload.redirect_uri)
@@ -382,6 +534,17 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
             .await?;
         let userinfo = self.fetch_userinfo(&token_response.access_token).await?;
 
+        // Get service to determine tenant_id
+        let service = self
+            .service_repo
+            .find_by_client_id(client_id)
+            .await?
+            .ok_or_else(|| AppError::BadRequest(format!("Service not found: {}", client_id)))?;
+
+        let tenant_id = service
+            .tenant_id
+            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Service has no tenant_id")))?;
+
         // Find or create user
         let user = match self.user_repo.find_by_keycloak_id(&userinfo.sub).await? {
             Some(existing) => existing,
@@ -395,11 +558,62 @@ impl<U: UserRepository, S: ServiceRepository> KeycloakOidcService<U, S> {
             }
         };
 
-        let identity_token = self.jwt_manager.create_identity_token(
-            *user.id,
-            &userinfo.email,
-            userinfo.name.as_deref(),
-        )?;
+        // Execute PreTokenRefresh action (before creating new identity token)
+        let custom_claims = if let Some(ref action_engine) = self.action_engine {
+            let pre_refresh_context = ActionContext {
+                user: ActionContextUser {
+                    id: user.id.to_string(),
+                    email: user.email.clone(),
+                    display_name: user.display_name.clone(),
+                    mfa_enabled: false,
+                },
+                tenant: ActionContextTenant {
+                    id: tenant_id.to_string(),
+                    slug: "unknown".to_string(),
+                    name: "Unknown Tenant".to_string(),
+                },
+                request: ActionContextRequest {
+                    ip: None,
+                    user_agent: None,
+                    timestamp: Utc::now(),
+                },
+                claims: None,
+            };
+
+            // Execute pre-token-refresh trigger (can block token refresh)
+            match action_engine
+                .execute_trigger(tenant_id, "pre-token-refresh", pre_refresh_context)
+                .await
+            {
+                Ok(modified_context) => {
+                    tracing::info!("PreTokenRefresh actions passed for user {}", user.id);
+                    modified_context.claims
+                }
+                Err(e) => {
+                    // Strict mode: abort token refresh on action failure
+                    tracing::error!("PreTokenRefresh action failed for user {}: {}", user.id, e);
+                    return Err(e);
+                }
+            }
+        } else {
+            None
+        };
+
+        // Create identity token with custom claims (if any)
+        let identity_token = if let Some(claims) = custom_claims {
+            self.jwt_manager.create_identity_token_with_claims(
+                *user.id,
+                &userinfo.email,
+                userinfo.name.as_deref(),
+                claims,
+            )?
+        } else {
+            self.jwt_manager.create_identity_token(
+                *user.id,
+                &userinfo.email,
+                userinfo.name.as_deref(),
+            )?
+        };
 
         Ok(OidcTokenResponse {
             access_token: identity_token,
@@ -578,7 +792,8 @@ fn decode_state(state: Option<&str>) -> Result<CallbackState> {
 mod tests {
     use super::*;
     use crate::config::JwtConfig;
-    use crate::domain::{Service, ServiceStatus};
+    use crate::domain::{Action, Service, ServiceStatus};
+    use crate::repository::action::MockActionRepository;
     use crate::repository::service::MockServiceRepository;
     use crate::repository::user::MockUserRepository;
     use chrono::Utc;
@@ -659,7 +874,7 @@ mod tests {
         user_repo: Arc<MockUserRepository>,
         service_repo: Arc<MockServiceRepository>,
         config: KeycloakConfig,
-    ) -> KeycloakOidcService<MockUserRepository, MockServiceRepository> {
+    ) -> KeycloakOidcService<MockUserRepository, MockServiceRepository, MockActionRepository> {
         KeycloakOidcService::new_with_http(
             keycloak,
             Arc::new(create_test_jwt_manager()),
@@ -668,7 +883,50 @@ mod tests {
             config,
             "https://auth9.example.com".to_string(),
             http,
+            None, // No ActionEngine
         )
+    }
+
+    fn build_service_with_actions(
+        keycloak: Arc<dyn KeycloakOidcAdminApi>,
+        http: Arc<dyn OidcHttpClient>,
+        user_repo: Arc<MockUserRepository>,
+        service_repo: Arc<MockServiceRepository>,
+        action_repo: Arc<MockActionRepository>,
+        config: KeycloakConfig,
+    ) -> KeycloakOidcService<MockUserRepository, MockServiceRepository, MockActionRepository> {
+        let action_engine = Arc::new(ActionEngine::new(action_repo));
+        KeycloakOidcService::new_with_http(
+            keycloak,
+            Arc::new(create_test_jwt_manager()),
+            user_repo,
+            service_repo,
+            config,
+            "https://auth9.example.com".to_string(),
+            http,
+            Some(action_engine),
+        )
+    }
+
+    fn create_test_action(trigger_id: &str, script: &str, tenant_id: StringUuid) -> Action {
+        let now = Utc::now();
+        Action {
+            id: StringUuid::new_v4(),
+            tenant_id,
+            name: format!("Test {} Action", trigger_id),
+            description: Some("Test action".to_string()),
+            trigger_id: trigger_id.to_string(),
+            script: script.to_string(),
+            enabled: true,
+            execution_order: 0,
+            timeout_ms: 3000,
+            last_executed_at: None,
+            execution_count: 0,
+            error_count: 0,
+            last_error: None,
+            created_at: now,
+            updated_at: now,
+        }
     }
 
     #[tokio::test]
@@ -840,11 +1098,29 @@ mod tests {
             .returning(move |_| Ok(Some(existing_user.clone())))
             .times(1);
 
+        let mut service_repo = MockServiceRepository::new();
+        let test_service = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(StringUuid::new_v4()),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec![],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .with(eq("test-client"))
+            .returning(move |_| Ok(Some(test_service.clone())))
+            .times(1);
+
         let service = build_service(
             Arc::new(keycloak),
             Arc::new(http),
             Arc::new(user_repo),
-            Arc::new(MockServiceRepository::new()),
+            Arc::new(service_repo),
             config,
         );
 
@@ -1085,11 +1361,28 @@ mod tests {
             .expect_create()
             .returning(move |_, _| Ok(new_user.clone()));
 
+        let mut service_repo = MockServiceRepository::new();
+        let test_service = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(StringUuid::new_v4()),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec![],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .with(eq("test-client"))
+            .returning(move |_| Ok(Some(test_service.clone())));
+
         let service = build_service(
             Arc::new(keycloak),
             Arc::new(http),
             Arc::new(user_repo),
-            Arc::new(MockServiceRepository::new()),
+            Arc::new(service_repo),
             config,
         );
 
@@ -1468,11 +1761,28 @@ mod tests {
             .expect_find_by_keycloak_id()
             .returning(move |_| Ok(Some(user.clone())));
 
+        let mut service_repo = MockServiceRepository::new();
+        let test_service = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(StringUuid::new_v4()),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec![],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .with(eq("test-client"))
+            .returning(move |_| Ok(Some(test_service.clone())));
+
         let service = build_service(
             Arc::new(keycloak),
             Arc::new(http),
             Arc::new(user_repo),
-            Arc::new(MockServiceRepository::new()),
+            Arc::new(service_repo),
             config,
         );
 
@@ -1534,11 +1844,28 @@ mod tests {
             .expect_create()
             .returning(move |_, _| Ok(new_user.clone()));
 
+        let mut service_repo = MockServiceRepository::new();
+        let test_service = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(StringUuid::new_v4()),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec![],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .with(eq("client-id"))
+            .returning(move |_| Ok(Some(test_service.clone())));
+
         let service = build_service(
             Arc::new(keycloak),
             Arc::new(http),
             Arc::new(user_repo),
-            Arc::new(MockServiceRepository::new()),
+            Arc::new(service_repo),
             config,
         );
 
@@ -1638,5 +1965,473 @@ mod tests {
         let decoded = decode_state(Some(&encoded)).unwrap();
         assert_eq!(decoded.redirect_uri, "https://app.com/cb");
         assert!(decoded.original_state.is_none());
+    }
+
+    // ============================================================
+    // Action Trigger Tests
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_pre_user_registration_blocks_registration() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .with(eq("test-client"))
+            .returning(|_| Ok("client-uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .with(eq("client-uuid"))
+            .returning(|_| Ok("client-secret".to_string()));
+
+        let tenant_id = StringUuid::new_v4();
+        let mut service_repo = MockServiceRepository::new();
+        let service_with_tenant = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(tenant_id),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec!["https://app.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .returning(move |_| Ok(Some(service_with_tenant.clone())));
+
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None)); // User doesn't exist, will create
+
+        // Action that blocks registration (throws error)
+        let mut action_repo = MockActionRepository::new();
+        action_repo
+            .expect_list_by_trigger()
+            .with(eq(tenant_id), eq("pre-user-registration"), eq(true))
+            .returning(move |_, _, _| {
+                let script = r#"throw new Error("Email domain not allowed");"#;
+                Ok(vec![create_test_action("pre-user-registration", script, tenant_id)])
+            });
+        action_repo
+            .expect_record_execution()
+            .returning(|_, _, _, _, _, _, _| Ok(()));
+        action_repo
+            .expect_update_execution_stats()
+            .returning(|_, _, _| Ok(()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "kc-access",
+                        "refresh_token": "kc-refresh"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "keycloak-user-123",
+                        "email": "newuser@blocked-domain.com",
+                        "name": "New User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let service = build_service_with_actions(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(service_repo),
+            Arc::new(action_repo),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        // PreUserRegistration should block registration
+        let result = service.handle_callback("authcode", Some(&encoded)).await;
+        assert!(result.is_err());
+        // Verify it's an action error
+        match result {
+            Err(AppError::ActionExecutionFailed(_)) => {
+                // Expected: action threw an error that blocked registration
+            }
+            other => panic!("Expected ActionExecutionFailed error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_post_user_registration_executes_successfully() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .with(eq("test-client"))
+            .returning(|_| Ok("client-uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .with(eq("client-uuid"))
+            .returning(|_| Ok("client-secret".to_string()));
+
+        let tenant_id = StringUuid::new_v4();
+        let mut service_repo = MockServiceRepository::new();
+        let service_with_tenant = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(tenant_id),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec!["https://app.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .returning(move |_| Ok(Some(service_with_tenant.clone())));
+
+        let new_user = create_test_user("keycloak-user-123", "newuser@example.com");
+        let new_user_clone = new_user.clone();
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(|_| Ok(None)); // User doesn't exist
+        user_repo
+            .expect_create()
+            .returning(move |_, _| Ok(new_user_clone.clone()));
+
+        // Actions that execute successfully
+        let mut action_repo = MockActionRepository::new();
+
+        // PreUserRegistration - passes
+        action_repo
+            .expect_list_by_trigger()
+            .with(eq(tenant_id), eq("pre-user-registration"), eq(true))
+            .returning(move |_, _, _| {
+                let script = r#"context;"#; // Just return context unchanged
+                Ok(vec![create_test_action("pre-user-registration", script, tenant_id)])
+            });
+
+        // PostUserRegistration - executes
+        action_repo
+            .expect_list_by_trigger()
+            .with(eq(tenant_id), eq("post-user-registration"), eq(true))
+            .returning(move |_, _, _| {
+                let script = r#"console.log('User registered successfully'); context;"#;
+                Ok(vec![create_test_action("post-user-registration", script, tenant_id)])
+            });
+
+        // PostLogin - no actions
+        action_repo
+            .expect_list_by_trigger()
+            .with(eq(tenant_id), eq("post-login"), eq(true))
+            .returning(|_, _, _| Ok(vec![]));
+
+        action_repo
+            .expect_record_execution()
+            .returning(|_, _, _, _, _, _, _| Ok(()));
+        action_repo
+            .expect_update_execution_stats()
+            .returning(|_, _, _| Ok(()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "kc-access",
+                        "refresh_token": "kc-refresh",
+                        "id_token": "kc-id"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "keycloak-user-123",
+                        "email": "newuser@example.com",
+                        "name": "New User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let service = build_service_with_actions(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(service_repo),
+            Arc::new(action_repo),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        // Should succeed and trigger PostUserRegistration
+        let result = service.handle_callback("authcode", Some(&encoded)).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_post_login_modifies_claims() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .with(eq("test-client"))
+            .returning(|_| Ok("client-uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .with(eq("client-uuid"))
+            .returning(|_| Ok("client-secret".to_string()));
+
+        let tenant_id = StringUuid::new_v4();
+        let mut service_repo = MockServiceRepository::new();
+        let service_with_tenant = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(tenant_id),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec!["https://app.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .returning(move |_| Ok(Some(service_with_tenant.clone())));
+
+        let existing_user = create_test_user("keycloak-user-456", "existinguser@example.com");
+        let existing_user_clone = existing_user.clone();
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(move |_| Ok(Some(existing_user_clone.clone())));
+
+        // PostLogin action that adds custom claims
+        let mut action_repo = MockActionRepository::new();
+        action_repo
+            .expect_list_by_trigger()
+            .with(eq(tenant_id), eq("post-login"), eq(true))
+            .returning(move |_, _, _| {
+                let script = r#"
+                    context.claims = context.claims || {};
+                    context.claims.department = "engineering";
+                    context.claims.tier = "premium";
+                    context;
+                "#;
+                Ok(vec![create_test_action("post-login", script, tenant_id)])
+            });
+        action_repo
+            .expect_record_execution()
+            .returning(|_, _, _, _, _, _, _| Ok(()));
+        action_repo
+            .expect_update_execution_stats()
+            .returning(|_, _, _| Ok(()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, _| url == token_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "kc-access",
+                        "refresh_token": "kc-refresh",
+                        "id_token": "kc-id"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "keycloak-user-456",
+                        "email": "existinguser@example.com",
+                        "name": "Existing User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let service = build_service_with_actions(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(service_repo),
+            Arc::new(action_repo),
+            config,
+        );
+
+        let state = CallbackState {
+            redirect_uri: "https://app.example.com/callback".to_string(),
+            client_id: "test-client".to_string(),
+            original_state: None,
+        };
+        let encoded = encode_state(&state).unwrap();
+
+        let result = service.handle_callback("authcode", Some(&encoded)).await;
+        assert!(result.is_ok());
+
+        // Decode the identity token to verify custom claims
+        let callback_result = result.unwrap();
+        let jwt_manager = create_test_jwt_manager();
+        let claims = jwt_manager.verify_identity_token(&callback_result.identity_token).unwrap();
+
+        // Verify custom claims were added
+        let extra = claims.extra.as_ref().expect("extra claims should be present");
+        assert!(extra.contains_key("department"));
+        assert_eq!(extra.get("department").unwrap(), "engineering");
+        assert!(extra.contains_key("tier"));
+        assert_eq!(extra.get("tier").unwrap(), "premium");
+    }
+
+    #[tokio::test]
+    async fn test_pre_token_refresh_blocks_refresh() {
+        let config = create_test_keycloak_config();
+        let token_url = token_url(&config);
+        let userinfo_url = userinfo_url(&config);
+
+        let mut keycloak = MockKeycloakOidcAdminApi::new();
+        keycloak
+            .expect_get_client_uuid_by_client_id()
+            .with(eq("test-client"))
+            .returning(|_| Ok("client-uuid".to_string()));
+        keycloak
+            .expect_get_client_secret()
+            .with(eq("client-uuid"))
+            .returning(|_| Ok("client-secret".to_string()));
+
+        let tenant_id = StringUuid::new_v4();
+        let mut service_repo = MockServiceRepository::new();
+        let service_with_tenant = Service {
+            id: StringUuid::new_v4(),
+            tenant_id: Some(tenant_id),
+            name: "Test Service".to_string(),
+            base_url: Some("https://app.example.com".to_string()),
+            redirect_uris: vec!["https://app.example.com/callback".to_string()],
+            logout_uris: vec!["https://app.example.com/logout".to_string()],
+            status: ServiceStatus::Active,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        service_repo
+            .expect_find_by_client_id()
+            .returning(move |_| Ok(Some(service_with_tenant.clone())));
+
+        let existing_user = create_test_user("keycloak-user-789", "user@example.com");
+        let existing_user_clone = existing_user.clone();
+        let mut user_repo = MockUserRepository::new();
+        user_repo
+            .expect_find_by_keycloak_id()
+            .returning(move |_| Ok(Some(existing_user_clone.clone())));
+
+        // PreTokenRefresh action that blocks refresh
+        let mut action_repo = MockActionRepository::new();
+        action_repo
+            .expect_list_by_trigger()
+            .with(eq(tenant_id), eq("pre-token-refresh"), eq(true))
+            .returning(move |_, _, _| {
+                let script = r#"throw new Error("User account suspended");"#;
+                Ok(vec![create_test_action("pre-token-refresh", script, tenant_id)])
+            });
+        action_repo
+            .expect_record_execution()
+            .returning(|_, _, _, _, _, _, _| Ok(()));
+        action_repo
+            .expect_update_execution_stats()
+            .returning(|_, _, _| Ok(()));
+
+        let mut http = MockOidcHttpClient::new();
+        http.expect_post_form()
+            .withf(move |url, params| {
+                url == token_url.as_str()
+                    && params
+                        .iter()
+                        .any(|(k, v)| k == "grant_type" && v == "refresh_token")
+            })
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "access_token": "new-access",
+                        "refresh_token": "new-refresh"
+                    })
+                    .to_string(),
+                ))
+            });
+        http.expect_get_bearer()
+            .withf(move |url, _| url == userinfo_url.as_str())
+            .returning(|_, _| {
+                Ok((
+                    200,
+                    serde_json::json!({
+                        "sub": "keycloak-user-789",
+                        "email": "user@example.com",
+                        "name": "User"
+                    })
+                    .to_string(),
+                ))
+            });
+
+        let service = build_service_with_actions(
+            Arc::new(keycloak),
+            Arc::new(http),
+            Arc::new(user_repo),
+            Arc::new(service_repo),
+            Arc::new(action_repo),
+            config,
+        );
+
+        // PreTokenRefresh should block token refresh
+        let result = service.refresh_token("old-refresh-token", "test-client").await;
+        assert!(result.is_err());
+        match result {
+            Err(AppError::ActionExecutionFailed(_)) => {
+                // Expected: action threw an error that blocked refresh
+            }
+            other => panic!("Expected ActionExecutionFailed error, got: {:?}", other),
+        }
     }
 }

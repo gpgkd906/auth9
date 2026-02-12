@@ -112,8 +112,8 @@ services:
   # ==================== Auth9 Portal (Remix Frontend) ====================
   auth9-portal:
     build:
-      context: ./auth9-portal
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: auth9-portal/Dockerfile
     container_name: auth9-portal
     ports:
       - "3000:3000"

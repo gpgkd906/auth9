@@ -24,6 +24,10 @@ pub struct IdentityClaims {
     pub iss: String,
     /// Audience
     pub aud: String,
+    /// Custom claims (from Actions)
+    #[serde(flatten)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub extra: Option<std::collections::HashMap<String, serde_json::Value>>,
     /// Issued at (Unix timestamp)
     pub iat: i64,
     /// Expiration (Unix timestamp)
@@ -136,6 +140,29 @@ impl JwtManager {
         self.create_identity_token_with_session(user_id, email, name, None)
     }
 
+    /// Create an identity token with custom claims (from Actions)
+    pub fn create_identity_token_with_claims(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        name: Option<&str>,
+        custom_claims: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<String> {
+        self.create_identity_token_full(user_id, email, name, None, Some(custom_claims))
+    }
+
+    /// Create an identity token with both session ID and custom claims (from Actions)
+    pub fn create_identity_token_with_session_and_claims(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        name: Option<&str>,
+        session_id: Option<Uuid>,
+        custom_claims: std::collections::HashMap<String, serde_json::Value>,
+    ) -> Result<String> {
+        self.create_identity_token_full(user_id, email, name, session_id, Some(custom_claims))
+    }
+
     /// Create an identity token with session ID
     pub fn create_identity_token_with_session(
         &self,
@@ -143,6 +170,18 @@ impl JwtManager {
         email: &str,
         name: Option<&str>,
         session_id: Option<Uuid>,
+    ) -> Result<String> {
+        self.create_identity_token_full(user_id, email, name, session_id, None)
+    }
+
+    /// Create an identity token with all options
+    fn create_identity_token_full(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        name: Option<&str>,
+        session_id: Option<Uuid>,
+        custom_claims: Option<std::collections::HashMap<String, serde_json::Value>>,
     ) -> Result<String> {
         let now = Utc::now();
         let exp = now + Duration::seconds(self.config.access_token_ttl_secs);
@@ -154,6 +193,7 @@ impl JwtManager {
             name: name.map(String::from),
             iss: self.config.issuer.clone(),
             aud: "auth9".to_string(),
+            extra: custom_claims,
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
@@ -520,6 +560,7 @@ mod tests {
             aud: "auth9".to_string(),
             iat: 1000000,
             exp: 1003600,
+            extra: None,
         };
 
         let json = serde_json::to_string(&claims).unwrap();
@@ -540,6 +581,7 @@ mod tests {
             aud: "auth9".to_string(),
             iat: 1000000,
             exp: 1003600,
+            extra: None,
         };
 
         let json = serde_json::to_string(&claims).unwrap();

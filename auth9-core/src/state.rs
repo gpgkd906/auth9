@@ -10,15 +10,16 @@ use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
 use crate::repository::{
-    InvitationRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
-    RbacRepository, SecurityAlertRepository, ServiceRepository, SessionRepository,
-    SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
+    ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
+    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
+    SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+    WebhookRepository,
 };
 use crate::service::{
-    AnalyticsService, BrandingService, ClientService, EmailService, EmailTemplateService,
-    IdentityProviderService, InvitationService, PasswordService, RbacService,
-    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
-    WebAuthnService, WebhookService,
+    ActionService, AnalyticsService, BrandingService, ClientService, EmailService,
+    EmailTemplateService, IdentityProviderService, InvitationService, PasswordService,
+    RbacService, SecurityDetectionService, SessionService, SystemSettingsService, TenantService,
+    UserService, WebAuthnService, WebhookService,
 };
 
 // ============================================================
@@ -35,6 +36,7 @@ pub type TenantServiceType<S> = TenantService<
     <S as HasServices>::RbacRepo,
     <S as HasServices>::LoginEventRepo,
     <S as HasServices>::SecurityAlertRepo,
+    <S as HasServices>::ActionRepo,
 >;
 
 /// Generic UserService type parameterized by trait associated types
@@ -79,6 +81,8 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     type WebhookRepo: WebhookRepository;
     /// The invitation repository type (for cascade delete) - Note: HasInvitations also has this
     type CascadeInvitationRepo: InvitationRepository;
+    /// The action repository type
+    type ActionRepo: ActionRepository;
 
     /// Get the application configuration
     fn config(&self) -> &Config;
@@ -103,6 +107,9 @@ pub trait HasServices: Clone + Send + Sync + 'static {
 
     /// Get the Keycloak client
     fn keycloak_client(&self) -> &KeycloakClient;
+
+    /// Get the action service
+    fn action_service(&self) -> &ActionService<Self::ActionRepo>;
 
     /// Check if the system is ready (database and cache are healthy)
     /// Returns (db_ok, cache_ok) tuple

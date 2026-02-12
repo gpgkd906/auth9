@@ -15,16 +15,16 @@ use async_trait::async_trait;
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
-    AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateInvitationInput,
-    CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasskeyInput,
-    CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
+    Action, AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client,
+    CreateActionInput, CreateInvitationInput, CreateLinkedIdentityInput, CreateLoginEventInput,
+    CreatePasskeyInput, CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
     CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput,
     CreateUserInput, CreateWebhookInput, Invitation, InvitationStatus, LinkedIdentity, LoginEvent,
     LoginEventType, LoginStats, PasswordResetToken, Permission, Role, SecurityAlert, Service,
     ServiceStatus, Session, StoredPasskey, StringUuid, SystemSettingRow, Tenant, TenantSettings,
-    TenantStatus, TenantUser, UpdateRoleInput, UpdateServiceInput, UpdateTenantInput,
-    UpdateUserInput, UpdateWebhookInput, UpsertSystemSettingInput, User, UserRolesInTenant,
-    Webhook,
+    TenantStatus, TenantUser, UpdateActionInput, UpdateRoleInput, UpdateServiceInput,
+    UpdateTenantInput, UpdateUserInput, UpdateWebhookInput, UpsertSystemSettingInput, User,
+    UserRolesInTenant, Webhook,
 };
 use auth9_core::error::{AppError, Result};
 use auth9_core::jwt::JwtManager;
@@ -32,10 +32,10 @@ use auth9_core::repository::audit::{
     AuditLog, AuditLogQuery, AuditRepository, CreateAuditLogInput,
 };
 use auth9_core::repository::{
-    InvitationRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
-    RbacRepository, SecurityAlertRepository, ServiceRepository, SessionRepository,
-    SystemSettingsRepository, TenantRepository, UserRepository, WebAuthnRepository,
-    WebhookRepository,
+    ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
+    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
+    SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+    WebAuthnRepository, WebhookRepository,
 };
 use auth9_core::service::{
     tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ClientService, RbacService,
@@ -1804,6 +1804,189 @@ impl WebhookRepository for TestWebhookRepository {
 }
 
 // ============================================================================
+// Test Action Repository
+// ============================================================================
+
+pub struct TestActionRepository {
+    actions: RwLock<Vec<Action>>,
+}
+
+impl TestActionRepository {
+    pub fn new() -> Self {
+        Self {
+            actions: RwLock::new(vec![]),
+        }
+    }
+
+    pub async fn add_action(&self, action: Action) {
+        self.actions.write().await.push(action);
+    }
+}
+
+impl Default for TestActionRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ActionRepository for TestActionRepository {
+    async fn create(&self, tenant_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
+        let now = Utc::now();
+        let action = Action {
+            id: StringUuid::new_v4(),
+            tenant_id,
+            name: input.name.clone(),
+            description: input.description.clone(),
+            trigger_id: input.trigger_id.clone(),
+            script: input.script.clone(),
+            enabled: input.enabled,
+            execution_order: input.execution_order,
+            timeout_ms: input.timeout_ms,
+            last_executed_at: None,
+            execution_count: 0,
+            error_count: 0,
+            last_error: None,
+            created_at: now,
+            updated_at: now,
+        };
+        self.actions.write().await.push(action.clone());
+        Ok(action)
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<Action>> {
+        let actions = self.actions.read().await;
+        Ok(actions.iter().find(|a| a.id == id).cloned())
+    }
+
+    async fn list_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<Action>> {
+        let actions = self.actions.read().await;
+        Ok(actions
+            .iter()
+            .filter(|a| a.tenant_id == tenant_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_trigger(
+        &self,
+        tenant_id: StringUuid,
+        trigger_id: &str,
+        enabled_only: bool,
+    ) -> Result<Vec<Action>> {
+        let actions = self.actions.read().await;
+        Ok(actions
+            .iter()
+            .filter(|a| {
+                a.tenant_id == tenant_id
+                    && a.trigger_id == trigger_id
+                    && (!enabled_only || a.enabled)
+            })
+            .cloned()
+            .collect())
+    }
+
+    async fn update(&self, id: StringUuid, input: &UpdateActionInput) -> Result<Action> {
+        let mut actions = self.actions.write().await;
+        let action = actions
+            .iter_mut()
+            .find(|a| a.id == id)
+            .ok_or_else(|| AppError::NotFound(format!("Action {} not found", id)))?;
+
+        if let Some(name) = &input.name {
+            action.name = name.clone();
+        }
+        if let Some(description) = &input.description {
+            action.description = Some(description.clone());
+        }
+        if let Some(script) = &input.script {
+            action.script = script.clone();
+        }
+        if let Some(enabled) = input.enabled {
+            action.enabled = enabled;
+        }
+        if let Some(execution_order) = input.execution_order {
+            action.execution_order = execution_order;
+        }
+        if let Some(timeout_ms) = input.timeout_ms {
+            action.timeout_ms = timeout_ms;
+        }
+        action.updated_at = Utc::now();
+        Ok(action.clone())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut actions = self.actions.write().await;
+        let pos = actions
+            .iter()
+            .position(|a| a.id == id)
+            .ok_or_else(|| AppError::NotFound("Action not found".to_string()))?;
+        actions.remove(pos);
+        Ok(())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut actions = self.actions.write().await;
+        let before = actions.len();
+        actions.retain(|a| a.tenant_id != tenant_id);
+        Ok((before - actions.len()) as u64)
+    }
+
+    async fn record_execution(
+        &self,
+        action_id: StringUuid,
+        _tenant_id: StringUuid,
+        _trigger_id: String,
+        _user_id: Option<StringUuid>,
+        _success: bool,
+        _duration_ms: i32,
+        _error: Option<String>,
+    ) -> Result<()> {
+        // For test repository, just record in memory (not to action_executions table)
+        Ok(())
+    }
+
+    async fn update_execution_stats(
+        &self,
+        id: StringUuid,
+        success: bool,
+        error: Option<String>,
+    ) -> Result<()> {
+        let mut actions = self.actions.write().await;
+        if let Some(action) = actions.iter_mut().find(|a| a.id == id) {
+            action.last_executed_at = Some(Utc::now());
+            action.execution_count += 1;
+            if !success {
+                action.error_count += 1;
+                action.last_error = error;
+            } else {
+                action.last_error = None;
+            }
+        }
+        Ok(())
+    }
+
+    async fn query_logs(&self, _filter: &auth9_core::domain::LogQueryFilter) -> Result<Vec<auth9_core::domain::ActionExecution>> {
+        // For test repository, return empty logs
+        Ok(vec![])
+    }
+
+    async fn get_stats(&self, action_id: StringUuid) -> Result<Option<(i64, i64, f64, i64)>> {
+        let actions = self.actions.read().await;
+        if let Some(action) = actions.iter().find(|a| a.id == action_id) {
+            Ok(Some((
+                action.execution_count as i64,
+                action.error_count as i64,
+                0.0, // avg_duration_ms
+                0,   // last_24h_count
+            )))
+        } else {
+            Ok(None)
+        }
+    }
+}
+
+// ============================================================================
 // Test Invitation Repository
 // ============================================================================
 
@@ -2548,6 +2731,26 @@ pub fn create_test_service(id: Option<Uuid>, tenant_id: Option<Uuid>) -> Service
     }
 }
 
+pub fn create_test_action(tenant_id: Uuid, name: &str) -> Action {
+    Action {
+        id: StringUuid::new_v4(),
+        tenant_id: StringUuid::from(tenant_id),
+        name: name.to_string(),
+        description: Some("Test action description".to_string()),
+        trigger_id: "post-login".to_string(),
+        script: "export default async function(ctx) { return ctx; }".to_string(),
+        enabled: true,
+        execution_order: 0,
+        timeout_ms: 5000,
+        last_executed_at: None,
+        execution_count: 0,
+        error_count: 0,
+        last_error: None,
+        created_at: Utc::now(),
+        updated_at: Utc::now(),
+    }
+}
+
 pub fn create_test_role(id: Option<Uuid>, service_id: Uuid) -> Role {
     Role {
         id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
@@ -2591,6 +2794,7 @@ pub struct TestServicesBuilder {
     pub linked_identity_repo: Arc<TestLinkedIdentityRepository>,
     pub login_event_repo: Arc<TestLoginEventRepository>,
     pub security_alert_repo: Arc<TestSecurityAlertRepository>,
+    pub action_repo: Arc<TestActionRepository>,
 }
 
 #[allow(dead_code)]
@@ -2609,6 +2813,7 @@ impl TestServicesBuilder {
             linked_identity_repo: Arc::new(TestLinkedIdentityRepository::new()),
             login_event_repo: Arc::new(TestLoginEventRepository::new()),
             security_alert_repo: Arc::new(TestSecurityAlertRepository::new()),
+            action_repo: Arc::new(TestActionRepository::new()),
         }
     }
 
@@ -2623,6 +2828,7 @@ impl TestServicesBuilder {
         TestRbacRepository,
         TestLoginEventRepository,
         TestSecurityAlertRepository,
+        TestActionRepository,
     > {
         let repos = TenantRepositoryBundle::new(
             self.tenant_repo.clone(),
@@ -2633,6 +2839,7 @@ impl TestServicesBuilder {
             self.rbac_repo.clone(),
             self.login_event_repo.clone(),
             self.security_alert_repo.clone(),
+            self.action_repo.clone(),
         );
         TenantService::new(repos, None)
     }

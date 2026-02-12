@@ -93,6 +93,19 @@ pub fn describe_metrics() {
     describe_gauge!("auth9_users_active_total", "Number of active users");
     describe_gauge!("auth9_sessions_active_total", "Number of active sessions");
 
+    // Action metrics
+    describe_counter!("auth9_action_operations_total", "Total action CRUD operations");
+    describe_histogram!(
+        "auth9_action_operation_duration_seconds",
+        "Action operation duration in seconds"
+    );
+    describe_counter!("auth9_action_executions_total", "Total action executions");
+    describe_histogram!(
+        "auth9_action_execution_duration_seconds",
+        "Action execution duration in seconds"
+    );
+    describe_gauge!("auth9_actions_enabled_total", "Enabled actions per tenant");
+
     // Emit initial zero values for lazily-registered metrics so that
     // HELP/TYPE lines appear in Prometheus output from startup.
     // Gauges and metrics driven by background tasks (db_pool, business gauges)
@@ -116,4 +129,11 @@ pub fn describe_metrics() {
     counter!("auth9_redis_operations_total", "operation" => "get").absolute(0);
     histogram!("auth9_redis_operation_duration_seconds", "operation" => "get").record(0.0);
     gauge!("auth9_http_requests_in_flight").set(0.0);
+
+    // Action metrics initial values
+    counter!("auth9_action_operations_total", "operation" => "create", "result" => "success").absolute(0);
+    histogram!("auth9_action_operation_duration_seconds", "operation" => "create").record(0.0);
+    counter!("auth9_action_executions_total", "trigger" => "post-login", "result" => "success").absolute(0);
+    histogram!("auth9_action_execution_duration_seconds", "trigger" => "post-login").record(0.0);
+    gauge!("auth9_actions_enabled_total", "tenant_id" => "").set(0.0);
 }

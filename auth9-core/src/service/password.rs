@@ -7,9 +7,10 @@ use crate::domain::{
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
-    PasswordResetRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+    ActionRepository, PasswordResetRepository, SystemSettingsRepository, TenantRepository,
+    UserRepository,
 };
-use crate::service::EmailService;
+use crate::service::{ActionEngine, EmailService};
 use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
@@ -26,12 +27,16 @@ pub struct PasswordService<
     U: UserRepository,
     S: SystemSettingsRepository,
     T: TenantRepository = crate::repository::tenant::TenantRepositoryImpl,
+    AR: ActionRepository = crate::repository::action::ActionRepositoryImpl,
 > {
     password_reset_repo: Arc<P>,
     user_repo: Arc<U>,
     email_service: Arc<EmailService<S>>,
     keycloak: Arc<KeycloakClient>,
     tenant_repo: Option<Arc<T>>,
+    // Reserved for future PostChangePassword trigger integration
+    #[allow(dead_code)]
+    action_engine: Option<Arc<ActionEngine<AR>>>,
     hmac_key: String,
 }
 
@@ -51,6 +56,7 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
             email_service,
             keycloak,
             tenant_repo: None,
+            action_engine: None,
             hmac_key,
         }
     }
@@ -77,6 +83,27 @@ impl<
             email_service,
             keycloak,
             tenant_repo: Some(tenant_repo),
+            action_engine: None,
+            hmac_key,
+        }
+    }
+
+    pub fn with_action_engine<AR: ActionRepository + 'static>(
+        password_reset_repo: Arc<P>,
+        user_repo: Arc<U>,
+        email_service: Arc<EmailService<S>>,
+        keycloak: Arc<KeycloakClient>,
+        tenant_repo: Arc<T>,
+        action_engine: Arc<ActionEngine<AR>>,
+        hmac_key: String,
+    ) -> PasswordService<P, U, S, T, AR> {
+        PasswordService {
+            password_reset_repo,
+            user_repo,
+            email_service,
+            keycloak,
+            tenant_repo: Some(tenant_repo),
+            action_engine: Some(action_engine),
             hmac_key,
         }
     }
@@ -185,6 +212,12 @@ impl<
         self.keycloak
             .reset_user_password(&user.keycloak_id, &input.new_password, false)
             .await?;
+
+        // Note: PostChangePassword trigger integration is pending due to complexity:
+        // - Password change is user-level operation (may affect multiple tenants)
+        // - Requires querying user's tenant memberships
+        // - Will be implemented when multi-tenant context handling is clarified
+        // See: docs/debt/001-action-test-endpoint-axum-tonic-conflict.md for related issues
 
         // Send password changed notification
         self.email_service

@@ -2,9 +2,12 @@
 # Reset Docker environment for Auth9 local development
 # This script ensures a clean state by removing all containers, images, and volumes
 #
+# Smart rebuild: uses content hashing to skip rebuilding unchanged components.
+# Only components whose source files have changed will be rebuilt.
+#
 # Usage:
-#   ./scripts/reset-docker.sh          # Normal reset (uses mount cache for fast rebuilds)
-#   ./scripts/reset-docker.sh --purge  # Full purge (also clears BuildKit mount caches)
+#   ./scripts/reset-docker.sh          # Smart reset (skips unchanged components)
+#   ./scripts/reset-docker.sh --purge  # Full purge (rebuild everything, clear all caches)
 
 set -e
 
@@ -24,15 +27,103 @@ done
 # Compose files: base + observability overlay
 DC="docker-compose -f docker-compose.yml -f docker-compose.observability.yml"
 
+# ==================== Smart Build: Content Hash ====================
+CACHE_DIR="$PROJECT_DIR/.build-cache"
+mkdir -p "$CACHE_DIR"
+
+# Compute a content hash for a component's source files.
+# Usage: compute_hash <component_name>
+# Outputs the sha256 hash to stdout.
+compute_hash() {
+  local component="$1"
+  local hash_input=""
+
+  case "$component" in
+    auth9-core)
+      hash_input=$(find auth9-core/src auth9-core/migrations auth9-core/proto -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-core/Cargo.toml auth9-core/Cargo.lock auth9-core/Dockerfile 2>/dev/null)
+      ;;
+    auth9-portal)
+      hash_input=$(find auth9-portal/app sdk/packages/core/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-portal/package.json auth9-portal/package-lock.json auth9-portal/Dockerfile sdk/packages/core/package.json 2>/dev/null)
+      ;;
+    auth9-theme-builder)
+      hash_input=$(find auth9-keycloak-theme/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-keycloak-theme/package.json auth9-keycloak-theme/package-lock.json auth9-keycloak-theme/Dockerfile 2>/dev/null)
+      ;;
+    auth9-keycloak-events-builder)
+      # Only the Dockerfile matters — source is git-cloned from a pinned version (v0.47)
+      hash_input=$(cat auth9-keycloak-events/Dockerfile 2>/dev/null)
+      ;;
+  esac
+
+  echo "$hash_input" | shasum -a 256 | cut -d' ' -f1
+}
+
+# Check whether a component needs rebuilding.
+# Returns 0 (true) if rebuild needed, 1 (false) if skip.
+needs_rebuild() {
+  local component="$1"
+  local docker_image="auth9-${component}"
+  local hash_file="$CACHE_DIR/${component}.hash"
+
+  # --purge always rebuilds
+  if [ "$PURGE" = true ]; then
+    return 0
+  fi
+
+  # Check if Docker image exists
+  if ! docker image inspect "$docker_image" &>/dev/null; then
+    return 0
+  fi
+
+  # Compute current hash and compare with stored hash
+  local current_hash
+  current_hash=$(compute_hash "$component")
+
+  if [ -f "$hash_file" ] && [ "$(cat "$hash_file")" = "$current_hash" ]; then
+    return 1  # no rebuild needed
+  fi
+
+  return 0
+}
+
+# Save the current hash after a successful build.
+save_hash() {
+  local component="$1"
+  compute_hash "$component" > "$CACHE_DIR/${component}.hash"
+}
+
+# ==================== Determine what needs rebuilding ====================
+REBUILD_CORE=false
+REBUILD_PORTAL=false
+REBUILD_THEME=false
+REBUILD_EVENTS=false
+
+for comp in auth9-core auth9-portal auth9-theme-builder auth9-keycloak-events-builder; do
+  if needs_rebuild "$comp"; then
+    case "$comp" in
+      auth9-core)                    REBUILD_CORE=true ;;
+      auth9-portal)                  REBUILD_PORTAL=true ;;
+      auth9-theme-builder)           REBUILD_THEME=true ;;
+      auth9-keycloak-events-builder) REBUILD_EVENTS=true ;;
+    esac
+  fi
+done
+
 echo "Auth9 Docker Environment Reset"
 echo "==============================="
 if [ "$PURGE" = true ]; then
   echo "Mode: FULL PURGE (clearing all caches)"
 else
-  echo "Mode: Normal (preserving BuildKit mount caches for fast rebuilds)"
+  echo "Mode: Smart (skipping unchanged components)"
+  echo ""
+  echo "  Build plan:"
+  [ "$REBUILD_CORE" = true ]   && echo "    auth9-core                    → REBUILD" || echo "    auth9-core                    → skip (unchanged)"
+  [ "$REBUILD_PORTAL" = true ] && echo "    auth9-portal                  → REBUILD" || echo "    auth9-portal                  → skip (unchanged)"
+  [ "$REBUILD_THEME" = true ]  && echo "    auth9-theme-builder           → REBUILD" || echo "    auth9-theme-builder           → skip (unchanged)"
+  [ "$REBUILD_EVENTS" = true ] && echo "    auth9-keycloak-events-builder → REBUILD" || echo "    auth9-keycloak-events-builder → skip (unchanged)"
 fi
 
 # Step 0: Ensure dev gRPC TLS certificate exists
+echo ""
 echo "[0/7] gRPC TLS certificate..."
 CERT_DIR="$PROJECT_DIR/deploy/dev-certs/grpc"
 mkdir -p "$CERT_DIR"
@@ -52,10 +143,17 @@ fi
 echo "[1/7] Stopping containers..."
 $DC --profile build down -v --remove-orphans 2>&1 | tail -1 || true
 
-# Step 2: Remove project images
+# Step 2: Remove project images (only those that need rebuilding)
 echo "[2/7] Removing images..."
-docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-theme-builder auth9-auth9-keycloak-events-builder 2>/dev/null || true
-docker rmi $(docker images -q 'auth9-*' 2>/dev/null) 2>/dev/null || true
+if [ "$PURGE" = true ]; then
+  docker rmi auth9-auth9-core auth9-auth9-portal auth9-auth9-theme-builder auth9-auth9-keycloak-events-builder 2>/dev/null || true
+  docker rmi $(docker images -q 'auth9-*' 2>/dev/null) 2>/dev/null || true
+else
+  [ "$REBUILD_CORE" = true ]   && { docker rmi auth9-auth9-core 2>/dev/null || true; }
+  [ "$REBUILD_PORTAL" = true ] && { docker rmi auth9-auth9-portal 2>/dev/null || true; }
+  [ "$REBUILD_THEME" = true ]  && { docker rmi auth9-auth9-theme-builder 2>/dev/null || true; }
+  [ "$REBUILD_EVENTS" = true ] && { docker rmi auth9-auth9-keycloak-events-builder 2>/dev/null || true; }
+fi
 
 # Step 3: Remove any remaining volumes
 echo "[3/7] Removing volumes..."
@@ -65,25 +163,62 @@ docker volume rm auth9_tidb-data auth9_redis-data auth9_keycloak-theme auth9_key
 if [ "$PURGE" = true ]; then
   echo "[4/7] Pruning ALL builder cache (--purge)..."
   docker builder prune -af 2>/dev/null | tail -1 || true
+  # Clear all stored hashes
+  rm -f "$CACHE_DIR"/*.hash
 else
   echo "[4/7] Skipping builder cache prune (mount caches preserved for fast rebuilds)"
 fi
 
-# Step 5: Build all images in parallel
-echo "[5/7] Building all images (parallel)..."
+# Step 5: Build images (only changed components)
+echo "[5/7] Building images..."
 
-# Build Keycloak plugins and app images in parallel
-$DC --profile build build --no-cache --parallel auth9-theme-builder auth9-keycloak-events-builder 2>&1 | grep -E '(Built|ERROR|built)' || true &
-BUILD_PLUGINS_PID=$!
+# Build Keycloak plugins (only if needed)
+PLUGIN_BUILD_TARGETS=""
+[ "$REBUILD_THEME" = true ]  && PLUGIN_BUILD_TARGETS="$PLUGIN_BUILD_TARGETS auth9-theme-builder"
+[ "$REBUILD_EVENTS" = true ] && PLUGIN_BUILD_TARGETS="$PLUGIN_BUILD_TARGETS auth9-keycloak-events-builder"
 
-$DC build --no-cache --parallel 2>&1 | grep -E '(Built|ERROR|built)' || true &
-BUILD_APP_PID=$!
+# Build app images (only if needed)
+APP_BUILD_TARGETS=""
+[ "$REBUILD_CORE" = true ]   && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-core"
+[ "$REBUILD_PORTAL" = true ] && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-portal"
 
-# Wait for all builds to complete
-wait $BUILD_PLUGINS_PID || { echo "ERROR: Plugin build failed"; exit 1; }
-wait $BUILD_APP_PID || { echo "ERROR: App build failed"; exit 1; }
+# Also build auth9-init if core changed (they share the same Dockerfile)
+[ "$REBUILD_CORE" = true ]   && APP_BUILD_TARGETS="$APP_BUILD_TARGETS auth9-init"
 
-# Run plugin builders in parallel to copy JARs to volumes
+BUILD_PLUGINS_PID=""
+BUILD_APP_PID=""
+
+if [ -n "$PLUGIN_BUILD_TARGETS" ]; then
+  echo "  Building plugins:$PLUGIN_BUILD_TARGETS"
+  $DC --profile build build --no-cache --parallel $PLUGIN_BUILD_TARGETS 2>&1 | grep -E '(Built|ERROR|built)' || true &
+  BUILD_PLUGINS_PID=$!
+else
+  echo "  Plugins: all unchanged, skipping"
+fi
+
+if [ -n "$APP_BUILD_TARGETS" ]; then
+  echo "  Building apps:$APP_BUILD_TARGETS"
+  $DC build --no-cache --parallel $APP_BUILD_TARGETS 2>&1 | grep -E '(Built|ERROR|built)' || true &
+  BUILD_APP_PID=$!
+else
+  echo "  Apps: all unchanged, skipping"
+fi
+
+# Wait for builds to complete
+if [ -n "$BUILD_PLUGINS_PID" ]; then
+  wait $BUILD_PLUGINS_PID || { echo "ERROR: Plugin build failed"; exit 1; }
+fi
+if [ -n "$BUILD_APP_PID" ]; then
+  wait $BUILD_APP_PID || { echo "ERROR: App build failed"; exit 1; }
+fi
+
+# Save hashes for successfully built components
+[ "$REBUILD_CORE" = true ]   && save_hash "auth9-core"
+[ "$REBUILD_PORTAL" = true ] && save_hash "auth9-portal"
+[ "$REBUILD_THEME" = true ]  && save_hash "auth9-theme-builder"
+[ "$REBUILD_EVENTS" = true ] && save_hash "auth9-keycloak-events-builder"
+
+# Run plugin builders to copy JARs to volumes (always needed since volumes are recreated)
 echo "  Copying Keycloak plugin JARs..."
 $DC --profile build up auth9-theme-builder 2>&1 | tail -1 &
 $DC --profile build up auth9-keycloak-events-builder 2>&1 | tail -1 &

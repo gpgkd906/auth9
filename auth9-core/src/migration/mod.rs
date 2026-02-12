@@ -282,7 +282,7 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     let actual_service_id = if service_result.rows_affected() == 0 {
         info!("Portal service already exists, using existing record");
         let row: (String,) =
-            sqlx::query_as("SELECT id FROM services WHERE tenant_id IS NULL AND name = ?")
+            sqlx::query_as("SELECT id FROM services WHERE name = ?")
                 .bind(DEFAULT_PORTAL_NAME)
                 .fetch_one(&pool)
                 .await
@@ -444,15 +444,22 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     .await
     .context("Failed to seed demo tenant_user")?;
 
-    // 6. INSERT tenant_services (both tenants → Auth9 Admin Portal)
+    // 6. Link Portal service to Auth9 Platform tenant and seed tenant_services
     let portal_service: Option<(String,)> =
-        sqlx::query_as("SELECT id FROM services WHERE tenant_id IS NULL AND name = ?")
+        sqlx::query_as("SELECT id FROM services WHERE name = ?")
             .bind(DEFAULT_PORTAL_NAME)
             .fetch_optional(&pool)
             .await
             .context("Failed to query portal service")?;
 
     if let Some((service_id,)) = portal_service {
+        // Assign Portal service to Auth9 Platform tenant (the primary tenant for Portal)
+        sqlx::query("UPDATE services SET tenant_id = ? WHERE id = ? AND tenant_id IS NULL")
+            .bind(&actual_platform_id)
+            .bind(&service_id)
+            .execute(&pool)
+            .await
+            .context("Failed to assign portal service to platform tenant")?;
         sqlx::query(
             r#"INSERT INTO tenant_services (tenant_id, service_id, enabled, created_at, updated_at)
             VALUES (?, ?, TRUE, NOW(), NOW())

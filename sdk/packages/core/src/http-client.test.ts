@@ -96,6 +96,96 @@ describe("Auth9HttpClient", () => {
     expect(result).toBeUndefined();
   });
 
+  // ============================================================================
+  // Edge Case Tests: Retry Logic
+  // ============================================================================
+
+  it("retries on 500 error and succeeds on second attempt", async () => {
+    const clientWithRetry = new Auth9HttpClient({
+      baseUrl: "https://auth9.example.com",
+      accessToken: "test-token",
+      retries: 2,
+    });
+
+    mockFetch
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ error: "server_error", message: "Internal error" }),
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: { id: "1" } }),
+      });
+
+    const result = await clientWithRetry.get("/api/v1/test");
+
+    expect(mockFetch).toHaveBeenCalledTimes(2);
+    expect(result).toEqual({ data: { id: "1" } });
+  });
+
+  it("throws last 5xx error when all retries exhausted", async () => {
+    const clientWithRetry = new Auth9HttpClient({
+      baseUrl: "https://auth9.example.com",
+      accessToken: "test-token",
+      retries: 2,
+    });
+
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 503,
+      json: () => Promise.resolve({ error: "service_unavailable", message: "Service down" }),
+    });
+
+    await expect(clientWithRetry.get("/api/v1/test")).rejects.toThrow("Service down");
+    expect(mockFetch).toHaveBeenCalledTimes(3); // 1 initial + 2 retries
+  });
+
+  it("supports custom timeout configuration", () => {
+    const clientWithTimeout = new Auth9HttpClient({
+      baseUrl: "https://auth9.example.com",
+      accessToken: "test-token",
+      timeout: 5000,
+      retries: 3,
+    });
+
+    expect(clientWithTimeout).toBeDefined();
+    // Timeout behavior is covered by integration tests
+  });
+
+  // ============================================================================
+  // Edge Case Tests: Error Handling
+  // ============================================================================
+
+  it("handles non-JSON error response body", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 400,
+      statusText: "Bad Request",
+      json: () => Promise.reject(new Error("Not JSON")),
+    });
+
+    await expect(client.get("/api/v1/test")).rejects.toThrow("Bad Request");
+  });
+
+  it("handles empty error object from backend", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({}),
+    });
+
+    await expect(client.get("/api/v1/test")).rejects.toThrow();
+  });
+
+  it("handles network error without retry", async () => {
+    mockFetch.mockRejectedValue(new Error("Network failure"));
+
+    await expect(client.get("/api/v1/test")).rejects.toThrow("Network failure");
+    expect(mockFetch).toHaveBeenCalledTimes(1); // No retry on network error
+  });
+
   it("supports async token provider", async () => {
     const tokenFn = vi.fn().mockResolvedValue("dynamic-token");
     const dynamicClient = new Auth9HttpClient({
@@ -148,5 +238,30 @@ describe("Auth9HttpClient", () => {
       "https://auth9.example.com/api/v1/health",
       expect.anything(),
     );
+  });
+
+  it("makes PATCH requests with body converted to snake_case", async () => {
+    mockFetch.mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ data: { id: "1", enabled: false } }),
+    });
+
+    await client.patch("/api/v1/tenants/1/actions/1", {
+      executionOrder: 5,
+      timeoutMs: 5000,
+    });
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      "https://auth9.example.com/api/v1/tenants/1/actions/1",
+      expect.objectContaining({
+        method: "PATCH",
+      }),
+    );
+
+    const [, init] = mockFetch.mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.execution_order).toBe(5);
+    expect(body.timeout_ms).toBe(5000);
   });
 });

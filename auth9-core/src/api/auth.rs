@@ -1,6 +1,9 @@
 //! Authentication API handlers
 
 use crate::cache::CacheOperations;
+use crate::domain::{
+    ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
+};
 use crate::error::{AppError, Result};
 use crate::state::{HasCache, HasServices, HasSessionManagement};
 use axum::{
@@ -220,16 +223,83 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
 
             let session = state
                 .session_service()
-                .create_session(user.id, None, ip_address, user_agent)
+                .create_session(user.id, None, ip_address.clone(), user_agent.clone())
                 .await?;
 
-            // Create identity token with session ID
-            let identity_token = jwt_manager.create_identity_token_with_session(
-                *user.id,
-                &userinfo.email,
-                userinfo.name.as_deref(),
-                Some(*session.id),
-            )?;
+            // Execute post-login Actions (if any are configured for this tenant)
+            let custom_claims = {
+                // Look up tenant from client_id
+                let tenant_id = state
+                    .client_service()
+                    .get_by_client_id(&state_payload.client_id)
+                    .await
+                    .ok()
+                    .and_then(|svc| svc.tenant_id);
+
+                if let Some(tenant_id) = tenant_id {
+                    let action_context = ActionContext {
+                        user: ActionContextUser {
+                            id: user.id.to_string(),
+                            email: user.email.clone(),
+                            display_name: user.display_name.clone(),
+                            mfa_enabled: false,
+                        },
+                        tenant: ActionContextTenant {
+                            id: tenant_id.to_string(),
+                            slug: String::new(),
+                            name: String::new(),
+                        },
+                        request: ActionContextRequest {
+                            ip: ip_address,
+                            user_agent,
+                            timestamp: Utc::now(),
+                        },
+                        claims: None,
+                    };
+
+                    match state
+                        .action_service()
+                        .execute_trigger(tenant_id, "post-login", action_context)
+                        .await
+                    {
+                        Ok(modified_context) => {
+                            tracing::info!(
+                                "PostLogin actions executed for user {} via token endpoint",
+                                user.id
+                            );
+                            modified_context.claims
+                        }
+                        Err(e) => {
+                            tracing::error!(
+                                "PostLogin action failed for user {}: {}",
+                                user.id,
+                                e
+                            );
+                            return Err(e);
+                        }
+                    }
+                } else {
+                    None
+                }
+            };
+
+            // Create identity token with session ID and optional custom claims
+            let identity_token = if let Some(claims) = custom_claims {
+                jwt_manager.create_identity_token_with_session_and_claims(
+                    *user.id,
+                    &userinfo.email,
+                    userinfo.name.as_deref(),
+                    Some(*session.id),
+                    claims,
+                )?
+            } else {
+                jwt_manager.create_identity_token_with_session(
+                    *user.id,
+                    &userinfo.email,
+                    userinfo.name.as_deref(),
+                    Some(*session.id),
+                )?
+            };
 
             if let Some(refresh_token) = token_response.refresh_token.as_deref() {
                 let refresh_ttl = state.config().jwt.refresh_token_ttl_secs.max(1) as u64;

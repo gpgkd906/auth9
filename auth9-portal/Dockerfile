@@ -1,20 +1,38 @@
 # Auth9 Portal - Remix Frontend
 # Multi-stage build for minimal image size
+# Build context: repo root (for file: dependency on @auth9/core)
 
-# ==================== Builder Stage ====================
+# ==================== SDK Build Stage ====================
+FROM node:20-alpine AS sdk-builder
+
+WORKDIR /app/sdk/packages/core
+
+# Install SDK dependencies and build
+COPY sdk/packages/core/package.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    npm install
+COPY sdk/packages/core/ ./
+RUN npm run build
+
+# ==================== Portal Builder Stage ====================
 FROM node:20-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package.json package-lock.json ./
+# Copy built SDK package
+COPY --from=sdk-builder /app/sdk/packages/core/package.json sdk/packages/core/
+COPY --from=sdk-builder /app/sdk/packages/core/dist sdk/packages/core/dist
 
-# Install dependencies (mount cache survives --no-cache rebuilds)
+# Copy package files
+COPY auth9-portal/package.json auth9-portal/package-lock.json auth9-portal/
+
+# Install dependencies
+WORKDIR /app/auth9-portal
 RUN --mount=type=cache,target=/root/.npm \
     npm ci
 
 # Copy source code
-COPY . .
+COPY auth9-portal/ .
 
 # Build the application
 RUN npm run build
@@ -28,13 +46,18 @@ RUN addgroup -g 1001 -S nodejs && \
 
 WORKDIR /app
 
+# Copy built SDK package (needed for production npm ci)
+COPY --from=sdk-builder /app/sdk/packages/core/package.json sdk/packages/core/
+COPY --from=sdk-builder /app/sdk/packages/core/dist sdk/packages/core/dist
+
 # Copy built assets from builder
-COPY --from=builder --chown=remix:nodejs /app/build ./build
-COPY --from=builder --chown=remix:nodejs /app/public ./public
-COPY --from=builder --chown=remix:nodejs /app/package.json ./package.json
-COPY --from=builder --chown=remix:nodejs /app/package-lock.json ./package-lock.json
+COPY --from=builder --chown=remix:nodejs /app/auth9-portal/build ./auth9-portal/build
+COPY --from=builder --chown=remix:nodejs /app/auth9-portal/public ./auth9-portal/public
+COPY --from=builder --chown=remix:nodejs /app/auth9-portal/package.json ./auth9-portal/package.json
+COPY --from=builder --chown=remix:nodejs /app/auth9-portal/package-lock.json ./auth9-portal/package-lock.json
 
 # Install production dependencies only
+WORKDIR /app/auth9-portal
 RUN npm ci --omit=dev
 
 # Switch to non-root user

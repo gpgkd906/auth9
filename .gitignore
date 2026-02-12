@@ -24,6 +24,9 @@ build/
 dist/
 node_modules/
 
+# Smart build cache (content hashes for reset-docker.sh)
+.build-cache/
+
 # Logs
 *.log
 logs/
@@ -50,3 +53,4 @@ Cargo.lock
 docs/ticket/*.md
 !docs/ticket/README.md
 !docs/ticket/.example_ticket.md
+sdk/.turbo/
