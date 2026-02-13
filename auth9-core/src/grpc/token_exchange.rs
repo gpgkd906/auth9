@@ -7,7 +7,7 @@ use crate::grpc::proto::{
     Role as ProtoRole, ValidateTokenRequest, ValidateTokenResponse,
 };
 use crate::jwt::JwtManager;
-use crate::repository::{RbacRepository, ServiceRepository, UserRepository};
+use crate::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
 use tracing::debug;
@@ -125,6 +125,7 @@ where
     user_repo: Arc<U>,
     service_repo: Arc<S>,
     rbac_repo: Arc<R>,
+    tenant_repo: Option<Arc<dyn TenantRepository>>,
     is_production: bool,
 }
 
@@ -149,6 +150,27 @@ where
             user_repo,
             service_repo,
             rbac_repo,
+            tenant_repo: None,
+            is_production,
+        }
+    }
+
+    pub fn with_tenant_repo(
+        jwt_manager: JwtManager,
+        cache_manager: C,
+        user_repo: Arc<U>,
+        service_repo: Arc<S>,
+        rbac_repo: Arc<R>,
+        tenant_repo: Arc<dyn TenantRepository>,
+        is_production: bool,
+    ) -> Self {
+        Self {
+            jwt_manager,
+            cache_manager,
+            user_repo,
+            service_repo,
+            rbac_repo,
+            tenant_repo: Some(tenant_repo),
             is_production,
         }
     }
@@ -179,10 +201,30 @@ where
             .sub
             .parse::<StringUuid>()
             .map_err(|_| Status::internal("Invalid user ID in token"))?;
-        let tenant_id = req
-            .tenant_id
-            .parse::<StringUuid>()
-            .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
+
+        // Accept both UUID and tenant slug
+        let tenant_id = match req.tenant_id.parse::<StringUuid>() {
+            Ok(id) => id,
+            Err(_) => {
+                if let Some(ref tenant_repo) = self.tenant_repo {
+                    let tenant = tenant_repo
+                        .find_by_slug(&req.tenant_id)
+                        .await
+                        .map_err(|e| {
+                            Status::internal(format!("Failed to lookup tenant: {}", e))
+                        })?
+                        .ok_or_else(|| {
+                            Status::not_found(format!(
+                                "Tenant '{}' not found. Provide a valid tenant UUID or slug.",
+                                req.tenant_id
+                            ))
+                        })?;
+                    tenant.id
+                } else {
+                    return Err(Status::invalid_argument("Invalid tenant ID"));
+                }
+            }
+        };
 
         let user_exists = self
             .user_repo
@@ -354,10 +396,28 @@ where
             .user_id
             .parse::<StringUuid>()
             .map_err(|_| Status::invalid_argument("Invalid user ID"))?;
-        let tenant_id = req
-            .tenant_id
-            .parse::<StringUuid>()
-            .map_err(|_| Status::invalid_argument("Invalid tenant ID"))?;
+        let tenant_id = match req.tenant_id.parse::<StringUuid>() {
+            Ok(id) => id,
+            Err(_) => {
+                if let Some(ref tenant_repo) = self.tenant_repo {
+                    let tenant = tenant_repo
+                        .find_by_slug(&req.tenant_id)
+                        .await
+                        .map_err(|e| {
+                            Status::internal(format!("Failed to lookup tenant: {}", e))
+                        })?
+                        .ok_or_else(|| {
+                            Status::not_found(format!(
+                                "Tenant '{}' not found. Provide a valid tenant UUID or slug.",
+                                req.tenant_id
+                            ))
+                        })?;
+                    tenant.id
+                } else {
+                    return Err(Status::invalid_argument("Invalid tenant ID"));
+                }
+            }
+        };
 
         let (user_roles, role_records) = if req.service_id.is_empty() {
             let user_roles = match self

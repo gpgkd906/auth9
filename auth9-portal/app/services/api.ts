@@ -334,7 +334,60 @@ export const serviceApi = {
     });
     return handleResponse(response);
   },
+
+  getIntegration: async (serviceId: string, accessToken?: string): Promise<{ data: ServiceIntegrationInfo }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/integration`, {
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
 };
+
+// Integration info types
+export interface ServiceIntegrationInfo {
+  service: {
+    id: string;
+    name: string;
+    base_url?: string;
+    redirect_uris: string[];
+    logout_uris: string[];
+  };
+  clients: ClientIntegrationInfo[];
+  endpoints: EndpointInfo;
+  grpc: GrpcInfo;
+  environment_variables: EnvVar[];
+}
+
+export interface ClientIntegrationInfo {
+  client_id: string;
+  name?: string;
+  public_client: boolean;
+  client_secret?: string;
+  created_at: string;
+}
+
+export interface EndpointInfo {
+  auth9_domain: string;
+  auth9_public_url: string;
+  authorize: string;
+  token: string;
+  callback: string;
+  logout: string;
+  userinfo: string;
+  openid_configuration: string;
+  jwks: string;
+}
+
+export interface GrpcInfo {
+  address: string;
+  auth_mode: string;
+}
+
+export interface EnvVar {
+  key: string;
+  value: string;
+  description: string;
+}
 
 export interface CreateServiceInput {
   name: string;

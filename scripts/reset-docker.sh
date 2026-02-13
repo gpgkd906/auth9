@@ -46,7 +46,7 @@ compute_hash() {
       hash_input=$(find auth9-portal/app sdk/packages/core/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-portal/package.json auth9-portal/package-lock.json auth9-portal/Dockerfile sdk/packages/core/package.json 2>/dev/null)
       ;;
     auth9-demo)
-      hash_input=$(find auth9-demo/src sdk/packages/core/src sdk/packages/node/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-demo/package.json auth9-demo/Dockerfile sdk/packages/core/package.json sdk/packages/node/package.json 2>/dev/null)
+      hash_input=$(find auth9-demo/src sdk/packages/core/src sdk/packages/node/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-demo/package.json auth9-demo/package-lock.json auth9-demo/tsconfig.json auth9-demo/Dockerfile sdk/packages/core/package.json sdk/packages/node/package.json 2>/dev/null)
       ;;
     auth9-theme-builder)
       hash_input=$(find auth9-keycloak-theme/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-keycloak-theme/package.json auth9-keycloak-theme/package-lock.json auth9-keycloak-theme/Dockerfile 2>/dev/null)

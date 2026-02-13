@@ -28,6 +28,10 @@ const DEFAULT_M2M_CLIENT_ID: &str = "auth9-m2m-test";
 const DEFAULT_M2M_CLIENT_SECRET: &str = "m2m-test-secret-do-not-use-in-production";
 const DEFAULT_M2M_SERVICE_NAME: &str = "Auth9 M2M Test Service";
 
+/// Default demo client configuration
+const DEFAULT_DEMO_CLIENT_ID: &str = "auth9-demo";
+const DEFAULT_DEMO_SERVICE_NAME: &str = "Auth9 Demo Service";
+
 /// Build redirect URIs for database (JSON array)
 fn build_db_redirect_uris(_core_public_url: Option<&str>, portal_url: Option<&str>) -> String {
     let mut uris = vec![
@@ -205,6 +209,19 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed portal service in database")?;
 
+    // Seed demo client in Keycloak
+    info!("Seeding demo client in Keycloak...");
+    seeder
+        .seed_demo_client()
+        .await
+        .context("Failed to seed demo client in Keycloak")?;
+
+    // Seed demo service in database
+    info!("Seeding demo service in database...");
+    seed_demo_service(config)
+        .await
+        .context("Failed to seed demo service in database")?;
+
     // Seed M2M test service (client_credentials flow)
     info!("Seeding M2M test service in database...");
     seed_m2m_test_service(config)
@@ -221,6 +238,93 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .context("Failed to seed initial data")?;
 
     info!("Keycloak seeding completed");
+    Ok(())
+}
+
+/// Seed demo service in the database (idempotent)
+async fn seed_demo_service(config: &Config) -> Result<()> {
+    let pool: Pool<MySql> = MySqlPoolOptions::new()
+        .max_connections(1)
+        .connect(&config.database.url)
+        .await
+        .context("Failed to connect to database")?;
+
+    // Check if demo client already exists
+    let exists: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM clients WHERE client_id = ?")
+        .bind(DEFAULT_DEMO_CLIENT_ID)
+        .fetch_one(&pool)
+        .await
+        .context("Failed to check demo client")?;
+
+    if exists.0 > 0 {
+        info!(
+            "Demo client '{}' already exists in database, skipping",
+            DEFAULT_DEMO_CLIENT_ID
+        );
+        pool.close().await;
+        return Ok(());
+    }
+
+    let service_id = uuid::Uuid::new_v4().to_string();
+    let client_record_id = uuid::Uuid::new_v4().to_string();
+    // Public client has no secret
+    let placeholder_hash = "public-client-no-secret";
+
+    // Create service (tenant_id will be linked later)
+    let service_result = sqlx::query(
+        r#"
+        INSERT IGNORE INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at)
+        VALUES (?, NULL, ?, 'http://localhost:3002', '["http://localhost:3002/auth/callback"]', '["http://localhost:3002"]', 'active', NOW(), NOW())
+        "#,
+    )
+    .bind(&service_id)
+    .bind(DEFAULT_DEMO_SERVICE_NAME)
+    .execute(&pool)
+    .await
+    .context("Failed to create demo service")?;
+
+    // Get actual service ID
+    let actual_service_id = if service_result.rows_affected() == 0 {
+        let row: (String,) =
+            sqlx::query_as("SELECT id FROM services WHERE name = ?")
+                .bind(DEFAULT_DEMO_SERVICE_NAME)
+                .fetch_one(&pool)
+                .await
+                .context("Failed to get existing demo service")?;
+        row.0
+    } else {
+        service_id
+    };
+
+    // Create client
+    let client_result = sqlx::query(
+        r#"
+        INSERT IGNORE INTO clients (id, service_id, client_id, client_secret_hash, name, created_at)
+        VALUES (?, ?, ?, ?, 'Auth9 Demo Client', NOW())
+        "#,
+    )
+    .bind(&client_record_id)
+    .bind(&actual_service_id)
+    .bind(DEFAULT_DEMO_CLIENT_ID)
+    .bind(placeholder_hash)
+    .execute(&pool)
+    .await
+    .context("Failed to create demo client")?;
+
+    pool.close().await;
+
+    if client_result.rows_affected() > 0 {
+        info!(
+            "Created demo service and client '{}' in database",
+            DEFAULT_DEMO_CLIENT_ID
+        );
+    } else {
+        info!(
+            "Demo client '{}' already exists",
+            DEFAULT_DEMO_CLIENT_ID
+        );
+    }
+
     Ok(())
 }
 
@@ -625,6 +729,37 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .context("Failed to seed demo tenant_service for M2M")?;
 
         info!("Seeded tenant_service for Demo tenant → M2M Test Service");
+    }
+
+    // 9. Link Demo service to Demo tenant
+    let demo_service: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM services WHERE name = ?")
+            .bind(DEFAULT_DEMO_SERVICE_NAME)
+            .fetch_optional(&pool)
+            .await
+            .context("Failed to query Demo service")?;
+
+    if let Some((demo_service_id,)) = demo_service {
+        // Assign Demo service to Demo tenant
+        sqlx::query("UPDATE services SET tenant_id = ? WHERE id = ? AND tenant_id IS NULL")
+            .bind(&actual_demo_id)
+            .bind(&demo_service_id)
+            .execute(&pool)
+            .await
+            .context("Failed to assign Demo service to demo tenant")?;
+
+        sqlx::query(
+            r#"INSERT INTO tenant_services (tenant_id, service_id, enabled, created_at, updated_at)
+            VALUES (?, ?, TRUE, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE enabled = TRUE"#,
+        )
+        .bind(&actual_demo_id)
+        .bind(&demo_service_id)
+        .execute(&pool)
+        .await
+        .context("Failed to seed demo tenant_service for Demo Service")?;
+
+        info!("Seeded tenant_service for Demo tenant → Auth9 Demo Service");
     }
 
     pool.close().await;

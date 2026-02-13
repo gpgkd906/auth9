@@ -646,12 +646,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     };
 
     // Create gRPC service (clone cache_manager before move)
-    let grpc_service = TokenExchangeService::new(
+    let grpc_service = TokenExchangeService::with_tenant_repo(
         jwt_manager,
         cache_manager,
         user_repo,
         service_repo,
         rbac_repo,
+        tenant_repo.clone(),
         config.is_production(),
     );
 
@@ -1123,6 +1124,10 @@ where
             get(api::service::get::<S>)
                 .put(api::service::update::<S>)
                 .delete(api::service::delete::<S>),
+        )
+        .route(
+            "/api/v1/services/{id}/integration",
+            get(api::service::integration_info::<S>),
         )
         .route(
             "/api/v1/services/{id}/clients",

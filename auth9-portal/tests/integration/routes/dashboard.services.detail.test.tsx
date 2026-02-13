@@ -11,6 +11,7 @@ vi.mock("~/services/api", () => ({
     serviceApi: {
         get: vi.fn(),
         listClients: vi.fn(),
+        getIntegration: vi.fn().mockResolvedValue({ data: null }),
         regenerateClientSecret: vi.fn(),
         createClient: vi.fn(),
         deleteClient: vi.fn(),

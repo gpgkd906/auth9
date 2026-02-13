@@ -538,6 +538,14 @@ impl KeycloakClient {
 
     /// Get client UUID by client_id
     pub async fn get_client_uuid_by_client_id(&self, client_id: &str) -> Result<String> {
+        let client = self.get_client_by_client_id(client_id).await?;
+        client
+            .id
+            .ok_or_else(|| AppError::Keycloak("Client id missing in Keycloak response".to_string()))
+    }
+
+    /// Get full client info by client_id
+    pub async fn get_client_by_client_id(&self, client_id: &str) -> Result<KeycloakOidcClient> {
         let token = self.get_admin_token().await?;
         let url = format!(
             "{}/admin/realms/{}/clients?clientId={}",
@@ -566,14 +574,10 @@ impl KeycloakClient {
             .await
             .map_err(|e| AppError::Keycloak(format!("Failed to parse client list: {}", e)))?;
 
-        let client = clients
+        clients
             .into_iter()
             .next()
-            .ok_or_else(|| AppError::NotFound("Client not found in Keycloak".to_string()))?;
-
-        client
-            .id
-            .ok_or_else(|| AppError::Keycloak("Client id missing in Keycloak response".to_string()))
+            .ok_or_else(|| AppError::NotFound("Client not found in Keycloak".to_string()))
     }
 
     /// Update an OIDC client
