@@ -302,4 +302,52 @@ mod tests {
         let ip = extract_client_ip(&headers);
         assert!(ip.is_none());
     }
+
+    #[test]
+    fn test_extract_client_ip_xff_with_spaces() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "  192.168.1.1 , 10.0.0.1 ".parse().unwrap());
+        let ip = extract_client_ip(&headers);
+        assert_eq!(ip, Some("192.168.1.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_xff_single() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "10.0.0.1".parse().unwrap());
+        let ip = extract_client_ip(&headers);
+        assert_eq!(ip, Some("10.0.0.1".to_string()));
+    }
+
+    #[test]
+    fn test_extract_client_ip_prefers_xff_over_real_ip() {
+        let mut headers = HeaderMap::new();
+        headers.insert("x-forwarded-for", "1.1.1.1".parse().unwrap());
+        headers.insert("x-real-ip", "2.2.2.2".parse().unwrap());
+        let ip = extract_client_ip(&headers);
+        assert_eq!(ip, Some("1.1.1.1".to_string()));
+    }
+
+    #[test]
+    fn test_authentication_start_response_fields() {
+        let response = AuthenticationStartResponse {
+            challenge_id: "ch-123".to_string(),
+            public_key: serde_json::json!({"rpId": "localhost"}),
+        };
+        assert_eq!(response.challenge_id, "ch-123");
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("rpId"));
+    }
+
+    #[test]
+    fn test_authentication_token_response_fields() {
+        let response = AuthenticationTokenResponse {
+            access_token: "tok-123".to_string(),
+            token_type: "Bearer".to_string(),
+            expires_in: 7200,
+        };
+        assert_eq!(response.access_token, "tok-123");
+        assert_eq!(response.token_type, "Bearer");
+        assert_eq!(response.expires_in, 7200);
+    }
 }

@@ -518,6 +518,7 @@ pub async fn rate_limit_middleware(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::http::Method;
 
     #[test]
     fn test_rate_limit_config_default() {
@@ -872,4 +873,164 @@ mod tests {
         let cloned = state.clone();
         assert!(!cloned.is_enabled());
     }
+
+    // ========================================================================
+    // Helper Function Tests
+    // ========================================================================
+
+    #[test]
+    fn test_extract_client_ip_xff_single() {
+        let request = Request::builder()
+            .uri("/test")
+            .header("x-forwarded-for", "10.0.0.1")
+            .body(Body::empty())
+            .unwrap();
+        let ip = extract_client_ip(&request);
+        assert_eq!(ip, "10.0.0.1");
+    }
+
+    #[test]
+    fn test_extract_client_ip_xff_multiple() {
+        let request = Request::builder()
+            .uri("/test")
+            .header("x-forwarded-for", "192.168.1.1, 10.0.0.1, 172.16.0.1")
+            .body(Body::empty())
+            .unwrap();
+        let ip = extract_client_ip(&request);
+        assert_eq!(ip, "192.168.1.1");
+    }
+
+    #[test]
+    fn test_extract_client_ip_real_ip() {
+        let request = Request::builder()
+            .uri("/test")
+            .header("x-real-ip", "10.0.0.5")
+            .body(Body::empty())
+            .unwrap();
+        let ip = extract_client_ip(&request);
+        assert_eq!(ip, "10.0.0.5");
+    }
+
+    #[test]
+    fn test_extract_client_ip_unknown() {
+        let request = Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .unwrap();
+        let ip = extract_client_ip(&request);
+        assert_eq!(ip, "unknown");
+    }
+
+    #[test]
+    fn test_extract_client_ip_xff_takes_priority() {
+        let request = Request::builder()
+            .uri("/test")
+            .header("x-forwarded-for", "1.1.1.1")
+            .header("x-real-ip", "2.2.2.2")
+            .body(Body::empty())
+            .unwrap();
+        let ip = extract_client_ip(&request);
+        assert_eq!(ip, "1.1.1.1"); // xff takes priority
+    }
+
+    #[test]
+    fn test_normalize_path_with_uuid() {
+        let path = "/api/v1/tenants/550e8400-e29b-41d4-a716-446655440000/users";
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, "/api/v1/tenants/:id/users");
+    }
+
+    #[test]
+    fn test_normalize_path_with_numeric_id() {
+        let path = "/api/v1/tenants/12345/users";
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, "/api/v1/tenants/:id/users");
+    }
+
+    #[test]
+    fn test_normalize_path_with_template() {
+        let path = "/api/v1/tenants/{tenant_id}/users";
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, "/api/v1/tenants/{tenant_id}/users");
+    }
+
+    #[test]
+    fn test_normalize_path_no_ids() {
+        let path = "/api/v1/tenants";
+        let normalized = normalize_path(path);
+        assert_eq!(normalized, "/api/v1/tenants");
+    }
+
+    #[test]
+    fn test_is_sensitive_endpoint_true() {
+        assert!(is_sensitive_endpoint("POST:/api/v1/auth/token"));
+        assert!(is_sensitive_endpoint("POST:/api/v1/auth/forgot-password"));
+        assert!(is_sensitive_endpoint("POST:/api/v1/auth/reset-password"));
+    }
+
+    #[test]
+    fn test_is_sensitive_endpoint_false() {
+        assert!(!is_sensitive_endpoint("GET:/api/v1/users"));
+        assert!(!is_sensitive_endpoint("POST:/api/v1/tenants"));
+        assert!(!is_sensitive_endpoint("GET:/health"));
+    }
+
+    #[test]
+    fn test_endpoint_key_without_matched_path() {
+        let request = Request::builder()
+            .method(Method::GET)
+            .uri("/api/v1/tenants/550e8400-e29b-41d4-a716-446655440000/users")
+            .body(Body::empty())
+            .unwrap();
+        let key = endpoint_key(&request);
+        assert_eq!(key, "GET:/api/v1/tenants/:id/users");
+    }
+
+    #[test]
+    fn test_endpoint_key_post_method() {
+        let request = Request::builder()
+            .method(Method::POST)
+            .uri("/api/v1/auth/token")
+            .body(Body::empty())
+            .unwrap();
+        let key = endpoint_key(&request);
+        assert_eq!(key, "POST:/api/v1/auth/token");
+    }
+
+    #[test]
+    fn test_extract_key_from_verified_token_no_jwt_manager() {
+        let state = RateLimitState::noop(); // jwt_manager is None
+        let request = Request::builder()
+            .uri("/test")
+            .header(AUTHORIZATION, "Bearer some-token")
+            .body(Body::empty())
+            .unwrap();
+        let result = extract_key_from_verified_token(&state, &request);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_extract_key_from_verified_token_no_auth_header() {
+        let state = RateLimitState::noop();
+        let request = Request::builder()
+            .uri("/test")
+            .body(Body::empty())
+            .unwrap();
+        let result = extract_key_from_verified_token(&state, &request);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_rate_limit_exceeded_response_body() {
+        let response = RateLimitExceededResponse {
+            error: "Rate limit exceeded".to_string(),
+            code: "RATE_LIMITED".to_string(),
+            retry_after: 60,
+        };
+        let json = serde_json::to_string(&response).unwrap();
+        assert!(json.contains("Rate limit exceeded"));
+        assert!(json.contains("RATE_LIMITED"));
+        assert!(json.contains("60"));
+    }
+
 }

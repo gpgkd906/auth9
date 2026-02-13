@@ -261,4 +261,84 @@ mod tests {
         assert!(config.access_key_id.is_none());
         assert!(config.secret_access_key.is_none());
     }
+
+    #[tokio::test]
+    async fn test_ses_provider_from_config_with_explicit_credentials() {
+        let config = test_ses_config();
+        let provider = SesEmailProvider::from_config(&config).await;
+        assert!(provider.is_ok());
+        let provider = provider.unwrap();
+        assert_eq!(provider.provider_name(), "ses");
+        assert_eq!(provider.from_email, "noreply@example.com");
+        assert_eq!(provider.from_name, Some("Test Sender".to_string()));
+        assert_eq!(provider.configuration_set, Some("tracking-set".to_string()));
+    }
+
+    #[tokio::test]
+    async fn test_ses_provider_from_config_with_iam_role() {
+        let config = SesConfig {
+            region: "eu-west-1".to_string(),
+            access_key_id: None,
+            secret_access_key: None,
+            from_email: "noreply@iam.example.com".to_string(),
+            from_name: None,
+            configuration_set: None,
+        };
+        let provider = SesEmailProvider::from_config(&config).await;
+        assert!(provider.is_ok());
+        let provider = provider.unwrap();
+        assert_eq!(provider.from_email, "noreply@iam.example.com");
+        assert!(provider.from_name.is_none());
+        assert!(provider.configuration_set.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_ses_provider_build_from_address_with_name() {
+        let config = test_ses_config();
+        let provider = SesEmailProvider::from_config(&config).await.unwrap();
+        let address = provider.build_from_address();
+        assert_eq!(address, "Test Sender <noreply@example.com>");
+    }
+
+    #[tokio::test]
+    async fn test_ses_provider_build_from_address_without_name() {
+        let config = SesConfig {
+            region: "us-east-1".to_string(),
+            access_key_id: Some("AKIAIOSFODNN7EXAMPLE".to_string()),
+            secret_access_key: Some("wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY".to_string()),
+            from_email: "noreply@example.com".to_string(),
+            from_name: None,
+            configuration_set: None,
+        };
+        let provider = SesEmailProvider::from_config(&config).await.unwrap();
+        let address = provider.build_from_address();
+        assert_eq!(address, "noreply@example.com");
+    }
+
+    #[tokio::test]
+    async fn test_ses_provider_name() {
+        let config = test_ses_config();
+        let provider = SesEmailProvider::from_config(&config).await.unwrap();
+        assert_eq!(provider.provider_name(), "ses");
+    }
+
+    #[tokio::test]
+    async fn test_ses_send_no_recipients() {
+        let config = test_ses_config();
+        let provider = SesEmailProvider::from_config(&config).await.unwrap();
+        let message = EmailMessage {
+            to: vec![],
+            subject: "Test".to_string(),
+            html_body: "<p>Test</p>".to_string(),
+            text_body: None,
+        };
+        let result = provider.send(&message).await;
+        assert!(result.is_err());
+        match result {
+            Err(EmailProviderError::InvalidConfiguration(msg)) => {
+                assert!(msg.contains("No recipients"));
+            }
+            other => panic!("Expected InvalidConfiguration error, got {:?}", other),
+        }
+    }
 }
