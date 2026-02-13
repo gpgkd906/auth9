@@ -1336,4 +1336,67 @@ mod tests {
         let result = cache.invalidate_user_roles_for_tenant(user_id, tenant_id).await;
         assert!(result.is_ok());
     }
+
+    // ========================================================================
+    // CacheOperations trait dispatch tests - OIDC and Refresh Token
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_oidc_state() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.store_oidc_state("nonce-1", "payload", 300).await.is_ok());
+        // NoOp impl stores in-memory, so consuming works
+        let result = cache.consume_oidc_state("nonce-1").await.unwrap();
+        assert!(result.is_some());
+        let second = cache.consume_oidc_state("nonce-1").await.unwrap();
+        assert!(second.is_none());
+    }
+
+    #[tokio::test]
+    async fn test_noop_cache_operations_trait_refresh_session() {
+        let cache: &dyn CacheOperations = &NoOpCacheManager::new();
+        assert!(cache.bind_refresh_token_session("rt-1", "sid-1", 300).await.is_ok());
+        let result = cache.get_refresh_token_session("rt-1").await.unwrap();
+        assert_eq!(result.as_deref(), Some("sid-1"));
+        assert!(cache.remove_refresh_token_session("rt-1").await.is_ok());
+        let missing = cache.get_refresh_token_session("rt-1").await.unwrap();
+        assert!(missing.is_none());
+    }
+
+    #[test]
+    fn test_refresh_token_hash_deterministic() {
+        let hash1 = NoOpCacheManager::refresh_token_hash("test-token");
+        let hash2 = NoOpCacheManager::refresh_token_hash("test-token");
+        assert_eq!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_refresh_token_hash_different_inputs() {
+        let hash1 = NoOpCacheManager::refresh_token_hash("token-a");
+        let hash2 = NoOpCacheManager::refresh_token_hash("token-b");
+        assert_ne!(hash1, hash2);
+    }
+
+    #[test]
+    fn test_cache_manager_refresh_token_hash_deterministic() {
+        let hash1 = CacheManager::refresh_token_hash("test-token");
+        let hash2 = CacheManager::refresh_token_hash("test-token");
+        assert_eq!(hash1, hash2);
+        // Both managers should produce same hash
+        let noop_hash = NoOpCacheManager::refresh_token_hash("test-token");
+        assert_eq!(hash1, noop_hash);
+    }
+
+    #[test]
+    fn test_oidc_state_key_format() {
+        let key = format!("{}:{}", keys::OIDC_STATE, "nonce-abc");
+        assert_eq!(key, "auth9:oidc_state:nonce-abc");
+    }
+
+    #[test]
+    fn test_refresh_token_session_key_format() {
+        let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, "hash-abc");
+        assert_eq!(key, "auth9:refresh_session:hash-abc");
+    }
+
 }

@@ -213,4 +213,43 @@ mod tests {
         let response = MessageResponse::new("Test message");
         assert_eq!(response.message, "Test message");
     }
+
+    #[test]
+    fn test_forgot_password_input_deserialization() {
+        let json = r#"{"email": "test@example.com"}"#;
+        let input: ForgotPasswordInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.email, "test@example.com");
+    }
+
+    #[test]
+    fn test_reset_password_input_deserialization() {
+        let json = r#"{"token": "abc123", "new_password": "NewPass123!"}"#;
+        let input: ResetPasswordInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.token, "abc123");
+        assert_eq!(input.new_password, "NewPass123!");
+    }
+
+    #[test]
+    fn test_change_password_input_deserialization() {
+        let json = r#"{"current_password": "OldPass", "new_password": "NewPass123!"}"#;
+        let input: ChangePasswordInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.current_password, "OldPass");
+        assert_eq!(input.new_password, "NewPass123!");
+    }
+
+    #[test]
+    fn test_admin_set_password_input_deserialization() {
+        let json = r#"{"password": "TempPass123!", "temporary": true}"#;
+        let input: AdminSetPasswordInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.password, "TempPass123!");
+        assert!(input.temporary);
+    }
+
+    #[test]
+    fn test_admin_set_password_input_temporary_default() {
+        let json = r#"{"password": "TempPass123!"}"#;
+        let input: AdminSetPasswordInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.password, "TempPass123!");
+        assert!(!input.temporary);
+    }
 }
