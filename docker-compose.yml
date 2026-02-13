@@ -128,6 +128,26 @@ services:
       - auth9-network
     restart: unless-stopped
 
+  # ==================== Auth9 Demo (SDK Integration Example) ====================
+  auth9-demo:
+    build:
+      context: .
+      dockerfile: auth9-demo/Dockerfile
+    container_name: auth9-demo
+    ports:
+      - "3002:3002"
+    environment:
+      PORT: 3002
+      AUTH9_DOMAIN: http://auth9-core:8080
+      AUTH9_GRPC_ADDRESS: auth9-core:50051
+      AUTH9_GRPC_API_KEY: ${GRPC_API_KEYS:-dev-grpc-api-key}
+      AUTH9_AUDIENCE: demo-service
+    depends_on:
+      - auth9-core
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
   # ==================== TiDB (Database) ====================
   tidb:
     image: pingcap/tidb:v7.5.0
