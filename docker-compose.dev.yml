@@ -14,6 +14,11 @@ services:
     profiles:
       - full
 
+  # Disable auth9-demo in dev mode (run locally with npm run dev)
+  auth9-demo:
+    profiles:
+      - full
+
   # Enable adminer by default in dev
   adminer:
     profiles: []

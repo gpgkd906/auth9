@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Auth9 Demo - SDK Integration Guide</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f1117;
+      color: #e1e4e8;
+      line-height: 1.6;
+      padding: 2rem;
+      max-width: 960px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      color: #58a6ff;
+      margin-bottom: 0.5rem;
+      font-size: 2rem;
+    }
+
+    h2 {
+      color: #79c0ff;
+      margin: 2rem 0 1rem;
+      font-size: 1.3rem;
+      border-bottom: 1px solid #21262d;
+      padding-bottom: 0.5rem;
+    }
+
+    h3 {
+      color: #d2a8ff;
+      margin: 1.5rem 0 0.5rem;
+      font-size: 1.1rem;
+    }
+
+    p {
+      margin: 0.5rem 0;
+      color: #8b949e;
+    }
+
+    .subtitle {
+      color: #8b949e;
+      font-size: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .card {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 1.2rem;
+      margin: 0.8rem 0;
+    }
+
+    .method {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-right: 8px;
+      font-family: monospace;
+    }
+
+    .get {
+      background: #1f6feb33;
+      color: #58a6ff;
+    }
+
+    .post {
+      background: #238636;
+      color: #3fb950;
+    }
+
+    .endpoint {
+      font-family: monospace;
+      color: #f0883e;
+      font-weight: 600;
+    }
+
+    .hint {
+      color: #8b949e;
+      font-size: 0.9rem;
+      margin-top: 4px;
+    }
+
+    .tag {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 0.7rem;
+      font-weight: 600;
+      margin-left: 8px;
+    }
+
+    .public {
+      background: #238636;
+      color: #3fb950;
+    }
+
+    .protected {
+      background: #da3633;
+      color: #f85149;
+    }
+
+    .rbac {
+      background: #8957e5;
+      color: #d2a8ff;
+    }
+
+    .grpc-tag {
+      background: #1f6feb;
+      color: #58a6ff;
+    }
+
+    .mgmt {
+      background: #f0883e33;
+      color: #f0883e;
+    }
+
+    code {
+      background: #21262d;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.85rem;
+      color: #79c0ff;
+    }
+
+    pre {
+      background: #161b22;
+      border: 1px solid #21262d;
+      border-radius: 8px;
+      padding: 1rem;
+      overflow-x: auto;
+      font-size: 0.85rem;
+      margin: 0.5rem 0;
+      color: #c9d1d9;
+    }
+
+    .config-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 0.5rem 0;
+    }
+
+    .config-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #21262d;
+    }
+
+    .config-table td:first-child {
+      color: #79c0ff;
+      font-family: monospace;
+      white-space: nowrap;
+    }
+
+    .config-table td:last-child {
+      color: #8b949e;
+    }
+
+    .flow {
+      background: #0d1117;
+      border: 1px solid #30363d;
+      border-radius: 8px;
+      padding: 1rem;
+      margin: 1rem 0;
+      font-family: monospace;
+      font-size: 0.85rem;
+      color: #8b949e;
+    }
+
+    .flow .arrow {
+      color: #58a6ff;
+    }
+
+    a {
+      color: #58a6ff;
+      text-decoration: none;
+    }
+
+    a:hover {
+      text-decoration: underline;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>🔐 Auth9 Demo</h1>
+  <p class="subtitle">SDK integration examples for authentication, RBAC, and multi-tenant management</p>
+
+  <h2>Available Endpoints</h2>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/health</span>
+    <span class="tag public">Public</span>
+    <p class="hint">Health check - no authentication required</p>
+  </div>
+
+  <h3>Token Verification (auth9Middleware)</h3>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/api/me</span>
+    <span class="tag protected">Token Required</span>
+    <p class="hint">Returns current user info extracted from the verified JWT token</p>
+  </div>
+
+  <h3>RBAC Guards (requireRole / requirePermission)</h3>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/api/admin</span>
+    <span class="tag rbac">Role: admin</span>
+    <p class="hint">Requires <code>admin</code> role in the Tenant Access Token</p>
+  </div>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/api/resources</span>
+    <span class="tag rbac">Perm: resource:read</span>
+    <p class="hint">Requires <code>resource:read</code> permission in the Tenant Access Token</p>
+  </div>
+
+  <h3>gRPC Integration (Auth9GrpcClient)</h3>
+
+  <div class="card">
+    <span class="method post">POST</span>
+    <span class="endpoint">/api/exchange-token</span>
+    <span class="tag grpc-tag">gRPC</span>
+    <span class="tag protected">Token Required</span>
+    <p class="hint">Exchange Identity Token → Tenant Access Token with roles/permissions</p>
+    <pre>curl -X POST http://localhost:3002/api/exchange-token \
+  -H "Authorization: Bearer &lt;identity-token&gt;" \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId": "&lt;tenant-id&gt;", "serviceId": "&lt;service-id&gt;"}'</pre>
+  </div>
+
+  <div class="card">
+    <span class="method post">POST</span>
+    <span class="endpoint">/api/introspect</span>
+    <span class="tag grpc-tag">gRPC</span>
+    <span class="tag protected">Token Required</span>
+    <p class="hint">Introspect a token to see its full claims (sub, email, roles, permissions, etc.)</p>
+    <pre>curl -X POST http://localhost:3002/api/introspect \
+  -H "Authorization: Bearer &lt;token&gt;"</pre>
+  </div>
+
+  <h3>Management API (Auth9HttpClient)</h3>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/api/tenants</span>
+    <span class="tag mgmt">Management</span>
+    <span class="tag protected">Token Required</span>
+    <p class="hint">List all tenants via Auth9 Core REST API</p>
+  </div>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/api/users</span>
+    <span class="tag mgmt">Management</span>
+    <span class="tag protected">Token Required</span>
+    <p class="hint">List all users via Auth9 Core REST API</p>
+  </div>
+
+  <h2>Auth Flow</h2>
+  <div class="flow">
+    User Login (Keycloak) <span class="arrow">→</span> Identity Token<br>
+    <span class="arrow">↓</span><br>
+    Token Exchange (gRPC) <span class="arrow">→</span> Tenant Access Token (with roles &amp; permissions)<br>
+    <span class="arrow">↓</span><br>
+    Access Protected API <span class="arrow">→</span> auth9Middleware verifies token<br>
+    <span class="arrow">↓</span><br>
+    RBAC Check <span class="arrow">→</span> requireRole / requirePermission guards
+  </div>
+
+  <h2>Quick Start</h2>
+  <pre># Using curl with a token obtained from Auth9
+TOKEN="your-auth9-token"
+
+# Check your identity
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/me
+
+# Exchange for a tenant-scoped token
+curl -X POST http://localhost:3001/api/exchange-token \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"tenantId": "your-tenant-id", "serviceId": "your-service-id"}'
+
+# Use the tenant access token for RBAC-protected endpoints
+curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/admin
+curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/resources</pre>
+
+  <h2>Configuration</h2>
+  <table class="config-table">
+    <tr>
+      <td>AUTH9_DOMAIN</td>
+      <td>
+        <%= config.auth9Domain %>
+      </td>
+    </tr>
+    <tr>
+      <td>AUTH9_GRPC_ADDRESS</td>
+      <td>
+        <%= config.auth9GrpcAddress %>
+      </td>
+    </tr>
+    <tr>
+      <td>AUTH9_AUDIENCE</td>
+      <td>
+        <%= config.auth9Audience %>
+      </td>
+    </tr>
+    <tr>
+      <td>PORT</td>
+      <td>
+        <%= config.port %>
+      </td>
+    </tr>
+  </table>
+
+  <h2>SDK Packages Used</h2>
+  <div class="card">
+    <p><code>@auth9/node</code> — Main SDK: Auth9 class, TokenVerifier, Auth9GrpcClient</p>
+    <p><code>@auth9/node/middleware/express</code> — Express middleware: auth9Middleware, requireRole, requirePermission
+    </p>
+    <p><code>@auth9/core</code> — HTTP client &amp; domain types: Auth9HttpClient, Tenant, User, Role, etc.</p>
+  </div>
+</body>
+
+</html>

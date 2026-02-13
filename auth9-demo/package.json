@@ -1,0 +1,28 @@
+{
+    "name": "auth9-demo",
+    "version": "0.1.0",
+    "private": true,
+    "type": "module",
+    "description": "Auth9 SDK integration demo - shows authentication, RBAC, and multi-tenant management",
+    "scripts": {
+        "start": "node dist/server.js",
+        "dev": "tsx watch src/server.ts",
+        "build": "tsc"
+    },
+    "dependencies": {
+        "@auth9/core": "file:../sdk/packages/core",
+        "@auth9/node": "file:../sdk/packages/node",
+        "ejs": "^3.1.10",
+        "express": "^4.21.0"
+    },
+    "devDependencies": {
+        "@types/ejs": "^3.1.5",
+        "@types/express": "^5.0.0",
+        "@types/node": "^20.0.0",
+        "tsx": "^4.19.0",
+        "typescript": "^5.7.0"
+    },
+    "engines": {
+        "node": ">=18.0.0"
+    }
+}
