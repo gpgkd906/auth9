@@ -10,7 +10,7 @@ use crate::repository::{
     ActionRepository, PasswordResetRepository, SystemSettingsRepository, TenantRepository,
     UserRepository,
 };
-use crate::service::{ActionEngine, EmailService};
+use crate::service::{ActionEngine, EmailService, KeycloakSyncService};
 use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
@@ -37,6 +37,7 @@ pub struct PasswordService<
     // Reserved for future PostChangePassword trigger integration
     #[allow(dead_code)]
     action_engine: Option<Arc<ActionEngine<AR>>>,
+    keycloak_sync: Option<Arc<KeycloakSyncService>>,
     hmac_key: String,
 }
 
@@ -57,6 +58,7 @@ impl<P: PasswordResetRepository, U: UserRepository, S: SystemSettingsRepository>
             keycloak,
             tenant_repo: None,
             action_engine: None,
+            keycloak_sync: None,
             hmac_key,
         }
     }
@@ -75,6 +77,7 @@ impl<
         email_service: Arc<EmailService<S>>,
         keycloak: Arc<KeycloakClient>,
         tenant_repo: Arc<T>,
+        keycloak_sync: Arc<KeycloakSyncService>,
         hmac_key: String,
     ) -> Self {
         Self {
@@ -84,6 +87,7 @@ impl<
             keycloak,
             tenant_repo: Some(tenant_repo),
             action_engine: None,
+            keycloak_sync: Some(keycloak_sync),
             hmac_key,
         }
     }
@@ -95,6 +99,7 @@ impl<
         keycloak: Arc<KeycloakClient>,
         tenant_repo: Arc<T>,
         action_engine: Arc<ActionEngine<AR>>,
+        keycloak_sync: Arc<KeycloakSyncService>,
         hmac_key: String,
     ) -> PasswordService<P, U, S, T, AR> {
         PasswordService {
@@ -104,6 +109,7 @@ impl<
             keycloak,
             tenant_repo: Some(tenant_repo),
             action_engine: Some(action_engine),
+            keycloak_sync: Some(keycloak_sync),
             hmac_key,
         }
     }
@@ -170,6 +176,12 @@ impl<
             .reset_user_password(&user.keycloak_id, &input.new_password, false)
             .await?;
 
+        // Track password change timestamp
+        let _ = self
+            .user_repo
+            .update_password_changed_at(reset_token.user_id)
+            .await;
+
         // Mark token as used
         self.password_reset_repo.mark_used(reset_token.id).await?;
 
@@ -213,6 +225,9 @@ impl<
             .reset_user_password(&user.keycloak_id, &input.new_password, false)
             .await?;
 
+        // Track password change timestamp
+        let _ = self.user_repo.update_password_changed_at(user_id).await;
+
         // Note: PostChangePassword trigger integration is pending due to complexity:
         // - Password change is user-level operation (may affect multiple tenants)
         // - Requires querying user's tenant memberships
@@ -223,6 +238,30 @@ impl<
         self.email_service
             .send_password_changed(&user.email, user.display_name.as_deref())
             .await?;
+
+        Ok(())
+    }
+
+    /// Admin set password for a user (supports temporary passwords)
+    pub async fn admin_set_password(
+        &self,
+        user_id: StringUuid,
+        password: &str,
+        temporary: bool,
+    ) -> Result<()> {
+        let user = self
+            .user_repo
+            .find_by_id(user_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+
+        // Admin bypass: set password directly in Keycloak without policy validation
+        self.keycloak
+            .reset_user_password(&user.keycloak_id, password, temporary)
+            .await?;
+
+        // Track password change timestamp
+        let _ = self.user_repo.update_password_changed_at(user_id).await;
 
         Ok(())
     }
@@ -278,6 +317,11 @@ impl<
             tenant_repo
                 .update_password_policy(tenant_id, &updated)
                 .await?;
+        }
+
+        // Sync password policy to Keycloak
+        if let Some(ref keycloak_sync) = self.keycloak_sync {
+            keycloak_sync.sync_password_policy(&updated).await;
         }
 
         Ok(updated)

@@ -159,37 +159,74 @@ impl InvitationRepository for InvitationRepositoryImpl {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<Invitation>> {
-        let invitations = if let Some(status) = status {
-            sqlx::query_as::<_, Invitation>(
-                r#"
-                SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
-                FROM invitations
-                WHERE tenant_id = ? AND status = ?
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
-                "#,
-            )
-            .bind(tenant_id)
-            .bind(status.to_string())
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?
-        } else {
-            sqlx::query_as::<_, Invitation>(
-                r#"
-                SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
-                FROM invitations
-                WHERE tenant_id = ?
-                ORDER BY created_at DESC
-                LIMIT ? OFFSET ?
-                "#,
-            )
-            .bind(tenant_id)
-            .bind(limit)
-            .bind(offset)
-            .fetch_all(&self.pool)
-            .await?
+        let invitations = match status {
+            Some(InvitationStatus::Expired) => {
+                // "Expired" = pending in DB but past expires_at, OR explicitly marked expired
+                sqlx::query_as::<_, Invitation>(
+                    r#"
+                    SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+                    FROM invitations
+                    WHERE tenant_id = ? AND (status = 'expired' OR (status = 'pending' AND expires_at <= NOW()))
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    "#,
+                )
+                .bind(tenant_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            Some(InvitationStatus::Pending) => {
+                // "Pending" = pending in DB and NOT yet expired
+                sqlx::query_as::<_, Invitation>(
+                    r#"
+                    SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+                    FROM invitations
+                    WHERE tenant_id = ? AND status = 'pending' AND expires_at > NOW()
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    "#,
+                )
+                .bind(tenant_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            Some(ref s) => {
+                sqlx::query_as::<_, Invitation>(
+                    r#"
+                    SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+                    FROM invitations
+                    WHERE tenant_id = ? AND status = ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    "#,
+                )
+                .bind(tenant_id)
+                .bind(s.to_string())
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await?
+            }
+            None => {
+                sqlx::query_as::<_, Invitation>(
+                    r#"
+                    SELECT id, tenant_id, email, role_ids, invited_by, token_hash, status, expires_at, accepted_at, created_at, updated_at
+                    FROM invitations
+                    WHERE tenant_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT ? OFFSET ?
+                    "#,
+                )
+                .bind(tenant_id)
+                .bind(limit)
+                .bind(offset)
+                .fetch_all(&self.pool)
+                .await?
+            }
         };
 
         Ok(invitations)
@@ -200,17 +237,32 @@ impl InvitationRepository for InvitationRepositoryImpl {
         tenant_id: StringUuid,
         status: Option<InvitationStatus>,
     ) -> Result<i64> {
-        let row: (i64,) = if let Some(status) = status {
-            sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ? AND status = ?")
-                .bind(tenant_id)
-                .bind(status.to_string())
-                .fetch_one(&self.pool)
-                .await?
-        } else {
-            sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ?")
-                .bind(tenant_id)
-                .fetch_one(&self.pool)
-                .await?
+        let row: (i64,) = match status {
+            Some(InvitationStatus::Expired) => {
+                sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ? AND (status = 'expired' OR (status = 'pending' AND expires_at <= NOW()))")
+                    .bind(tenant_id)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            Some(InvitationStatus::Pending) => {
+                sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ? AND status = 'pending' AND expires_at > NOW()")
+                    .bind(tenant_id)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            Some(ref s) => {
+                sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ? AND status = ?")
+                    .bind(tenant_id)
+                    .bind(s.to_string())
+                    .fetch_one(&self.pool)
+                    .await?
+            }
+            None => {
+                sqlx::query_as("SELECT COUNT(*) FROM invitations WHERE tenant_id = ?")
+                    .bind(tenant_id)
+                    .fetch_one(&self.pool)
+                    .await?
+            }
         };
         Ok(row.0)
     }

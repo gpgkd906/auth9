@@ -21,6 +21,7 @@ pub enum PolicyAction {
     SystemConfigWrite,
     ActionRead,
     ActionWrite,
+    UserWrite,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -104,6 +105,7 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["action:write", "action:*"])
         }
+        PolicyAction::UserWrite => require_platform_admin(config, auth),
     }
 }
 

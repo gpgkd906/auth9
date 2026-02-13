@@ -504,7 +504,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create branding service with Keycloak sync
     let branding_service = Arc::new(BrandingService::with_sync_service(
         system_settings_repo.clone(),
-        keycloak_sync_service,
+        keycloak_sync_service.clone(),
     ));
 
     // Get app base URL for invitation links
@@ -526,6 +526,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         email_service.clone(),
         keycloak_arc.clone(),
         tenant_repo.clone(),
+        keycloak_sync_service.clone(),
         config.password_reset.hmac_key.clone(),
     ));
 
@@ -1243,6 +1244,11 @@ where
         .route(
             "/api/v1/users/me/password",
             post(api::password::change_password::<S>),
+        )
+        // Admin set password for a user (supports temporary passwords)
+        .route(
+            "/api/v1/users/{id}/password",
+            axum::routing::put(api::password::admin_set_password::<S>),
         )
         .route(
             "/api/v1/tenants/{id}/password-policy",

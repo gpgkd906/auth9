@@ -2081,8 +2081,7 @@ async fn test_update_realm_success() {
         registration_allowed: Some(true),
         reset_password_allowed: Some(true),
         ssl_required: Some("none".to_string()),
-        login_theme: None,
-        smtp_server: None,
+        ..Default::default()
     };
 
     let result = client.update_realm(&update).await;
@@ -2115,10 +2114,7 @@ async fn test_update_realm_not_found() {
     use auth9_core::keycloak::RealmUpdate;
     let update = RealmUpdate {
         registration_allowed: Some(true),
-        reset_password_allowed: None,
-        ssl_required: None,
-        login_theme: None,
-        smtp_server: None,
+        ..Default::default()
     };
 
     let result = client.update_realm(&update).await;

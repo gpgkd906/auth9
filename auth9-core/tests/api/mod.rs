@@ -294,6 +294,8 @@ impl UserRepository for TestUserRepository {
             avatar_url: input.avatar_url.clone(),
             keycloak_id: keycloak_id.to_string(),
             mfa_enabled: false,
+            password_changed_at: None,
+            locked_until: None,
             created_at: Utc::now(),
             updated_at: Utc::now(),
         };
@@ -536,6 +538,28 @@ impl UserRepository for TestUserRepository {
         let before = tenant_users.len();
         tenant_users.retain(|tu| tu.tenant_id != tenant_id);
         Ok((before - tenant_users.len()) as u64)
+    }
+
+    async fn update_password_changed_at(&self, id: StringUuid) -> Result<()> {
+        let mut users = self.users.write().await;
+        if let Some(user) = users.iter_mut().find(|u| u.id == id) {
+            user.password_changed_at = Some(Utc::now());
+            user.updated_at = Utc::now();
+        }
+        Ok(())
+    }
+
+    async fn update_locked_until(
+        &self,
+        id: StringUuid,
+        locked_until: Option<chrono::DateTime<Utc>>,
+    ) -> Result<()> {
+        let mut users = self.users.write().await;
+        if let Some(user) = users.iter_mut().find(|u| u.id == id) {
+            user.locked_until = locked_until;
+            user.updated_at = Utc::now();
+        }
+        Ok(())
     }
 }
 
@@ -2238,6 +2262,11 @@ impl LoginEventRepository for TestLoginEventRepository {
         Ok(id)
     }
 
+    async fn find_by_id(&self, id: i64) -> Result<Option<LoginEvent>> {
+        let events = self.events.read().await;
+        Ok(events.iter().find(|e| e.id == id).cloned())
+    }
+
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {
         let events = self.events.read().await;
         Ok(events
@@ -2712,6 +2741,8 @@ pub fn create_test_user(id: Option<Uuid>) -> User {
         avatar_url: None,
         keycloak_id: "kc-user-test".to_string(),
         mfa_enabled: false,
+        password_changed_at: None,
+        locked_until: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     }

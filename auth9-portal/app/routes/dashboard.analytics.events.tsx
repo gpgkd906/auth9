@@ -230,14 +230,14 @@ export default function LoginEventsPage() {
               </div>
               <div className="flex gap-2">
                 {pagination.page > 1 && (
-                  <Link to={`?page=${pagination.page - 1}`}>
+                  <Link to={`?page=${pagination.page - 1}${email ? `&email=${encodeURIComponent(email)}` : ""}`}>
                     <Button variant="outline" size="sm">
                       Previous
                     </Button>
                   </Link>
                 )}
                 {pagination.page < pagination.total_pages && (
-                  <Link to={`?page=${pagination.page + 1}`}>
+                  <Link to={`?page=${pagination.page + 1}${email ? `&email=${encodeURIComponent(email)}` : ""}`}>
                     <Button variant="outline" size="sm">
                       Next
                     </Button>

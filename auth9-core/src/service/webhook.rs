@@ -171,22 +171,27 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
         };
 
         let start = Instant::now();
-        match deliver_webhook_with_status(self.http_client.as_ref(), &webhook, &test_event).await {
-            Ok(response) => Ok(WebhookTestResult {
+        let result = match deliver_webhook_with_status(self.http_client.as_ref(), &webhook, &test_event).await {
+            Ok(response) => WebhookTestResult {
                 success: true,
                 status_code: Some(response.status_code),
                 response_body: response.body,
                 error: None,
                 response_time_ms: Some(start.elapsed().as_millis() as u64),
-            }),
-            Err((status_code, error_msg)) => Ok(WebhookTestResult {
+            },
+            Err((status_code, error_msg)) => WebhookTestResult {
                 success: false,
                 status_code,
                 response_body: None,
                 error: Some(error_msg),
                 response_time_ms: Some(start.elapsed().as_millis() as u64),
-            }),
-        }
+            },
+        };
+
+        // Update webhook status (reset failure_count on success, increment on failure)
+        let _ = self.webhook_repo.update_triggered(id, result.success).await;
+
+        Ok(result)
     }
 
     /// Regenerate webhook secret
@@ -753,6 +758,10 @@ mod tests {
                 }))
             }
         });
+        mock.expect_update_triggered()
+            .with(eq(webhook_id), eq(true))
+            .returning(|_, _| Ok(()))
+            .times(1);
 
         let service = WebhookService::new_with_http(Arc::new(mock), http);
         let result = service.test(webhook_id).await.unwrap();
@@ -794,6 +803,10 @@ mod tests {
                 }))
             }
         });
+        mock.expect_update_triggered()
+            .with(eq(webhook_id), eq(false))
+            .returning(|_, _| Ok(()))
+            .times(1);
 
         let service = WebhookService::new_with_http(Arc::new(mock), http);
         let result = service.test(webhook_id).await.unwrap();

@@ -121,7 +121,7 @@ export default function InviteAcceptPage() {
 
           <div className="mt-6 text-center text-sm text-[var(--text-tertiary)]">
             Already have an account?{" "}
-            <Link to="/login" className="text-[var(--accent-blue)] hover:underline font-medium">
+            <Link to={`/login?invite_token=${encodeURIComponent(token)}`} className="text-[var(--accent-blue)] hover:underline font-medium">
               Sign in
             </Link>
           </div>

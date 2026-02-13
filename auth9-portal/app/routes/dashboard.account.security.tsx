@@ -13,7 +13,7 @@ export async function action({ request }: ActionFunctionArgs) {
   const newPassword = formData.get("newPassword") as string;
   const confirmPassword = formData.get("confirmPassword") as string;
 
-  if (!currentPassword || !newPassword) {
+  if (!currentPassword || !newPassword || !confirmPassword) {
     return { error: "All password fields are required" };
   }
 
@@ -51,14 +51,13 @@ export default function AccountSecurityPage() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Form method="post" className="space-y-4 max-w-md">
+          <Form method="post" className="space-y-4 max-w-md" noValidate>
             <div className="space-y-2">
               <Label htmlFor="currentPassword">Current password</Label>
               <Input
                 id="currentPassword"
                 name="currentPassword"
                 type="password"
-                required
               />
             </div>
 
@@ -68,8 +67,6 @@ export default function AccountSecurityPage() {
                 id="newPassword"
                 name="newPassword"
                 type="password"
-                minLength={8}
-                required
               />
               <p className="text-xs text-[var(--text-secondary)]">Must be at least 8 characters</p>
             </div>
@@ -80,7 +77,6 @@ export default function AccountSecurityPage() {
                 id="confirmPassword"
                 name="confirmPassword"
                 type="password"
-                required
               />
             </div>
 

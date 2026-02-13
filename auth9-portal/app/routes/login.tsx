@@ -17,7 +17,11 @@ function buildAuthorizeUrl(requestUrl: URL) {
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   const redirectUri = `${portalUrl}/auth/callback`;
 
-  const state = crypto.randomUUID();
+  const inviteToken = requestUrl.searchParams.get("invite_token");
+  const statePayload = inviteToken
+    ? JSON.stringify({ nonce: crypto.randomUUID(), invite_token: inviteToken })
+    : crypto.randomUUID();
+  const state = Buffer.from(typeof statePayload === "string" ? statePayload : statePayload).toString("base64url");
 
   const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
   authorizeUrl.searchParams.set("response_type", "code");

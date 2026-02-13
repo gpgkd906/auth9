@@ -8,16 +8,42 @@
 
 ## 测试前置数据（必需）
 
-在执行本文件场景前，先执行：
+在执行本文件场景前，依次执行：
 
+### Step 1: 创建数据库种子数据
 ```bash
 mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/session/seed.sql
+```
+
+### Step 2: 在 Keycloak 中创建目标用户
+```bash
+# 获取 Keycloak Admin Token
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "grant_type=client_credentials&client_id=admin-cli&client_secret=admin" \
+  | jq -r '.access_token')
+
+# 创建 target@example.com 用户（忽略已存在错误）
+curl -s -o /dev/null -w "%{http_code}" -X POST "http://localhost:8081/admin/realms/auth9/users" \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"target","email":"target@example.com","firstName":"Target","lastName":"User","enabled":true,"emailVerified":true,"credentials":[{"type":"password","value":"Target123!","temporary":false}]}'
+
+# 获取 Keycloak 分配的用户 ID 并更新数据库
+KC_USER_ID=$(curl -s "http://localhost:8081/admin/realms/auth9/users?email=target@example.com" \
+  -H "Authorization: Bearer $KC_TOKEN" | jq -r '.[0].id')
+
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
+  "UPDATE users SET keycloak_id='$KC_USER_ID' WHERE id='50587266-c621-42d7-9d3d-8fc8e0ed00ef';"
+
+echo "Target user Keycloak ID: $KC_USER_ID"
 ```
 
 说明：
 - `seed.sql` 会创建管理员与目标用户的会话数据
 - 管理员：`admin@auth9.local`
-- 目标用户：`target@example.com`
+- 目标用户：`target@example.com`（密码：`Target123!`）
+- Step 2 确保用户同时存在于 Keycloak 和数据库中，并同步 keycloak_id
 
 ---
 
@@ -82,7 +108,7 @@ WHERE user_id = '{user_id}' AND alert_type = 'brute_force' ORDER BY created_at D
 ```sql
 SELECT alert_type, severity, details FROM security_alerts
 WHERE user_id = '{user_id}' AND alert_type = 'new_device' ORDER BY created_at DESC LIMIT 1;
--- 预期: 存在记录，severity = 'low'
+-- 预期: 存在记录，severity = 'medium'
 ```
 
 ---

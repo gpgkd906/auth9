@@ -450,6 +450,7 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
 /// Logout endpoint
 #[derive(Debug, Deserialize)]
 pub struct LogoutRequest {
+    pub client_id: Option<String>,
     pub id_token_hint: Option<String>,
     pub post_logout_redirect_uri: Option<String>,
     pub state: Option<String>,
@@ -530,6 +531,26 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
         }
     } else {
         tracing::debug!("Logout request without authorization header");
+    }
+
+    // Validate post_logout_redirect_uri against the service's logout_uris
+    if let Some(ref redirect_uri) = params.post_logout_redirect_uri {
+        if let Some(ref client_id) = params.client_id {
+            let service = state
+                .client_service()
+                .get_by_client_id(client_id)
+                .await?;
+            if !service.logout_uris.contains(redirect_uri) {
+                return Err(AppError::BadRequest(
+                    "Invalid post_logout_redirect_uri".to_string(),
+                ));
+            }
+        } else {
+            // No client_id provided but post_logout_redirect_uri specified — reject
+            return Err(AppError::BadRequest(
+                "client_id is required when post_logout_redirect_uri is specified".to_string(),
+            ));
+        }
     }
 
     let logout_url = build_keycloak_logout_url(
@@ -1139,12 +1160,14 @@ mod tests {
     #[test]
     fn test_logout_request_full() {
         let json = r#"{
+            "client_id": "my-client",
             "id_token_hint": "token123",
             "post_logout_redirect_uri": "https://app.example.com/logged-out",
             "state": "logout-state"
         }"#;
 
         let request: LogoutRequest = serde_json::from_str(json).unwrap();
+        assert_eq!(request.client_id, Some("my-client".to_string()));
         assert_eq!(request.id_token_hint, Some("token123".to_string()));
         assert_eq!(
             request.post_logout_redirect_uri,
@@ -1158,6 +1181,7 @@ mod tests {
         let json = r#"{}"#;
 
         let request: LogoutRequest = serde_json::from_str(json).unwrap();
+        assert!(request.client_id.is_none());
         assert!(request.id_token_hint.is_none());
         assert!(request.post_logout_redirect_uri.is_none());
         assert!(request.state.is_none());

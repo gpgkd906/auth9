@@ -1,11 +1,27 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
 import { commitSession } from "~/services/session.server";
+import { invitationApi } from "~/services/api";
+
+function parseOAuthState(stateParam: string | null): { inviteToken?: string } {
+    if (!stateParam) return {};
+    try {
+        const decoded = Buffer.from(stateParam, "base64url").toString("utf-8");
+        const parsed = JSON.parse(decoded);
+        if (parsed && typeof parsed === "object" && parsed.invite_token) {
+            return { inviteToken: parsed.invite_token };
+        }
+    } catch {
+        // Not a JSON state (plain UUID), ignore
+    }
+    return {};
+}
 
 export async function loader({ request }: LoaderFunctionArgs) {
     const url = new URL(request.url);
     const portalOrigin = url.origin;
     const code = url.searchParams.get("code");
+    const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");
     const errorDescription = url.searchParams.get("error_description");
 
@@ -51,6 +67,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
             idToken: data.id_token,
             expiresAt: Date.now() + (data.expires_in * 1000),
         };
+
+        // Check if there's a pending invitation to accept
+        const { inviteToken } = parseOAuthState(state);
+        if (inviteToken) {
+            try {
+                await invitationApi.accept({ token: inviteToken });
+            } catch (err) {
+                console.error("Failed to auto-accept invitation:", err);
+            }
+        }
 
         return redirect("/dashboard", {
             headers: {

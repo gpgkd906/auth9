@@ -1,7 +1,9 @@
 //! Password management API handlers
 
 use crate::api::{write_audit_log_generic, MessageResponse, SuccessResponse};
-use crate::domain::{ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput, StringUuid};
+use crate::domain::{
+    AdminSetPasswordInput, ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput, StringUuid,
+};
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
@@ -11,6 +13,7 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use validator::Validate;
 
 /// Request password reset email
 pub async fn forgot_password<S: HasPasswordManagement>(
@@ -112,6 +115,49 @@ pub async fn update_password_policy<S: HasPasswordManagement + HasServices>(
     .await;
 
     Ok(Json(SuccessResponse::new(policy)))
+}
+
+/// Admin set password for a user (supports temporary passwords)
+pub async fn admin_set_password<S: HasPasswordManagement + HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    headers: HeaderMap,
+    Path(user_id): Path<StringUuid>,
+    Json(input): Json<AdminSetPasswordInput>,
+) -> Result<Json<MessageResponse>, AppError> {
+    // Require UserWrite permission
+    enforce(
+        state.config(),
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::UserWrite,
+            scope: ResourceScope::Global,
+        },
+    )?;
+
+    input
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    state
+        .password_service()
+        .admin_set_password(user_id, &input.password, input.temporary)
+        .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "user.password.admin_set",
+        "user",
+        Some(*user_id),
+        None,
+        Some(serde_json::json!({ "temporary": input.temporary })),
+    )
+    .await;
+
+    Ok(Json(MessageResponse::new(
+        "Password has been set successfully.",
+    )))
 }
 
 /// Extract user ID from JWT token in Authorization header

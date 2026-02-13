@@ -878,4 +878,102 @@ mod tests {
             );
         }
     }
+
+    #[tokio::test]
+    async fn test_nodejs_require_blocked() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        // Try to use Node.js require()
+        let action = create_test_action(
+            r#"
+            try {
+                const fs = require("fs");
+                context.claims = context.claims || {};
+                context.claims.leaked_data = "Node.js require worked!";
+            } catch (e) {
+                context.claims = context.claims || {};
+                context.claims.blocked = true;
+                context.claims.error = String(e);
+            }
+            context;
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        // Should succeed because require() should not be defined
+        assert!(result.is_ok(), "Node.js require() should be blocked");
+
+        if let Ok(updated_context) = result {
+            assert!(
+                updated_context.claims.is_some(),
+                "Should have claims"
+            );
+            let claims = updated_context.claims.unwrap();
+            assert!(
+                claims.contains_key("blocked"),
+                "Should have blocked flag when require() fails"
+            );
+            assert!(
+                claims.contains_key("error"),
+                "Should have error message"
+            );
+            let error = claims.get("error").unwrap();
+            assert!(
+                error.as_str().unwrap().contains("ReferenceError") || 
+                error.as_str().unwrap().contains("require is not defined"),
+                "Error should be ReferenceError: require is not defined"
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_process_env_access_blocked() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        // Try to access process.env (from QA document scenario 3)
+        let action = create_test_action(
+            r#"
+            try {
+                context.claims = context.claims || {};
+                context.claims.env = process.env;
+                context.claims.jwt_secret = process.env.JWT_SECRET;
+            } catch (e) {
+                context.claims = context.claims || {};
+                context.claims.blocked = true;
+            }
+            context;
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        // Should succeed because process should not be defined
+        assert!(result.is_ok(), "process.env access should be blocked");
+
+        if let Ok(updated_context) = result {
+            assert!(
+                updated_context.claims.is_some(),
+                "Should have claims"
+            );
+            let claims = updated_context.claims.unwrap();
+            assert!(
+                claims.contains_key("blocked"),
+                "Should have blocked flag when process access fails"
+            );
+            // Should NOT contain env or jwt_secret
+            assert!(
+                !claims.contains_key("env"),
+                "Should not contain env data"
+            );
+            assert!(
+                !claims.contains_key("jwt_secret"),
+                "Should not contain JWT_SECRET"
+            );
+        }
+    }
 }

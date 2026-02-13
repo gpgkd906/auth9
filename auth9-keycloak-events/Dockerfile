@@ -4,9 +4,9 @@ FROM maven:3.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /build
 
 # Clone and build the keycloak-events project
-# Using v0.47 which is compatible with Keycloak 26.x
+# Using v0.26 which is compatible with Keycloak 23.x (targets 23.0.4)
 RUN apk add --no-cache git && \
-    git clone --depth 1 --branch v0.47 https://github.com/p2-inc/keycloak-events.git .
+    git clone --depth 1 --branch v0.26 https://github.com/p2-inc/keycloak-events.git .
 RUN --mount=type=cache,target=/root/.m2/repository \
     mvn clean package -DskipTests
 

@@ -57,7 +57,7 @@ describe("Account Profile Page", () => {
         const request = new Request("http://localhost/dashboard/account");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ user: mockUser });
+        expect(result).toEqual({ user: mockUser, error: null });
         expect(userApi.getMe).toHaveBeenCalledWith("test-token");
     });
 

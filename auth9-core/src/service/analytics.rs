@@ -77,6 +77,11 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
         self.login_event_repo.create(&input).await
     }
 
+    /// Get a login event by ID
+    pub async fn get_event(&self, id: i64) -> Result<Option<LoginEvent>> {
+        self.login_event_repo.find_by_id(id).await
+    }
+
     /// Record a successful login
     pub async fn record_successful_login(&self, metadata: LoginEventMetadata) -> Result<i64> {
         let input = CreateLoginEventInput {

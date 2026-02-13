@@ -74,6 +74,8 @@ pub struct ListEventsQuery {
     pub per_page: i64,
     /// Filter events by email address
     pub email: Option<String>,
+    /// Filter events by tenant ID
+    pub tenant_id: Option<StringUuid>,
 }
 
 /// List login events with pagination
@@ -85,6 +87,11 @@ pub async fn list_events<S: HasAnalytics>(
         state
             .analytics_service()
             .list_events_by_email(&email, params.page, params.per_page)
+            .await?
+    } else if let Some(tenant_id) = params.tenant_id {
+        state
+            .analytics_service()
+            .list_tenant_events(tenant_id, params.page, params.per_page)
             .await?
     } else {
         state

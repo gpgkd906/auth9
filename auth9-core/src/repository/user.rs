@@ -60,6 +60,16 @@ pub trait UserRepository: Send + Sync {
 
     /// Delete all tenant memberships for a tenant
     async fn delete_tenant_memberships_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
+
+    /// Update password_changed_at timestamp
+    async fn update_password_changed_at(&self, id: StringUuid) -> Result<()>;
+
+    /// Update locked_until timestamp (None to unlock)
+    async fn update_locked_until(
+        &self,
+        id: StringUuid,
+        locked_until: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<()>;
 }
 
 pub struct UserRepositoryImpl {
@@ -99,7 +109,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
+            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE id = ?
             "#,
@@ -114,7 +124,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
+            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE email = ?
             "#,
@@ -129,7 +139,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
+            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE keycloak_id = ?
             "#,
@@ -144,7 +154,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
+            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -169,7 +179,7 @@ impl UserRepository for UserRepositoryImpl {
         let pattern = format!("%{}%", query);
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, created_at, updated_at
+            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE email LIKE ? OR display_name LIKE ?
             ORDER BY created_at DESC
@@ -356,7 +366,7 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT u.id, u.keycloak_id, u.email, u.display_name, u.avatar_url, u.mfa_enabled, u.created_at, u.updated_at
+            SELECT u.id, u.keycloak_id, u.email, u.display_name, u.avatar_url, u.mfa_enabled, u.password_changed_at, u.locked_until, u.created_at, u.updated_at
             FROM users u
             INNER JOIN tenant_users tu ON u.id = tu.user_id
             WHERE tu.tenant_id = ?
@@ -494,6 +504,38 @@ impl UserRepository for UserRepositoryImpl {
             .await?;
 
         Ok(result.rows_affected())
+    }
+
+    async fn update_password_changed_at(&self, id: StringUuid) -> Result<()> {
+        let result = sqlx::query(
+            "UPDATE users SET password_changed_at = NOW(), updated_at = NOW() WHERE id = ?",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("User {} not found", id)));
+        }
+        Ok(())
+    }
+
+    async fn update_locked_until(
+        &self,
+        id: StringUuid,
+        locked_until: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<()> {
+        let result =
+            sqlx::query("UPDATE users SET locked_until = ?, updated_at = NOW() WHERE id = ?")
+                .bind(locked_until)
+                .bind(id)
+                .execute(&self.pool)
+                .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("User {} not found", id)));
+        }
+        Ok(())
     }
 }
 

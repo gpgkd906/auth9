@@ -293,6 +293,19 @@ where
     ) -> Result<Response<ValidateTokenResponse>, Status> {
         let req = request.into_inner();
 
+        // Try service client token first (aud: "auth9-service")
+        if let Ok(claims) = self.jwt_manager.verify_service_client_token(&req.access_token) {
+            metrics::counter!("auth9_auth_token_validation_total", "result" => "valid")
+                .increment(1);
+            return Ok(Response::new(ValidateTokenResponse {
+                valid: true,
+                user_id: claims.sub,
+                tenant_id: claims.tenant_id.unwrap_or_default(),
+                error: String::new(),
+            }));
+        }
+
+        // Then try tenant access token
         let audience = if req.audience.is_empty() {
             if self.is_production {
                 return Err(Status::failed_precondition(

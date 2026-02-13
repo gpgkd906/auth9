@@ -12,6 +12,7 @@ use std::collections::HashMap;
 #[async_trait]
 pub trait LoginEventRepository: Send + Sync {
     async fn create(&self, input: &CreateLoginEventInput) -> Result<i64>;
+    async fn find_by_id(&self, id: i64) -> Result<Option<LoginEvent>>;
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<LoginEvent>>;
     async fn list_by_user(
         &self,
@@ -81,6 +82,22 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
         .await?;
 
         Ok(result.last_insert_id() as i64)
+    }
+
+    async fn find_by_id(&self, id: i64) -> Result<Option<LoginEvent>> {
+        let event = sqlx::query_as::<_, LoginEvent>(
+            r#"
+            SELECT id, user_id, email, tenant_id, event_type, ip_address, user_agent,
+                   device_type, location, session_id, failure_reason, created_at
+            FROM login_events
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(event)
     }
 
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<LoginEvent>> {

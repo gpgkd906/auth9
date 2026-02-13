@@ -4,13 +4,18 @@ import { createCookie, redirect } from "react-router";
 const isProduction = process.env.NODE_ENV === "production";
 
 // Create the session cookie
+// Session lifetime in seconds (8 hours).
+// Using an explicit maxAge ensures the cookie expires even when browsers
+// restore session cookies across restarts ("continue where you left off").
+const SESSION_MAX_AGE = 8 * 60 * 60;
+
 export const sessionCookie = createCookie("auth9_session", {
   secrets: [process.env.SESSION_SECRET || "default-secret-change-me"],
   path: "/",
   sameSite: "lax",
   httpOnly: true,
   secure: isProduction,
-  maxAge: 60 * 60 * 24 * 7, // 7 days
+  maxAge: SESSION_MAX_AGE,
 });
 
 export interface SessionData {

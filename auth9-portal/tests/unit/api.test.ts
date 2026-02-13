@@ -540,7 +540,8 @@ describe('API Service', () => {
       const result = await rbacApi.getUserRoles('user-123', 'tenant-456');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/users/user-123/tenants/tenant-456/roles')
+        expect.stringContaining('/api/v1/users/user-123/tenants/tenant-456/roles'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data.roles).toContain('admin');
     });
@@ -1036,7 +1037,8 @@ describe('API Service', () => {
       const result = await rbacApi.getUserAssignedRoles('user-123', 'tenant-456');
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/users/user-123/tenants/tenant-456/assigned-roles')
+        expect.stringContaining('/api/v1/users/user-123/tenants/tenant-456/assigned-roles'),
+        expect.objectContaining({ headers: expect.any(Object) })
       );
       expect(result.data).toHaveLength(1);
     });
@@ -1112,7 +1114,7 @@ describe('API Service', () => {
       await analyticsApi.listEvents(2, 25);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/analytics/login-events?limit=25&offset=25'),
+        expect.stringContaining('/api/v1/analytics/login-events?page=2&per_page=25'),
         expect.objectContaining({ headers: expect.any(Object) })
       );
     });
@@ -1126,7 +1128,7 @@ describe('API Service', () => {
       await analyticsApi.listEvents();
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('limit=50&offset=0'),
+        expect.stringContaining('page=1&per_page=50'),
         expect.any(Object)
       );
     });

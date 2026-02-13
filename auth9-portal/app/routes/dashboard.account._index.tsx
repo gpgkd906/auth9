@@ -17,8 +17,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   try {
     const response = await userApi.getMe(accessToken);
-    return { user: response.data };
-  } catch {
+    return { user: response.data, error: null };
+  } catch (error) {
+    // Network errors (backend down) - show error on page instead of crashing
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      return { user: null, error: "Unable to connect to the server. Please try again later." };
+    }
     throw redirect("/login");
   }
 }
@@ -43,17 +47,38 @@ export async function action({ request }: ActionFunctionArgs) {
     );
     return { success: true, message: "Profile updated successfully" };
   } catch (error) {
+    if (error instanceof TypeError && error.message.includes("fetch")) {
+      return { error: "Unable to connect to the server. Please try again later." };
+    }
     const message = error instanceof Error ? error.message : "Failed to update profile";
     return { error: message };
   }
 }
 
 export default function AccountProfilePage() {
-  const { user } = useLoaderData<typeof loader>();
+  const { user, error: loaderError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
   const isSubmitting = navigation.state === "submitting";
+
+  if (!user) {
+    return (
+      <div className="space-y-6">
+        <Card>
+          <CardHeader>
+            <CardTitle>Profile</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
+              {loaderError || "Failed to load profile. Please try again later."}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   const displayName = user.display_name || "";
   const initials = (user.display_name || user.email)
     .split(" ")

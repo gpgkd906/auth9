@@ -171,6 +171,8 @@ pub fn create_test_user(id: Uuid) -> User {
         avatar_url: None,
         keycloak_id: "kc-user-id".to_string(),
         mfa_enabled: false,
+        password_changed_at: None,
+        locked_until: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     }
@@ -184,6 +186,8 @@ pub fn create_test_user_with_email(id: Uuid, email: &str) -> User {
         avatar_url: None,
         keycloak_id: format!("kc-{}", id),
         mfa_enabled: false,
+        password_changed_at: None,
+        locked_until: None,
         created_at: chrono::Utc::now(),
         updated_at: chrono::Utc::now(),
     }

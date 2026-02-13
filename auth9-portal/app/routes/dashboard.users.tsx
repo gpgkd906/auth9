@@ -103,8 +103,8 @@ export async function action({ request }: ActionFunctionArgs) {
       await rbacApi.assignRoles({
         user_id,
         tenant_id,
-        roles
-      });
+        role_ids: roles
+      }, accessToken || undefined);
       return { success: true, intent };
     }
 
@@ -124,7 +124,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const user_id = formData.get("user_id") as string;
       const tenant_id = formData.get("tenant_id") as string;
       const role_id = formData.get("role_id") as string;
-      await rbacApi.unassignRole(user_id, tenant_id, role_id);
+      await rbacApi.unassignRole(user_id, tenant_id, role_id, accessToken || undefined);
       return { success: true, intent };
     }
 
@@ -144,6 +144,19 @@ export async function action({ request }: ActionFunctionArgs) {
       const user_id = formData.get("user_id") as string;
       const tenants = await userApi.getTenants(user_id, accessToken || undefined);
       return { success: true, data: tenants.data, intent };
+    }
+
+    if (intent === "get_user_assigned_roles") {
+      const user_id = formData.get("user_id") as string;
+      const tenant_id = formData.get("tenant_id") as string;
+      const roles = await rbacApi.getUserAssignedRoles(user_id, tenant_id, accessToken || undefined);
+      return { success: true, data: roles.data, intent };
+    }
+
+    if (intent === "get_service_roles") {
+      const service_id = formData.get("service_id") as string;
+      const roles = await rbacApi.listRoles(service_id, accessToken || undefined);
+      return { success: true, data: roles.data, intent };
     }
 
     if (intent === "enable_mfa") {
@@ -212,17 +225,23 @@ export default function UsersPage() {
     if (actionData && "success" in actionData && actionData.success) {
       if (actionData.intent === "update_user") setEditingUser(null);
       if (actionData.intent === "create_user") setCreatingUser(false);
-      // For tenant/role management, we might want to keep the dialog open or refresh data
-      // For now, let's close role dialog but keep tenant dialog unless specifically closed
       if (actionData.intent === "assign_roles") setManagingRoles(null);
-      // Refresh assigned roles after unassign
+      // Refresh assigned roles after unassign via server-side action
       if (actionData.intent === "unassign_role" && managingRoles) {
-        rbacApi.getUserAssignedRoles(managingRoles.user.id, managingRoles.tenant.id)
-          .then(res => {
-            setAllAssignedRoles(res.data);
-            const ids = new Set(res.data.map((r: Role) => r.id));
-            setAssignedRoleIds(ids);
-          });
+        const formData = new FormData();
+        formData.append("intent", "get_user_assigned_roles");
+        formData.append("user_id", managingRoles.user.id);
+        formData.append("tenant_id", managingRoles.tenant.id);
+        submit(formData, { method: "post" });
+      }
+      // Handle server-side role data responses
+      if (actionData.intent === "get_user_assigned_roles" && actionData.data) {
+        const roles = actionData.data as Role[];
+        setAllAssignedRoles(roles);
+        setAssignedRoleIds(new Set(roles.map((r: Role) => r.id)));
+      }
+      if (actionData.intent === "get_service_roles" && actionData.data) {
+        setAvailableRoles(actionData.data as Role[]);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -238,7 +257,6 @@ export default function UsersPage() {
     if (managingTenantsUser) {
       setLoadingTenants(true);
       setTenantsError(null);
-      // Submit form to get user tenants via action
       const formData = new FormData();
       formData.append("intent", "get_user_tenants");
       formData.append("user_id", managingTenantsUser.id);
@@ -252,33 +270,36 @@ export default function UsersPage() {
     if (actionData && actionData.intent === "get_user_tenants") {
       setLoadingTenants(false);
       if ("success" in actionData && actionData.success) {
-        setUserTenants(actionData.data || []);
+        setUserTenants((actionData.data as UserTenant[]) || []);
       } else if ("error" in actionData) {
         setTenantsError(String(actionData.error));
       }
     }
   }, [actionData]);
 
-  // Fetch roles when opening Manage Roles dialog
-  // 1. Fetch all assigned roles for this user in this tenant
+  // Fetch assigned roles when opening Manage Roles dialog (server-side)
   useEffect(() => {
     if (managingRoles) {
-      rbacApi.getUserAssignedRoles(managingRoles.user.id, managingRoles.tenant.id)
-        .then(res => {
-          setAllAssignedRoles(res.data);
-          const ids = new Set(res.data.map((r: Role) => r.id));
-          setAssignedRoleIds(ids);
-        });
+      const formData = new FormData();
+      formData.append("intent", "get_user_assigned_roles");
+      formData.append("user_id", managingRoles.user.id);
+      formData.append("tenant_id", managingRoles.tenant.id);
+      submit(formData, { method: "post" });
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [managingRoles]);
 
-  // 2. Fetch available roles when service is selected
+  // Fetch available roles when service is selected (server-side)
   useEffect(() => {
     if (selectedServiceId) {
-      rbacApi.listRoles(selectedServiceId).then(res => setAvailableRoles(res.data));
+      const formData = new FormData();
+      formData.append("intent", "get_service_roles");
+      formData.append("service_id", selectedServiceId);
+      submit(formData, { method: "post" });
     } else {
       setAvailableRoles([]);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedServiceId]);
 
   const handleAssignRoles = () => {
