@@ -727,14 +727,13 @@ async fn exchange_code_for_tokens<S: HasServices>(
     callback_state: &CallbackState,
     code: &str,
 ) -> Result<KeycloakTokenResponse> {
-    let client_uuid = state
+    let kc_client = state
         .keycloak_client()
-        .get_client_uuid_by_client_id(&callback_state.client_id)
+        .get_client_by_client_id(&callback_state.client_id)
         .await?;
-    let client_secret = state
-        .keycloak_client()
-        .get_client_secret(&client_uuid)
-        .await?;
+    let client_uuid = kc_client
+        .id
+        .ok_or_else(|| AppError::Keycloak("Client UUID missing".to_string()))?;
 
     let token_url = format!(
         "{}/realms/{}/protocol/openid-connect/token",
@@ -746,13 +745,21 @@ async fn exchange_code_for_tokens<S: HasServices>(
         state.config().jwt.issuer.trim_end_matches('/')
     );
 
-    let params = [
-        ("grant_type", "authorization_code"),
-        ("client_id", callback_state.client_id.as_str()),
-        ("client_secret", client_secret.as_str()),
-        ("code", code),
-        ("redirect_uri", callback_url.as_str()),
+    let mut params = vec![
+        ("grant_type", "authorization_code".to_string()),
+        ("client_id", callback_state.client_id.clone()),
+        ("code", code.to_string()),
+        ("redirect_uri", callback_url),
     ];
+
+    // Public clients don't have a secret; only fetch and send secret for confidential clients
+    if !kc_client.public_client {
+        let client_secret = state
+            .keycloak_client()
+            .get_client_secret(&client_uuid)
+            .await?;
+        params.push(("client_secret", client_secret));
+    }
 
     let response = reqwest::Client::new()
         .post(&token_url)
@@ -786,14 +793,13 @@ async fn exchange_refresh_token<S: HasServices>(
     callback_state: &CallbackState,
     refresh_token: &str,
 ) -> Result<KeycloakTokenResponse> {
-    let client_uuid = state
+    let kc_client = state
         .keycloak_client()
-        .get_client_uuid_by_client_id(&callback_state.client_id)
+        .get_client_by_client_id(&callback_state.client_id)
         .await?;
-    let client_secret = state
-        .keycloak_client()
-        .get_client_secret(&client_uuid)
-        .await?;
+    let client_uuid = kc_client
+        .id
+        .ok_or_else(|| AppError::Keycloak("Client UUID missing".to_string()))?;
 
     let token_url = format!(
         "{}/realms/{}/protocol/openid-connect/token",
@@ -801,12 +807,19 @@ async fn exchange_refresh_token<S: HasServices>(
         state.config().keycloak.realm
     );
 
-    let params = [
-        ("grant_type", "refresh_token"),
-        ("client_id", callback_state.client_id.as_str()),
-        ("client_secret", client_secret.as_str()),
-        ("refresh_token", refresh_token),
+    let mut params = vec![
+        ("grant_type", "refresh_token".to_string()),
+        ("client_id", callback_state.client_id.clone()),
+        ("refresh_token", refresh_token.to_string()),
     ];
+
+    if !kc_client.public_client {
+        let client_secret = state
+            .keycloak_client()
+            .get_client_secret(&client_uuid)
+            .await?;
+        params.push(("client_secret", client_secret));
+    }
 
     let response = reqwest::Client::new()
         .post(&token_url)

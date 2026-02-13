@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Auth9 Demo - Dashboard</title>
+    <style>
+        :root {
+            --bg-color: #0d1117;
+            --card-bg: #161b22;
+            --text-primary: #c9d1d9;
+            --text-secondary: #8b949e;
+            --accent: #58a6ff;
+            --border: #30363d;
+            --success: #238636;
+            --danger: #da3633;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            margin: 0;
+            padding: 0;
+            line-height: 1.5;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 40px 20px;
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 40px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+
+        .btn {
+            display: inline-block;
+            padding: 8px 16px;
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--accent);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 14px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn:hover {
+            background-color: var(--border);
+            text-decoration: none;
+        }
+
+        .btn-logout {
+            color: var(--danger);
+            border-color: rgba(218, 54, 51, 0.4);
+        }
+
+        .btn-logout:hover {
+            background-color: rgba(218, 54, 51, 0.1);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 24px;
+            margin-bottom: 24px;
+        }
+
+        .card h2 {
+            margin-top: 0;
+            font-size: 18px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 12px;
+            margin-bottom: 16px;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 150px 1fr;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .label {
+            color: var(--text-secondary);
+            font-size: 14px;
+        }
+
+        .value {
+            font-family: monospace;
+            background: rgba(110, 118, 129, 0.1);
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            word-break: break-all;
+        }
+
+        pre {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 12px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 0;
+            font-size: 12px;
+            color: #e6edf3;
+        }
+
+        .token-box {
+            margin-top: 10px;
+        }
+
+        details summary {
+            cursor: pointer;
+            color: var(--accent);
+            margin-bottom: 10px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <header>
+            <h1>Auth9 Demo Dashboard</h1>
+            <a href="/logout" class="btn btn-logout">Logout</a>
+        </header>
+
+        <div class="card">
+            <h2>User Profile</h2>
+            <div class="info-grid">
+                <div class="label">User ID (sub)</div>
+                <div class="value">
+                    <%= user.sub %>
+                </div>
+
+                <div class="label">Email</div>
+                <div class="value">
+                    <%= user.email %>
+                </div>
+
+                <div class="label">Name</div>
+                <div class="value">
+                    <%= user.name || 'N/A' %>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Authenticaton Debug</h2>
+
+            <div class="token-box">
+                <div class="label" style="margin-bottom:8px;"><strong>Identity Token (Auth9-signed)</strong></div>
+                <details>
+                    <summary>View raw token</summary>
+                    <div class="value">
+                        <%= identityToken %>
+                    </div>
+                </details>
+                <div style="margin-top:10px;">
+                    <div class="label">Decoded Payload:</div>
+                    <pre><%= JSON.stringify(user, null, 2) %></pre>
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Tenant Access (Token Exchange)</h2>
+            <p style="color: var(--text-secondary); font-size: 14px; margin-bottom: 20px;">
+                This section demonstrates exchanging the Identity Token for a Tenant Access Token via gRPC.
+            </p>
+
+            <div class="token-box">
+                <button id="exchangeBtn" class="btn">Exchange Token for 'demo' tenant</button>
+                <div id="exchangeResult" style="margin-top: 15px; display: none;">
+                    <div class="label">Tenant Access Token Payload:</div>
+                    <pre id="exchangeOutput">Processing...</pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        document.getElementById('exchangeBtn').addEventListener('click', async () => {
+            const output = document.getElementById('exchangeOutput');
+            const resultDiv = document.getElementById('exchangeResult');
+            const btn = document.getElementById('exchangeBtn');
+
+            resultDiv.style.display = 'block';
+            output.textContent = 'Exchanging token...';
+            btn.disabled = true;
+
+            try {
+                // We use the demo endpoint which internally allows calling gRPC with the identity token
+                // In a real app, the backend would handle this session management
+                const response = await fetch('/demo/exchange-token', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': 'Bearer <%= identityToken %>'
+                    },
+                    body: JSON.stringify({
+                        tenantId: 'demo' // We try for the 'demo' tenant
+                    })
+                });
+
+                const data = await response.json();
+                output.textContent = JSON.stringify(data, null, 2);
+            } catch (err) {
+                output.textContent = 'Error: ' + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+        });
+    </script>
+</body>
+
+</html>

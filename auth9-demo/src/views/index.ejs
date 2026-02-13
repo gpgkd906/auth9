@@ -197,6 +197,28 @@
   <h1>🔐 Auth9 Demo</h1>
   <p class="subtitle">SDK integration examples for authentication, RBAC, and multi-tenant management</p>
 
+  <div class="card" style="text-align: center; background: #0d1117; border-color: #30363d;">
+    <% if (user) { %>
+      <p style="margin-bottom: 1rem; color: #58a6ff;">Welcome, <strong>
+          <%= user.name || user.email %>
+        </strong>!</p>
+      <a href="/dashboard"
+        style="display: inline-block; background: #1f6feb; color: white; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600; margin-right: 10px;">
+        Go to Dashboard
+      </a>
+      <a href="/logout"
+        style="display: inline-block; background: #21262d; color: #f85149; border: 1px solid #30363d; padding: 8px 16px; border-radius: 6px; text-decoration: none; font-weight: 600;">
+        Logout
+      </a>
+      <% } else { %>
+        <p style="margin-bottom: 1rem;">You are currently not logged in.</p>
+        <a href="/login"
+          style="display: inline-block; background: #238636; color: white; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 1.1rem;">
+          Login with Auth9
+        </a>
+        <% } %>
+  </div>
+
   <h2>Available Endpoints</h2>
 
   <div class="card">
@@ -307,6 +329,18 @@ curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/resource
       <td>AUTH9_DOMAIN</td>
       <td>
         <%= config.auth9Domain %>
+      </td>
+    </tr>
+    <tr>
+      <td>AUTH9_PUBLIC_URL</td>
+      <td>
+        <%= config.auth9PublicUrl %>
+      </td>
+    </tr>
+    <tr>
+      <td>AUTH9_PUBLIC_URL</td>
+      <td>
+        <%= config.auth9PublicUrl %>
       </td>
     </tr>
     <tr>

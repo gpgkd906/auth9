@@ -22,6 +22,8 @@ const DEFAULT_ADMIN_LAST_NAME: &str = "User";
 /// Default portal client configuration
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
 const DEFAULT_PORTAL_CLIENT_NAME: &str = "Auth9 Admin Portal";
+const DEFAULT_DEMO_CLIENT_ID: &str = "auth9-demo";
+const DEFAULT_DEMO_CLIENT_NAME: &str = "Auth9 Demo Client";
 
 /// Default admin client configuration
 const DEFAULT_ADMIN_CLIENT_ID: &str = "auth9-admin";
@@ -896,6 +898,187 @@ impl KeycloakSeeder {
         Ok(())
     }
 
+    /// Seed demo client (idempotent - creates or updates)
+    pub async fn seed_demo_client(&self) -> anyhow::Result<()> {
+        let token = self.get_master_admin_token().await?;
+
+        if self.demo_client_exists(&token).await? {
+            info!(
+                "Demo client '{}' already exists, updating configuration...",
+                DEFAULT_DEMO_CLIENT_ID
+            );
+            self.update_demo_client(&token).await?;
+            return Ok(());
+        }
+
+        // Create new client
+        self.create_demo_client(&token).await?;
+        Ok(())
+    }
+
+    /// Check if demo client exists
+    async fn demo_client_exists(&self, token: &str) -> anyhow::Result<bool> {
+        let url = format!(
+            "{}/admin/realms/{}/clients?clientId={}",
+            self.config.url, self.config.realm, DEFAULT_DEMO_CLIENT_ID
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to check if demo client exists")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to check demo client existence: {} - {}", status, body);
+        }
+
+        let clients: Vec<serde_json::Value> = response.json().await?;
+        Ok(!clients.is_empty())
+    }
+
+    /// Update existing demo client configuration
+    async fn update_demo_client(&self, token: &str) -> anyhow::Result<()> {
+        // 1. Query existing client to get UUID
+        let url = format!(
+            "{}/admin/realms/{}/clients?clientId={}",
+            self.config.url, self.config.realm, DEFAULT_DEMO_CLIENT_ID
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to query demo client")?;
+
+        if !response.status().is_success() {
+            anyhow::bail!("Failed to query demo client for update");
+        }
+
+        let clients: Vec<KeycloakOidcClient> = response.json().await?;
+        let existing_client = clients
+            .into_iter()
+            .next()
+            .context("Demo client not found for update")?;
+
+        let client_uuid = existing_client.id.context("Demo client UUID missing")?;
+
+        // 2. Build updated client configuration
+        let updated_client = KeycloakOidcClient {
+            id: Some(client_uuid.clone()),
+            client_id: DEFAULT_DEMO_CLIENT_ID.to_string(),
+            name: Some(DEFAULT_DEMO_CLIENT_NAME.to_string()),
+            enabled: true,
+            protocol: "openid-connect".to_string(),
+            base_url: Some("http://localhost:3002".to_string()),
+            root_url: Some("http://localhost:3002".to_string()),
+            admin_url: Some("http://localhost:3002".to_string()),
+            redirect_uris: vec![
+                "http://localhost:8080/api/v1/auth/callback".to_string(),
+                "http://127.0.0.1:8080/api/v1/auth/callback".to_string(),
+                "http://localhost:3002/auth/callback".to_string(),
+                "http://127.0.0.1:3002/auth/callback".to_string(),
+            ],
+            web_origins: vec![
+                "http://localhost:3002".to_string(),
+                "http://127.0.0.1:3002".to_string(),
+            ],
+            attributes: existing_client.attributes,
+            public_client: true, // Public client for demo app
+            secret: existing_client.secret,
+        };
+
+        // 3. Update client
+        let update_url = format!(
+            "{}/admin/realms/{}/clients/{}",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .put(&update_url)
+            .bearer_auth(token)
+            .json(&updated_client)
+            .send()
+            .await
+            .context("Failed to update demo client")?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to update demo client: {} - {}", status, body);
+        }
+
+        info!(
+            "Updated demo client '{}' configuration",
+            DEFAULT_DEMO_CLIENT_ID
+        );
+        Ok(())
+    }
+
+    /// Create demo client
+    async fn create_demo_client(&self, token: &str) -> anyhow::Result<()> {
+        let url = format!(
+            "{}/admin/realms/{}/clients",
+            self.config.url, self.config.realm
+        );
+
+        let client = KeycloakOidcClient {
+            id: None,
+            client_id: DEFAULT_DEMO_CLIENT_ID.to_string(),
+            name: Some(DEFAULT_DEMO_CLIENT_NAME.to_string()),
+            enabled: true,
+            protocol: "openid-connect".to_string(),
+            base_url: Some("http://localhost:3002".to_string()),
+            root_url: Some("http://localhost:3002".to_string()),
+            admin_url: Some("http://localhost:3002".to_string()),
+            redirect_uris: vec![
+                "http://localhost:8080/api/v1/auth/callback".to_string(),
+                "http://127.0.0.1:8080/api/v1/auth/callback".to_string(),
+                "http://localhost:3002/auth/callback".to_string(),
+                "http://127.0.0.1:3002/auth/callback".to_string(),
+            ],
+            web_origins: vec![
+                "http://localhost:3002".to_string(),
+                "http://127.0.0.1:3002".to_string(),
+            ],
+            attributes: None,
+            public_client: true, // Public client for demo app
+            secret: None,
+        };
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(token)
+            .json(&client)
+            .send()
+            .await
+            .context("Failed to create demo client")?;
+
+        if response.status() == StatusCode::CONFLICT {
+            info!(
+                "Demo client '{}' already exists",
+                DEFAULT_DEMO_CLIENT_ID
+            );
+            return Ok(());
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!("Failed to create demo client: {} - {}", status, body);
+        }
+
+        info!("Created demo client '{}'", DEFAULT_DEMO_CLIENT_ID);
+        Ok(())
+    }
     /// Check if admin client exists in a specific realm
     async fn admin_client_exists_in_realm(&self, token: &str, realm: &str) -> anyhow::Result<bool> {
         let client_id = DEFAULT_ADMIN_CLIENT_ID;

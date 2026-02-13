@@ -19,7 +19,8 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
+use chrono::{DateTime, Utc};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use uuid::Uuid;
 use validator::Validate;
@@ -540,6 +541,220 @@ pub async fn delete<S: HasServices>(
     Ok(Json(MessageResponse::new("Service deleted successfully")))
 }
 
+// ============================================================================
+// Integration Info Types & Handler
+// ============================================================================
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ServiceIntegrationInfo {
+    pub service: ServiceBasicInfo,
+    pub clients: Vec<ClientIntegrationInfo>,
+    pub endpoints: EndpointInfo,
+    pub grpc: GrpcInfo,
+    pub environment_variables: Vec<EnvVar>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ServiceBasicInfo {
+    pub id: String,
+    pub name: String,
+    pub base_url: Option<String>,
+    pub redirect_uris: Vec<String>,
+    pub logout_uris: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct ClientIntegrationInfo {
+    pub client_id: String,
+    pub name: Option<String>,
+    pub public_client: bool,
+    pub client_secret: Option<String>,
+    pub created_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EndpointInfo {
+    pub auth9_domain: String,
+    pub auth9_public_url: String,
+    pub authorize: String,
+    pub token: String,
+    pub callback: String,
+    pub logout: String,
+    pub userinfo: String,
+    pub openid_configuration: String,
+    pub jwks: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct GrpcInfo {
+    pub address: String,
+    pub auth_mode: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+pub struct EnvVar {
+    pub key: String,
+    pub value: String,
+    pub description: String,
+}
+
+/// Build endpoint info from config
+fn build_endpoint_info(config: &Config) -> EndpointInfo {
+    let domain = config
+        .keycloak
+        .core_public_url
+        .clone()
+        .unwrap_or_else(|| config.jwt.issuer.clone());
+    let public_url = domain.clone();
+
+    EndpointInfo {
+        authorize: format!("{}/api/v1/auth/authorize", domain),
+        token: format!("{}/api/v1/auth/token", domain),
+        callback: format!("{}/api/v1/auth/callback", domain),
+        logout: format!("{}/api/v1/auth/logout", domain),
+        userinfo: format!("{}/api/v1/auth/userinfo", domain),
+        openid_configuration: format!("{}/.well-known/openid-configuration", domain),
+        jwks: format!("{}/.well-known/jwks.json", domain),
+        auth9_domain: domain,
+        auth9_public_url: public_url,
+    }
+}
+
+/// Build environment variables list from integration data
+fn build_env_vars(
+    endpoints: &EndpointInfo,
+    grpc: &GrpcInfo,
+    clients: &[ClientIntegrationInfo],
+) -> Vec<EnvVar> {
+    let mut vars = vec![
+        EnvVar {
+            key: "AUTH9_DOMAIN".to_string(),
+            value: endpoints.auth9_domain.clone(),
+            description: "Auth9 Core API base URL".to_string(),
+        },
+        EnvVar {
+            key: "AUTH9_PUBLIC_URL".to_string(),
+            value: endpoints.auth9_public_url.clone(),
+            description: "Auth9 public-facing URL".to_string(),
+        },
+        EnvVar {
+            key: "AUTH9_GRPC_ADDRESS".to_string(),
+            value: grpc.address.clone(),
+            description: "gRPC Token Exchange endpoint".to_string(),
+        },
+        EnvVar {
+            key: "AUTH9_GRPC_API_KEY".to_string(),
+            value: "<your-grpc-api-key>".to_string(),
+            description: "gRPC API key (create separately)".to_string(),
+        },
+    ];
+
+    if let Some(first) = clients.first() {
+        vars.push(EnvVar {
+            key: "AUTH9_AUDIENCE".to_string(),
+            value: first.client_id.clone(),
+            description: "OAuth audience (client_id of primary client)".to_string(),
+        });
+        vars.push(EnvVar {
+            key: "AUTH9_CLIENT_ID".to_string(),
+            value: first.client_id.clone(),
+            description: "OAuth Client ID".to_string(),
+        });
+
+        if first.public_client {
+            vars.push(EnvVar {
+                key: "AUTH9_CLIENT_SECRET".to_string(),
+                value: "(not required — public client)".to_string(),
+                description: "Public client does not use a secret".to_string(),
+            });
+        } else if let Some(ref secret) = first.client_secret {
+            vars.push(EnvVar {
+                key: "AUTH9_CLIENT_SECRET".to_string(),
+                value: secret.clone(),
+                description: "OAuth Client Secret (confidential)".to_string(),
+            });
+        }
+    }
+
+    vars
+}
+
+/// Get integration info for a service
+pub async fn integration_info<S: HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    Path(id): Path<Uuid>,
+) -> Result<impl IntoResponse> {
+    let service = state.client_service().get(id).await?;
+    require_service_access(
+        state.config(),
+        &auth,
+        service.tenant_id.as_ref().map(|t| t.0),
+    )?;
+
+    let db_clients = state.client_service().list_clients(id).await?;
+
+    // Enrich each client with Keycloak data (public_client flag, secret)
+    let mut clients = Vec::new();
+    for c in &db_clients {
+        let kc_result = state
+            .keycloak_client()
+            .get_client_by_client_id(&c.client_id)
+            .await;
+
+        let (public_client, client_secret) = match kc_result {
+            Ok(kc_client) => {
+                if kc_client.public_client {
+                    (true, None)
+                } else {
+                    // Confidential — fetch secret
+                    let secret = match kc_client.id {
+                        Some(ref kc_uuid) => state
+                            .keycloak_client()
+                            .get_client_secret(kc_uuid)
+                            .await
+                            .ok(),
+                        None => None,
+                    };
+                    (false, secret)
+                }
+            }
+            Err(_) => (false, None), // Keycloak not reachable — degrade gracefully
+        };
+
+        clients.push(ClientIntegrationInfo {
+            client_id: c.client_id.clone(),
+            name: c.name.clone(),
+            public_client,
+            client_secret,
+            created_at: c.created_at,
+        });
+    }
+
+    let endpoints = build_endpoint_info(state.config());
+    let grpc = GrpcInfo {
+        address: state.config().grpc_addr(),
+        auth_mode: state.config().grpc_security.auth_mode.clone(),
+    };
+    let environment_variables = build_env_vars(&endpoints, &grpc, &clients);
+
+    let info = ServiceIntegrationInfo {
+        service: ServiceBasicInfo {
+            id: service.id.0.to_string(),
+            name: service.name.clone(),
+            base_url: service.base_url.clone(),
+            redirect_uris: service.redirect_uris.clone(),
+            logout_uris: service.logout_uris.clone(),
+        },
+        clients,
+        endpoints,
+        grpc,
+        environment_variables,
+    };
+
+    Ok(Json(SuccessResponse::new(info)))
+}
+
 /// Regenerate client secret
 pub async fn regenerate_client_secret<S: HasServices>(
     State(state): State<S>,
@@ -764,6 +979,250 @@ mod tests {
         let json = r#"{}"#;
         let input: CreateClientInput = serde_json::from_str(json).unwrap();
         assert!(input.name.is_none());
+    }
+
+    // ========================================================================
+    // Integration info struct tests
+    // ========================================================================
+
+    fn test_config() -> Config {
+        Config {
+            environment: "development".to_string(),
+            http_host: "127.0.0.1".to_string(),
+            http_port: 8080,
+            grpc_host: "127.0.0.1".to_string(),
+            grpc_port: 50051,
+            database: crate::config::DatabaseConfig {
+                url: "mysql://localhost/test".to_string(),
+                max_connections: 10,
+                min_connections: 2,
+                acquire_timeout_secs: 30,
+                idle_timeout_secs: 600,
+            },
+            redis: crate::config::RedisConfig {
+                url: "redis://localhost:6379".to_string(),
+            },
+            jwt: crate::config::JwtConfig {
+                secret: "test-secret".to_string(),
+                issuer: "http://localhost:8080".to_string(),
+                access_token_ttl_secs: 3600,
+                refresh_token_ttl_secs: 604800,
+                private_key_pem: None,
+                public_key_pem: None,
+            },
+            keycloak: crate::config::KeycloakConfig {
+                url: "http://localhost:8081".to_string(),
+                public_url: "http://localhost:8081".to_string(),
+                realm: "auth9".to_string(),
+                admin_client_id: "admin-cli".to_string(),
+                admin_client_secret: "secret".to_string(),
+                ssl_required: "none".to_string(),
+                core_public_url: None,
+                portal_url: None,
+                webhook_secret: None,
+            },
+            grpc_security: crate::config::GrpcSecurityConfig::default(),
+            rate_limit: crate::config::RateLimitConfig::default(),
+            cors: crate::config::CorsConfig::default(),
+            webauthn: crate::config::WebAuthnConfig {
+                rp_id: "localhost".to_string(),
+                rp_name: "Auth9".to_string(),
+                rp_origin: "http://localhost:3000".to_string(),
+                challenge_ttl_secs: 300,
+            },
+            server: crate::config::ServerConfig::default(),
+            telemetry: crate::config::TelemetryConfig::default(),
+            password_reset: crate::config::PasswordResetConfig {
+                hmac_key: "test-key".to_string(),
+                token_ttl_secs: 3600,
+            },
+            platform_admin_emails: vec!["admin@auth9.local".to_string()],
+            jwt_tenant_access_allowed_audiences: vec![],
+            security_headers: crate::config::SecurityHeadersConfig::default(),
+            portal_client_id: None,
+        }
+    }
+
+    #[test]
+    fn test_build_endpoint_info_default() {
+        let config = test_config();
+        let ep = build_endpoint_info(&config);
+
+        assert_eq!(ep.auth9_domain, "http://localhost:8080");
+        assert_eq!(ep.authorize, "http://localhost:8080/api/v1/auth/authorize");
+        assert_eq!(ep.token, "http://localhost:8080/api/v1/auth/token");
+        assert_eq!(ep.callback, "http://localhost:8080/api/v1/auth/callback");
+        assert_eq!(ep.logout, "http://localhost:8080/api/v1/auth/logout");
+        assert_eq!(ep.userinfo, "http://localhost:8080/api/v1/auth/userinfo");
+        assert_eq!(
+            ep.openid_configuration,
+            "http://localhost:8080/.well-known/openid-configuration"
+        );
+        assert_eq!(ep.jwks, "http://localhost:8080/.well-known/jwks.json");
+    }
+
+    #[test]
+    fn test_build_endpoint_info_with_core_public_url() {
+        let mut config = test_config();
+        config.keycloak.core_public_url = Some("https://api.auth9.example.com".to_string());
+        let ep = build_endpoint_info(&config);
+
+        assert_eq!(ep.auth9_domain, "https://api.auth9.example.com");
+        assert_eq!(
+            ep.authorize,
+            "https://api.auth9.example.com/api/v1/auth/authorize"
+        );
+    }
+
+    #[test]
+    fn test_build_env_vars_confidential_client() {
+        let ep = EndpointInfo {
+            auth9_domain: "http://localhost:8080".to_string(),
+            auth9_public_url: "http://localhost:8080".to_string(),
+            authorize: String::new(),
+            token: String::new(),
+            callback: String::new(),
+            logout: String::new(),
+            userinfo: String::new(),
+            openid_configuration: String::new(),
+            jwks: String::new(),
+        };
+        let grpc = GrpcInfo {
+            address: "127.0.0.1:50051".to_string(),
+            auth_mode: "api_key".to_string(),
+        };
+        let clients = vec![ClientIntegrationInfo {
+            client_id: "my-client".to_string(),
+            name: Some("Main".to_string()),
+            public_client: false,
+            client_secret: Some("secret-123".to_string()),
+            created_at: chrono::Utc::now(),
+        }];
+
+        let vars = build_env_vars(&ep, &grpc, &clients);
+
+        assert!(vars.iter().any(|v| v.key == "AUTH9_DOMAIN"));
+        assert!(vars.iter().any(|v| v.key == "AUTH9_CLIENT_ID" && v.value == "my-client"));
+        assert!(vars
+            .iter()
+            .any(|v| v.key == "AUTH9_CLIENT_SECRET" && v.value == "secret-123"));
+        assert!(vars.iter().any(|v| v.key == "AUTH9_GRPC_ADDRESS"));
+    }
+
+    #[test]
+    fn test_build_env_vars_public_client() {
+        let ep = EndpointInfo {
+            auth9_domain: "http://localhost:8080".to_string(),
+            auth9_public_url: "http://localhost:8080".to_string(),
+            authorize: String::new(),
+            token: String::new(),
+            callback: String::new(),
+            logout: String::new(),
+            userinfo: String::new(),
+            openid_configuration: String::new(),
+            jwks: String::new(),
+        };
+        let grpc = GrpcInfo {
+            address: "127.0.0.1:50051".to_string(),
+            auth_mode: "none".to_string(),
+        };
+        let clients = vec![ClientIntegrationInfo {
+            client_id: "spa-client".to_string(),
+            name: None,
+            public_client: true,
+            client_secret: None,
+            created_at: chrono::Utc::now(),
+        }];
+
+        let vars = build_env_vars(&ep, &grpc, &clients);
+
+        let secret_var = vars.iter().find(|v| v.key == "AUTH9_CLIENT_SECRET");
+        assert!(secret_var.is_some());
+        assert!(secret_var.unwrap().value.contains("not required"));
+    }
+
+    #[test]
+    fn test_build_env_vars_no_clients() {
+        let ep = EndpointInfo {
+            auth9_domain: "http://localhost:8080".to_string(),
+            auth9_public_url: "http://localhost:8080".to_string(),
+            authorize: String::new(),
+            token: String::new(),
+            callback: String::new(),
+            logout: String::new(),
+            userinfo: String::new(),
+            openid_configuration: String::new(),
+            jwks: String::new(),
+        };
+        let grpc = GrpcInfo {
+            address: "127.0.0.1:50051".to_string(),
+            auth_mode: "none".to_string(),
+        };
+
+        let vars = build_env_vars(&ep, &grpc, &[]);
+
+        // Should only have the 4 base vars, no client-specific vars
+        assert_eq!(vars.len(), 4);
+        assert!(!vars.iter().any(|v| v.key == "AUTH9_CLIENT_ID"));
+    }
+
+    #[test]
+    fn test_service_integration_info_serialization() {
+        let info = ServiceIntegrationInfo {
+            service: ServiceBasicInfo {
+                id: "test-id".to_string(),
+                name: "Test Service".to_string(),
+                base_url: Some("https://test.com".to_string()),
+                redirect_uris: vec!["https://test.com/cb".to_string()],
+                logout_uris: vec![],
+            },
+            clients: vec![ClientIntegrationInfo {
+                client_id: "client-1".to_string(),
+                name: Some("Main Client".to_string()),
+                public_client: false,
+                client_secret: Some("secret-value".to_string()),
+                created_at: chrono::Utc::now(),
+            }],
+            endpoints: EndpointInfo {
+                auth9_domain: "http://localhost:8080".to_string(),
+                auth9_public_url: "http://localhost:8080".to_string(),
+                authorize: "http://localhost:8080/api/v1/auth/authorize".to_string(),
+                token: "http://localhost:8080/api/v1/auth/token".to_string(),
+                callback: "http://localhost:8080/api/v1/auth/callback".to_string(),
+                logout: "http://localhost:8080/api/v1/auth/logout".to_string(),
+                userinfo: "http://localhost:8080/api/v1/auth/userinfo".to_string(),
+                openid_configuration: "http://localhost:8080/.well-known/openid-configuration"
+                    .to_string(),
+                jwks: "http://localhost:8080/.well-known/jwks.json".to_string(),
+            },
+            grpc: GrpcInfo {
+                address: "127.0.0.1:50051".to_string(),
+                auth_mode: "api_key".to_string(),
+            },
+            environment_variables: vec![EnvVar {
+                key: "AUTH9_DOMAIN".to_string(),
+                value: "http://localhost:8080".to_string(),
+                description: "Auth9 base URL".to_string(),
+            }],
+        };
+
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("Test Service"));
+        assert!(json.contains("client-1"));
+        assert!(json.contains("secret-value"));
+        assert!(json.contains("api_key"));
+        assert!(json.contains("AUTH9_DOMAIN"));
+    }
+
+    #[test]
+    fn test_grpc_info_serialization() {
+        let info = GrpcInfo {
+            address: "localhost:50051".to_string(),
+            auth_mode: "mtls".to_string(),
+        };
+        let json = serde_json::to_string(&info).unwrap();
+        assert!(json.contains("localhost:50051"));
+        assert!(json.contains("mtls"));
     }
 
     // ========================================================================

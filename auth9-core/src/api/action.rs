@@ -149,44 +149,19 @@ pub async fn batch_upsert_actions<S: HasServices>(
 }
 
 /// Test an action with mock context
-///
-/// NOTE: This endpoint is temporarily limited due to axum version conflicts.
-/// The full implementation requires resolving the tonic/axum dependency conflict:
-/// - tonic 0.12 depends on axum 0.7.9
-/// - Our project uses axum 0.8.8
-/// - This creates Handler trait bound issues
-///
-/// Workaround: Returns a mock response for now. Full testing can be done by:
-/// 1. Enabling the action and triggering it through actual login
-/// 2. Using the gRPC test endpoint (if implemented)
-/// 3. Upgrading tonic to a version compatible with axum 0.8 when available
 pub async fn test_action<S: HasServices>(
     State(state): State<S>,
-    _auth: AuthUser,
+    auth: AuthUser,
     Path((tenant_id, action_id)): Path<(StringUuid, StringUuid)>,
-    Json(_req): Json<TestActionRequest>,
+    Json(req): Json<TestActionRequest>,
 ) -> Result<Json<SuccessResponse<TestActionResponse>>, AppError> {
-    // TODO: Check permission "action:write" (or "action:test")
+    enforce(state.config(), &auth, &PolicyInput {
+        action: PolicyAction::ActionWrite,
+        scope: ResourceScope::Tenant(tenant_id),
+    })?;
 
-    // Verify the action exists
     let action_service = state.action_service();
-    let _action = action_service.get(action_id, tenant_id).await?;
-
-    // Return informative response
-    let response = TestActionResponse {
-        success: false,
-        duration_ms: 0,
-        modified_context: None,
-        error_message: Some(
-            "Test endpoint temporarily unavailable due to axum/tonic version conflict. \
-             To test this action: (1) Enable it and trigger through actual login, \
-             (2) Check execution logs after triggering, or (3) Use Portal UI test button when available."
-                .to_string(),
-        ),
-        console_logs: vec![
-            "This endpoint will be fully functional after resolving dependency conflicts".to_string(),
-        ],
-    };
+    let response = action_service.test(action_id, tenant_id, req.context).await?;
 
     Ok(Json(SuccessResponse::new(response)))
 }

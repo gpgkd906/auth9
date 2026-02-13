@@ -28,12 +28,14 @@
 | [rbac/03-assignment.md](./rbac/03-assignment.md) | 权限分配、用户角色 | 5 |
 | [rbac/04-advanced.md](./rbac/04-advanced.md) | 层次视图、循环检测 | 3 |
 
-### 服务与客户端 (3 个文档, 15 个场景)
+### 服务与客户端 (5 个文档, 25 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [service/01-service-crud.md](./service/01-service-crud.md) | 服务 CRUD | 5 |
 | [service/02-client.md](./service/02-client.md) | 客户端管理、密钥 | 5 |
 | [service/03-oidc.md](./service/03-oidc.md) | OIDC 配置、URI 验证 | 5 |
+| [service/04-tenant-service-toggle.md](./service/04-tenant-service-toggle.md) | 租户服务启停 | 5 |
+| [service/05-integration-info.md](./service/05-integration-info.md) | 集成信息 API 与 Portal 页面 | 5 |
 
 ### 邀请管理 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -59,7 +61,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (5 个文档, 23 个场景)
+### 认证流程 (6 个文档, 28 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程 | 5 |
@@ -67,6 +69,7 @@
 | [auth/03-password.md](./auth/03-password.md) | 密码管理 | 5 |
 | [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点 | 5 |
 | [auth/05-boundary.md](./auth/05-boundary.md) | 边界测试 | 3 |
+| [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（OAuth 登录、Token Exchange、登出） | 5 |
 
 ### 系统设置 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -138,11 +141,11 @@
 | 租户管理 | 2 | 10 |
 | 用户管理 | 6 | 28 |
 | RBAC 角色权限 | 4 | 17 |
-| 服务与客户端 | 3 | 15 |
+| 服务与客户端 | 5 | 25 |
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 5 | 25 |
 | Webhook | 4 | 17 |
-| 认证流程 | 5 | 23 |
+| 认证流程 | 6 | 28 |
 | 系统设置 | 3 | 15 |
 | 身份提供商 | 2 | 10 |
 | Passkeys | 3 | 15 |
@@ -151,7 +154,7 @@
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
 | 集成测试 | 6 | 30 |
-| **总计** | **61** | **300** |
+| **总计** | **64** | **315** |
 
 ---
 
@@ -295,6 +298,8 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-14 | 4.0.0 | 新增 Service Integration Info（API 端点 + Portal Integration 标签页），共 64 个文档 315 个场景 |
+| 2026-02-14 | 3.9.0 | 新增 Auth9 Demo 完整认证流程回归测试（OAuth 登录、public client token exchange、gRPC tenant slug 支持、登出），共 62 个文档 305 个场景 |
 | 2026-02-13 | 3.8.0 | 新增 Action 模块（CRUD、执行、日志、安全沙箱、API/SDK 集成、Async/Await fetch 支持），共 61 个文档 300 个场景 |
 | 2026-02-11 | 3.7.0 | 新增会话与安全回归测试（管理员端点越权、refresh 撤销一致性、OIDC callback token 泄露、限流 header 绕过与高基数 key），共 55 个文档 265 个场景 |
 | 2026-02-11 | 3.6.0 | 新增安全加固集成测试（production 启动 fail-fast、gRPC 鉴权配置校验、REST tenant token aud 严格校验、HSTS 条件下发、gRPC validate_token audience 必填），共 54 个文档 260 个场景 |

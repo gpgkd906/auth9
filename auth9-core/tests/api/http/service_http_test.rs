@@ -707,6 +707,127 @@ async fn test_service_with_multiple_redirect_uris() {
     assert_eq!(response.data.redirect_uris.len(), 3);
 }
 
+// ============================================================================
+// Integration Info Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_integration_info_success() {
+    let mock_kc = MockKeycloakServer::new().await;
+    // Register specific mock first (wiremock matches FIFO)
+    mock_kc
+        .mock_get_client_secret("kc-uuid-1", "the-secret-value")
+        .await;
+    // Then register broader client lookup mock
+    mock_kc
+        .mock_get_client_uuid_by_client_id("test-client", "kc-uuid-1")
+        .await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let service = create_test_service(Some(service_id), None);
+    state.service_repo.add_service(service).await;
+
+    // Add a client
+    let client = Client {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        service_id: auth9_core::domain::StringUuid::from(service_id),
+        client_id: "test-client".to_string(),
+        name: Some("Main Client".to_string()),
+        client_secret_hash: "hash".to_string(),
+        created_at: chrono::Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
+    let app = build_test_router(state);
+    let token = create_test_identity_token();
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/integration", service_id),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let data = body.unwrap()["data"].clone();
+
+    // Verify service basic info
+    assert!(data["service"]["name"].is_string());
+
+    // Verify clients
+    let clients = data["clients"].as_array().unwrap();
+    assert_eq!(clients.len(), 1);
+    assert_eq!(clients[0]["client_id"], "test-client");
+    assert_eq!(clients[0]["client_secret"], "the-secret-value");
+    assert_eq!(clients[0]["public_client"], false);
+
+    // Verify endpoints
+    assert!(data["endpoints"]["authorize"].as_str().unwrap().contains("/api/v1/auth/authorize"));
+    assert!(data["endpoints"]["token"].as_str().unwrap().contains("/api/v1/auth/token"));
+    assert!(data["endpoints"]["jwks"].as_str().unwrap().contains("/.well-known/jwks.json"));
+
+    // Verify grpc
+    assert!(data["grpc"]["address"].is_string());
+    assert!(data["grpc"]["auth_mode"].is_string());
+
+    // Verify environment_variables
+    let env_vars = data["environment_variables"].as_array().unwrap();
+    assert!(env_vars.iter().any(|v| v["key"] == "AUTH9_DOMAIN"));
+    assert!(env_vars.iter().any(|v| v["key"] == "AUTH9_CLIENT_ID" && v["value"] == "test-client"));
+    assert!(env_vars.iter().any(|v| v["key"] == "AUTH9_CLIENT_SECRET" && v["value"] == "the-secret-value"));
+}
+
+#[tokio::test]
+async fn test_integration_info_not_found() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+    let token = create_test_identity_token();
+
+    let nonexistent_id = Uuid::new_v4();
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/integration", nonexistent_id),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_integration_info_no_clients() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let service = create_test_service(Some(service_id), None);
+    state.service_repo.add_service(service).await;
+
+    let app = build_test_router(state);
+    let token = create_test_identity_token();
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/integration", service_id),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let data = body.unwrap()["data"].clone();
+    let clients = data["clients"].as_array().unwrap();
+    assert!(clients.is_empty());
+
+    // env_vars should NOT have AUTH9_CLIENT_ID when no clients
+    let env_vars = data["environment_variables"].as_array().unwrap();
+    assert!(!env_vars.iter().any(|v| v["key"] == "AUTH9_CLIENT_ID"));
+}
+
 #[tokio::test]
 async fn test_update_service_redirect_uris() {
     let mock_kc = MockKeycloakServer::new().await;

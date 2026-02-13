@@ -139,9 +139,10 @@ services:
     environment:
       PORT: 3002
       AUTH9_DOMAIN: http://auth9-core:8080
+      AUTH9_PUBLIC_URL: http://localhost:8080
       AUTH9_GRPC_ADDRESS: auth9-core:50051
       AUTH9_GRPC_API_KEY: ${GRPC_API_KEYS:-dev-grpc-api-key}
-      AUTH9_AUDIENCE: demo-service
+      AUTH9_AUDIENCE: auth9-demo
     depends_on:
       - auth9-core
     networks:

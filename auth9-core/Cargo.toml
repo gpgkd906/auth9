@@ -16,8 +16,8 @@ tower-http = { version = "0.6", features = ["cors", "trace", "compression-gzip",
 tokio = { version = "1", features = ["full"] }
 
 # gRPC
-tonic = { version = "0.12", features = ["tls"] }
-tonic-reflection = "0.12"
+tonic = { version = "0.13", features = ["tls-ring"] }
+tonic-reflection = "0.13"
 prost = "0.13"
 
 # Database
@@ -105,7 +105,7 @@ rstest = "0.23"
 pretty_assertions = "1"
 
 [build-dependencies]
-tonic-build = "0.12"
+tonic-build = "0.13"
 
 [[bin]]
 name = "auth9-core"
