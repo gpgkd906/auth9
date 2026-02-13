@@ -215,6 +215,21 @@ pub struct RealmUpdate {
     /// SMTP server configuration for email sending
     #[serde(skip_serializing_if = "Option::is_none")]
     pub smtp_server: Option<SmtpServerConfig>,
+    /// Keycloak password policy string (e.g., "length(12) and upperCase(1) and passwordHistory(5)")
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_policy: Option<String>,
+    /// Enable brute force protection
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub brute_force_protected: Option<bool>,
+    /// Max wait time in seconds after lockout
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub max_failure_wait_seconds: Option<i32>,
+    /// Number of failures before lockout
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub failure_factor: Option<i32>,
+    /// Wait increment in seconds per failure
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub wait_increment_seconds: Option<i32>,
 }
 
 #[cfg(test)]
@@ -556,9 +571,7 @@ mod tests {
         let update = RealmUpdate {
             registration_allowed: Some(true),
             reset_password_allowed: Some(false),
-            ssl_required: None,
-            login_theme: None,
-            smtp_server: None,
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&update).unwrap();
@@ -617,11 +630,8 @@ mod tests {
         };
 
         let update = RealmUpdate {
-            registration_allowed: None,
-            reset_password_allowed: None,
-            ssl_required: None,
-            login_theme: None,
             smtp_server: Some(smtp),
+            ..Default::default()
         };
 
         let json = serde_json::to_string(&update).unwrap();

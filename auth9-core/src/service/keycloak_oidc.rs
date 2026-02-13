@@ -849,6 +849,8 @@ mod tests {
             display_name: Some("Test User".to_string()),
             avatar_url: None,
             mfa_enabled: false,
+            password_changed_at: None,
+            locked_until: None,
             created_at: now,
             updated_at: now,
         }

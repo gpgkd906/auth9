@@ -75,7 +75,7 @@ describe("Audit Logs Page", () => {
         });
     });
 
-    it("displays pagination info", async () => {
+    it("displays pagination info and controls", async () => {
         vi.mocked(auditApi.list).mockResolvedValue(mockAuditLogs);
 
         const RoutesStub = createRoutesStub([
@@ -90,7 +90,8 @@ describe("Audit Logs Page", () => {
 
         await waitFor(() => {
             expect(screen.getByText(/150 events/)).toBeInTheDocument();
-            expect(screen.getByText(/Page 1 of/)).toBeInTheDocument();
+            expect(screen.getAllByText(/Page 1 of/).length).toBeGreaterThan(0);
+            expect(screen.getByText("Next")).toBeInTheDocument();
         });
     });
 

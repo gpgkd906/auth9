@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -139,6 +139,7 @@ export default function IdentityProvidersPage() {
     config: {} as Record<string, string>,
   });
 
+  const submit = useSubmit();
   const isSubmitting = navigation.state === "submitting";
   // Track when form submission starts to avoid closing dialog on stale actionData
   const wasSubmitting = useRef(false);
@@ -276,29 +277,19 @@ export default function IdentityProvidersPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-4">
-                      <Form method="post">
-                        <input type="hidden" name="intent" value="toggle" />
-                        <input type="hidden" name="alias" value={provider.alias} />
-                        <input
-                          type="hidden"
-                          name="enabled"
-                          value={provider.enabled ? "false" : "true"}
-                        />
-                        <Switch
-                          checked={provider.enabled}
-                          onCheckedChange={() => {
-                            const form = document.createElement("form");
-                            form.method = "post";
-                            form.innerHTML = `
-                              <input name="intent" value="toggle" />
-                              <input name="alias" value="${provider.alias}" />
-                              <input name="enabled" value="${!provider.enabled}" />
-                            `;
-                            document.body.appendChild(form);
-                            form.submit();
-                          }}
-                        />
-                      </Form>
+                      <Switch
+                        checked={provider.enabled}
+                        onCheckedChange={() => {
+                          submit(
+                            {
+                              intent: "toggle",
+                              alias: provider.alias,
+                              enabled: String(!provider.enabled),
+                            },
+                            { method: "post" }
+                          );
+                        }}
+                      />
                       <Button
                         variant="ghost"
                         size="sm"

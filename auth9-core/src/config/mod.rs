@@ -195,6 +195,7 @@ impl Default for CorsConfig {
             allowed_origins: vec![
                 "http://localhost:3000".to_string(),
                 "http://localhost:5173".to_string(),
+                "http://localhost:8081".to_string(),
             ],
             allow_credentials: true,
         }
@@ -581,7 +582,12 @@ impl Config {
             grpc_security: GrpcSecurityConfig {
                 auth_mode: env::var("GRPC_AUTH_MODE").unwrap_or_else(|_| "none".to_string()),
                 api_keys: env::var("GRPC_API_KEYS")
-                    .map(|s| s.split(',').map(|k| k.trim().to_string()).collect())
+                    .map(|s| {
+                        s.split(',')
+                            .map(|k| k.trim().to_string())
+                            .filter(|k| !k.is_empty())
+                            .collect()
+                    })
                     .unwrap_or_default(),
                 tls_cert_path: env::var("GRPC_TLS_CERT_PATH").ok(),
                 tls_key_path: env::var("GRPC_TLS_KEY_PATH").ok(),
@@ -1361,6 +1367,49 @@ mod tests {
                 assert_eq!(config.grpc_security.api_keys[0], "key-alpha");
                 assert_eq!(config.grpc_security.api_keys[1], "key-beta");
                 assert_eq!(config.grpc_security.api_keys[2], "key-gamma");
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_grpc_api_keys_empty_string_filtered() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
+                ("GRPC_AUTH_MODE", Some("api_key")),
+                ("GRPC_API_KEYS", Some("")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert_eq!(config.grpc_security.auth_mode, "api_key");
+                assert!(
+                    config.grpc_security.api_keys.is_empty(),
+                    "Empty GRPC_API_KEYS should result in empty vec, got {:?}",
+                    config.grpc_security.api_keys
+                );
+            },
+        );
+    }
+
+    #[test]
+    fn test_from_env_grpc_api_keys_whitespace_only_filtered() {
+        with_env_vars(
+            &[
+                ("DATABASE_URL", Some("mysql://test:test@localhost/testdb")),
+                ("JWT_SECRET", Some("test-secret")),
+                ("PASSWORD_RESET_HMAC_KEY", Some("test-key")),
+                ("GRPC_AUTH_MODE", Some("api_key")),
+                ("GRPC_API_KEYS", Some(" , , ")),
+            ],
+            || {
+                let config = Config::from_env().unwrap();
+                assert!(
+                    config.grpc_security.api_keys.is_empty(),
+                    "Whitespace-only GRPC_API_KEYS should result in empty vec, got {:?}",
+                    config.grpc_security.api_keys
+                );
             },
         );
     }

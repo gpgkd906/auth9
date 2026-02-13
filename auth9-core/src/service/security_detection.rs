@@ -196,10 +196,10 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         // Get recent successful logins for this user
         let recent_events = self.login_event_repo.list_by_user(user_id, 0, 100).await?;
 
-        // Build a set of known device fingerprints
+        // Build a set of known device fingerprints (excluding the current event)
         let mut known_devices: HashMap<String, bool> = HashMap::new();
         for evt in &recent_events {
-            if evt.event_type == LoginEventType::Success {
+            if evt.id != event.id && evt.event_type == LoginEventType::Success {
                 if let Some(ua) = &evt.user_agent {
                     known_devices.insert(ua.clone(), true);
                 }
@@ -208,7 +208,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
 
         // Check if current device is new
         if let Some(user_agent) = &event.user_agent {
-            if !known_devices.contains_key(user_agent) && !recent_events.is_empty() {
+            if !known_devices.contains_key(user_agent) && !known_devices.is_empty() {
                 let input = CreateSecurityAlertInput {
                     user_id: Some(user_id),
                     tenant_id: event.tenant_id,

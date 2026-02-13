@@ -16,6 +16,8 @@ pub struct User {
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
     pub mfa_enabled: bool,
+    pub password_changed_at: Option<DateTime<Utc>>,
+    pub locked_until: Option<DateTime<Utc>>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
 }
@@ -30,10 +32,22 @@ impl Default for User {
             display_name: None,
             avatar_url: None,
             mfa_enabled: false,
+            password_changed_at: None,
+            locked_until: None,
             created_at: now,
             updated_at: now,
         }
     }
+}
+
+/// Input for admin setting a user's password
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct AdminSetPasswordInput {
+    #[validate(length(min = 1, max = 128))]
+    pub password: String,
+    /// If true, user must change password on next login
+    #[serde(default)]
+    pub temporary: bool,
 }
 
 /// User-Tenant relationship

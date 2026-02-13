@@ -211,8 +211,8 @@ services:
       KC_SPI_THEME_LOGIN_DEFAULT: auth9
       KC_SPI_THEME_EMAIL_DEFAULT: keycloak
       KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
-      # Auth9 API URL for custom theme
-      AUTH9_API_URL: http://auth9-core:8080
+      # Auth9 API URL for custom theme (browser-accessible URL, not Docker-internal)
+      AUTH9_API_URL: http://localhost:8080
       # Keycloak Events HTTP SPI configuration (p2-inc/keycloak-events)
       # These are read by the ext-event-http listener to forward events to auth9-core
       KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events

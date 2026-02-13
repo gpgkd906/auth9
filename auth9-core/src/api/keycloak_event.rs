@@ -303,12 +303,25 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
             }
         };
 
-    // 5. Parse user ID if present (Keycloak uses UUID format)
-    let user_id = event
-        .user_id
-        .as_ref()
-        .and_then(|id| uuid::Uuid::parse_str(id).ok())
-        .map(StringUuid::from);
+    // 5. Resolve Keycloak user ID to auth9 user ID
+    // Keycloak sends its own internal user UUID, which differs from auth9's users.id.
+    // We look up the auth9 user by keycloak_id so that login events and security alerts
+    // reference the correct user.
+    let user_id = if let Some(ref kc_user_id) = event.user_id {
+        match state.user_service().get_by_keycloak_id(kc_user_id).await {
+            Ok(user) => Some(user.id),
+            Err(_) => {
+                debug!(
+                    "Could not resolve Keycloak user_id {} to auth9 user; storing as-is",
+                    kc_user_id
+                );
+                // Fall back to using the Keycloak UUID directly (for users not yet synced)
+                uuid::Uuid::parse_str(kc_user_id).ok().map(StringUuid::from)
+            }
+        }
+    } else {
+        None
+    };
 
     // 6. Get email from event details
     let email = event
@@ -348,17 +361,15 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
     );
 
     // 9. Trigger security detection analysis
-    // Fetch the event we just created to pass to security detection
-    if let Ok((events, _)) = state.analytics_service().list_events(1, 1).await {
-        if let Some(login_event) = events.into_iter().next() {
-            if let Err(err) = state
-                .security_detection_service()
-                .analyze_login_event(&login_event)
-                .await
-            {
-                error!("Security analysis failed for event {}: {}", event_id, err);
-                // Don't fail the webhook for security analysis errors
-            }
+    // Fetch the event we just created by its ID to pass to security detection
+    if let Ok(Some(login_event)) = state.analytics_service().get_event(event_id).await {
+        if let Err(err) = state
+            .security_detection_service()
+            .analyze_login_event(&login_event)
+            .await
+        {
+            error!("Security analysis failed for event {}: {}", event_id, err);
+            // Don't fail the webhook for security analysis errors
         }
     }
 

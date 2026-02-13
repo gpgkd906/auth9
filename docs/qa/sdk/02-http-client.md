@@ -218,8 +218,8 @@ SELECT id FROM tenants WHERE slug = 'to-delete-sdk';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | GET 响应 camelCase 转换 | ☐ | | | |
-| 2 | POST 请求体 snake_case 转换 | ☐ | | | |
-| 3 | HTTP 错误映射 | ☐ | | | |
-| 4 | 异步 Token Provider | ☐ | | | |
-| 5 | DELETE 与 204 处理 | ☐ | | | |
+| 1 | GET 响应 camelCase 转换 | ✅ | 2026-02-13 | opencode | 通过：camelCase转换正确，分页字段也正确转换 |
+| 2 | POST 请求体 snake_case 转换 | ✅ | 2026-02-13 | opencode | 通过：camelCase自动转为snake_case发送到后端 |
+| 3 | HTTP 错误映射 | ✅ | 2026-02-13 | opencode | 通过：404→NotFoundError，401→UnauthorizedError，409→ConflictError |
+| 4 | 异步 Token Provider | ✅ | 2026-02-13 | opencode | 通过：每次请求都调用token函数，支持Promise<string> |
+| 5 | DELETE 与 204 处理 | ✅ | 2026-02-13 | opencode | 通过：正确处理204 No Content，返回undefined |

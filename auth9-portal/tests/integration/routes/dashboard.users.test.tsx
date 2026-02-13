@@ -519,9 +519,9 @@ describe("Users Page", () => {
         await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
         await user.click(screen.getByRole("button", { name: /Roles/i }));
 
-        // Verify rbacApi.getUserAssignedRoles was called
+        // Verify rbacApi.getUserAssignedRoles was called (via server-side action with accessToken)
         await waitFor(() => {
-            expect(rbacApi.getUserAssignedRoles).toHaveBeenCalledWith("u1", "t1");
+            expect(rbacApi.getUserAssignedRoles).toHaveBeenCalledWith("u1", "t1", "test-token");
         });
     });
 
@@ -1289,7 +1289,7 @@ describe("Users Page", () => {
             await openRolesDialog(user);
 
             await waitFor(() => {
-                expect(rbacApi.getUserAssignedRoles).toHaveBeenCalledWith("u1", "t1");
+                expect(rbacApi.getUserAssignedRoles).toHaveBeenCalledWith("u1", "t1", "test-token");
             });
         });
     });
@@ -1448,8 +1448,8 @@ describe("Users Page", () => {
             expect(rbacApi.assignRoles).toHaveBeenCalledWith({
                 user_id: "u1",
                 tenant_id: "t1",
-                roles: ["r1", "r2"],
-            });
+                role_ids: ["r1", "r2"],
+            }, "test-token");
         });
 
         it("unassign_role calls rbacApi.unassignRole", async () => {
@@ -1464,7 +1464,7 @@ describe("Users Page", () => {
 
             const result = await action({ request, params: {}, context: {} });
             expect(result).toEqual({ success: true, intent: "unassign_role" });
-            expect(rbacApi.unassignRole).toHaveBeenCalledWith("u1", "t1", "r1");
+            expect(rbacApi.unassignRole).toHaveBeenCalledWith("u1", "t1", "r1", "test-token");
         });
 
         it("delete_user calls userApi.delete", async () => {

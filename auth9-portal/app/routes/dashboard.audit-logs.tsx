@@ -1,6 +1,7 @@
 import type { MetaFunction, LoaderFunctionArgs } from "react-router";
-import { useLoaderData } from "react-router";
+import { useLoaderData, Link } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
 import { auditApi } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 
@@ -68,6 +69,29 @@ export default function AuditLogsPage() {
               </tbody>
             </table>
           </div>
+          {data.pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-4">
+              <div className="text-sm text-[var(--text-secondary)]">
+                Page {data.pagination.page} of {data.pagination.total_pages}
+              </div>
+              <div className="flex gap-2">
+                {data.pagination.page > 1 && (
+                  <Link to={`?page=${data.pagination.page - 1}`}>
+                    <Button variant="outline" size="sm">
+                      Previous
+                    </Button>
+                  </Link>
+                )}
+                {data.pagination.page < data.pagination.total_pages && (
+                  <Link to={`?page=${data.pagination.page + 1}`}>
+                    <Button variant="outline" size="sm">
+                      Next
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
     </div>

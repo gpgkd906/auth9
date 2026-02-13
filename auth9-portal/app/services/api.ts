@@ -466,28 +466,33 @@ export const rbacApi = {
     }
   },
 
-  assignRoles: async (input: AssignRolesInput): Promise<void> => {
+  assignRoles: async (input: AssignRolesInput, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/rbac/assign`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getHeaders(accessToken),
       body: JSON.stringify(input),
     });
     return handleResponse(response);
   },
 
-  getUserRoles: async (userId: string, tenantId: string): Promise<{ data: UserRolesInTenant }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/roles`);
+  getUserRoles: async (userId: string, tenantId: string, accessToken?: string): Promise<{ data: UserRolesInTenant }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/roles`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  getUserAssignedRoles: async (userId: string, tenantId: string): Promise<{ data: Role[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/assigned-roles`);
+  getUserAssignedRoles: async (userId: string, tenantId: string, accessToken?: string): Promise<{ data: Role[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/assigned-roles`, {
+      headers: getHeaders(accessToken),
+    });
     return handleResponse(response);
   },
 
-  unassignRole: async (userId: string, tenantId: string, roleId: string): Promise<void> => {
+  unassignRole: async (userId: string, tenantId: string, roleId: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}/roles/${roleId}`, {
       method: "DELETE",
+      headers: getHeaders(accessToken),
     });
     if (!response.ok) {
       const error: ApiError = await response.json();
@@ -505,7 +510,7 @@ export interface CreateRoleInput {
 export interface AssignRolesInput {
   user_id: string;
   tenant_id: string;
-  roles: string[]; // Role IDs
+  role_ids: string[];
 }
 
 export interface UserRolesInTenant {
@@ -1282,8 +1287,7 @@ export const analyticsApi = {
     email?: string,
     accessToken?: string
   ): Promise<PaginatedResponse<LoginEvent>> => {
-    const offset = (page - 1) * perPage;
-    let url = `${API_BASE_URL}/api/v1/analytics/login-events?limit=${perPage}&offset=${offset}`;
+    let url = `${API_BASE_URL}/api/v1/analytics/login-events?page=${page}&per_page=${perPage}`;
     if (email) url += `&email=${encodeURIComponent(email)}`;
     const response = await fetch(
       url,

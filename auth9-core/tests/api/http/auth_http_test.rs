@@ -316,6 +316,39 @@ async fn test_logout_with_id_token_hint() {
 async fn test_logout_with_post_redirect_uri() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Set up a service with allowed logout_uris and a linked client
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.logout_uris = vec!["https://app.example.com/logged-out".to_string()];
+    state.service_repo.add_service(service).await;
+    state
+        .service_repo
+        .add_client(Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(service_id),
+            client_id: "logout-test-client".to_string(),
+            client_secret_hash: "hash".to_string(),
+            name: Some("Test Client".to_string()),
+            created_at: Utc::now(),
+        })
+        .await;
+
+    let app = build_test_router(state);
+
+    let (status, _body) = get_raw(
+        &app,
+        "/api/v1/auth/logout?client_id=logout-test-client&post_logout_redirect_uri=https://app.example.com/logged-out",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+}
+
+#[tokio::test]
+async fn test_logout_with_post_redirect_uri_rejected_without_client_id() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
     let (status, _body) = get_raw(
@@ -324,18 +357,67 @@ async fn test_logout_with_post_redirect_uri() {
     )
     .await;
 
-    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_logout_with_invalid_post_redirect_uri() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.logout_uris = vec!["https://app.example.com/logged-out".to_string()];
+    state.service_repo.add_service(service).await;
+    state
+        .service_repo
+        .add_client(Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(service_id),
+            client_id: "logout-test-client2".to_string(),
+            client_secret_hash: "hash".to_string(),
+            name: Some("Test Client".to_string()),
+            created_at: Utc::now(),
+        })
+        .await;
+
+    let app = build_test_router(state);
+
+    let (status, _body) = get_raw(
+        &app,
+        "/api/v1/auth/logout?client_id=logout-test-client2&post_logout_redirect_uri=https://evil.com/logout",
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
 async fn test_logout_full_params() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.logout_uris = vec!["https://app.example.com/logged-out".to_string()];
+    state.service_repo.add_service(service).await;
+    state
+        .service_repo
+        .add_client(Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(service_id),
+            client_id: "logout-full-client".to_string(),
+            client_secret_hash: "hash".to_string(),
+            name: Some("Test Client".to_string()),
+            created_at: Utc::now(),
+        })
+        .await;
+
     let app = build_test_router(state);
 
     let (status, _body) = get_raw(
         &app,
-        "/api/v1/auth/logout?id_token_hint=token123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
+        "/api/v1/auth/logout?client_id=logout-full-client&id_token_hint=token123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
     ).await;
 
     assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
@@ -1110,6 +1192,8 @@ async fn test_callback_success_existing_user() {
         avatar_url: None,
         keycloak_id: kc_sub.to_string(),
         mfa_enabled: false,
+        password_changed_at: None,
+        locked_until: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -1283,6 +1367,8 @@ async fn test_token_authorization_code_success_existing_user() {
         avatar_url: None,
         keycloak_id: kc_sub.to_string(),
         mfa_enabled: false,
+        password_changed_at: None,
+        locked_until: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -1391,6 +1477,8 @@ async fn test_token_refresh_success() {
         avatar_url: None,
         keycloak_id: kc_sub.to_string(),
         mfa_enabled: false,
+        password_changed_at: None,
+        locked_until: None,
         created_at: Utc::now(),
         updated_at: Utc::now(),
     };
@@ -1509,6 +1597,23 @@ async fn test_logout_with_session_and_all_params() {
     let user_id = Uuid::new_v4();
     let session_id = Uuid::new_v4();
 
+    // Set up service with logout_uris and linked client
+    let service_id = Uuid::new_v4();
+    let mut service = create_test_service(Some(service_id), None);
+    service.logout_uris = vec!["https://app.example.com/logged-out".to_string()];
+    state.service_repo.add_service(service).await;
+    state
+        .service_repo
+        .add_client(Client {
+            id: StringUuid::new_v4(),
+            service_id: StringUuid::from(service_id),
+            client_id: "session-logout-client".to_string(),
+            client_secret_hash: "hash".to_string(),
+            name: Some("Test Client".to_string()),
+            created_at: Utc::now(),
+        })
+        .await;
+
     let token = state
         .jwt_manager
         .create_identity_token_with_session(
@@ -1525,7 +1630,7 @@ async fn test_logout_with_session_and_all_params() {
     let request = axum::http::Request::builder()
         .method(axum::http::Method::GET)
         .uri(
-            "/api/v1/auth/logout?id_token_hint=hint123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
+            "/api/v1/auth/logout?client_id=session-logout-client&id_token_hint=hint123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
         )
         .header("Authorization", format!("Bearer {}", token))
         .body(axum::body::Body::empty())

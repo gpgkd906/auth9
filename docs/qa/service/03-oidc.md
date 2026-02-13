@@ -56,42 +56,57 @@ SELECT redirect_uris FROM services WHERE id = '{service_id}';
 
 ---
 
-## 场景 3：Logout URI 配置
+## 场景 3：Logout URI 配置与验证
 
 ### 初始状态
-- 服务配置了 logout_uris
+- 服务配置了 logout_uris: `["https://test.example.com/logout"]`
+- 客户端: `existing-client`
 
 ### 目的
-验证登出后的重定向
+验证登出后的重定向到配置的URI，未配置的URI应被拒绝
 
 ### 测试操作流程
-1. 用户登录
-2. 用户点击登出
-3. 验证重定向
+1. 调用登出端点带有效URI和client_id:
+   ```
+   GET /api/v1/auth/logout?client_id=existing-client&post_logout_redirect_uri=https://test.example.com/logout
+   ```
+2. 调用登出端点带无效URI:
+   ```
+   GET /api/v1/auth/logout?client_id=existing-client&post_logout_redirect_uri=https://evil.com/logout
+   ```
+3. 调用登出端点带redirect_uri但不带client_id:
+   ```
+   GET /api/v1/auth/logout?post_logout_redirect_uri=https://test.example.com/logout
+   ```
 
 ### 预期结果
-- 登出后正确重定向到配置的 URI
+- 步骤1: 307重定向到Keycloak登出页面
+- 步骤2: 400错误，拒绝无效URI
+- 步骤3: 400错误，要求提供client_id
 
 ---
 
-## 场景 4：Client ID 唯一性验证
+## 场景 4：Client ID 自动生成验证
 
 ### 初始状态
-- 已存在 client_id=`existing-client`
+- 已存在至少一个服务
 
 ### 目的
-验证 Client ID 全局唯一性
+验证 Client ID 由系统自动生成（UUID），用户无法指定 client_id
 
 ### 测试操作流程
-1. 尝试创建 client_id=`existing-client` 的新客户端
+1. 调用创建客户端 API，仅提供 `name` 字段
+2. 重复创建多个客户端
 
 ### 预期结果
-- 显示错误：「Client ID 已存在」
+- 每次创建成功，返回系统自动生成的 UUID 格式 client_id
+- 每个 client_id 全局唯一
+- API 忽略请求体中的 client_id 字段（如有）
 
 ### 预期数据状态
 ```sql
-SELECT COUNT(*) FROM clients WHERE client_id = 'existing-client';
--- 预期: 1
+SELECT id, client_id, name FROM clients WHERE service_id = '{service_id}';
+-- client_id 列均为 UUID 格式，且互不重复
 ```
 
 ---

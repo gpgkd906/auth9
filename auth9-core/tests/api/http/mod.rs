@@ -47,8 +47,9 @@ use auth9_core::server::build_full_router;
 use auth9_core::service::{
     tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ActionService, AnalyticsService,
     BrandingService, ClientService, EmailService, EmailTemplateService, IdentityProviderService,
-    InvitationService, PasswordService, RbacService, SecurityDetectionService, SessionService,
-    SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
+    InvitationService, KeycloakSyncService, PasswordService, RbacService,
+    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
+    WebAuthnService, WebhookService,
 };
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -293,6 +294,11 @@ impl TestAppState {
         let cache_manager = NoOpCacheManager::new();
         let db_pool = sqlx::MySqlPool::connect_lazy(&config.database.url).unwrap();
 
+        // Create Keycloak sync service for tests
+        let keycloak_updater: Arc<dyn auth9_core::service::keycloak_sync::KeycloakRealmUpdater> =
+            Arc::new(KeycloakClient::new(config.keycloak.clone()));
+        let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
+
         // Create new services
         let password_service = Arc::new(PasswordService::with_tenant_repo(
             password_reset_repo.clone(),
@@ -300,6 +306,7 @@ impl TestAppState {
             email_service.clone(),
             Arc::new(KeycloakClient::new(config.keycloak.clone())),
             tenant_repo.clone(),
+            keycloak_sync_service,
             config.password_reset.hmac_key.clone(),
         ));
         let session_service = Arc::new(SessionService::new(
