@@ -4,73 +4,343 @@
 //! in a secure V8 isolate sandbox. Key features:
 //!
 //! - **V8 Isolate Sandbox**: Each script runs in an isolated V8 instance
+//! - **Async/Await Support**: Scripts can use `async/await`, `fetch()`, `setTimeout`
 //! - **TypeScript Support**: Automatic transpilation to JavaScript
 //! - **Timeout Control**: Enforced execution timeout per action
 //! - **Script Caching**: LRU cache for compiled scripts
-//! - **Host Functions**: Exposed Deno ops for logging and context modification
+//! - **Host Functions**: Exposed Deno ops for logging, HTTP fetch, and timers
+//! - **Security**: Domain allowlist for fetch, private IP blocking, request limits
 
-use crate::domain::{Action, ActionContext};
+use crate::domain::{Action, ActionContext, AsyncActionConfig};
 use crate::error::{AppError, Result};
 use crate::repository::ActionRepository;
-use deno_core::{JsRuntime, RuntimeOptions};
+use deno_core::{JsRuntime, OpState, RuntimeOptions};
 use lru::LruCache;
 use metrics::{counter, histogram};
 use std::cell::RefCell;
+use std::collections::HashMap;
 use std::num::NonZeroUsize;
+use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
 use tokio::time::timeout;
 
+/// Error type for action ops (implements JsErrorClass for deno_core)
+#[derive(Debug, thiserror::Error, deno_error::JsError)]
+#[class(generic)]
+#[error("{0}")]
+struct ActionOpError(String);
+
+// ============================================================
+// Async ops state types
+// ============================================================
+
+/// Counter for HTTP requests in a single action execution
+struct RequestCounter(usize);
+
+/// Response from op_fetch, serialized back to JS
+#[derive(serde::Serialize)]
+struct FetchResponse {
+    status: u16,
+    body: String,
+    headers: HashMap<String, String>,
+}
+
+// ============================================================
+// Deno ops
+// ============================================================
+
+#[deno_core::op2(async)]
+#[serde]
+async fn op_fetch(
+    state: Rc<RefCell<OpState>>,
+    #[string] url: String,
+    #[string] method: String,
+    #[serde] headers: HashMap<String, String>,
+    #[string] body: String,
+) -> std::result::Result<FetchResponse, ActionOpError> {
+    // Extract config and client from state
+    let (client, config, request_count) = {
+        let state = state.borrow();
+        let client = state.borrow::<reqwest::Client>().clone();
+        let config = state.borrow::<AsyncActionConfig>().clone();
+        let count = state.borrow::<RequestCounter>().0;
+        (client, config, count)
+    };
+
+    // Check request limit
+    if request_count >= config.max_requests_per_execution {
+        return Err(ActionOpError(format!(
+            "Request limit exceeded (max {} per execution)",
+            config.max_requests_per_execution
+        )));
+    }
+
+    // Parse URL and check domain
+    let parsed_url = url::Url::parse(&url)
+        .map_err(|e| ActionOpError(format!("Invalid URL: {}", e)))?;
+
+    let host = parsed_url
+        .host_str()
+        .ok_or_else(|| ActionOpError("URL has no host".into()))?;
+
+    let host_with_port = if let Some(port) = parsed_url.port() {
+        format!("{}:{}", host, port)
+    } else {
+        host.to_string()
+    };
+
+    // Check allowlist (match on host alone or host:port)
+    if !config
+        .allowed_domains
+        .iter()
+        .any(|d| d == host || d == &host_with_port)
+    {
+        return Err(ActionOpError(format!(
+            "Domain '{}' not in allowlist. Allowed: {:?}",
+            host, config.allowed_domains
+        )));
+    }
+
+    // Check private IP (SSRF protection)
+    if !config.allow_private_ips && is_private_ip(host) {
+        return Err(ActionOpError(format!(
+            "Requests to private/internal IPs are blocked: {}",
+            host
+        )));
+    }
+
+    // Increment request counter
+    {
+        let mut state = state.borrow_mut();
+        state.borrow_mut::<RequestCounter>().0 += 1;
+    }
+
+    // Build HTTP request
+    let method = reqwest::Method::from_bytes(method.as_bytes())
+        .map_err(|e| ActionOpError(format!("Invalid HTTP method: {}", e)))?;
+
+    let mut req = client.request(method, &url);
+
+    for (key, value) in &headers {
+        req = req.header(key.as_str(), value.as_str());
+    }
+
+    if !body.is_empty() {
+        req = req.body(body);
+    }
+
+    // Execute with per-request timeout
+    let response = tokio::time::timeout(
+        Duration::from_millis(config.request_timeout_ms),
+        req.send(),
+    )
+    .await
+    .map_err(|_| {
+        ActionOpError(format!(
+            "Request timed out after {}ms",
+            config.request_timeout_ms
+        ))
+    })?
+    .map_err(|e| ActionOpError(format!("HTTP request failed: {}", e)))?;
+
+    let status = response.status().as_u16();
+    let resp_headers: HashMap<String, String> = response
+        .headers()
+        .iter()
+        .map(|(k, v)| (k.to_string(), v.to_str().unwrap_or("").to_string()))
+        .collect();
+
+    let body_bytes = response
+        .bytes()
+        .await
+        .map_err(|e| ActionOpError(format!("Failed to read body: {}", e)))?;
+
+    // Truncate at max_response_bytes
+    let body = if body_bytes.len() > config.max_response_bytes {
+        String::from_utf8_lossy(&body_bytes[..config.max_response_bytes]).to_string()
+    } else {
+        String::from_utf8_lossy(&body_bytes).to_string()
+    };
+
+    Ok(FetchResponse {
+        status,
+        body,
+        headers: resp_headers,
+    })
+}
+
+#[deno_core::op2(async)]
+async fn op_set_timeout(#[number] delay_ms: u64) -> std::result::Result<(), ActionOpError> {
+    // Cap at 30 seconds to prevent abuse
+    let capped = delay_ms.min(30_000);
+    tokio::time::sleep(Duration::from_millis(capped)).await;
+    Ok(())
+}
+
+#[deno_core::op2]
+fn op_console_log(#[serde] args: Vec<String>) {
+    tracing::info!("[Action Script] {}", args.join(" "));
+}
+
+// Register extension
+deno_core::extension!(
+    auth9_action_ext,
+    ops = [op_fetch, op_set_timeout, op_console_log],
+);
+
+// ============================================================
+// Private IP blocking (SSRF protection)
+// ============================================================
+
+fn is_private_ip(host: &str) -> bool {
+    use std::net::IpAddr;
+
+    if let Ok(ip) = host.parse::<IpAddr>() {
+        match ip {
+            IpAddr::V4(v4) => {
+                v4.is_loopback()      // 127.0.0.0/8
+                || v4.is_private()    // 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16
+                || v4.is_link_local() // 169.254.0.0/16
+                || v4.is_unspecified() // 0.0.0.0
+            }
+            IpAddr::V6(v6) => v6.is_loopback() || v6.is_unspecified(),
+        }
+    } else {
+        // Hostname: block common internal names
+        host == "localhost"
+            || host.ends_with(".local")
+            || host.ends_with(".internal")
+    }
+}
+
+// ============================================================
+// JavaScript polyfills (injected once at runtime creation)
+// ============================================================
+
+const POLYFILLS_JS: &str = r#"
+// fetch(url, options?) -> Promise<{ status, body, headers, ok, text(), json() }>
+globalThis.fetch = async function(url, options) {
+    options = options || {};
+    const method = (options.method || 'GET').toUpperCase();
+    const headers = options.headers || {};
+    const body = options.body || '';
+    const result = await Deno.core.ops.op_fetch(url, method, headers, body);
+    return {
+        status: result.status,
+        ok: result.status >= 200 && result.status < 300,
+        headers: result.headers,
+        text: async () => result.body,
+        json: async () => JSON.parse(result.body),
+    };
+};
+
+// setTimeout(callback, delay) -> id
+globalThis.__timers = { nextId: 1, pending: new Map() };
+globalThis.setTimeout = function(callback, delay) {
+    delay = delay || 0;
+    const id = globalThis.__timers.nextId++;
+    const promise = Deno.core.ops.op_set_timeout(delay).then(() => {
+        if (globalThis.__timers.pending.has(id)) {
+            globalThis.__timers.pending.delete(id);
+            callback();
+        }
+    });
+    globalThis.__timers.pending.set(id, promise);
+    return id;
+};
+globalThis.clearTimeout = function(id) {
+    globalThis.__timers.pending.delete(id);
+};
+
+// console.log/warn/error
+globalThis.console = {
+    log: (...args) => Deno.core.ops.op_console_log(args.map(String)),
+    warn: (...args) => Deno.core.ops.op_console_log(args.map(a => '[WARN] ' + String(a))),
+    error: (...args) => Deno.core.ops.op_console_log(args.map(a => '[ERROR] ' + String(a))),
+};
+"#;
+
+// ============================================================
+// Thread-local V8 runtime management
+// ============================================================
+
 // Thread-local storage for V8 runtime (JsRuntime is !Send, must stay on one thread)
 thread_local! {
-    static RUNTIME: RefCell<Option<JsRuntime>> = RefCell::new(None);
+    static JS_RUNTIME: RefCell<Option<JsRuntime>> = const { RefCell::new(None) };
+    static LOCAL_TOKIO_RT: RefCell<Option<tokio::runtime::Runtime>> = const { RefCell::new(None) };
 }
 
-/// Get or create a thread-local JsRuntime
-fn get_or_create_runtime() -> Result<()> {
-    RUNTIME.with(|runtime| {
-        let mut rt = runtime.borrow_mut();
+/// Take JsRuntime out of thread-local (avoids RefCell borrow across await)
+fn take_js_runtime() -> Option<JsRuntime> {
+    JS_RUNTIME.with(|rt| rt.borrow_mut().take())
+}
+
+/// Return JsRuntime to thread-local storage
+fn return_js_runtime(runtime: JsRuntime) {
+    JS_RUNTIME.with(|rt| {
+        *rt.borrow_mut() = Some(runtime);
+    });
+}
+
+/// Create a new JsRuntime with async extension + polyfills
+fn create_js_runtime(
+    http_client: reqwest::Client,
+    config: AsyncActionConfig,
+) -> Result<JsRuntime> {
+    tracing::debug!("Creating thread-local V8 runtime with async extensions");
+
+    let mut runtime = JsRuntime::new(RuntimeOptions {
+        extensions: vec![auth9_action_ext::init_ops_and_esm()],
+        ..Default::default()
+    });
+
+    // Inject initial op state
+    {
+        let op_state = runtime.op_state();
+        let mut state = op_state.borrow_mut();
+        state.put(http_client);
+        state.put(config);
+        state.put(RequestCounter(0));
+    }
+
+    // Inject polyfills (fetch, setTimeout, console)
+    runtime
+        .execute_script("<polyfills>", POLYFILLS_JS)
+        .map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to load polyfills: {}", e))
+        })?;
+
+    Ok(runtime)
+}
+
+/// Get or create thread-local tokio current-thread runtime, take it out for use
+fn take_local_tokio_rt() -> tokio::runtime::Runtime {
+    LOCAL_TOKIO_RT.with(|rt_cell| {
+        let mut rt = rt_cell.borrow_mut();
         if rt.is_none() {
-            tracing::debug!("Creating thread-local V8 runtime");
-            let js_runtime = JsRuntime::new(RuntimeOptions {
-                extensions: vec![],
-                ..Default::default()
-            });
-            *rt = Some(js_runtime);
+            *rt = Some(
+                tokio::runtime::Builder::new_current_thread()
+                    .enable_all()
+                    .build()
+                    .expect("Failed to create thread-local tokio runtime"),
+            );
         }
-        Ok(())
+        rt.take().unwrap()
     })
 }
 
-/// Execute code with the thread-local runtime
-fn with_runtime<F, R>(f: F) -> Result<R>
-where
-    F: FnOnce(&mut JsRuntime) -> Result<R>,
-{
-    RUNTIME.with(|runtime| {
-        let mut rt = runtime.borrow_mut();
-        match rt.as_mut() {
-            Some(js_runtime) => f(js_runtime),
-            None => Err(AppError::Internal(anyhow::anyhow!(
-                "Runtime not initialized"
-            ))),
-        }
-    })
+/// Return tokio runtime to thread-local storage
+fn return_local_tokio_rt(rt: tokio::runtime::Runtime) {
+    LOCAL_TOKIO_RT.with(|rt_cell| {
+        *rt_cell.borrow_mut() = Some(rt);
+    });
 }
 
-/// Clean up runtime state to prevent cross-request pollution
-fn cleanup_runtime() -> Result<()> {
-    with_runtime(|runtime| {
-        runtime
-            .execute_script(
-                "<cleanup>",
-                "delete globalThis.context; delete globalThis.result;",
-            )
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to cleanup runtime: {}", e)))?;
-        Ok(())
-    })
-}
+// ============================================================
+// Compiled script cache
+// ============================================================
 
 /// Compiled script cache entry
 #[derive(Debug, Clone)]
@@ -82,22 +352,43 @@ struct CompiledScript {
 /// Script cache (action_id -> compiled script)
 type ScriptCache = Arc<RwLock<LruCache<String, CompiledScript>>>;
 
+// ============================================================
+// ActionEngine
+// ============================================================
+
 /// ActionEngine executes TypeScript/JavaScript actions in V8 isolate
 pub struct ActionEngine<R: ActionRepository> {
     action_repo: Arc<R>,
     script_cache: ScriptCache,
+    http_client: reqwest::Client,
+    async_config: AsyncActionConfig,
 }
 
 impl<R: ActionRepository + 'static> ActionEngine<R> {
-    /// Create a new ActionEngine
-    ///
-    /// Uses thread-local V8 runtimes for execution (one runtime per thread, reused)
+    /// Create a new ActionEngine with default async config (fetch blocked by default)
     pub fn new(action_repo: Arc<R>) -> Self {
-        let cache_size = NonZeroUsize::new(100).unwrap();
-        tracing::info!("ActionEngine initialized with thread-local V8 runtimes");
+        Self::with_config(action_repo, AsyncActionConfig::default())
+    }
+
+    /// Create a new ActionEngine with explicit async config
+    pub fn with_config(action_repo: Arc<R>, async_config: AsyncActionConfig) -> Self {
+        let http_client = reqwest::Client::builder()
+            .timeout(Duration::from_millis(async_config.request_timeout_ms))
+            .build()
+            .unwrap_or_default();
+
+        tracing::info!(
+            "ActionEngine initialized (allowed_domains: {:?})",
+            async_config.allowed_domains
+        );
+
         Self {
             action_repo,
-            script_cache: Arc::new(RwLock::new(LruCache::new(cache_size))),
+            script_cache: Arc::new(RwLock::new(LruCache::new(
+                NonZeroUsize::new(100).unwrap(),
+            ))),
+            http_client,
+            async_config,
         }
     }
 
@@ -231,65 +522,151 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         let transpiled_code = self.get_or_compile_script(action).await?;
         let timeout_ms = action.timeout_ms;
 
-        // Clone context for move into blocking task
+        // Clone values for move into blocking task
         let context_clone = context.clone();
-        let transpiled_clone = transpiled_code.clone();
+        let http_client = self.http_client.clone();
+        let async_config = self.async_config.clone();
 
         // Execute in blocking thread pool (JsRuntime is !Send, must stay on one thread)
         let handle = tokio::task::spawn_blocking(move || {
-            // Ensure thread-local runtime exists
-            get_or_create_runtime()?;
-
-            // Execute with thread-local runtime
-            let result = with_runtime(|runtime| {
-                // Inject context into globalThis
-                {
-                    let scope = &mut runtime.handle_scope();
-                    let context_value = serde_v8::to_v8(scope, &context_clone).map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!("Failed to serialize context: {}", e))
-                    })?;
-
-                    let global = scope.get_current_context().global(scope);
-                    let key = deno_core::v8::String::new(scope, "context").unwrap();
-                    global.set(scope, key.into(), context_value);
-                }
-
-                // Execute the transpiled script
-                // Note: We don't support async/await in blocking context due to performance issues
-                // Users should keep scripts synchronous for now
-                let result_value = runtime
-                    .execute_script("<action_script>", transpiled_clone)
+            // 1. Take or create JsRuntime
+            let mut js_runtime = match take_js_runtime() {
+                Some(rt) => rt,
+                None => create_js_runtime(http_client.clone(), async_config.clone())
                     .map_err(|e| {
-                        AppError::ActionExecutionFailed(format!("Script execution error: {}", e))
+                        AppError::Internal(anyhow::anyhow!(
+                            "Failed to create V8 runtime: {}",
+                            e
+                        ))
+                    })?,
+            };
+
+            // 2. Reset per-execution op state
+            {
+                let op_state = js_runtime.op_state();
+                let mut state = op_state.borrow_mut();
+                state.put(http_client);
+                state.put(async_config);
+                state.put(RequestCounter(0));
+            }
+
+            // 3. Inject context into globalThis
+            {
+                let scope = &mut js_runtime.handle_scope();
+                let context_value =
+                    serde_v8::to_v8(scope, &context_clone).map_err(|e| {
+                        AppError::Internal(anyhow::anyhow!(
+                            "Failed to serialize context: {}",
+                            e
+                        ))
                     })?;
 
-                // Extract modified context using serde_v8
-                let modified_context = {
-                    let scope = &mut runtime.handle_scope();
-                    let local_value = deno_core::v8::Local::new(scope, result_value);
+                let global = scope.get_current_context().global(scope);
+                let key = deno_core::v8::String::new(scope, "context").unwrap();
+                global.set(scope, key.into(), context_value);
+            }
 
-                    serde_v8::from_v8::<ActionContext>(scope, local_value).map_err(|e| {
+            // 4. Execute the transpiled script
+            let result_global = js_runtime
+                .execute_script("<action_script>", transpiled_code)
+                .map_err(|e| {
+                    AppError::ActionExecutionFailed(format!(
+                        "Script execution error: {}",
+                        e
+                    ))
+                })?;
+
+            // 5. Detect if result is a Promise and pump event loop
+            let is_promise = {
+                let scope = &mut js_runtime.handle_scope();
+                let local =
+                    deno_core::v8::Local::new(scope, result_global.clone());
+                local.is_promise()
+            };
+
+            if is_promise {
+                // Take thread-local tokio runtime to drive async ops
+                let tokio_rt = take_local_tokio_rt();
+
+                let event_loop_result = tokio_rt.block_on(async {
+                    js_runtime
+                        .run_event_loop(Default::default())
+                        .await
+                });
+
+                // Return tokio runtime to thread-local
+                return_local_tokio_rt(tokio_rt);
+
+                event_loop_result.map_err(|e| {
+                    AppError::ActionExecutionFailed(format!(
+                        "Async execution error: {}",
+                        e
+                    ))
+                })?;
+            }
+
+            // 6. Extract result (handle both sync value and resolved Promise)
+            let modified_context = {
+                let scope = &mut js_runtime.handle_scope();
+                let local = deno_core::v8::Local::new(scope, result_global);
+
+                let value = if local.is_promise() {
+                    let promise =
+                        deno_core::v8::Local::<deno_core::v8::Promise>::try_from(
+                            local,
+                        )
+                        .map_err(|e| {
+                            AppError::ActionExecutionFailed(format!(
+                                "Invalid promise: {}",
+                                e
+                            ))
+                        })?;
+
+                    match promise.state() {
+                        deno_core::v8::PromiseState::Fulfilled => {
+                            promise.result(scope)
+                        }
+                        deno_core::v8::PromiseState::Rejected => {
+                            let err = promise.result(scope);
+                            let msg = err.to_rust_string_lossy(scope);
+                            return Err(AppError::ActionExecutionFailed(
+                                format!("Promise rejected: {}", msg),
+                            ));
+                        }
+                        deno_core::v8::PromiseState::Pending => {
+                            return Err(AppError::ActionExecutionFailed(
+                                "Promise still pending after event loop completed"
+                                    .into(),
+                            ));
+                        }
+                    }
+                } else {
+                    local
+                };
+
+                serde_v8::from_v8::<ActionContext>(scope, value).map_err(
+                    |e| {
                         AppError::ActionExecutionFailed(format!(
                             "Failed to extract context from script result: {}",
                             e
                         ))
-                    })?
-                };
+                    },
+                )?
+            };
 
-                Ok::<ActionContext, AppError>(modified_context)
-            })?;
+            // 7. Cleanup and return runtime to thread-local
+            let _ = js_runtime.execute_script(
+                "<cleanup>",
+                "delete globalThis.context; delete globalThis.result;",
+            );
+            return_js_runtime(js_runtime);
 
-            // Clean up for next use
-            let _ = cleanup_runtime();
-
-            Ok::<ActionContext, AppError>(result)
+            Ok(modified_context)
         });
 
         // Apply timeout
         let timeout_duration = Duration::from_millis(timeout_ms as u64);
-        let execution_result = timeout(timeout_duration, handle).await;
-
-        match execution_result {
+        match timeout(timeout_duration, handle).await {
             Ok(Ok(result)) => result,
             Ok(Err(e)) => Err(AppError::Internal(anyhow::anyhow!(
                 "Blocking task error: {}",
@@ -310,7 +687,6 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         {
             let mut cache = self.script_cache.write().await;
             if let Some(cached) = cache.get(&cache_key) {
-                // Cache hit!
                 return Ok(cached.code.clone());
             }
         }
@@ -334,22 +710,34 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 
     /// Compile TypeScript to JavaScript
     ///
-    /// Basic transpilation that ensures the script returns context.
-    /// Users can use async/await by wrapping their code in async functions.
+    /// Detects async patterns and wraps in async IIFE when needed.
+    /// Ensures the script returns context at the end.
     fn compile_typescript(&self, script: &str) -> Result<String> {
         let trimmed = script.trim();
 
-        // Ensure script returns context at the end
-        let wrapped = if trimmed.ends_with("context;") || trimmed.ends_with("context") {
-            script.to_string()
-        } else if trimmed.contains("return context") {
-            script.to_string()
-        } else {
-            // Append context return
-            format!("{}\ncontext;", script)
-        };
+        // Detect async patterns
+        let is_async = trimmed.contains("await ")
+            || trimmed.contains("async ")
+            || trimmed.contains("fetch(");
 
-        Ok(wrapped)
+        if is_async {
+            // Wrap in async IIFE that returns context
+            Ok(format!(
+                "(async () => {{\n{}\nreturn context;\n}})()",
+                script
+            ))
+        } else {
+            // Sync path: ensure script returns context at the end
+            if trimmed.ends_with("context;")
+                || trimmed.ends_with("context")
+                || trimmed.contains("return context")
+            {
+                Ok(script.to_string())
+            } else {
+                // Append context return
+                Ok(format!("{}\ncontext;", script))
+            }
+        }
     }
 
     /// Test an action with mock context (for testing endpoint)
@@ -363,7 +751,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         let modified_context = self.execute_action(action, &context).await?;
 
         let duration_ms = start.elapsed().as_millis() as i32;
-        let console_logs = Vec::new(); // TODO: Capture console.log output
+        let console_logs = Vec::new(); // TODO: Capture console.log output via op state
 
         Ok((modified_context, duration_ms, console_logs))
     }
@@ -372,7 +760,9 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{ActionContextRequest, ActionContextTenant, ActionContextUser, StringUuid};
+    use crate::domain::{
+        ActionContextRequest, ActionContextTenant, ActionContextUser, StringUuid,
+    };
     use crate::repository::action::MockActionRepository;
     use chrono::Utc;
 
@@ -408,7 +798,7 @@ mod tests {
             script: script.to_string(),
             enabled: true,
             execution_order: 0,
-            timeout_ms: 3000,
+            timeout_ms: 5000,
             last_executed_at: None,
             execution_count: 0,
             error_count: 0,
@@ -417,6 +807,10 @@ mod tests {
             updated_at: Utc::now(),
         }
     }
+
+    // ============================================================
+    // Backward compatibility tests
+    // ============================================================
 
     #[tokio::test]
     async fn test_simple_script_execution() {
@@ -482,23 +876,17 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // V8 limitation: synchronous execution cannot be interrupted by async timeout
-              // Infinite loops in V8 block the thread and cannot be terminated from Rust.
-              // Real timeout protection should be at infrastructure level (reverse proxy, etc.)
-              // See: https://github.com/denoland/deno_core/issues/1055
+    #[ignore] // V8 limitation: synchronous infinite loops block the thread
     async fn test_script_timeout() {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
         let mut action = create_test_action(
             r#"
-            // Intentional infinite loop
-            while (true) {
-                const x = 1 + 1;
-            }
+            while (true) { const x = 1 + 1; }
             "#,
         );
-        action.timeout_ms = 100; // 100ms timeout
+        action.timeout_ms = 100;
 
         let context = create_test_context();
 
@@ -514,22 +902,17 @@ mod tests {
 
         let action = create_test_action("context;");
 
-        // First call - cache miss
         let code1 = engine.get_or_compile_script(&action).await.unwrap();
-
-        // Second call - cache hit
         let code2 = engine.get_or_compile_script(&action).await.unwrap();
 
         assert_eq!(code1, code2);
     }
-
 
     #[tokio::test]
     async fn test_sync_script_still_works() {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Old-style synchronous script should still work
         let action = create_test_action(
             r#"
             context.claims = context.claims || {};
@@ -563,13 +946,11 @@ mod tests {
 
         let context = create_test_context();
 
-        // Warm up: first execution initializes thread-local runtime
         let warmup_start = Instant::now();
         let _ = engine.execute_action(&action, &context).await.unwrap();
         let warmup_duration = warmup_start.elapsed();
         println!("Warmup (first execution): {:?}", warmup_duration);
 
-        // Measure subsequent executions (should reuse runtime)
         let iterations = 10;
         let mut total_duration = Duration::ZERO;
 
@@ -578,7 +959,6 @@ mod tests {
             let result = engine.execute_action(&action, &context).await;
             let duration = start.elapsed();
             total_duration += duration;
-
             assert!(result.is_ok());
             println!("Execution {} duration: {:?}", i + 1, duration);
         }
@@ -586,14 +966,15 @@ mod tests {
         let avg_duration = total_duration / iterations;
         println!("\n=== Performance Results ===");
         println!("First execution (with init): {:?}", warmup_duration);
-        println!("Average of {} reuse executions: {:?}", iterations, avg_duration);
+        println!(
+            "Average of {} reuse executions: {:?}",
+            iterations, avg_duration
+        );
         println!(
             "Speedup: {:.1}x faster",
             warmup_duration.as_secs_f64() / avg_duration.as_secs_f64()
         );
 
-        // Assert that reuse is significantly faster than first execution
-        // (should be at least 2x faster if runtime reuse is working)
         assert!(
             avg_duration < warmup_duration / 2,
             "Runtime reuse should be at least 2x faster. Warmup: {:?}, Avg: {:?}",
@@ -603,13 +984,11 @@ mod tests {
     }
 
     // ============================================================
-    // Security Tests - V8 Sandbox Validation
+    // Security tests
     // ============================================================
 
     #[tokio::test]
     async fn test_runtime_cleanup_runs_without_error() {
-        // cleanup_runtime() is called after each execution to delete globalThis.context/result
-        // This test verifies the cleanup runs without errors
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
@@ -623,30 +1002,21 @@ mod tests {
 
         let context1 = create_test_context();
         let result1 = engine.execute_action(&action, &context1).await;
-
-        // First execution should succeed
         assert!(result1.is_ok());
 
-        // Second execution should also succeed (cleanup didn't break anything)
         let context2 = create_test_context();
         let result2 = engine.execute_action(&action, &context2).await;
-
-        assert!(result2.is_ok(), "Cleanup should not break subsequent executions");
+        assert!(
+            result2.is_ok(),
+            "Cleanup should not break subsequent executions"
+        );
     }
 
     #[tokio::test]
     async fn test_known_limitation_globalthis_pollution() {
-        // KNOWN LIMITATION: Custom properties added to globalThis persist across executions
-        // within the same thread-local runtime. This is documented in docs/action-engine-security.md.
-        // Full isolation would require creating a new V8 Isolate per execution (expensive).
-        //
-        // Mitigation: Thread-local runtimes limit cross-request pollution to same-thread requests.
-        // In production, requests are distributed across multiple threads/workers.
-
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // First action pollutes globalThis with custom property
         let action1 = create_test_action(
             r#"
             globalThis.customPollution = "persists";
@@ -657,7 +1027,6 @@ mod tests {
         let context1 = create_test_context();
         let _ = engine.execute_action(&action1, &context1).await;
 
-        // Second action can detect the pollution (this is the known limitation)
         let action2 = create_test_action(
             r#"
             context.claims = context.claims || {};
@@ -669,7 +1038,6 @@ mod tests {
         let context2 = create_test_context();
         let result = engine.execute_action(&action2, &context2).await;
 
-        // This documents the current behavior - custom properties DO persist
         if let Ok(ctx) = result {
             let pollution_detected = ctx
                 .claims
@@ -686,16 +1054,17 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_network_access_blocked() {
+    async fn test_fetch_is_available_but_controlled() {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to use fetch (should not be available)
+        // fetch IS defined (polyfill), but controlled by allowlist
         let action = create_test_action(
             r#"
-            if (typeof fetch !== 'undefined') {
-                throw new Error("fetch should not be available!");
-            }
+            context.claims = context.claims || {};
+            context.claims.fetch_available = (typeof fetch !== 'undefined');
+            context.claims.console_available = (typeof console !== 'undefined');
+            context.claims.setTimeout_available = (typeof setTimeout !== 'undefined');
             context;
             "#,
         );
@@ -703,10 +1072,20 @@ mod tests {
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
 
-        // Should succeed because fetch is not available
-        assert!(
-            result.is_ok(),
-            "Network access should be blocked - fetch undefined"
+        assert!(result.is_ok());
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(
+            claims.get("fetch_available").unwrap().as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            claims.get("console_available").unwrap().as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            claims.get("setTimeout_available").unwrap().as_bool(),
+            Some(true)
         );
     }
 
@@ -715,7 +1094,6 @@ mod tests {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to access Deno filesystem APIs
         let action = create_test_action(
             r#"
             if (typeof Deno !== 'undefined' && typeof Deno.readFile !== 'undefined') {
@@ -727,8 +1105,6 @@ mod tests {
 
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
-
-        // Should succeed because Deno APIs are not available
         assert!(result.is_ok(), "Filesystem access should be blocked");
     }
 
@@ -737,7 +1113,6 @@ mod tests {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to access process APIs
         let action = create_test_action(
             r#"
             if (typeof Deno !== 'undefined' && typeof Deno.run !== 'undefined') {
@@ -752,8 +1127,6 @@ mod tests {
 
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
-
-        // Should succeed because process APIs are not available
         assert!(result.is_ok(), "Process access should be blocked");
     }
 
@@ -762,22 +1135,15 @@ mod tests {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to break out of sandbox using various techniques
         let action = create_test_action(
             r#"
-            // Try to modify prototype chain
             try {
                 Object.prototype.polluted = "bad";
-            } catch (e) {
-                // Expected to fail or be isolated
-            }
+            } catch (e) {}
 
-            // Try eval (should not work in strict mode)
             try {
                 const result = eval("1+1");
-            } catch (e) {
-                // Expected to fail
-            }
+            } catch (e) {}
 
             context;
             "#,
@@ -785,8 +1151,6 @@ mod tests {
 
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
-
-        // Should complete without breaking sandbox
         assert!(
             result.is_ok() || result.is_err(),
             "Should handle injection attempts safely"
@@ -795,23 +1159,17 @@ mod tests {
 
     #[tokio::test]
     async fn test_memory_bomb_prevention() {
-        // V8 has default heap limits (~1.4GB) that prevent unbounded allocation
-        // This test verifies that scripts can't exhaust system memory
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to allocate a large (but not system-crashing) array
         let mut action = create_test_action(
             r#"
             try {
-                // Attempt to create a large array - V8 should handle this gracefully
-                const large = new Array(10000000); // 10 million elements
+                const large = new Array(10000000);
                 for (let i = 0; i < 1000; i++) {
-                    large[i] = "x".repeat(1000); // Create some memory pressure
+                    large[i] = "x".repeat(1000);
                 }
-            } catch (e) {
-                // If V8 throws OOM, that's fine - the key is not crashing the process
-            }
+            } catch (e) {}
             context;
             "#,
         );
@@ -819,8 +1177,6 @@ mod tests {
 
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
-
-        // Either success or controlled error is acceptable - the key is not crashing
         assert!(
             result.is_ok() || result.is_err(),
             "Should handle memory pressure without crashing the process"
@@ -832,7 +1188,6 @@ mod tests {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Two actions with different scripts
         let mut action1 = create_test_action(
             r#"
             context.claims = context.claims || {};
@@ -857,25 +1212,15 @@ mod tests {
         let context2 = create_test_context();
         let result2 = engine.execute_action(&action2, &context2).await;
 
-        // Both should succeed with their own scripts
         assert!(result1.is_ok(), "Action 1 should execute successfully");
         assert!(result2.is_ok(), "Action 2 should execute successfully");
 
-        // Results should be different (cache should not mix them up)
         if let (Ok(ctx1), Ok(ctx2)) = (result1, result2) {
             let tenant1 = ctx1.claims.as_ref().and_then(|c| c.get("tenant"));
             let tenant2 = ctx2.claims.as_ref().and_then(|c| c.get("tenant"));
 
-            assert_eq!(
-                tenant1.and_then(|v| v.as_str()),
-                Some("tenant1"),
-                "Action 1 should set tenant1"
-            );
-            assert_eq!(
-                tenant2.and_then(|v| v.as_str()),
-                Some("tenant2"),
-                "Action 2 should set tenant2"
-            );
+            assert_eq!(tenant1.and_then(|v| v.as_str()), Some("tenant1"));
+            assert_eq!(tenant2.and_then(|v| v.as_str()), Some("tenant2"));
         }
     }
 
@@ -884,7 +1229,6 @@ mod tests {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to use Node.js require()
         let action = create_test_action(
             r#"
             try {
@@ -903,28 +1247,17 @@ mod tests {
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
 
-        // Should succeed because require() should not be defined
         assert!(result.is_ok(), "Node.js require() should be blocked");
 
         if let Ok(updated_context) = result {
-            assert!(
-                updated_context.claims.is_some(),
-                "Should have claims"
-            );
+            assert!(updated_context.claims.is_some());
             let claims = updated_context.claims.unwrap();
-            assert!(
-                claims.contains_key("blocked"),
-                "Should have blocked flag when require() fails"
-            );
-            assert!(
-                claims.contains_key("error"),
-                "Should have error message"
-            );
+            assert!(claims.contains_key("blocked"));
+            assert!(claims.contains_key("error"));
             let error = claims.get("error").unwrap();
             assert!(
-                error.as_str().unwrap().contains("ReferenceError") || 
-                error.as_str().unwrap().contains("require is not defined"),
-                "Error should be ReferenceError: require is not defined"
+                error.as_str().unwrap().contains("ReferenceError")
+                    || error.as_str().unwrap().contains("require is not defined"),
             );
         }
     }
@@ -934,7 +1267,6 @@ mod tests {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
-        // Try to access process.env (from QA document scenario 3)
         let action = create_test_action(
             r#"
             try {
@@ -952,28 +1284,423 @@ mod tests {
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
 
-        // Should succeed because process should not be defined
         assert!(result.is_ok(), "process.env access should be blocked");
 
         if let Ok(updated_context) = result {
-            assert!(
-                updated_context.claims.is_some(),
-                "Should have claims"
-            );
+            assert!(updated_context.claims.is_some());
             let claims = updated_context.claims.unwrap();
-            assert!(
-                claims.contains_key("blocked"),
-                "Should have blocked flag when process access fails"
-            );
-            // Should NOT contain env or jwt_secret
-            assert!(
-                !claims.contains_key("env"),
-                "Should not contain env data"
-            );
-            assert!(
-                !claims.contains_key("jwt_secret"),
-                "Should not contain JWT_SECRET"
-            );
+            assert!(claims.contains_key("blocked"));
+            assert!(!claims.contains_key("env"));
+            assert!(!claims.contains_key("jwt_secret"));
         }
+    }
+
+    // ============================================================
+    // Async/await tests
+    // ============================================================
+
+    #[tokio::test]
+    async fn test_async_await_basic() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let action = create_test_action(
+            r#"
+            async function enrich() {
+                return { role: "admin" };
+            }
+            const data = await enrich();
+            context.claims = context.claims || {};
+            context.claims.role = data.role;
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(result.is_ok(), "Async/await should work: {:?}", result.err());
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(claims.get("role").unwrap().as_str().unwrap(), "admin");
+    }
+
+    #[tokio::test]
+    async fn test_async_promise_chain() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let action = create_test_action(
+            r#"
+            const value = await Promise.resolve(42).then(v => v * 2);
+            context.claims = context.claims || {};
+            context.claims.value = value;
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(
+            result.is_ok(),
+            "Promise chain should work: {:?}",
+            result.err()
+        );
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(claims.get("value").unwrap().as_f64().unwrap() as i64, 84);
+    }
+
+    #[tokio::test]
+    async fn test_async_promise_rejection() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let action = create_test_action(
+            r#"
+            await Promise.reject(new Error("test rejection"));
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err().to_string();
+        assert!(
+            err.contains("test rejection") || err.contains("rejected") || err.contains("error"),
+            "Error should mention rejection: {}",
+            err
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fetch_blocked_by_default() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        // fetch is available but blocked when no domains are in allowlist
+        let action = create_test_action(
+            r#"
+            context.claims = context.claims || {};
+            try {
+                await fetch('https://example.com/api');
+                context.claims.fetch_succeeded = true;
+            } catch (e) {
+                context.claims.fetch_blocked = true;
+                context.claims.error = String(e);
+            }
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(
+            result.is_ok(),
+            "Script should handle fetch error: {:?}",
+            result.err()
+        );
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(
+            claims.get("fetch_blocked").unwrap().as_bool(),
+            Some(true),
+            "Fetch should be blocked"
+        );
+        let error = claims.get("error").unwrap().as_str().unwrap();
+        assert!(
+            error.contains("allowlist"),
+            "Error should mention allowlist: {}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fetch_allowed_domain() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .respond_with(
+                ResponseTemplate::new(200)
+                    .set_body_json(serde_json::json!({"role": "admin"})),
+            )
+            .mount(&mock_server)
+            .await;
+
+        // Extract host:port from wiremock URI
+        let server_uri = mock_server.uri();
+        let parsed = url::Url::parse(&server_uri).unwrap();
+        let host_port = format!(
+            "{}:{}",
+            parsed.host_str().unwrap(),
+            parsed.port().unwrap()
+        );
+
+        let config = AsyncActionConfig {
+            allowed_domains: vec![host_port],
+            allow_private_ips: true, // wiremock runs on 127.0.0.1
+            ..Default::default()
+        };
+
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::with_config(Arc::new(mock_repo), config);
+
+        let action = create_test_action(&format!(
+            r#"
+            const response = await fetch('{}/test', {{ method: 'GET' }});
+            const data = await response.json();
+            context.claims = context.claims || {{}};
+            context.claims.role = data.role;
+            context.claims.status = response.status;
+            "#,
+            server_uri
+        ));
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(
+            result.is_ok(),
+            "Fetch to allowed domain should work: {:?}",
+            result.err()
+        );
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(claims.get("role").unwrap().as_str().unwrap(), "admin");
+        assert_eq!(claims.get("status").unwrap().as_f64().unwrap() as u16, 200);
+    }
+
+    #[tokio::test]
+    async fn test_fetch_private_ip_blocked() {
+        let config = AsyncActionConfig {
+            allowed_domains: vec!["127.0.0.1".to_string()],
+            allow_private_ips: false, // default: block private IPs
+            ..Default::default()
+        };
+
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::with_config(Arc::new(mock_repo), config);
+
+        let action = create_test_action(
+            r#"
+            context.claims = context.claims || {};
+            try {
+                await fetch('http://127.0.0.1:8080/secret');
+                context.claims.error = 'should have been blocked';
+            } catch (e) {
+                context.claims.blocked = true;
+                context.claims.error = String(e);
+            }
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(result.is_ok());
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(claims.get("blocked").unwrap().as_bool(), Some(true));
+        let error = claims.get("error").unwrap().as_str().unwrap();
+        assert!(
+            error.contains("private") || error.contains("blocked"),
+            "Error should mention private IP blocking: {}",
+            error
+        );
+    }
+
+    #[tokio::test]
+    async fn test_fetch_request_limit() {
+        use wiremock::matchers::method;
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("ok"))
+            .mount(&mock_server)
+            .await;
+
+        let server_uri = mock_server.uri();
+        let parsed = url::Url::parse(&server_uri).unwrap();
+        let host_port = format!(
+            "{}:{}",
+            parsed.host_str().unwrap(),
+            parsed.port().unwrap()
+        );
+
+        let config = AsyncActionConfig {
+            allowed_domains: vec![host_port],
+            allow_private_ips: true,
+            max_requests_per_execution: 2, // Only allow 2 requests
+            ..Default::default()
+        };
+
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::with_config(Arc::new(mock_repo), config);
+
+        let action = create_test_action(&format!(
+            r#"
+            const results = [];
+            for (let i = 0; i < 3; i++) {{
+                try {{
+                    await fetch('{}/test');
+                    results.push('ok');
+                }} catch (e) {{
+                    results.push('blocked: ' + String(e));
+                }}
+            }}
+            context.claims = context.claims || {{}};
+            context.claims.results = results;
+            "#,
+            server_uri
+        ));
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(result.is_ok(), "Script should handle limit: {:?}", result.err());
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        let results = claims.get("results").unwrap().as_array().unwrap();
+
+        assert_eq!(results[0].as_str().unwrap(), "ok");
+        assert_eq!(results[1].as_str().unwrap(), "ok");
+        assert!(
+            results[2].as_str().unwrap().starts_with("blocked"),
+            "3rd request should be blocked: {}",
+            results[2]
+        );
+    }
+
+    #[tokio::test]
+    async fn test_console_log_captured() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        // console.log should not crash and should route to tracing
+        let action = create_test_action(
+            r#"
+            console.log("hello", "world");
+            console.warn("warning message");
+            console.error("error message");
+            context.claims = context.claims || {};
+            context.claims.logged = true;
+            context;
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(
+            result.is_ok(),
+            "console.log should not crash: {:?}",
+            result.err()
+        );
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(claims.get("logged").unwrap().as_bool(), Some(true));
+    }
+
+    #[tokio::test]
+    async fn test_set_timeout_works() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let action = create_test_action(
+            r#"
+            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+            await delay(10);
+            context.claims = context.claims || {};
+            context.claims.delayed = true;
+            "#,
+        );
+
+        let context = create_test_context();
+        let result = engine.execute_action(&action, &context).await;
+
+        assert!(
+            result.is_ok(),
+            "setTimeout should work: {:?}",
+            result.err()
+        );
+        let modified = result.unwrap();
+        let claims = modified.claims.unwrap();
+        assert_eq!(claims.get("delayed").unwrap().as_bool(), Some(true));
+    }
+
+    // ============================================================
+    // Private IP blocking unit tests
+    // ============================================================
+
+    #[test]
+    fn test_is_private_ip() {
+        // Loopback
+        assert!(is_private_ip("127.0.0.1"));
+        assert!(is_private_ip("127.0.0.5"));
+
+        // Private ranges
+        assert!(is_private_ip("10.0.0.1"));
+        assert!(is_private_ip("172.16.0.1"));
+        assert!(is_private_ip("192.168.1.1"));
+
+        // Link-local
+        assert!(is_private_ip("169.254.1.1"));
+
+        // Unspecified
+        assert!(is_private_ip("0.0.0.0"));
+
+        // IPv6 loopback
+        assert!(is_private_ip("::1"));
+
+        // Hostnames
+        assert!(is_private_ip("localhost"));
+        assert!(is_private_ip("my-service.local"));
+        assert!(is_private_ip("db.internal"));
+
+        // Public IPs should not be private
+        assert!(!is_private_ip("8.8.8.8"));
+        assert!(!is_private_ip("1.1.1.1"));
+        assert!(!is_private_ip("example.com"));
+        assert!(!is_private_ip("api.stripe.com"));
+    }
+
+    // ============================================================
+    // Compile tests
+    // ============================================================
+
+    #[test]
+    fn test_compile_sync_script_appends_context() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let result = engine.compile_typescript("context.claims = {};").unwrap();
+        assert!(result.ends_with("\ncontext;"));
+    }
+
+    #[test]
+    fn test_compile_sync_script_preserves_context_return() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let result = engine.compile_typescript("context;").unwrap();
+        assert_eq!(result, "context;");
+    }
+
+    #[test]
+    fn test_compile_async_script_wraps_in_iife() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let result = engine
+            .compile_typescript("const data = await fetch('http://example.com');")
+            .unwrap();
+        assert!(result.starts_with("(async () => {"));
+        assert!(result.contains("return context;"));
+        assert!(result.ends_with("})()"));
     }
 }

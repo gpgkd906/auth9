@@ -266,6 +266,33 @@ pub struct LogQueryFilter {
     pub offset: Option<usize>,
 }
 
+/// Security configuration for async action execution
+#[derive(Debug, Clone)]
+pub struct AsyncActionConfig {
+    /// Allowed domains for fetch (empty = block all)
+    pub allowed_domains: Vec<String>,
+    /// Per-request timeout in milliseconds (default: 10s)
+    pub request_timeout_ms: u64,
+    /// Max response body size in bytes (default: 1MB)
+    pub max_response_bytes: usize,
+    /// Max HTTP requests per single action execution (default: 5)
+    pub max_requests_per_execution: usize,
+    /// Allow requests to private/loopback IPs (default: false, set true only for testing)
+    pub allow_private_ips: bool,
+}
+
+impl Default for AsyncActionConfig {
+    fn default() -> Self {
+        Self {
+            allowed_domains: vec![],
+            request_timeout_ms: 10_000,
+            max_response_bytes: 1_048_576,
+            max_requests_per_execution: 5,
+            allow_private_ips: false,
+        }
+    }
+}
+
 /// Action statistics
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionStats {

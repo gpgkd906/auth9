@@ -309,6 +309,7 @@ dependencies = [
  "clap",
  "config",
  "deno_core",
+ "deno_error",
  "dotenvy",
  "hex",
  "hmac",

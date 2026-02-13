@@ -1,10 +1,11 @@
 #!/usr/bin/env bash
-# Run QA tests for each document in docs/qa/ using opencode
+# Run QA tests for each document in docs/qa/ and docs/security/ using opencode
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 QA_DIR="$PROJECT_ROOT/docs/qa"
+SECURITY_DIR="$PROJECT_ROOT/docs/security"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -24,15 +25,20 @@ echo -e "${CYAN}  Auth9 QA Test Runner${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-# Collect all .md files under docs/qa/, excluding README.md
-mapfile -t qa_files < <(find "$QA_DIR" -name '*.md' ! -name 'README.md' | sort)
+# Collect all .md files under docs/qa/ and docs/security/, excluding README.md
+mapfile -t qa_files < <(
+    {
+        find "$QA_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+        find "$SECURITY_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+    } | sort
+)
 
 if [[ ${#qa_files[@]} -eq 0 ]]; then
-    echo -e "${YELLOW}No QA documents found in $QA_DIR${NC}"
+    echo -e "${YELLOW}No QA/Security documents found in $QA_DIR or $SECURITY_DIR${NC}"
     exit 0
 fi
 
-echo -e "Found ${#qa_files[@]} QA document(s) to process."
+echo -e "Found ${#qa_files[@]} QA/Security document(s) to process."
 echo ""
 
 for file in "${qa_files[@]}"; do
