@@ -194,6 +194,22 @@ body {
   gap: 8px;
 }
 
+.view-tabs {
+  display: flex;
+  gap: 8px;
+}
+
+.view-tab {
+  width: auto;
+  min-width: 92px;
+}
+
+.view-tab.active {
+  border-color: color-mix(in srgb, var(--accent-blue) 35%, transparent);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-blue) 18%, transparent);
+  background: color-mix(in srgb, var(--accent-blue-light) 40%, var(--glass-bg));
+}
+
 .layout {
   max-width: 1460px;
   margin: 0 auto;
@@ -673,6 +689,91 @@ button:disabled {
   font-size: 12px;
 }
 
+.config-layout {
+  max-width: 1460px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 16px;
+}
+
+.config-panel {
+  min-height: calc(100vh - 128px);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.config-history-panel {
+  max-height: calc(100vh - 128px);
+  overflow: auto;
+}
+
+.yaml-editor {
+  min-height: 560px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono',
+    monospace;
+  font-size: 12px;
+}
+
+.config-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.config-block {
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--glass-bg) 88%, transparent);
+  padding: 12px;
+}
+
+.config-block-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.config-block-head .ghost-button {
+  width: auto;
+}
+
+.config-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 450px;
+  overflow: auto;
+}
+
+.config-card {
+  border: 1px solid var(--glass-border-subtle);
+  border-radius: 12px;
+  padding: 10px;
+  background: color-mix(in srgb, var(--glass-bg) 88%, transparent);
+}
+
+.config-card-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.config-card-head .ghost-button {
+  width: auto;
+}
+
+.config-history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 @supports not (backdrop-filter: blur(24px)) {
   .panel {
     background: var(--bg-secondary);
@@ -702,6 +803,10 @@ button:disabled {
     grid-template-columns: 1fr;
   }
 
+  .config-layout {
+    grid-template-columns: 1fr;
+  }
+
   .stats-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -714,6 +819,10 @@ button:disabled {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .config-grid {
+    grid-template-columns: 1fr;
+  }
+
   .title-row {
     flex-direction: column;
   }
@@ -721,6 +830,14 @@ button:disabled {
   .topbar-actions {
     width: 100%;
     flex-wrap: wrap;
+  }
+
+  .view-tabs {
+    width: 100%;
+  }
+
+  .view-tab {
+    flex: 1;
   }
 
   .topbar-actions .ghost-button {

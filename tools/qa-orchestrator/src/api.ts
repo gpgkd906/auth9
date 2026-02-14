@@ -1,6 +1,13 @@
 import { invoke } from '@tauri-apps/api/tauri';
 import type {
+  ConfigOverview,
+  ConfigValidationResult,
+  ConfigVersionDetail,
+  ConfigVersionSummary,
+  CreateTaskOptions,
   CreateTaskRequest,
+  SaveConfigFormRequest,
+  SaveConfigYamlRequest,
   LogChunk,
   TaskDetail,
   TaskSummary
@@ -8,6 +15,20 @@ import type {
 
 export const api = {
   bootstrap: () => invoke<{ resumed_task_id: string | null }>('bootstrap'),
+  getConfigOverview: () =>
+    invoke<ConfigOverview>('get_config_overview'),
+  saveConfigFromForm: (payload: SaveConfigFormRequest) =>
+    invoke<ConfigOverview>('save_config_from_form', { payload }),
+  saveConfigFromYaml: (payload: SaveConfigYamlRequest) =>
+    invoke<ConfigOverview>('save_config_from_yaml', { payload }),
+  validateConfigYaml: (payload: SaveConfigYamlRequest) =>
+    invoke<ConfigValidationResult>('validate_config_yaml', { payload }),
+  listConfigVersions: () =>
+    invoke<ConfigVersionSummary[]>('list_config_versions'),
+  getConfigVersion: (version: number) =>
+    invoke<ConfigVersionDetail>('get_config_version', { version }),
+  getCreateTaskOptions: () =>
+    invoke<CreateTaskOptions>('get_create_task_options'),
   listTasks: () => invoke<TaskSummary[]>('list_tasks'),
   createTask: (payload: CreateTaskRequest) =>
     invoke<TaskSummary>('create_task', { payload }),
