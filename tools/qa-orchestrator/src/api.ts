@@ -7,6 +7,8 @@ import type {
   ConfigVersionSummary,
   CreateTaskOptions,
   CreateTaskRequest,
+  SimulatePrehookRequest,
+  SimulatePrehookResult,
   SaveConfigFormRequest,
   SaveConfigYamlRequest,
   LogChunk,
@@ -35,17 +37,19 @@ export const api = {
   createTask: (payload: CreateTaskRequest) =>
     invoke<TaskSummary>('create_task', { payload }),
   getTaskDetails: (taskId: string) =>
-    invoke<TaskDetail>('get_task_details', { task_id: taskId }),
+    invoke<TaskDetail>('get_task_details', { taskId }),
   startTask: (taskId: string) =>
-    invoke<TaskSummary>('start_task', { task_id: taskId }),
+    invoke<TaskSummary>('start_task', { taskId }),
   pauseTask: (taskId: string) =>
-    invoke<TaskSummary>('pause_task', { task_id: taskId }),
+    invoke<TaskSummary>('pause_task', { taskId }),
   resumeTask: (taskId: string) =>
-    invoke<TaskSummary>('resume_task', { task_id: taskId }),
+    invoke<TaskSummary>('resume_task', { taskId }),
   retryTaskItem: (taskItemId: string) =>
-    invoke<TaskSummary>('retry_task_item', { task_item_id: taskItemId }),
+    invoke<TaskSummary>('retry_task_item', { taskItemId }),
   streamTaskLogs: (taskId: string, limit = 300) =>
-    invoke<LogChunk[]>('stream_task_logs', { task_id: taskId, limit }),
+    invoke<LogChunk[]>('stream_task_logs', { taskId, limit }),
+  simulatePrehook: (payload: SimulatePrehookRequest) =>
+    invoke<SimulatePrehookResult>('simulate_prehook', { payload }),
   subscribeTaskEvents: (handler: (event: TaskEventEnvelope) => void) =>
     listen<TaskEventEnvelope>('task-event', (event) => {
       handler(event.payload);

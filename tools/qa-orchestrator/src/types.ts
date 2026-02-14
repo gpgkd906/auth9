@@ -147,6 +147,43 @@ export interface AgentConfig {
 }
 
 export type WorkflowStepType = 'init_once' | 'qa' | 'fix' | 'retest';
+export type StepHookEngine = 'cel';
+export type StepPrehookUiMode = 'visual' | 'cel';
+export type StepPrehookVisualOp = 'all' | 'any';
+export type StepPrehookVisualField =
+  | 'cycle'
+  | 'active_ticket_count'
+  | 'new_ticket_count'
+  | 'qa_exit_code'
+  | 'fix_exit_code'
+  | 'retest_exit_code'
+  | 'qa_failed'
+  | 'fix_required';
+export type StepPrehookVisualComparator = '>' | '>=' | '==' | '!=' | '<' | '<=';
+
+export interface StepPrehookVisualRule {
+  field: StepPrehookVisualField;
+  cmp: StepPrehookVisualComparator;
+  value: number | boolean;
+}
+
+export interface StepPrehookVisualExpression {
+  op: StepPrehookVisualOp;
+  rules: StepPrehookVisualRule[];
+}
+
+export interface StepPrehookUiConfig {
+  mode?: StepPrehookUiMode;
+  preset_id?: string;
+  expr?: StepPrehookVisualExpression;
+}
+
+export interface StepPrehookConfig {
+  engine: StepHookEngine;
+  when: string;
+  reason?: string;
+  ui?: StepPrehookUiConfig;
+}
 
 export type WorkflowLoopMode = 'once' | 'infinite';
 
@@ -155,6 +192,7 @@ export interface WorkflowStepConfig {
   type: WorkflowStepType;
   enabled: boolean;
   agent_id?: string;
+  prehook?: StepPrehookConfig;
 }
 
 export interface WorkflowLoopGuardConfig {
@@ -169,9 +207,22 @@ export interface WorkflowLoopConfig {
   guard: WorkflowLoopGuardConfig;
 }
 
+export interface WorkflowFinalizeRule {
+  id: string;
+  engine: StepHookEngine;
+  when: string;
+  status: string;
+  reason?: string;
+}
+
+export interface WorkflowFinalizeConfig {
+  rules: WorkflowFinalizeRule[];
+}
+
 export interface WorkflowConfig {
   steps: WorkflowStepConfig[];
   loop: WorkflowLoopConfig;
+  finalize?: WorkflowFinalizeConfig;
 }
 
 export interface OrchestratorConfigModel {
@@ -209,6 +260,26 @@ export interface SaveConfigYamlRequest {
 export interface ConfigValidationResult {
   valid: boolean;
   normalized_yaml: string;
+}
+
+export interface SimulatePrehookRequest {
+  expression: string;
+  step?: string;
+  context?: {
+    cycle: number;
+    active_ticket_count: number;
+    new_ticket_count: number;
+    qa_exit_code?: number | null;
+    fix_exit_code?: number | null;
+    retest_exit_code?: number | null;
+    qa_failed: boolean;
+    fix_required: boolean;
+  };
+}
+
+export interface SimulatePrehookResult {
+  result: boolean;
+  expression: string;
 }
 
 export interface ConfigVersionSummary {

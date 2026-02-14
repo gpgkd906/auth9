@@ -70,39 +70,70 @@ describe('api wrapper', () => {
 
     await api.getTaskDetails('task-1');
     expect(invokeMock).toHaveBeenNthCalledWith(4, 'get_task_details', {
-      task_id: 'task-1'
+      taskId: 'task-1'
     });
 
     await api.startTask('task-1');
     expect(invokeMock).toHaveBeenNthCalledWith(5, 'start_task', {
-      task_id: 'task-1'
+      taskId: 'task-1'
     });
 
     await api.pauseTask('task-1');
     expect(invokeMock).toHaveBeenNthCalledWith(6, 'pause_task', {
-      task_id: 'task-1'
+      taskId: 'task-1'
     });
 
     await api.resumeTask('task-1');
     expect(invokeMock).toHaveBeenNthCalledWith(7, 'resume_task', {
-      task_id: 'task-1'
+      taskId: 'task-1'
     });
 
     await api.retryTaskItem('item-1');
     expect(invokeMock).toHaveBeenNthCalledWith(8, 'retry_task_item', {
-      task_item_id: 'item-1'
+      taskItemId: 'item-1'
     });
 
     await api.streamTaskLogs('task-1');
     expect(invokeMock).toHaveBeenNthCalledWith(9, 'stream_task_logs', {
-      task_id: 'task-1',
+      taskId: 'task-1',
       limit: 300
     });
 
     await api.streamTaskLogs('task-1', 99);
     expect(invokeMock).toHaveBeenNthCalledWith(10, 'stream_task_logs', {
-      task_id: 'task-1',
+      taskId: 'task-1',
       limit: 99
+    });
+
+    await api.simulatePrehook({
+      expression: 'active_ticket_count > 0',
+      step: 'fix',
+      context: {
+        cycle: 1,
+        active_ticket_count: 2,
+        new_ticket_count: 2,
+        qa_exit_code: 1,
+        fix_exit_code: 0,
+        retest_exit_code: 0,
+        qa_failed: true,
+        fix_required: true
+      }
+    });
+    expect(invokeMock).toHaveBeenNthCalledWith(11, 'simulate_prehook', {
+      payload: {
+        expression: 'active_ticket_count > 0',
+        step: 'fix',
+        context: {
+          cycle: 1,
+          active_ticket_count: 2,
+          new_ticket_count: 2,
+          qa_exit_code: 1,
+          fix_exit_code: 0,
+          retest_exit_code: 0,
+          qa_failed: true,
+          fix_required: true
+        }
+      }
     });
   });
 

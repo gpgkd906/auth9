@@ -4,12 +4,20 @@ import type {
   ConfigOverview,
   ConfigVersionSummary,
   CreateTaskOptions,
+  EventRow,
   LogChunkEventPayload,
   OrchestratorConfigModel,
+  StepPrehookConfig,
+  StepPrehookUiConfig,
+  StepPrehookVisualComparator,
+  StepPrehookVisualExpression,
+  StepPrehookVisualField,
+  StepPrehookVisualRule,
   TaskDetail,
   TaskEventEnvelope,
-  WorkflowStepType,
-  TaskSummary
+  TaskSummary,
+  WorkflowStepConfig,
+  WorkflowStepType
 } from './types';
 
 const STATUS_CLASS: Record<string, string> = {
@@ -34,8 +42,341 @@ const STATUS_CLASS: Record<string, string> = {
 type ItemFilter = 'all' | 'active' | 'unresolved' | 'completed';
 type Theme = 'light' | 'dark';
 type ViewTab = 'tasks' | 'config';
-type ConfigEditor = 'form' | 'yaml';
+type ConfigFormTab = 'overview' | 'workspace' | 'agent' | 'workflow' | 'yaml';
+type ConfigEntityKind = 'workspace' | 'agent' | 'workflow';
+interface PendingEntitySwitch {
+  kind: ConfigEntityKind;
+  id: string;
+}
 const WORKFLOW_STEP_ORDER: WorkflowStepType[] = ['init_once', 'qa', 'fix', 'retest'];
+const CONFIG_FORM_TABS: Array<{ id: ConfigFormTab; label: string; hint: string }> = [
+  { id: 'overview', label: '总览', hint: '默认入口与配置状态' },
+  { id: 'workspace', label: 'Workspace', hint: '目录、目标与工单路径' },
+  { id: 'agent', label: 'Agent', hint: '阶段模板与执行角色' },
+  { id: 'workflow', label: 'Workflow', hint: '步骤、Prehook 与循环策略' },
+  { id: 'yaml', label: 'YAML', hint: '高级配置编辑' }
+];
+const ANSI_CSI_REGEX = /\u001b\[[0-?]*[ -/]*[@-~]/g;
+const ANSI_OSC_REGEX = /\u001b\][^\u0007]*(?:\u0007|\u001b\\)/g;
+const MAX_LOG_LINE_LENGTH = 320;
+
+type PrehookFieldValueType = 'number' | 'boolean';
+type PrehookDecision = 'run' | 'skip' | 'error';
+
+interface PrehookFieldMeta {
+  id: StepPrehookVisualField;
+  label: string;
+  valueType: PrehookFieldValueType;
+}
+
+interface PrehookPreset {
+  id: string;
+  label: string;
+  description: string;
+  reason?: string;
+  expr: StepPrehookVisualExpression;
+}
+
+type PrehookSimulationContext = Record<StepPrehookVisualField, number | boolean>;
+
+interface PrehookSimulationResult {
+  result: boolean;
+  explanation: string;
+}
+
+const PREHOOK_FIELDS: PrehookFieldMeta[] = [
+  { id: 'active_ticket_count', label: 'Active Ticket Count', valueType: 'number' },
+  { id: 'new_ticket_count', label: 'New Ticket Count', valueType: 'number' },
+  { id: 'cycle', label: 'Cycle', valueType: 'number' },
+  { id: 'qa_exit_code', label: 'QA Exit Code', valueType: 'number' },
+  { id: 'fix_exit_code', label: 'Fix Exit Code', valueType: 'number' },
+  { id: 'retest_exit_code', label: 'Retest Exit Code', valueType: 'number' },
+  { id: 'qa_failed', label: 'QA Failed', valueType: 'boolean' },
+  { id: 'fix_required', label: 'Fix Required', valueType: 'boolean' }
+];
+
+const PREHOOK_FIELD_SET = new Set(PREHOOK_FIELDS.map((field) => field.id));
+const NUMBER_COMPARATORS: StepPrehookVisualComparator[] = ['>', '>=', '==', '!=', '<', '<='];
+const BOOLEAN_COMPARATORS: StepPrehookVisualComparator[] = ['==', '!='];
+
+const DEFAULT_PREHOOK_SIMULATION_CONTEXT: PrehookSimulationContext = {
+  cycle: 1,
+  active_ticket_count: 0,
+  new_ticket_count: 0,
+  qa_exit_code: 0,
+  fix_exit_code: 0,
+  retest_exit_code: 0,
+  qa_failed: false,
+  fix_required: false
+};
+
+const STEP_PREHOOK_PRESETS: Record<WorkflowStepType, PrehookPreset[]> = {
+  init_once: [
+    {
+      id: 'always_run',
+      label: 'Always run',
+      description: 'No condition, this step always runs.',
+      expr: { op: 'all', rules: [] },
+      reason: 'run init_once by default'
+    }
+  ],
+  qa: [
+    {
+      id: 'always_run',
+      label: 'Always run',
+      description: 'No condition, this step always runs.',
+      expr: { op: 'all', rules: [] },
+      reason: 'run qa by default'
+    },
+    {
+      id: 'only_when_fix_required',
+      label: 'Only if fix required',
+      description: 'Run QA only when fix is required in context.',
+      expr: {
+        op: 'all',
+        rules: [{ field: 'fix_required', cmp: '==', value: true }]
+      },
+      reason: 'skip qa when fix is not required'
+    }
+  ],
+  fix: [
+    {
+      id: 'has_active_tickets',
+      label: 'Has active tickets',
+      description: 'Run fix only when active tickets exist.',
+      expr: {
+        op: 'all',
+        rules: [{ field: 'active_ticket_count', cmp: '>', value: 0 }]
+      },
+      reason: 'skip fix when no active tickets'
+    },
+    {
+      id: 'qa_failed_only',
+      label: 'QA failed only',
+      description: 'Run fix only when QA failed.',
+      expr: {
+        op: 'all',
+        rules: [{ field: 'qa_failed', cmp: '==', value: true }]
+      },
+      reason: 'skip fix when qa is not failed'
+    }
+  ],
+  retest: [
+    {
+      id: 'retest_after_fix_success',
+      label: 'After fix success',
+      description: 'Run retest only when tickets exist and fix succeeds.',
+      expr: {
+        op: 'all',
+        rules: [
+          { field: 'active_ticket_count', cmp: '>', value: 0 },
+          { field: 'fix_exit_code', cmp: '==', value: 0 }
+        ]
+      },
+      reason: 'skip retest when fix did not run successfully'
+    },
+    {
+      id: 'has_active_tickets',
+      label: 'Has active tickets',
+      description: 'Run retest only when active tickets exist.',
+      expr: {
+        op: 'all',
+        rules: [{ field: 'active_ticket_count', cmp: '>', value: 0 }]
+      },
+      reason: 'skip retest when no active tickets'
+    }
+  ]
+};
+
+function clipLogText(value: string): string {
+  if (value.length <= MAX_LOG_LINE_LENGTH) {
+    return value;
+  }
+  return `${value.slice(0, MAX_LOG_LINE_LENGTH - 3)}...`;
+}
+
+function getFieldMeta(field: StepPrehookVisualField): PrehookFieldMeta {
+  return PREHOOK_FIELDS.find((entry) => entry.id === field) ?? PREHOOK_FIELDS[0];
+}
+
+function cloneVisualExpression(expr?: StepPrehookVisualExpression): StepPrehookVisualExpression {
+  if (!expr) {
+    return { op: 'all', rules: [] };
+  }
+  return {
+    op: expr.op,
+    rules: expr.rules.map((rule) => ({ ...rule }))
+  };
+}
+
+function toCelLiteral(value: number | boolean): string {
+  if (typeof value === 'boolean') {
+    return value ? 'true' : 'false';
+  }
+  return Number.isFinite(value) ? String(value) : '0';
+}
+
+function compileVisualExpressionToCel(expr?: StepPrehookVisualExpression): string {
+  if (!expr || expr.rules.length === 0) {
+    return 'true';
+  }
+  const connector = expr.op === 'any' ? ' || ' : ' && ';
+  return expr.rules
+    .map((rule) => `(${rule.field} ${rule.cmp} ${toCelLiteral(rule.value)})`)
+    .join(connector);
+}
+
+function resolvePrehookMode(prehook?: StepPrehookConfig): 'visual' | 'cel' {
+  if (!prehook) {
+    return 'cel';
+  }
+  return prehook.ui?.mode === 'visual' ? 'visual' : 'cel';
+}
+
+function buildPrehookFromPreset(stepType: WorkflowStepType, presetId?: string): StepPrehookConfig {
+  const presets = STEP_PREHOOK_PRESETS[stepType] ?? [];
+  const preset = presets.find((entry) => entry.id === presetId) ?? presets[0];
+  const expr = cloneVisualExpression(preset?.expr);
+  return {
+    engine: 'cel',
+    when: compileVisualExpressionToCel(expr),
+    reason: preset?.reason,
+    ui: {
+      mode: 'visual',
+      preset_id: preset?.id,
+      expr
+    }
+  };
+}
+
+function normalizePrehook(step: WorkflowStepConfig): WorkflowStepConfig {
+  if (!step.prehook) {
+    return step;
+  }
+  if (step.prehook.ui?.mode === 'visual' && step.prehook.ui.expr) {
+    const normalizedExpr = cloneVisualExpression(step.prehook.ui.expr);
+    return {
+      ...step,
+      prehook: {
+        ...step.prehook,
+        when: compileVisualExpressionToCel(normalizedExpr),
+        ui: {
+          ...(step.prehook.ui as StepPrehookUiConfig),
+          expr: normalizedExpr
+        }
+      }
+    };
+  }
+  return {
+    ...step,
+    prehook: {
+      ...step.prehook,
+      ui: {
+        ...(step.prehook.ui as StepPrehookUiConfig),
+        mode: step.prehook.ui?.mode ?? 'cel'
+      }
+    }
+  };
+}
+
+function extractReferencedFields(
+  expression: string,
+  context: Record<string, unknown>
+): StepPrehookVisualField[] {
+  const result = new Set<StepPrehookVisualField>();
+
+  for (const match of expression.matchAll(/\b([a-zA-Z_][a-zA-Z0-9_]*)\b/g)) {
+    const token = match[1] as StepPrehookVisualField;
+    if (PREHOOK_FIELD_SET.has(token) && token in context) {
+      result.add(token);
+    }
+  }
+
+  for (const match of expression.matchAll(/\bcontext\.([a-zA-Z_][a-zA-Z0-9_]*)\b/g)) {
+    const token = match[1] as StepPrehookVisualField;
+    if (PREHOOK_FIELD_SET.has(token) && token in context) {
+      result.add(token);
+    }
+  }
+
+  return [...result];
+}
+
+function formatSimulationExplanation(
+  expression: string,
+  context: PrehookSimulationContext
+): string {
+  const fields = extractReferencedFields(expression, context as Record<string, unknown>);
+  if (fields.length === 0) {
+    return 'No known context variables referenced.';
+  }
+  return fields
+    .map((field) => `${field}=${String(context[field])}`)
+    .join(', ');
+}
+
+function formatPrehookEventLine(
+  payload: Record<string, unknown>,
+  createdAt?: string
+): string | null {
+  const step = typeof payload.step === 'string' ? payload.step : null;
+  const decisionRaw = typeof payload.decision === 'string' ? payload.decision : null;
+  const reason = typeof payload.reason === 'string' ? payload.reason : '';
+  const when = typeof payload.when === 'string' ? payload.when : '';
+  const context =
+    payload.context && typeof payload.context === 'object'
+      ? (payload.context as Record<string, unknown>)
+      : {};
+
+  if (!step || !decisionRaw) {
+    return null;
+  }
+  const decision = (decisionRaw as PrehookDecision) || 'error';
+  const prefix = createdAt ? `${createdAt.slice(11, 19)} ` : '';
+  const fields = extractReferencedFields(when, context);
+  const values = fields.map((field) => `${field}=${String(context[field])}`).join(', ');
+  const detail = [
+    `${prefix}[prehook][${step}] ${decision.toUpperCase()}: ${reason || 'no reason provided'}`,
+    when ? `when: ${when}` : '',
+    values ? `values: ${values}` : ''
+  ]
+    .filter(Boolean)
+    .join(' | ');
+
+  return clipLogText(detail);
+}
+
+function formatFinalizeEventLine(
+  payload: Record<string, unknown>,
+  createdAt?: string
+): string | null {
+  const status = typeof payload.status === 'string' ? payload.status : null;
+  const reason = typeof payload.reason === 'string' ? payload.reason : '';
+  const ruleId = typeof payload.rule_id === 'string' ? payload.rule_id : '';
+  if (!status) {
+    return null;
+  }
+  const prefix = createdAt ? `${createdAt.slice(11, 19)} ` : '';
+  return clipLogText(
+    `${prefix}[finalize] status=${status}${ruleId ? ` rule=${ruleId}` : ''}${
+      reason ? ` reason=${reason}` : ''
+    }`
+  );
+}
+
+function formatRuleEventRows(events: EventRow[]): string[] {
+  return events
+    .map((event) => {
+      if (event.event_type === 'step_prehook_evaluated') {
+        return formatPrehookEventLine(event.payload, event.created_at);
+      }
+      if (event.event_type === 'item_finalize_evaluated') {
+        return formatFinalizeEventLine(event.payload, event.created_at);
+      }
+      return null;
+    })
+    .filter((line): line is string => Boolean(line));
+}
 
 function cloneConfig(config: OrchestratorConfigModel): OrchestratorConfigModel {
   return JSON.parse(JSON.stringify(config)) as OrchestratorConfigModel;
@@ -59,7 +400,7 @@ function ensureWorkflowShape(config: OrchestratorConfigModel) {
     workflow.steps = WORKFLOW_STEP_ORDER.map((stepType) => {
       const existing = byType.get(stepType);
       if (existing) {
-        return { ...existing, id: existing.id || stepType };
+        return normalizePrehook({ ...existing, id: existing.id || stepType });
       }
       return { id: stepType, type: stepType, enabled: false, agent_id: undefined };
     });
@@ -93,6 +434,62 @@ function parseLogChunkPayload(payload: Record<string, unknown>): LogChunkEventPa
   };
 }
 
+function stripAnsi(value: string): string {
+  return value.replace(ANSI_OSC_REGEX, '').replace(ANSI_CSI_REGEX, '').replace(/\r/g, '');
+}
+
+function formatLogLine({
+  runId,
+  phase,
+  stream,
+  line
+}: {
+  runId: string;
+  phase: string;
+  stream: 'stdout' | 'stderr';
+  line: string;
+}): string | null {
+  const clean = stripAnsi(line).trimEnd();
+  if (!clean.trim()) {
+    return null;
+  }
+  const clipped = clipLogText(clean);
+  const shortRunId = runId.slice(0, 8);
+  const streamMark = stream === 'stderr' ? ' !' : '';
+  return `[${shortRunId}][${phase}${streamMark}] ${clipped}`;
+}
+
+function formatLogChunkForDisplay(chunk: { run_id: string; phase: string; content: string }): string {
+  const lines = chunk.content.split(/\r?\n/);
+  const rendered: string[] = [];
+  let currentStream: 'stdout' | 'stderr' = 'stdout';
+
+  for (const rawLine of lines) {
+    const normalized = stripAnsi(rawLine).trimEnd();
+    if (!normalized.trim()) {
+      continue;
+    }
+    if (normalized === `[${chunk.run_id}][${chunk.phase}]`) {
+      continue;
+    }
+    if (normalized === '[stderr]') {
+      currentStream = 'stderr';
+      continue;
+    }
+    const formatted = formatLogLine({
+      runId: chunk.run_id,
+      phase: chunk.phase,
+      stream: currentStream,
+      line: normalized
+    });
+    if (formatted) {
+      rendered.push(formatted);
+    }
+  }
+
+  return rendered.join('\n');
+}
+
 export function App() {
   const [viewTab, setViewTab] = useState<ViewTab>('tasks');
 
@@ -117,13 +514,26 @@ export function App() {
   const [isInfoOverlayOpen, setIsInfoOverlayOpen] = useState(false);
   const [isItemsPanelOpen, setIsItemsPanelOpen] = useState(false);
 
-  const [configEditor, setConfigEditor] = useState<ConfigEditor>('form');
+  const [configTab, setConfigTab] = useState<ConfigFormTab>('overview');
   const [configOverview, setConfigOverview] = useState<ConfigOverview | null>(null);
   const [configDraft, setConfigDraft] = useState<OrchestratorConfigModel | null>(null);
+  const [configSavedSnapshot, setConfigSavedSnapshot] = useState<OrchestratorConfigModel | null>(null);
   const [yamlDraft, setYamlDraft] = useState('');
   const [configVersions, setConfigVersions] = useState<ConfigVersionSummary[]>([]);
+  const [isConfigVersionsOpen, setIsConfigVersionsOpen] = useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState<string | null>(null);
+  const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
+  const [selectedWorkflowId, setSelectedWorkflowId] = useState<string | null>(null);
+  const [pendingEntitySwitch, setPendingEntitySwitch] = useState<PendingEntitySwitch | null>(null);
+  const [entitySwitchBusy, setEntitySwitchBusy] = useState(false);
   const [configBusy, setConfigBusy] = useState(false);
   const [configMessage, setConfigMessage] = useState('');
+  const [prehookSimulationInputs, setPrehookSimulationInputs] = useState<
+    Record<string, PrehookSimulationContext>
+  >({});
+  const [prehookSimulationResults, setPrehookSimulationResults] = useState<
+    Record<string, PrehookSimulationResult | { error: string }>
+  >({});
 
   const selectedTaskIdRef = useRef<string | null>(null);
   const viewTabRef = useRef<ViewTab>('tasks');
@@ -208,6 +618,39 @@ export function App() {
     () => Object.keys(configDraft?.agents ?? {}).sort(),
     [configDraft]
   );
+  const selectedAgentIndex = useMemo(
+    () => (selectedAgentId ? agentKeys.indexOf(selectedAgentId) : -1),
+    [agentKeys, selectedAgentId]
+  );
+  const selectedWorkspaceIndex = useMemo(
+    () => (selectedWorkspaceId ? workspaceKeys.indexOf(selectedWorkspaceId) : -1),
+    [selectedWorkspaceId, workspaceKeys]
+  );
+  const selectedWorkflowIndex = useMemo(
+    () => (selectedWorkflowId ? workflowKeys.indexOf(selectedWorkflowId) : -1),
+    [selectedWorkflowId, workflowKeys]
+  );
+  const selectedWorkspaceDirty = useMemo(() => {
+    if (!selectedWorkspaceId || !configDraft || !configSavedSnapshot) {
+      return false;
+    }
+    return JSON.stringify(configDraft.workspaces[selectedWorkspaceId] ?? null) !==
+      JSON.stringify(configSavedSnapshot.workspaces[selectedWorkspaceId] ?? null);
+  }, [configDraft, configSavedSnapshot, selectedWorkspaceId]);
+  const selectedAgentDirty = useMemo(() => {
+    if (!selectedAgentId || !configDraft || !configSavedSnapshot) {
+      return false;
+    }
+    return JSON.stringify(configDraft.agents[selectedAgentId] ?? null) !==
+      JSON.stringify(configSavedSnapshot.agents[selectedAgentId] ?? null);
+  }, [configDraft, configSavedSnapshot, selectedAgentId]);
+  const selectedWorkflowDirty = useMemo(() => {
+    if (!selectedWorkflowId || !configDraft || !configSavedSnapshot) {
+      return false;
+    }
+    return JSON.stringify(configDraft.workflows[selectedWorkflowId] ?? null) !==
+      JSON.stringify(configSavedSnapshot.workflows[selectedWorkflowId] ?? null);
+  }, [configDraft, configSavedSnapshot, selectedWorkflowId]);
 
   async function loadTasks() {
     const data = await api.listTasks();
@@ -217,16 +660,21 @@ export function App() {
     }
   }
 
-  async function loadTaskLogs(taskId: string) {
+  async function loadTaskLogs(taskId: string, prehookLines: string[] = []) {
     const chunks = await api.streamTaskLogs(taskId, 350);
-    setLogs(chunks.map((chunk) => chunk.content).join('\n\n'));
+    const commandLines = chunks
+      .map((chunk) => formatLogChunkForDisplay(chunk))
+      .filter((block) => block.length > 0)
+      .join('\n');
+    const mergedLines = [commandLines, ...prehookLines].filter(Boolean).join('\n');
+    setLogs(mergedLines);
   }
 
   async function loadTaskDetails(taskId: string, includeLogs = true) {
     const data = await api.getTaskDetails(taskId);
     setDetail(data);
     if (includeLogs) {
-      await loadTaskLogs(taskId);
+      await loadTaskLogs(taskId, formatRuleEventRows(data.events));
     }
   }
 
@@ -282,9 +730,30 @@ export function App() {
     if (!payload) {
       return;
     }
-    const streamTag = payload.stream === 'stderr' ? '[stderr]' : '';
-    const nextLine = `[${payload.run_id}][${payload.phase}]${streamTag} ${payload.line}`;
+    const nextLine = formatLogLine({
+      runId: payload.run_id,
+      phase: payload.phase,
+      stream: payload.stream,
+      line: payload.line
+    });
+    if (!nextLine) {
+      return;
+    }
     setLogs((current) => (current ? `${current}\n${nextLine}` : nextLine));
+  }
+
+  function appendRealtimeRuleEvent(event: TaskEventEnvelope) {
+    if (!selectedTaskIdRef.current || event.task_id !== selectedTaskIdRef.current) {
+      return;
+    }
+    const line =
+      event.event_type === 'step_prehook_evaluated'
+        ? formatPrehookEventLine(event.payload)
+        : formatFinalizeEventLine(event.payload);
+    if (!line) {
+      return;
+    }
+    setLogs((current) => (current ? `${current}\n${line}` : line));
   }
 
   function handleRealtimeEvent(event: TaskEventEnvelope) {
@@ -293,6 +762,16 @@ export function App() {
         appendRealtimeLog(event);
       }
       return;
+    }
+    if (event.event_type === 'step_prehook_evaluated') {
+      if (viewTabRef.current === 'tasks') {
+        appendRealtimeRuleEvent(event);
+      }
+    }
+    if (event.event_type === 'item_finalize_evaluated') {
+      if (viewTabRef.current === 'tasks') {
+        appendRealtimeRuleEvent(event);
+      }
     }
     const selectedId = selectedTaskIdRef.current;
     const isSelectedTask = Boolean(selectedId && event.task_id === selectedId);
@@ -329,6 +808,7 @@ export function App() {
     ensureWorkflowShape(normalized);
     setConfigOverview(overview);
     setConfigDraft(normalized);
+    setConfigSavedSnapshot(cloneConfig(normalized));
     setYamlDraft(overview.yaml);
   }
 
@@ -433,6 +913,34 @@ export function App() {
     loadTaskDetails(selectedTaskId).catch((err) => setError(String(err)));
   }, [selectedTaskId, viewTab]);
 
+  useEffect(() => {
+    if (workspaceKeys.length === 0) {
+      setSelectedWorkspaceId(null);
+      return;
+    }
+    setSelectedWorkspaceId((current) =>
+      current && workspaceKeys.includes(current) ? current : workspaceKeys[0]
+    );
+  }, [workspaceKeys]);
+
+  useEffect(() => {
+    if (agentKeys.length === 0) {
+      setSelectedAgentId(null);
+      return;
+    }
+    setSelectedAgentId((current) => (current && agentKeys.includes(current) ? current : agentKeys[0]));
+  }, [agentKeys]);
+
+  useEffect(() => {
+    if (workflowKeys.length === 0) {
+      setSelectedWorkflowId(null);
+      return;
+    }
+    setSelectedWorkflowId((current) =>
+      current && workflowKeys.includes(current) ? current : workflowKeys[0]
+    );
+  }, [workflowKeys]);
+
   async function createTask() {
     setBusy(true);
     try {
@@ -487,29 +995,235 @@ export function App() {
     setConfigMessage('');
   }
 
-  function addWorkspace() {
+  function isEntityDirty(kind: ConfigEntityKind, id: string): boolean {
+    if (!configDraft || !configSavedSnapshot) {
+      return false;
+    }
+    const current =
+      kind === 'workspace'
+        ? configDraft.workspaces[id] ?? null
+        : kind === 'agent'
+          ? configDraft.agents[id] ?? null
+          : configDraft.workflows[id] ?? null;
+    const saved =
+      kind === 'workspace'
+        ? configSavedSnapshot.workspaces[id] ?? null
+        : kind === 'agent'
+          ? configSavedSnapshot.agents[id] ?? null
+          : configSavedSnapshot.workflows[id] ?? null;
+    return JSON.stringify(current) !== JSON.stringify(saved);
+  }
+
+  function applyEntitySwitch(target: PendingEntitySwitch) {
+    if (target.kind === 'workspace') {
+      setSelectedWorkspaceId(target.id);
+      return;
+    }
+    if (target.kind === 'agent') {
+      setSelectedAgentId(target.id);
+      return;
+    }
+    setSelectedWorkflowId(target.id);
+  }
+
+  function closeEntitySwitchModal() {
+    setPendingEntitySwitch(null);
+    setEntitySwitchBusy(false);
+  }
+
+  function requestEntitySwitch(kind: ConfigEntityKind, nextId: string) {
+    const currentId =
+      kind === 'workspace'
+        ? selectedWorkspaceId
+        : kind === 'agent'
+          ? selectedAgentId
+          : selectedWorkflowId;
+    if (!nextId || nextId === currentId) {
+      return;
+    }
+    if (currentId && isEntityDirty(kind, currentId)) {
+      setPendingEntitySwitch({ kind, id: nextId });
+      return;
+    }
+    applyEntitySwitch({ kind, id: nextId });
+  }
+
+  async function saveAndSwitchEntity() {
+    if (!pendingEntitySwitch) {
+      return;
+    }
+    setEntitySwitchBusy(true);
+    const ok = await saveConfigFromForm();
+    if (ok) {
+      applyEntitySwitch(pendingEntitySwitch);
+      closeEntitySwitchModal();
+      return;
+    }
+    setEntitySwitchBusy(false);
+  }
+
+  function discardAndSwitchEntity() {
+    if (!pendingEntitySwitch) {
+      return;
+    }
+    applyEntitySwitch(pendingEntitySwitch);
+    closeEntitySwitchModal();
+  }
+
+  function stepEditorKey(workflowKey: string, stepType: WorkflowStepType): string {
+    return `${workflowKey}:${stepType}`;
+  }
+
+  function getSimulationContext(editorKey: string): PrehookSimulationContext {
+    return prehookSimulationInputs[editorKey] ?? { ...DEFAULT_PREHOOK_SIMULATION_CONTEXT };
+  }
+
+  function updateSimulationField(
+    editorKey: string,
+    field: StepPrehookVisualField,
+    value: number | boolean
+  ) {
+    setPrehookSimulationInputs((prev) => ({
+      ...prev,
+      [editorKey]: {
+        ...(prev[editorKey] ?? { ...DEFAULT_PREHOOK_SIMULATION_CONTEXT }),
+        [field]: value
+      }
+    }));
+  }
+
+  function updateStepPrehook(
+    workflowKey: string,
+    stepType: WorkflowStepType,
+    updater: (prehook: StepPrehookConfig) => StepPrehookConfig
+  ) {
     updateConfig((draft) => {
-      const id = `workspace-${Date.now()}`;
+      const target = draft.workflows[workflowKey].steps.find((entry) => entry.type === stepType);
+      if (!target?.prehook) {
+        return;
+      }
+      target.prehook = updater(target.prehook);
+    });
+  }
+
+  async function simulatePrehook(workflowKey: string, stepType: WorkflowStepType) {
+    const editorKey = stepEditorKey(workflowKey, stepType);
+    const step = configDraft?.workflows[workflowKey]?.steps.find((entry) => entry.type === stepType);
+    if (!step?.prehook) {
+      return;
+    }
+    const mode = resolvePrehookMode(step.prehook);
+    const expression =
+      mode === 'visual'
+        ? compileVisualExpressionToCel(step.prehook.ui?.expr)
+        : step.prehook.when.trim();
+    if (!expression) {
+      setPrehookSimulationResults((prev) => ({
+        ...prev,
+        [editorKey]: { error: 'Expression is empty.' }
+      }));
+      return;
+    }
+    const context = getSimulationContext(editorKey);
+    try {
+      const output = await api.simulatePrehook({
+        expression,
+        step: stepType,
+        context: {
+          cycle: Number(context.cycle),
+          active_ticket_count: Number(context.active_ticket_count),
+          new_ticket_count: Number(context.new_ticket_count),
+          qa_exit_code: Number(context.qa_exit_code),
+          fix_exit_code: Number(context.fix_exit_code),
+          retest_exit_code: Number(context.retest_exit_code),
+          qa_failed: Boolean(context.qa_failed),
+          fix_required: Boolean(context.fix_required)
+        }
+      });
+      setPrehookSimulationResults((prev) => ({
+        ...prev,
+        [editorKey]: {
+          result: output.result,
+          explanation: formatSimulationExplanation(output.expression, context)
+        }
+      }));
+    } catch (err) {
+      setPrehookSimulationResults((prev) => ({
+        ...prev,
+        [editorKey]: { error: String(err) }
+      }));
+    }
+  }
+
+  function setPrehookPreset(
+    workflowKey: string,
+    stepType: WorkflowStepType,
+    presetId: string
+  ) {
+    const preset = (STEP_PREHOOK_PRESETS[stepType] ?? []).find((entry) => entry.id === presetId);
+    if (!preset) {
+      return;
+    }
+    updateStepPrehook(workflowKey, stepType, (prehook) => {
+      const expr = cloneVisualExpression(preset.expr);
+      return {
+        ...prehook,
+        when: compileVisualExpressionToCel(expr),
+        reason: preset.reason ?? prehook.reason,
+        ui: {
+          ...(prehook.ui ?? {}),
+          mode: 'visual',
+          preset_id: preset.id,
+          expr
+        }
+      };
+    });
+  }
+
+  function updateVisualExpression(
+    workflowKey: string,
+    stepType: WorkflowStepType,
+    mutator: (expr: StepPrehookVisualExpression) => StepPrehookVisualExpression
+  ) {
+    updateStepPrehook(workflowKey, stepType, (prehook) => {
+      const nextExpr = mutator(cloneVisualExpression(prehook.ui?.expr));
+      return {
+        ...prehook,
+        when: compileVisualExpressionToCel(nextExpr),
+        ui: {
+          ...(prehook.ui ?? {}),
+          mode: 'visual',
+          expr: nextExpr
+        }
+      };
+    });
+  }
+
+  function addWorkspace() {
+    const id = `workspace-${Date.now()}`;
+    updateConfig((draft) => {
       draft.workspaces[id] = {
         root_path: '../..',
         qa_targets: ['docs/qa'],
         ticket_dir: 'docs/ticket'
       };
     });
+    setSelectedWorkspaceId(id);
   }
 
   function addAgent() {
+    const id = `agent-${Date.now()}`;
     updateConfig((draft) => {
-      const id = `agent-${Date.now()}`;
       draft.agents[id] = {
         templates: {}
       };
     });
+    setSelectedAgentId(id);
   }
 
   function addWorkflow() {
+    const id = `workflow-${Date.now()}`;
     updateConfig((draft) => {
-      const id = `workflow-${Date.now()}`;
       const firstAgent = Object.keys(draft.agents)[0] ?? '';
       draft.workflows[id] = {
         steps: defaultWorkflowSteps(firstAgent),
@@ -523,11 +1237,39 @@ export function App() {
         }
       };
     });
+    setSelectedWorkflowId(id);
   }
 
-  async function saveConfigFromForm() {
+  function removeAgent(agentId: string) {
+    const index = agentKeys.indexOf(agentId);
+    const nextSelection = agentKeys[index + 1] ?? agentKeys[index - 1] ?? null;
+    updateConfig((draft) => {
+      delete draft.agents[agentId];
+    });
+    setSelectedAgentId(nextSelection);
+  }
+
+  function removeWorkspace(workspaceId: string) {
+    const index = workspaceKeys.indexOf(workspaceId);
+    const nextSelection = workspaceKeys[index + 1] ?? workspaceKeys[index - 1] ?? null;
+    updateConfig((draft) => {
+      delete draft.workspaces[workspaceId];
+    });
+    setSelectedWorkspaceId(nextSelection);
+  }
+
+  function removeWorkflow(workflowKey: string) {
+    const index = workflowKeys.indexOf(workflowKey);
+    const nextSelection = workflowKeys[index + 1] ?? workflowKeys[index - 1] ?? null;
+    updateConfig((draft) => {
+      delete draft.workflows[workflowKey];
+    });
+    setSelectedWorkflowId(nextSelection);
+  }
+
+  async function saveConfigFromForm(): Promise<boolean> {
     if (!configDraft) {
-      return;
+      return false;
     }
     setConfigBusy(true);
     try {
@@ -536,12 +1278,15 @@ export function App() {
       ensureWorkflowShape(normalized);
       setConfigOverview(overview);
       setConfigDraft(normalized);
+      setConfigSavedSnapshot(cloneConfig(normalized));
       setYamlDraft(overview.yaml);
-      setConfigMessage(`Saved config version ${overview.version}`);
+      setConfigMessage(`已保存配置版本 v${overview.version}（表单）`);
       await Promise.all([loadCreateTaskOptions(), loadConfigVersions()]);
       setError('');
+      return true;
     } catch (err) {
       setError(String(err));
+      return false;
     } finally {
       setConfigBusy(false);
     }
@@ -552,7 +1297,7 @@ export function App() {
     try {
       const result = await api.validateConfigYaml({ yaml: yamlDraft });
       setYamlDraft(result.normalized_yaml);
-      setConfigMessage('YAML is valid');
+      setConfigMessage('YAML 校验通过');
       setError('');
     } catch (err) {
       setError(String(err));
@@ -569,8 +1314,9 @@ export function App() {
       ensureWorkflowShape(normalized);
       setConfigOverview(overview);
       setConfigDraft(normalized);
+      setConfigSavedSnapshot(cloneConfig(normalized));
       setYamlDraft(overview.yaml);
-      setConfigMessage(`Saved config version ${overview.version}`);
+      setConfigMessage(`已保存配置版本 v${overview.version}（YAML）`);
       await Promise.all([loadCreateTaskOptions(), loadConfigVersions()]);
       setError('');
     } catch (err) {
@@ -699,6 +1445,7 @@ export function App() {
             <div className="logs-stage">
               <section className="log-section">
                 <h3>Live Logs</h3>
+                <p className="muted log-legend">Legend: `!` means stderr (error output stream).</p>
                 <pre className="log-box">{logs || 'No logs yet.'}</pre>
               </section>
 
@@ -897,269 +1644,526 @@ export function App() {
         </div>
       )}
 
-      {viewTab === 'config' && (
-        <main className="config-layout">
-          <section className="panel config-panel animate-fade-in-up delay-1">
-            <div className="detail-head">
-              <div>
-                <h2>Config Center</h2>
-                <p className="muted">
-                  {configOverview
-                    ? `version ${configOverview.version} | updated ${configOverview.updated_at}`
-                    : 'loading...'}
-                </p>
-              </div>
-              <div className="actions">
-                <button className="ghost-button" onClick={() => setConfigEditor(configEditor === 'form' ? 'yaml' : 'form')}>
-                  Editor: {configEditor}
-                </button>
-                <button className="ghost-button" disabled={configBusy} onClick={() => loadConfigOverview().catch((err) => setError(String(err)))}>
-                  Reload
-                </button>
-                {configEditor === 'form' ? (
-                  <button disabled={configBusy || !configDraft} onClick={saveConfigFromForm}>
-                    Save Form
-                  </button>
-                ) : (
-                  <>
-                    <button className="ghost-button" disabled={configBusy} onClick={validateYamlDraft}>
-                      Validate
-                    </button>
-                    <button disabled={configBusy} onClick={saveConfigFromYaml}>
-                      Save YAML
-                    </button>
-                  </>
-                )}
-              </div>
+      {pendingEntitySwitch && (
+        <div className="modal-backdrop" onClick={closeEntitySwitchModal} role="presentation">
+          <section
+            className="modal-card switch-confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="切换配置对象确认"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="modal-head">
+              <h2>切换前确认</h2>
+              <button className="ghost-button" onClick={closeEntitySwitchModal}>
+                取消
+              </button>
             </div>
+            <p className="muted">
+              当前
+              {pendingEntitySwitch.kind === 'workspace'
+                ? 'Workspace'
+                : pendingEntitySwitch.kind === 'agent'
+                  ? 'Agent'
+                  : 'Workflow'}
+              存在未保存修改，是否保存后再切换？
+            </p>
+            <div className="actions">
+              <button disabled={entitySwitchBusy || configBusy} onClick={() => void saveAndSwitchEntity()}>
+                保存并切换
+              </button>
+              <button className="ghost-button" disabled={entitySwitchBusy || configBusy} onClick={discardAndSwitchEntity}>
+                直接切换
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
 
-            {configMessage && <p className="muted">{configMessage}</p>}
+      {viewTab === 'config' && (
+        <main className={`config-layout ${isConfigVersionsOpen ? '' : 'versions-collapsed'}`}>
+          <section className="panel config-panel animate-fade-in-up delay-1">
+            <div className="config-shell">
+              <div className="detail-head config-detail-head">
+                <div>
+                  <h2>Config Center</h2>
+                  <p className="muted">
+                    {configOverview
+                      ? `当前版本 v${configOverview.version} | 更新时间 ${configOverview.updated_at}`
+                      : '配置加载中...'}
+                  </p>
+                </div>
+                <div className="actions">
+                  <button
+                    className="ghost-button"
+                    disabled={configBusy}
+                    onClick={() => loadConfigOverview().catch((err) => setError(String(err)))}
+                  >
+                    重新加载
+                  </button>
+                  {configTab === 'yaml' ? (
+                    <>
+                      <button className="ghost-button" disabled={configBusy} onClick={validateYamlDraft}>
+                        校验 YAML
+                      </button>
+                      <button disabled={configBusy} onClick={saveConfigFromYaml}>
+                        保存 YAML
+                      </button>
+                    </>
+                  ) : (
+                    <button disabled={configBusy || !configDraft} onClick={saveConfigFromForm}>
+                      保存配置
+                    </button>
+                  )}
+                </div>
+              </div>
 
-            {configEditor === 'yaml' && (
-              <label>
-                Config YAML
-                <textarea
-                  className="yaml-editor"
-                  value={yamlDraft}
-                  onChange={(event) => setYamlDraft(event.target.value)}
-                />
-              </label>
-            )}
+              <div className="config-form-tabs" role="tablist" aria-label="配置页签">
+                {CONFIG_FORM_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={configTab === tab.id}
+                    className={`ghost-button config-form-tab ${configTab === tab.id ? 'active' : ''}`}
+                    onClick={() => setConfigTab(tab.id)}
+                  >
+                    <span>{tab.label}</span>
+                    <small>{tab.hint}</small>
+                  </button>
+                ))}
+              </div>
 
-            {configEditor === 'form' && configDraft && (
-              <div className="config-grid">
-                <section className="config-block">
-                  <h3>Defaults</h3>
-                  <label>
-                    Default Workspace
-                    <select
-                      value={configDraft.defaults.workspace}
-                      onChange={(event) =>
-                        updateConfig((draft) => {
-                          draft.defaults.workspace = event.target.value;
-                        })
-                      }
-                    >
-                      {workspaceKeys.map((key) => (
-                        <option key={key} value={key}>
-                          {key}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label>
-                    Default Workflow
-                    <select
-                      value={configDraft.defaults.workflow}
-                      onChange={(event) =>
-                        updateConfig((draft) => {
-                          draft.defaults.workflow = event.target.value;
-                        })
-                      }
-                    >
-                      {workflowKeys.map((key) => (
-                        <option key={key} value={key}>
-                          {key}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </section>
+              {configMessage && <p className="muted config-message">{configMessage}</p>}
 
-                <section className="config-block">
-                  <div className="config-block-head">
-                    <h3>Workspaces</h3>
-                    <button className="ghost-button" onClick={addWorkspace}>Add</button>
-                  </div>
-                  <div className="config-list">
-                    {workspaceKeys.map((id) => {
-                      const ws = configDraft.workspaces[id];
-                      return (
-                        <article key={id} className="config-card">
-                          <div className="config-card-head">
-                            <strong>{id}</strong>
-                            <button
-                              className="ghost-button"
-                              onClick={() =>
-                                updateConfig((draft) => {
-                                  delete draft.workspaces[id];
-                                })
-                              }
-                            >
-                              Delete
-                            </button>
+              {configDraft && (
+                <div className="config-grid">
+                  {configTab === 'overview' && (
+                    <section className="config-block config-overview-block">
+                      <div className="config-block-head">
+                        <h3>总览与默认配置</h3>
+                        <div className="actions">
+                          <button className="ghost-button" type="button" onClick={() => setConfigTab('workspace')}>
+                            前往 Workspace
+                          </button>
+                          <button className="ghost-button" type="button" onClick={() => setConfigTab('workflow')}>
+                            前往 Workflow
+                          </button>
+                        </div>
+                      </div>
+                      <p className="muted">
+                        先设置默认 Workspace/Workflow，再分别进入对应 Tab 完成详细配置，可减少任务创建时的误选。
+                      </p>
+                      <label>
+                        默认 Workspace (Default Workspace)
+                        <small className="config-field-hint">创建任务时优先自动选中</small>
+                        <select
+                          value={configDraft.defaults.workspace}
+                          onChange={(event) =>
+                            updateConfig((draft) => {
+                              draft.defaults.workspace = event.target.value;
+                            })
+                          }
+                        >
+                          {workspaceKeys.map((key) => (
+                            <option key={key} value={key}>
+                              {key}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label>
+                        默认 Workflow (Default Workflow)
+                        <small className="config-field-hint">用于未手动指定流程的任务</small>
+                        <select
+                          value={configDraft.defaults.workflow}
+                          onChange={(event) =>
+                            updateConfig((draft) => {
+                              draft.defaults.workflow = event.target.value;
+                            })
+                          }
+                        >
+                          {workflowKeys.map((key) => (
+                            <option key={key} value={key}>
+                              {key}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    </section>
+                  )}
+
+                  {configTab === 'workspace' && (
+                    <section className="config-block">
+                      <div className="config-block-head">
+                        <div>
+                          <h3>Workspace 设定</h3>
+                          <p className="muted">管理目录、QA 目标与工单路径，避免执行路径误配置。</p>
+                        </div>
+                        <button className="ghost-button" onClick={addWorkspace}>新增 Workspace</button>
+                      </div>
+                      <div className="entity-split-layout">
+                        <aside className="entity-nav-panel">
+                          <strong>Workspace 列表</strong>
+                          <div className="entity-nav-list">
+                            {workspaceKeys.map((id) => (
+                              <button
+                                key={id}
+                                type="button"
+                                className={`ghost-button entity-nav-item ${selectedWorkspaceId === id ? 'active' : ''}`}
+                                onClick={() => requestEntitySwitch('workspace', id)}
+                              >
+                                <span>{id}</span>
+                                {selectedWorkspaceId === id && selectedWorkspaceDirty && (
+                                  <span className="dirty-dot" aria-label="unsaved changes" />
+                                )}
+                              </button>
+                            ))}
                           </div>
-                          <label>
-                            Root Path
-                            <input
-                              value={ws.root_path}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.workspaces[id].root_path = event.target.value;
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            QA Targets (one per line)
-                            <textarea
-                              value={(ws.qa_targets ?? []).join('\n')}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.workspaces[id].qa_targets = event.target.value
-                                    .split('\n')
-                                    .map((line) => line.trim())
-                                    .filter(Boolean);
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            Ticket Dir
-                            <input
-                              value={ws.ticket_dir}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.workspaces[id].ticket_dir = event.target.value;
-                                })
-                              }
-                            />
-                          </label>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
+                        </aside>
 
-                <section className="config-block">
-                  <div className="config-block-head">
-                    <h3>Agents</h3>
-                    <button className="ghost-button" onClick={addAgent}>Add</button>
-                  </div>
-                  <div className="config-list">
-                    {agentKeys.map((id) => {
-                      const agent = configDraft.agents[id];
-                      return (
-                        <article key={id} className="config-card">
-                          <div className="config-card-head">
-                            <strong>{id}</strong>
-                            <button
-                              className="ghost-button"
-                              onClick={() =>
-                                updateConfig((draft) => {
-                                  delete draft.agents[id];
-                                })
-                              }
-                            >
-                              Delete
-                            </button>
+                        <div className="entity-editor-panel">
+                          {selectedWorkspaceId ? (
+                            <>
+                              <div className="entity-editor-head">
+                                <div>
+                                  <strong>当前 Workspace: {selectedWorkspaceId}</strong>
+                                  <p className="muted">
+                                    {selectedWorkspaceDirty ? '存在未保存变更' : '已与最近保存版本同步'}
+                                  </p>
+                                </div>
+                                <div className="actions">
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    disabled={selectedWorkspaceIndex <= 0}
+                                    onClick={() =>
+                                      requestEntitySwitch(
+                                        'workspace',
+                                        workspaceKeys[selectedWorkspaceIndex - 1] ?? selectedWorkspaceId
+                                      )
+                                    }
+                                  >
+                                    上一个
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    disabled={selectedWorkspaceIndex < 0 || selectedWorkspaceIndex >= workspaceKeys.length - 1}
+                                    onClick={() =>
+                                      requestEntitySwitch(
+                                        'workspace',
+                                        workspaceKeys[selectedWorkspaceIndex + 1] ?? selectedWorkspaceId
+                                      )
+                                    }
+                                  >
+                                    下一个
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="config-list">
+                                {workspaceKeys
+                                  .filter((id) => id === selectedWorkspaceId)
+                                  .map((id) => {
+                                    const ws = configDraft.workspaces[id];
+                                    return (
+                                      <article key={id} className="config-card">
+                                        <div className="config-card-head">
+                                          <strong>{id}</strong>
+                                          <button className="ghost-button danger-button" onClick={() => removeWorkspace(id)}>
+                                            删除
+                                          </button>
+                                        </div>
+                                        <label>
+                                          根目录 (Root Path)
+                                          <small className="config-field-hint">例如 `../..`，需指向可执行 QA 的工作区</small>
+                                          <input
+                                            value={ws.root_path}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.workspaces[id].root_path = event.target.value;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          QA 目标 (QA Targets，每行一个)
+                                          <small className="config-field-hint">例如 `docs/qa`、`tests/e2e`</small>
+                                          <textarea
+                                            value={(ws.qa_targets ?? []).join('\n')}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.workspaces[id].qa_targets = event.target.value
+                                                  .split('\n')
+                                                  .map((line) => line.trim())
+                                                  .filter(Boolean);
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          工单目录 (Ticket Dir)
+                                          <small className="config-field-hint">用于写入自动生成的 ticket 文件</small>
+                                          <input
+                                            value={ws.ticket_dir}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.workspaces[id].ticket_dir = event.target.value;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                      </article>
+                                    );
+                                  })}
+                              </div>
+                            </>
+                          ) : (
+                            <p className="muted">暂无 Workspace，请先新增。</p>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {configTab === 'agent' && (
+                    <section className="config-block">
+                      <div className="config-block-head">
+                        <div>
+                          <h3>Agent 设定</h3>
+                          <p className="muted">配置各阶段模板，让执行行为更稳定且可解释。</p>
+                        </div>
+                        <button className="ghost-button" onClick={addAgent}>新增 Agent</button>
+                      </div>
+                      <div className="entity-split-layout">
+                        <aside className="entity-nav-panel">
+                          <strong>Agent 列表</strong>
+                          <div className="entity-nav-list">
+                            {agentKeys.map((id) => (
+                              <button
+                                key={id}
+                                type="button"
+                                className={`ghost-button entity-nav-item ${selectedAgentId === id ? 'active' : ''}`}
+                                onClick={() => requestEntitySwitch('agent', id)}
+                              >
+                                <span>{id}</span>
+                                {selectedAgentId === id && selectedAgentDirty && (
+                                  <span className="dirty-dot" aria-label="unsaved changes" />
+                                )}
+                              </button>
+                            ))}
                           </div>
-                          <label>
-                            Init Template
-                            <textarea
-                              value={agent.templates.init_once ?? ''}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.agents[id].templates.init_once = event.target.value || undefined;
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            QA Template
-                            <textarea
-                              value={agent.templates.qa ?? ''}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.agents[id].templates.qa = event.target.value || undefined;
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            Fix Template
-                            <textarea
-                              value={agent.templates.fix ?? ''}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.agents[id].templates.fix = event.target.value || undefined;
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            Retest Template
-                            <textarea
-                              value={agent.templates.retest ?? ''}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.agents[id].templates.retest = event.target.value || undefined;
-                                })
-                              }
-                            />
-                          </label>
-                          <label>
-                            Loop Guard Template
-                            <textarea
-                              value={agent.templates.loop_guard ?? ''}
-                              onChange={(event) =>
-                                updateConfig((draft) => {
-                                  draft.agents[id].templates.loop_guard = event.target.value || undefined;
-                                })
-                              }
-                            />
-                          </label>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
+                        </aside>
 
-                <section className="config-block">
-                  <div className="config-block-head">
-                    <h3>Workflows</h3>
-                    <button className="ghost-button" onClick={addWorkflow}>Add</button>
-                  </div>
-                  <div className="config-list">
-                    {workflowKeys.map((id) => {
+                        <div className="entity-editor-panel">
+                          {selectedAgentId ? (
+                            <>
+                              <div className="entity-editor-head">
+                                <div>
+                                  <strong>当前 Agent: {selectedAgentId}</strong>
+                                  <p className="muted">
+                                    {selectedAgentDirty ? '存在未保存变更' : '已与最近保存版本同步'}
+                                  </p>
+                                </div>
+                                <div className="actions">
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    disabled={selectedAgentIndex <= 0}
+                                    onClick={() =>
+                                      requestEntitySwitch(
+                                        'agent',
+                                        agentKeys[selectedAgentIndex - 1] ?? selectedAgentId
+                                      )
+                                    }
+                                  >
+                                    上一个
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    disabled={selectedAgentIndex < 0 || selectedAgentIndex >= agentKeys.length - 1}
+                                    onClick={() =>
+                                      requestEntitySwitch(
+                                        'agent',
+                                        agentKeys[selectedAgentIndex + 1] ?? selectedAgentId
+                                      )
+                                    }
+                                  >
+                                    下一个
+                                  </button>
+                                </div>
+                              </div>
+
+                              <div className="config-list">
+                                {agentKeys
+                                  .filter((id) => id === selectedAgentId)
+                                  .map((id) => {
+                                    const agent = configDraft.agents[id];
+                                    return (
+                                      <article key={id} className="config-card">
+                                        <div className="config-card-head">
+                                          <strong>{id}</strong>
+                                          <button className="ghost-button danger-button" onClick={() => removeAgent(id)}>
+                                            删除
+                                          </button>
+                                        </div>
+                                        <label>
+                                          Init 模板 (init_once)
+                                          <small className="config-field-hint">任务初始化阶段执行</small>
+                                          <textarea
+                                            value={agent.templates.init_once ?? ''}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.agents[id].templates.init_once = event.target.value || undefined;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          QA 模板 (qa)
+                                          <small className="config-field-hint">质量检查阶段执行</small>
+                                          <textarea
+                                            value={agent.templates.qa ?? ''}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.agents[id].templates.qa = event.target.value || undefined;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          Fix 模板 (fix)
+                                          <small className="config-field-hint">自动修复阶段执行</small>
+                                          <textarea
+                                            value={agent.templates.fix ?? ''}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.agents[id].templates.fix = event.target.value || undefined;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          Retest 模板 (retest)
+                                          <small className="config-field-hint">修复后复测阶段执行</small>
+                                          <textarea
+                                            value={agent.templates.retest ?? ''}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.agents[id].templates.retest = event.target.value || undefined;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                        <label>
+                                          Loop Guard 模板 (loop_guard)
+                                          <small className="config-field-hint">循环守卫决策阶段执行（可选）</small>
+                                          <textarea
+                                            value={agent.templates.loop_guard ?? ''}
+                                            onChange={(event) =>
+                                              updateConfig((draft) => {
+                                                draft.agents[id].templates.loop_guard = event.target.value || undefined;
+                                              })
+                                            }
+                                          />
+                                        </label>
+                                      </article>
+                                    );
+                                  })}
+                              </div>
+                            </>
+                          ) : (
+                            <p className="muted">暂无 Agent，请先新增。</p>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {configTab === 'workflow' && (
+                    <section className="config-block">
+                      <div className="config-block-head">
+                        <div>
+                          <h3>Workflow 设定</h3>
+                          <p className="muted">定义步骤启用、Agent 绑定、Prehook 规则和循环策略。</p>
+                        </div>
+                        <button className="ghost-button" onClick={addWorkflow}>新增 Workflow</button>
+                      </div>
+                      <div className="entity-split-layout">
+                        <aside className="entity-nav-panel">
+                          <strong>Workflow 列表</strong>
+                          <div className="entity-nav-list">
+                            {workflowKeys.map((id) => (
+                              <button
+                                key={id}
+                                type="button"
+                                className={`ghost-button entity-nav-item ${selectedWorkflowId === id ? 'active' : ''}`}
+                                onClick={() => requestEntitySwitch('workflow', id)}
+                              >
+                                <span>{id}</span>
+                                {selectedWorkflowId === id && selectedWorkflowDirty && (
+                                  <span className="dirty-dot" aria-label="unsaved changes" />
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        </aside>
+
+                        <div className="entity-editor-panel">
+                          {selectedWorkflowId ? (
+                            <>
+                              <div className="entity-editor-head">
+                                <div>
+                                  <strong>当前 Workflow: {selectedWorkflowId}</strong>
+                                  <p className="muted">
+                                    {selectedWorkflowDirty ? '存在未保存变更' : '已与最近保存版本同步'}
+                                  </p>
+                                </div>
+                                <div className="actions">
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    disabled={selectedWorkflowIndex <= 0}
+                                    onClick={() =>
+                                      requestEntitySwitch(
+                                        'workflow',
+                                        workflowKeys[selectedWorkflowIndex - 1] ?? selectedWorkflowId
+                                      )
+                                    }
+                                  >
+                                    上一个
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="ghost-button"
+                                    disabled={
+                                      selectedWorkflowIndex < 0 || selectedWorkflowIndex >= workflowKeys.length - 1
+                                    }
+                                    onClick={() =>
+                                      requestEntitySwitch(
+                                        'workflow',
+                                        workflowKeys[selectedWorkflowIndex + 1] ?? selectedWorkflowId
+                                      )
+                                    }
+                                  >
+                                    下一个
+                                  </button>
+                                </div>
+                              </div>
+                              <div className="config-list">
+                                {workflowKeys.filter((id) => id === selectedWorkflowId).map((id) => {
                       const wf = configDraft.workflows[id];
                       const stepsByType = new Map(wf.steps.map((step) => [step.type, step]));
                       return (
                         <article key={id} className="config-card">
                           <div className="config-card-head">
                             <strong>{id}</strong>
-                            <button
-                              className="ghost-button"
-                              onClick={() =>
-                                updateConfig((draft) => {
-                                  delete draft.workflows[id];
-                                })
-                              }
-                            >
-                              Delete
+                            <button className="ghost-button danger-button" onClick={() => removeWorkflow(id)}>
+                              删除
                             </button>
                           </div>
-                          <h4>Steps</h4>
+                          <h4>步骤配置 (Steps)</h4>
                           {WORKFLOW_STEP_ORDER.map((stepType) => {
                             const step = stepsByType.get(stepType);
                             if (!step) {
@@ -1206,12 +2210,446 @@ export function App() {
                                     </option>
                                   ))}
                                 </select>
+                                <div className="step-prehook">
+                                  <label>
+                                    <input
+                                      type="checkbox"
+                                      checked={Boolean(step.prehook)}
+                                      onChange={(event) =>
+                                        updateConfig((draft) => {
+                                          const target = draft.workflows[id].steps.find((entry) => entry.type === stepType);
+                                          if (target) {
+                                            target.prehook = event.target.checked
+                                              ? buildPrehookFromPreset(stepType)
+                                              : undefined;
+                                          }
+                                        })
+                                      }
+                                    />
+                                    Enable Prehook
+                                  </label>
+                                  {step.prehook && (
+                                    <>
+                                      <div className="prehook-mode-row">
+                                        <button
+                                          type="button"
+                                          className={`ghost-button prehook-mode-btn ${resolvePrehookMode(step.prehook) === 'visual' ? 'active' : ''}`}
+                                          onClick={() =>
+                                            updateStepPrehook(id, stepType, (prehook) => {
+                                              const fallback = STEP_PREHOOK_PRESETS[stepType]?.[0];
+                                              const expr = cloneVisualExpression(prehook.ui?.expr ?? fallback?.expr);
+                                              return {
+                                                ...prehook,
+                                                when: compileVisualExpressionToCel(expr),
+                                                ui: {
+                                                  ...(prehook.ui ?? {}),
+                                                  mode: 'visual',
+                                                  preset_id: prehook.ui?.preset_id ?? fallback?.id,
+                                                  expr
+                                                }
+                                              };
+                                            })
+                                          }
+                                        >
+                                          Visual Rules
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`ghost-button prehook-mode-btn ${resolvePrehookMode(step.prehook) === 'cel' ? 'active' : ''}`}
+                                          onClick={() =>
+                                            updateStepPrehook(id, stepType, (prehook) => ({
+                                              ...prehook,
+                                              ui: {
+                                                ...(prehook.ui ?? {}),
+                                                mode: 'cel'
+                                              }
+                                            }))
+                                          }
+                                        >
+                                          Advanced CEL
+                                        </button>
+                                      </div>
+
+                                      {resolvePrehookMode(step.prehook) === 'visual' ? (
+                                        <>
+                                          <label>
+                                            Preset
+                                            <select
+                                              value={step.prehook.ui?.preset_id ?? STEP_PREHOOK_PRESETS[stepType]?.[0]?.id ?? ''}
+                                              onChange={(event) =>
+                                                setPrehookPreset(id, stepType, event.target.value)
+                                              }
+                                            >
+                                              {(STEP_PREHOOK_PRESETS[stepType] ?? []).map((preset) => (
+                                                <option key={preset.id} value={preset.id}>
+                                                  {preset.label}
+                                                </option>
+                                              ))}
+                                            </select>
+                                          </label>
+                                          <p className="muted">
+                                            {(STEP_PREHOOK_PRESETS[stepType] ?? []).find(
+                                              (preset) =>
+                                                preset.id ===
+                                                (step.prehook?.ui?.preset_id ??
+                                                  STEP_PREHOOK_PRESETS[stepType]?.[0]?.id)
+                                            )?.description ?? 'No preset description.'}
+                                          </p>
+                                          <label>
+                                            Match Strategy
+                                            <select
+                                              value={step.prehook.ui?.expr?.op ?? 'all'}
+                                              onChange={(event) =>
+                                                updateVisualExpression(id, stepType, (expr) => ({
+                                                  ...expr,
+                                                  op: event.target.value === 'any' ? 'any' : 'all'
+                                                }))
+                                              }
+                                            >
+                                              <option value="all">All conditions (AND)</option>
+                                              <option value="any">Any condition (OR)</option>
+                                            </select>
+                                          </label>
+                                          <div className="prehook-rules">
+                                            {(step.prehook.ui?.expr?.rules ?? []).map((rule, ruleIndex) => {
+                                              const fieldMeta = getFieldMeta(rule.field);
+                                              const comparators =
+                                                fieldMeta.valueType === 'boolean'
+                                                  ? BOOLEAN_COMPARATORS
+                                                  : NUMBER_COMPARATORS;
+                                              return (
+                                                <div className="prehook-rule-row" key={`${rule.field}-${ruleIndex}`}>
+                                                  <select
+                                                    value={rule.field}
+                                                    onChange={(event) =>
+                                                      updateVisualExpression(id, stepType, (expr) => {
+                                                        const nextRules = expr.rules.map((entry, index) => {
+                                                          if (index !== ruleIndex) {
+                                                            return entry;
+                                                          }
+                                                          const nextField = event.target
+                                                            .value as StepPrehookVisualField;
+                                                          const nextMeta = getFieldMeta(nextField);
+                                                          return {
+                                                            field: nextField,
+                                                            cmp:
+                                                              nextMeta.valueType === 'boolean'
+                                                                ? '=='
+                                                                : '>',
+                                                            value:
+                                                              nextMeta.valueType === 'boolean'
+                                                                ? false
+                                                                : 0
+                                                          } as StepPrehookVisualRule;
+                                                        });
+                                                        return { ...expr, rules: nextRules };
+                                                      })
+                                                    }
+                                                  >
+                                                    {PREHOOK_FIELDS.map((field) => (
+                                                      <option key={field.id} value={field.id}>
+                                                        {field.label}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                  <select
+                                                    value={rule.cmp}
+                                                    onChange={(event) =>
+                                                      updateVisualExpression(id, stepType, (expr) => ({
+                                                        ...expr,
+                                                        rules: expr.rules.map((entry, index) =>
+                                                          index === ruleIndex
+                                                            ? {
+                                                                ...entry,
+                                                                cmp:
+                                                                  event.target
+                                                                    .value as StepPrehookVisualComparator
+                                                              }
+                                                            : entry
+                                                        )
+                                                      }))
+                                                    }
+                                                  >
+                                                    {comparators.map((cmp) => (
+                                                      <option key={cmp} value={cmp}>
+                                                        {cmp}
+                                                      </option>
+                                                    ))}
+                                                  </select>
+                                                  {fieldMeta.valueType === 'boolean' ? (
+                                                    <select
+                                                      value={rule.value ? 'true' : 'false'}
+                                                      onChange={(event) =>
+                                                        updateVisualExpression(id, stepType, (expr) => ({
+                                                          ...expr,
+                                                          rules: expr.rules.map((entry, index) =>
+                                                            index === ruleIndex
+                                                              ? {
+                                                                  ...entry,
+                                                                  value:
+                                                                    event.target.value === 'true'
+                                                                }
+                                                              : entry
+                                                          )
+                                                        }))
+                                                      }
+                                                    >
+                                                      <option value="true">true</option>
+                                                      <option value="false">false</option>
+                                                    </select>
+                                                  ) : (
+                                                    <input
+                                                      type="number"
+                                                      value={Number(rule.value)}
+                                                      onChange={(event) =>
+                                                        updateVisualExpression(id, stepType, (expr) => ({
+                                                          ...expr,
+                                                          rules: expr.rules.map((entry, index) =>
+                                                            index === ruleIndex
+                                                              ? {
+                                                                  ...entry,
+                                                                  value: Number(event.target.value || 0)
+                                                                }
+                                                              : entry
+                                                          )
+                                                        }))
+                                                      }
+                                                    />
+                                                  )}
+                                                  <button
+                                                    type="button"
+                                                    className="ghost-button prehook-rule-remove"
+                                                    onClick={() =>
+                                                      updateVisualExpression(id, stepType, (expr) => ({
+                                                        ...expr,
+                                                        rules: expr.rules.filter(
+                                                          (_, index) => index !== ruleIndex
+                                                        )
+                                                      }))
+                                                    }
+                                                  >
+                                                    Remove
+                                                  </button>
+                                                </div>
+                                              );
+                                            })}
+                                          </div>
+                                          <button
+                                            type="button"
+                                            className="ghost-button prehook-add-rule"
+                                            onClick={() =>
+                                              updateVisualExpression(id, stepType, (expr) => ({
+                                                ...expr,
+                                                rules: [
+                                                  ...(expr.rules ?? []),
+                                                  {
+                                                    field: 'active_ticket_count',
+                                                    cmp: '>',
+                                                    value: 0
+                                                  }
+                                                ]
+                                              }))
+                                            }
+                                          >
+                                            Add Condition
+                                          </button>
+                                          <label>
+                                            Generated CEL
+                                            <input value={step.prehook.when} readOnly />
+                                          </label>
+                                          <div className="prehook-simulator">
+                                            <strong>Simulate</strong>
+                                            <div className="prehook-sim-grid">
+                                              {(
+                                                (
+                                                  step.prehook.ui?.expr?.rules.map(
+                                                    (entry) => entry.field
+                                                  ) ?? [
+                                                    'active_ticket_count',
+                                                    'fix_exit_code',
+                                                    'qa_failed',
+                                                    'fix_required'
+                                                  ]
+                                                ).filter(
+                                                  (field, index, arr) =>
+                                                    arr.indexOf(field) === index
+                                                ) as StepPrehookVisualField[]
+                                              ).map((field) => {
+                                                const meta = getFieldMeta(field);
+                                                const key = stepEditorKey(id, stepType);
+                                                const context = getSimulationContext(key);
+                                                const currentValue = context[field];
+                                                return (
+                                                  <label key={field}>
+                                                    {meta.label}
+                                                    {meta.valueType === 'boolean' ? (
+                                                      <select
+                                                        value={currentValue ? 'true' : 'false'}
+                                                        onChange={(event) =>
+                                                          updateSimulationField(
+                                                            key,
+                                                            field,
+                                                            event.target.value === 'true'
+                                                          )
+                                                        }
+                                                      >
+                                                        <option value="true">true</option>
+                                                        <option value="false">false</option>
+                                                      </select>
+                                                    ) : (
+                                                      <input
+                                                        type="number"
+                                                        value={Number(currentValue)}
+                                                        onChange={(event) =>
+                                                          updateSimulationField(
+                                                            key,
+                                                            field,
+                                                            Number(event.target.value || 0)
+                                                          )
+                                                        }
+                                                      />
+                                                    )}
+                                                  </label>
+                                                );
+                                              })}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="ghost-button"
+                                              onClick={() => {
+                                                void simulatePrehook(id, stepType);
+                                              }}
+                                            >
+                                              Simulate
+                                            </button>
+                                            {(() => {
+                                              const simulationResult =
+                                                prehookSimulationResults[stepEditorKey(id, stepType)];
+                                              if (!simulationResult) {
+                                                return null;
+                                              }
+                                              return (
+                                                <p className="muted">
+                                                  {'error' in simulationResult
+                                                    ? simulationResult.error
+                                                    : `Result: ${
+                                                        simulationResult.result ? 'run' : 'skip'
+                                                      } | ${simulationResult.explanation}`}
+                                                </p>
+                                              );
+                                            })()}
+                                          </div>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <label>
+                                            CEL Expression
+                                            <textarea
+                                              value={step.prehook.when}
+                                              onChange={(event) =>
+                                                updateStepPrehook(id, stepType, (prehook) => ({
+                                                  ...prehook,
+                                                  when: event.target.value,
+                                                  ui: {
+                                                    ...(prehook.ui ?? {}),
+                                                    mode: 'cel'
+                                                  }
+                                                }))
+                                              }
+                                              placeholder="active_ticket_count > 0 && fix_exit_code == 0"
+                                            />
+                                          </label>
+                                          <div className="prehook-simulator">
+                                            <strong>Simulate</strong>
+                                            <div className="prehook-sim-grid">
+                                              {PREHOOK_FIELDS.map((field) => {
+                                                const key = stepEditorKey(id, stepType);
+                                                const context = getSimulationContext(key);
+                                                const currentValue = context[field.id];
+                                                return (
+                                                  <label key={field.id}>
+                                                    {field.label}
+                                                    {field.valueType === 'boolean' ? (
+                                                      <select
+                                                        value={currentValue ? 'true' : 'false'}
+                                                        onChange={(event) =>
+                                                          updateSimulationField(
+                                                            key,
+                                                            field.id,
+                                                            event.target.value === 'true'
+                                                          )
+                                                        }
+                                                      >
+                                                        <option value="true">true</option>
+                                                        <option value="false">false</option>
+                                                      </select>
+                                                    ) : (
+                                                      <input
+                                                        type="number"
+                                                        value={Number(currentValue)}
+                                                        onChange={(event) =>
+                                                          updateSimulationField(
+                                                            key,
+                                                            field.id,
+                                                            Number(event.target.value || 0)
+                                                          )
+                                                        }
+                                                      />
+                                                    )}
+                                                  </label>
+                                                );
+                                              })}
+                                            </div>
+                                            <button
+                                              type="button"
+                                              className="ghost-button"
+                                              onClick={() => {
+                                                void simulatePrehook(id, stepType);
+                                              }}
+                                            >
+                                              Simulate
+                                            </button>
+                                            {(() => {
+                                              const simulationResult =
+                                                prehookSimulationResults[stepEditorKey(id, stepType)];
+                                              if (!simulationResult) {
+                                                return null;
+                                              }
+                                              return (
+                                                <p className="muted">
+                                                  {'error' in simulationResult
+                                                    ? simulationResult.error
+                                                    : `Result: ${
+                                                        simulationResult.result ? 'run' : 'skip'
+                                                      } | ${simulationResult.explanation}`}
+                                                </p>
+                                              );
+                                            })()}
+                                          </div>
+                                        </>
+                                      )}
+                                      <label>
+                                        Reason (optional)
+                                        <input
+                                          value={step.prehook.reason ?? ''}
+                                          onChange={(event) =>
+                                            updateStepPrehook(id, stepType, (prehook) => ({
+                                              ...prehook,
+                                              reason: event.target.value || undefined
+                                            }))
+                                          }
+                                          placeholder="skip fix when no tickets"
+                                        />
+                                      </label>
+                                    </>
+                                  )}
+                                </div>
                               </div>
                             );
                           })}
-                          <h4>Loop</h4>
+                          <h4>循环策略 (Loop)</h4>
                           <label>
-                            Loop Mode
+                            循环模式 (Loop Mode)
                             <select
                               value={wf.loop.mode}
                               onChange={(event) =>
@@ -1234,7 +2672,7 @@ export function App() {
                                 })
                               }
                             />
-                            Guard Enabled
+                            启用 Guard
                           </label>
                           <label>
                             <input
@@ -1246,10 +2684,10 @@ export function App() {
                                 })
                               }
                             />
-                            Stop When No Unresolved
+                            无未解决项时停止
                           </label>
                           <label>
-                            Guard Agent (optional)
+                            Guard Agent（可选）
                             <select
                               value={wf.loop.guard.agent_id ?? ''}
                               onChange={(event) =>
@@ -1267,7 +2705,7 @@ export function App() {
                             </select>
                           </label>
                           <label>
-                            Max Cycles (optional)
+                            最大循环次数（可选）
                             <input
                               type="number"
                               min={1}
@@ -1282,40 +2720,108 @@ export function App() {
                               }
                             />
                           </label>
-                        </article>
-                      );
-                    })}
-                  </div>
-                </section>
-              </div>
-            )}
+                                    </article>
+                                  );
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            <p className="muted">暂无 Workflow，请先新增。</p>
+                          )}
+                        </div>
+                      </div>
+                    </section>
+                  )}
+
+                  {configTab === 'yaml' && (
+                    <section className="config-block config-yaml-block">
+                      <div className="config-block-head">
+                        <h3>YAML 高级编辑</h3>
+                        <span className="badge amber">高级模式</span>
+                      </div>
+                      <p className="muted">
+                        直接编辑 YAML 可能影响全部配置。建议先在 Workspace/Agent/Workflow Tab 中修改，再在此进行高级调整。
+                      </p>
+                      <label>
+                        Config YAML
+                        <textarea
+                          className="yaml-editor"
+                          value={yamlDraft}
+                          onChange={(event) => setYamlDraft(event.target.value)}
+                        />
+                      </label>
+                    </section>
+                  )}
+                </div>
+              )}
+              {!configDraft && <p className="muted">配置加载中，请稍候...</p>}
+            </div>
           </section>
 
-          <section className="panel config-history-panel animate-fade-in-up delay-2">
-            <h3>Config Versions</h3>
-            <div className="config-history-list">
-              {configVersions.map((entry) => (
-                <button
-                  key={entry.version}
-                  className="task-card"
-                  onClick={() =>
-                    api
-                      .getConfigVersion(entry.version)
-                      .then((detail) => {
-                        setYamlDraft(detail.yaml);
-                        setConfigEditor('yaml');
-                      })
-                      .catch((err) => setError(String(err)))
-                  }
-                >
-                  <div className="task-card-top">
-                    <strong>v{entry.version}</strong>
-                    <span className="badge gray">{entry.author}</span>
-                  </div>
-                  <div className="task-card-meta">{entry.created_at}</div>
-                </button>
-              ))}
+          <section
+            className={`panel config-history-panel animate-fade-in-up delay-2 ${
+              isConfigVersionsOpen ? '' : 'collapsed'
+            }`}
+          >
+            <div
+              className="config-history-head"
+              role="button"
+              tabIndex={0}
+              aria-expanded={isConfigVersionsOpen}
+              aria-controls="config-versions-list"
+              onClick={() => setIsConfigVersionsOpen((current) => !current)}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  setIsConfigVersionsOpen((current) => !current);
+                }
+              }}
+            >
+              <div className="config-history-title">
+                <h3>{isConfigVersionsOpen ? 'Config Versions' : 'Versions'}</h3>
+                {isConfigVersionsOpen && (
+                  <p className="muted">已保存 {configVersions.length} 个版本，点击版本可加载到 YAML Tab。</p>
+                )}
+              </div>
+              <button
+                type="button"
+                className="ghost-button config-history-toggle"
+                aria-label={isConfigVersionsOpen ? '收起 Config Versions' : '展开 Config Versions'}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  setIsConfigVersionsOpen((current) => !current);
+                }}
+              >
+                {isConfigVersionsOpen ? '«' : '»'}
+              </button>
             </div>
+
+            {isConfigVersionsOpen && (
+              <div className="config-history-list" id="config-versions-list">
+                {configVersions.map((entry) => (
+                  <button
+                    key={entry.version}
+                    className="task-card"
+                    onClick={() =>
+                      api
+                        .getConfigVersion(entry.version)
+                        .then((detail) => {
+                          setYamlDraft(detail.yaml);
+                          setConfigTab('yaml');
+                          setConfigMessage(`已加载历史版本 v${entry.version}，保存后才会生效。`);
+                        })
+                        .catch((err) => setError(String(err)))
+                    }
+                  >
+                    <div className="task-card-top">
+                      <strong>v{entry.version}</strong>
+                      <span className="badge gray">{entry.author}</span>
+                    </div>
+                    <div className="task-card-meta">{entry.created_at}</div>
+                  </button>
+                ))}
+              </div>
+            )}
           </section>
         </main>
       )}
