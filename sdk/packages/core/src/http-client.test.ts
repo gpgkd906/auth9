@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Auth9HttpClient } from "./http-client.js";
-import { NotFoundError, UnauthorizedError } from "./errors.js";
+import { NotFoundError, UnauthorizedError, ConflictError } from "./errors.js";
 
 // Mock global fetch
 const mockFetch = vi.fn();
@@ -83,6 +83,19 @@ describe("Auth9HttpClient", () => {
 
     await expect(client.get("/api/v1/tenants")).rejects.toThrow(
       UnauthorizedError,
+    );
+  });
+
+  it("throws ConflictError on 409", async () => {
+    mockFetch.mockResolvedValue({
+      ok: false,
+      status: 409,
+      json: () =>
+        Promise.resolve({ error: "conflict", message: "Resource already exists" }),
+    });
+
+    await expect(client.post("/api/v1/tenants", { name: "Duplicate" })).rejects.toThrow(
+      ConflictError,
     );
   });
 

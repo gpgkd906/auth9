@@ -6,6 +6,8 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 TICKET_DIR="$PROJECT_ROOT/docs/ticket"
+ORCHESTRATOR_LAUNCHER="$PROJECT_ROOT/tools/qa-orchestrator/scripts/open-ui.sh"
+ORCHESTRATOR_CLI="$PROJECT_ROOT/tools/qa-orchestrator/scripts/run-cli.sh"
 BATCH_SIZE="${BATCH_SIZE:-3}"
 MAX_BATCHES="${MAX_BATCHES:-0}" # 0 = unlimited
 
@@ -35,6 +37,8 @@ usage() {
     echo "  -b, --batch-size N    Number of tickets per batch (default: 3)"
     echo "  -m, --max-batches N   Maximum number of batches to process (default: 0 = unlimited)"
     echo "  -d, --dry-run         Show what would be processed without running"
+    echo "  --orchestrator        Launch tools/qa-orchestrator (Tauri UI workflow)"
+    echo "  --orchestrator-cli    Run tools/qa-orchestrator in CLI automation mode"
     echo "  -h, --help            Show this help message"
     echo ""
     echo "Environment Variables:"
@@ -58,6 +62,21 @@ while [[ $# -gt 0 ]]; do
         -d|--dry-run)
             DRY_RUN=true
             shift
+            ;;
+        --orchestrator)
+            if [[ ! -x "$ORCHESTRATOR_LAUNCHER" ]]; then
+                echo -e "${RED}Orchestrator launcher not found: $ORCHESTRATOR_LAUNCHER${NC}"
+                exit 1
+            fi
+            exec "$ORCHESTRATOR_LAUNCHER"
+            ;;
+        --orchestrator-cli)
+            if [[ ! -x "$ORCHESTRATOR_CLI" ]]; then
+                echo -e "${RED}Orchestrator CLI not found: $ORCHESTRATOR_CLI${NC}"
+                exit 1
+            fi
+            shift
+            exec "$ORCHESTRATOR_CLI" "$@"
             ;;
         -h|--help)
             usage

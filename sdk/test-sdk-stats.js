@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '259e29f1-5d77-496c-999f-8f0374bae15f';
+const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -27,13 +27,13 @@ async function testStats() {
     const statsResult = await client.get(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}/stats`);
     
     const stats = statsResult.data;
-    console.log('Execution count:', stats?.execution_count || 0);
-    console.log('Success rate:', stats?.success_rate || 0);
-    console.log('Avg duration:', stats?.avg_duration_ms || 0);
-    console.log('Last 24h:', stats?.last_24h_count || 0);
+    console.log('Execution count:', stats?.executionCount || 0);
+    console.log('Error count:', stats?.errorCount || 0);
+    console.log('Avg duration:', stats?.avgDurationMs || 0);
+    console.log('Last 24h:', stats?.last24hCount || 0);
 
     // 验证结果
-    if (stats && typeof stats.execution_count === 'number') {
+    if (stats && typeof stats.executionCount === 'number') {
       console.log('✅ 场景7测试通过 - 统计查询API正常工作');
     } else {
       console.log('❌ 场景7测试失败: 统计查询返回无效结果');

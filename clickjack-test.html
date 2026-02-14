@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Clickjacking Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+        }
+        .overlay {
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            background: rgba(255, 0, 0, 0.3);
+            padding: 10px;
+            border: 2px solid red;
+            z-index: 1000;
+        }
+        iframe {
+            border: 2px solid #ccc;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Clickjacking Test Page</h1>
+    <p>This page attempts to embed the Auth9 portal in an iframe.</p>
+    
+    <div class="overlay">
+        <h3>Malicious Overlay</h3>
+        <p>This overlay tries to trick users into clicking on the iframe below.</p>
+        <button onclick="alert('Malicious button clicked!')">Click Me (Malicious)</button>
+    </div>
+    
+    <iframe src="http://localhost:3000" width="800" height="600" id="auth9-frame"></iframe>
+    
+    <div>
+        <p>Frame status: <span id="status">Loading...</span></p>
+        <button onclick="checkFrame()">Check Frame Status</button>
+    </div>
+    
+    <script>
+        function checkFrame() {
+            const frame = document.getElementById('auth9-frame');
+            try {
+                const content = frame.contentWindow.document.body.innerHTML;
+                document.getElementById('status').textContent = 'Frame loaded successfully';
+                console.log('Frame content accessible:', content.substring(0, 100));
+            } catch (e) {
+                document.getElementById('status').textContent = 'Frame blocked: ' + e.message;
+                console.log('Frame blocked:', e.message);
+            }
+        }
+        
+        // Auto-check after load
+        window.onload = function() {
+            setTimeout(checkFrame, 2000);
+        };
+    </script>
+</body>
+</html>

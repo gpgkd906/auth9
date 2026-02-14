@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '259e29f1-5d77-496c-999f-8f0374bae15f';
+const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',

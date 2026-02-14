@@ -1,0 +1,44 @@
+{
+  "$schema": "https://schema.tauri.app/config/1",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build",
+    "devPath": "http://localhost:1420",
+    "distDir": "../dist"
+  },
+  "package": {
+    "productName": "Auth9 QA Orchestrator",
+    "version": "0.1.0"
+  },
+  "tauri": {
+    "allowlist": {
+      "all": false,
+      "shell": {
+        "open": true
+      },
+      "fs": {
+        "all": true
+      },
+      "dialog": {
+        "all": true
+      }
+    },
+    "windows": [
+      {
+        "title": "Auth9 QA Orchestrator",
+        "width": 1460,
+        "height": 940,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    },
+    "bundle": {
+      "active": true,
+      "targets": "all",
+      "identifier": "com.auth9.qaorchestrator"
+    }
+  }
+}

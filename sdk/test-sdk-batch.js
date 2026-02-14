@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '259e29f1-5d77-496c-999f-8f0374bae15f';
+const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -45,12 +45,12 @@ async function testBatchUpsert() {
       ]
     });
 
-    console.log('Created:', result.created?.length || 0);
-    console.log('Updated:', result.updated?.length || 0);
-    console.log('Errors:', result.errors?.length || 0);
+    console.log('Created:', result.data?.created?.length || 0);
+    console.log('Updated:', result.data?.updated?.length || 0);
+    console.log('Errors:', result.data?.errors?.length || 0);
 
     // 验证结果
-    if ((result.created?.length || 0) >= 2 && (result.updated?.length || 0) >= 1 && (result.errors?.length || 0) === 0) {
+    if ((result.data?.created?.length || 0) >= 2 && (result.data?.updated?.length || 0) >= 1 && (result.data?.errors?.length || 0) === 0) {
       console.log('✅ 场景4测试通过');
     } else {
       console.log('❌ 场景4测试失败: 结果不符合预期');

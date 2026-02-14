@@ -72,6 +72,8 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
+      # Settings encryption key for sensitive data
+      SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:-RBjedpDGR0hESLvyj0+QZ2anp4mATR+ytgaUlwCUpgE=}
       # SMTP configuration for email sending (invitations, password reset, etc.)
       SMTP_HOST: mailpit
       SMTP_PORT: 1025
