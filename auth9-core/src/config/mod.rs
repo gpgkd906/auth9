@@ -5,6 +5,8 @@ use std::collections::HashMap;
 use std::env;
 use std::fmt;
 
+use crate::domain::action::AsyncActionConfig;
+
 /// Runtime environment name (best-effort; used for security defaults).
 pub const ENV_PRODUCTION: &str = "production";
 pub const ENV_DEVELOPMENT: &str = "development";
@@ -22,6 +24,10 @@ pub struct TelemetryConfig {
     pub log_format: String,
     /// OpenTelemetry service name
     pub service_name: String,
+    /// Bearer token required to access /metrics endpoint.
+    /// When set, requests must include `Authorization: Bearer <token>`.
+    /// Required in production to prevent information disclosure.
+    pub metrics_token: Option<String>,
 }
 
 impl Default for TelemetryConfig {
@@ -32,6 +38,7 @@ impl Default for TelemetryConfig {
             otlp_endpoint: None,
             log_format: "pretty".to_string(),
             service_name: "auth9-core".to_string(),
+            metrics_token: None,
         }
     }
 }
@@ -140,6 +147,9 @@ pub struct Config {
 
     /// Optional portal client ID (used as a default tenant token audience).
     pub portal_client_id: Option<String>,
+
+    /// Async action execution configuration (fetch allowlist, limits)
+    pub async_action: AsyncActionConfig,
 }
 
 impl fmt::Debug for Config {
@@ -174,6 +184,7 @@ impl fmt::Debug for Config {
                 "platform_admin_emails",
                 &format!("[{} emails]", self.platform_admin_emails.len()),
             )
+            .field("async_action", &self.async_action)
             .finish()
     }
 }
@@ -681,6 +692,7 @@ impl Config {
                 log_format: env::var("LOG_FORMAT").unwrap_or_else(|_| "pretty".to_string()),
                 service_name: env::var("OTEL_SERVICE_NAME")
                     .unwrap_or_else(|_| "auth9-core".to_string()),
+                metrics_token: env::var("METRICS_TOKEN").ok(),
             },
             password_reset,
             platform_admin_emails: parse_csv_env(
@@ -690,6 +702,13 @@ impl Config {
             jwt_tenant_access_allowed_audiences,
             security_headers,
             portal_client_id,
+            async_action: AsyncActionConfig {
+                allowed_domains: parse_csv_env("ACTION_ALLOWED_DOMAINS", vec![]),
+                request_timeout_ms: parse_u64_env("ACTION_REQUEST_TIMEOUT_MS", 10_000),
+                max_response_bytes: parse_u64_env("ACTION_MAX_RESPONSE_BYTES", 1_048_576) as usize,
+                max_requests_per_execution: parse_u64_env("ACTION_MAX_REQUESTS", 5) as usize,
+                allow_private_ips: parse_bool_env("ACTION_ALLOW_PRIVATE_IPS", false),
+            },
         })
     }
 
@@ -803,6 +822,7 @@ mod tests {
             jwt_tenant_access_allowed_audiences: vec![],
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: None,
+            async_action: AsyncActionConfig::default(),
         }
     }
 
@@ -1072,6 +1092,7 @@ mod tests {
             jwt_tenant_access_allowed_audiences: vec![],
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: None,
+            async_action: AsyncActionConfig::default(),
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
@@ -1694,6 +1715,7 @@ mod tests {
             jwt_tenant_access_allowed_audiences: vec!["auth9-portal".to_string()],
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: Some("auth9-portal".to_string()),
+            async_action: AsyncActionConfig::default(),
         };
 
         let debug_str = format!("{:?}", config);

@@ -1,5 +1,6 @@
 //! Branding configuration domain types
 
+use super::common::validate_url_no_ssrf_strict_option;
 use serde::{Deserialize, Serialize};
 use validator::Validate;
 
@@ -31,8 +32,8 @@ fn validate_hex_color(color: &str) -> Result<(), validator::ValidationError> {
 /// Branding configuration for login pages
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
 pub struct BrandingConfig {
-    /// Logo URL
-    #[validate(url(message = "Invalid logo URL"))]
+    /// Logo URL (with SSRF protection)
+    #[validate(custom(function = "validate_url_no_ssrf_strict_option"))]
     pub logo_url: Option<String>,
 
     /// Primary color (hex format, e.g., "#007AFF")
@@ -59,8 +60,8 @@ pub struct BrandingConfig {
     #[validate(length(max = 100, message = "Company name exceeds maximum length"))]
     pub company_name: Option<String>,
 
-    /// Favicon URL
-    #[validate(url(message = "Invalid favicon URL"))]
+    /// Favicon URL (with SSRF protection)
+    #[validate(custom(function = "validate_url_no_ssrf_strict_option"))]
     pub favicon_url: Option<String>,
 
     /// Whether to allow showing registration link on login page (default: false)
@@ -190,6 +191,43 @@ mod tests {
     fn test_invalid_logo_url() {
         let config = BrandingConfig {
             logo_url: Some("not-a-url".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_logo_url_ssrf_private_ip_blocked() {
+        let config = BrandingConfig {
+            logo_url: Some("http://192.168.1.1/logo.png".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_logo_url_ssrf_cloud_metadata_blocked() {
+        let config = BrandingConfig {
+            logo_url: Some("http://169.254.169.254/latest/meta-data/".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_favicon_url_ssrf_private_ip_blocked() {
+        let config = BrandingConfig {
+            favicon_url: Some("http://192.168.1.1/favicon.ico".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_logo_url_localhost_http_blocked() {
+        // Branding uses strict validation - no localhost/HTTP allowed
+        let config = BrandingConfig {
+            logo_url: Some("http://localhost:8080/logo.png".to_string()),
             ..Default::default()
         };
         assert!(config.validate().is_err());

@@ -292,7 +292,9 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
                                 user.id,
                                 e
                             );
-                            return Err(e);
+                            // Log but don't block login - action script errors
+                            // should not prevent user authentication
+                            None
                         }
                     }
                 } else {

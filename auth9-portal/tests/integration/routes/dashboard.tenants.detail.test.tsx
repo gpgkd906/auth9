@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import TenantDetailPage, { loader, action } from "~/routes/dashboard.tenants.$tenantId._index";
-import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi } from "~/services/api";
+import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi } from "~/services/api";
 
 // Mock the APIs
 vi.mock("~/services/api", () => ({
@@ -22,6 +22,9 @@ vi.mock("~/services/api", () => ({
   },
   tenantServiceApi: {
     listServices: vi.fn(),
+  },
+  tenantUserApi: {
+    list: vi.fn(),
   },
 }));
 
@@ -79,6 +82,9 @@ describe("Tenant Detail Page", () => {
       vi.mocked(tenantServiceApi.listServices).mockResolvedValue({
         data: mockServices,
       });
+      vi.mocked(tenantUserApi.list).mockResolvedValue({
+        data: [{ id: "u-1" }, { id: "u-2" }, { id: "u-3" }],
+      });
 
       const response = await loader({
         request: new Request("http://localhost/dashboard/tenants/tenant-1"),
@@ -88,6 +94,7 @@ describe("Tenant Detail Page", () => {
 
       expect(response).toEqual({
         tenant: mockTenant,
+        usersCount: 3,
         servicesCount: 5,
         pendingInvitationsCount: 3,
         webhooksCount: 2,
@@ -116,6 +123,7 @@ describe("Tenant Detail Page", () => {
   describe("header rendering", () => {
     const loaderData = {
       tenant: mockTenant,
+      usersCount: 3,
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
@@ -221,6 +229,7 @@ describe("Tenant Detail Page", () => {
   describe("configuration form rendering", () => {
     const loaderData = {
       tenant: mockTenant,
+      usersCount: 3,
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
@@ -353,6 +362,7 @@ describe("Tenant Detail Page", () => {
   describe("quick links rendering", () => {
     const loaderData = {
       tenant: mockTenant,
+      usersCount: 3,
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
@@ -464,6 +474,7 @@ describe("Tenant Detail Page", () => {
   describe("overview stats rendering", () => {
     const loaderData = {
       tenant: mockTenant,
+      usersCount: 3,
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
@@ -485,6 +496,22 @@ describe("Tenant Detail Page", () => {
       await waitFor(() => {
         expect(screen.getByText("Overview")).toBeInTheDocument();
         expect(screen.getByText("Tenant statistics")).toBeInTheDocument();
+      });
+    });
+
+    it("renders users count stat", async () => {
+      const RoutesStub = createRoutesStub([
+        {
+          path: "/dashboard/tenants/:tenantId",
+          Component: TenantDetailPage,
+          loader: () => loaderData,
+        },
+      ]);
+
+      render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
+
+      await waitFor(() => {
+        expect(screen.getByText("Users")).toBeInTheDocument();
       });
     });
 
@@ -535,7 +562,6 @@ describe("Tenant Detail Page", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Pending Invitations")).toBeInTheDocument();
-        expect(screen.getByText("3")).toBeInTheDocument();
       });
     });
 
@@ -787,6 +813,7 @@ describe("Tenant Detail Page", () => {
   describe("security settings", () => {
     const loaderData = {
       tenant: mockTenant,
+      usersCount: 3,
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,

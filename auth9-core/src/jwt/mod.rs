@@ -24,6 +24,9 @@ pub struct IdentityClaims {
     pub iss: String,
     /// Audience
     pub aud: String,
+    /// Token type discriminator (prevents token confusion attacks)
+    #[serde(default)]
+    pub token_type: String,
     /// Custom claims (from Actions)
     #[serde(flatten)]
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -45,6 +48,9 @@ pub struct TenantAccessClaims {
     pub iss: String,
     /// Audience (service client_id)
     pub aud: String,
+    /// Token type discriminator (prevents token confusion attacks)
+    #[serde(default)]
+    pub token_type: String,
     /// Tenant ID
     pub tenant_id: String,
     /// Roles in this tenant
@@ -70,6 +76,9 @@ pub struct ServiceClientClaims {
     pub iss: String,
     /// Audience (always "auth9-service" to distinguish from Identity tokens)
     pub aud: String,
+    /// Token type discriminator (prevents token confusion attacks)
+    #[serde(default)]
+    pub token_type: String,
     /// The tenant_id this service belongs to (if any)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tenant_id: Option<String>,
@@ -84,6 +93,9 @@ pub struct RefreshClaims {
     pub sub: String,
     pub iss: String,
     pub aud: String,
+    /// Token type discriminator (prevents token confusion attacks)
+    #[serde(default)]
+    pub token_type: String,
     pub tenant_id: String,
     pub iat: i64,
     pub exp: i64,
@@ -128,6 +140,14 @@ impl JwtManager {
             algorithm,
             public_key_pem,
         }
+    }
+
+    /// Create a Validation with a strict leeway (5 seconds) instead of the default 60 seconds.
+    /// This ensures tokens expire promptly while still tolerating minor clock skew.
+    fn strict_validation(&self) -> Validation {
+        let mut v = Validation::new(self.algorithm);
+        v.leeway = 5;
+        v
     }
 
     /// Create an identity token
@@ -193,6 +213,7 @@ impl JwtManager {
             name: name.map(String::from),
             iss: self.config.issuer.clone(),
             aud: "auth9".to_string(),
+            token_type: "identity".to_string(),
             extra: custom_claims,
             iat: now.timestamp(),
             exp: exp.timestamp(),
@@ -219,6 +240,7 @@ impl JwtManager {
             email: email.to_string(),
             iss: self.config.issuer.clone(),
             aud: service_client_id.to_string(),
+            token_type: "access".to_string(),
             tenant_id: tenant_id.to_string(),
             roles,
             permissions,
@@ -242,6 +264,7 @@ impl JwtManager {
             sub: user_id.to_string(),
             iss: self.config.issuer.clone(),
             aud: service_client_id.to_string(),
+            token_type: "refresh".to_string(),
             tenant_id: tenant_id.to_string(),
             iat: now.timestamp(),
             exp: exp.timestamp(),
@@ -265,6 +288,7 @@ impl JwtManager {
             email: email.to_string(),
             iss: self.config.issuer.clone(),
             aud: "auth9-service".to_string(),
+            token_type: "service".to_string(),
             tenant_id: tenant_id.map(|t| t.to_string()),
             iat: now.timestamp(),
             exp: exp.timestamp(),
@@ -275,7 +299,7 @@ impl JwtManager {
 
     /// Verify and decode a service client token
     pub fn verify_service_client_token(&self, token: &str) -> Result<ServiceClientClaims> {
-        let mut validation = Validation::new(self.algorithm);
+        let mut validation = self.strict_validation();
         validation.set_audience(&["auth9-service"]);
         validation.set_issuer(&[&self.config.issuer]);
 
@@ -285,7 +309,7 @@ impl JwtManager {
 
     /// Verify and decode an identity token
     pub fn verify_identity_token(&self, token: &str) -> Result<IdentityClaims> {
-        let mut validation = Validation::new(self.algorithm);
+        let mut validation = self.strict_validation();
         validation.set_audience(&["auth9"]);
         validation.set_issuer(&[&self.config.issuer]);
 
@@ -302,7 +326,7 @@ impl JwtManager {
         token: &str,
         expected_audience: Option<&str>,
     ) -> Result<TenantAccessClaims> {
-        let mut validation = Validation::new(self.algorithm);
+        let mut validation = self.strict_validation();
         validation.set_issuer(&[&self.config.issuer]);
 
         if let Some(aud) = expected_audience {
@@ -340,7 +364,7 @@ impl JwtManager {
             ));
         }
 
-        let mut validation = Validation::new(self.algorithm);
+        let mut validation = self.strict_validation();
         validation.set_issuer(&[&self.config.issuer]);
 
         let aud_refs: Vec<&str> = expected_audiences.iter().map(|s| s.as_str()).collect();
@@ -558,6 +582,7 @@ mod tests {
             name: Some("Test User".to_string()),
             iss: "https://auth9.test".to_string(),
             aud: "auth9".to_string(),
+            token_type: "identity".to_string(),
             iat: 1000000,
             exp: 1003600,
             extra: None,
@@ -568,6 +593,7 @@ mod tests {
         assert!(json.contains("\"email\":\"test@example.com\""));
         assert!(json.contains("\"name\":\"Test User\""));
         assert!(json.contains("\"sid\":\"session-456\""));
+        assert!(json.contains("\"token_type\":\"identity\""));
     }
 
     #[test]
@@ -579,6 +605,7 @@ mod tests {
             name: None,
             iss: "https://auth9.test".to_string(),
             aud: "auth9".to_string(),
+            token_type: "identity".to_string(),
             iat: 1000000,
             exp: 1003600,
             extra: None,
@@ -596,6 +623,7 @@ mod tests {
             email: "tenant@example.com".to_string(),
             iss: "https://auth9.test".to_string(),
             aud: "my-app".to_string(),
+            token_type: "access".to_string(),
             tenant_id: "tenant-789".to_string(),
             roles: vec!["admin".to_string(), "user".to_string()],
             permissions: vec!["read".to_string(), "write".to_string()],
@@ -607,6 +635,7 @@ mod tests {
         assert!(json.contains("\"tenant_id\":\"tenant-789\""));
         assert!(json.contains("\"roles\":[\"admin\",\"user\"]"));
         assert!(json.contains("\"permissions\":[\"read\",\"write\"]"));
+        assert!(json.contains("\"token_type\":\"access\""));
     }
 
     #[test]
@@ -615,6 +644,7 @@ mod tests {
             sub: "user-123".to_string(),
             iss: "https://auth9.test".to_string(),
             aud: "my-service".to_string(),
+            token_type: "refresh".to_string(),
             tenant_id: "tenant-456".to_string(),
             iat: 1000000,
             exp: 1604800,
@@ -623,6 +653,7 @@ mod tests {
         let json = serde_json::to_string(&claims).unwrap();
         assert!(json.contains("\"sub\":\"user-123\""));
         assert!(json.contains("\"tenant_id\":\"tenant-456\""));
+        assert!(json.contains("\"token_type\":\"refresh\""));
     }
 
     #[test]
@@ -633,6 +664,7 @@ mod tests {
             "name": "Test User",
             "iss": "https://auth9.test",
             "aud": "auth9",
+            "token_type": "identity",
             "iat": 1000000,
             "exp": 1003600
         }"#;
@@ -649,6 +681,7 @@ mod tests {
             "email": "tenant@example.com",
             "iss": "https://auth9.test",
             "aud": "my-app",
+            "token_type": "access",
             "tenant_id": "tenant-789",
             "roles": ["admin"],
             "permissions": ["read", "write"],

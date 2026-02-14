@@ -1,7 +1,9 @@
-//! Common types for domain models
+//! Common types and shared validation for domain models
 
 use serde::{Deserialize, Serialize};
+use url::Url;
 use uuid::Uuid;
+use validator::ValidationError;
 
 /// Wrapper type for UUID stored as CHAR(36) in MySQL/TiDB
 /// sqlx's uuid feature expects BINARY(16), but we use CHAR(36)
@@ -85,6 +87,125 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for StringUuid {
     ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         <String as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&self.0.to_string(), buf)
     }
+}
+
+/// Validate a URL against SSRF attacks.
+/// Blocks cloud metadata endpoints, private/loopback IPs, and restricts HTTP to local networks.
+pub fn validate_url_no_ssrf(url: &str) -> Result<(), ValidationError> {
+    let parsed = Url::parse(url).map_err(|_| ValidationError::new("invalid_url"))?;
+
+    let scheme = parsed.scheme();
+    let host = parsed.host_str().unwrap_or("");
+
+    // Only allow http and https schemes
+    if scheme != "http" && scheme != "https" {
+        return Err(ValidationError::new("invalid_scheme"));
+    }
+
+    // Block cloud metadata endpoints for ALL schemes
+    let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
+    let is_loopback = host == "127.0.0.1" || host == "::1" || host == "0.0.0.0";
+    let is_private = host.starts_with("192.168.")
+        || host.starts_with("10.")
+        || (host.starts_with("172.")
+            && host
+                .split('.')
+                .nth(1)
+                .and_then(|s| s.parse::<u8>().ok())
+                .map(|n| (16..=31).contains(&n))
+                .unwrap_or(false));
+
+    if is_cloud_metadata {
+        let mut err = ValidationError::new("ssrf_blocked");
+        err.message = Some("Cloud metadata endpoints are not allowed".into());
+        return Err(err);
+    }
+
+    // For HTTPS: allow external URLs, block private/loopback
+    if scheme == "https" {
+        if is_loopback || is_private {
+            let mut err = ValidationError::new("internal_ip_blocked");
+            err.message = Some("Internal IP addresses are not allowed".into());
+            return Err(err);
+        }
+        return Ok(());
+    }
+
+    // HTTP only allowed for localhost/private networks (dev environment)
+    if scheme == "http" {
+        let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
+        if is_localhost || is_private {
+            return Ok(());
+        }
+
+        let mut err = ValidationError::new("http_not_allowed");
+        err.message = Some(
+            "HTTP URLs are only allowed for localhost or private networks. Use HTTPS for external URLs.".into(),
+        );
+        return Err(err);
+    }
+
+    Err(ValidationError::new("invalid_scheme"))
+}
+
+/// Validate an optional URL against SSRF (for use with validator crate on Option<String> fields)
+pub fn validate_url_no_ssrf_option(url: &str) -> Result<(), ValidationError> {
+    validate_url_no_ssrf(url)
+}
+
+/// Strict URL validation that blocks ALL private/loopback IPs regardless of scheme.
+/// Use for user-supplied URLs that will be stored and rendered (e.g. branding logos).
+pub fn validate_url_no_ssrf_strict(url: &str) -> Result<(), ValidationError> {
+    let parsed = Url::parse(url).map_err(|_| ValidationError::new("invalid_url"))?;
+
+    let scheme = parsed.scheme();
+    let host = parsed.host_str().unwrap_or("");
+
+    // Only allow http and https schemes
+    if scheme != "http" && scheme != "https" {
+        return Err(ValidationError::new("invalid_scheme"));
+    }
+
+    let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
+    let is_loopback = host == "127.0.0.1"
+        || host == "::1"
+        || host == "0.0.0.0"
+        || host == "localhost";
+    let is_private = host.starts_with("192.168.")
+        || host.starts_with("10.")
+        || (host.starts_with("172.")
+            && host
+                .split('.')
+                .nth(1)
+                .and_then(|s| s.parse::<u8>().ok())
+                .map(|n| (16..=31).contains(&n))
+                .unwrap_or(false));
+
+    if is_cloud_metadata {
+        let mut err = ValidationError::new("ssrf_blocked");
+        err.message = Some("Cloud metadata endpoints are not allowed".into());
+        return Err(err);
+    }
+
+    if is_loopback || is_private {
+        let mut err = ValidationError::new("internal_ip_blocked");
+        err.message = Some("Internal IP addresses are not allowed".into());
+        return Err(err);
+    }
+
+    // Block external HTTP (require HTTPS for external URLs)
+    if scheme == "http" {
+        let mut err = ValidationError::new("http_not_allowed");
+        err.message = Some("Only HTTPS URLs are allowed".into());
+        return Err(err);
+    }
+
+    Ok(())
+}
+
+/// Strict URL validation for optional fields
+pub fn validate_url_no_ssrf_strict_option(url: &str) -> Result<(), ValidationError> {
+    validate_url_no_ssrf_strict(url)
 }
 
 #[cfg(test)]
@@ -227,5 +348,109 @@ mod tests {
         // The encoded buffer should contain the UUID string
         let encoded = String::from_utf8_lossy(&buf);
         assert!(encoded.contains(uuid_str));
+    }
+
+    #[test]
+    fn test_ssrf_allows_valid_https() {
+        assert!(validate_url_no_ssrf("https://example.com/logo.png").is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_allows_private_ip_http_for_dev() {
+        // Non-strict mode allows HTTP to private IPs (dev convenience for webhooks)
+        assert!(validate_url_no_ssrf("http://192.168.1.1/logo.png").is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_allows_localhost_http() {
+        assert!(validate_url_no_ssrf("http://localhost:8080/logo.png").is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_blocks_cloud_metadata() {
+        let result = validate_url_no_ssrf("http://169.254.169.254/latest/meta-data/");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "ssrf_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_blocks_gcp_metadata() {
+        let result =
+            validate_url_no_ssrf("http://metadata.google.internal/computeMetadata/v1/");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "ssrf_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_blocks_private_https() {
+        let result = validate_url_no_ssrf("https://192.168.1.1/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "internal_ip_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_blocks_loopback_https() {
+        let result = validate_url_no_ssrf("https://127.0.0.1/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "internal_ip_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_blocks_external_http() {
+        let result = validate_url_no_ssrf("http://example.com/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "http_not_allowed");
+    }
+
+    #[test]
+    fn test_ssrf_blocks_invalid_scheme() {
+        assert!(validate_url_no_ssrf("ftp://example.com/logo.png").is_err());
+    }
+
+    #[test]
+    fn test_ssrf_option_delegates() {
+        assert!(validate_url_no_ssrf_option("https://example.com/logo.png").is_ok());
+        assert!(validate_url_no_ssrf_option("http://example.com/x").is_err());
+    }
+
+    // Strict SSRF validation tests (for branding URLs)
+    #[test]
+    fn test_ssrf_strict_allows_valid_https() {
+        assert!(validate_url_no_ssrf_strict("https://example.com/logo.png").is_ok());
+    }
+
+    #[test]
+    fn test_ssrf_strict_blocks_private_ip_http() {
+        let result = validate_url_no_ssrf_strict("http://192.168.1.1/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "internal_ip_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_strict_blocks_private_ip_https() {
+        let result = validate_url_no_ssrf_strict("https://192.168.1.1/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "internal_ip_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_strict_blocks_localhost() {
+        let result = validate_url_no_ssrf_strict("http://localhost:8080/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "internal_ip_blocked");
+    }
+
+    #[test]
+    fn test_ssrf_strict_blocks_external_http() {
+        let result = validate_url_no_ssrf_strict("http://example.com/logo.png");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "http_not_allowed");
+    }
+
+    #[test]
+    fn test_ssrf_strict_blocks_cloud_metadata() {
+        let result = validate_url_no_ssrf_strict("http://169.254.169.254/latest/meta-data/");
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err().code.as_ref(), "ssrf_blocked");
     }
 }

@@ -1,7 +1,9 @@
 //! Login event repository
 
 #[allow(unused_imports)]
-use crate::domain::{CreateLoginEventInput, LoginEvent, LoginEventType, LoginStats, StringUuid};
+use crate::domain::{
+    CreateLoginEventInput, DailyTrendPoint, LoginEvent, LoginEventType, LoginStats, StringUuid,
+};
 use crate::error::Result;
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
@@ -45,6 +47,13 @@ pub trait LoginEventRepository: Send + Sync {
 
     /// Delete all login events for a tenant (when tenant is deleted)
     async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
+
+    /// Get daily trend data (per-day breakdown of logins)
+    async fn get_daily_trend(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<DailyTrendPoint>>;
 }
 
 pub struct LoginEventRepositoryImpl {
@@ -353,6 +362,40 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
             .await?;
 
         Ok(result.rows_affected())
+    }
+
+    async fn get_daily_trend(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<DailyTrendPoint>> {
+        let rows: Vec<(String, i64, i64, i64)> = sqlx::query_as(
+            r#"
+            SELECT
+                DATE_FORMAT(created_at, '%Y-%m-%d') as date,
+                COUNT(*) as total,
+                CAST(COALESCE(SUM(CASE WHEN event_type = 'success' OR event_type = 'social' THEN 1 ELSE 0 END), 0) AS SIGNED) as successful,
+                CAST(COALESCE(SUM(CASE WHEN event_type IN ('failed_password', 'failed_mfa', 'locked') THEN 1 ELSE 0 END), 0) AS SIGNED) as failed
+            FROM login_events
+            WHERE created_at BETWEEN ? AND ?
+            GROUP BY DATE_FORMAT(created_at, '%Y-%m-%d')
+            ORDER BY date
+            "#,
+        )
+        .bind(start)
+        .bind(end)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows
+            .into_iter()
+            .map(|(date, total, successful, failed)| DailyTrendPoint {
+                date,
+                total,
+                successful,
+                failed,
+            })
+            .collect())
     }
 }
 

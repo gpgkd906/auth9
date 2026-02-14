@@ -24,7 +24,6 @@ use std::rc::Rc;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::RwLock;
-use tokio::time::timeout;
 
 /// Error type for action ops (implements JsErrorClass for deno_core)
 #[derive(Debug, thiserror::Error, deno_error::JsError)]
@@ -527,6 +526,20 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         let http_client = self.http_client.clone();
         let async_config = self.async_config.clone();
 
+        // Channel to send V8 IsolateHandle from blocking thread to timeout watchdog
+        let (handle_tx, handle_rx) =
+            tokio::sync::oneshot::channel::<deno_core::v8::IsolateHandle>();
+
+        // Spawn timeout watchdog that will terminate V8 execution if it exceeds the limit
+        let timeout_duration = Duration::from_millis(timeout_ms as u64);
+        let watchdog = tokio::spawn(async move {
+            if let Ok(isolate_handle) = handle_rx.await {
+                tokio::time::sleep(timeout_duration).await;
+                // Forcibly terminate V8 execution (works even on synchronous infinite loops)
+                isolate_handle.terminate_execution();
+            }
+        });
+
         // Execute in blocking thread pool (JsRuntime is !Send, must stay on one thread)
         let handle = tokio::task::spawn_blocking(move || {
             // 1. Take or create JsRuntime
@@ -540,6 +553,10 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                         ))
                     })?,
             };
+
+            // Send IsolateHandle to the timeout watchdog
+            let _ = handle_tx
+                .send(js_runtime.v8_isolate().thread_safe_handle());
 
             // 2. Reset per-execution op state
             {
@@ -654,28 +671,76 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                 )?
             };
 
-            // 7. Cleanup and return runtime to thread-local
+            // 7. Cleanup: remove context, result, and any user-defined globalThis properties
             let _ = js_runtime.execute_script(
                 "<cleanup>",
-                "delete globalThis.context; delete globalThis.result;",
+                r#"
+                (function() {
+                    // Whitelist of built-in globalThis properties to keep
+                    const builtins = new Set([
+                        'Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt',
+                        'Infinity', 'NaN', 'undefined', 'Boolean', 'String', 'Symbol',
+                        'Date', 'Promise', 'RegExp', 'Error', 'AggregateError', 'EvalError',
+                        'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError',
+                        'globalThis', 'JSON', 'Math', 'Intl', 'ArrayBuffer', 'Uint8Array',
+                        'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array',
+                        'Float32Array', 'Float64Array', 'Uint8ClampedArray', 'BigUint64Array',
+                        'BigInt64Array', 'DataView', 'Map', 'BigInt', 'Set', 'WeakMap',
+                        'WeakSet', 'WeakRef', 'FinalizationRegistry', 'Proxy', 'Reflect',
+                        'SharedArrayBuffer', 'Atomics', 'decodeURI', 'decodeURIComponent',
+                        'encodeURI', 'encodeURIComponent', 'escape', 'unescape',
+                        'eval', 'isFinite', 'isNaN',
+                        // Deno runtime
+                        'Deno',
+                        // Our polyfills (must survive cleanup)
+                        'fetch', 'setTimeout', 'clearTimeout', 'console', '__timers',
+                    ]);
+                    for (const key of Object.getOwnPropertyNames(globalThis)) {
+                        if (!builtins.has(key)) {
+                            try { delete globalThis[key]; } catch(e) {}
+                        }
+                    }
+                    // Also clean up any Object.prototype pollution
+                    for (const key of Object.getOwnPropertyNames(Object.prototype)) {
+                        if (!['constructor','__defineGetter__','__defineSetter__',
+                             '__lookupGetter__','__lookupSetter__','__proto__',
+                             'hasOwnProperty','isPrototypeOf','propertyIsEnumerable',
+                             'toString','valueOf','toLocaleString'].includes(key)) {
+                            try { delete Object.prototype[key]; } catch(e) {}
+                        }
+                    }
+                })();
+                "#,
             );
             return_js_runtime(js_runtime);
 
             Ok(modified_context)
         });
 
-        // Apply timeout
-        let timeout_duration = Duration::from_millis(timeout_ms as u64);
-        match timeout(timeout_duration, handle).await {
-            Ok(Ok(result)) => result,
-            Ok(Err(e)) => Err(AppError::Internal(anyhow::anyhow!(
-                "Blocking task error: {}",
-                e
-            ))),
-            Err(_) => Err(AppError::ActionExecutionFailed(format!(
-                "Action timed out after {}ms",
-                timeout_ms
-            ))),
+        let result = handle
+            .await
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Blocking task error: {}", e))
+            })?;
+
+        // Cancel the watchdog (script finished before timeout)
+        watchdog.abort();
+
+        // If V8 was terminated by the watchdog, the script error will contain
+        // "Uncaught Error: execution terminated". Map it to a clear timeout error.
+        match result {
+            Ok(ctx) => Ok(ctx),
+            Err(e) => {
+                let msg = e.to_string();
+                if msg.contains("execution terminated") {
+                    Err(AppError::ActionExecutionFailed(format!(
+                        "Action timed out after {}ms",
+                        timeout_ms
+                    )))
+                } else {
+                    Err(e)
+                }
+            }
         }
     }
 
@@ -876,7 +941,6 @@ mod tests {
     }
 
     #[tokio::test]
-    #[ignore] // V8 limitation: synchronous infinite loops block the thread
     async fn test_script_timeout() {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
@@ -892,7 +956,10 @@ mod tests {
 
         let result = engine.execute_action(&action, &context).await;
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("timed out"));
+        assert!(
+            result.unwrap_err().to_string().contains("timed out"),
+            "Synchronous infinite loops should be terminated by V8 IsolateHandle"
+        );
     }
 
     #[tokio::test]
@@ -1013,7 +1080,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_known_limitation_globalthis_pollution() {
+    async fn test_globalthis_pollution_is_cleaned_up() {
         let mock_repo = MockActionRepository::new();
         let engine = ActionEngine::new(Arc::new(mock_repo));
 
@@ -1038,19 +1105,60 @@ mod tests {
         let context2 = create_test_context();
         let result = engine.execute_action(&action2, &context2).await;
 
-        if let Ok(ctx) = result {
-            let pollution_detected = ctx
-                .claims
-                .as_ref()
-                .and_then(|c| c.get("pollutionDetected"))
-                .and_then(|v| v.as_bool());
+        assert!(result.is_ok(), "Second action should execute successfully");
+        let ctx = result.unwrap();
+        let pollution_detected = ctx
+            .claims
+            .as_ref()
+            .and_then(|c| c.get("pollutionDetected"))
+            .and_then(|v| v.as_bool());
 
-            assert_eq!(
-                pollution_detected,
-                Some(true),
-                "Known limitation: custom globalThis properties persist (documented behavior)"
-            );
-        }
+        assert_eq!(
+            pollution_detected,
+            Some(false),
+            "globalThis pollution should be cleaned up between actions"
+        );
+    }
+
+    #[tokio::test]
+    async fn test_object_prototype_pollution_is_cleaned_up() {
+        let mock_repo = MockActionRepository::new();
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+
+        let action1 = create_test_action(
+            r#"
+            Object.prototype.hacked = true;
+            context;
+            "#,
+        );
+
+        let context1 = create_test_context();
+        let _ = engine.execute_action(&action1, &context1).await;
+
+        let action2 = create_test_action(
+            r#"
+            context.claims = context.claims || {};
+            context.claims.prototypeHacked = Object.prototype.hasOwnProperty("hacked");
+            context;
+            "#,
+        );
+
+        let context2 = create_test_context();
+        let result = engine.execute_action(&action2, &context2).await;
+
+        assert!(result.is_ok(), "Second action should execute successfully");
+        let ctx = result.unwrap();
+        let hacked = ctx
+            .claims
+            .as_ref()
+            .and_then(|c| c.get("prototypeHacked"))
+            .and_then(|v| v.as_bool());
+
+        assert_eq!(
+            hacked,
+            Some(false),
+            "Object.prototype pollution should be cleaned up between actions"
+        );
     }
 
     #[tokio::test]

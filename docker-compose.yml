@@ -87,6 +87,8 @@ services:
       # Password Reset Security
       PASSWORD_RESET_HMAC_KEY: dev-password-reset-hmac-key-change-in-production
       PASSWORD_RESET_TOKEN_TTL_SECS: 3600
+      # Action Engine - allowed domains for fetch() in Action scripts
+      ACTION_ALLOWED_DOMAINS: "httpbin.org,api.github.com,jsonplaceholder.typicode.com"
     depends_on:
       auth9-init:
         condition: service_completed_successfully

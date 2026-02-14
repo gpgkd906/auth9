@@ -1,0 +1,10 @@
+# cargo-audit configuration
+# https://github.com/rustsec/rustsec/blob/main/cargo-audit/audit.toml.example
+
+[advisories]
+ignore = [
+    # rsa 0.9.10: Marvin Attack timing sidechannel (medium severity, 5.9 CVSS)
+    # No fixed version available upstream. Transitive dep via sqlx-mysql.
+    # auth9-core uses rsa only for public key parsing, not PKCS#1 v1.5 decryption.
+    "RUSTSEC-2023-0071",
+]

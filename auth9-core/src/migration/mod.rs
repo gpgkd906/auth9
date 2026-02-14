@@ -603,7 +603,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     sqlx::query(
         r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
         VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
-        ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), mfa_enabled = FALSE"#,
+        ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), email = VALUES(email), mfa_enabled = FALSE"#,
     )
     .bind(&admin_user_id)
     .bind(&keycloak_id)
