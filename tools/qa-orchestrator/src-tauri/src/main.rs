@@ -1,6 +1,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use anyhow::{Context, Result};
+use cel_interpreter::{Context as CelContext, Program, Value as CelValue};
 use chrono::Utc;
 use qa_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_workspace_rel_path};
 use rusqlite::{params, Connection, OptionalExtension};
@@ -88,6 +89,63 @@ enum WorkflowStepType {
     Retest,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StepHookEngine {
+    Cel,
+}
+
+impl Default for StepHookEngine {
+    fn default() -> Self {
+        Self::Cel
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum StepPrehookUiMode {
+    Visual,
+    Cel,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct StepPrehookUiConfig {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    mode: Option<StepPrehookUiMode>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    preset_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    expr: Option<Value>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct StepPrehookConfig {
+    #[serde(default)]
+    engine: StepHookEngine,
+    when: String,
+    #[serde(default)]
+    reason: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    ui: Option<StepPrehookUiConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowFinalizeRule {
+    id: String,
+    #[serde(default)]
+    engine: StepHookEngine,
+    when: String,
+    status: String,
+    #[serde(default)]
+    reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct WorkflowFinalizeConfig {
+    #[serde(default)]
+    rules: Vec<WorkflowFinalizeRule>,
+}
+
 impl WorkflowStepType {
     fn as_str(&self) -> &'static str {
         match self {
@@ -148,6 +206,8 @@ struct WorkflowStepConfig {
     step_type: WorkflowStepType,
     enabled: bool,
     agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prehook: Option<StepPrehookConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -157,6 +217,8 @@ struct TaskExecutionStep {
     step_type: WorkflowStepType,
     agent_id: String,
     template: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    prehook: Option<StepPrehookConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -164,6 +226,8 @@ struct TaskExecutionPlan {
     steps: Vec<TaskExecutionStep>,
     #[serde(rename = "loop")]
     loop_policy: WorkflowLoopConfig,
+    #[serde(default)]
+    finalize: WorkflowFinalizeConfig,
 }
 
 impl TaskExecutionPlan {
@@ -178,6 +242,8 @@ struct WorkflowConfig {
     steps: Vec<WorkflowStepConfig>,
     #[serde(rename = "loop", default)]
     loop_policy: WorkflowLoopConfig,
+    #[serde(default)]
+    finalize: WorkflowFinalizeConfig,
     #[serde(default)]
     qa: Option<String>,
     #[serde(default)]
@@ -206,26 +272,126 @@ fn default_workflow_steps(
             step_type: WorkflowStepType::InitOnce,
             enabled: false,
             agent_id: None,
+            prehook: None,
         },
         WorkflowStepConfig {
             id: "qa".to_string(),
             step_type: WorkflowStepType::Qa,
             enabled: qa.is_some(),
             agent_id: qa.map(str::to_string),
+            prehook: None,
         },
         WorkflowStepConfig {
             id: "fix".to_string(),
             step_type: WorkflowStepType::Fix,
             enabled: fix.is_some(),
             agent_id: fix.map(str::to_string),
+            prehook: None,
         },
         WorkflowStepConfig {
             id: "retest".to_string(),
             step_type: WorkflowStepType::Retest,
             enabled: retest.is_some(),
             agent_id: retest.map(str::to_string),
+            prehook: None,
         },
     ]
+}
+
+fn default_workflow_finalize_config() -> WorkflowFinalizeConfig {
+    WorkflowFinalizeConfig {
+        rules: vec![
+            WorkflowFinalizeRule {
+                id: "skip_without_tickets".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "(qa_skipped == true || qa_enabled == false) && active_ticket_count == 0"
+                    .to_string(),
+                status: "skipped".to_string(),
+                reason: Some("qa skipped and no tickets".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "qa_passed_without_tickets".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0"
+                    .to_string(),
+                status: "qa_passed".to_string(),
+                reason: Some("qa passed with no tickets".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fix_disabled_with_tickets".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "fix_enabled == false && active_ticket_count > 0".to_string(),
+                status: "unresolved".to_string(),
+                reason: Some("fix disabled by workflow".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fix_failed".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "fix_ran == true && fix_success == false".to_string(),
+                status: "unresolved".to_string(),
+                reason: Some("fix failed".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fixed_without_retest".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "fix_success == true && retest_enabled == false".to_string(),
+                status: "fixed".to_string(),
+                reason: Some("fixed without retest".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fix_skipped_and_retest_disabled".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0".to_string(),
+                status: "unresolved".to_string(),
+                reason: Some("fix skipped by prehook and retest disabled".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fixed_retest_skipped_after_fix_success".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "retest_enabled == true && retest_ran == false && fix_success == true"
+                    .to_string(),
+                status: "fixed".to_string(),
+                reason: Some("retest skipped by prehook".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "unresolved_retest_skipped_without_fix".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0".to_string(),
+                status: "unresolved".to_string(),
+                reason: Some("fix skipped by prehook and retest skipped by prehook".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "verified_after_retest".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "retest_ran == true && retest_success == true && retest_new_ticket_count == 0"
+                    .to_string(),
+                status: "verified".to_string(),
+                reason: Some("retest passed".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "unresolved_after_retest".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)"
+                    .to_string(),
+                status: "unresolved".to_string(),
+                reason: Some("retest still failing".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fallback_unresolved_with_tickets".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "active_ticket_count > 0".to_string(),
+                status: "unresolved".to_string(),
+                reason: Some("unresolved tickets remain".to_string()),
+            },
+            WorkflowFinalizeRule {
+                id: "fallback_qa_passed".to_string(),
+                engine: StepHookEngine::Cel,
+                when: "active_ticket_count == 0".to_string(),
+                status: "qa_passed".to_string(),
+                reason: Some("no active tickets".to_string()),
+            },
+        ],
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -296,6 +462,7 @@ impl Default for OrchestratorConfig {
             WorkflowConfig {
                 steps: default_workflow_steps(Some("opencode"), None, None),
                 loop_policy: WorkflowLoopConfig::default(),
+                finalize: default_workflow_finalize_config(),
                 qa: None,
                 fix: None,
                 retest: None,
@@ -306,6 +473,7 @@ impl Default for OrchestratorConfig {
             WorkflowConfig {
                 steps: default_workflow_steps(Some("opencode"), Some("claudecode"), None),
                 loop_policy: WorkflowLoopConfig::default(),
+                finalize: default_workflow_finalize_config(),
                 qa: None,
                 fix: None,
                 retest: None,
@@ -316,6 +484,7 @@ impl Default for OrchestratorConfig {
             WorkflowConfig {
                 steps: default_workflow_steps(None, Some("claudecode"), None),
                 loop_policy: WorkflowLoopConfig::default(),
+                finalize: default_workflow_finalize_config(),
                 qa: None,
                 fix: None,
                 retest: None,
@@ -330,6 +499,7 @@ impl Default for OrchestratorConfig {
                     Some("opencode"),
                 ),
                 loop_policy: WorkflowLoopConfig::default(),
+                finalize: default_workflow_finalize_config(),
                 qa: None,
                 fix: None,
                 retest: None,
@@ -443,6 +613,43 @@ struct SaveConfigFormPayload {
 #[derive(Debug, Deserialize)]
 struct SaveConfigYamlPayload {
     yaml: String,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(default)]
+struct SimulatePrehookContextPayload {
+    cycle: i64,
+    active_ticket_count: i64,
+    new_ticket_count: i64,
+    qa_exit_code: Option<i64>,
+    fix_exit_code: Option<i64>,
+    retest_exit_code: Option<i64>,
+    qa_failed: bool,
+    fix_required: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(default)]
+struct SimulatePrehookPayload {
+    expression: String,
+    step: Option<String>,
+    context: SimulatePrehookContextPayload,
+}
+
+impl Default for SimulatePrehookPayload {
+    fn default() -> Self {
+        Self {
+            expression: String::new(),
+            step: None,
+            context: SimulatePrehookContextPayload::default(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+struct SimulatePrehookResult {
+    result: bool,
+    expression: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -567,6 +774,58 @@ struct TaskRuntimeContext {
     execution_plan: TaskExecutionPlan,
     current_cycle: u32,
     init_done: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct StepPrehookContext {
+    task_id: String,
+    task_item_id: String,
+    cycle: u32,
+    step: String,
+    qa_file_path: String,
+    item_status: String,
+    task_status: String,
+    qa_exit_code: Option<i64>,
+    fix_exit_code: Option<i64>,
+    retest_exit_code: Option<i64>,
+    active_ticket_count: i64,
+    new_ticket_count: i64,
+    qa_failed: bool,
+    fix_required: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct ItemFinalizeContext {
+    task_id: String,
+    task_item_id: String,
+    cycle: u32,
+    qa_file_path: String,
+    item_status: String,
+    task_status: String,
+    qa_exit_code: Option<i64>,
+    fix_exit_code: Option<i64>,
+    retest_exit_code: Option<i64>,
+    active_ticket_count: i64,
+    new_ticket_count: i64,
+    retest_new_ticket_count: i64,
+    qa_failed: bool,
+    fix_required: bool,
+    qa_enabled: bool,
+    qa_ran: bool,
+    qa_skipped: bool,
+    fix_enabled: bool,
+    fix_ran: bool,
+    fix_success: bool,
+    retest_enabled: bool,
+    retest_ran: bool,
+    retest_success: bool,
+}
+
+#[derive(Debug, Clone)]
+struct WorkflowFinalizeOutcome {
+    rule_id: String,
+    status: String,
+    reason: String,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -802,6 +1061,13 @@ async fn stream_task_logs(
     stream_task_logs_impl(&state.inner, &task_id, limit.unwrap_or(300)).map_err(err_to_string)
 }
 
+#[tauri::command]
+async fn simulate_prehook(
+    payload: SimulatePrehookPayload,
+) -> Result<SimulatePrehookResult, String> {
+    simulate_prehook_impl(payload).map_err(err_to_string)
+}
+
 fn now_ts() -> String {
     Utc::now().to_rfc3339()
 }
@@ -905,6 +1171,9 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
     workflow.qa = None;
     workflow.fix = None;
     workflow.retest = None;
+    if workflow.finalize.rules.is_empty() {
+        workflow.finalize = default_workflow_finalize_config();
+    }
     workflow.loop_policy.guard.agent_template = None;
 }
 
@@ -956,9 +1225,15 @@ fn validate_workflow_config(
                 workflow_id
             );
         }
+        if let Some(prehook) = step.prehook.as_ref() {
+            validate_step_prehook(prehook, workflow_id, key)?;
+        }
     }
     if enabled_count == 0 {
         anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
+    }
+    for rule in &workflow.finalize.rules {
+        validate_workflow_finalize_rule(rule, workflow_id)?;
     }
     if let Some(max_cycles) = workflow.loop_policy.guard.max_cycles {
         if max_cycles == 0 {
@@ -986,6 +1261,553 @@ fn validate_workflow_config(
         }
     }
     Ok(())
+}
+
+fn validate_step_prehook(
+    prehook: &StepPrehookConfig,
+    workflow_id: &str,
+    step_type: &str,
+) -> Result<()> {
+    let expression = prehook.when.trim();
+    if expression.is_empty() {
+        anyhow::bail!(
+            "workflow '{}' step '{}' prehook.when cannot be empty",
+            workflow_id,
+            step_type
+        );
+    }
+    match prehook.engine {
+        StepHookEngine::Cel => {
+            let compiled =
+                std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
+                    anyhow::anyhow!(
+                        "workflow '{}' step '{}' prehook.when caused CEL parser panic",
+                        workflow_id,
+                        step_type
+                    )
+                })?;
+            compiled.map_err(|err| {
+                anyhow::anyhow!(
+                    "workflow '{}' step '{}' prehook.when is invalid CEL: {}",
+                    workflow_id,
+                    step_type,
+                    err
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_workflow_finalize_rule(rule: &WorkflowFinalizeRule, workflow_id: &str) -> Result<()> {
+    if rule.id.trim().is_empty() {
+        anyhow::bail!("workflow '{}' has finalize rule with empty id", workflow_id);
+    }
+    if rule.status.trim().is_empty() {
+        anyhow::bail!(
+            "workflow '{}' finalize rule '{}' has empty status",
+            workflow_id,
+            rule.id
+        );
+    }
+    let expression = rule.when.trim();
+    if expression.is_empty() {
+        anyhow::bail!(
+            "workflow '{}' finalize rule '{}' has empty when",
+            workflow_id,
+            rule.id
+        );
+    }
+    match rule.engine {
+        StepHookEngine::Cel => {
+            let compiled =
+                std::panic::catch_unwind(|| Program::compile(expression)).map_err(|_| {
+                    anyhow::anyhow!(
+                        "workflow '{}' finalize rule '{}' caused CEL parser panic",
+                        workflow_id,
+                        rule.id
+                    )
+                })?;
+            compiled.map_err(|err| {
+                anyhow::anyhow!(
+                    "workflow '{}' finalize rule '{}' invalid CEL: {}",
+                    workflow_id,
+                    rule.id,
+                    err
+                )
+            })?;
+        }
+    }
+    Ok(())
+}
+
+fn emit_step_prehook_event(
+    state: &InnerState,
+    app: Option<&AppHandle>,
+    context: &StepPrehookContext,
+    expression: &str,
+    reason: &str,
+    decision: &str,
+) -> Result<()> {
+    let payload = json!({
+        "step": context.step,
+        "decision": decision,
+        "reason": reason,
+        "engine": "cel",
+        "when": expression,
+        "context": {
+            "cycle": context.cycle,
+            "item_status": context.item_status,
+            "qa_exit_code": context.qa_exit_code,
+            "fix_exit_code": context.fix_exit_code,
+            "retest_exit_code": context.retest_exit_code,
+            "active_ticket_count": context.active_ticket_count,
+            "new_ticket_count": context.new_ticket_count,
+            "qa_failed": context.qa_failed,
+            "fix_required": context.fix_required
+        }
+    });
+    insert_event(
+        state,
+        &context.task_id,
+        Some(&context.task_item_id),
+        "step_prehook_evaluated",
+        payload.clone(),
+    )?;
+    if let Some(app_handle) = app {
+        emit_event(
+            app_handle,
+            &context.task_id,
+            Some(&context.task_item_id),
+            "step_prehook_evaluated",
+            payload,
+        );
+    }
+    Ok(())
+}
+
+fn evaluate_step_prehook(
+    state: &InnerState,
+    app: Option<&AppHandle>,
+    prehook: Option<&StepPrehookConfig>,
+    context: &StepPrehookContext,
+) -> Result<bool> {
+    let Some(prehook) = prehook else {
+        return Ok(true);
+    };
+    let expression = prehook.when.trim();
+
+    let should_run = evaluate_step_prehook_expression(expression, context)?;
+
+    if should_run {
+        emit_step_prehook_event(
+            state,
+            app,
+            context,
+            expression,
+            prehook
+                .reason
+                .as_deref()
+                .unwrap_or("prehook evaluated to true"),
+            "run",
+        )?;
+    } else {
+        emit_step_prehook_event(
+            state,
+            app,
+            context,
+            expression,
+            prehook
+                .reason
+                .as_deref()
+                .unwrap_or("prehook evaluated to false"),
+            "skip",
+        )?;
+    }
+
+    Ok(should_run)
+}
+
+fn build_step_prehook_cel_context(context: &StepPrehookContext) -> Result<CelContext<'_>> {
+    let mut cel_context = CelContext::default();
+    cel_context
+        .add_variable("context", context.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("task_id", context.task_id.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("task_item_id", context.task_item_id.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("cycle", context.cycle as i64)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("step", context.step.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_file_path", context.qa_file_path.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("item_status", context.item_status.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("task_status", context.task_status.clone())
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_exit_code", context.qa_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("fix_exit_code", context.fix_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("retest_exit_code", context.retest_exit_code)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("active_ticket_count", context.active_ticket_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("new_ticket_count", context.new_ticket_count)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("qa_failed", context.qa_failed)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    cel_context
+        .add_variable("fix_required", context.fix_required)
+        .map_err(|err| {
+            anyhow::anyhow!(
+                "step '{}' prehook context build failed: {}",
+                context.step,
+                err
+            )
+        })?;
+    Ok(cel_context)
+}
+
+fn evaluate_step_prehook_expression(
+    expression: &str,
+    context: &StepPrehookContext,
+) -> Result<bool> {
+    let compiled = std::panic::catch_unwind(|| Program::compile(expression))
+        .map_err(|_| anyhow::anyhow!("step '{}' prehook compilation panicked", context.step))?;
+    let program = compiled.map_err(|err| {
+        anyhow::anyhow!(
+            "step '{}' prehook compilation failed: {}",
+            context.step,
+            err
+        )
+    })?;
+    let cel_context = build_step_prehook_cel_context(context)?;
+    let value = program.execute(&cel_context).map_err(|err| {
+        anyhow::anyhow!("step '{}' prehook execution failed: {}", context.step, err)
+    })?;
+    match value {
+        CelValue::Bool(v) => Ok(v),
+        other => {
+            anyhow::bail!(
+                "step '{}' prehook must return bool, got {:?}",
+                context.step,
+                other
+            );
+        }
+    }
+}
+
+fn build_finalize_cel_context(context: &ItemFinalizeContext) -> Result<CelContext<'_>> {
+    let mut cel_context = CelContext::default();
+    cel_context
+        .add_variable("context", context.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("task_id", context.task_id.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("task_item_id", context.task_item_id.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("cycle", context.cycle as i64)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_file_path", context.qa_file_path.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("item_status", context.item_status.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("task_status", context.task_status.clone())
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_exit_code", context.qa_exit_code)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_exit_code", context.fix_exit_code)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_exit_code", context.retest_exit_code)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("active_ticket_count", context.active_ticket_count)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("new_ticket_count", context.new_ticket_count)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_new_ticket_count", context.retest_new_ticket_count)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_failed", context.qa_failed)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_required", context.fix_required)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_enabled", context.qa_enabled)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_ran", context.qa_ran)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("qa_skipped", context.qa_skipped)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_enabled", context.fix_enabled)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_ran", context.fix_ran)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("fix_success", context.fix_success)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_enabled", context.retest_enabled)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_ran", context.retest_ran)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    cel_context
+        .add_variable("retest_success", context.retest_success)
+        .map_err(|err| anyhow::anyhow!("finalize context build failed: {}", err))?;
+    Ok(cel_context)
+}
+
+fn evaluate_finalize_rule_expression(
+    rule: &WorkflowFinalizeRule,
+    context: &ItemFinalizeContext,
+) -> Result<bool> {
+    let expression = rule.when.trim();
+    let compiled = std::panic::catch_unwind(|| Program::compile(expression))
+        .map_err(|_| anyhow::anyhow!("finalize rule '{}' compilation panicked", rule.id))?;
+    let program = compiled.map_err(|err| {
+        anyhow::anyhow!("finalize rule '{}' compilation failed: {}", rule.id, err)
+    })?;
+    let cel_context = build_finalize_cel_context(context)?;
+    let value = program
+        .execute(&cel_context)
+        .map_err(|err| anyhow::anyhow!("finalize rule '{}' execution failed: {}", rule.id, err))?;
+    match value {
+        CelValue::Bool(v) => Ok(v),
+        other => anyhow::bail!(
+            "finalize rule '{}' must return bool, got {:?}",
+            rule.id,
+            other
+        ),
+    }
+}
+
+fn resolve_workflow_finalize_outcome(
+    finalize: &WorkflowFinalizeConfig,
+    context: &ItemFinalizeContext,
+) -> Result<Option<WorkflowFinalizeOutcome>> {
+    for rule in &finalize.rules {
+        let matched = evaluate_finalize_rule_expression(rule, context)?;
+        if !matched {
+            continue;
+        }
+        return Ok(Some(WorkflowFinalizeOutcome {
+            rule_id: rule.id.clone(),
+            status: rule.status.clone(),
+            reason: rule
+                .reason
+                .clone()
+                .unwrap_or_else(|| format!("finalize rule '{}' matched", rule.id)),
+        }));
+    }
+    Ok(None)
+}
+
+fn emit_item_finalize_event(
+    state: &InnerState,
+    app: Option<&AppHandle>,
+    context: &ItemFinalizeContext,
+    outcome: &WorkflowFinalizeOutcome,
+) -> Result<()> {
+    let payload = json!({
+        "rule_id": outcome.rule_id,
+        "status": outcome.status,
+        "reason": outcome.reason,
+        "context": context
+    });
+    insert_event(
+        state,
+        &context.task_id,
+        Some(&context.task_item_id),
+        "item_finalize_evaluated",
+        payload.clone(),
+    )?;
+    if let Some(app_handle) = app {
+        emit_event(
+            app_handle,
+            &context.task_id,
+            Some(&context.task_item_id),
+            "item_finalize_evaluated",
+            payload,
+        );
+    }
+    Ok(())
+}
+
+fn evaluate_step_prehook_with_error_event(
+    state: &InnerState,
+    app: Option<&AppHandle>,
+    step: &TaskExecutionStep,
+    context: &StepPrehookContext,
+) -> Result<bool> {
+    match evaluate_step_prehook(state, app, step.prehook.as_ref(), context) {
+        Ok(v) => Ok(v),
+        Err(err) => {
+            if let Some(prehook) = step.prehook.as_ref() {
+                let _ = emit_step_prehook_event(
+                    state,
+                    app,
+                    context,
+                    prehook.when.trim(),
+                    &err.to_string(),
+                    "error",
+                );
+            }
+            Err(err)
+        }
+    }
+}
+
+fn simulate_prehook_impl(payload: SimulatePrehookPayload) -> Result<SimulatePrehookResult> {
+    let expression = payload.expression.trim().to_string();
+    if expression.is_empty() {
+        anyhow::bail!("prehook expression cannot be empty");
+    }
+    let step_name = payload
+        .step
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("simulation")
+        .to_string();
+    let context = StepPrehookContext {
+        task_id: "simulation".to_string(),
+        task_item_id: "simulation".to_string(),
+        cycle: if payload.context.cycle < 0 {
+            0
+        } else {
+            payload.context.cycle as u32
+        },
+        step: step_name,
+        qa_file_path: "simulation.md".to_string(),
+        item_status: "pending".to_string(),
+        task_status: "running".to_string(),
+        qa_exit_code: payload.context.qa_exit_code,
+        fix_exit_code: payload.context.fix_exit_code,
+        retest_exit_code: payload.context.retest_exit_code,
+        active_ticket_count: payload.context.active_ticket_count,
+        new_ticket_count: payload.context.new_ticket_count,
+        qa_failed: payload.context.qa_failed,
+        fix_required: payload.context.fix_required,
+    };
+    let result = evaluate_step_prehook_expression(&expression, &context)?;
+    Ok(SimulatePrehookResult { result, expression })
 }
 
 fn build_execution_plan(
@@ -1019,6 +1841,7 @@ fn build_execution_plan(
             step_type: step.step_type.clone(),
             agent_id: agent_id.to_string(),
             template: template.to_string(),
+            prehook: step.prehook.clone(),
         });
     }
     let mut loop_policy = workflow.loop_policy.clone();
@@ -1035,7 +1858,11 @@ fn build_execution_plan(
     } else {
         loop_policy.guard.agent_template = None;
     }
-    Ok(TaskExecutionPlan { steps, loop_policy })
+    Ok(TaskExecutionPlan {
+        steps,
+        loop_policy,
+        finalize: workflow.finalize.clone(),
+    })
 }
 
 fn resolve_and_validate_workspaces(
@@ -2293,7 +3120,7 @@ fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRu
         .get(&workflow_id)
         .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?;
 
-    let execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
+    let mut execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
         .ok()
         .filter(|plan| !plan.steps.is_empty())
         .unwrap_or_else(|| {
@@ -2301,9 +3128,13 @@ fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRu
                 TaskExecutionPlan {
                     steps: Vec::new(),
                     loop_policy: WorkflowLoopConfig::default(),
+                    finalize: default_workflow_finalize_config(),
                 },
             )
         });
+    if execution_plan.finalize.rules.is_empty() {
+        execution_plan.finalize = default_workflow_finalize_config();
+    }
     if execution_plan.steps.is_empty() {
         anyhow::bail!("task '{}' has empty execution plan", task_id);
     }
@@ -2498,6 +3329,41 @@ async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &str) 
         json!({"status": status}),
     )?;
     Ok(())
+}
+
+async fn shutdown_running_tasks(state: Arc<InnerState>) {
+    let runtimes: Vec<(String, RunningTask)> = {
+        let running = state.running.lock().await;
+        running
+            .iter()
+            .map(|(task_id, runtime)| (task_id.clone(), runtime.clone()))
+            .collect()
+    };
+
+    if runtimes.is_empty() {
+        return;
+    }
+
+    for (_, runtime) in &runtimes {
+        runtime.stop_flag.store(true, Ordering::SeqCst);
+        kill_current_child(runtime).await;
+    }
+
+    for (task_id, _) in &runtimes {
+        let _ = set_task_status(&state, task_id, "paused", false);
+        let _ = insert_event(
+            &state,
+            task_id,
+            None,
+            "task_paused",
+            json!({"reason":"app_shutdown"}),
+        );
+    }
+
+    let mut running = state.running.lock().await;
+    for (task_id, _) in runtimes {
+        running.remove(&task_id);
+    }
 }
 
 async fn run_task_loop(
@@ -2831,60 +3697,139 @@ async fn process_item(
     let qa_step = task_ctx.execution_plan.step(WorkflowStepType::Qa);
     let fix_step = task_ctx.execution_plan.step(WorkflowStepType::Fix);
     let retest_step = task_ctx.execution_plan.step(WorkflowStepType::Retest);
-    let mut active_tickets: Vec<String>;
+    let qa_enabled = qa_step.is_some();
+    let fix_enabled = fix_step.is_some();
+    let retest_enabled = retest_step.is_some();
+    let mut active_tickets: Vec<String> = Vec::new();
+    let mut retest_new_tickets: Vec<String> = Vec::new();
     let mut qa_failed = false;
+    let mut qa_ran = false;
+    let mut qa_skipped = false;
+    let mut fix_ran = false;
+    let mut fix_success = false;
+    let mut retest_ran = false;
+    let mut retest_success = false;
+    let mut qa_exit_code: Option<i64> = None;
+    let mut fix_exit_code: Option<i64> = None;
+    let mut retest_exit_code: Option<i64> = None;
+    let mut new_ticket_count = 0_i64;
+    let mut item_status = "pending".to_string();
 
     if let Some(qa_step) = qa_step {
-        update_task_item(
-            state,
-            item_id,
-            "qa_running",
-            None,
-            None,
-            Some(false),
-            Some(false),
-            Some(""),
-            true,
-            false,
-        )?;
-        let before_tickets = list_ticket_files(task_ctx)?;
-        let (qa_agent_id, qa_cmd) = build_phase_command(qa_step, &item.qa_file_path, &[])?;
-        let qa_result = run_phase(
+        let should_run_qa = evaluate_step_prehook_with_error_event(
             state,
             app,
-            task_id,
-            item_id,
-            "qa",
-            qa_cmd,
-            &task_ctx.workspace_root,
-            &task_ctx.workspace_id,
-            &qa_agent_id,
-            runtime,
-        )
-        .await?;
-        let after_tickets = list_ticket_files(task_ctx)?;
-        active_tickets = new_ticket_diff(&before_tickets, &after_tickets);
-        if qa_result.success && active_tickets.is_empty() {
+            qa_step,
+            &StepPrehookContext {
+                task_id: task_id.to_string(),
+                task_item_id: item_id.to_string(),
+                cycle: task_ctx.current_cycle,
+                step: "qa".to_string(),
+                qa_file_path: item.qa_file_path.clone(),
+                item_status: item_status.clone(),
+                task_status: "running".to_string(),
+                qa_exit_code,
+                fix_exit_code,
+                retest_exit_code,
+                active_ticket_count: active_tickets.len() as i64,
+                new_ticket_count,
+                qa_failed,
+                fix_required: qa_failed || !active_tickets.is_empty(),
+            },
+        )?;
+        if !should_run_qa {
+            qa_skipped = true;
+            active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
+            new_ticket_count = active_tickets.len() as i64;
+            if active_tickets.is_empty() {
+                item_status = "skipped".to_string();
+            } else {
+                qa_failed = true;
+                let ticket_content: Vec<Value> = active_tickets
+                    .iter()
+                    .map(|path| read_ticket_preview(task_ctx, path))
+                    .collect();
+                update_task_item(
+                    state,
+                    item_id,
+                    "qa_failed",
+                    Some(&active_tickets),
+                    Some(&ticket_content),
+                    Some(true),
+                    Some(false),
+                    Some("qa skipped by prehook; using existing tickets"),
+                    true,
+                    false,
+                )?;
+                item_status = "qa_failed".to_string();
+            }
+        } else {
+            qa_ran = true;
             update_task_item(
                 state,
                 item_id,
-                "qa_passed",
-                Some(&[]),
-                Some(&[]),
+                "qa_running",
+                None,
+                None,
                 Some(false),
                 Some(false),
                 Some(""),
-                false,
                 true,
+                false,
             )?;
-            if fix_step.is_none() {
-                return Ok(());
+            let before_tickets = list_ticket_files(task_ctx)?;
+            let (qa_agent_id, qa_cmd) = build_phase_command(qa_step, &item.qa_file_path, &[])?;
+            let qa_result = run_phase(
+                state,
+                app,
+                task_id,
+                item_id,
+                "qa",
+                qa_cmd,
+                &task_ctx.workspace_root,
+                &task_ctx.workspace_id,
+                &qa_agent_id,
+                runtime,
+            )
+            .await?;
+            qa_exit_code = Some(qa_result.exit_code);
+            let after_tickets = list_ticket_files(task_ctx)?;
+            active_tickets = new_ticket_diff(&before_tickets, &after_tickets);
+            new_ticket_count = active_tickets.len() as i64;
+            if qa_result.success && active_tickets.is_empty() {
+                item_status = "qa_passed".to_string();
+            } else {
+                qa_failed = true;
+                if active_tickets.is_empty() {
+                    active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
+                }
+                let ticket_content: Vec<Value> = active_tickets
+                    .iter()
+                    .map(|path| read_ticket_preview(task_ctx, path))
+                    .collect();
+                update_task_item(
+                    state,
+                    item_id,
+                    "qa_failed",
+                    Some(&active_tickets),
+                    Some(&ticket_content),
+                    Some(true),
+                    Some(false),
+                    Some(&format!("qa failed: exit={}", qa_result.exit_code)),
+                    false,
+                    false,
+                )?;
+                item_status = "qa_failed".to_string();
             }
+        }
+    } else {
+        qa_skipped = true;
+        active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
+        new_ticket_count = active_tickets.len() as i64;
+        if active_tickets.is_empty() {
+            item_status = "skipped".to_string();
         } else {
             qa_failed = true;
-            if active_tickets.is_empty() {
-                active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
-            }
             let ticket_content: Vec<Value> = active_tickets
                 .iter()
                 .map(|path| read_ticket_preview(task_ctx, path))
@@ -2897,14 +3842,180 @@ async fn process_item(
                 Some(&ticket_content),
                 Some(true),
                 Some(false),
-                Some(&format!("qa failed: exit={}", qa_result.exit_code)),
-                false,
+                Some("qa disabled; using existing tickets"),
+                true,
                 false,
             )?;
+            item_status = "qa_failed".to_string();
         }
-    } else {
-        active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
-        if active_tickets.is_empty() {
+    }
+
+    if let Some(fix_step) = fix_step {
+        if !active_tickets.is_empty() {
+            let should_run_fix = evaluate_step_prehook_with_error_event(
+                state,
+                app,
+                fix_step,
+                &StepPrehookContext {
+                    task_id: task_id.to_string(),
+                    task_item_id: item_id.to_string(),
+                    cycle: task_ctx.current_cycle,
+                    step: "fix".to_string(),
+                    qa_file_path: item.qa_file_path.clone(),
+                    item_status: item_status.clone(),
+                    task_status: "running".to_string(),
+                    qa_exit_code,
+                    fix_exit_code,
+                    retest_exit_code,
+                    active_ticket_count: active_tickets.len() as i64,
+                    new_ticket_count,
+                    qa_failed,
+                    fix_required: qa_failed || !active_tickets.is_empty(),
+                },
+            )?;
+            if should_run_fix {
+                fix_ran = true;
+                update_task_item(
+                    state,
+                    item_id,
+                    "fix_running",
+                    None,
+                    None,
+                    Some(true),
+                    Some(false),
+                    Some(""),
+                    false,
+                    false,
+                )?;
+                item_status = "fix_running".to_string();
+                let (fix_agent_id, fix_cmd) =
+                    build_phase_command(fix_step, &item.qa_file_path, &active_tickets)?;
+                let fix_result = run_phase(
+                    state,
+                    app,
+                    task_id,
+                    item_id,
+                    "fix",
+                    fix_cmd,
+                    &task_ctx.workspace_root,
+                    &task_ctx.workspace_id,
+                    &fix_agent_id,
+                    runtime,
+                )
+                .await?;
+                fix_exit_code = Some(fix_result.exit_code);
+                fix_success = fix_result.success;
+            }
+        }
+    }
+
+    if let Some(retest_step) = retest_step {
+        if !active_tickets.is_empty() {
+            let should_run_retest = evaluate_step_prehook_with_error_event(
+                state,
+                app,
+                retest_step,
+                &StepPrehookContext {
+                    task_id: task_id.to_string(),
+                    task_item_id: item_id.to_string(),
+                    cycle: task_ctx.current_cycle,
+                    step: "retest".to_string(),
+                    qa_file_path: item.qa_file_path.clone(),
+                    item_status: item_status.clone(),
+                    task_status: "running".to_string(),
+                    qa_exit_code,
+                    fix_exit_code,
+                    retest_exit_code,
+                    active_ticket_count: active_tickets.len() as i64,
+                    new_ticket_count,
+                    qa_failed,
+                    fix_required: qa_failed || !active_tickets.is_empty(),
+                },
+            )?;
+            if should_run_retest {
+                retest_ran = true;
+                update_task_item(
+                    state,
+                    item_id,
+                    "retest_running",
+                    None,
+                    None,
+                    Some(true),
+                    Some(true),
+                    Some(""),
+                    false,
+                    false,
+                )?;
+                let before_retest_tickets = list_ticket_files(task_ctx)?;
+                let (retest_agent_id, retest_cmd) =
+                    build_phase_command(retest_step, &item.qa_file_path, &[])?;
+                let retest_result = run_phase(
+                    state,
+                    app,
+                    task_id,
+                    item_id,
+                    "retest",
+                    retest_cmd,
+                    &task_ctx.workspace_root,
+                    &task_ctx.workspace_id,
+                    &retest_agent_id,
+                    runtime,
+                )
+                .await?;
+                retest_exit_code = Some(retest_result.exit_code);
+                retest_success = retest_result.success;
+                let after_retest_tickets = list_ticket_files(task_ctx)?;
+                retest_new_tickets = new_ticket_diff(&before_retest_tickets, &after_retest_tickets);
+            }
+        }
+    }
+
+    let finalize_context = ItemFinalizeContext {
+        task_id: task_id.to_string(),
+        task_item_id: item_id.to_string(),
+        cycle: task_ctx.current_cycle,
+        qa_file_path: item.qa_file_path.clone(),
+        item_status: item_status.clone(),
+        task_status: "running".to_string(),
+        qa_exit_code,
+        fix_exit_code,
+        retest_exit_code,
+        active_ticket_count: active_tickets.len() as i64,
+        new_ticket_count,
+        retest_new_ticket_count: retest_new_tickets.len() as i64,
+        qa_failed,
+        fix_required: qa_failed || !active_tickets.is_empty(),
+        qa_enabled,
+        qa_ran,
+        qa_skipped,
+        fix_enabled,
+        fix_ran,
+        fix_success,
+        retest_enabled,
+        retest_ran,
+        retest_success,
+    };
+    let outcome =
+        resolve_workflow_finalize_outcome(&task_ctx.execution_plan.finalize, &finalize_context)?
+            .unwrap_or_else(|| {
+                if !active_tickets.is_empty() || !retest_new_tickets.is_empty() {
+                    WorkflowFinalizeOutcome {
+                        rule_id: "fallback_unresolved".to_string(),
+                        status: "unresolved".to_string(),
+                        reason: "unresolved tickets remain".to_string(),
+                    }
+                } else {
+                    WorkflowFinalizeOutcome {
+                        rule_id: "fallback_qa_passed".to_string(),
+                        status: "qa_passed".to_string(),
+                        reason: "no active tickets".to_string(),
+                    }
+                }
+            });
+    emit_item_finalize_event(state, app, &finalize_context, &outcome)?;
+
+    match outcome.status.as_str() {
+        "skipped" => {
             update_task_item(
                 state,
                 item_id,
@@ -2913,173 +4024,76 @@ async fn process_item(
                 Some(&[]),
                 Some(false),
                 Some(false),
-                Some("qa disabled and no existing tickets"),
+                Some(&outcome.reason),
                 true,
                 true,
             )?;
-            return Ok(());
         }
-        qa_failed = true;
-        let ticket_content: Vec<Value> = active_tickets
-            .iter()
-            .map(|path| read_ticket_preview(task_ctx, path))
-            .collect();
-        update_task_item(
-            state,
-            item_id,
-            "qa_failed",
-            Some(&active_tickets),
-            Some(&ticket_content),
-            Some(true),
-            Some(false),
-            Some("qa disabled; using existing tickets"),
-            true,
-            false,
-        )?;
-    }
-
-    let Some(fix_step) = fix_step else {
-        if qa_failed || !active_tickets.is_empty() {
+        "qa_passed" => {
             update_task_item(
                 state,
                 item_id,
-                "unresolved",
-                None,
-                None,
-                Some(true),
+                "qa_passed",
+                Some(&[]),
+                Some(&[]),
                 Some(false),
-                Some("fix disabled by workflow"),
+                Some(false),
+                Some(&outcome.reason),
                 false,
                 true,
             )?;
         }
-        return Ok(());
-    };
-    if active_tickets.is_empty() {
-        return Ok(());
-    }
-
-    update_task_item(
-        state,
-        item_id,
-        "fix_running",
-        None,
-        None,
-        Some(true),
-        Some(false),
-        Some(""),
-        false,
-        false,
-    )?;
-    let (fix_agent_id, fix_cmd) =
-        build_phase_command(fix_step, &item.qa_file_path, &active_tickets)?;
-    let fix_result = run_phase(
-        state,
-        app,
-        task_id,
-        item_id,
-        "fix",
-        fix_cmd,
-        &task_ctx.workspace_root,
-        &task_ctx.workspace_id,
-        &fix_agent_id,
-        runtime,
-    )
-    .await?;
-
-    if !fix_result.success {
-        update_task_item(
-            state,
-            item_id,
-            "unresolved",
-            None,
-            None,
-            Some(true),
-            Some(false),
-            Some(&format!("fix failed: exit={}", fix_result.exit_code)),
-            false,
-            true,
-        )?;
-        return Ok(());
-    }
-
-    let Some(retest_step) = retest_step else {
-        update_task_item(
-            state,
-            item_id,
-            "fixed",
-            None,
-            None,
-            Some(true),
-            Some(true),
-            Some(""),
-            false,
-            true,
-        )?;
-        return Ok(());
-    };
-
-    update_task_item(
-        state,
-        item_id,
-        "retest_running",
-        None,
-        None,
-        Some(true),
-        Some(true),
-        Some(""),
-        false,
-        false,
-    )?;
-
-    let before_retest_tickets = list_ticket_files(task_ctx)?;
-    let (retest_agent_id, retest_cmd) = build_phase_command(retest_step, &item.qa_file_path, &[])?;
-    let retest_result = run_phase(
-        state,
-        app,
-        task_id,
-        item_id,
-        "retest",
-        retest_cmd,
-        &task_ctx.workspace_root,
-        &task_ctx.workspace_id,
-        &retest_agent_id,
-        runtime,
-    )
-    .await?;
-    let after_retest_tickets = list_ticket_files(task_ctx)?;
-    let new_retest_tickets = new_ticket_diff(&before_retest_tickets, &after_retest_tickets);
-
-    if retest_result.success && new_retest_tickets.is_empty() {
-        update_task_item(
-            state,
-            item_id,
-            "verified",
-            None,
-            None,
-            Some(true),
-            Some(true),
-            Some(""),
-            false,
-            true,
-        )?;
-    } else {
-        let previews: Vec<Value> = new_retest_tickets
-            .iter()
-            .map(|path| read_ticket_preview(task_ctx, path))
-            .collect();
-        update_task_item(
-            state,
-            item_id,
-            "unresolved",
-            Some(&new_retest_tickets),
-            Some(&previews),
-            Some(true),
-            Some(false),
-            Some("retest still failing"),
-            false,
-            true,
-        )?;
+        "fixed" => {
+            update_task_item(
+                state,
+                item_id,
+                "fixed",
+                None,
+                None,
+                Some(true),
+                Some(true),
+                Some(&outcome.reason),
+                false,
+                true,
+            )?;
+        }
+        "verified" => {
+            update_task_item(
+                state,
+                item_id,
+                "verified",
+                None,
+                None,
+                Some(true),
+                Some(true),
+                Some(&outcome.reason),
+                false,
+                true,
+            )?;
+        }
+        _ => {
+            let unresolved_tickets = if !retest_new_tickets.is_empty() {
+                retest_new_tickets.clone()
+            } else {
+                active_tickets.clone()
+            };
+            let previews: Vec<Value> = unresolved_tickets
+                .iter()
+                .map(|path| read_ticket_preview(task_ctx, path))
+                .collect();
+            update_task_item(
+                state,
+                item_id,
+                "unresolved",
+                Some(&unresolved_tickets),
+                Some(&previews),
+                Some(true),
+                Some(false),
+                Some(&outcome.reason),
+                false,
+                true,
+            )?;
+        }
     }
 
     Ok(())
@@ -3431,6 +4445,142 @@ fn print_startup_banner(state: &InnerState) {
     println!("[qa-orchestrator] db_path={}", state.db_path.display());
 }
 
+#[cfg(test)]
+mod prehook_tests {
+    use super::*;
+
+    #[test]
+    fn validate_step_prehook_accepts_valid_cel() {
+        let hook = StepPrehookConfig {
+            engine: StepHookEngine::Cel,
+            when: "active_ticket_count > 0 && qa_failed == true".to_string(),
+            reason: None,
+            ui: None,
+        };
+        assert!(validate_step_prehook(&hook, "wf", "fix").is_ok());
+    }
+
+    #[test]
+    fn validate_step_prehook_rejects_empty_expression() {
+        let hook = StepPrehookConfig {
+            engine: StepHookEngine::Cel,
+            when: "   ".to_string(),
+            reason: None,
+            ui: None,
+        };
+        assert!(validate_step_prehook(&hook, "wf", "fix").is_err());
+    }
+
+    #[test]
+    fn validate_step_prehook_rejects_invalid_cel_expression() {
+        let hook = StepPrehookConfig {
+            engine: StepHookEngine::Cel,
+            when: "active_ticket_count >".to_string(),
+            reason: None,
+            ui: None,
+        };
+        assert!(validate_step_prehook(&hook, "wf", "fix").is_err());
+    }
+
+    #[test]
+    fn simulate_prehook_uses_runtime_evaluator() {
+        let payload = SimulatePrehookPayload {
+            expression: "active_ticket_count > 0 && fix_exit_code == 0".to_string(),
+            step: Some("retest".to_string()),
+            context: SimulatePrehookContextPayload {
+                cycle: 1,
+                active_ticket_count: 2,
+                new_ticket_count: 2,
+                qa_exit_code: Some(1),
+                fix_exit_code: Some(0),
+                retest_exit_code: None,
+                qa_failed: true,
+                fix_required: true,
+            },
+        };
+        let output = simulate_prehook_impl(payload).expect("simulate prehook should succeed");
+        assert!(output.result);
+    }
+
+    #[test]
+    fn simulate_prehook_rejects_invalid_expression() {
+        let payload = SimulatePrehookPayload {
+            expression: "active_ticket_count >".to_string(),
+            step: Some("fix".to_string()),
+            context: SimulatePrehookContextPayload::default(),
+        };
+        assert!(simulate_prehook_impl(payload).is_err());
+    }
+
+    #[test]
+    fn finalize_rules_mark_verified_after_clean_retest() {
+        let finalize = default_workflow_finalize_config();
+        let context = ItemFinalizeContext {
+            task_id: "t".to_string(),
+            task_item_id: "i".to_string(),
+            cycle: 1,
+            qa_file_path: "docs/qa/demo.md".to_string(),
+            item_status: "retest_running".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(1),
+            fix_exit_code: Some(0),
+            retest_exit_code: Some(0),
+            active_ticket_count: 1,
+            new_ticket_count: 1,
+            retest_new_ticket_count: 0,
+            qa_failed: true,
+            fix_required: true,
+            qa_enabled: true,
+            qa_ran: true,
+            qa_skipped: false,
+            fix_enabled: true,
+            fix_ran: true,
+            fix_success: true,
+            retest_enabled: true,
+            retest_ran: true,
+            retest_success: true,
+        };
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("finalize evaluation should succeed")
+            .expect("finalize should match a rule");
+        assert_eq!(outcome.status, "verified");
+    }
+
+    #[test]
+    fn finalize_rules_mark_unresolved_on_fix_failure() {
+        let finalize = default_workflow_finalize_config();
+        let context = ItemFinalizeContext {
+            task_id: "t".to_string(),
+            task_item_id: "i".to_string(),
+            cycle: 1,
+            qa_file_path: "docs/qa/demo.md".to_string(),
+            item_status: "fix_running".to_string(),
+            task_status: "running".to_string(),
+            qa_exit_code: Some(1),
+            fix_exit_code: Some(2),
+            retest_exit_code: None,
+            active_ticket_count: 1,
+            new_ticket_count: 1,
+            retest_new_ticket_count: 0,
+            qa_failed: true,
+            fix_required: true,
+            qa_enabled: true,
+            qa_ran: true,
+            qa_skipped: false,
+            fix_enabled: true,
+            fix_ran: true,
+            fix_success: false,
+            retest_enabled: true,
+            retest_ran: false,
+            retest_success: false,
+        };
+        let outcome = resolve_workflow_finalize_outcome(&finalize, &context)
+            .expect("finalize evaluation should succeed")
+            .expect("finalize should match a rule");
+        assert_eq!(outcome.status, "unresolved");
+    }
+}
+
 fn main() {
     let args: Vec<String> = std::env::args().collect();
     let cli_options = match parse_cli_options(&args[1..]) {
@@ -3474,7 +4624,11 @@ fn main() {
         }
     }
 
-    tauri::Builder::default()
+    let state_for_exit = state.inner.clone();
+    let exit_cleanup_guard = Arc::new(AtomicBool::new(false));
+    let exit_cleanup_guard_for_run = exit_cleanup_guard.clone();
+
+    let app = tauri::Builder::default()
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             bootstrap,
@@ -3492,8 +4646,21 @@ fn main() {
             pause_task,
             resume_task,
             retry_task_item,
-            stream_task_logs
+            stream_task_logs,
+            simulate_prehook
         ])
-        .run(tauri::generate_context!())
-        .expect("error while running tauri application");
+        .build(tauri::generate_context!())
+        .expect("error while building tauri application");
+
+    app.run(move |_app_handle, event| {
+        if matches!(
+            event,
+            tauri::RunEvent::ExitRequested { .. } | tauri::RunEvent::Exit
+        ) {
+            if exit_cleanup_guard_for_run.swap(true, Ordering::SeqCst) {
+                return;
+            }
+            tauri::async_runtime::block_on(shutdown_running_tasks(state_for_exit.clone()));
+        }
+    });
 }

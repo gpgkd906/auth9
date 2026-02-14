@@ -75,8 +75,28 @@ CLI examples:
 
 - Workflow is a configurable step pipeline: `init_once`, `qa`, `fix`, `retest`
 - Each step can be enabled/disabled and mapped to an agent
+- Each step can define optional `prehook` rules to decide run/skip per item
+- Workflow supports `finalize.rules[]` to decide final item status (`skipped/qa_passed/fixed/verified/unresolved`) via CEL
 - Loop policy is defined per workflow: `once` or `infinite`
 - Loop guard supports rule-based stop conditions and optional guard agent decision (`loop.guard.agent_id`)
+
+## Prehook (Low-friction mode)
+
+- Default editor is **Visual Rules** (no CEL required)
+- Built-in presets:
+  - `fix`: run only when `active_ticket_count > 0`
+  - `retest`: run only when `active_ticket_count > 0 && fix_exit_code == 0`
+- `Advanced CEL` mode is optional for power users
+- Runtime still evaluates `prehook.when` (CEL); visual editor writes CEL automatically
+- `Simulate` in both modes runs backend CEL evaluator (`simulate_prehook`) for parity with runtime
+- UI-only metadata is stored under `prehook.ui` for round-trip editing
+- Final state decisions can be configured with `workflow.finalize.rules[]` (first-match wins)
+
+Available visual fields:
+
+- `active_ticket_count`, `new_ticket_count`, `cycle`
+- `qa_exit_code`, `fix_exit_code`, `retest_exit_code`
+- `qa_failed`, `fix_required`
 
 ## Config Model
 
