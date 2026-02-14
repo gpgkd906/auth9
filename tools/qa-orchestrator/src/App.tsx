@@ -113,6 +113,9 @@ export function App() {
   const [itemFilter, setItemFilter] = useState<ItemFilter>('all');
   const [itemQuery, setItemQuery] = useState('');
   const [theme, setTheme] = useState<Theme>('light');
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isInfoOverlayOpen, setIsInfoOverlayOpen] = useState(false);
+  const [isItemsPanelOpen, setIsItemsPanelOpen] = useState(false);
 
   const [configEditor, setConfigEditor] = useState<ConfigEditor>('form');
   const [configOverview, setConfigOverview] = useState<ConfigOverview | null>(null);
@@ -306,6 +309,20 @@ export function App() {
     setWorkflowId((current) => current || options.defaults.workflow_id);
   }
 
+  function resetCreateTaskForm(options?: CreateTaskOptions | null) {
+    const resolved = options ?? createOptions;
+    setName('');
+    setGoal('Automate QA sprint with auto-fix and restart');
+    setTargets('');
+    setWorkspaceId(resolved?.defaults.workspace_id ?? '');
+    setWorkflowId(resolved?.defaults.workflow_id ?? '');
+  }
+
+  function closeCreateModal() {
+    resetCreateTaskForm();
+    setIsCreateModalOpen(false);
+  }
+
   async function loadConfigOverview() {
     const overview = await api.getConfigOverview();
     const normalized = cloneConfig(overview.config);
@@ -364,6 +381,21 @@ export function App() {
   }, [viewTab]);
 
   useEffect(() => {
+    if (!isCreateModalOpen) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        closeCreateModal();
+      }
+    };
+
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isCreateModalOpen, createOptions]);
+
+  useEffect(() => {
     let disposed = false;
     let unlisten: (() => void) | null = null;
 
@@ -419,6 +451,8 @@ export function App() {
         target_files: targetFiles.length > 0 ? targetFiles : undefined
       });
       await refreshSnapshot(created.id);
+      resetCreateTaskForm();
+      setIsCreateModalOpen(false);
     } catch (err) {
       setError(String(err));
     } finally {
@@ -604,9 +638,222 @@ export function App() {
       {error && <div className="error-box">{error}</div>}
 
       {viewTab === 'tasks' && (
-        <main className="layout">
-          <section className="panel create-panel animate-fade-in-up delay-1">
-            <h2>Create QA Sprint</h2>
+        <main className="tasks-layout">
+          <section className="panel tasks-sidebar animate-fade-in-up delay-1">
+            <div className="sidebar-head">
+              <h2>Tasks</h2>
+              <button className="ghost-button" onClick={() => setIsCreateModalOpen(true)}>
+                New Sprint
+              </button>
+            </div>
+            <div className="task-list">
+              {tasks.length === 0 && (
+                <div className="empty-state">
+                  <p className="muted">No tasks yet.</p>
+                  <button className="ghost-button" onClick={() => setIsCreateModalOpen(true)}>
+                    Create QA Sprint
+                  </button>
+                </div>
+              )}
+              {tasks.map((task) => {
+                const pct = task.total_items === 0 ? 0 : Math.round((task.finished_items / task.total_items) * 100);
+                return (
+                  <button
+                    className={`task-card ${selectedTaskId === task.id ? 'active' : ''}`}
+                    key={task.id}
+                    onClick={() => setSelectedTaskId(task.id)}
+                  >
+                    <div className="task-card-top">
+                      <strong>{task.name}</strong>
+                      <span className={STATUS_CLASS[task.status] ?? 'badge gray'}>{task.status}</span>
+                    </div>
+                    <div className="task-card-meta">Workspace: {task.workspace_id}</div>
+                    <div className="task-card-meta">Workflow: {task.workflow_id}</div>
+                    <div className="task-card-meta">
+                      {task.finished_items}/{task.total_items} finished ({pct}%)
+                    </div>
+                    <div className="progress-line">
+                      <span style={{ width: `${pct}%` }} />
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+          </section>
+
+          <section className="panel detail-panel task-detail-main animate-fade-in-up delay-2">
+            <div className="detail-head">
+              <div>
+                <h2>{selectedTask?.name ?? 'Task Details'}</h2>
+                {selectedTask && (
+                  <p className="muted">
+                    workspace: {selectedTask.workspace_id} | workflow: {selectedTask.workflow_id}
+                  </p>
+                )}
+              </div>
+              <button className="ghost-button" onClick={() => setIsInfoOverlayOpen((current) => !current)}>
+                {isInfoOverlayOpen ? 'Hide Info' : 'Show Info'}
+              </button>
+            </div>
+
+            <div className="logs-stage">
+              <section className="log-section">
+                <h3>Live Logs</h3>
+                <pre className="log-box">{logs || 'No logs yet.'}</pre>
+              </section>
+
+              {isInfoOverlayOpen && (
+                <aside className="info-overlay">
+                  <div className="overlay-head">
+                    <strong>Task Info</strong>
+                    <button className="ghost-button" onClick={() => setIsInfoOverlayOpen(false)}>
+                      Close
+                    </button>
+                  </div>
+                  <div className="sub-stats-grid compact">
+                    <article className="stat-pill">
+                      <span>Items</span>
+                      <strong>{itemStats.total}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Active</span>
+                      <strong>{itemStats.active}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Unresolved</span>
+                      <strong>{itemStats.unresolved}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Verified</span>
+                      <strong>{itemStats.completed}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>QA Runs</span>
+                      <strong>{runStats.qa}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Init Runs</span>
+                      <strong>{runStats.init_once}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Fix Runs</span>
+                      <strong>{runStats.fix}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Retest Runs</span>
+                      <strong>{runStats.retest}</strong>
+                    </article>
+                    <article className="stat-pill">
+                      <span>Guard Runs</span>
+                      <strong>{runStats.loop_guard}</strong>
+                    </article>
+                  </div>
+                </aside>
+              )}
+            </div>
+
+            <section className="items-panel">
+              <div className="items-panel-head">
+                <h3>Items ({filteredItems.length})</h3>
+                <button className="ghost-button" onClick={() => setIsItemsPanelOpen((current) => !current)}>
+                  {isItemsPanelOpen ? 'Hide' : 'Show'}
+                </button>
+              </div>
+              {isItemsPanelOpen && (
+                <>
+                  <div className="toolbar-row">
+                    <select value={itemFilter} onChange={(event) => setItemFilter(event.target.value as ItemFilter)}>
+                      <option value="all">All Items</option>
+                      <option value="active">Active</option>
+                      <option value="unresolved">Unresolved</option>
+                      <option value="completed">Completed</option>
+                    </select>
+                    <input
+                      value={itemQuery}
+                      onChange={(event) => setItemQuery(event.target.value)}
+                      placeholder="Filter by QA file path"
+                    />
+                  </div>
+
+                  <div className="items-table-wrap">
+                    <table className="items-table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>QA File</th>
+                          <th>Status</th>
+                          <th>Tickets</th>
+                          <th>Error</th>
+                          <th>Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredItems.map((item) => (
+                          <tr key={item.id}>
+                            <td>{item.order_no}</td>
+                            <td className="file-col">{item.qa_file_path}</td>
+                            <td>
+                              <span className={STATUS_CLASS[item.status] ?? 'badge gray'}>{item.status}</span>
+                            </td>
+                            <td>{item.ticket_files.length}</td>
+                            <td className="error-col">{item.last_error || '-'}</td>
+                            <td>
+                              <button onClick={() => withTaskAction(() => api.retryTaskItem(item.id))} disabled={busy}>
+                                Retry
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </section>
+          </section>
+
+          <aside className="panel task-control-panel animate-fade-in-up delay-3">
+            <h2>Control Panel</h2>
+            <div className="control-actions">
+              <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.startTask(selectedTaskId!))}>
+                Start
+              </button>
+              <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.pauseTask(selectedTaskId!))}>
+                Pause
+              </button>
+              <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.resumeTask(selectedTaskId!))}>
+                Resume
+              </button>
+            </div>
+
+            <section className="ticket-section">
+              <h3>Tickets ({ticketList.length})</h3>
+              <div className="ticket-list">
+                {ticketList.length === 0 && <p className="muted">No tickets linked to this task.</p>}
+                {ticketList.map((ticket) => (
+                  <article className="ticket-card" key={ticket.path}>
+                    <div className="ticket-card-head">
+                      <span className={STATUS_CLASS[ticket.status] ?? 'badge gray'}>{ticket.status}</span>
+                    </div>
+                    <code>{ticket.path}</code>
+                    <p className="muted">Source: {ticket.source}</p>
+                  </article>
+                ))}
+              </div>
+            </section>
+          </aside>
+        </main>
+      )}
+
+      {viewTab === 'tasks' && isCreateModalOpen && (
+        <div className="modal-backdrop" onClick={closeCreateModal} role="presentation">
+          <section className="modal-card" role="dialog" aria-modal="true" aria-label="Create QA Sprint" onClick={(event) => event.stopPropagation()}>
+            <div className="modal-head">
+              <h2>Create QA Sprint</h2>
+              <button className="ghost-button" onClick={closeCreateModal}>
+                Close
+              </button>
+            </div>
             <label>
               Task Name
               <input value={name} onChange={(event) => setName(event.target.value)} />
@@ -647,169 +894,7 @@ export function App() {
               Create Task
             </button>
           </section>
-
-          <section className="panel tasks-panel animate-fade-in-up delay-2">
-            <h2>Tasks</h2>
-            <div className="task-list">
-              {tasks.map((task) => {
-                const pct = task.total_items === 0 ? 0 : Math.round((task.finished_items / task.total_items) * 100);
-                return (
-                  <button
-                    className={`task-card ${selectedTaskId === task.id ? 'active' : ''}`}
-                    key={task.id}
-                    onClick={() => setSelectedTaskId(task.id)}
-                  >
-                    <div className="task-card-top">
-                      <strong>{task.name}</strong>
-                      <span className={STATUS_CLASS[task.status] ?? 'badge gray'}>{task.status}</span>
-                    </div>
-                    <div className="task-card-meta">Workspace: {task.workspace_id}</div>
-                    <div className="task-card-meta">Workflow: {task.workflow_id}</div>
-                    <div className="task-card-meta">
-                      {task.finished_items}/{task.total_items} finished ({pct}%)
-                    </div>
-                    <div className="progress-line">
-                      <span style={{ width: `${pct}%` }} />
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-          </section>
-
-          <section className="panel detail-panel animate-fade-in-up delay-3">
-            <div className="detail-head">
-              <div>
-                <h2>{selectedTask?.name ?? 'Task Details'}</h2>
-                {selectedTask && (
-                  <p className="muted">
-                    workspace: {selectedTask.workspace_id} | workflow: {selectedTask.workflow_id}
-                  </p>
-                )}
-              </div>
-              <div className="actions">
-                <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.startTask(selectedTaskId!))}>
-                  Start
-                </button>
-                <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.pauseTask(selectedTaskId!))}>
-                  Pause
-                </button>
-                <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.resumeTask(selectedTaskId!))}>
-                  Resume
-                </button>
-              </div>
-            </div>
-
-            <div className="sub-stats-grid">
-              <article className="stat-pill">
-                <span>Items</span>
-                <strong>{itemStats.total}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Active</span>
-                <strong>{itemStats.active}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Unresolved</span>
-                <strong>{itemStats.unresolved}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Verified</span>
-                <strong>{itemStats.completed}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>QA Runs</span>
-                <strong>{runStats.qa}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Init Runs</span>
-                <strong>{runStats.init_once}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Fix Runs</span>
-                <strong>{runStats.fix}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Retest Runs</span>
-                <strong>{runStats.retest}</strong>
-              </article>
-              <article className="stat-pill">
-                <span>Guard Runs</span>
-                <strong>{runStats.loop_guard}</strong>
-              </article>
-            </div>
-
-            <div className="toolbar-row">
-              <select value={itemFilter} onChange={(event) => setItemFilter(event.target.value as ItemFilter)}>
-                <option value="all">All Items</option>
-                <option value="active">Active</option>
-                <option value="unresolved">Unresolved</option>
-                <option value="completed">Completed</option>
-              </select>
-              <input
-                value={itemQuery}
-                onChange={(event) => setItemQuery(event.target.value)}
-                placeholder="Filter by QA file path"
-              />
-            </div>
-
-            <div className="items-table-wrap">
-              <table className="items-table">
-                <thead>
-                  <tr>
-                    <th>#</th>
-                    <th>QA File</th>
-                    <th>Status</th>
-                    <th>Tickets</th>
-                    <th>Error</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredItems.map((item) => (
-                    <tr key={item.id}>
-                      <td>{item.order_no}</td>
-                      <td className="file-col">{item.qa_file_path}</td>
-                      <td>
-                        <span className={STATUS_CLASS[item.status] ?? 'badge gray'}>{item.status}</span>
-                      </td>
-                      <td>{item.ticket_files.length}</td>
-                      <td className="error-col">{item.last_error || '-'}</td>
-                      <td>
-                        <button onClick={() => withTaskAction(() => api.retryTaskItem(item.id))} disabled={busy}>
-                          Retry
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="detail-bottom">
-              <section className="log-section">
-                <h3>Live Logs</h3>
-                <pre className="log-box">{logs || 'No logs yet.'}</pre>
-              </section>
-
-              <section className="ticket-section">
-                <h3>Tickets ({ticketList.length})</h3>
-                <div className="ticket-list">
-                  {ticketList.length === 0 && <p className="muted">No tickets linked to this task.</p>}
-                  {ticketList.map((ticket) => (
-                    <article className="ticket-card" key={ticket.path}>
-                      <div className="ticket-card-head">
-                        <span className={STATUS_CLASS[ticket.status] ?? 'badge gray'}>{ticket.status}</span>
-                      </div>
-                      <code>{ticket.path}</code>
-                      <p className="muted">Source: {ticket.source}</p>
-                    </article>
-                  ))}
-                </div>
-              </section>
-            </div>
-          </section>
-        </main>
+        </div>
       )}
 
       {viewTab === 'config' && (
