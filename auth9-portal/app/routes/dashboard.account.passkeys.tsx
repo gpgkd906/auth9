@@ -145,7 +145,12 @@ export default function AccountPasskeysPage() {
 
       // 2. Convert to browser-compatible format and call WebAuthn API
       const options = toCreationOptions(creationOptions);
-      const credential = await navigator.credentials.create({ publicKey: options });
+      const credential = await Promise.race([
+        navigator.credentials.create({ publicKey: options }),
+        new Promise<null>((_, reject) =>
+          setTimeout(() => reject(new DOMException("The operation timed out.", "NotAllowedError")), 60000)
+        ),
+      ]);
 
       if (!credential) {
         throw new Error("Registration was cancelled");

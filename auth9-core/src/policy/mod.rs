@@ -243,6 +243,7 @@ mod tests {
         PasswordResetConfig, RateLimitConfig, RedisConfig, SecurityHeadersConfig, ServerConfig,
         TelemetryConfig, WebAuthnConfig,
     };
+    use crate::domain::action::AsyncActionConfig;
 
     fn create_test_config(platform_admins: Vec<String>) -> Config {
         Config {
@@ -295,6 +296,7 @@ mod tests {
             jwt_tenant_access_allowed_audiences: vec![],
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: None,
+            async_action: AsyncActionConfig::default(),
             password_reset: PasswordResetConfig {
                 hmac_key: "test-key".to_string(),
                 token_ttl_secs: 3600,

@@ -1,11 +1,10 @@
 //! Analytics and security alert domain models
 
-use super::common::StringUuid;
+use super::common::{validate_url_no_ssrf, validate_url_no_ssrf_option, StringUuid};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
-use url::Url;
 use validator::{Validate, ValidationError};
 
 /// Login event types
@@ -306,65 +305,14 @@ impl Default for Webhook {
     }
 }
 
-/// Validate webhook URL - block internal/private IPs for all schemes, HTTP only for localhost/private
+/// Validate webhook URL - delegates to shared SSRF validation
 fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
-    let parsed = Url::parse(url).map_err(|_| ValidationError::new("invalid_url"))?;
-
-    let scheme = parsed.scheme();
-    let host = parsed.host_str().unwrap_or("");
-
-    // Only allow http and https schemes
-    if scheme != "http" && scheme != "https" {
-        return Err(ValidationError::new("invalid_scheme"));
-    }
-
-    // Block internal/cloud metadata IPs for ALL schemes (including HTTPS)
-    let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
-    let is_loopback = host == "127.0.0.1" || host == "::1" || host == "0.0.0.0";
-    let is_private = host.starts_with("192.168.")
-        || host.starts_with("10.")
-        || (host.starts_with("172.")
-            && host
-                .split('.')
-                .nth(1)
-                .and_then(|s| s.parse::<u8>().ok())
-                .map(|n| (16..=31).contains(&n))
-                .unwrap_or(false));
-
-    if is_cloud_metadata {
-        let mut err = ValidationError::new("ssrf_blocked");
-        err.message = Some("Cloud metadata endpoints are not allowed".into());
-        return Err(err);
-    }
-
-    // For HTTPS: allow external URLs, block private/loopback
-    if scheme == "https" {
-        if is_loopback || is_private {
-            let mut err = ValidationError::new("internal_ip_blocked");
-            err.message = Some("Internal IP addresses are not allowed for webhook URLs".into());
-            return Err(err);
-        }
-        return Ok(());
-    }
-
-    // HTTP only allowed for localhost/private networks (dev environment)
-    if scheme == "http" {
-        let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
-        if is_localhost || is_private {
-            return Ok(());
-        }
-
-        let mut err = ValidationError::new("http_not_allowed");
-        err.message = Some("HTTP URLs are only allowed for localhost or private networks. Use HTTPS for external URLs.".into());
-        return Err(err);
-    }
-
-    Err(ValidationError::new("invalid_scheme"))
+    validate_url_no_ssrf(url)
 }
 
 /// Validate optional webhook URL (called by validator macro when Option<String> field has Some value)
 fn validate_webhook_url_option(url: &str) -> Result<(), ValidationError> {
-    validate_webhook_url(url)
+    validate_url_no_ssrf_option(url)
 }
 
 /// Input for creating a webhook
@@ -430,6 +378,15 @@ pub struct LoginStats {
     pub by_device_type: HashMap<String, i64>,
     pub period_start: DateTime<Utc>,
     pub period_end: DateTime<Utc>,
+}
+
+/// A single day's login statistics for trend visualization
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DailyTrendPoint {
+    pub date: String,
+    pub total: i64,
+    pub successful: i64,
+    pub failed: i64,
 }
 
 impl Default for LoginStats {

@@ -42,6 +42,12 @@ describe("Next.js auth9Middleware", () => {
 
     const res = await mw(createRequest("/login"));
     expect(res.status).toBe(200);
+
+    const resRoot = await mw(createRequest("/"));
+    expect(resRoot.status).toBe(200);
+
+    const resHealth = await mw(createRequest("/api/health"));
+    expect(resHealth.status).toBe(200);
   });
 
   it("allows unprotected paths when protectedPaths is specified", async () => {
@@ -111,14 +117,41 @@ describe("Next.js auth9Middleware", () => {
     expect(res.headers.get("x-auth9-tenant-id")).toBeNull();
   });
 
-  it("public path check uses startsWith matching", async () => {
+  it("public path check uses path-segment prefix matching", async () => {
     const mw = auth9Middleware({
       domain: "http://test",
       publicPaths: ["/api/health"],
     });
 
-    // /api/health/deep should also match
+    // /api/health/deep should match (path-segment prefix)
     const res = await mw(createRequest("/api/health/deep"));
     expect(res.status).toBe(200);
+
+    // /api/healthz should NOT match (not a path-segment boundary)
+    const res2 = await mw(createRequest("/api/healthz"));
+    expect(res2.status).toBe(401);
+  });
+
+  it("root path '/' in publicPaths does not match all paths", async () => {
+    const mw = auth9Middleware({
+      domain: "http://test",
+      publicPaths: ["/", "/login"],
+    });
+
+    // Root path itself should be public
+    const resRoot = await mw(createRequest("/"));
+    expect(resRoot.status).toBe(200);
+
+    // /login should be public
+    const resLogin = await mw(createRequest("/login"));
+    expect(resLogin.status).toBe(200);
+
+    // /api/users should NOT be public (not matched by "/")
+    const resApi = await mw(createRequest("/api/users"));
+    expect(resApi.status).toBe(401);
+
+    // /dashboard should NOT be public
+    const resDash = await mw(createRequest("/dashboard"));
+    expect(resDash.status).toBe(401);
   });
 });

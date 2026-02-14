@@ -6,6 +6,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const AUTH9_CORE_URL = process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const AUTH9_CORE_PUBLIC_URL = process.env.AUTH9_CORE_PUBLIC_URL || AUTH9_CORE_URL;
   const PORTAL_URL = process.env.AUTH9_PORTAL_URL || "http://localhost:3000";
+  const CLIENT_ID = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
 
   // Get the access token to send with logout request
   const accessToken = await getAccessToken(request);
@@ -14,7 +15,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Use internal URL for server-to-server communication
   if (accessToken) {
     try {
-      const response = await fetch(`${AUTH9_CORE_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}`, {
+      const response = await fetch(`${AUTH9_CORE_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}&client_id=${encodeURIComponent(CLIENT_ID)}`, {
         method: "GET",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
@@ -42,6 +43,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // This will redirect to Keycloak logout, then back to portal
   const logoutUrl = new URL(`${AUTH9_CORE_PUBLIC_URL}/api/v1/auth/logout`);
   logoutUrl.searchParams.set("post_logout_redirect_uri", PORTAL_URL);
+  logoutUrl.searchParams.set("client_id", CLIENT_ID);
 
   // Pass id_token_hint so Keycloak skips the logout confirmation page
   if (session?.idToken) {

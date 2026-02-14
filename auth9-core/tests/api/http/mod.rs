@@ -126,6 +126,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             hmac_key: "test-password-reset-hmac-key".to_string(),
             token_ttl_secs: 3600,
         },
+        async_action: auth9_core::domain::AsyncActionConfig::default(),
     }
 }
 

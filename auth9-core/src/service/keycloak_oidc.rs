@@ -424,9 +424,10 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                     modified_context.claims
                 }
                 Err(e) => {
-                    // Strict mode: abort login on action failure
                     tracing::error!("PostLogin action failed for user {}: {}", user.id, e);
-                    return Err(e);
+                    // Log but don't block login - action script errors
+                    // should not prevent user authentication
+                    None
                 }
             }
         } else {

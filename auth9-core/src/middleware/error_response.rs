@@ -16,9 +16,15 @@ use serde_json::json;
 /// This prevents information leakage from framework-level error messages
 /// (e.g., JSON parser position details, method not allowed text).
 pub async fn normalize_error_response(request: Request<Body>, next: Next) -> Response {
+    let uri = request.uri().path().to_string();
     let response = next.run(request).await;
 
     let status = response.status();
+
+    // Health/readiness endpoints return their own plain-text responses - skip normalization
+    if uri == "/health" || uri == "/ready" {
+        return response;
+    }
 
     // Only process error responses (4xx and 5xx)
     if !status.is_client_error() && !status.is_server_error() {
@@ -105,6 +111,34 @@ mod tests {
             .unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_ready_endpoint_503_not_normalized() {
+        use axum::routing::get;
+        let app = Router::new()
+            .route(
+                "/ready",
+                get(|| async { (StatusCode::SERVICE_UNAVAILABLE, "not_ready") }),
+            )
+            .layer(axum::middleware::from_fn(normalize_error_response));
+
+        let response = app
+            .oneshot(
+                Request::builder()
+                    .method("GET")
+                    .uri("/ready")
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let body = axum::body::to_bytes(response.into_body(), usize::MAX)
+            .await
+            .unwrap();
+        assert_eq!(&body[..], b"not_ready");
     }
 
     #[tokio::test]

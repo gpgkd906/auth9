@@ -90,6 +90,12 @@ pub trait CacheOperations: Send + Sync {
     ) -> Result<()>;
     async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>>;
     async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()>;
+
+    // ==================== Webhook Event Deduplication ====================
+
+    /// Check if a webhook event has already been processed (returns true if duplicate).
+    /// If not a duplicate, marks it as processed with the given TTL.
+    async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool>;
 }
 
 /// Cache key prefixes
@@ -103,6 +109,7 @@ mod keys {
     pub const WEBAUTHN_AUTH: &str = "auth9:webauthn_auth";
     pub const OIDC_STATE: &str = "auth9:oidc_state";
     pub const REFRESH_TOKEN_SESSION: &str = "auth9:refresh_session";
+    pub const WEBHOOK_EVENT_DEDUP: &str = "auth9:webhook_dedup";
 }
 
 /// Default TTLs
@@ -502,6 +509,31 @@ impl CacheManager {
         let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, token_hash);
         self.delete(&key).await
     }
+
+    // ==================== Webhook Event Deduplication ====================
+
+    /// Atomically check if a webhook event key exists and set it if not (SETNX).
+    /// Returns true if the event was already processed (duplicate).
+    pub async fn check_and_mark_webhook_event(
+        &self,
+        event_key: &str,
+        ttl_secs: u64,
+    ) -> Result<bool> {
+        let key = format!("{}:{}", keys::WEBHOOK_EVENT_DEDUP, event_key);
+        let mut conn = self.conn.clone();
+        // SET key "1" NX EX ttl — returns true only if key was newly set
+        let was_set: bool = redis::cmd("SET")
+            .arg(&key)
+            .arg("1")
+            .arg("NX")
+            .arg("EX")
+            .arg(ttl_secs)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or(false);
+        // If was_set is true, event is new (not a duplicate). If false, it's a duplicate.
+        Ok(!was_set)
+    }
 }
 
 #[async_trait]
@@ -621,6 +653,10 @@ impl CacheOperations for CacheManager {
 
     async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
         CacheManager::remove_refresh_token_session(self, refresh_token).await
+    }
+
+    async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool> {
+        CacheManager::check_and_mark_webhook_event(self, event_key, ttl_secs).await
     }
 }
 
@@ -781,6 +817,15 @@ impl NoOpCacheManager {
         self.refresh_sessions.write().await.remove(&key);
         Ok(())
     }
+
+    pub async fn check_and_mark_webhook_event(
+        &self,
+        _event_key: &str,
+        _ttl_secs: u64,
+    ) -> Result<bool> {
+        // NoOp: always report as not duplicate
+        Ok(false)
+    }
 }
 
 impl Default for NoOpCacheManager {
@@ -911,6 +956,10 @@ impl CacheOperations for NoOpCacheManager {
 
     async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
         NoOpCacheManager::remove_refresh_token_session(self, refresh_token).await
+    }
+
+    async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool> {
+        NoOpCacheManager::check_and_mark_webhook_event(self, event_key, ttl_secs).await
     }
 }
 

@@ -94,7 +94,7 @@ aws-sdk-sesv2 = "1.60"
 deno_core = "0.330"
 deno_error = "0.5"
 serde_v8 = "0.240"
-lru = "0.12"
+lru = "0.16"
 
 [dev-dependencies]
 # Testing

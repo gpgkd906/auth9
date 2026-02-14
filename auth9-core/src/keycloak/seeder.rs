@@ -370,7 +370,7 @@ impl KeycloakSeeder {
             obj.insert(
                 "passwordPolicy".to_string(),
                 serde_json::json!(
-                    "length(8) and upperCase(1) and lowerCase(1) and digits(1) and notUsername()"
+                    "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername() and passwordHistory(5)"
                 ),
             );
         }
@@ -595,6 +595,95 @@ impl KeycloakSeeder {
         Ok(())
     }
 
+    /// Update admin user's email in Keycloak if AUTH9_ADMIN_EMAIL differs
+    async fn update_admin_email(
+        &self,
+        token: &str,
+        user_uuid: &str,
+        current_email: &str,
+    ) -> anyhow::Result<()> {
+        let desired_email = get_admin_email();
+        if desired_email == current_email {
+            return Ok(());
+        }
+
+        let url = format!(
+            "{}/admin/realms/{}/users/{}",
+            self.config.url, self.config.realm, user_uuid
+        );
+
+        let body = serde_json::json!({
+            "email": desired_email,
+            "emailVerified": true,
+        });
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to update admin user email in Keycloak")?;
+
+        if response.status().is_success() {
+            info!(
+                "Updated admin user email in Keycloak: {} -> {}",
+                current_email, desired_email
+            );
+        } else {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            warn!(
+                "Failed to update admin user email: {} - {}",
+                status, body
+            );
+        }
+
+        Ok(())
+    }
+
+    /// Clear brute force detection status for a user.
+    /// This resets failed login counters and ensures brute force lockout protection
+    /// is active (not disabled) for the user.
+    async fn clear_brute_force_status(
+        &self,
+        token: &str,
+        user_uuid: &str,
+    ) -> anyhow::Result<()> {
+        let url = format!(
+            "{}/admin/realms/{}/attack-detection/brute-force/users/{}",
+            self.config.url, self.config.realm, user_uuid
+        );
+
+        let response = self
+            .http_client
+            .delete(&url)
+            .bearer_auth(token)
+            .send()
+            .await;
+
+        match response {
+            Ok(r) if r.status().is_success() => {
+                info!("Cleared brute force status for admin user");
+            }
+            Ok(r) => {
+                // 404 is expected if no brute force record exists yet
+                if r.status() != StatusCode::NOT_FOUND {
+                    warn!(
+                        "Failed to clear brute force status: {}",
+                        r.status()
+                    );
+                }
+            }
+            Err(e) => {
+                warn!("Failed to clear brute force status: {}", e);
+            }
+        }
+
+        Ok(())
+    }
+
     /// Seed default admin user (idempotent)
     pub async fn seed_admin_user(&self) -> anyhow::Result<()> {
         let token = self.get_master_admin_token().await?;
@@ -606,8 +695,13 @@ impl KeycloakSeeder {
             );
 
             // Remove stale TOTP credentials to prevent MFA blockers after env reset
-            if let Ok(Some((user_uuid, _))) = self.get_admin_user_keycloak_id().await {
+            // and update email if AUTH9_ADMIN_EMAIL differs
+            if let Ok(Some((user_uuid, current_email))) = self.get_admin_user_keycloak_id().await {
                 self.remove_totp_credentials(&token, &user_uuid).await?;
+                self.update_admin_email(&token, &user_uuid, &current_email)
+                    .await?;
+                // Clear brute force status so lockout protection is active
+                self.clear_brute_force_status(&token, &user_uuid).await?;
             }
 
             return Ok(());
@@ -625,6 +719,11 @@ impl KeycloakSeeder {
                 DEFAULT_ADMIN_USERNAME
             );
             warn!("Please save the admin credentials shown above!");
+
+            // Clear brute force status for newly created admin user
+            if let Ok(Some((user_uuid, _))) = self.get_admin_user_keycloak_id().await {
+                self.clear_brute_force_status(&token, &user_uuid).await?;
+            }
         }
 
         Ok(())

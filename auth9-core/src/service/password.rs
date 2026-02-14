@@ -157,10 +157,10 @@ impl<
         // Hash the provided token to look up in database
         let token_hash = hash_token(&input.token, self.hmac_key.as_bytes())?;
 
-        // Find valid token
+        // Atomically claim the token (prevents race conditions: only one request succeeds)
         let reset_token = self
             .password_reset_repo
-            .find_by_token_hash(&token_hash)
+            .claim_by_token_hash(&token_hash)
             .await?
             .ok_or_else(|| AppError::BadRequest("Invalid or expired reset token".to_string()))?;
 
@@ -182,13 +182,11 @@ impl<
             .update_password_changed_at(reset_token.user_id)
             .await;
 
-        // Mark token as used
-        self.password_reset_repo.mark_used(reset_token.id).await?;
-
-        // Send password changed notification
-        self.email_service
+        // Send password changed notification (best-effort: password is already changed)
+        let _ = self
+            .email_service
             .send_password_changed(&user.email, user.display_name.as_deref())
-            .await?;
+            .await;
 
         Ok(())
     }
@@ -234,10 +232,11 @@ impl<
         // - Will be implemented when multi-tenant context handling is clarified
         // See: docs/debt/001-action-test-endpoint-axum-tonic-conflict.md for related issues
 
-        // Send password changed notification
-        self.email_service
+        // Send password changed notification (best-effort: password is already changed)
+        let _ = self
+            .email_service
             .send_password_changed(&user.email, user.display_name.as_deref())
-            .await?;
+            .await;
 
         Ok(())
     }
@@ -534,9 +533,9 @@ mod tests {
         let mut password_reset_mock = MockPasswordResetRepository::new();
         let user_mock = MockUserRepository::new();
 
-        // Token not found
+        // Token not found / already claimed
         password_reset_mock
-            .expect_find_by_token_hash()
+            .expect_claim_by_token_hash()
             .returning(|_| Ok(None));
 
         let (service, _) = create_test_password_service(password_reset_mock, user_mock);
@@ -558,9 +557,9 @@ mod tests {
 
         let user_id = StringUuid::new_v4();
 
-        // Token found
+        // Token claimed successfully
         password_reset_mock
-            .expect_find_by_token_hash()
+            .expect_claim_by_token_hash()
             .returning(move |_| {
                 Ok(Some(PasswordResetToken {
                     user_id,

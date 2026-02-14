@@ -1040,6 +1040,7 @@ mod tests {
             jwt_tenant_access_allowed_audiences: vec![],
             security_headers: crate::config::SecurityHeadersConfig::default(),
             portal_client_id: None,
+            async_action: crate::domain::action::AsyncActionConfig::default(),
         }
     }
 

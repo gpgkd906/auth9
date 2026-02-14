@@ -224,6 +224,16 @@ export const userApi = {
   },
 };
 
+// Tenant User API
+export const tenantUserApi = {
+  list: async (tenantId: string, accessToken?: string): Promise<{ data: User[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/users`, {
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
+};
+
 // Service API
 export interface Service {
   id: string;
@@ -1304,6 +1314,13 @@ export interface LoginStats {
   period_end: string;
 }
 
+export interface DailyTrendPoint {
+  date: string;
+  total: number;
+  successful: number;
+  failed: number;
+}
+
 export interface LoginEvent {
   id: number;
   user_id?: string;
@@ -1330,6 +1347,15 @@ export const analyticsApi = {
     if (startDate) params.set("start", startDate);
     if (endDate) params.set("end", endDate);
     if (params.toString()) url += `?${params}`;
+    const response = await fetch(url, { headers: getHeaders(accessToken) });
+    return handleResponse(response);
+  },
+
+  getDailyTrend: async (
+    days = 7,
+    accessToken?: string
+  ): Promise<{ data: DailyTrendPoint[] }> => {
+    const url = `${API_BASE_URL}/api/v1/analytics/daily-trend?days=${days}`;
     const response = await fetch(url, { headers: getHeaders(accessToken) });
     return handleResponse(response);
   },

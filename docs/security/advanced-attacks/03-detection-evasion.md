@@ -18,13 +18,61 @@ Auth9 实现了 `SecurityDetectionService`（`src/service/security_detection.rs`
 
 攻击者了解检测规则后可能尝试绕过，本文档测试检测系统的鲁棒性。
 
+### 架构说明
+
+Auth9 采用 **Headless Keycloak 架构**，登录认证由 Keycloak 处理，登录事件通过 Keycloak webhook 发送到 `POST /api/v1/keycloak/events`，由 auth9-core 记录并触发安全检测分析。
+
+**不支持**直接向 `/api/v1/auth/token` 发送 `grant_type=password` 进行密码登录。
+
+**测试方法**：通过 Keycloak 登录页面触发真实登录事件（推荐），或通过模拟 Keycloak webhook 事件到 `/api/v1/keycloak/events` 端点。
+
+```bash
+# 环境变量：Keycloak webhook 签名密钥（本地开发默认值）
+WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}"
+
+# 辅助函数：发送带 HMAC 签名的 Keycloak 事件
+send_signed_event() {
+  local body="$1"
+  local signature=$(echo -n "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $NF}')
+  curl -s -o /dev/null -w "%{http_code}" \
+    -X POST http://localhost:8080/api/v1/keycloak/events \
+    -H "Content-Type: application/json" \
+    -H "X-Keycloak-Signature: sha256=$signature" \
+    -d "$body"
+}
+
+# 辅助函数：模拟 Keycloak LOGIN_ERROR 事件
+send_login_error() {
+  local ip="${1:-127.0.0.1}"
+  local email="${2:-test@test.com}"
+  local user_id="${3:-550e8400-e29b-41d4-a716-446655440000}"
+  local body="{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"$user_id\",\"ipAddress\":\"$ip\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"$email\",\"email\":\"$email\"}}"
+  send_signed_event "$body"
+}
+
+# 辅助函数：通过 Keycloak 登录页面触发真实失败登录
+send_keycloak_login_failure() {
+  local email="${1:-test@test.com}"
+  local password="${2:-wrong-password}"
+  # 获取 Keycloak 登录页面和 session code
+  LOGIN_PAGE=$(curl -s -c /tmp/kc_cookies -L \
+    "http://localhost:8081/realms/auth9/protocol/openid-connect/auth?client_id=auth9-portal&response_type=code&redirect_uri=http://localhost:3000/callback")
+  ACTION_URL=$(echo "$LOGIN_PAGE" | grep -o 'action="[^"]*"' | head -1 | cut -d'"' -f2 | sed 's/&amp;/\&/g')
+  # 提交错误密码
+  curl -s -o /dev/null -b /tmp/kc_cookies \
+    -X POST "$ACTION_URL" \
+    -d "username=$email&password=$password"
+}
+```
+
 ---
 
 ## 场景 1：暴力破解检测阈值边界测试
 
 ### 前置条件
-- 测试账户
+- 测试账户（Keycloak 中已存在）
 - 了解检测阈值（5 次 / 10 分钟）
+- KEYCLOAK_WEBHOOK_SECRET 未设置（本地开发环境默认）或已知
 
 ### 攻击目标
 验证检测阈值的精确性和边界条件
@@ -46,37 +94,38 @@ Auth9 实现了 `SecurityDetectionService`（`src/service/security_detection.rs`
 
 ### 验证方法
 ```bash
-# 清理之前的告警（如有此能力）
-# 或在新窗口期开始测试
-
+# 方法 A：通过 Keycloak 登录页面触发真实事件（推荐）
 # 发送 4 次失败（不应触发）
 for i in $(seq 1 4); do
-  curl -s -o /dev/null \
-    -X POST http://localhost:8080/api/v1/auth/token \
-    -d "grant_type=password&client_id=auth9-portal&username=test@test.com&password=wrong$i"
+  send_keycloak_login_failure "test@test.com" "wrong-password-$i"
+  sleep 2
+done
+
+# 方法 B：通过 webhook 端点模拟事件（快速测试）
+# 发送 4 次失败（不应触发）
+for i in $(seq 1 4); do
+  send_login_error "192.168.1.100" "test@test.com"
   sleep 2
 done
 
 # 检查告警
 ALERTS_BEFORE=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?type=brute_force&severity=high" | jq '.total')
+  "http://localhost:8080/api/v1/security/alerts?unresolved_only=true" | jq '.total')
 echo "Alerts after 4 attempts: $ALERTS_BEFORE"
 # 预期: 0 (或之前的数量不变)
 
 # 第 5 次失败（应触发）
-curl -s -o /dev/null \
-  -X POST http://localhost:8080/api/v1/auth/token \
-  -d "grant_type=password&client_id=auth9-portal&username=test@test.com&password=wrong5"
+send_login_error "192.168.1.100" "test@test.com"
 
 ALERTS_AFTER=$(curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?type=brute_force&severity=high" | jq '.total')
+  "http://localhost:8080/api/v1/security/alerts?unresolved_only=true" | jq '.total')
 echo "Alerts after 5 attempts: $ALERTS_AFTER"
 # 预期: ALERTS_BEFORE + 1
 
 # 验证告警详情
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?type=brute_force&limit=1" | jq '.'
-# 预期: 包含 source_ip, target_user, attempt_count, severity=HIGH
+  "http://localhost:8080/api/v1/security/alerts" | jq '.data[0]'
+# 预期: alert_type=brute_force, severity=high, 包含 IP 和用户信息
 ```
 
 ### 修复建议
@@ -110,34 +159,30 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ### 验证方法
 ```bash
-# 低速暴力破解 - 每 3 分钟 1 次
+# 低速暴力破解 - 每 3 分钟 1 次（通过 Keycloak webhook 模拟）
 for i in $(seq 1 20); do
   echo "Attempt $i at $(date)"
-  curl -s -o /dev/null \
-    -X POST http://localhost:8080/api/v1/auth/token \
-    -d "grant_type=password&client_id=auth9-portal&username=test@test.com&password=slow-attack-$i"
+  send_login_error "192.168.1.100" "test@test.com"
   sleep 180
 done
 
 # 1 小时后检查告警
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?limit=10" | jq '.'
+  "http://localhost:8080/api/v1/security/alerts" | jq '.'
 # 观察: 是否有任何告警产生
 
-# 低速密码喷洒 - 每个账户间隔 3 分钟
+# 低速密码喷洒 - 同一 IP 对不同账户，每个间隔 3 分钟
 USERS=("user1@test.com" "user2@test.com" "user3@test.com" "user4@test.com" "user5@test.com"
        "user6@test.com" "user7@test.com" "user8@test.com" "user9@test.com" "user10@test.com")
 for user in "${USERS[@]}"; do
   echo "Trying $user at $(date)"
-  curl -s -o /dev/null \
-    -X POST http://localhost:8080/api/v1/auth/token \
-    -d "grant_type=password&client_id=auth9-portal&username=$user&password=common-password"
+  send_login_error "10.0.0.50" "$user"
   sleep 180
 done
 
 # 检查是否检测到低速喷洒模式
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?type=password_spray" | jq '.'
+  "http://localhost:8080/api/v1/security/alerts" | jq '.'
 ```
 
 ### 修复建议
@@ -173,27 +218,31 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ### 验证方法
 ```bash
-# 模拟多 IP 攻击（使用 X-Forwarded-For，假设不受信任会被忽略）
+# 模拟多 IP 攻击（通过 Keycloak webhook，ipAddress 字段模拟不同来源 IP）
+# 每个 IP 发送 4 次失败（低于阈值），总计 40 次
 for ip_suffix in $(seq 1 10); do
   for attempt in $(seq 1 4); do
-    curl -s -o /dev/null \
-      -H "X-Forwarded-For: 192.168.1.$ip_suffix" \
-      -X POST http://localhost:8080/api/v1/auth/token \
-      -d "grant_type=password&client_id=auth9-portal&username=target@test.com&password=wrong"
+    send_login_error "10.0.0.$ip_suffix" "target@test.com"
+    sleep 1
   done
 done
 # 总计 40 次失败，但每个 IP 仅 4 次
 
-# 验证 X-Forwarded-For 处理
-# 如果服务端信任 X-Forwarded-For（应仅在反向代理后），每个 IP 4 次不触发
-# 如果服务端看到真实 IP，则同一 IP 40 次会触发
+# 检查告警 — 各 IP 未超阈值，但同一账户累计 40 次失败
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?limit=10" | jq '.'
+  "http://localhost:8080/api/v1/security/alerts" | jq '.'
+# 观察: 是否有 brute_force 告警（账户级聚合）
+
+# 测试 X-Forwarded-For 伪造：通过 Keycloak webhook 模拟不同来源 IP
+# 验证 auth9-core 是否信任事件中的 ipAddress（来自 Keycloak）而忽略请求头中的伪造 IP
+for ip_suffix in $(seq 1 5); do
+  send_login_error "10.99.99.$ip_suffix" "target@test.com"
+done
+# auth9-core 使用 Keycloak 事件中的 ipAddress，不受 HTTP 头伪造影响
 
 # 验证账户级聚合
-# 即使从不同 IP，同一账户 40 次失败是否有告警
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?details.target_user=target@test.com" | jq '.'
+  "http://localhost:8080/api/v1/security/alerts" | jq '.data[] | select(.details.email == "target@test.com")'
 ```
 
 ### 修复建议
@@ -230,34 +279,33 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ### 验证方法
 ```bash
-# 模拟北京登录
-curl -s -X POST http://localhost:8080/api/v1/auth/token \
-  -H "X-Forwarded-For: 123.123.123.123" \
-  -d "grant_type=password&client_id=auth9-portal&username=travel@test.com&password=correct"
-# 假设此 IP 解析为北京
+# 辅助函数：发送带签名的成功登录事件
+send_login_success() {
+  local ip="${1:-127.0.0.1}"
+  local email="${2:-travel@test.com}"
+  local user_id="${3:-550e8400-e29b-41d4-a716-446655440000}"
+  local body="{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"$user_id\",\"ipAddress\":\"$ip\",\"time\":$(date +%s)000,\"details\":{\"username\":\"$email\",\"email\":\"$email\"}}"
+  send_signed_event "$body"
+}
 
-# 等待 5 分钟后模拟纽约登录
+# 模拟北京登录（假设 123.123.123.123 解析为北京）
+send_login_success "123.123.123.123" "travel@test.com"
+
+# 等待 5 分钟后模拟纽约登录（假设 74.125.224.72 解析为纽约）
 sleep 300
-curl -s -X POST http://localhost:8080/api/v1/auth/token \
-  -H "X-Forwarded-For: 74.125.224.72" \
-  -d "grant_type=password&client_id=auth9-portal&username=travel@test.com&password=correct"
-# 假设此 IP 解析为纽约
+send_login_success "74.125.224.72" "travel@test.com"
 
 # 检查不可能旅行告警
 curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/security-alerts?type=impossible_travel" | jq '.'
-# 预期: MEDIUM 告警，包含两个位置和距离
+  "http://localhost:8080/api/v1/security/alerts" | jq '.data[] | select(.alert_type == "impossible_travel")'
+# 预期: HIGH 告警，包含两个位置和距离
 
-# 检查无 GeoIP 数据的 IP
-curl -s -X POST http://localhost:8080/api/v1/auth/token \
-  -H "X-Forwarded-For: 10.0.0.1" \
-  -d "grant_type=password&client_id=auth9-portal&username=travel@test.com&password=correct"
-# 预期: 正常登录，GeoIP 查询失败不阻断
+# 模拟无 GeoIP 数据的私有 IP 登录
+send_login_success "10.0.0.1" "travel@test.com"
+# 预期: 正常记录，GeoIP 查询失败不阻断
 
-# 同城市 IP 切换（不应触发）
-curl -s -X POST http://localhost:8080/api/v1/auth/token \
-  -H "X-Forwarded-For: 123.123.123.124" \
-  -d "grant_type=password&client_id=auth9-portal&username=travel@test.com&password=correct"
+# 模拟同城市 IP 切换（不应触发）
+send_login_success "123.123.123.124" "travel@test.com"
 # 预期: 无告警（同城市 IP 段）
 ```
 

@@ -209,6 +209,7 @@ pub async fn update<S: HasServices>(
 
 /// Delete tenant
 /// Only platform admins can delete tenants
+/// Requires `X-Confirm-Destructive: true` header to prevent accidental deletion
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -217,6 +218,18 @@ pub async fn delete<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     // Only platform admins can delete tenants
     require_platform_admin(state.config(), &auth)?;
+
+    // Require explicit confirmation header for destructive operation
+    let confirmed = headers
+        .get("X-Confirm-Destructive")
+        .and_then(|v| v.to_str().ok())
+        .map(|v| v.eq_ignore_ascii_case("true"))
+        .unwrap_or(false);
+    if !confirmed {
+        return Err(crate::error::AppError::Validation(
+            "Destructive operation requires X-Confirm-Destructive: true header".to_string(),
+        ));
+    }
 
     let id = StringUuid::from(id);
     let before = state.tenant_service().get(id).await?;

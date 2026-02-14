@@ -35,15 +35,15 @@ export function auth9Middleware(config: Auth9NextConfig) {
     const url = new URL(req.url);
     const path = url.pathname;
 
-    // Skip public paths
-    if (config.publicPaths?.some((p) => path.startsWith(p))) {
+    // Skip public paths (exact match or path-segment prefix match)
+    if (config.publicPaths?.some((p) => path === p || (p !== "/" && path.startsWith(p + "/")))) {
       return new Response(null, { status: 200 });
     }
 
     // Check protected paths (if specified, only protect those)
     if (
       config.protectedPaths &&
-      !config.protectedPaths.some((p) => path.startsWith(p))
+      !config.protectedPaths.some((p) => path === p || (p !== "/" && path.startsWith(p + "/")))
     ) {
       return new Response(null, { status: 200 });
     }

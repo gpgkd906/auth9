@@ -1,6 +1,8 @@
 //! Analytics service for login statistics and event tracking
 
-use crate::domain::{CreateLoginEventInput, LoginEvent, LoginEventType, LoginStats, StringUuid};
+use crate::domain::{
+    CreateLoginEventInput, DailyTrendPoint, LoginEvent, LoginEventType, LoginStats, StringUuid,
+};
 use crate::error::Result;
 use crate::repository::LoginEventRepository;
 use chrono::{DateTime, Duration, Utc};
@@ -185,6 +187,13 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
     /// Get login statistics for the last 30 days
     pub async fn get_monthly_stats(&self) -> Result<LoginStats> {
         self.get_stats_for_days(30).await
+    }
+
+    /// Get daily trend data for the last N days
+    pub async fn get_daily_trend(&self, days: i64) -> Result<Vec<DailyTrendPoint>> {
+        let end = Utc::now();
+        let start = end - Duration::days(days);
+        self.login_event_repo.get_daily_trend(start, end).await
     }
 
     /// List login events with pagination

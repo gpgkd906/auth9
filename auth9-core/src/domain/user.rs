@@ -68,7 +68,26 @@ pub struct CreateUserInput {
     pub email: String,
     #[validate(length(max = 255))]
     pub display_name: Option<String>,
+    #[validate(length(max = 2048), custom(function = "validate_avatar_url"))]
     pub avatar_url: Option<String>,
+}
+
+/// Validate avatar URL - must use http:// or https:// scheme and contain no path traversal
+fn validate_avatar_url(url: &str) -> Result<(), validator::ValidationError> {
+    if url.is_empty() {
+        return Ok(());
+    }
+    if !url.starts_with("http://") && !url.starts_with("https://") {
+        let mut err = validator::ValidationError::new("invalid_avatar_url");
+        err.message = Some("Avatar URL must use http:// or https:// scheme".into());
+        return Err(err);
+    }
+    if url.contains("..") || url.contains('\0') {
+        let mut err = validator::ValidationError::new("invalid_avatar_url");
+        err.message = Some("Avatar URL contains invalid characters".into());
+        return Err(err);
+    }
+    Ok(())
 }
 
 /// Input for updating a user
@@ -76,6 +95,7 @@ pub struct CreateUserInput {
 pub struct UpdateUserInput {
     #[validate(length(max = 255))]
     pub display_name: Option<String>,
+    #[validate(length(max = 2048), custom(function = "validate_avatar_url"))]
     pub avatar_url: Option<String>,
 }
 
@@ -151,5 +171,76 @@ mod tests {
             avatar_url: None,
         };
         assert!(valid_input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_avatar_url_rejects_path_traversal() {
+        let input = UpdateUserInput {
+            display_name: None,
+            avatar_url: Some("../../etc/passwd".to_string()),
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_avatar_url_rejects_encoded_path_traversal() {
+        let input = UpdateUserInput {
+            display_name: None,
+            avatar_url: Some("..%2F..%2Fetc%2Fpasswd".to_string()),
+        };
+        assert!(input.validate().is_err()); // no http(s):// scheme
+    }
+
+    #[test]
+    fn test_avatar_url_rejects_dotdot_in_url() {
+        let input = UpdateUserInput {
+            display_name: None,
+            avatar_url: Some("https://example.com/../../etc/passwd".to_string()),
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_avatar_url_accepts_valid_https() {
+        let input = UpdateUserInput {
+            display_name: None,
+            avatar_url: Some("https://cdn.example.com/avatars/user123.png".to_string()),
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_avatar_url_accepts_none() {
+        let input = UpdateUserInput {
+            display_name: None,
+            avatar_url: None,
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_avatar_url_rejects_null_byte() {
+        let input = UpdateUserInput {
+            display_name: None,
+            avatar_url: Some("https://example.com/avatar\0.png".to_string()),
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_create_user_avatar_url_validation() {
+        let input = CreateUserInput {
+            email: "user@example.com".to_string(),
+            display_name: None,
+            avatar_url: Some("../../etc/passwd".to_string()),
+        };
+        assert!(input.validate().is_err());
+
+        let valid = CreateUserInput {
+            email: "user@example.com".to_string(),
+            display_name: None,
+            avatar_url: Some("https://cdn.example.com/avatar.png".to_string()),
+        };
+        assert!(valid.validate().is_ok());
     }
 }
