@@ -12,7 +12,7 @@ app.use(express.json());
 // Initialize Auth9
 const auth9 = new Auth9({
   domain: process.env.AUTH9_DOMAIN || "http://localhost:8080",
-  audience: process.env.AUTH9_AUDIENCE || "my-service",
+    audience: process.env.AUTH9_AUDIENCE || "auth9",
   clientId: process.env.AUTH9_CLIENT_ID,
   clientSecret: process.env.AUTH9_CLIENT_SECRET,
 });
@@ -22,12 +22,25 @@ app.get("/health", (_req, res) => {
   res.json({ status: "ok" });
 });
 
+// Optional auth route
+app.get("/optional", auth9Middleware({
+  domain: process.env.AUTH9_DOMAIN || "http://localhost:8080",
+  audience: process.env.AUTH9_AUDIENCE || "auth9",
+  optional: true,
+}), (req, res) => {
+  if (req.auth) {
+    res.json({ message: "Authenticated", user: req.auth.email });
+  } else {
+    res.json({ message: "Anonymous" });
+  }
+});
+
 // Protected routes - require valid Auth9 token
 app.use(
   "/api",
   auth9Middleware({
     domain: process.env.AUTH9_DOMAIN || "http://localhost:8080",
-    audience: process.env.AUTH9_AUDIENCE || "my-service",
+    audience: process.env.AUTH9_AUDIENCE || "auth9",
   }),
 );
 
@@ -51,12 +64,86 @@ app.get(
   },
 );
 
+// Test multiple permissions (all mode)
+app.post(
+  "/api/users",
+  requirePermission(["user:read", "user:write"]),
+  (_req, res) => {
+    res.json({ message: "User created" });
+  },
+);
+
+// Test any mode
+app.patch(
+  "/api/users/:id",
+  requirePermission(["user:write", "user:admin"], { mode: "any" }),
+  (req, res) => {
+    res.json({ message: `User ${req.params.id} updated` });
+  },
+);
+
+// Test missing permission
+app.delete(
+  "/api/users/:id",
+  requirePermission("user:delete"),
+  (req, res) => {
+    res.json({ message: `User ${req.params.id} deleted` });
+  },
+);
+
 // Require admin role
 app.delete(
   "/api/users/:id",
   requireRole("admin"),
   (req, res) => {
     res.json({ message: `User ${req.params.id} deleted` });
+  },
+);
+
+// Test role checks
+app.get(
+  "/api/admin",
+  requireRole("admin"),
+  (_req, res) => {
+    res.json({ message: "Admin access granted" });
+  },
+);
+
+app.get(
+  "/api/superadmin",
+  requireRole("superadmin"),
+  (_req, res) => {
+    res.json({ message: "Superadmin access granted" });
+  },
+);
+
+app.get(
+  "/api/any-admin",
+  requireRole(["admin", "superadmin"], { mode: "any" }),
+  (_req, res) => {
+    res.json({ message: "Any admin access granted" });
+  },
+);
+
+// Test AuthInfo helper methods
+app.get(
+  "/api/check-helpers",
+  (req, res) => {
+    if (!req.auth) {
+      return res.status(401).json({ error: "Unauthorized" });
+    }
+    
+    res.json({
+      hasReadPerm: req.auth.hasPermission("user:read"),
+      hasDeletePerm: req.auth.hasPermission("user:delete"),
+      isAdmin: req.auth.hasRole("admin"),
+      isSuperAdmin: req.auth.hasRole("superadmin"),
+      hasAnyWritePerm: req.auth.hasAnyPermission(["user:write", "user:admin"]),
+      hasAllPerms: req.auth.hasAllPermissions(["user:read", "user:write"]),
+      hasAllPermsIncDelete: req.auth.hasAllPermissions(["user:read", "user:delete"]),
+      roles: req.auth.roles,
+      permissions: req.auth.permissions,
+    });
   },
 );
 
@@ -110,7 +197,7 @@ app.use(
   },
 );
 
-const port = process.env.PORT || 3001;
+const port = process.env.PORT || 3003;
 app.listen(port, () => {
   console.log(`Example API running on http://localhost:${port}`);
   console.log(`  GET  /health         - Health check`);
