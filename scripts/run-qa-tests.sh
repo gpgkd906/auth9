@@ -6,6 +6,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 QA_DIR="$PROJECT_ROOT/docs/qa"
 SECURITY_DIR="$PROJECT_ROOT/docs/security"
+ORCHESTRATOR_LAUNCHER="$PROJECT_ROOT/tools/qa-orchestrator/scripts/open-ui.sh"
+ORCHESTRATOR_CLI="$PROJECT_ROOT/tools/qa-orchestrator/scripts/run-cli.sh"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -19,6 +21,32 @@ total=0
 passed=0
 failed=0
 failed_files=()
+
+if [[ "${1:-}" == "--orchestrator" ]]; then
+    if [[ ! -x "$ORCHESTRATOR_LAUNCHER" ]]; then
+        echo "Orchestrator launcher not found: $ORCHESTRATOR_LAUNCHER"
+        exit 1
+    fi
+    exec "$ORCHESTRATOR_LAUNCHER"
+fi
+
+if [[ "${1:-}" == "--orchestrator-cli" ]]; then
+    if [[ ! -x "$ORCHESTRATOR_CLI" ]]; then
+        echo "Orchestrator CLI not found: $ORCHESTRATOR_CLI"
+        exit 1
+    fi
+    shift
+    exec "$ORCHESTRATOR_CLI" "$@"
+fi
+
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    echo "Usage: $0 [--orchestrator] [--orchestrator-cli] [cli-options]"
+    echo ""
+    echo "Default: run QA docs via opencode in shell mode."
+    echo "  --orchestrator   Launch tools/qa-orchestrator (Tauri UI workflow)"
+    echo "  --orchestrator-cli  Run tools/qa-orchestrator in CLI automation mode"
+    exit 0
+fi
 
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  Auth9 QA Test Runner${NC}"

@@ -1,0 +1,16 @@
+paths:
+  project_root: "../.."
+runner:
+  shell: "/bin/zsh"
+  shell_arg: "-lc"
+resume:
+  auto: true
+executors:
+  qa:
+    command_template: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+  fix:
+    command_template: "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\""
+  retest:
+    command_template: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+ticket:
+  directory: "docs/ticket"
