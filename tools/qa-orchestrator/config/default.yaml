@@ -20,19 +20,99 @@ workspaces:
 agents:
   opencode:
     templates:
+      init_once: "echo \"qa-orchestrator init_once\""
       qa: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
       retest: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+      loop_guard: "if [ \"{unresolved_items}\" -eq 0 ]; then echo stop; else echo continue; fi"
   claudecode:
     templates:
       fix: "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\""
 
 workflows:
   qa_only:
-    qa: "opencode"
+    steps:
+      - id: "init_once"
+        type: "init_once"
+        enabled: false
+      - id: "qa"
+        type: "qa"
+        enabled: true
+        agent_id: "opencode"
+      - id: "fix"
+        type: "fix"
+        enabled: false
+      - id: "retest"
+        type: "retest"
+        enabled: false
+    loop:
+      mode: "once"
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        agent_id: null
   qa_fix:
-    qa: "opencode"
-    fix: "claudecode"
+    steps:
+      - id: "init_once"
+        type: "init_once"
+        enabled: false
+      - id: "qa"
+        type: "qa"
+        enabled: true
+        agent_id: "opencode"
+      - id: "fix"
+        type: "fix"
+        enabled: true
+        agent_id: "claudecode"
+      - id: "retest"
+        type: "retest"
+        enabled: false
+    loop:
+      mode: "once"
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        agent_id: null
+  only-fix:
+    steps:
+      - id: "init_once"
+        type: "init_once"
+        enabled: false
+      - id: "qa"
+        type: "qa"
+        enabled: false
+      - id: "fix"
+        type: "fix"
+        enabled: true
+        agent_id: "claudecode"
+      - id: "retest"
+        type: "retest"
+        enabled: false
+    loop:
+      mode: "once"
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        agent_id: null
   qa_fix_retest:
-    qa: "opencode"
-    fix: "claudecode"
-    retest: "opencode"
+    steps:
+      - id: "init_once"
+        type: "init_once"
+        enabled: false
+      - id: "qa"
+        type: "qa"
+        enabled: true
+        agent_id: "opencode"
+      - id: "fix"
+        type: "fix"
+        enabled: true
+        agent_id: "claudecode"
+      - id: "retest"
+        type: "retest"
+        enabled: true
+        agent_id: "opencode"
+    loop:
+      mode: "once"
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        agent_id: null

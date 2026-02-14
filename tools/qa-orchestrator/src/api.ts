@@ -1,4 +1,5 @@
 import { invoke } from '@tauri-apps/api/tauri';
+import { listen } from '@tauri-apps/api/event';
 import type {
   ConfigOverview,
   ConfigValidationResult,
@@ -9,6 +10,7 @@ import type {
   SaveConfigFormRequest,
   SaveConfigYamlRequest,
   LogChunk,
+  TaskEventEnvelope,
   TaskDetail,
   TaskSummary
 } from './types';
@@ -43,5 +45,9 @@ export const api = {
   retryTaskItem: (taskItemId: string) =>
     invoke<TaskSummary>('retry_task_item', { task_item_id: taskItemId }),
   streamTaskLogs: (taskId: string, limit = 300) =>
-    invoke<LogChunk[]>('stream_task_logs', { task_id: taskId, limit })
+    invoke<LogChunk[]>('stream_task_logs', { task_id: taskId, limit }),
+  subscribeTaskEvents: (handler: (event: TaskEventEnvelope) => void) =>
+    listen<TaskEventEnvelope>('task-event', (event) => {
+      handler(event.payload);
+    })
 };
