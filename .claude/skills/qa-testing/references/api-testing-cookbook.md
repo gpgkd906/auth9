@@ -194,9 +194,11 @@ curl -s -X DELETE "http://localhost:8081/admin/realms/auth9/users/$USER_UUID" \
 
 ### Known Limitation: Setting Passwords
 
-In Keycloak 23 with active password policy, the admin `reset-password` endpoint returns HTTP 400 with the generic message `{"error":"HTTP 400 Bad Request"}` regardless of password strength. This is a known Keycloak behavior.
+In Keycloak 23.0.7, the admin `PUT /users/{id}/reset-password` endpoint always returns HTTP 400 with `{"error":"HTTP 400 Bad Request"}` regardless of password policy or password strength. This is a confirmed Keycloak bug.
 
-**Workaround for testing**: Use the seeded admin user (`admin / Admin123!`) or create users without passwords and rely on the OIDC login flow.
+**auth9-core workaround** (implemented): `reset_user_password` uses GET-merge-PUT on the user representation endpoint (`PUT /admin/realms/{realm}/users/{id}`) with credentials in the body, instead of the broken `reset-password` endpoint.
+
+**For testing**: Use the seeded admin user or create users with credentials in the POST body.
 
 ---
 

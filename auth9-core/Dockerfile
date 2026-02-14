@@ -2,7 +2,7 @@
 # Multi-stage build for minimal image size
 
 # ==================== Chef Stage ====================
-FROM rust:1.93 AS chef
+FROM rust:1.93-bookworm AS chef
 
 # Install cargo-chef
 RUN cargo install cargo-chef
@@ -37,7 +37,7 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
     cp /app/target/release/auth9-core /app/auth9-core-bin
 
 # ==================== Runtime Stage ====================
-FROM debian:trixie-slim
+FROM debian:bookworm-slim
 
 # Install runtime dependencies and apply security patches
 RUN apt-get update && \
