@@ -5,10 +5,13 @@ Tauri + React based QA workflow orchestrator for Auth9.
 ## Features
 
 - SQLite-backed `task -> task_item` lifecycle tracking
-- Unified `QA -> Fix -> Retest` workflow with configurable shell templates
+- Workspace isolation (`workspace`) for root path and document scope
+- Agent-driven command templates (`agent`) bound by `workflow` phase mapping
 - Full shell command passthrough (`/bin/zsh -lc` by default)
 - Auto-resume latest unfinished task on startup
 - Real-time dashboard for task list, item progress, and command logs
+- Config Center with `Form`/`YAML` switch for workspace/workflow/agent editing
+- Config persistence in SQLite with hot reload for new tasks
 
 ## Directory
 
@@ -40,6 +43,7 @@ CLI examples:
 ```bash
 ./tools/qa-orchestrator/scripts/run-cli.sh
 ./tools/qa-orchestrator/scripts/run-cli.sh --mode qa_fix_retest
+./tools/qa-orchestrator/scripts/run-cli.sh --workspace auth9 --workflow qa_fix_retest
 ./tools/qa-orchestrator/scripts/run-cli.sh --target-file docs/qa/user/01-crud.md
 ./tools/qa-orchestrator/scripts/run-cli.sh --no-auto-resume --mode qa_only
 ```
@@ -50,17 +54,31 @@ CLI examples:
 - `qa_fix`: run QA and auto-fix tickets
 - `qa_fix_retest`: run QA, fix tickets, then retest (default)
 
-## Command Templates
+## Config Model
 
-`config/default.yaml` supports placeholders:
+`config/default.yaml` defines:
+
+- `workspaces`: isolated roots and path scopes (`root_path`, `qa_targets`, `ticket_dir`)
+- `agents`: phase templates (`qa`, `fix`, `retest`)
+- `workflows`: `phase -> agent` mapping
+- `defaults`: default `workspace` and `workflow`
+
+Runtime source of truth:
+
+- active config is stored in SQLite (`orchestrator_config` tables)
+- `config/default.yaml` is updated on every save as mirror/export
+- config changes hot-reload for new task creation; running tasks keep their own snapshots
+
+Template placeholders:
 
 - `{rel_path}`: current QA/security markdown file path
 - `{ticket_paths}`: space-separated ticket file paths for current item
 
-Example default templates:
+Path safety rules:
 
-- QA: `opencode run "读取文档：{rel_path}，执行QA测试" -m "deepseek/deepseek-chat"`
-- Fix: `claude -p ... "/ticket-fix {ticket_paths}"`
+- all task paths are resolved relative to the selected workspace root
+- path escape (`..`) is rejected
+- existing paths are canonicalized and must remain inside workspace root
 
 ## Existing Scripts Compatibility
 

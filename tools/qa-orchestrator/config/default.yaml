@@ -1,16 +1,38 @@
-paths:
-  project_root: "../.."
 runner:
   shell: "/bin/zsh"
   shell_arg: "-lc"
+
 resume:
   auto: true
-executors:
-  qa:
-    command_template: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-  fix:
-    command_template: "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\""
-  retest:
-    command_template: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-ticket:
-  directory: "docs/ticket"
+
+defaults:
+  workspace: "auth9"
+  workflow: "qa_fix_retest"
+
+workspaces:
+  auth9:
+    root_path: "../.."
+    qa_targets:
+      - "docs/qa"
+      - "docs/security"
+    ticket_dir: "docs/ticket"
+
+agents:
+  opencode:
+    templates:
+      qa: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+      retest: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+  claudecode:
+    templates:
+      fix: "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\""
+
+workflows:
+  qa_only:
+    qa: "opencode"
+  qa_fix:
+    qa: "opencode"
+    fix: "claudecode"
+  qa_fix_retest:
+    qa: "opencode"
+    fix: "claudecode"
+    retest: "opencode"

@@ -8,7 +8,7 @@ use serde_json::{json, Value};
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, RwLock};
 use tauri::{AppHandle, Manager, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
@@ -17,77 +17,175 @@ use tokio::time::{sleep, Duration};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct OrchestratorConfig {
-    paths: ConfigPaths,
     runner: RunnerConfig,
     resume: ResumeConfig,
-    executors: ExecutorsConfig,
-    ticket: TicketConfig,
+    defaults: ConfigDefaults,
+    workspaces: HashMap<String, WorkspaceConfig>,
+    agents: HashMap<String, AgentConfig>,
+    workflows: HashMap<String, WorkflowConfig>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct ConfigPaths {
-    project_root: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct ConfigDefaults {
+    workspace: String,
+    workflow: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct RunnerConfig {
     shell: String,
     shell_arg: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct ResumeConfig {
     auto: bool,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct ExecutorsConfig {
-    qa: ExecutorEntry,
-    fix: ExecutorEntry,
-    retest: ExecutorEntry,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkspaceConfig {
+    root_path: String,
+    qa_targets: Vec<String>,
+    ticket_dir: String,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct ExecutorEntry {
-    command_template: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AgentConfig {
+    templates: AgentTemplates,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-struct TicketConfig {
-    directory: String,
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AgentTemplates {
+    qa: Option<String>,
+    fix: Option<String>,
+    retest: Option<String>,
+}
+
+impl AgentTemplates {
+    fn phase_template(&self, phase: &str) -> Option<&str> {
+        match phase {
+            "qa" => self.qa.as_deref(),
+            "fix" => self.fix.as_deref(),
+            "retest" => self.retest.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowConfig {
+    qa: String,
+    fix: Option<String>,
+    retest: Option<String>,
+}
+
+impl WorkflowConfig {
+    fn agent_for_phase(&self, phase: &str) -> Option<&str> {
+        match phase {
+            "qa" => Some(self.qa.as_str()),
+            "fix" => self.fix.as_deref(),
+            "retest" => self.retest.as_deref(),
+            _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ResolvedWorkspace {
+    root_path: PathBuf,
+    qa_targets: Vec<String>,
+    ticket_dir: String,
+}
+
+#[derive(Debug, Clone)]
+struct ActiveConfig {
+    config: OrchestratorConfig,
+    workspaces: HashMap<String, ResolvedWorkspace>,
+    default_workspace_id: String,
+    default_workflow_id: String,
 }
 
 impl Default for OrchestratorConfig {
     fn default() -> Self {
-        Self {
-            paths: ConfigPaths {
-                project_root: "../..".to_string(),
+        let mut workspaces = HashMap::new();
+        workspaces.insert(
+            "auth9".to_string(),
+            WorkspaceConfig {
+                root_path: "../..".to_string(),
+                qa_targets: vec!["docs/qa".to_string(), "docs/security".to_string()],
+                ticket_dir: "docs/ticket".to_string(),
             },
+        );
+
+        let mut agents = HashMap::new();
+        agents.insert(
+            "opencode".to_string(),
+            AgentConfig {
+                templates: AgentTemplates {
+                    qa: Some(
+                        "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+                            .to_string(),
+                    ),
+                    fix: None,
+                    retest: Some(
+                        "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
+                            .to_string(),
+                    ),
+                },
+            },
+        );
+        agents.insert(
+            "claudecode".to_string(),
+            AgentConfig {
+                templates: AgentTemplates {
+                    qa: None,
+                    fix: Some("claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\"".to_string()),
+                    retest: None,
+                },
+            },
+        );
+
+        let mut workflows = HashMap::new();
+        workflows.insert(
+            "qa_only".to_string(),
+            WorkflowConfig {
+                qa: "opencode".to_string(),
+                fix: None,
+                retest: None,
+            },
+        );
+        workflows.insert(
+            "qa_fix".to_string(),
+            WorkflowConfig {
+                qa: "opencode".to_string(),
+                fix: Some("claudecode".to_string()),
+                retest: None,
+            },
+        );
+        workflows.insert(
+            "qa_fix_retest".to_string(),
+            WorkflowConfig {
+                qa: "opencode".to_string(),
+                fix: Some("claudecode".to_string()),
+                retest: Some("opencode".to_string()),
+            },
+        );
+
+        Self {
             runner: RunnerConfig {
                 shell: "/bin/zsh".to_string(),
                 shell_arg: "-lc".to_string(),
             },
             resume: ResumeConfig { auto: true },
-            executors: ExecutorsConfig {
-                qa: ExecutorEntry {
-                    command_template:
-                        "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-                            .to_string(),
-                },
-                fix: ExecutorEntry {
-                    command_template: "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\"".to_string(),
-                },
-                retest: ExecutorEntry {
-                    command_template:
-                        "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-                            .to_string(),
-                },
+            defaults: ConfigDefaults {
+                workspace: "auth9".to_string(),
+                workflow: "qa_fix_retest".to_string(),
             },
-            ticket: TicketConfig {
-                directory: "docs/ticket".to_string(),
-            },
+            workspaces,
+            agents,
+            workflows,
         }
     }
 }
@@ -99,10 +197,10 @@ struct ManagedState {
 
 struct InnerState {
     app_root: PathBuf,
-    project_root: PathBuf,
     db_path: PathBuf,
     logs_dir: PathBuf,
-    config: OrchestratorConfig,
+    config_path: PathBuf,
+    active_config: RwLock<ActiveConfig>,
     running: Mutex<HashMap<String, RunningTask>>,
 }
 
@@ -161,6 +259,8 @@ struct CreateTaskPayload {
     name: Option<String>,
     goal: Option<String>,
     mode: Option<String>,
+    workspace_id: Option<String>,
+    workflow_id: Option<String>,
     target_files: Option<Vec<String>>,
 }
 
@@ -170,6 +270,8 @@ impl Default for CreateTaskPayload {
             name: None,
             goal: None,
             mode: Some("qa_fix_retest".to_string()),
+            workspace_id: None,
+            workflow_id: None,
             target_files: None,
         }
     }
@@ -181,6 +283,63 @@ struct BootstrapResponse {
 }
 
 #[derive(Debug, Serialize)]
+struct NamedOption {
+    id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CreateTaskDefaults {
+    workspace_id: String,
+    workflow_id: String,
+}
+
+#[derive(Debug, Serialize)]
+struct CreateTaskOptions {
+    defaults: CreateTaskDefaults,
+    workspaces: Vec<NamedOption>,
+    workflows: Vec<NamedOption>,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigOverview {
+    config: OrchestratorConfig,
+    yaml: String,
+    version: i64,
+    updated_at: String,
+}
+
+#[derive(Debug, Deserialize)]
+struct SaveConfigFormPayload {
+    config: OrchestratorConfig,
+}
+
+#[derive(Debug, Deserialize)]
+struct SaveConfigYamlPayload {
+    yaml: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigVersionSummary {
+    version: i64,
+    created_at: String,
+    author: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigVersionDetail {
+    version: i64,
+    created_at: String,
+    author: String,
+    yaml: String,
+}
+
+#[derive(Debug, Serialize)]
+struct ConfigValidationResult {
+    valid: bool,
+    normalized_yaml: String,
+}
+
+#[derive(Debug, Serialize)]
 struct TaskSummary {
     id: String,
     name: String,
@@ -189,6 +348,8 @@ struct TaskSummary {
     completed_at: Option<String>,
     goal: String,
     mode: String,
+    workspace_id: String,
+    workflow_id: String,
     target_files: Vec<String>,
     total_items: i64,
     finished_items: i64,
@@ -221,6 +382,8 @@ struct CommandRunDto {
     phase: String,
     command: String,
     cwd: String,
+    workspace_id: String,
+    agent_id: String,
     exit_code: Option<i64>,
     stdout_path: String,
     stderr_path: String,
@@ -268,6 +431,15 @@ struct RunResult {
     exit_code: i64,
 }
 
+#[derive(Debug, Clone)]
+struct TaskRuntimeContext {
+    mode: TaskMode,
+    workspace_id: String,
+    workflow_id: String,
+    workspace_root: PathBuf,
+    ticket_dir: String,
+}
+
 #[derive(Debug, Default, Clone)]
 struct CliOptions {
     cli: bool,
@@ -275,6 +447,8 @@ struct CliOptions {
     no_auto_resume: bool,
     task_id: Option<String>,
     mode: Option<String>,
+    workspace_id: Option<String>,
+    workflow_id: Option<String>,
     name: Option<String>,
     goal: Option<String>,
     target_files: Vec<String>,
@@ -282,7 +456,8 @@ struct CliOptions {
 
 #[tauri::command]
 async fn bootstrap(state: State<'_, ManagedState>) -> Result<BootstrapResponse, String> {
-    if !state.inner.config.resume.auto {
+    let active = read_active_config(&state.inner).map_err(err_to_string)?;
+    if !active.config.resume.auto {
         return Ok(BootstrapResponse {
             resumed_task_id: None,
         });
@@ -290,6 +465,132 @@ async fn bootstrap(state: State<'_, ManagedState>) -> Result<BootstrapResponse, 
     let resumed_task_id =
         find_latest_resumable_task_id(&state.inner, false).map_err(err_to_string)?;
     Ok(BootstrapResponse { resumed_task_id })
+}
+
+#[tauri::command]
+async fn get_create_task_options(
+    state: State<'_, ManagedState>,
+) -> Result<CreateTaskOptions, String> {
+    let active = read_active_config(&state.inner).map_err(err_to_string)?;
+    let mut workspaces: Vec<NamedOption> = active
+        .config
+        .workspaces
+        .keys()
+        .cloned()
+        .map(|id| NamedOption { id })
+        .collect();
+    workspaces.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let mut workflows: Vec<NamedOption> = active
+        .config
+        .workflows
+        .keys()
+        .cloned()
+        .map(|id| NamedOption { id })
+        .collect();
+    workflows.sort_by(|a, b| a.id.cmp(&b.id));
+
+    Ok(CreateTaskOptions {
+        defaults: CreateTaskDefaults {
+            workspace_id: active.default_workspace_id.clone(),
+            workflow_id: active.default_workflow_id.clone(),
+        },
+        workspaces,
+        workflows,
+    })
+}
+
+#[tauri::command]
+async fn get_config_overview(state: State<'_, ManagedState>) -> Result<ConfigOverview, String> {
+    load_config_overview(&state.inner).map_err(err_to_string)
+}
+
+#[tauri::command]
+async fn save_config_from_form(
+    state: State<'_, ManagedState>,
+    payload: SaveConfigFormPayload,
+) -> Result<ConfigOverview, String> {
+    let yaml = serde_yaml::to_string(&payload.config).map_err(err_to_string)?;
+    persist_config_and_reload(&state.inner, payload.config, yaml, "ui-form").map_err(err_to_string)
+}
+
+#[tauri::command]
+async fn save_config_from_yaml(
+    state: State<'_, ManagedState>,
+    payload: SaveConfigYamlPayload,
+) -> Result<ConfigOverview, String> {
+    let config =
+        serde_yaml::from_str::<OrchestratorConfig>(&payload.yaml).map_err(err_to_string)?;
+    persist_config_and_reload(&state.inner, config, payload.yaml, "ui-yaml").map_err(err_to_string)
+}
+
+#[tauri::command]
+async fn validate_config_yaml(
+    state: State<'_, ManagedState>,
+    payload: SaveConfigYamlPayload,
+) -> Result<ConfigValidationResult, String> {
+    let config =
+        serde_yaml::from_str::<OrchestratorConfig>(&payload.yaml).map_err(err_to_string)?;
+    let _ = build_active_config(&state.inner.app_root, config.clone()).map_err(err_to_string)?;
+    let current = read_active_config(&state.inner)
+        .map_err(err_to_string)?
+        .config
+        .clone();
+    let conn = open_conn(&state.inner.db_path).map_err(err_to_string)?;
+    enforce_deletion_guards(&conn, &current, &config).map_err(err_to_string)?;
+    let normalized_yaml = serde_yaml::to_string(&config).map_err(err_to_string)?;
+    Ok(ConfigValidationResult {
+        valid: true,
+        normalized_yaml,
+    })
+}
+
+#[tauri::command]
+async fn list_config_versions(
+    state: State<'_, ManagedState>,
+) -> Result<Vec<ConfigVersionSummary>, String> {
+    let conn = open_conn(&state.inner.db_path).map_err(err_to_string)?;
+    let mut stmt = conn
+        .prepare(
+            "SELECT version, created_at, author FROM orchestrator_config_versions ORDER BY version DESC LIMIT 200",
+        )
+        .map_err(err_to_string)?;
+    let rows = stmt
+        .query_map([], |row| {
+            Ok(ConfigVersionSummary {
+                version: row.get(0)?,
+                created_at: row.get(1)?,
+                author: row.get(2)?,
+            })
+        })
+        .map_err(err_to_string)?
+        .collect::<std::result::Result<Vec<_>, _>>()
+        .map_err(err_to_string)?;
+    Ok(rows)
+}
+
+#[tauri::command]
+async fn get_config_version(
+    state: State<'_, ManagedState>,
+    version: i64,
+) -> Result<ConfigVersionDetail, String> {
+    let conn = open_conn(&state.inner.db_path).map_err(err_to_string)?;
+    let detail = conn
+        .query_row(
+            "SELECT version, created_at, author, config_yaml FROM orchestrator_config_versions WHERE version = ?1",
+            params![version],
+            |row| {
+                Ok(ConfigVersionDetail {
+                    version: row.get(0)?,
+                    created_at: row.get(1)?,
+                    author: row.get(2)?,
+                    yaml: row.get(3)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(err_to_string)?;
+    detail.ok_or_else(|| format!("config version not found: {}", version))
 }
 
 #[tauri::command]
@@ -396,21 +697,411 @@ fn detect_app_root() -> PathBuf {
     cwd
 }
 
-fn load_config(app_root: &Path) -> OrchestratorConfig {
-    let config_path = app_root.join("config/default.yaml");
+fn load_config(config_path: &Path) -> Result<OrchestratorConfig> {
     match std::fs::read_to_string(config_path) {
-        Ok(content) => serde_yaml::from_str::<OrchestratorConfig>(&content).unwrap_or_default(),
-        Err(_) => OrchestratorConfig::default(),
+        Ok(content) => serde_yaml::from_str::<OrchestratorConfig>(&content)
+            .with_context(|| format!("failed to parse {}", config_path.display())),
+        Err(_) => Ok(OrchestratorConfig::default()),
     }
+}
+
+fn open_conn(db_path: &Path) -> Result<Connection> {
+    Connection::open(db_path).context("failed to open sqlite db")
+}
+
+fn read_active_config<'a>(
+    state: &'a InnerState,
+) -> Result<std::sync::RwLockReadGuard<'a, ActiveConfig>> {
+    state
+        .active_config
+        .read()
+        .map_err(|_| anyhow::anyhow!("active config lock is poisoned"))
+}
+
+fn write_active_config<'a>(
+    state: &'a InnerState,
+) -> Result<std::sync::RwLockWriteGuard<'a, ActiveConfig>> {
+    state
+        .active_config
+        .write()
+        .map_err(|_| anyhow::anyhow!("active config lock is poisoned"))
+}
+
+fn validate_workspace_rel_path(raw: &str, field: &str) -> Result<()> {
+    let path = raw.trim();
+    if path.is_empty() {
+        anyhow::bail!("{} cannot be empty", field);
+    }
+    let parsed = Path::new(path);
+    if parsed.is_absolute() {
+        anyhow::bail!("{} must be a relative path: {}", field, raw);
+    }
+    if parsed
+        .components()
+        .any(|c| matches!(c, std::path::Component::ParentDir))
+    {
+        anyhow::bail!("{} cannot include '..': {}", field, raw);
+    }
+    Ok(())
+}
+
+fn ensure_within_root(root: &Path, target: &Path, field: &str) -> Result<()> {
+    let root_canon = root
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize workspace root {}", root.display()))?;
+    let target_canon = target.canonicalize().with_context(|| {
+        format!(
+            "failed to canonicalize path {} for {}",
+            target.display(),
+            field
+        )
+    })?;
+    if !target_canon.starts_with(&root_canon) {
+        anyhow::bail!(
+            "{} resolves outside workspace root: {}",
+            field,
+            target_canon.display()
+        );
+    }
+    Ok(())
+}
+
+fn resolve_workspace_path(workspace_root: &Path, rel_path: &str, field: &str) -> Result<PathBuf> {
+    validate_workspace_rel_path(rel_path, field)?;
+    let joined = workspace_root.join(rel_path);
+    if joined.exists() {
+        ensure_within_root(workspace_root, &joined, field)?;
+    } else if let Some(parent) = joined.parent() {
+        if parent.exists() {
+            ensure_within_root(workspace_root, parent, field)?;
+        }
+    }
+    Ok(joined)
+}
+
+fn resolve_and_validate_workspaces(
+    app_root: &Path,
+    config: &OrchestratorConfig,
+) -> Result<HashMap<String, ResolvedWorkspace>> {
+    if config.workspaces.is_empty() {
+        anyhow::bail!("config.workspaces cannot be empty");
+    }
+    if config.agents.is_empty() {
+        anyhow::bail!("config.agents cannot be empty");
+    }
+    if config.workflows.is_empty() {
+        anyhow::bail!("config.workflows cannot be empty");
+    }
+
+    let mut resolved = HashMap::new();
+    for (id, entry) in &config.workspaces {
+        if id.trim().is_empty() {
+            anyhow::bail!("workspace id cannot be empty");
+        }
+        if entry.qa_targets.is_empty() {
+            anyhow::bail!("workspace '{}' qa_targets cannot be empty", id);
+        }
+
+        let root_path = app_root
+            .join(&entry.root_path)
+            .canonicalize()
+            .with_context(|| {
+                format!(
+                    "workspace '{}' root_path not found: {}",
+                    id, entry.root_path
+                )
+            })?;
+
+        for (idx, target) in entry.qa_targets.iter().enumerate() {
+            let field = format!("workspace '{}' qa_targets[{}]", id, idx);
+            let resolved_target = resolve_workspace_path(&root_path, target, &field)?;
+            if resolved_target.exists() && !resolved_target.is_dir() {
+                anyhow::bail!(
+                    "{} must be a directory: {}",
+                    field,
+                    resolved_target.display()
+                );
+            }
+        }
+        let ticket_field = format!("workspace '{}' ticket_dir", id);
+        let resolved_ticket = resolve_workspace_path(&root_path, &entry.ticket_dir, &ticket_field)?;
+        if resolved_ticket.exists() && !resolved_ticket.is_dir() {
+            anyhow::bail!(
+                "{} must be a directory: {}",
+                ticket_field,
+                resolved_ticket.display()
+            );
+        }
+
+        resolved.insert(
+            id.clone(),
+            ResolvedWorkspace {
+                root_path,
+                qa_targets: entry.qa_targets.clone(),
+                ticket_dir: entry.ticket_dir.clone(),
+            },
+        );
+    }
+
+    if !resolved.contains_key(&config.defaults.workspace) {
+        anyhow::bail!(
+            "defaults.workspace '{}' does not exist",
+            config.defaults.workspace
+        );
+    }
+    if !config.workflows.contains_key(&config.defaults.workflow) {
+        anyhow::bail!(
+            "defaults.workflow '{}' does not exist",
+            config.defaults.workflow
+        );
+    }
+
+    for (workflow_id, workflow) in &config.workflows {
+        for phase in ["qa", "fix", "retest"] {
+            let Some(agent_id) = workflow.agent_for_phase(phase) else {
+                continue;
+            };
+            let agent = config.agents.get(agent_id).with_context(|| {
+                format!(
+                    "workflow '{}' phase '{}' references unknown agent '{}'",
+                    workflow_id, phase, agent_id
+                )
+            })?;
+            if agent.templates.phase_template(phase).is_none() {
+                anyhow::bail!(
+                    "agent '{}' is missing template for phase '{}' used by workflow '{}'",
+                    agent_id,
+                    phase,
+                    workflow_id
+                );
+            }
+        }
+    }
+
+    Ok(resolved)
+}
+
+fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
+    let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
+    Ok(ActiveConfig {
+        default_workspace_id: config.defaults.workspace.clone(),
+        default_workflow_id: config.defaults.workflow.clone(),
+        workspaces,
+        config,
+    })
+}
+
+fn atomic_write_string(path: &Path, content: &str) -> Result<()> {
+    let parent = path
+        .parent()
+        .with_context(|| format!("invalid file path: {}", path.display()))?;
+    std::fs::create_dir_all(parent)
+        .with_context(|| format!("failed to create dir {}", parent.display()))?;
+    let tmp_path = path.with_extension("yaml.tmp");
+    std::fs::write(&tmp_path, content)
+        .with_context(|| format!("failed writing temp config {}", tmp_path.display()))?;
+    std::fs::rename(&tmp_path, path)
+        .with_context(|| format!("failed replacing config {}", path.display()))?;
+    Ok(())
+}
+
+fn load_or_seed_config(
+    db_path: &Path,
+    config_path: &Path,
+) -> Result<(OrchestratorConfig, String, i64, String)> {
+    let conn = open_conn(db_path)?;
+    let row: Option<(String, String, i64, String)> = conn
+        .query_row(
+            "SELECT config_yaml, config_json, version, updated_at FROM orchestrator_config WHERE id = 1",
+            [],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)),
+        )
+        .optional()?;
+
+    if let Some((yaml, json_raw, version, updated_at)) = row {
+        let config = serde_json::from_str::<OrchestratorConfig>(&json_raw)
+            .or_else(|_| serde_yaml::from_str::<OrchestratorConfig>(&yaml))
+            .context("failed to parse config from sqlite")?;
+        return Ok((config, yaml, version, updated_at));
+    }
+
+    let config = load_config(config_path)?;
+    let yaml = if config_path.exists() {
+        std::fs::read_to_string(config_path)
+            .with_context(|| format!("failed to read {}", config_path.display()))?
+    } else {
+        serde_yaml::to_string(&config).context("failed to serialize initial config to yaml")?
+    };
+    let json_raw = serde_json::to_string(&config).context("failed to serialize initial config")?;
+    let now = now_ts();
+    conn.execute(
+        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, 1, ?3)",
+        params![yaml, json_raw, now],
+    )?;
+    conn.execute(
+        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (1, ?1, ?2, ?3, 'bootstrap')",
+        params![yaml, serde_json::to_string(&config)?, now],
+    )?;
+    atomic_write_string(config_path, &yaml)?;
+    Ok((config, yaml, 1, now))
+}
+
+fn count_tasks_by_workspace(conn: &Connection, workspace_id: &str) -> Result<i64> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE workspace_id = ?1",
+        params![workspace_id],
+        |row| row.get(0),
+    )?;
+    Ok(count)
+}
+
+fn count_tasks_by_workflow(conn: &Connection, workflow_id: &str) -> Result<i64> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM tasks WHERE workflow_id = ?1",
+        params![workflow_id],
+        |row| row.get(0),
+    )?;
+    Ok(count)
+}
+
+fn agent_is_referenced(workflows: &HashMap<String, WorkflowConfig>, agent_id: &str) -> bool {
+    workflows.values().any(|wf| {
+        wf.qa == agent_id
+            || wf.fix.as_deref() == Some(agent_id)
+            || wf.retest.as_deref() == Some(agent_id)
+    })
+}
+
+fn enforce_deletion_guards(
+    conn: &Connection,
+    previous: &OrchestratorConfig,
+    candidate: &OrchestratorConfig,
+) -> Result<()> {
+    let removed_workspaces: Vec<String> = previous
+        .workspaces
+        .keys()
+        .filter(|id| !candidate.workspaces.contains_key(*id))
+        .cloned()
+        .collect();
+    for workspace_id in removed_workspaces {
+        let task_count = count_tasks_by_workspace(conn, &workspace_id)?;
+        if task_count > 0 {
+            anyhow::bail!(
+                "cannot delete workspace '{}' because {} tasks reference it",
+                workspace_id,
+                task_count
+            );
+        }
+    }
+
+    let removed_workflows: Vec<String> = previous
+        .workflows
+        .keys()
+        .filter(|id| !candidate.workflows.contains_key(*id))
+        .cloned()
+        .collect();
+    for workflow_id in removed_workflows {
+        let task_count = count_tasks_by_workflow(conn, &workflow_id)?;
+        if task_count > 0 {
+            anyhow::bail!(
+                "cannot delete workflow '{}' because {} tasks reference it",
+                workflow_id,
+                task_count
+            );
+        }
+    }
+
+    let removed_agents: Vec<String> = previous
+        .agents
+        .keys()
+        .filter(|id| !candidate.agents.contains_key(*id))
+        .cloned()
+        .collect();
+    for agent_id in removed_agents {
+        if agent_is_referenced(&candidate.workflows, &agent_id) {
+            anyhow::bail!(
+                "cannot delete agent '{}' because workflows still reference it",
+                agent_id
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn persist_config_and_reload(
+    state: &InnerState,
+    config: OrchestratorConfig,
+    yaml: String,
+    author: &str,
+) -> Result<ConfigOverview> {
+    let candidate = build_active_config(&state.app_root, config.clone())?;
+    let json_raw = serde_json::to_string(&config).context("failed to serialize config json")?;
+
+    let previous_config = {
+        let active = read_active_config(state)?;
+        active.config.clone()
+    };
+
+    let conn = open_conn(&state.db_path)?;
+    let tx = conn.unchecked_transaction()?;
+    enforce_deletion_guards(&tx, &previous_config, &config)?;
+    let current_version: i64 = tx
+        .query_row(
+            "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
+            [],
+            |row| row.get(0),
+        )
+        .unwrap_or(0);
+    let next_version = current_version + 1;
+    let now = now_ts();
+
+    tx.execute(
+        "INSERT INTO orchestrator_config (id, config_yaml, config_json, version, updated_at) VALUES (1, ?1, ?2, ?3, ?4)
+         ON CONFLICT(id) DO UPDATE SET config_yaml=excluded.config_yaml, config_json=excluded.config_json, version=excluded.version, updated_at=excluded.updated_at",
+        params![yaml, json_raw, next_version, now],
+    )?;
+    tx.execute(
+        "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![next_version, yaml, serde_json::to_string(&config)?, now, author],
+    )?;
+
+    atomic_write_string(&state.config_path, &yaml)?;
+    tx.commit()?;
+
+    {
+        let mut active = write_active_config(state)?;
+        *active = candidate;
+    }
+
+    Ok(ConfigOverview {
+        config,
+        yaml,
+        version: next_version,
+        updated_at: now,
+    })
+}
+
+fn load_config_overview(state: &InnerState) -> Result<ConfigOverview> {
+    let conn = open_conn(&state.db_path)?;
+    let (yaml, version, updated_at): (String, i64, String) = conn.query_row(
+        "SELECT config_yaml, version, updated_at FROM orchestrator_config WHERE id = 1",
+        [],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+    )?;
+
+    let active = read_active_config(state)?;
+    Ok(ConfigOverview {
+        config: active.config.clone(),
+        yaml,
+        version,
+        updated_at,
+    })
 }
 
 fn init_state() -> Result<ManagedState> {
     let app_root = detect_app_root();
-    let config = load_config(&app_root);
-    let project_root = app_root
-        .join(&config.paths.project_root)
-        .canonicalize()
-        .unwrap_or_else(|_| app_root.join(&config.paths.project_root));
+    let config_path = app_root.join("config/default.yaml");
     let data_dir = app_root.join("data");
     let logs_dir = data_dir.join("logs");
     std::fs::create_dir_all(&logs_dir)
@@ -419,20 +1110,43 @@ fn init_state() -> Result<ManagedState> {
     let db_path = data_dir.join("qa_orchestrator.db");
     init_schema(&db_path)?;
 
+    let (config, _yaml, _version, _updated_at) = load_or_seed_config(&db_path, &config_path)?;
+    let active = build_active_config(&app_root, config)?;
+    let default_workspace = active
+        .workspaces
+        .get(&active.default_workspace_id)
+        .context("default workspace is missing after config validation")?;
+    backfill_legacy_data(
+        &db_path,
+        &active.default_workspace_id,
+        &active.default_workflow_id,
+        default_workspace,
+    )?;
+
     Ok(ManagedState {
         inner: Arc::new(InnerState {
             app_root,
-            project_root,
             db_path,
             logs_dir,
-            config,
+            config_path,
+            active_config: RwLock::new(active),
             running: Mutex::new(HashMap::new()),
         }),
     })
 }
 
-fn open_conn(db_path: &Path) -> Result<Connection> {
-    Connection::open(db_path).context("failed to open sqlite db")
+fn ensure_column(conn: &Connection, table: &str, column: &str, ddl: &str) -> Result<()> {
+    let mut stmt = conn
+        .prepare(&format!("PRAGMA table_info({})", table))
+        .with_context(|| format!("failed to read schema for {}", table))?;
+    let cols = stmt
+        .query_map([], |row| row.get::<_, String>(1))?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    if !cols.iter().any(|c| c == column) {
+        conn.execute(ddl, [])
+            .with_context(|| format!("failed to add column {}.{}", table, column))?;
+    }
+    Ok(())
 }
 
 fn init_schema(db_path: &Path) -> Result<()> {
@@ -448,6 +1162,11 @@ fn init_schema(db_path: &Path) -> Result<()> {
             goal TEXT NOT NULL,
             target_files_json TEXT NOT NULL,
             mode TEXT NOT NULL,
+            workspace_id TEXT NOT NULL,
+            workflow_id TEXT NOT NULL,
+            workspace_root TEXT NOT NULL,
+            qa_targets_json TEXT NOT NULL,
+            ticket_dir TEXT NOT NULL,
             resume_token TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -477,6 +1196,8 @@ fn init_schema(db_path: &Path) -> Result<()> {
             phase TEXT NOT NULL,
             command TEXT NOT NULL,
             cwd TEXT NOT NULL,
+            workspace_id TEXT NOT NULL,
+            agent_id TEXT NOT NULL,
             exit_code INTEGER,
             stdout_path TEXT NOT NULL,
             stderr_path TEXT NOT NULL,
@@ -495,22 +1216,155 @@ fn init_schema(db_path: &Path) -> Result<()> {
             created_at TEXT NOT NULL
         );
 
+        CREATE TABLE IF NOT EXISTS orchestrator_config (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            config_yaml TEXT NOT NULL,
+            config_json TEXT NOT NULL,
+            version INTEGER NOT NULL,
+            updated_at TEXT NOT NULL
+        );
+
+        CREATE TABLE IF NOT EXISTS orchestrator_config_versions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            version INTEGER NOT NULL,
+            config_yaml TEXT NOT NULL,
+            config_json TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            author TEXT NOT NULL DEFAULT 'system'
+        );
+
         CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
         CREATE INDEX IF NOT EXISTS idx_task_items_task_order ON task_items(task_id, order_no);
         CREATE INDEX IF NOT EXISTS idx_task_items_status ON task_items(status);
         CREATE INDEX IF NOT EXISTS idx_command_runs_task_item_phase ON command_runs(task_item_id, phase);
         CREATE INDEX IF NOT EXISTS idx_events_task_created_at ON events(task_id, created_at);
+        CREATE INDEX IF NOT EXISTS idx_cfg_versions_version ON orchestrator_config_versions(version DESC);
         "#,
     )
     .context("failed to initialize schema")?;
+
+    ensure_column(
+        &conn,
+        "tasks",
+        "workspace_id",
+        "ALTER TABLE tasks ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "workflow_id",
+        "ALTER TABLE tasks ADD COLUMN workflow_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "workspace_root",
+        "ALTER TABLE tasks ADD COLUMN workspace_root TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "qa_targets_json",
+        "ALTER TABLE tasks ADD COLUMN qa_targets_json TEXT NOT NULL DEFAULT '[]'",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "ticket_dir",
+        "ALTER TABLE tasks ADD COLUMN ticket_dir TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "workspace_id",
+        "ALTER TABLE command_runs ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    ensure_column(
+        &conn,
+        "command_runs",
+        "agent_id",
+        "ALTER TABLE command_runs ADD COLUMN agent_id TEXT NOT NULL DEFAULT ''",
+    )?;
+    Ok(())
+}
+
+fn backfill_legacy_data(
+    db_path: &Path,
+    default_workspace_id: &str,
+    default_workflow_id: &str,
+    workspace: &ResolvedWorkspace,
+) -> Result<()> {
+    let conn = open_conn(db_path)?;
+    let workspace_root = workspace.root_path.to_string_lossy().to_string();
+    let qa_targets = serde_json::to_string(&workspace.qa_targets)?;
+    conn.execute(
+        "UPDATE tasks SET workspace_id = ?1 WHERE workspace_id = ''",
+        params![default_workspace_id],
+    )?;
+    conn.execute(
+        "UPDATE tasks SET workflow_id = ?1 WHERE workflow_id = ''",
+        params![default_workflow_id],
+    )?;
+    conn.execute(
+        "UPDATE tasks SET workspace_root = ?1 WHERE workspace_root = ''",
+        params![workspace_root],
+    )?;
+    conn.execute(
+        "UPDATE tasks SET qa_targets_json = ?1 WHERE qa_targets_json = '' OR qa_targets_json = '[]'",
+        params![qa_targets],
+    )?;
+    conn.execute(
+        "UPDATE tasks SET ticket_dir = ?1 WHERE ticket_dir = ''",
+        params![workspace.ticket_dir],
+    )?;
+    conn.execute(
+        "UPDATE command_runs SET workspace_id = ?1 WHERE workspace_id = ''",
+        params![default_workspace_id],
+    )?;
+    conn.execute(
+        "UPDATE command_runs SET agent_id = 'legacy' WHERE agent_id = ''",
+        [],
+    )?;
     Ok(())
 }
 
 fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<TaskSummary> {
+    let active = read_active_config(state)?;
     let mode_raw = payload.mode.unwrap_or_else(|| "qa_fix_retest".to_string());
     let mode = TaskMode::from_str(&mode_raw);
 
-    let target_files = collect_target_files(&state.project_root, payload.target_files)?;
+    let workspace_id = payload
+        .workspace_id
+        .clone()
+        .unwrap_or_else(|| active.default_workspace_id.clone());
+    let workspace = active
+        .workspaces
+        .get(&workspace_id)
+        .with_context(|| format!("workspace not found: {}", workspace_id))?;
+
+    let workflow_id = payload
+        .workflow_id
+        .clone()
+        .or_else(|| {
+            if active.config.workflows.contains_key(mode.as_str()) {
+                Some(mode.as_str().to_string())
+            } else {
+                None
+            }
+        })
+        .unwrap_or_else(|| active.default_workflow_id.clone());
+    let workflow = active
+        .config
+        .workflows
+        .get(&workflow_id)
+        .with_context(|| format!("workflow not found: {}", workflow_id))?;
+    validate_workflow_for_mode(&active.config, workflow, &workflow_id, &mode)?;
+
+    let target_files = collect_target_files(
+        &workspace.root_path,
+        &workspace.qa_targets,
+        payload.target_files,
+    )?;
     if target_files.is_empty() {
         anyhow::bail!("No QA/Security markdown files found");
     }
@@ -527,8 +1381,20 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, ?5, NULL, ?6, ?6)",
-        params![task_id, task_name, goal, serde_json::to_string(&target_files)?, mode.as_str(), created_at],
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, ?11, ?11)",
+        params![
+            task_id,
+            task_name,
+            goal,
+            serde_json::to_string(&target_files)?,
+            mode.as_str(),
+            workspace_id,
+            workflow_id,
+            workspace.root_path.to_string_lossy().to_string(),
+            serde_json::to_string(&workspace.qa_targets)?,
+            workspace.ticket_dir,
+            created_at
+        ],
     )?;
 
     for (idx, path) in target_files.iter().enumerate() {
@@ -543,7 +1409,77 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
     load_task_summary(state, &task_id)
 }
 
-fn collect_target_files(project_root: &Path, input: Option<Vec<String>>) -> Result<Vec<String>> {
+fn validate_workflow_for_mode(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+    mode: &TaskMode,
+) -> Result<()> {
+    let qa_agent = workflow.qa.as_str();
+    let qa_templates = config
+        .agents
+        .get(qa_agent)
+        .with_context(|| format!("workflow '{}' qa agent missing: {}", workflow_id, qa_agent))?;
+    if qa_templates.templates.phase_template("qa").is_none() {
+        anyhow::bail!(
+            "workflow '{}' qa agent '{}' has no qa template",
+            workflow_id,
+            qa_agent
+        );
+    }
+
+    if mode.should_fix() {
+        let fix_agent = workflow
+            .fix
+            .as_deref()
+            .with_context(|| format!("workflow '{}' missing fix agent", workflow_id))?;
+        let fix_templates = config.agents.get(fix_agent).with_context(|| {
+            format!(
+                "workflow '{}' fix agent '{}' does not exist",
+                workflow_id, fix_agent
+            )
+        })?;
+        if fix_templates.templates.phase_template("fix").is_none() {
+            anyhow::bail!(
+                "workflow '{}' fix agent '{}' has no fix template",
+                workflow_id,
+                fix_agent
+            );
+        }
+    }
+
+    if mode.should_retest() {
+        let retest_agent = workflow
+            .retest
+            .as_deref()
+            .with_context(|| format!("workflow '{}' missing retest agent", workflow_id))?;
+        let retest_templates = config.agents.get(retest_agent).with_context(|| {
+            format!(
+                "workflow '{}' retest agent '{}' does not exist",
+                workflow_id, retest_agent
+            )
+        })?;
+        if retest_templates
+            .templates
+            .phase_template("retest")
+            .is_none()
+        {
+            anyhow::bail!(
+                "workflow '{}' retest agent '{}' has no retest template",
+                workflow_id,
+                retest_agent
+            );
+        }
+    }
+
+    Ok(())
+}
+
+fn collect_target_files(
+    workspace_root: &Path,
+    qa_targets: &[String],
+    input: Option<Vec<String>>,
+) -> Result<Vec<String>> {
     if let Some(list) = input {
         let mut result = Vec::new();
         for entry in list {
@@ -551,7 +1487,7 @@ fn collect_target_files(project_root: &Path, input: Option<Vec<String>>) -> Resu
             if trimmed.is_empty() {
                 continue;
             }
-            let abs = project_root.join(trimmed);
+            let abs = resolve_workspace_path(workspace_root, trimmed, "target_files")?;
             if abs.is_file() {
                 result.push(trimmed.to_string());
             }
@@ -562,10 +1498,8 @@ fn collect_target_files(project_root: &Path, input: Option<Vec<String>>) -> Resu
     }
 
     let mut files = Vec::new();
-    for base in [
-        project_root.join("docs/qa"),
-        project_root.join("docs/security"),
-    ] {
+    for target in qa_targets {
+        let base = resolve_workspace_path(workspace_root, target, "qa_targets")?;
         if !base.exists() {
             continue;
         }
@@ -586,7 +1520,7 @@ fn collect_target_files(project_root: &Path, input: Option<Vec<String>>) -> Resu
             {
                 continue;
             }
-            let rel = pathdiff::diff_paths(entry.path(), project_root)
+            let rel = pathdiff::diff_paths(entry.path(), workspace_root)
                 .unwrap_or_else(|| entry.path().to_path_buf())
                 .to_string_lossy()
                 .to_string();
@@ -601,7 +1535,7 @@ fn collect_target_files(project_root: &Path, input: Option<Vec<String>>) -> Resu
 fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
-        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, mode, created_at, updated_at FROM tasks WHERE id = ?1",
+        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, mode, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
     )?;
     let mut summary = stmt.query_row(params![task_id], |row| {
         let target_raw: String = row.get(6)?;
@@ -614,12 +1548,14 @@ fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
             completed_at: row.get(4)?,
             goal: row.get(5)?,
             mode: row.get(7)?,
+            workspace_id: row.get(8)?,
+            workflow_id: row.get(9)?,
             target_files,
             total_items: 0,
             finished_items: 0,
             failed_items: 0,
-            created_at: row.get(8)?,
-            updated_at: row.get(9)?,
+            created_at: row.get(10)?,
+            updated_at: row.get(11)?,
         })
     })?;
 
@@ -685,7 +1621,7 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
         .collect::<std::result::Result<Vec<_>, _>>()?;
 
     let mut runs_stmt = conn.prepare(
-        "SELECT cr.id, cr.task_item_id, cr.phase, cr.command, cr.cwd, cr.exit_code, cr.stdout_path, cr.stderr_path, cr.started_at, cr.ended_at, cr.interrupted
+        "SELECT cr.id, cr.task_item_id, cr.phase, cr.command, cr.cwd, cr.workspace_id, cr.agent_id, cr.exit_code, cr.stdout_path, cr.stderr_path, cr.started_at, cr.ended_at, cr.interrupted
          FROM command_runs cr
          JOIN task_items ti ON ti.id = cr.task_item_id
          WHERE ti.task_id = ?1
@@ -700,12 +1636,14 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
                 phase: row.get(2)?,
                 command: row.get(3)?,
                 cwd: row.get(4)?,
-                exit_code: row.get(5)?,
-                stdout_path: row.get(6)?,
-                stderr_path: row.get(7)?,
-                started_at: row.get(8)?,
-                ended_at: row.get(9)?,
-                interrupted: row.get::<_, i64>(10)? == 1,
+                workspace_id: row.get(5)?,
+                agent_id: row.get(6)?,
+                exit_code: row.get(7)?,
+                stdout_path: row.get(8)?,
+                stderr_path: row.get(9)?,
+                started_at: row.get(10)?,
+                ended_at: row.get(11)?,
+                interrupted: row.get::<_, i64>(12)? == 1,
             })
         })?
         .collect::<std::result::Result<Vec<_>, _>>()?;
@@ -993,10 +1931,14 @@ fn update_task_item(
     Ok(())
 }
 
-fn list_ticket_files(state: &InnerState) -> Vec<String> {
-    let ticket_dir = state.project_root.join(&state.config.ticket.directory);
+fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
+    let ticket_dir = resolve_workspace_path(
+        &task_ctx.workspace_root,
+        &task_ctx.ticket_dir,
+        "task.ticket_dir",
+    )?;
     if !ticket_dir.exists() {
-        return Vec::new();
+        return Ok(Vec::new());
     }
     let mut result = Vec::new();
     for entry in WalkDir::new(ticket_dir)
@@ -1018,14 +1960,14 @@ fn list_ticket_files(state: &InnerState) -> Vec<String> {
         {
             continue;
         }
-        let rel = pathdiff::diff_paths(entry.path(), &state.project_root)
+        let rel = pathdiff::diff_paths(entry.path(), &task_ctx.workspace_root)
             .unwrap_or_else(|| entry.path().to_path_buf())
             .to_string_lossy()
             .to_string();
         result.push(rel);
     }
     result.sort();
-    result
+    Ok(result)
 }
 
 fn new_ticket_diff(before: &[String], after: &[String]) -> Vec<String> {
@@ -1037,8 +1979,14 @@ fn new_ticket_diff(before: &[String], after: &[String]) -> Vec<String> {
         .collect()
 }
 
-fn read_ticket_preview(state: &InnerState, rel_path: &str) -> Value {
-    let abs = state.project_root.join(rel_path);
+fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> Value {
+    let abs =
+        match resolve_workspace_path(&task_ctx.workspace_root, rel_path, "ticket preview path") {
+            Ok(value) => value,
+            Err(_) => {
+                return json!({"path": rel_path, "title": "", "status": "", "qa_document": ""})
+            }
+        };
     let content = std::fs::read_to_string(abs).unwrap_or_default();
     let mut title = String::new();
     let mut status = String::new();
@@ -1072,6 +2020,85 @@ fn render_template(template: &str, rel_path: &str, ticket_paths: &[String]) -> S
         .replace("{ticket_paths}", &ticket_paths.join(" "))
 }
 
+fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
+    let conn = open_conn(&state.db_path)?;
+    let (mode_raw, workspace_id, workflow_id, workspace_root_raw, ticket_dir): (
+        String,
+        String,
+        String,
+        String,
+        String,
+    ) = conn.query_row(
+        "SELECT mode, workspace_id, workflow_id, workspace_root, ticket_dir FROM tasks WHERE id = ?1",
+        params![task_id],
+        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+    )?;
+
+    let mode = TaskMode::from_str(&mode_raw);
+    let active = read_active_config(state)?;
+    let workflow = active
+        .config
+        .workflows
+        .get(&workflow_id)
+        .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?;
+    validate_workflow_for_mode(&active.config, workflow, &workflow_id, &mode)?;
+
+    let workspace_root = PathBuf::from(workspace_root_raw);
+    if !workspace_root.exists() {
+        anyhow::bail!(
+            "workspace root does not exist for task {}: {}",
+            task_id,
+            workspace_root.display()
+        );
+    }
+    let workspace_root = workspace_root
+        .canonicalize()
+        .with_context(|| format!("failed to canonicalize workspace root for task {}", task_id))?;
+    resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
+
+    Ok(TaskRuntimeContext {
+        mode,
+        workspace_id,
+        workflow_id,
+        workspace_root,
+        ticket_dir,
+    })
+}
+
+fn build_phase_command(
+    state: &InnerState,
+    task_ctx: &TaskRuntimeContext,
+    phase: &str,
+    rel_path: &str,
+    ticket_paths: &[String],
+) -> Result<(String, String)> {
+    let active = read_active_config(state)?;
+    let workflow = active
+        .config
+        .workflows
+        .get(&task_ctx.workflow_id)
+        .with_context(|| format!("workflow not found: {}", task_ctx.workflow_id))?;
+    let agent_id = workflow.agent_for_phase(phase).with_context(|| {
+        format!(
+            "workflow '{}' has no agent mapping for phase '{}'",
+            task_ctx.workflow_id, phase
+        )
+    })?;
+    let agent = active
+        .config
+        .agents
+        .get(agent_id)
+        .with_context(|| format!("agent not found: {}", agent_id))?;
+    let template = agent
+        .templates
+        .phase_template(phase)
+        .with_context(|| format!("agent '{}' has no template for phase '{}'", agent_id, phase))?;
+    Ok((
+        agent_id.to_string(),
+        render_template(template, rel_path, ticket_paths),
+    ))
+}
+
 fn find_latest_resumable_task_id(
     state: &InnerState,
     include_pending: bool,
@@ -1097,7 +2124,7 @@ fn print_cli_help(binary_name: &str) {
     println!("Auth9 QA Orchestrator CLI");
     println!();
     println!(
-        "Usage: {} --cli [--task-id ID] [--mode MODE] [--name NAME] [--goal GOAL] [--target-file PATH]... [--no-auto-resume]",
+        "Usage: {} --cli [--task-id ID] [--mode MODE] [--workspace ID] [--workflow ID] [--name NAME] [--goal GOAL] [--target-file PATH]... [--no-auto-resume]",
         binary_name
     );
     println!();
@@ -1130,6 +2157,16 @@ fn parse_cli_options(args: &[String]) -> Result<CliOptions> {
             "--mode" => {
                 let value = args.get(idx + 1).context("missing value for --mode")?;
                 options.mode = Some(value.clone());
+                idx += 2;
+            }
+            "--workspace" => {
+                let value = args.get(idx + 1).context("missing value for --workspace")?;
+                options.workspace_id = Some(value.clone());
+                idx += 2;
+            }
+            "--workflow" => {
+                let value = args.get(idx + 1).context("missing value for --workflow")?;
+                options.workflow_id = Some(value.clone());
                 idx += 2;
             }
             "--name" => {
@@ -1234,16 +2271,7 @@ async fn run_task_loop(
     runtime: RunningTask,
 ) -> Result<()> {
     set_task_status(&state, task_id, "running", false)?;
-
-    let mode_raw = {
-        let conn = open_conn(&state.db_path)?;
-        conn.query_row(
-            "SELECT mode FROM tasks WHERE id = ?1",
-            params![task_id],
-            |row| row.get::<_, String>(0),
-        )?
-    };
-    let mode = TaskMode::from_str(&mode_raw);
+    let task_ctx = load_task_runtime_context(&state, task_id)?;
 
     loop {
         if runtime.stop_flag.load(Ordering::SeqCst) {
@@ -1266,7 +2294,7 @@ async fn run_task_loop(
             break;
         };
 
-        process_item(&state, app, task_id, &item, &mode, &runtime).await?;
+        process_item(&state, app, task_id, &item, &task_ctx, &runtime).await?;
     }
 
     let conn = open_conn(&state.db_path)?;
@@ -1310,7 +2338,7 @@ async fn process_item(
     app: Option<&AppHandle>,
     task_id: &str,
     item: &TaskItemRow,
-    mode: &TaskMode,
+    task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<()> {
     let item_id = item.id.as_str();
@@ -1343,14 +2371,23 @@ async fn process_item(
         );
     }
 
-    let before_tickets = list_ticket_files(state);
-    let qa_cmd = render_template(
-        &state.config.executors.qa.command_template,
-        &item.qa_file_path,
-        &[],
-    );
-    let qa_result = run_phase(state, app, task_id, item_id, "qa", qa_cmd, runtime).await?;
-    let after_tickets = list_ticket_files(state);
+    let before_tickets = list_ticket_files(task_ctx)?;
+    let (qa_agent_id, qa_cmd) =
+        build_phase_command(state, task_ctx, "qa", &item.qa_file_path, &[])?;
+    let qa_result = run_phase(
+        state,
+        app,
+        task_id,
+        item_id,
+        "qa",
+        qa_cmd,
+        &task_ctx.workspace_root,
+        &task_ctx.workspace_id,
+        &qa_agent_id,
+        runtime,
+    )
+    .await?;
+    let after_tickets = list_ticket_files(task_ctx)?;
     let new_tickets = new_ticket_diff(&before_tickets, &after_tickets);
 
     if qa_result.success && new_tickets.is_empty() {
@@ -1378,7 +2415,7 @@ async fn process_item(
 
     let ticket_content: Vec<Value> = new_tickets
         .iter()
-        .map(|path| read_ticket_preview(state, path))
+        .map(|path| read_ticket_preview(task_ctx, path))
         .collect();
 
     update_task_item(
@@ -1401,7 +2438,7 @@ async fn process_item(
         json!({"phase":"qa", "tickets": new_tickets}),
     )?;
 
-    if !mode.should_fix() {
+    if !task_ctx.mode.should_fix() {
         update_task_item(
             state,
             item_id,
@@ -1429,12 +2466,21 @@ async fn process_item(
         false,
         false,
     )?;
-    let fix_cmd = render_template(
-        &state.config.executors.fix.command_template,
-        &item.qa_file_path,
-        &new_tickets,
-    );
-    let fix_result = run_phase(state, app, task_id, item_id, "fix", fix_cmd, runtime).await?;
+    let (fix_agent_id, fix_cmd) =
+        build_phase_command(state, task_ctx, "fix", &item.qa_file_path, &new_tickets)?;
+    let fix_result = run_phase(
+        state,
+        app,
+        task_id,
+        item_id,
+        "fix",
+        fix_cmd,
+        &task_ctx.workspace_root,
+        &task_ctx.workspace_id,
+        &fix_agent_id,
+        runtime,
+    )
+    .await?;
 
     if !fix_result.success {
         update_task_item(
@@ -1452,7 +2498,7 @@ async fn process_item(
         return Ok(());
     }
 
-    if !mode.should_retest() {
+    if !task_ctx.mode.should_retest() {
         update_task_item(
             state,
             item_id,
@@ -1481,15 +2527,23 @@ async fn process_item(
         false,
     )?;
 
-    let before_retest_tickets = list_ticket_files(state);
-    let retest_cmd = render_template(
-        &state.config.executors.retest.command_template,
-        &item.qa_file_path,
-        &[],
-    );
-    let retest_result =
-        run_phase(state, app, task_id, item_id, "retest", retest_cmd, runtime).await?;
-    let after_retest_tickets = list_ticket_files(state);
+    let before_retest_tickets = list_ticket_files(task_ctx)?;
+    let (retest_agent_id, retest_cmd) =
+        build_phase_command(state, task_ctx, "retest", &item.qa_file_path, &[])?;
+    let retest_result = run_phase(
+        state,
+        app,
+        task_id,
+        item_id,
+        "retest",
+        retest_cmd,
+        &task_ctx.workspace_root,
+        &task_ctx.workspace_id,
+        &retest_agent_id,
+        runtime,
+    )
+    .await?;
+    let after_retest_tickets = list_ticket_files(task_ctx)?;
     let new_retest_tickets = new_ticket_diff(&before_retest_tickets, &after_retest_tickets);
 
     if retest_result.success && new_retest_tickets.is_empty() {
@@ -1508,7 +2562,7 @@ async fn process_item(
     } else {
         let previews: Vec<Value> = new_retest_tickets
             .iter()
-            .map(|path| read_ticket_preview(state, path))
+            .map(|path| read_ticket_preview(task_ctx, path))
             .collect();
         update_task_item(
             state,
@@ -1534,6 +2588,9 @@ async fn run_phase(
     task_item_id: &str,
     phase: &str,
     command: String,
+    workspace_root: &Path,
+    workspace_id: &str,
+    agent_id: &str,
     runtime: &RunningTask,
 ) -> Result<RunResult> {
     let run_id = Uuid::new_v4().to_string();
@@ -1552,14 +2609,16 @@ async fn run_phase(
     {
         let conn = open_conn(&state.db_path)?;
         conn.execute(
-            "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, exit_code, stdout_path, stderr_path, started_at, ended_at, interrupted)
-             VALUES (?1, ?2, ?3, ?4, ?5, NULL, ?6, ?7, ?8, NULL, 0)",
+            "INSERT INTO command_runs (id, task_item_id, phase, command, cwd, workspace_id, agent_id, exit_code, stdout_path, stderr_path, started_at, ended_at, interrupted)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?8, ?9, ?10, NULL, 0)",
             params![
                 run_id,
                 task_item_id,
                 phase,
                 command,
-                state.project_root.to_string_lossy().to_string(),
+                workspace_root.to_string_lossy().to_string(),
+                workspace_id,
+                agent_id,
                 stdout_path,
                 stderr_path,
                 started_at,
@@ -1572,7 +2631,7 @@ async fn run_phase(
         task_id,
         Some(task_item_id),
         "command_started",
-        json!({"phase": phase, "run_id": run_id, "command": command}),
+        json!({"phase": phase, "run_id": run_id, "command": command, "workspace_id": workspace_id, "agent_id": agent_id}),
     )?;
     if let Some(app) = app {
         emit_event(
@@ -1580,14 +2639,21 @@ async fn run_phase(
             task_id,
             Some(task_item_id),
             "command_started",
-            json!({"phase": phase, "run_id": run_id}),
+            json!({"phase": phase, "run_id": run_id, "workspace_id": workspace_id, "agent_id": agent_id}),
         );
     }
 
-    let mut child = Command::new(&state.config.runner.shell)
-        .arg(&state.config.runner.shell_arg)
+    let (shell, shell_arg) = {
+        let active = read_active_config(state)?;
+        (
+            active.config.runner.shell.clone(),
+            active.config.runner.shell_arg.clone(),
+        )
+    };
+    let mut child = Command::new(&shell)
+        .arg(&shell_arg)
         .arg(&command)
-        .current_dir(&state.project_root)
+        .current_dir(workspace_root)
         .stdout(std::process::Stdio::piped())
         .stderr(std::process::Stdio::piped())
         .spawn()
@@ -1770,6 +2836,8 @@ fn resolve_cli_task_id(state: &InnerState, options: &CliOptions) -> Result<Strin
         name: options.name.clone(),
         goal: options.goal.clone(),
         mode: options.mode.clone(),
+        workspace_id: options.workspace_id.clone(),
+        workflow_id: options.workflow_id.clone(),
         target_files: if options.target_files.is_empty() {
             None
         } else {
@@ -1807,10 +2875,16 @@ fn run_cli_mode_blocking(state: Arc<InnerState>, options: CliOptions) -> Result<
 
 fn print_startup_banner(state: &InnerState) {
     println!("[qa-orchestrator] app_root={}", state.app_root.display());
-    println!(
-        "[qa-orchestrator] project_root={}",
-        state.project_root.display()
-    );
+    if let Ok(active) = read_active_config(state) {
+        println!(
+            "[qa-orchestrator] default_workspace={}",
+            active.default_workspace_id
+        );
+        println!(
+            "[qa-orchestrator] default_workflow={}",
+            active.default_workflow_id
+        );
+    }
     println!("[qa-orchestrator] db_path={}", state.db_path.display());
 }
 
@@ -1861,6 +2935,13 @@ fn main() {
         .manage(state)
         .invoke_handler(tauri::generate_handler![
             bootstrap,
+            get_config_overview,
+            save_config_from_form,
+            save_config_from_yaml,
+            validate_config_yaml,
+            list_config_versions,
+            get_config_version,
+            get_create_task_options,
             create_task,
             list_tasks,
             get_task_details,
