@@ -342,24 +342,23 @@ export default function IdentityProvidersPage() {
             </DialogDescription>
           </DialogHeader>
 
-          <Form method="post" className="space-y-4">
-            <input
-              type="hidden"
-              name="intent"
-              value={editingProvider ? "update" : "create"}
-            />
-            <input type="hidden" name="alias" value={formData.alias} />
-            <input type="hidden" name="providerId" value={selectedTemplate} />
-            <input
-              type="hidden"
-              name="config"
-              value={JSON.stringify(formData.config)}
-            />
-            <input
-              type="hidden"
-              name="enabled"
-              value={formData.enabled ? "true" : "false"}
-            />
+          <form
+            className="space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              submit(
+                {
+                  intent: editingProvider ? "update" : "create",
+                  alias: formData.alias,
+                  providerId: selectedTemplate,
+                  config: JSON.stringify(formData.config),
+                  enabled: formData.enabled ? "true" : "false",
+                  ...(formData.displayName ? { displayName: formData.displayName } : {}),
+                },
+                { method: "post" }
+              );
+            }}
+          >
 
             {/* Provider Type Selection (only for create) */}
             {!editingProvider && (
@@ -534,7 +533,7 @@ export default function IdentityProvidersPage() {
                   : "Add provider"}
               </Button>
             </DialogFooter>
-          </Form>
+          </form>
         </DialogContent>
       </Dialog>
     </div>

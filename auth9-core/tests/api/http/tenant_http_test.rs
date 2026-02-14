@@ -9,8 +9,10 @@ use super::{
 use crate::api::{create_test_identity_token, create_test_tenant, MockKeycloakServer};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Tenant, TenantStatus};
-use axum::http::StatusCode;
+use axum::body::Body;
+use axum::http::{Method, Request, StatusCode};
 use serde_json::json;
+use tower::ServiceExt;
 use uuid::Uuid;
 
 // ============================================================================
@@ -391,8 +393,21 @@ async fn test_delete_tenant_returns_200() {
 
     let app = build_test_router(state.clone());
 
-    let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &token).await;
+    // Must include X-Confirm-Destructive header for delete
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/api/v1/tenants/{}", tenant_id))
+        .header("Authorization", format!("Bearer {}", token))
+        .header("X-Confirm-Destructive", "true")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap();
+    let body: Option<MessageResponse> = serde_json::from_slice(&body_bytes).ok();
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -415,10 +430,38 @@ async fn test_delete_tenant_returns_404() {
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
-    let (status, _body): (StatusCode, Option<serde_json::Value>) =
-        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &token).await;
+    // Must include X-Confirm-Destructive header for delete
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(format!("/api/v1/tenants/{}", nonexistent_id))
+        .header("Authorization", format!("Bearer {}", token))
+        .header("X-Confirm-Destructive", "true")
+        .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
 
     assert_eq!(status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn test_delete_tenant_requires_confirmation_header() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
+
+    let tenant_id = Uuid::new_v4();
+    let tenant = create_test_tenant(Some(tenant_id));
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let app = build_test_router(state);
+
+    // Without X-Confirm-Destructive header, should return 422
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}", tenant_id), &token).await;
+
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 
 // ============================================================================

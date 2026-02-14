@@ -1417,6 +1417,21 @@ impl PasswordResetRepository for TestPasswordResetRepository {
         Ok(())
     }
 
+    async fn claim_by_token_hash(&self, token_hash: &str) -> Result<Option<PasswordResetToken>> {
+        let mut tokens = self.tokens.write().await;
+        let now = Utc::now();
+        let token = tokens
+            .iter_mut()
+            .find(|t| t.token_hash == token_hash && t.used_at.is_none() && t.expires_at > now);
+        match token {
+            Some(t) => {
+                t.used_at = Some(now);
+                Ok(Some(t.clone()))
+            }
+            None => Ok(None),
+        }
+    }
+
     async fn delete_expired(&self) -> Result<u64> {
         let mut tokens = self.tokens.write().await;
         let now = Utc::now();
@@ -2467,6 +2482,14 @@ impl LoginEventRepository for TestLoginEventRepository {
         let before = events.len();
         events.retain(|e| e.tenant_id != Some(tenant_id));
         Ok((before - events.len()) as u64)
+    }
+
+    async fn get_daily_trend(
+        &self,
+        _start: DateTime<Utc>,
+        _end: DateTime<Utc>,
+    ) -> Result<Vec<auth9_core::domain::DailyTrendPoint>> {
+        Ok(vec![])
     }
 }
 

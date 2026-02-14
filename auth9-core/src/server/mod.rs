@@ -427,8 +427,14 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
 
     // Create ActionEngine (for Auth9 Actions system)
-    let action_engine = Arc::new(ActionEngine::new(action_repo.clone()));
-    info!("ActionEngine initialized");
+    let action_engine = Arc::new(ActionEngine::with_config(
+        action_repo.clone(),
+        config.async_action.clone(),
+    ));
+    info!(
+        "ActionEngine initialized (allowed_domains: {:?})",
+        config.async_action.allowed_domains
+    );
 
     // Create ActionService
     let action_service = Arc::new(ActionService::new(action_repo.clone(), Some(action_engine.clone())));
@@ -1026,7 +1032,7 @@ where
         .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
         .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
         .route("/api/v1/auth/token", post(api::auth::token::<S>))
-        .route("/api/v1/auth/logout", get(api::auth::logout::<S>))
+        .route("/api/v1/auth/logout", get(api::auth::logout::<S>).post(api::auth::logout::<S>))
         // Password reset flow (unauthenticated by design)
         .route(
             "/api/v1/auth/forgot-password",
@@ -1320,6 +1326,10 @@ where
             "/api/v1/analytics/login-events",
             get(api::analytics::list_events::<S>),
         )
+        .route(
+            "/api/v1/analytics/daily-trend",
+            get(api::analytics::get_daily_trend::<S>),
+        )
         // Webhook endpoints
         .route(
             "/api/v1/tenants/{tenant_id}/webhooks",
@@ -1397,10 +1407,32 @@ where
 
     // ============================================================
     // METRICS ENDPOINT (separate state, nested router)
+    // When METRICS_TOKEN is set, requires Bearer token auth.
+    // In production without METRICS_TOKEN, returns 404.
     // ============================================================
+    let metrics_state = crate::api::metrics::MetricsState {
+        handle: prometheus_handle.clone(),
+        required_token: state.config().telemetry.metrics_token.clone(),
+    };
+
+    // In production, require METRICS_TOKEN to be set for metrics access
+    let effective_metrics_state = if state.config().is_production()
+        && metrics_state.required_token.is_none()
+    {
+        tracing::warn!(
+            "⚠️  /metrics endpoint disabled in production (set METRICS_TOKEN to enable)"
+        );
+        crate::api::metrics::MetricsState {
+            handle: Arc::new(None), // Disable metrics endpoint
+            required_token: None,
+        }
+    } else {
+        metrics_state
+    };
+
     let metrics_route: Router<()> = Router::new()
         .route("/metrics", get(crate::api::metrics::metrics_handler))
-        .with_state(prometheus_handle);
+        .with_state(effective_metrics_state);
 
     // Server resource limits
     let body_limit = state.config().server.body_limit_bytes;

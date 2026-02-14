@@ -39,8 +39,9 @@ RUN --mount=type=cache,target=/usr/local/cargo/registry \
 # ==================== Runtime Stage ====================
 FROM debian:trixie-slim
 
-# Install runtime dependencies
+# Install runtime dependencies and apply security patches
 RUN apt-get update && \
+    apt-get upgrade -y && \
     apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl3 \

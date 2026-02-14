@@ -4,7 +4,7 @@ use crate::api::{
     default_page, default_per_page, deserialize_page, deserialize_per_page, PaginatedResponse,
     PaginationQuery, SuccessResponse,
 };
-use crate::domain::{LoginEvent, LoginStats, StringUuid};
+use crate::domain::{DailyTrendPoint, LoginEvent, LoginStats, StringUuid};
 use crate::error::AppError;
 use crate::state::HasAnalytics;
 use axum::{
@@ -144,6 +144,23 @@ pub async fn list_tenant_events<S: HasAnalytics>(
         pagination.per_page,
         total,
     )))
+}
+
+/// Query parameters for daily trend endpoint
+#[derive(Debug, Deserialize)]
+pub struct DailyTrendQuery {
+    /// Number of days to show (default: 7)
+    pub days: Option<i64>,
+}
+
+/// Get daily login trend data
+pub async fn get_daily_trend<S: HasAnalytics>(
+    State(state): State<S>,
+    Query(params): Query<DailyTrendQuery>,
+) -> Result<Json<SuccessResponse<Vec<DailyTrendPoint>>>, AppError> {
+    let days = params.days.unwrap_or(7);
+    let trend = state.analytics_service().get_daily_trend(days).await?;
+    Ok(Json(SuccessResponse::new(trend)))
 }
 
 #[cfg(test)]

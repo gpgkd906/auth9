@@ -3,9 +3,10 @@
 //! Receives login events from Keycloak via the p2-inc/keycloak-events SPI plugin.
 //! This enables real-time security monitoring and analytics for authentication events.
 
+use crate::cache::CacheOperations;
 use crate::domain::{CreateLoginEventInput, LoginEventType, StringUuid};
 use crate::error::AppError;
-use crate::state::{HasAnalytics, HasSecurityAlerts, HasServices};
+use crate::state::{HasAnalytics, HasCache, HasSecurityAlerts, HasServices};
 use axum::{
     body::Bytes,
     extract::State,
@@ -195,30 +196,21 @@ fn verify_signature(secret: &str, body: &[u8], signature: &str) -> bool {
     // Signature format: "sha256=<hex>"
     let expected_hex = signature.strip_prefix("sha256=").unwrap_or(signature);
 
+    let expected_bytes = match hex::decode(expected_hex) {
+        Ok(b) => b,
+        Err(_) => return false,
+    };
+
     let mut mac = match HmacSha256::new_from_slice(secret.as_bytes()) {
         Ok(m) => m,
         Err(_) => return false,
     };
 
     mac.update(body);
-    let result = mac.finalize();
-    let computed_hex = hex::encode(result.into_bytes());
 
-    // Use constant-time comparison to prevent timing attacks
-    constant_time_eq(computed_hex.as_bytes(), expected_hex.as_bytes())
-}
-
-/// Constant-time byte comparison
-fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
-    if a.len() != b.len() {
-        return false;
-    }
-
-    let mut result = 0u8;
-    for (x, y) in a.iter().zip(b.iter()) {
-        result |= x ^ y;
-    }
-    result == 0
+    // Use hmac crate's built-in constant-time verification (via CtOutput)
+    // to prevent timing side-channel attacks
+    mac.verify_slice(&expected_bytes).is_ok()
 }
 
 /// Receive Keycloak events webhook
@@ -228,7 +220,7 @@ fn constant_time_eq(a: &[u8], b: &[u8]) -> bool {
 /// This endpoint receives events from the Keycloak p2-inc/keycloak-events SPI plugin.
 /// It validates the HMAC signature (if configured), maps the event to our domain model,
 /// records it in the analytics system, and triggers security detection analysis.
-pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
+pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCache>(
     State(state): State<S>,
     headers: HeaderMap,
     body: Bytes,
@@ -276,6 +268,31 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts>(
             )));
         }
     };
+
+    // 2b. Deduplicate webhook events using Redis SETNX
+    // Compose a dedup key from event type + user_id + session_id + timestamp
+    let dedup_key = format!(
+        "{}:{}:{}:{}",
+        event.event_type.as_deref().unwrap_or("admin"),
+        event.user_id.as_deref().unwrap_or("none"),
+        event.session_id.as_deref().unwrap_or("none"),
+        event.time,
+    );
+    match state
+        .cache()
+        .check_and_mark_webhook_event(&dedup_key, 3600)
+        .await
+    {
+        Ok(true) => {
+            debug!("Duplicate webhook event detected, skipping: {}", dedup_key);
+            return Ok(StatusCode::NO_CONTENT);
+        }
+        Ok(false) => {} // New event, proceed
+        Err(e) => {
+            // Cache failure should not block event processing
+            warn!("Webhook dedup cache check failed, proceeding: {}", e);
+        }
+    }
 
     // 3. Skip admin events (operationType/resourceType) - we only track user login events
     if event.event_type.is_none() {
@@ -569,14 +586,6 @@ mod tests {
         let signature = hex::encode(mac.finalize().into_bytes());
 
         assert!(verify_signature(secret, body, &signature));
-    }
-
-    #[test]
-    fn test_constant_time_eq() {
-        assert!(constant_time_eq(b"hello", b"hello"));
-        assert!(!constant_time_eq(b"hello", b"world"));
-        assert!(!constant_time_eq(b"hello", b"hell"));
-        assert!(!constant_time_eq(b"", b"a"));
     }
 
     #[test]

@@ -193,9 +193,9 @@ curl -s -o /dev/null -w "%{http_code}" \
   http://localhost:8080/api/v1/users
 # 预期: 403
 
-# 轮转 Secret
+# 轮转 Secret (需要 service_id 和 client_id)
 NEW_SECRET=$(curl -s -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:8080/api/v1/services/$SERVICE_ID/rotate-secret | jq -r '.client_secret')
+  http://localhost:8080/api/v1/services/$SERVICE_ID/clients/$CLIENT_ID/regenerate-secret | jq -r '.data.client_secret')
 
 # 旧 Secret 应失效
 curl -s -o /dev/null -w "%{http_code}" \

@@ -50,7 +50,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
         rbacApi.listRoles(service.id, accessToken || undefined),
         rbacApi.listPermissions(service.id, accessToken || undefined),
       ]);
-      return { service, roles: roles.data, permissions: permissions.data };
+
+      // Fetch permission counts per role for hierarchy view
+      const rolePermissionCounts: Record<string, number> = {};
+      await Promise.all(
+        roles.data.map(async (role) => {
+          try {
+            const roleDetail = await rbacApi.getRole(role.id, accessToken || undefined);
+            rolePermissionCounts[role.id] = roleDetail.data.permissions.length;
+          } catch {
+            rolePermissionCounts[role.id] = 0;
+          }
+        })
+      );
+
+      return { service, roles: roles.data, permissions: permissions.data, rolePermissionCounts };
     })
   );
 
@@ -487,6 +501,9 @@ export default function RolesPage() {
                           {role.description && (
                             <span className="text-[var(--text-secondary)] text-xs">({role.description})</span>
                           )}
+                          <span className="text-[var(--text-secondary)] text-xs px-1.5 py-0.5 rounded-full bg-[var(--glass-bg-subtle)]">
+                            {entry.rolePermissionCounts[role.id] ?? 0} permission{(entry.rolePermissionCounts[role.id] ?? 0) !== 1 ? 's' : ''}
+                          </span>
                         </div>
                       </div>
                       {children.map(child => renderRoleTree(child, level + 1))}

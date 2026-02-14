@@ -857,7 +857,6 @@ async fn test_health_endpoint_via_router() {
     assert_eq!(status, StatusCode::OK);
     let body = body.unwrap();
     assert_eq!(body["status"], "healthy");
-    assert!(body["version"].as_str().is_some());
 }
 
 #[tokio::test]

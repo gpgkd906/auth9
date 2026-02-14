@@ -7,7 +7,7 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
 import { redirect } from "react-router";
-import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi } from "~/services/api";
+import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi } from "~/services/api";
 import { formatErrorMessage } from "~/lib/error-messages";
 import { getAccessToken } from "~/services/session.server";
 
@@ -22,12 +22,13 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
   try {
     // Fetch tenant details and related counts in parallel
-    const [tenantRes, servicesRes, invitationsRes, webhooksRes, tenantServicesRes] = await Promise.all([
+    const [tenantRes, servicesRes, invitationsRes, webhooksRes, tenantServicesRes, tenantUsersRes] = await Promise.all([
       tenantApi.get(tenantId, accessToken || undefined),
       serviceApi.list(tenantId, 1, 1, accessToken || undefined), // Just get count
       invitationApi.list(tenantId, 1, 1, "pending", accessToken || undefined), // Pending invitations count
       webhookApi.list(tenantId, accessToken || undefined),
       tenantServiceApi.listServices(tenantId, accessToken || undefined), // Get global services with enabled status
+      tenantUserApi.list(tenantId, accessToken || undefined),
     ]);
 
     const enabledServicesCount = tenantServicesRes.data.filter(s => s.enabled).length;
@@ -35,6 +36,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
     return {
       tenant: tenantRes.data,
+      usersCount: tenantUsersRes.data.length,
       servicesCount: servicesRes.pagination.total,
       pendingInvitationsCount: invitationsRes.pagination.total,
       webhooksCount: webhooksRes.data.length,
@@ -84,7 +86,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TenantDetailPage() {
-  const { tenant, servicesCount, pendingInvitationsCount, webhooksCount, enabledServicesCount, totalGlobalServicesCount } =
+  const { tenant, usersCount, servicesCount, pendingInvitationsCount, webhooksCount, enabledServicesCount, totalGlobalServicesCount } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -285,6 +287,13 @@ export default function TenantDetailPage() {
             </CardHeader>
             <CardContent>
               <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <PersonIcon className="h-4 w-4" />
+                    Users
+                  </div>
+                  <span className="font-medium">{usersCount}</span>
+                </div>
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
                     <GlobeIcon className="h-4 w-4" />
