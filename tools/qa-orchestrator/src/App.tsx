@@ -1,24 +1,16 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { api } from './api';
 import type {
   ConfigOverview,
   ConfigVersionSummary,
   CreateTaskOptions,
+  LogChunkEventPayload,
   OrchestratorConfigModel,
   TaskDetail,
-  TaskMode,
+  TaskEventEnvelope,
+  WorkflowStepType,
   TaskSummary
 } from './types';
-
-const MODES: { value: TaskMode; label: string; desc: string }[] = [
-  {
-    value: 'qa_fix_retest',
-    label: 'QA -> Fix -> Retest',
-    desc: 'Recommended full workflow'
-  },
-  { value: 'qa_fix', label: 'QA -> Fix', desc: 'Skip retest phase' },
-  { value: 'qa_only', label: 'QA only', desc: 'Collect failures only' }
-];
 
 const STATUS_CLASS: Record<string, string> = {
   pending: 'badge gray',
@@ -43,9 +35,62 @@ type ItemFilter = 'all' | 'active' | 'unresolved' | 'completed';
 type Theme = 'light' | 'dark';
 type ViewTab = 'tasks' | 'config';
 type ConfigEditor = 'form' | 'yaml';
+const WORKFLOW_STEP_ORDER: WorkflowStepType[] = ['init_once', 'qa', 'fix', 'retest'];
 
 function cloneConfig(config: OrchestratorConfigModel): OrchestratorConfigModel {
   return JSON.parse(JSON.stringify(config)) as OrchestratorConfigModel;
+}
+
+function defaultWorkflowSteps(firstAgent: string) {
+  return [
+    { id: 'init_once', type: 'init_once' as const, enabled: false, agent_id: undefined },
+    { id: 'qa', type: 'qa' as const, enabled: Boolean(firstAgent), agent_id: firstAgent || undefined },
+    { id: 'fix', type: 'fix' as const, enabled: false, agent_id: undefined },
+    { id: 'retest', type: 'retest' as const, enabled: false, agent_id: undefined }
+  ];
+}
+
+function ensureWorkflowShape(config: OrchestratorConfigModel) {
+  for (const workflow of Object.values(config.workflows)) {
+    if (!workflow.steps) {
+      workflow.steps = defaultWorkflowSteps('');
+    }
+    const byType = new Map(workflow.steps.map((step) => [step.type, step]));
+    workflow.steps = WORKFLOW_STEP_ORDER.map((stepType) => {
+      const existing = byType.get(stepType);
+      if (existing) {
+        return { ...existing, id: existing.id || stepType };
+      }
+      return { id: stepType, type: stepType, enabled: false, agent_id: undefined };
+    });
+    workflow.loop = workflow.loop ?? {
+      mode: 'once',
+      guard: { enabled: true, stop_when_no_unresolved: true, agent_id: undefined }
+    };
+    workflow.loop.guard = workflow.loop.guard ?? {
+      enabled: true,
+      stop_when_no_unresolved: true,
+      agent_id: undefined
+    };
+  }
+}
+
+function parseLogChunkPayload(payload: Record<string, unknown>): LogChunkEventPayload | null {
+  const runId = typeof payload.run_id === 'string' ? payload.run_id : null;
+  const phase = typeof payload.phase === 'string' ? payload.phase : null;
+  const stream = payload.stream === 'stdout' || payload.stream === 'stderr' ? payload.stream : null;
+  const line = typeof payload.line === 'string' ? payload.line : null;
+
+  if (!runId || !phase || !stream || line === null) {
+    return null;
+  }
+
+  return {
+    run_id: runId,
+    phase,
+    stream,
+    line
+  };
 }
 
 export function App() {
@@ -60,7 +105,6 @@ export function App() {
 
   const [name, setName] = useState('');
   const [goal, setGoal] = useState('Automate QA sprint with auto-fix and restart');
-  const [mode, setMode] = useState<TaskMode>('qa_fix_retest');
   const [workspaceId, setWorkspaceId] = useState('');
   const [workflowId, setWorkflowId] = useState('');
   const [targets, setTargets] = useState('');
@@ -68,7 +112,6 @@ export function App() {
 
   const [itemFilter, setItemFilter] = useState<ItemFilter>('all');
   const [itemQuery, setItemQuery] = useState('');
-  const [liveRefresh, setLiveRefresh] = useState(true);
   const [theme, setTheme] = useState<Theme>('light');
 
   const [configEditor, setConfigEditor] = useState<ConfigEditor>('form');
@@ -78,6 +121,14 @@ export function App() {
   const [configVersions, setConfigVersions] = useState<ConfigVersionSummary[]>([]);
   const [configBusy, setConfigBusy] = useState(false);
   const [configMessage, setConfigMessage] = useState('');
+
+  const selectedTaskIdRef = useRef<string | null>(null);
+  const viewTabRef = useRef<ViewTab>('tasks');
+  const realtimeRefreshTimerRef = useRef<number | null>(null);
+  const realtimeRefreshPendingRef = useRef<{ tasks: boolean; detail: boolean }>({
+    tasks: false,
+    detail: false
+  });
 
   const selectedTask = useMemo(
     () => tasks.find((task) => task.id === selectedTaskId) ?? null,
@@ -100,7 +151,7 @@ export function App() {
   }, [detail]);
 
   const runStats = useMemo(() => {
-    const counts = { qa: 0, fix: 0, retest: 0, custom: 0 };
+    const counts = { init_once: 0, qa: 0, fix: 0, retest: 0, loop_guard: 0, custom: 0 };
     for (const run of detail?.runs ?? []) {
       if (run.phase in counts) {
         counts[run.phase as keyof typeof counts] += 1;
@@ -158,29 +209,94 @@ export function App() {
   async function loadTasks() {
     const data = await api.listTasks();
     setTasks(data);
-    if (!selectedTaskId && data.length > 0) {
+    if (!selectedTaskIdRef.current && data.length > 0) {
       setSelectedTaskId(data[0].id);
     }
   }
 
-  async function loadTaskDetails(taskId: string) {
-    const data = await api.getTaskDetails(taskId);
-    setDetail(data);
+  async function loadTaskLogs(taskId: string) {
     const chunks = await api.streamTaskLogs(taskId, 350);
     setLogs(chunks.map((chunk) => chunk.content).join('\n\n'));
   }
 
-  async function refreshSnapshot(forceTaskId?: string) {
+  async function loadTaskDetails(taskId: string, includeLogs = true) {
+    const data = await api.getTaskDetails(taskId);
+    setDetail(data);
+    if (includeLogs) {
+      await loadTaskLogs(taskId);
+    }
+  }
+
+  async function refreshSnapshot(forceTaskId?: string, includeLogs = true) {
     const latest = await api.listTasks();
     setTasks(latest);
 
-    const focusId = forceTaskId ?? selectedTaskId ?? latest[0]?.id ?? null;
+    const currentSelectedTaskId = selectedTaskIdRef.current;
+    const focusId = forceTaskId ?? currentSelectedTaskId ?? latest[0]?.id ?? null;
     if (focusId) {
-      if (!selectedTaskId) {
+      if (!currentSelectedTaskId) {
         setSelectedTaskId(focusId);
       }
-      await loadTaskDetails(focusId);
+      await loadTaskDetails(focusId, includeLogs);
     }
+  }
+
+  function scheduleRealtimeRefresh(options: { tasks?: boolean; detail?: boolean }) {
+    const pending = realtimeRefreshPendingRef.current;
+    if (options.tasks) {
+      pending.tasks = true;
+    }
+    if (options.detail) {
+      pending.detail = true;
+    }
+    if (realtimeRefreshTimerRef.current !== null) {
+      return;
+    }
+    realtimeRefreshTimerRef.current = window.setTimeout(() => {
+      realtimeRefreshTimerRef.current = null;
+      const run = realtimeRefreshPendingRef.current;
+      realtimeRefreshPendingRef.current = { tasks: false, detail: false };
+
+      Promise.resolve()
+        .then(async () => {
+          if (run.tasks) {
+            await loadTasks();
+          }
+          const currentTaskId = selectedTaskIdRef.current;
+          if (run.detail && currentTaskId && viewTabRef.current === 'tasks') {
+            await loadTaskDetails(currentTaskId, false);
+          }
+        })
+        .catch((err) => setError(String(err)));
+    }, 150);
+  }
+
+  function appendRealtimeLog(event: TaskEventEnvelope) {
+    if (!selectedTaskIdRef.current || event.task_id !== selectedTaskIdRef.current) {
+      return;
+    }
+    const payload = parseLogChunkPayload(event.payload);
+    if (!payload) {
+      return;
+    }
+    const streamTag = payload.stream === 'stderr' ? '[stderr]' : '';
+    const nextLine = `[${payload.run_id}][${payload.phase}]${streamTag} ${payload.line}`;
+    setLogs((current) => (current ? `${current}\n${nextLine}` : nextLine));
+  }
+
+  function handleRealtimeEvent(event: TaskEventEnvelope) {
+    if (event.event_type === 'log_chunk') {
+      if (viewTabRef.current === 'tasks') {
+        appendRealtimeLog(event);
+      }
+      return;
+    }
+    const selectedId = selectedTaskIdRef.current;
+    const isSelectedTask = Boolean(selectedId && event.task_id === selectedId);
+    scheduleRealtimeRefresh({
+      tasks: true,
+      detail: isSelectedTask
+    });
   }
 
   async function loadCreateTaskOptions() {
@@ -192,8 +308,10 @@ export function App() {
 
   async function loadConfigOverview() {
     const overview = await api.getConfigOverview();
+    const normalized = cloneConfig(overview.config);
+    ensureWorkflowShape(normalized);
     setConfigOverview(overview);
-    setConfigDraft(cloneConfig(overview.config));
+    setConfigDraft(normalized);
     setYamlDraft(overview.yaml);
   }
 
@@ -238,14 +356,43 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (!liveRefresh || viewTab !== 'tasks') {
-      return;
-    }
-    const timer = setInterval(() => {
-      refreshSnapshot().catch((err) => setError(String(err)));
-    }, 2000);
-    return () => clearInterval(timer);
-  }, [selectedTaskId, liveRefresh, viewTab]);
+    selectedTaskIdRef.current = selectedTaskId;
+  }, [selectedTaskId]);
+
+  useEffect(() => {
+    viewTabRef.current = viewTab;
+  }, [viewTab]);
+
+  useEffect(() => {
+    let disposed = false;
+    let unlisten: (() => void) | null = null;
+
+    api
+      .subscribeTaskEvents((event) => {
+        if (!disposed) {
+          handleRealtimeEvent(event);
+        }
+      })
+      .then((fn) => {
+        if (disposed) {
+          fn();
+          return;
+        }
+        unlisten = fn;
+      })
+      .catch((err) => setError(String(err)));
+
+    return () => {
+      disposed = true;
+      if (realtimeRefreshTimerRef.current !== null) {
+        window.clearTimeout(realtimeRefreshTimerRef.current);
+        realtimeRefreshTimerRef.current = null;
+      }
+      if (unlisten) {
+        unlisten();
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (!selectedTaskId || viewTab !== 'tasks') {
@@ -267,7 +414,6 @@ export function App() {
       const created = await api.createTask({
         name: name.trim() || undefined,
         goal: goal.trim() || undefined,
-        mode,
         workspace_id: workspaceId,
         workflow_id: workflowId,
         target_files: targetFiles.length > 0 ? targetFiles : undefined
@@ -332,9 +478,15 @@ export function App() {
       const id = `workflow-${Date.now()}`;
       const firstAgent = Object.keys(draft.agents)[0] ?? '';
       draft.workflows[id] = {
-        qa: firstAgent,
-        fix: undefined,
-        retest: undefined
+        steps: defaultWorkflowSteps(firstAgent),
+        loop: {
+          mode: 'once',
+          guard: {
+            enabled: true,
+            stop_when_no_unresolved: true,
+            agent_id: undefined
+          }
+        }
       };
     });
   }
@@ -346,8 +498,10 @@ export function App() {
     setConfigBusy(true);
     try {
       const overview = await api.saveConfigFromForm({ config: configDraft });
+      const normalized = cloneConfig(overview.config);
+      ensureWorkflowShape(normalized);
       setConfigOverview(overview);
-      setConfigDraft(cloneConfig(overview.config));
+      setConfigDraft(normalized);
       setYamlDraft(overview.yaml);
       setConfigMessage(`Saved config version ${overview.version}`);
       await Promise.all([loadCreateTaskOptions(), loadConfigVersions()]);
@@ -377,8 +531,10 @@ export function App() {
     setConfigBusy(true);
     try {
       const overview = await api.saveConfigFromYaml({ yaml: yamlDraft });
+      const normalized = cloneConfig(overview.config);
+      ensureWorkflowShape(normalized);
       setConfigOverview(overview);
-      setConfigDraft(cloneConfig(overview.config));
+      setConfigDraft(normalized);
       setYamlDraft(overview.yaml);
       setConfigMessage(`Saved config version ${overview.version}`);
       await Promise.all([loadCreateTaskOptions(), loadConfigVersions()]);
@@ -421,12 +577,6 @@ export function App() {
             </div>
             <button className="ghost-button" onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
               Theme: {theme}
-            </button>
-            <button className="ghost-button" onClick={() => setLiveRefresh((value) => !value)}>
-              Live: {liveRefresh ? 'On' : 'Off'}
-            </button>
-            <button className="ghost-button" onClick={() => refreshSnapshot().catch((err) => setError(String(err)))}>
-              Refresh
             </button>
           </div>
         </div>
@@ -486,25 +636,6 @@ export function App() {
               </select>
             </label>
             <label>
-              Workflow Mode
-              <select
-                value={mode}
-                onChange={(event) => {
-                  const nextMode = event.target.value as TaskMode;
-                  setMode(nextMode);
-                  if (createOptions?.workflows.some((entry) => entry.id === nextMode)) {
-                    setWorkflowId(nextMode);
-                  }
-                }}
-              >
-                {MODES.map((entry) => (
-                  <option key={entry.value} value={entry.value}>
-                    {entry.label} - {entry.desc}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label>
               Target Files (optional, one path per line)
               <textarea
                 value={targets}
@@ -532,7 +663,6 @@ export function App() {
                       <strong>{task.name}</strong>
                       <span className={STATUS_CLASS[task.status] ?? 'badge gray'}>{task.status}</span>
                     </div>
-                    <div className="task-card-meta">Mode: {task.mode}</div>
                     <div className="task-card-meta">Workspace: {task.workspace_id}</div>
                     <div className="task-card-meta">Workflow: {task.workflow_id}</div>
                     <div className="task-card-meta">
@@ -592,12 +722,20 @@ export function App() {
                 <strong>{runStats.qa}</strong>
               </article>
               <article className="stat-pill">
+                <span>Init Runs</span>
+                <strong>{runStats.init_once}</strong>
+              </article>
+              <article className="stat-pill">
                 <span>Fix Runs</span>
                 <strong>{runStats.fix}</strong>
               </article>
               <article className="stat-pill">
                 <span>Retest Runs</span>
                 <strong>{runStats.retest}</strong>
+              </article>
+              <article className="stat-pill">
+                <span>Guard Runs</span>
+                <strong>{runStats.loop_guard}</strong>
               </article>
             </div>
 
@@ -852,6 +990,17 @@ export function App() {
                             </button>
                           </div>
                           <label>
+                            Init Template
+                            <textarea
+                              value={agent.templates.init_once ?? ''}
+                              onChange={(event) =>
+                                updateConfig((draft) => {
+                                  draft.agents[id].templates.init_once = event.target.value || undefined;
+                                })
+                              }
+                            />
+                          </label>
+                          <label>
                             QA Template
                             <textarea
                               value={agent.templates.qa ?? ''}
@@ -884,6 +1033,17 @@ export function App() {
                               }
                             />
                           </label>
+                          <label>
+                            Loop Guard Template
+                            <textarea
+                              value={agent.templates.loop_guard ?? ''}
+                              onChange={(event) =>
+                                updateConfig((draft) => {
+                                  draft.agents[id].templates.loop_guard = event.target.value || undefined;
+                                })
+                              }
+                            />
+                          </label>
                         </article>
                       );
                     })}
@@ -898,6 +1058,7 @@ export function App() {
                   <div className="config-list">
                     {workflowKeys.map((id) => {
                       const wf = configDraft.workflows[id];
+                      const stepsByType = new Map(wf.steps.map((step) => [step.type, step]));
                       return (
                         <article key={id} className="config-card">
                           <div className="config-card-head">
@@ -913,30 +1074,102 @@ export function App() {
                               Delete
                             </button>
                           </div>
+                          <h4>Steps</h4>
+                          {WORKFLOW_STEP_ORDER.map((stepType) => {
+                            const step = stepsByType.get(stepType);
+                            if (!step) {
+                              return null;
+                            }
+                            return (
+                              <div key={stepType} className="step-row">
+                                <label>
+                                  <input
+                                    type="checkbox"
+                                    checked={step.enabled}
+                                    onChange={(event) =>
+                                      updateConfig((draft) => {
+                                        const target = draft.workflows[id].steps.find((entry) => entry.type === stepType);
+                                        if (target) {
+                                          target.enabled = event.target.checked;
+                                          if (!event.target.checked) {
+                                            target.agent_id = undefined;
+                                          } else if (!target.agent_id && agentKeys[0]) {
+                                            target.agent_id = agentKeys[0];
+                                          }
+                                        }
+                                      })
+                                    }
+                                  />
+                                  {stepType}
+                                </label>
+                                <select
+                                  value={step.agent_id ?? ''}
+                                  disabled={!step.enabled}
+                                  onChange={(event) =>
+                                    updateConfig((draft) => {
+                                      const target = draft.workflows[id].steps.find((entry) => entry.type === stepType);
+                                      if (target) {
+                                        target.agent_id = event.target.value || undefined;
+                                      }
+                                    })
+                                  }
+                                >
+                                  <option value="">(none)</option>
+                                  {agentKeys.map((agentId) => (
+                                    <option key={agentId} value={agentId}>
+                                      {agentId}
+                                    </option>
+                                  ))}
+                                </select>
+                              </div>
+                            );
+                          })}
+                          <h4>Loop</h4>
                           <label>
-                            QA Agent
+                            Loop Mode
                             <select
-                              value={wf.qa}
+                              value={wf.loop.mode}
                               onChange={(event) =>
                                 updateConfig((draft) => {
-                                  draft.workflows[id].qa = event.target.value;
+                                  draft.workflows[id].loop.mode = event.target.value as 'once' | 'infinite';
                                 })
                               }
                             >
-                              {agentKeys.map((agentId) => (
-                                <option key={agentId} value={agentId}>
-                                  {agentId}
-                                </option>
-                              ))}
+                              <option value="once">once</option>
+                              <option value="infinite">infinite</option>
                             </select>
                           </label>
                           <label>
-                            Fix Agent (optional)
-                            <select
-                              value={wf.fix ?? ''}
+                            <input
+                              type="checkbox"
+                              checked={wf.loop.guard.enabled}
                               onChange={(event) =>
                                 updateConfig((draft) => {
-                                  draft.workflows[id].fix = event.target.value || undefined;
+                                  draft.workflows[id].loop.guard.enabled = event.target.checked;
+                                })
+                              }
+                            />
+                            Guard Enabled
+                          </label>
+                          <label>
+                            <input
+                              type="checkbox"
+                              checked={wf.loop.guard.stop_when_no_unresolved}
+                              onChange={(event) =>
+                                updateConfig((draft) => {
+                                  draft.workflows[id].loop.guard.stop_when_no_unresolved = event.target.checked;
+                                })
+                              }
+                            />
+                            Stop When No Unresolved
+                          </label>
+                          <label>
+                            Guard Agent (optional)
+                            <select
+                              value={wf.loop.guard.agent_id ?? ''}
+                              onChange={(event) =>
+                                updateConfig((draft) => {
+                                  draft.workflows[id].loop.guard.agent_id = event.target.value || undefined;
                                 })
                               }
                             >
@@ -949,22 +1182,20 @@ export function App() {
                             </select>
                           </label>
                           <label>
-                            Retest Agent (optional)
-                            <select
-                              value={wf.retest ?? ''}
+                            Max Cycles (optional)
+                            <input
+                              type="number"
+                              min={1}
+                              value={wf.loop.guard.max_cycles ?? ''}
                               onChange={(event) =>
                                 updateConfig((draft) => {
-                                  draft.workflows[id].retest = event.target.value || undefined;
+                                  const raw = event.target.value.trim();
+                                  draft.workflows[id].loop.guard.max_cycles = raw
+                                    ? Math.max(1, Number(raw))
+                                    : undefined;
                                 })
                               }
-                            >
-                              <option value="">(none)</option>
-                              {agentKeys.map((agentId) => (
-                                <option key={agentId} value={agentId}>
-                                  {agentId}
-                                </option>
-                              ))}
-                            </select>
+                            />
                           </label>
                         </article>
                       );

@@ -6,6 +6,11 @@
   "scripts": {
     "dev": "vite --port 1420 --strictPort",
     "build": "tsc && vite build",
+    "test": "./scripts/run-vitest.sh run",
+    "test:watch": "./scripts/run-vitest.sh",
+    "test:coverage": "./scripts/run-vitest.sh run --coverage",
+    "test:tauri": "cd src-tauri && make test",
+    "test:tauri:coverage": "cd src-tauri && make coverage",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
@@ -20,7 +25,9 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "@vitejs/plugin-react": "^4.3.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "typescript": "^5.7.0",
-    "vite": "^6.0.0"
+    "vite": "^6.0.0",
+    "vitest": "^4.0.18"
   }
 }

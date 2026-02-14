@@ -1,5 +1,3 @@
-export type TaskMode = 'qa_only' | 'qa_fix' | 'qa_fix_retest';
-
 export type TaskStatus =
   | 'pending'
   | 'running'
@@ -28,7 +26,6 @@ export interface TaskSummary {
   started_at: string | null;
   completed_at: string | null;
   goal: string;
-  mode: TaskMode;
   workspace_id: string;
   workflow_id: string;
   target_files: string[];
@@ -58,7 +55,7 @@ export interface TaskItem {
 export interface CommandRun {
   id: string;
   task_item_id: string;
-  phase: 'qa' | 'fix' | 'retest' | 'custom';
+  phase: 'init_once' | 'qa' | 'fix' | 'retest' | 'loop_guard' | 'custom';
   command: string;
   cwd: string;
   workspace_id: string;
@@ -80,6 +77,21 @@ export interface EventRow {
   created_at: string;
 }
 
+export interface TaskEventEnvelope {
+  task_id: string;
+  task_item_id: string | null;
+  event_type: string;
+  payload: Record<string, unknown>;
+  ts: string;
+}
+
+export interface LogChunkEventPayload {
+  run_id: string;
+  phase: string;
+  stream: 'stdout' | 'stderr';
+  line: string;
+}
+
 export interface TaskDetail {
   task: TaskSummary;
   items: TaskItem[];
@@ -98,7 +110,6 @@ export interface LogChunk {
 export interface CreateTaskRequest {
   name?: string;
   goal?: string;
-  mode?: TaskMode;
   workspace_id?: string;
   workflow_id?: string;
   target_files?: string[];
@@ -124,19 +135,43 @@ export interface WorkspaceConfig {
 }
 
 export interface AgentTemplates {
+  init_once?: string;
   qa?: string;
   fix?: string;
   retest?: string;
+  loop_guard?: string;
 }
 
 export interface AgentConfig {
   templates: AgentTemplates;
 }
 
+export type WorkflowStepType = 'init_once' | 'qa' | 'fix' | 'retest';
+
+export type WorkflowLoopMode = 'once' | 'infinite';
+
+export interface WorkflowStepConfig {
+  id: string;
+  type: WorkflowStepType;
+  enabled: boolean;
+  agent_id?: string;
+}
+
+export interface WorkflowLoopGuardConfig {
+  enabled: boolean;
+  stop_when_no_unresolved: boolean;
+  max_cycles?: number;
+  agent_id?: string;
+}
+
+export interface WorkflowLoopConfig {
+  mode: WorkflowLoopMode;
+  guard: WorkflowLoopGuardConfig;
+}
+
 export interface WorkflowConfig {
-  qa: string;
-  fix?: string;
-  retest?: string;
+  steps: WorkflowStepConfig[];
+  loop: WorkflowLoopConfig;
 }
 
 export interface OrchestratorConfigModel {

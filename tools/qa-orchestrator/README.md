@@ -29,6 +29,30 @@ npm install
 npm run tauri:dev
 ```
 
+## Test & Coverage
+
+Install test dependencies once:
+
+```bash
+cd tools/qa-orchestrator
+npm install -D vitest @vitest/coverage-v8
+```
+
+```bash
+cd tools/qa-orchestrator
+npm run test
+npm run test:coverage
+npm run test:tauri
+npm run test:tauri:coverage
+```
+
+Coverage requirement (unit scope): `>= 90%` for lines/functions/branches/statements.
+
+Current coverage gates:
+
+- Frontend: `vitest.config.ts` (>=90%)
+- Tauri: `src-tauri/Makefile` using `cargo llvm-cov --fail-under-lines 90`
+
 ## UI vs CLI behavior
 
 - UI startup (`npm run tauri:dev` or `scripts/open-ui.sh`):
@@ -42,25 +66,25 @@ CLI examples:
 
 ```bash
 ./tools/qa-orchestrator/scripts/run-cli.sh
-./tools/qa-orchestrator/scripts/run-cli.sh --mode qa_fix_retest
 ./tools/qa-orchestrator/scripts/run-cli.sh --workspace auth9 --workflow qa_fix_retest
 ./tools/qa-orchestrator/scripts/run-cli.sh --target-file docs/qa/user/01-crud.md
-./tools/qa-orchestrator/scripts/run-cli.sh --no-auto-resume --mode qa_only
+./tools/qa-orchestrator/scripts/run-cli.sh --no-auto-resume --workflow qa_only
 ```
 
-## Workflow Modes
+## Workflow Model
 
-- `qa_only`: run QA and collect unresolved failures
-- `qa_fix`: run QA and auto-fix tickets
-- `qa_fix_retest`: run QA, fix tickets, then retest (default)
+- Workflow is a configurable step pipeline: `init_once`, `qa`, `fix`, `retest`
+- Each step can be enabled/disabled and mapped to an agent
+- Loop policy is defined per workflow: `once` or `infinite`
+- Loop guard supports rule-based stop conditions and optional guard agent decision (`loop.guard.agent_id`)
 
 ## Config Model
 
 `config/default.yaml` defines:
 
 - `workspaces`: isolated roots and path scopes (`root_path`, `qa_targets`, `ticket_dir`)
-- `agents`: phase templates (`qa`, `fix`, `retest`)
-- `workflows`: `phase -> agent` mapping
+- `agents`: step templates (`init_once`, `qa`, `fix`, `retest`, `loop_guard`)
+- `workflows`: step array + loop policy
 - `defaults`: default `workspace` and `workflow`
 
 Runtime source of truth:
@@ -73,6 +97,7 @@ Template placeholders:
 
 - `{rel_path}`: current QA/security markdown file path
 - `{ticket_paths}`: space-separated ticket file paths for current item
+- loop guard template placeholders: `{task_id}`, `{cycle}`, `{unresolved_items}`
 
 Path safety rules:
 

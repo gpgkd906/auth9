@@ -2,10 +2,11 @@
 
 use anyhow::{Context, Result};
 use chrono::Utc;
+use qa_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_workspace_rel_path};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::{HashMap, HashSet};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -58,38 +59,173 @@ struct AgentConfig {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct AgentTemplates {
+    init_once: Option<String>,
     qa: Option<String>,
     fix: Option<String>,
     retest: Option<String>,
+    loop_guard: Option<String>,
 }
 
 impl AgentTemplates {
     fn phase_template(&self, phase: &str) -> Option<&str> {
         match phase {
+            "init_once" => self.init_once.as_deref(),
             "qa" => self.qa.as_deref(),
             "fix" => self.fix.as_deref(),
             "retest" => self.retest.as_deref(),
+            "loop_guard" => self.loop_guard.as_deref(),
             _ => None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+enum WorkflowStepType {
+    InitOnce,
+    Qa,
+    Fix,
+    Retest,
+}
+
+impl WorkflowStepType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            Self::InitOnce => "init_once",
+            Self::Qa => "qa",
+            Self::Fix => "fix",
+            Self::Retest => "retest",
         }
     }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+enum LoopMode {
+    Once,
+    Infinite,
+}
+
+impl Default for LoopMode {
+    fn default() -> Self {
+        Self::Once
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowLoopGuardConfig {
+    enabled: bool,
+    stop_when_no_unresolved: bool,
+    max_cycles: Option<u32>,
+    agent_id: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    agent_template: Option<String>,
+}
+
+impl Default for WorkflowLoopGuardConfig {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            stop_when_no_unresolved: true,
+            max_cycles: None,
+            agent_id: None,
+            agent_template: None,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+struct WorkflowLoopConfig {
+    mode: LoopMode,
+    #[serde(default)]
+    guard: WorkflowLoopGuardConfig,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct WorkflowStepConfig {
+    id: String,
+    #[serde(rename = "type")]
+    step_type: WorkflowStepType,
+    enabled: bool,
+    agent_id: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TaskExecutionStep {
+    id: String,
+    #[serde(rename = "type")]
+    step_type: WorkflowStepType,
+    agent_id: String,
+    template: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct TaskExecutionPlan {
+    steps: Vec<TaskExecutionStep>,
+    #[serde(rename = "loop")]
+    loop_policy: WorkflowLoopConfig,
+}
+
+impl TaskExecutionPlan {
+    fn step(&self, step_type: WorkflowStepType) -> Option<&TaskExecutionStep> {
+        self.steps.iter().find(|step| step.step_type == step_type)
+    }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 struct WorkflowConfig {
-    qa: String,
+    #[serde(default)]
+    steps: Vec<WorkflowStepConfig>,
+    #[serde(rename = "loop", default)]
+    loop_policy: WorkflowLoopConfig,
+    #[serde(default)]
+    qa: Option<String>,
+    #[serde(default)]
     fix: Option<String>,
+    #[serde(default)]
     retest: Option<String>,
 }
 
 impl WorkflowConfig {
-    fn agent_for_phase(&self, phase: &str) -> Option<&str> {
-        match phase {
-            "qa" => Some(self.qa.as_str()),
-            "fix" => self.fix.as_deref(),
-            "retest" => self.retest.as_deref(),
-            _ => None,
-        }
+    fn uses_agent(&self, agent_id: &str) -> bool {
+        self.steps
+            .iter()
+            .any(|step| step.enabled && step.agent_id.as_deref() == Some(agent_id))
+            || self.loop_policy.guard.agent_id.as_deref() == Some(agent_id)
     }
+}
+
+fn default_workflow_steps(
+    qa: Option<&str>,
+    fix: Option<&str>,
+    retest: Option<&str>,
+) -> Vec<WorkflowStepConfig> {
+    vec![
+        WorkflowStepConfig {
+            id: "init_once".to_string(),
+            step_type: WorkflowStepType::InitOnce,
+            enabled: false,
+            agent_id: None,
+        },
+        WorkflowStepConfig {
+            id: "qa".to_string(),
+            step_type: WorkflowStepType::Qa,
+            enabled: qa.is_some(),
+            agent_id: qa.map(str::to_string),
+        },
+        WorkflowStepConfig {
+            id: "fix".to_string(),
+            step_type: WorkflowStepType::Fix,
+            enabled: fix.is_some(),
+            agent_id: fix.map(str::to_string),
+        },
+        WorkflowStepConfig {
+            id: "retest".to_string(),
+            step_type: WorkflowStepType::Retest,
+            enabled: retest.is_some(),
+            agent_id: retest.map(str::to_string),
+        },
+    ]
 }
 
 #[derive(Debug, Clone)]
@@ -124,6 +260,7 @@ impl Default for OrchestratorConfig {
             "opencode".to_string(),
             AgentConfig {
                 templates: AgentTemplates {
+                    init_once: Some("echo \"qa-orchestrator init_once\"".to_string()),
                     qa: Some(
                         "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
                             .to_string(),
@@ -133,6 +270,10 @@ impl Default for OrchestratorConfig {
                         "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
                             .to_string(),
                     ),
+                    loop_guard: Some(
+                        "if [ \"{unresolved_items}\" -eq 0 ]; then echo stop; else echo continue; fi"
+                            .to_string(),
+                    ),
                 },
             },
         );
@@ -140,9 +281,11 @@ impl Default for OrchestratorConfig {
             "claudecode".to_string(),
             AgentConfig {
                 templates: AgentTemplates {
+                    init_once: None,
                     qa: None,
                     fix: Some("claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\"".to_string()),
                     retest: None,
+                    loop_guard: None,
                 },
             },
         );
@@ -151,7 +294,9 @@ impl Default for OrchestratorConfig {
         workflows.insert(
             "qa_only".to_string(),
             WorkflowConfig {
-                qa: "opencode".to_string(),
+                steps: default_workflow_steps(Some("opencode"), None, None),
+                loop_policy: WorkflowLoopConfig::default(),
+                qa: None,
                 fix: None,
                 retest: None,
             },
@@ -159,17 +304,35 @@ impl Default for OrchestratorConfig {
         workflows.insert(
             "qa_fix".to_string(),
             WorkflowConfig {
-                qa: "opencode".to_string(),
-                fix: Some("claudecode".to_string()),
+                steps: default_workflow_steps(Some("opencode"), Some("claudecode"), None),
+                loop_policy: WorkflowLoopConfig::default(),
+                qa: None,
+                fix: None,
+                retest: None,
+            },
+        );
+        workflows.insert(
+            "only-fix".to_string(),
+            WorkflowConfig {
+                steps: default_workflow_steps(None, Some("claudecode"), None),
+                loop_policy: WorkflowLoopConfig::default(),
+                qa: None,
+                fix: None,
                 retest: None,
             },
         );
         workflows.insert(
             "qa_fix_retest".to_string(),
             WorkflowConfig {
-                qa: "opencode".to_string(),
-                fix: Some("claudecode".to_string()),
-                retest: Some("opencode".to_string()),
+                steps: default_workflow_steps(
+                    Some("opencode"),
+                    Some("claudecode"),
+                    Some("opencode"),
+                ),
+                loop_policy: WorkflowLoopConfig::default(),
+                qa: None,
+                fix: None,
+                retest: None,
             },
         );
 
@@ -219,46 +382,11 @@ impl RunningTask {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-enum TaskMode {
-    QaOnly,
-    QaFix,
-    QaFixRetest,
-}
-
-impl TaskMode {
-    fn as_str(&self) -> &'static str {
-        match self {
-            Self::QaOnly => "qa_only",
-            Self::QaFix => "qa_fix",
-            Self::QaFixRetest => "qa_fix_retest",
-        }
-    }
-
-    fn from_str(mode: &str) -> Self {
-        match mode {
-            "qa_only" => Self::QaOnly,
-            "qa_fix" => Self::QaFix,
-            _ => Self::QaFixRetest,
-        }
-    }
-
-    fn should_fix(&self) -> bool {
-        matches!(self, Self::QaFix | Self::QaFixRetest)
-    }
-
-    fn should_retest(&self) -> bool {
-        matches!(self, Self::QaFixRetest)
-    }
-}
-
 #[derive(Debug, Deserialize)]
 #[serde(default)]
 struct CreateTaskPayload {
     name: Option<String>,
     goal: Option<String>,
-    mode: Option<String>,
     workspace_id: Option<String>,
     workflow_id: Option<String>,
     target_files: Option<Vec<String>>,
@@ -269,7 +397,6 @@ impl Default for CreateTaskPayload {
         Self {
             name: None,
             goal: None,
-            mode: Some("qa_fix_retest".to_string()),
             workspace_id: None,
             workflow_id: None,
             target_files: None,
@@ -347,7 +474,6 @@ struct TaskSummary {
     started_at: Option<String>,
     completed_at: Option<String>,
     goal: String,
-    mode: String,
     workspace_id: String,
     workflow_id: String,
     target_files: Vec<String>,
@@ -429,15 +555,18 @@ struct TaskItemRow {
 struct RunResult {
     success: bool,
     exit_code: i64,
+    stdout_path: String,
+    stderr_path: String,
 }
 
 #[derive(Debug, Clone)]
 struct TaskRuntimeContext {
-    mode: TaskMode,
     workspace_id: String,
-    workflow_id: String,
     workspace_root: PathBuf,
     ticket_dir: String,
+    execution_plan: TaskExecutionPlan,
+    current_cycle: u32,
+    init_done: bool,
 }
 
 #[derive(Debug, Default, Clone)]
@@ -446,7 +575,6 @@ struct CliOptions {
     show_help: bool,
     no_auto_resume: bool,
     task_id: Option<String>,
-    mode: Option<String>,
     workspace_id: Option<String>,
     workflow_id: Option<String>,
     name: Option<String>,
@@ -531,14 +659,14 @@ async fn validate_config_yaml(
 ) -> Result<ConfigValidationResult, String> {
     let config =
         serde_yaml::from_str::<OrchestratorConfig>(&payload.yaml).map_err(err_to_string)?;
-    let _ = build_active_config(&state.inner.app_root, config.clone()).map_err(err_to_string)?;
+    let candidate = build_active_config(&state.inner.app_root, config).map_err(err_to_string)?;
     let current = read_active_config(&state.inner)
         .map_err(err_to_string)?
         .config
         .clone();
     let conn = open_conn(&state.inner.db_path).map_err(err_to_string)?;
-    enforce_deletion_guards(&conn, &current, &config).map_err(err_to_string)?;
-    let normalized_yaml = serde_yaml::to_string(&config).map_err(err_to_string)?;
+    enforce_deletion_guards(&conn, &current, &candidate.config).map_err(err_to_string)?;
+    let normalized_yaml = serde_yaml::to_string(&candidate.config).map_err(err_to_string)?;
     Ok(ConfigValidationResult {
         valid: true,
         normalized_yaml,
@@ -727,24 +855,6 @@ fn write_active_config<'a>(
         .map_err(|_| anyhow::anyhow!("active config lock is poisoned"))
 }
 
-fn validate_workspace_rel_path(raw: &str, field: &str) -> Result<()> {
-    let path = raw.trim();
-    if path.is_empty() {
-        anyhow::bail!("{} cannot be empty", field);
-    }
-    let parsed = Path::new(path);
-    if parsed.is_absolute() {
-        anyhow::bail!("{} must be a relative path: {}", field, raw);
-    }
-    if parsed
-        .components()
-        .any(|c| matches!(c, std::path::Component::ParentDir))
-    {
-        anyhow::bail!("{} cannot include '..': {}", field, raw);
-    }
-    Ok(())
-}
-
 fn ensure_within_root(root: &Path, target: &Path, field: &str) -> Result<()> {
     let root_canon = root
         .canonicalize()
@@ -777,6 +887,155 @@ fn resolve_workspace_path(workspace_root: &Path, rel_path: &str, field: &str) ->
         }
     }
     Ok(joined)
+}
+
+fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
+    if workflow.steps.is_empty() {
+        workflow.steps = default_workflow_steps(
+            workflow.qa.as_deref(),
+            workflow.fix.as_deref(),
+            workflow.retest.as_deref(),
+        );
+    }
+    for step in &mut workflow.steps {
+        if step.id.trim().is_empty() {
+            step.id = step.step_type.as_str().to_string();
+        }
+    }
+    workflow.qa = None;
+    workflow.fix = None;
+    workflow.retest = None;
+    workflow.loop_policy.guard.agent_template = None;
+}
+
+fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
+    for workflow in config.workflows.values_mut() {
+        normalize_workflow_config(workflow);
+    }
+    config
+}
+
+fn validate_workflow_config(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+) -> Result<()> {
+    if workflow.steps.is_empty() {
+        anyhow::bail!("workflow '{}' must define at least one step", workflow_id);
+    }
+
+    let mut enabled_count = 0usize;
+    let mut seen: HashMap<&'static str, bool> = HashMap::new();
+    for step in &workflow.steps {
+        let key = step.step_type.as_str();
+        if seen.insert(key, true).is_some() {
+            anyhow::bail!(
+                "workflow '{}' has duplicate step type '{}'",
+                workflow_id,
+                key
+            );
+        }
+        if !step.enabled {
+            continue;
+        }
+        enabled_count += 1;
+        let agent_id = step.agent_id.as_deref().with_context(|| {
+            format!("workflow '{}' step '{}' missing agent_id", workflow_id, key)
+        })?;
+        let agent = config.agents.get(agent_id).with_context(|| {
+            format!(
+                "workflow '{}' step '{}' references unknown agent '{}'",
+                workflow_id, key, agent_id
+            )
+        })?;
+        if agent.templates.phase_template(key).is_none() {
+            anyhow::bail!(
+                "agent '{}' is missing template for step '{}' used by workflow '{}'",
+                agent_id,
+                key,
+                workflow_id
+            );
+        }
+    }
+    if enabled_count == 0 {
+        anyhow::bail!("workflow '{}' has no enabled steps", workflow_id);
+    }
+    if let Some(max_cycles) = workflow.loop_policy.guard.max_cycles {
+        if max_cycles == 0 {
+            anyhow::bail!(
+                "workflow '{}' loop.guard.max_cycles must be > 0",
+                workflow_id
+            );
+        }
+    }
+    if workflow.loop_policy.guard.enabled {
+        if let Some(agent_id) = workflow.loop_policy.guard.agent_id.as_deref() {
+            let agent = config.agents.get(agent_id).with_context(|| {
+                format!(
+                    "workflow '{}' loop.guard references unknown agent '{}'",
+                    workflow_id, agent_id
+                )
+            })?;
+            if agent.templates.phase_template("loop_guard").is_none() {
+                anyhow::bail!(
+                    "workflow '{}' loop.guard agent '{}' has no loop_guard template",
+                    workflow_id,
+                    agent_id
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
+fn build_execution_plan(
+    config: &OrchestratorConfig,
+    workflow: &WorkflowConfig,
+    workflow_id: &str,
+) -> Result<TaskExecutionPlan> {
+    validate_workflow_config(config, workflow, workflow_id)?;
+    let mut steps = Vec::new();
+    for step in &workflow.steps {
+        if !step.enabled {
+            continue;
+        }
+        let phase = step.step_type.as_str();
+        let agent_id = step.agent_id.as_deref().with_context(|| {
+            format!(
+                "workflow '{}' step '{}' missing agent_id",
+                workflow_id, phase
+            )
+        })?;
+        let agent = config
+            .agents
+            .get(agent_id)
+            .with_context(|| format!("unknown agent '{}'", agent_id))?;
+        let template = agent
+            .templates
+            .phase_template(phase)
+            .with_context(|| format!("agent '{}' missing template '{}'", agent_id, phase))?;
+        steps.push(TaskExecutionStep {
+            id: step.id.clone(),
+            step_type: step.step_type.clone(),
+            agent_id: agent_id.to_string(),
+            template: template.to_string(),
+        });
+    }
+    let mut loop_policy = workflow.loop_policy.clone();
+    if let Some(agent_id) = loop_policy.guard.agent_id.clone() {
+        let agent = config
+            .agents
+            .get(&agent_id)
+            .with_context(|| format!("unknown loop guard agent '{}'", agent_id))?;
+        let template = agent
+            .templates
+            .phase_template("loop_guard")
+            .with_context(|| format!("agent '{}' missing template 'loop_guard'", agent_id))?;
+        loop_policy.guard.agent_template = Some(template.to_string());
+    } else {
+        loop_policy.guard.agent_template = None;
+    }
+    Ok(TaskExecutionPlan { steps, loop_policy })
 }
 
 fn resolve_and_validate_workspaces(
@@ -857,31 +1116,14 @@ fn resolve_and_validate_workspaces(
     }
 
     for (workflow_id, workflow) in &config.workflows {
-        for phase in ["qa", "fix", "retest"] {
-            let Some(agent_id) = workflow.agent_for_phase(phase) else {
-                continue;
-            };
-            let agent = config.agents.get(agent_id).with_context(|| {
-                format!(
-                    "workflow '{}' phase '{}' references unknown agent '{}'",
-                    workflow_id, phase, agent_id
-                )
-            })?;
-            if agent.templates.phase_template(phase).is_none() {
-                anyhow::bail!(
-                    "agent '{}' is missing template for phase '{}' used by workflow '{}'",
-                    agent_id,
-                    phase,
-                    workflow_id
-                );
-            }
-        }
+        validate_workflow_config(config, workflow, workflow_id)?;
     }
 
     Ok(resolved)
 }
 
 fn build_active_config(app_root: &Path, config: OrchestratorConfig) -> Result<ActiveConfig> {
+    let config = normalize_config(config);
     let workspaces = resolve_and_validate_workspaces(app_root, &config)?;
     Ok(ActiveConfig {
         default_workspace_id: config.defaults.workspace.clone(),
@@ -922,16 +1164,14 @@ fn load_or_seed_config(
         let config = serde_json::from_str::<OrchestratorConfig>(&json_raw)
             .or_else(|_| serde_yaml::from_str::<OrchestratorConfig>(&yaml))
             .context("failed to parse config from sqlite")?;
+        let config = normalize_config(config);
+        let yaml = serde_yaml::to_string(&config).context("failed to normalize config yaml")?;
         return Ok((config, yaml, version, updated_at));
     }
 
-    let config = load_config(config_path)?;
-    let yaml = if config_path.exists() {
-        std::fs::read_to_string(config_path)
-            .with_context(|| format!("failed to read {}", config_path.display()))?
-    } else {
-        serde_yaml::to_string(&config).context("failed to serialize initial config to yaml")?
-    };
+    let config = normalize_config(load_config(config_path)?);
+    let yaml =
+        serde_yaml::to_string(&config).context("failed to serialize initial config to yaml")?;
     let json_raw = serde_json::to_string(&config).context("failed to serialize initial config")?;
     let now = now_ts();
     conn.execute(
@@ -965,11 +1205,7 @@ fn count_tasks_by_workflow(conn: &Connection, workflow_id: &str) -> Result<i64> 
 }
 
 fn agent_is_referenced(workflows: &HashMap<String, WorkflowConfig>, agent_id: &str) -> bool {
-    workflows.values().any(|wf| {
-        wf.qa == agent_id
-            || wf.fix.as_deref() == Some(agent_id)
-            || wf.retest.as_deref() == Some(agent_id)
-    })
+    workflows.values().any(|wf| wf.uses_agent(agent_id))
 }
 
 fn enforce_deletion_guards(
@@ -1032,11 +1268,13 @@ fn enforce_deletion_guards(
 fn persist_config_and_reload(
     state: &InnerState,
     config: OrchestratorConfig,
-    yaml: String,
+    _yaml: String,
     author: &str,
 ) -> Result<ConfigOverview> {
     let candidate = build_active_config(&state.app_root, config.clone())?;
-    let json_raw = serde_json::to_string(&config).context("failed to serialize config json")?;
+    let normalized = candidate.config.clone();
+    let yaml = serde_yaml::to_string(&normalized).context("failed to serialize config yaml")?;
+    let json_raw = serde_json::to_string(&normalized).context("failed to serialize config json")?;
 
     let previous_config = {
         let active = read_active_config(state)?;
@@ -1045,7 +1283,7 @@ fn persist_config_and_reload(
 
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
-    enforce_deletion_guards(&tx, &previous_config, &config)?;
+    enforce_deletion_guards(&tx, &previous_config, &normalized)?;
     let current_version: i64 = tx
         .query_row(
             "SELECT COALESCE(MAX(version), 0) FROM orchestrator_config_versions",
@@ -1063,7 +1301,7 @@ fn persist_config_and_reload(
     )?;
     tx.execute(
         "INSERT INTO orchestrator_config_versions (version, config_yaml, config_json, created_at, author) VALUES (?1, ?2, ?3, ?4, ?5)",
-        params![next_version, yaml, serde_json::to_string(&config)?, now, author],
+        params![next_version, yaml, serde_json::to_string(&normalized)?, now, author],
     )?;
 
     atomic_write_string(&state.config_path, &yaml)?;
@@ -1075,7 +1313,7 @@ fn persist_config_and_reload(
     }
 
     Ok(ConfigOverview {
-        config,
+        config: normalized,
         yaml,
         version: next_version,
         updated_at: now,
@@ -1167,6 +1405,10 @@ fn init_schema(db_path: &Path) -> Result<()> {
             workspace_root TEXT NOT NULL,
             qa_targets_json TEXT NOT NULL,
             ticket_dir TEXT NOT NULL,
+            execution_plan_json TEXT NOT NULL DEFAULT '{}',
+            loop_mode TEXT NOT NULL DEFAULT 'once',
+            current_cycle INTEGER NOT NULL DEFAULT 0,
+            init_done INTEGER NOT NULL DEFAULT 0,
             resume_token TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
@@ -1275,6 +1517,30 @@ fn init_schema(db_path: &Path) -> Result<()> {
     )?;
     ensure_column(
         &conn,
+        "tasks",
+        "execution_plan_json",
+        "ALTER TABLE tasks ADD COLUMN execution_plan_json TEXT NOT NULL DEFAULT '{}'",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "loop_mode",
+        "ALTER TABLE tasks ADD COLUMN loop_mode TEXT NOT NULL DEFAULT 'once'",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "current_cycle",
+        "ALTER TABLE tasks ADD COLUMN current_cycle INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        &conn,
+        "tasks",
+        "init_done",
+        "ALTER TABLE tasks ADD COLUMN init_done INTEGER NOT NULL DEFAULT 0",
+    )?;
+    ensure_column(
+        &conn,
         "command_runs",
         "workspace_id",
         "ALTER TABLE command_runs ADD COLUMN workspace_id TEXT NOT NULL DEFAULT ''",
@@ -1330,8 +1596,6 @@ fn backfill_legacy_data(
 
 fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<TaskSummary> {
     let active = read_active_config(state)?;
-    let mode_raw = payload.mode.unwrap_or_else(|| "qa_fix_retest".to_string());
-    let mode = TaskMode::from_str(&mode_raw);
 
     let workspace_id = payload
         .workspace_id
@@ -1345,20 +1609,19 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
     let workflow_id = payload
         .workflow_id
         .clone()
-        .or_else(|| {
-            if active.config.workflows.contains_key(mode.as_str()) {
-                Some(mode.as_str().to_string())
-            } else {
-                None
-            }
-        })
         .unwrap_or_else(|| active.default_workflow_id.clone());
     let workflow = active
         .config
         .workflows
         .get(&workflow_id)
         .with_context(|| format!("workflow not found: {}", workflow_id))?;
-    validate_workflow_for_mode(&active.config, workflow, &workflow_id, &mode)?;
+    let execution_plan = build_execution_plan(&active.config, workflow, &workflow_id)?;
+    let execution_plan_json =
+        serde_json::to_string(&execution_plan).context("serialize execution plan")?;
+    let loop_mode = match execution_plan.loop_policy.mode {
+        LoopMode::Once => "once",
+        LoopMode::Infinite => "infinite",
+    };
 
     let target_files = collect_target_files(
         &workspace.root_path,
@@ -1381,18 +1644,19 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
     let conn = open_conn(&state.db_path)?;
     let tx = conn.unchecked_transaction()?;
     tx.execute(
-        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, NULL, ?11, ?11)",
+        "INSERT INTO tasks (id, name, status, started_at, completed_at, goal, target_files_json, mode, workspace_id, workflow_id, workspace_root, qa_targets_json, ticket_dir, execution_plan_json, loop_mode, current_cycle, init_done, resume_token, created_at, updated_at) VALUES (?1, ?2, 'pending', NULL, NULL, ?3, ?4, '', ?5, ?6, ?7, ?8, ?9, ?10, ?11, 0, 0, NULL, ?12, ?12)",
         params![
             task_id,
             task_name,
             goal,
             serde_json::to_string(&target_files)?,
-            mode.as_str(),
             workspace_id,
             workflow_id,
             workspace.root_path.to_string_lossy().to_string(),
             serde_json::to_string(&workspace.qa_targets)?,
             workspace.ticket_dir,
+            execution_plan_json,
+            loop_mode,
             created_at
         ],
     )?;
@@ -1407,72 +1671,6 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
     tx.commit()?;
 
     load_task_summary(state, &task_id)
-}
-
-fn validate_workflow_for_mode(
-    config: &OrchestratorConfig,
-    workflow: &WorkflowConfig,
-    workflow_id: &str,
-    mode: &TaskMode,
-) -> Result<()> {
-    let qa_agent = workflow.qa.as_str();
-    let qa_templates = config
-        .agents
-        .get(qa_agent)
-        .with_context(|| format!("workflow '{}' qa agent missing: {}", workflow_id, qa_agent))?;
-    if qa_templates.templates.phase_template("qa").is_none() {
-        anyhow::bail!(
-            "workflow '{}' qa agent '{}' has no qa template",
-            workflow_id,
-            qa_agent
-        );
-    }
-
-    if mode.should_fix() {
-        let fix_agent = workflow
-            .fix
-            .as_deref()
-            .with_context(|| format!("workflow '{}' missing fix agent", workflow_id))?;
-        let fix_templates = config.agents.get(fix_agent).with_context(|| {
-            format!(
-                "workflow '{}' fix agent '{}' does not exist",
-                workflow_id, fix_agent
-            )
-        })?;
-        if fix_templates.templates.phase_template("fix").is_none() {
-            anyhow::bail!(
-                "workflow '{}' fix agent '{}' has no fix template",
-                workflow_id,
-                fix_agent
-            );
-        }
-    }
-
-    if mode.should_retest() {
-        let retest_agent = workflow
-            .retest
-            .as_deref()
-            .with_context(|| format!("workflow '{}' missing retest agent", workflow_id))?;
-        let retest_templates = config.agents.get(retest_agent).with_context(|| {
-            format!(
-                "workflow '{}' retest agent '{}' does not exist",
-                workflow_id, retest_agent
-            )
-        })?;
-        if retest_templates
-            .templates
-            .phase_template("retest")
-            .is_none()
-        {
-            anyhow::bail!(
-                "workflow '{}' retest agent '{}' has no retest template",
-                workflow_id,
-                retest_agent
-            );
-        }
-    }
-
-    Ok(())
 }
 
 fn collect_target_files(
@@ -1535,7 +1733,7 @@ fn collect_target_files(
 fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
-        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, mode, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
+        "SELECT id, name, status, started_at, completed_at, goal, target_files_json, workspace_id, workflow_id, created_at, updated_at FROM tasks WHERE id = ?1",
     )?;
     let mut summary = stmt.query_row(params![task_id], |row| {
         let target_raw: String = row.get(6)?;
@@ -1547,15 +1745,14 @@ fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
             started_at: row.get(3)?,
             completed_at: row.get(4)?,
             goal: row.get(5)?,
-            mode: row.get(7)?,
-            workspace_id: row.get(8)?,
-            workflow_id: row.get(9)?,
+            workspace_id: row.get(7)?,
+            workflow_id: row.get(8)?,
             target_files,
             total_items: 0,
             finished_items: 0,
             failed_items: 0,
-            created_at: row.get(10)?,
-            updated_at: row.get(11)?,
+            created_at: row.get(9)?,
+            updated_at: row.get(10)?,
         })
     })?;
 
@@ -1829,27 +2026,66 @@ fn emit_event(
     );
 }
 
-fn fetch_next_active_item(state: &InnerState, task_id: &str) -> Result<Option<TaskItemRow>> {
+fn list_task_items_for_cycle(state: &InnerState, task_id: &str) -> Result<Vec<TaskItemRow>> {
     let conn = open_conn(&state.db_path)?;
     let mut stmt = conn.prepare(
         "SELECT id, qa_file_path
          FROM task_items
          WHERE task_id = ?1
-           AND status NOT IN ('qa_passed','fixed','verified','skipped','unresolved')
          ORDER BY order_no
-         LIMIT 1",
+        ",
     )?;
 
-    let row = stmt
-        .query_row(params![task_id], |row| {
+    let rows = stmt
+        .query_map(params![task_id], |row| {
             Ok(TaskItemRow {
                 id: row.get(0)?,
                 qa_file_path: row.get(1)?,
             })
         })
-        .optional()?;
+        .context("query task items")?
+        .collect::<std::result::Result<Vec<_>, _>>()?;
+    Ok(rows)
+}
 
-    Ok(row)
+fn first_task_item_id(state: &InnerState, task_id: &str) -> Result<Option<String>> {
+    let conn = open_conn(&state.db_path)?;
+    conn.query_row(
+        "SELECT id FROM task_items WHERE task_id = ?1 ORDER BY order_no LIMIT 1",
+        params![task_id],
+        |row| row.get(0),
+    )
+    .optional()
+    .context("query first task item")
+}
+
+fn count_unresolved_items(state: &InnerState, task_id: &str) -> Result<i64> {
+    let conn = open_conn(&state.db_path)?;
+    conn.query_row(
+        "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
+        params![task_id],
+        |row| row.get(0),
+    )
+    .context("count unresolved items")
+}
+
+fn update_task_cycle_state(
+    state: &InnerState,
+    task_id: &str,
+    current_cycle: u32,
+    init_done: bool,
+) -> Result<()> {
+    let conn = open_conn(&state.db_path)?;
+    conn.execute(
+        "UPDATE tasks SET current_cycle = ?2, init_done = ?3, updated_at = ?4 WHERE id = ?1",
+        params![
+            task_id,
+            current_cycle as i64,
+            if init_done { 1 } else { 0 },
+            now_ts()
+        ],
+    )?;
+    Ok(())
 }
 
 fn update_task_item(
@@ -1943,7 +2179,6 @@ fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
     let mut result = Vec::new();
     for entry in WalkDir::new(ticket_dir)
         .min_depth(1)
-        .max_depth(1)
         .into_iter()
         .filter_map(|value| value.ok())
     {
@@ -1970,13 +2205,24 @@ fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
     Ok(result)
 }
 
-fn new_ticket_diff(before: &[String], after: &[String]) -> Vec<String> {
-    let before_set: HashSet<&String> = before.iter().collect();
-    after
-        .iter()
-        .filter(|path| !before_set.contains(path))
-        .cloned()
-        .collect()
+fn list_existing_tickets_for_item(
+    task_ctx: &TaskRuntimeContext,
+    qa_file_path: &str,
+) -> Result<Vec<String>> {
+    let mut matched = Vec::new();
+    for ticket in list_ticket_files(task_ctx)? {
+        let preview = read_ticket_preview(task_ctx, &ticket);
+        let qa_doc = preview
+            .get("qa_document")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .trim();
+        if qa_doc == qa_file_path {
+            matched.push(ticket);
+        }
+    }
+    matched.sort();
+    Ok(matched)
 }
 
 fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> Value {
@@ -2014,34 +2260,53 @@ fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> Value {
     })
 }
 
-fn render_template(template: &str, rel_path: &str, ticket_paths: &[String]) -> String {
-    template
-        .replace("{rel_path}", rel_path)
-        .replace("{ticket_paths}", &ticket_paths.join(" "))
-}
-
 fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRuntimeContext> {
     let conn = open_conn(&state.db_path)?;
-    let (mode_raw, workspace_id, workflow_id, workspace_root_raw, ticket_dir): (
-        String,
-        String,
-        String,
-        String,
-        String,
-    ) = conn.query_row(
-        "SELECT mode, workspace_id, workflow_id, workspace_root, ticket_dir FROM tasks WHERE id = ?1",
+    let (
+        workspace_id,
+        workflow_id,
+        workspace_root_raw,
+        ticket_dir,
+        execution_plan_json,
+        current_cycle,
+        init_done,
+    ): (String, String, String, String, String, i64, i64) = conn.query_row(
+        "SELECT workspace_id, workflow_id, workspace_root, ticket_dir, execution_plan_json, current_cycle, init_done FROM tasks WHERE id = ?1",
         params![task_id],
-        |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?, row.get(4)?)),
+        |row| {
+            Ok((
+                row.get(0)?,
+                row.get(1)?,
+                row.get(2)?,
+                row.get(3)?,
+                row.get(4)?,
+                row.get(5)?,
+                row.get(6)?,
+            ))
+        },
     )?;
 
-    let mode = TaskMode::from_str(&mode_raw);
     let active = read_active_config(state)?;
     let workflow = active
         .config
         .workflows
         .get(&workflow_id)
         .with_context(|| format!("workflow not found for task {}: {}", task_id, workflow_id))?;
-    validate_workflow_for_mode(&active.config, workflow, &workflow_id, &mode)?;
+
+    let execution_plan = serde_json::from_str::<TaskExecutionPlan>(&execution_plan_json)
+        .ok()
+        .filter(|plan| !plan.steps.is_empty())
+        .unwrap_or_else(|| {
+            build_execution_plan(&active.config, workflow, &workflow_id).unwrap_or(
+                TaskExecutionPlan {
+                    steps: Vec::new(),
+                    loop_policy: WorkflowLoopConfig::default(),
+                },
+            )
+        });
+    if execution_plan.steps.is_empty() {
+        anyhow::bail!("task '{}' has empty execution plan", task_id);
+    }
 
     let workspace_root = PathBuf::from(workspace_root_raw);
     if !workspace_root.exists() {
@@ -2057,45 +2322,23 @@ fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRu
     resolve_workspace_path(&workspace_root, &ticket_dir, "task.ticket_dir")?;
 
     Ok(TaskRuntimeContext {
-        mode,
         workspace_id,
-        workflow_id,
         workspace_root,
         ticket_dir,
+        execution_plan,
+        current_cycle: current_cycle.max(0) as u32,
+        init_done: init_done == 1,
     })
 }
 
 fn build_phase_command(
-    state: &InnerState,
-    task_ctx: &TaskRuntimeContext,
-    phase: &str,
+    step: &TaskExecutionStep,
     rel_path: &str,
     ticket_paths: &[String],
 ) -> Result<(String, String)> {
-    let active = read_active_config(state)?;
-    let workflow = active
-        .config
-        .workflows
-        .get(&task_ctx.workflow_id)
-        .with_context(|| format!("workflow not found: {}", task_ctx.workflow_id))?;
-    let agent_id = workflow.agent_for_phase(phase).with_context(|| {
-        format!(
-            "workflow '{}' has no agent mapping for phase '{}'",
-            task_ctx.workflow_id, phase
-        )
-    })?;
-    let agent = active
-        .config
-        .agents
-        .get(agent_id)
-        .with_context(|| format!("agent not found: {}", agent_id))?;
-    let template = agent
-        .templates
-        .phase_template(phase)
-        .with_context(|| format!("agent '{}' has no template for phase '{}'", agent_id, phase))?;
     Ok((
-        agent_id.to_string(),
-        render_template(template, rel_path, ticket_paths),
+        step.agent_id.clone(),
+        render_template(&step.template, rel_path, ticket_paths),
     ))
 }
 
@@ -2124,11 +2367,9 @@ fn print_cli_help(binary_name: &str) {
     println!("Auth9 QA Orchestrator CLI");
     println!();
     println!(
-        "Usage: {} --cli [--task-id ID] [--mode MODE] [--workspace ID] [--workflow ID] [--name NAME] [--goal GOAL] [--target-file PATH]... [--no-auto-resume]",
+        "Usage: {} --cli [--task-id ID] [--workspace ID] [--workflow ID] [--name NAME] [--goal GOAL] [--target-file PATH]... [--no-auto-resume]",
         binary_name
     );
-    println!();
-    println!("Modes: qa_only | qa_fix | qa_fix_retest");
 }
 
 fn parse_cli_options(args: &[String]) -> Result<CliOptions> {
@@ -2152,11 +2393,6 @@ fn parse_cli_options(args: &[String]) -> Result<CliOptions> {
             "--task-id" => {
                 let value = args.get(idx + 1).context("missing value for --task-id")?;
                 options.task_id = Some(value.clone());
-                idx += 2;
-            }
-            "--mode" => {
-                let value = args.get(idx + 1).context("missing value for --mode")?;
-                options.mode = Some(value.clone());
                 idx += 2;
             }
             "--workspace" => {
@@ -2271,9 +2507,49 @@ async fn run_task_loop(
     runtime: RunningTask,
 ) -> Result<()> {
     set_task_status(&state, task_id, "running", false)?;
-    let task_ctx = load_task_runtime_context(&state, task_id)?;
+    let mut task_ctx = load_task_runtime_context(&state, task_id)?;
 
-    loop {
+    if !task_ctx.init_done {
+        if let Some(step) = task_ctx.execution_plan.step(WorkflowStepType::InitOnce) {
+            if let Some(anchor_item_id) = first_task_item_id(&state, task_id)? {
+                insert_event(
+                    &state,
+                    task_id,
+                    Some(&anchor_item_id),
+                    "step_started",
+                    json!({"step":"init_once"}),
+                )?;
+                let (_, init_cmd) = build_phase_command(step, ".", &[])?;
+                let init_result = run_phase(
+                    &state,
+                    app,
+                    task_id,
+                    &anchor_item_id,
+                    "init_once",
+                    init_cmd,
+                    &task_ctx.workspace_root,
+                    &task_ctx.workspace_id,
+                    &step.agent_id,
+                    &runtime,
+                )
+                .await?;
+                if !init_result.success {
+                    anyhow::bail!("init_once failed: exit={}", init_result.exit_code);
+                }
+                insert_event(
+                    &state,
+                    task_id,
+                    Some(&anchor_item_id),
+                    "step_finished",
+                    json!({"step":"init_once","exit_code":init_result.exit_code}),
+                )?;
+            }
+        }
+        task_ctx.init_done = true;
+        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, true)?;
+    }
+
+    'cycle: loop {
         if runtime.stop_flag.load(Ordering::SeqCst) {
             set_task_status(&state, task_id, "paused", false)?;
             insert_event(
@@ -2289,20 +2565,101 @@ async fn run_task_loop(
             return Ok(());
         }
 
-        let item = fetch_next_active_item(&state, task_id)?;
-        let Some(item) = item else {
-            break;
-        };
+        task_ctx.current_cycle += 1;
+        update_task_cycle_state(&state, task_id, task_ctx.current_cycle, task_ctx.init_done)?;
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "cycle_started",
+            json!({"cycle": task_ctx.current_cycle}),
+        )?;
+        if let Some(app) = app {
+            emit_event(
+                app,
+                task_id,
+                None,
+                "cycle_started",
+                json!({"cycle": task_ctx.current_cycle}),
+            );
+        }
 
-        process_item(&state, app, task_id, &item, &task_ctx, &runtime).await?;
+        let items = list_task_items_for_cycle(&state, task_id)?;
+        for item in items {
+            process_item(&state, app, task_id, &item, &task_ctx, &runtime).await?;
+            if runtime.stop_flag.load(Ordering::SeqCst) {
+                continue 'cycle;
+            }
+        }
+
+        let unresolved = count_unresolved_items(&state, task_id)?;
+        let (should_continue, reason) = if let Some((decision, reason)) = evaluate_loop_guard_rules(
+            &task_ctx.execution_plan.loop_policy,
+            task_ctx.current_cycle,
+            unresolved,
+        ) {
+            (decision, reason)
+        } else if let Some(agent_id) = task_ctx
+            .execution_plan
+            .loop_policy
+            .guard
+            .agent_id
+            .as_deref()
+        {
+            run_guard_agent_decision(
+                &state,
+                app,
+                task_id,
+                &task_ctx,
+                &runtime,
+                task_ctx.current_cycle,
+                unresolved,
+                agent_id,
+            )
+            .await?
+        } else if task_ctx
+            .execution_plan
+            .loop_policy
+            .guard
+            .stop_when_no_unresolved
+            && unresolved == 0
+        {
+            (false, "no_unresolved".to_string())
+        } else {
+            (true, "continue".to_string())
+        };
+        insert_event(
+            &state,
+            task_id,
+            None,
+            "loop_guard_decision",
+            json!({
+                "cycle": task_ctx.current_cycle,
+                "continue": should_continue,
+                "reason": reason,
+                "unresolved_items": unresolved
+            }),
+        )?;
+        if let Some(app) = app {
+            emit_event(
+                app,
+                task_id,
+                None,
+                "loop_guard_decision",
+                json!({
+                    "cycle": task_ctx.current_cycle,
+                    "continue": should_continue,
+                    "reason": reason,
+                    "unresolved_items": unresolved
+                }),
+            );
+        }
+        if !should_continue {
+            break;
+        }
     }
 
-    let conn = open_conn(&state.db_path)?;
-    let unresolved: i64 = conn.query_row(
-        "SELECT COUNT(*) FROM task_items WHERE task_id = ?1 AND status IN ('unresolved','qa_failed')",
-        params![task_id],
-        |row| row.get(0),
-    )?;
+    let unresolved = count_unresolved_items(&state, task_id)?;
 
     if unresolved > 0 {
         set_task_status(&state, task_id, "failed", true)?;
@@ -2333,6 +2690,135 @@ async fn run_task_loop(
     Ok(())
 }
 
+fn evaluate_loop_guard_rules(
+    loop_policy: &WorkflowLoopConfig,
+    current_cycle: u32,
+    _unresolved: i64,
+) -> Option<(bool, String)> {
+    match loop_policy.mode {
+        LoopMode::Once => Some((false, "once_mode".to_string())),
+        LoopMode::Infinite => {
+            if !loop_policy.guard.enabled {
+                return Some((true, "guard_disabled".to_string()));
+            }
+            if let Some(max_cycles) = loop_policy.guard.max_cycles {
+                if current_cycle >= max_cycles {
+                    return Some((false, "max_cycles_reached".to_string()));
+                }
+            }
+            None
+        }
+    }
+}
+
+fn parse_guard_agent_decision(output: &str) -> Option<bool> {
+    for line in output.lines().rev() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        if let Ok(json_value) = serde_json::from_str::<Value>(trimmed) {
+            if let Some(decision) = json_value.get("decision").and_then(Value::as_str) {
+                let decision = decision.trim().to_ascii_lowercase();
+                if matches!(
+                    decision.as_str(),
+                    "continue" | "cont" | "true" | "yes" | "1"
+                ) {
+                    return Some(true);
+                }
+                if matches!(decision.as_str(), "stop" | "halt" | "false" | "no" | "0") {
+                    return Some(false);
+                }
+            }
+        }
+        let normalized = trimmed.to_ascii_lowercase();
+        if matches!(
+            normalized.as_str(),
+            "continue" | "cont" | "true" | "yes" | "1"
+        ) {
+            return Some(true);
+        }
+        if matches!(normalized.as_str(), "stop" | "halt" | "false" | "no" | "0") {
+            return Some(false);
+        }
+    }
+    None
+}
+
+fn render_loop_guard_template(
+    template: &str,
+    task_id: &str,
+    cycle: u32,
+    unresolved_items: i64,
+) -> String {
+    template
+        .replace("{task_id}", task_id)
+        .replace("{cycle}", &cycle.to_string())
+        .replace("{unresolved_items}", &unresolved_items.to_string())
+}
+
+async fn run_guard_agent_decision(
+    state: &Arc<InnerState>,
+    app: Option<&AppHandle>,
+    task_id: &str,
+    task_ctx: &TaskRuntimeContext,
+    runtime: &RunningTask,
+    current_cycle: u32,
+    unresolved: i64,
+    agent_id: &str,
+) -> Result<(bool, String)> {
+    let Some(anchor_item_id) = first_task_item_id(state, task_id)? else {
+        anyhow::bail!(
+            "task '{}' has no task items for loop guard decision",
+            task_id
+        );
+    };
+    let template = task_ctx
+        .execution_plan
+        .loop_policy
+        .guard
+        .agent_template
+        .as_deref()
+        .with_context(|| {
+            format!(
+                "workflow loop guard template is missing for agent '{}'",
+                agent_id
+            )
+        })?;
+    let command = render_loop_guard_template(template, task_id, current_cycle, unresolved);
+    let result = run_phase(
+        state,
+        app,
+        task_id,
+        &anchor_item_id,
+        "loop_guard",
+        command,
+        &task_ctx.workspace_root,
+        &task_ctx.workspace_id,
+        agent_id,
+        runtime,
+    )
+    .await?;
+    if !result.success {
+        anyhow::bail!("loop_guard failed: exit={}", result.exit_code);
+    }
+    let stdout = std::fs::read_to_string(&result.stdout_path).unwrap_or_default();
+    let stderr = std::fs::read_to_string(&result.stderr_path).unwrap_or_default();
+    let combined = format!("{}\n{}", stdout, stderr);
+    let decision = parse_guard_agent_decision(&combined).with_context(|| {
+        format!(
+            "loop_guard output is invalid, expected continue/stop in {} or {}",
+            result.stdout_path, result.stderr_path
+        )
+    })?;
+    let reason = if decision {
+        "guard_agent_continue"
+    } else {
+        "guard_agent_stop"
+    };
+    Ok((decision, reason.to_string()))
+}
+
 async fn process_item(
     state: &Arc<InnerState>,
     app: Option<&AppHandle>,
@@ -2342,115 +2828,134 @@ async fn process_item(
     runtime: &RunningTask,
 ) -> Result<()> {
     let item_id = item.id.as_str();
-    update_task_item(
-        state,
-        item_id,
-        "qa_running",
-        None,
-        None,
-        Some(false),
-        Some(false),
-        Some(""),
-        true,
-        false,
-    )?;
-    insert_event(
-        state,
-        task_id,
-        Some(item_id),
-        "item_phase",
-        json!({"phase":"qa_running", "file": item.qa_file_path}),
-    )?;
-    if let Some(app) = app {
-        emit_event(
-            app,
-            task_id,
-            Some(item_id),
-            "item_phase",
-            json!({"phase":"qa_running", "file": item.qa_file_path}),
-        );
-    }
+    let qa_step = task_ctx.execution_plan.step(WorkflowStepType::Qa);
+    let fix_step = task_ctx.execution_plan.step(WorkflowStepType::Fix);
+    let retest_step = task_ctx.execution_plan.step(WorkflowStepType::Retest);
+    let mut active_tickets: Vec<String>;
+    let mut qa_failed = false;
 
-    let before_tickets = list_ticket_files(task_ctx)?;
-    let (qa_agent_id, qa_cmd) =
-        build_phase_command(state, task_ctx, "qa", &item.qa_file_path, &[])?;
-    let qa_result = run_phase(
-        state,
-        app,
-        task_id,
-        item_id,
-        "qa",
-        qa_cmd,
-        &task_ctx.workspace_root,
-        &task_ctx.workspace_id,
-        &qa_agent_id,
-        runtime,
-    )
-    .await?;
-    let after_tickets = list_ticket_files(task_ctx)?;
-    let new_tickets = new_ticket_diff(&before_tickets, &after_tickets);
-
-    if qa_result.success && new_tickets.is_empty() {
+    if let Some(qa_step) = qa_step {
         update_task_item(
             state,
             item_id,
-            "qa_passed",
-            Some(&[]),
-            Some(&[]),
+            "qa_running",
+            None,
+            None,
             Some(false),
             Some(false),
             Some(""),
-            false,
             true,
+            false,
         )?;
-        insert_event(
+        let before_tickets = list_ticket_files(task_ctx)?;
+        let (qa_agent_id, qa_cmd) = build_phase_command(qa_step, &item.qa_file_path, &[])?;
+        let qa_result = run_phase(
             state,
+            app,
             task_id,
-            Some(item_id),
-            "item_passed",
-            json!({"phase":"qa"}),
-        )?;
-        return Ok(());
-    }
-
-    let ticket_content: Vec<Value> = new_tickets
-        .iter()
-        .map(|path| read_ticket_preview(task_ctx, path))
-        .collect();
-
-    update_task_item(
-        state,
-        item_id,
-        "qa_failed",
-        Some(&new_tickets),
-        Some(&ticket_content),
-        Some(true),
-        Some(false),
-        Some(&format!("qa failed: exit={}", qa_result.exit_code)),
-        false,
-        false,
-    )?;
-    insert_event(
-        state,
-        task_id,
-        Some(item_id),
-        "item_failed",
-        json!({"phase":"qa", "tickets": new_tickets}),
-    )?;
-
-    if !task_ctx.mode.should_fix() {
+            item_id,
+            "qa",
+            qa_cmd,
+            &task_ctx.workspace_root,
+            &task_ctx.workspace_id,
+            &qa_agent_id,
+            runtime,
+        )
+        .await?;
+        let after_tickets = list_ticket_files(task_ctx)?;
+        active_tickets = new_ticket_diff(&before_tickets, &after_tickets);
+        if qa_result.success && active_tickets.is_empty() {
+            update_task_item(
+                state,
+                item_id,
+                "qa_passed",
+                Some(&[]),
+                Some(&[]),
+                Some(false),
+                Some(false),
+                Some(""),
+                false,
+                true,
+            )?;
+            if fix_step.is_none() {
+                return Ok(());
+            }
+        } else {
+            qa_failed = true;
+            if active_tickets.is_empty() {
+                active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
+            }
+            let ticket_content: Vec<Value> = active_tickets
+                .iter()
+                .map(|path| read_ticket_preview(task_ctx, path))
+                .collect();
+            update_task_item(
+                state,
+                item_id,
+                "qa_failed",
+                Some(&active_tickets),
+                Some(&ticket_content),
+                Some(true),
+                Some(false),
+                Some(&format!("qa failed: exit={}", qa_result.exit_code)),
+                false,
+                false,
+            )?;
+        }
+    } else {
+        active_tickets = list_existing_tickets_for_item(task_ctx, &item.qa_file_path)?;
+        if active_tickets.is_empty() {
+            update_task_item(
+                state,
+                item_id,
+                "skipped",
+                Some(&[]),
+                Some(&[]),
+                Some(false),
+                Some(false),
+                Some("qa disabled and no existing tickets"),
+                true,
+                true,
+            )?;
+            return Ok(());
+        }
+        qa_failed = true;
+        let ticket_content: Vec<Value> = active_tickets
+            .iter()
+            .map(|path| read_ticket_preview(task_ctx, path))
+            .collect();
         update_task_item(
             state,
             item_id,
-            "unresolved",
-            None,
-            None,
+            "qa_failed",
+            Some(&active_tickets),
+            Some(&ticket_content),
             Some(true),
             Some(false),
-            Some("qa failed and fix disabled by mode"),
-            false,
+            Some("qa disabled; using existing tickets"),
             true,
+            false,
         )?;
+    }
+
+    let Some(fix_step) = fix_step else {
+        if qa_failed || !active_tickets.is_empty() {
+            update_task_item(
+                state,
+                item_id,
+                "unresolved",
+                None,
+                None,
+                Some(true),
+                Some(false),
+                Some("fix disabled by workflow"),
+                false,
+                true,
+            )?;
+        }
+        return Ok(());
+    };
+    if active_tickets.is_empty() {
         return Ok(());
     }
 
@@ -2467,7 +2972,7 @@ async fn process_item(
         false,
     )?;
     let (fix_agent_id, fix_cmd) =
-        build_phase_command(state, task_ctx, "fix", &item.qa_file_path, &new_tickets)?;
+        build_phase_command(fix_step, &item.qa_file_path, &active_tickets)?;
     let fix_result = run_phase(
         state,
         app,
@@ -2498,7 +3003,7 @@ async fn process_item(
         return Ok(());
     }
 
-    if !task_ctx.mode.should_retest() {
+    let Some(retest_step) = retest_step else {
         update_task_item(
             state,
             item_id,
@@ -2512,7 +3017,7 @@ async fn process_item(
             true,
         )?;
         return Ok(());
-    }
+    };
 
     update_task_item(
         state,
@@ -2528,8 +3033,7 @@ async fn process_item(
     )?;
 
     let before_retest_tickets = list_ticket_files(task_ctx)?;
-    let (retest_agent_id, retest_cmd) =
-        build_phase_command(state, task_ctx, "retest", &item.qa_file_path, &[])?;
+    let (retest_agent_id, retest_cmd) = build_phase_command(retest_step, &item.qa_file_path, &[])?;
     let retest_result = run_phase(
         state,
         app,
@@ -2670,6 +3174,16 @@ async fn run_phase(
 
     let stdout_file_path = stdout_path.clone();
     let stderr_file_path = stderr_path.clone();
+    let app_for_stdout = app.cloned();
+    let app_for_stderr = app.cloned();
+    let task_id_for_stdout = task_id.to_string();
+    let task_id_for_stderr = task_id.to_string();
+    let task_item_id_for_stdout = task_item_id.to_string();
+    let task_item_id_for_stderr = task_item_id.to_string();
+    let phase_for_stdout = phase.to_string();
+    let phase_for_stderr = phase.to_string();
+    let run_id_for_stdout = run_id.clone();
+    let run_id_for_stderr = run_id.clone();
 
     let stdout_task = tokio::spawn(async move {
         let mut out_file = tokio::fs::OpenOptions::new()
@@ -2685,6 +3199,20 @@ async fn run_phase(
                 .write_all(format!("{}\n", line).as_bytes())
                 .await
                 .context("writing stdout line")?;
+            if let Some(app_handle) = &app_for_stdout {
+                emit_event(
+                    app_handle,
+                    &task_id_for_stdout,
+                    Some(&task_item_id_for_stdout),
+                    "log_chunk",
+                    json!({
+                        "run_id": run_id_for_stdout.clone(),
+                        "phase": phase_for_stdout.clone(),
+                        "stream": "stdout",
+                        "line": line,
+                    }),
+                );
+            }
         }
         Result::<()>::Ok(())
     });
@@ -2703,6 +3231,20 @@ async fn run_phase(
                 .write_all(format!("{}\n", line).as_bytes())
                 .await
                 .context("writing stderr line")?;
+            if let Some(app_handle) = &app_for_stderr {
+                emit_event(
+                    app_handle,
+                    &task_id_for_stderr,
+                    Some(&task_item_id_for_stderr),
+                    "log_chunk",
+                    json!({
+                        "run_id": run_id_for_stderr.clone(),
+                        "phase": phase_for_stderr.clone(),
+                        "stream": "stderr",
+                        "line": line,
+                    }),
+                );
+            }
         }
         Result::<()>::Ok(())
     });
@@ -2785,6 +3327,8 @@ async fn run_phase(
     Ok(RunResult {
         success: exit_code == 0 && !interrupted,
         exit_code,
+        stdout_path,
+        stderr_path,
     })
 }
 
@@ -2835,7 +3379,6 @@ fn resolve_cli_task_id(state: &InnerState, options: &CliOptions) -> Result<Strin
     let payload = CreateTaskPayload {
         name: options.name.clone(),
         goal: options.goal.clone(),
-        mode: options.mode.clone(),
         workspace_id: options.workspace_id.clone(),
         workflow_id: options.workflow_id.clone(),
         target_files: if options.target_files.is_empty() {
