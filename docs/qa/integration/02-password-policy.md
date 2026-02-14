@@ -95,6 +95,10 @@ LIMIT 5;
 
 ## 场景 3：密码年龄限制（强制定期修改）
 
+> **架构说明**: Auth9 采用 Headless Keycloak 架构，密码年龄限制由 Keycloak 的
+> `forceExpiredPasswordChange(N)` 策略执行。Auth9 负责策略配置同步。
+> 登录通过 Keycloak OIDC 流程，密码过期时 Keycloak 会显示 "UPDATE_PASSWORD" 页面。
+
 ### 初始状态
 - 租户密码策略：
   ```json
@@ -105,19 +109,32 @@ LIMIT 5;
 - 用户密码设置于 100 天前
 
 ### 目的
-验证系统强制用户定期修改密码
+验证 Auth9 将 `max_age_days` 同步到 Keycloak 的 `forceExpiredPasswordChange` 策略
 
 ### 测试操作流程
-1. 用户尝试登录（密码已过期）
-2. 系统应提示「密码已过期，请修改密码」
-3. 用户修改密码为 `NewPassword123!`
-4. 用户使用新密码成功登录
+1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
+2. 验证 Keycloak realm 密码策略包含 `forceExpiredPasswordChange(90)`
+3. 用户通过 Keycloak OIDC 登录页面尝试登录
+4. Keycloak 应显示 "UPDATE_PASSWORD" required action 页面
+5. 用户修改密码后成功登录
+
+### 验证方式
+```bash
+# 验证 Keycloak 策略同步
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s "http://localhost:8081/admin/realms/auth9" \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('passwordPolicy',''))"
+# 预期包含: forceExpiredPasswordChange(90)
+```
 
 ### 预期结果
-- 步骤 1 登录失败或跳转到密码修改页面
-- 步骤 2 显示明确的过期提示
-- 步骤 3 成功修改密码
-- 步骤 4 成功登录
+- 步骤 2: Keycloak 策略字符串包含 `forceExpiredPasswordChange(90)`
+- 步骤 4: 密码过期用户看到 Keycloak 密码修改页面（非 auth9 错误）
+- 步骤 5: 修改后成功登录
 
 ### 预期数据状态
 ```sql
@@ -125,9 +142,9 @@ SELECT password_changed_at FROM users WHERE id = '{user_id}';
 -- 预期: 当前时间（最新修改时间）
 
 -- 检查审计日志
-SELECT action, details FROM audit_logs 
-WHERE resource_type = 'user' 
-  AND resource_id = '{user_id}' 
+SELECT action, details FROM audit_logs
+WHERE resource_type = 'user'
+  AND resource_id = '{user_id}'
   AND action = 'password_change'
 ORDER BY created_at DESC LIMIT 1;
 -- 预期: 最新一条密码修改记录
@@ -136,6 +153,11 @@ ORDER BY created_at DESC LIMIT 1;
 ---
 
 ## 场景 4：账户锁定策略（暴力破解防护）
+
+> **架构说明**: Auth9 采用 Headless Keycloak 架构，账户锁定由 Keycloak 的 Brute Force
+> Protection 执行。Auth9 负责将 `lockout_threshold` 和 `lockout_duration_mins` 同步到
+> Keycloak realm 设置。登录事件通过 Keycloak webhook 事件 SPI 异步传递到 auth9-core
+> 的 `/api/v1/keycloak/events` 端点，再触发安全检测。
 
 ### 初始状态
 - 租户密码策略：
@@ -148,81 +170,112 @@ ORDER BY created_at DESC LIMIT 1;
 - 用户账户正常，无锁定
 
 ### 目的
-验证连续失败登录后账户自动锁定
+验证 Auth9 将锁定策略同步到 Keycloak，Keycloak 正确执行暴力破解防护
 
 ### 测试操作流程
-1. 使用错误密码尝试登录 5 次
-2. 第 6 次使用正确密码尝试登录
-3. 等待 30 分钟后，使用正确密码登录
-4. 检查 `security_alerts` 表是否记录异常
+1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
+2. 验证 Keycloak realm 的 brute force 配置正确
+3. 通过 Keycloak OIDC 登录页面使用错误密码尝试 5 次
+4. 第 6 次使用正确密码尝试登录
+5. 检查 Keycloak webhook 事件是否传递到 auth9
+
+### 验证方式
+```bash
+# 验证 Keycloak brute force 配置
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s "http://localhost:8081/admin/realms/auth9" \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  | python3 -c "
+import sys,json
+r = json.load(sys.stdin)
+print('bruteForceProtected:', r.get('bruteForceProtected'))
+print('failureFactor:', r.get('failureFactor'))
+print('maxFailureWaitSeconds:', r.get('maxFailureWaitSeconds'))
+print('waitIncrementSeconds:', r.get('waitIncrementSeconds'))
+"
+# 预期: bruteForceProtected=True, failureFactor=5, waitIncrementSeconds=1800
+```
 
 ### 预期结果
-- 步骤 1: 每次失败返回「用户名或密码错误」
-- 步骤 2: 返回「账户已锁定，请 30 分钟后重试」
-- 步骤 3: 成功登录，锁定自动解除
-- `security_alerts` 记录暴力破解告警
+- 步骤 2: Keycloak realm `bruteForceProtected=true`, `failureFactor=5`, `maxFailureWaitSeconds=1800`
+- 步骤 4: Keycloak 返回 `user_disabled` 错误（账户被 Keycloak 暂时锁定）
+- 步骤 5: Keycloak webhook 事件触发 auth9 `login_events` 和 `security_alerts` 记录
 
 ### 预期数据状态
 ```sql
--- 检查锁定状态（如果有 locked_until 字段）
-SELECT locked_until FROM users WHERE id = '{user_id}';
--- 步骤 2 时预期: 当前时间 + 30 分钟
--- 步骤 3 后预期: NULL
-
--- 检查安全告警
-SELECT alert_type, severity FROM security_alerts 
-WHERE user_id = '{user_id}' 
-  AND alert_type = 'brute_force_attempt'
+-- 检查安全告警（由 Keycloak webhook 事件触发）
+SELECT alert_type, severity FROM security_alerts
+WHERE user_id = '{user_id}'
+  AND alert_type = 'brute_force'
 ORDER BY created_at DESC LIMIT 1;
 -- 预期: 1 条记录，severity = 'high'
 
--- 检查登录事件
-SELECT event_type, COUNT(*) FROM login_events 
-WHERE user_id = '{user_id}' 
+-- 检查登录事件（由 Keycloak webhook 事件触发）
+SELECT event_type, COUNT(*) FROM login_events
+WHERE user_id = '{user_id}'
   AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
 GROUP BY event_type;
--- 预期: LOGIN_ERROR: 5, LOGIN: 1
+-- 预期: failed_password: 5+
 ```
 
 ---
 
 ## 场景 5：管理员绕过密码策略（特殊场景）
 
+> **架构说明**: Auth9 管理员通过 `PUT /api/v1/users/{id}/password` 设置密码，
+> 内部调用 Keycloak 用户更新 API 设置 credentials。`temporary: true` 会在
+> Keycloak 用户上添加 `UPDATE_PASSWORD` required action，用户通过 Keycloak
+> OIDC 登录时会被强制修改密码。
+
 ### 初始状态
 - 租户密码策略要求 12 位，包含大小写数字特殊字符
 - 平台管理员需要为用户设置临时密码
 
 ### 目的
-验证管理员可以设置临时弱密码，但用户首次登录必须修改
+验证管理员可以设置临时弱密码，Keycloak 强制用户首次登录修改
 
 ### 测试操作流程
-1. 管理员为新用户设置临时密码 `Temp123!`（较弱）
-2. 系统标记该密码为「临时密码」（`temporary: true`）
-3. 用户使用临时密码登录
-4. 系统强制跳转到密码修改页面
+1. 管理员通过 Auth9 API 为新用户设置临时密码 `Temp123!`（`temporary: true`）
+2. 验证 Keycloak 用户的 `requiredActions` 包含 `UPDATE_PASSWORD`
+3. 用户通过 Keycloak OIDC 登录页面使用临时密码登录
+4. Keycloak 强制显示密码修改页面
 5. 用户修改为符合策略的密码 `MyNewPassword456!`
 
+### 验证方式
+```bash
+# 设置临时密码后验证 Keycloak 用户状态
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s "http://localhost:8081/admin/realms/auth9/users/{keycloak_user_id}" \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  | python3 -c "import sys,json; print('requiredActions:', json.load(sys.stdin).get('requiredActions',[]))"
+# 预期: requiredActions: ['UPDATE_PASSWORD']
+```
+
 ### 预期结果
-- 步骤 1 成功，管理员可以绕过策略（仅限临时密码）
-- 步骤 3 登录成功但立即触发密码修改流程
-- 步骤 5 修改成功，取消「临时」标记
+- 步骤 1: Auth9 API 返回成功（管理员可以绕过策略）
+- 步骤 2: Keycloak 用户 `requiredActions` 包含 `UPDATE_PASSWORD`
+- 步骤 3-4: Keycloak OIDC 登录接受临时密码但强制跳转到密码修改页面
+- 步骤 5: 修改成功，`requiredActions` 清空
 
 ### 预期数据状态
 ```sql
--- Keycloak 中检查用户凭证
--- 临时密码标记应在首次登录后清除
-
 -- 检查审计日志
-SELECT action, actor_id FROM audit_logs 
-WHERE resource_type = 'user' 
-  AND resource_id = '{user_id}' 
-  AND action = 'password_set'
+SELECT action, actor_id FROM audit_logs
+WHERE resource_type = 'user'
+  AND resource_id = '{user_id}'
+  AND action = 'user.password.admin_set'
 ORDER BY created_at DESC LIMIT 1;
 -- 预期: actor_id 为管理员 ID
 
-SELECT action FROM audit_logs 
-WHERE resource_type = 'user' 
-  AND resource_id = '{user_id}' 
+SELECT action FROM audit_logs
+WHERE resource_type = 'user'
+  AND resource_id = '{user_id}'
   AND action = 'password_change'
 ORDER BY created_at DESC LIMIT 1;
 -- 预期: 用户自己修改密码的记录
@@ -264,7 +317,9 @@ VALUES
 
 ## 注意事项
 
-1. **密码策略同步**：Auth9 配置的策略需要同步到 Keycloak
-2. **向后兼容**：现有用户的密码可能不符合新策略，但不强制立即修改
-3. **多因素认证**：密码策略与 MFA 配合使用，提供更强安全性
-4. **审计合规**：所有密码修改操作必须记录到 `audit_logs`
+1. **Headless Keycloak 架构**：Auth9 不直接处理用户名/密码登录，所有认证通过 Keycloak OIDC 流程。`/api/v1/auth/token` 仅支持 `authorization_code`、`client_credentials`、`refresh_token` grant types，不支持 `password` grant
+2. **密码策略同步**：Auth9 配置的策略通过 `KeycloakSyncService` 同步到 Keycloak realm，包括密码复杂度、年龄限制、历史记录和暴力破解防护
+3. **密码设置方式**：使用 Keycloak 用户更新 API（GET-merge-PUT）设置密码，绕过 Keycloak 23.x `reset-password` 端点的已知 bug
+4. **登录事件来源**：登录事件通过 Keycloak p2-inc/keycloak-events SPI webhook 异步传递到 auth9-core，而非在 auth9 token 端点直接记录
+5. **向后兼容**：现有用户的密码可能不符合新策略，但不强制立即修改
+6. **审计合规**：所有密码修改操作必须记录到 `audit_logs`

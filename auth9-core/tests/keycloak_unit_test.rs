@@ -1321,12 +1321,24 @@ async fn test_reset_user_password_success() {
         .await;
 
     let user_id = "user-uuid-12345";
-    // Mock reset password endpoint
+    let user_path = format!("/admin/realms/test/users/{}", user_id);
+
+    // Mock GET user endpoint (for GET-merge-PUT workaround)
+    Mock::given(method("GET"))
+        .and(path(&user_path))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "id": user_id,
+            "username": "testuser",
+            "email": "test@example.com",
+            "enabled": true,
+            "emailVerified": true
+        })))
+        .mount(&mock_server)
+        .await;
+
+    // Mock PUT user endpoint (with merged credentials)
     Mock::given(method("PUT"))
-        .and(path(format!(
-            "/admin/realms/test/users/{}/reset-password",
-            user_id
-        )))
+        .and(path(&user_path))
         .respond_with(ResponseTemplate::new(204))
         .mount(&mock_server)
         .await;
@@ -1354,12 +1366,9 @@ async fn test_reset_user_password_not_found() {
         .await;
 
     let user_id = "nonexistent-user";
-    // Mock 404 response
-    Mock::given(method("PUT"))
-        .and(path(format!(
-            "/admin/realms/test/users/{}/reset-password",
-            user_id
-        )))
+    // Mock GET 404 response
+    Mock::given(method("GET"))
+        .and(path(format!("/admin/realms/test/users/{}", user_id)))
         .respond_with(ResponseTemplate::new(404))
         .mount(&mock_server)
         .await;

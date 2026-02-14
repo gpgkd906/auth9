@@ -658,6 +658,10 @@ impl KeycloakClient {
     // ============================================================================
 
     /// Reset a user's password
+    ///
+    /// Uses GET-merge-PUT on the user representation instead of the dedicated
+    /// `reset-password` endpoint which is broken in Keycloak 23.x (always
+    /// returns HTTP 400).
     pub async fn reset_user_password(
         &self,
         user_id: &str,
@@ -666,32 +670,57 @@ impl KeycloakClient {
     ) -> Result<()> {
         let token = self.get_admin_token().await?;
         let url = format!(
-            "{}/admin/realms/{}/users/{}/reset-password",
+            "{}/admin/realms/{}/users/{}",
             self.config.url, self.config.realm, user_id
         );
 
-        let credential = serde_json::json!({
+        // GET full user representation
+        let get_response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to get user: {}", e)))?;
+
+        if get_response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
+        }
+
+        if !get_response.status().is_success() {
+            let status = get_response.status();
+            let body = get_response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to get user for password reset: {} - {}",
+                status, body
+            )));
+        }
+
+        let mut user_repr: serde_json::Value = get_response
+            .json()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to parse user: {}", e)))?;
+
+        // Merge credentials into the user representation
+        user_repr["credentials"] = serde_json::json!([{
             "type": "password",
             "value": password,
             "temporary": temporary
-        });
+        }]);
 
-        let response = self
+        // PUT updated user representation back
+        let put_response = self
             .http_client
             .put(&url)
             .bearer_auth(&token)
-            .json(&credential)
+            .json(&user_repr)
             .send()
             .await
             .map_err(|e| AppError::Keycloak(format!("Failed to reset password: {}", e)))?;
 
-        if response.status() == StatusCode::NOT_FOUND {
-            return Err(AppError::NotFound("User not found in Keycloak".to_string()));
-        }
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+        if !put_response.status().is_success() {
+            let status = put_response.status();
+            let body = put_response.text().await.unwrap_or_default();
             return Err(AppError::Keycloak(format!(
                 "Failed to reset password: {} - {}",
                 status, body
