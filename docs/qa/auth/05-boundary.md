@@ -50,18 +50,35 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL
 ## 场景 3：跨域登录（CORS）
 
 ### 初始状态
-- 前端部署在 https://app.example.com
-- Auth9 API 在 https://api.example.com
+- Auth9 Core 运行在 localhost:8080
+- 默认 CORS 允许的 origin: `http://localhost:3000`, `http://localhost:5173`, `http://localhost:8081`
+- 可通过环境变量 `CORS_ALLOWED_ORIGINS` 配置额外的 origin（逗号分隔，或 `*` 允许所有）
 
 ### 目的
-验证 CORS 配置正确
+验证 CORS 配置正确，允许的 origin 收到正确的 CORS 响应头
 
 ### 测试操作流程
-1. 从前端发起登录请求
+1. 使用默认允许的 origin 发起 CORS 预检请求：
+   ```bash
+   curl -s -X OPTIONS http://localhost:8080/api/v1/auth/login \
+     -H "Origin: http://localhost:3000" \
+     -H "Access-Control-Request-Method: POST" \
+     -H "Access-Control-Request-Headers: content-type" \
+     -v 2>&1 | grep -i "access-control"
+   ```
+2. 使用未配置的 origin 发起 CORS 预检请求：
+   ```bash
+   curl -s -X OPTIONS http://localhost:8080/api/v1/auth/login \
+     -H "Origin: https://app.example.com" \
+     -H "Access-Control-Request-Method: POST" \
+     -H "Access-Control-Request-Headers: content-type" \
+     -v 2>&1 | grep -i "access-control-allow-origin"
+   ```
 
 ### 预期结果
-- 请求成功，无 CORS 错误
-- 响应包含正确的 CORS 头
+- 步骤 1：响应包含 `access-control-allow-origin: http://localhost:3000` 和 `access-control-allow-credentials: true`
+- 步骤 2：响应不包含 `access-control-allow-origin` 头（未配置的 origin 被正确拒绝）
+- 如需允许额外 origin，设置 `CORS_ALLOWED_ORIGINS` 环境变量后重启服务
 
 ---
 

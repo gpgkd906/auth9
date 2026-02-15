@@ -66,10 +66,21 @@ pub struct TenantUser {
 pub struct CreateUserInput {
     #[validate(email)]
     pub email: String,
-    #[validate(length(max = 255))]
+    #[validate(length(max = 255), custom(function = "validate_no_html"))]
     pub display_name: Option<String>,
     #[validate(length(max = 2048), custom(function = "validate_avatar_url"))]
     pub avatar_url: Option<String>,
+}
+
+/// Validate that a string does not contain HTML tags (prevent stored XSS)
+fn validate_no_html(value: &str) -> Result<(), validator::ValidationError> {
+    if value.contains('<') || value.contains('>') {
+        let mut err = validator::ValidationError::new("contains_html");
+        err.message = Some("Value must not contain HTML tags".into());
+        Err(err)
+    } else {
+        Ok(())
+    }
 }
 
 /// Validate avatar URL - must use http:// or https:// scheme and contain no path traversal
@@ -93,7 +104,7 @@ fn validate_avatar_url(url: &str) -> Result<(), validator::ValidationError> {
 /// Input for updating a user
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateUserInput {
-    #[validate(length(max = 255))]
+    #[validate(length(max = 255), custom(function = "validate_no_html"))]
     pub display_name: Option<String>,
     #[validate(length(max = 2048), custom(function = "validate_avatar_url"))]
     pub avatar_url: Option<String>,
@@ -171,6 +182,40 @@ mod tests {
             avatar_url: None,
         };
         assert!(valid_input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_display_name_rejects_html() {
+        let input = UpdateUserInput {
+            display_name: Some("<script>alert(1)</script>".to_string()),
+            avatar_url: None,
+        };
+        assert!(input.validate().is_err());
+
+        let input = UpdateUserInput {
+            display_name: Some("<img src=x onerror=alert(1)>".to_string()),
+            avatar_url: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_display_name_accepts_valid_text() {
+        let input = UpdateUserInput {
+            display_name: Some("John Doe".to_string()),
+            avatar_url: None,
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_create_user_display_name_rejects_html() {
+        let input = CreateUserInput {
+            email: "user@example.com".to_string(),
+            display_name: Some("<script>alert(1)</script>".to_string()),
+            avatar_url: None,
+        };
+        assert!(input.validate().is_err());
     }
 
     #[test]

@@ -1,6 +1,6 @@
 //! Tenant domain model
 
-use super::common::StringUuid;
+use super::common::{validate_url_no_ssrf_strict, StringUuid};
 use super::password::PasswordPolicy;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -74,7 +74,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for TenantStatus {
 }
 
 /// Tenant settings stored as JSON
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
 pub struct TenantSettings {
     /// Whether MFA is required for all users
     #[serde(default)]
@@ -87,6 +87,7 @@ pub struct TenantSettings {
     pub session_timeout_secs: i64,
     /// Custom branding colors
     #[serde(default)]
+    #[validate(nested)]
     pub branding: TenantBranding,
 }
 
@@ -105,10 +106,26 @@ impl Default for TenantSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
 pub struct TenantBranding {
     pub primary_color: Option<String>,
+    #[validate(custom(function = "validate_branding_logo_url"))]
     pub logo_url: Option<String>,
+}
+
+/// Validate branding logo_url - only allow http/https schemes (block javascript: etc.)
+fn validate_branding_logo_url(url: &str) -> Result<(), validator::ValidationError> {
+    if url.is_empty() {
+        return Ok(());
+    }
+    let parsed = url::Url::parse(url).map_err(|_| validator::ValidationError::new("invalid_url"))?;
+    let scheme = parsed.scheme();
+    if scheme != "http" && scheme != "https" {
+        let mut err = validator::ValidationError::new("invalid_scheme");
+        err.message = Some("Only http and https URLs are allowed".into());
+        return Err(err);
+    }
+    Ok(())
 }
 
 /// Tenant entity
@@ -151,8 +168,9 @@ pub struct CreateTenantInput {
     pub name: String,
     #[validate(length(min = 1, max = 63), custom(function = "validate_slug"))]
     pub slug: String,
-    #[validate(custom(function = "validate_url_scheme"))]
+    #[validate(custom(function = "validate_url_no_ssrf_strict"))]
     pub logo_url: Option<String>,
+    #[validate(nested)]
     pub settings: Option<TenantSettings>,
 }
 
@@ -176,24 +194,14 @@ fn validate_no_html(value: &str) -> Result<(), validator::ValidationError> {
     }
 }
 
-/// Validate URL scheme - only allow http:// and https://
-fn validate_url_scheme(url: &str) -> Result<(), validator::ValidationError> {
-    if url.starts_with("http://") || url.starts_with("https://") {
-        Ok(())
-    } else {
-        let mut err = validator::ValidationError::new("invalid_url_scheme");
-        err.message = Some("URL must use http:// or https:// scheme".into());
-        Err(err)
-    }
-}
-
 /// Input for updating a tenant
 #[derive(Debug, Clone, Deserialize, Validate)]
 pub struct UpdateTenantInput {
     #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
     pub name: Option<String>,
-    #[validate(custom(function = "validate_url_scheme"))]
+    #[validate(custom(function = "validate_url_no_ssrf_strict"))]
     pub logo_url: Option<String>,
+    #[validate(nested)]
     pub settings: Option<TenantSettings>,
     pub status: Option<TenantStatus>,
 }
@@ -596,6 +604,57 @@ mod tests {
 
         let json = serde_json::to_string(&assoc).unwrap();
         assert!(json.contains("\"enabled\":true"));
+    }
+
+    #[test]
+    fn test_branding_logo_url_rejects_javascript() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                branding: TenantBranding {
+                    primary_color: None,
+                    logo_url: Some("javascript:alert(1)".to_string()),
+                },
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_branding_logo_url_accepts_https() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                branding: TenantBranding {
+                    primary_color: None,
+                    logo_url: Some("https://example.com/logo.png".to_string()),
+                },
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_branding_logo_url_rejects_data_uri() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                branding: TenantBranding {
+                    primary_color: None,
+                    logo_url: Some("data:text/html,<script>alert(1)</script>".to_string()),
+                },
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_err());
     }
 
     #[test]

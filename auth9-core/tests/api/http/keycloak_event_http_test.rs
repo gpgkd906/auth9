@@ -47,6 +47,11 @@ async fn post_keycloak_event(app: &Router, body: &[u8], headers: Vec<(&str, &str
     response.status()
 }
 
+/// Helper: current timestamp in millis (for non-expired events)
+fn now_millis() -> i64 {
+    chrono::Utc::now().timestamp_millis()
+}
+
 /// Helper: Compute HMAC-SHA256 signature
 fn compute_signature(secret: &str, body: &[u8]) -> String {
     let mut mac = HmacSha256::new_from_slice(secret.as_bytes()).unwrap();
@@ -68,7 +73,7 @@ async fn test_receive_login_event_success() {
         "type": "LOGIN",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
         "ipAddress": "192.168.1.100",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {
             "username": "testuser",
             "email": "testuser@example.com"
@@ -94,7 +99,7 @@ async fn test_receive_login_error_event() {
         "type": "LOGIN_ERROR",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
         "error": "invalid_user_credentials",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {
             "username": "baduser",
             "email": "baduser@example.com"
@@ -120,7 +125,7 @@ async fn test_receive_mfa_failure_event() {
         "type": "LOGIN_ERROR",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
         "error": "invalid_totp",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {
             "email": "mfa-user@example.com"
         }
@@ -143,7 +148,7 @@ async fn test_receive_social_login_event() {
     let body = serde_json::json!({
         "type": "IDENTITY_PROVIDER_LOGIN",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {
             "identityProvider": "google",
             "email": "google-user@example.com"
@@ -167,7 +172,7 @@ async fn test_receive_lockout_event() {
     let body = serde_json::json!({
         "type": "USER_DISABLED_BY_TEMPORARY_LOCKOUT",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {}
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
@@ -193,7 +198,7 @@ async fn test_receive_admin_event_skipped() {
         "operationType": "CREATE",
         "resourceType": "USER",
         "realmId": "auth9",
-        "time": 1704067200000i64
+        "time": now_millis()
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
@@ -217,7 +222,7 @@ async fn test_receive_non_login_event_skipped() {
     let body = serde_json::json!({
         "type": "LOGOUT",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {}
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
@@ -262,7 +267,7 @@ async fn test_receive_with_valid_signature() {
     let body = serde_json::json!({
         "type": "LOGIN",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {"email": "sig-user@example.com"}
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
@@ -291,7 +296,7 @@ async fn test_receive_with_invalid_signature() {
 
     let body = serde_json::json!({
         "type": "LOGIN",
-        "time": 1704067200000i64
+        "time": now_millis()
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
@@ -318,7 +323,7 @@ async fn test_receive_missing_signature_when_required() {
 
     let body = serde_json::json!({
         "type": "LOGIN",
-        "time": 1704067200000i64
+        "time": now_millis()
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
 
@@ -339,7 +344,7 @@ async fn test_receive_email_from_username_fallback() {
     let body = serde_json::json!({
         "type": "LOGIN",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {
             "username": "fallback-username"
         }
@@ -367,7 +372,7 @@ async fn test_receive_extracts_user_agent() {
     let body = serde_json::json!({
         "type": "LOGIN",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {"email": "ua-user@example.com"}
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
@@ -396,7 +401,7 @@ async fn test_receive_prefers_forwarded_user_agent() {
     let body = serde_json::json!({
         "type": "LOGIN",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
-        "time": 1704067200000i64,
+        "time": now_millis(),
         "details": {"email": "fwd-ua@example.com"}
     });
     let body_bytes = serde_json::to_vec(&body).unwrap();
@@ -415,4 +420,83 @@ async fn test_receive_prefers_forwarded_user_agent() {
     let events = state.login_event_repo.list(0, 10).await.unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].user_agent.as_deref(), Some("Client UA"));
+}
+
+// ============================================================================
+// IP Address and Location Derivation
+// ============================================================================
+
+#[tokio::test]
+async fn test_receive_ip_from_keycloak_payload() {
+    let state = TestAppState::new("http://mock-keycloak");
+    let app = build_keycloak_event_test_router(state.clone());
+
+    let body = serde_json::json!({
+        "type": "LOGIN",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "ipAddress": "203.0.113.50",
+        "time": now_millis(),
+        "details": {"email": "ip-test@example.com"}
+    });
+    let body_bytes = serde_json::to_vec(&body).unwrap();
+
+    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let events = state.login_event_repo.list(0, 10).await.unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].ip_address.as_deref(), Some("203.0.113.50"));
+    // Public IP should produce IP-based location
+    assert_eq!(events[0].location.as_deref(), Some("IP:203.0.113.50"));
+}
+
+#[tokio::test]
+async fn test_receive_ip_fallback_from_headers() {
+    let state = TestAppState::new("http://mock-keycloak");
+    let app = build_keycloak_event_test_router(state.clone());
+
+    // No ipAddress in payload — should fall back to X-Forwarded-For
+    let body = serde_json::json!({
+        "type": "LOGIN",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "time": now_millis(),
+        "details": {"email": "ip-fallback@example.com"}
+    });
+    let body_bytes = serde_json::to_vec(&body).unwrap();
+
+    let status = post_keycloak_event(
+        &app,
+        &body_bytes,
+        vec![("x-forwarded-for", "198.51.100.10")],
+    )
+    .await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let events = state.login_event_repo.list(0, 10).await.unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].ip_address.as_deref(), Some("198.51.100.10"));
+    assert_eq!(events[0].location.as_deref(), Some("IP:198.51.100.10"));
+}
+
+#[tokio::test]
+async fn test_receive_private_ip_location_is_local_network() {
+    let state = TestAppState::new("http://mock-keycloak");
+    let app = build_keycloak_event_test_router(state.clone());
+
+    let body = serde_json::json!({
+        "type": "LOGIN",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "ipAddress": "192.168.1.100",
+        "time": now_millis(),
+        "details": {"email": "private-ip@example.com"}
+    });
+    let body_bytes = serde_json::to_vec(&body).unwrap();
+
+    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let events = state.login_event_repo.list(0, 10).await.unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].ip_address.as_deref(), Some("192.168.1.100"));
+    assert_eq!(events[0].location.as_deref(), Some("Local Network"));
 }

@@ -299,6 +299,31 @@ export default function TenantsIndexPage() {
               </tbody>
             </table>
           </div>
+
+          {/* Pagination */}
+          {data.pagination.total_pages > 1 && (
+            <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--glass-border-subtle)]">
+              <div className="text-sm text-[var(--text-secondary)]">
+                Page {data.pagination.page} of {data.pagination.total_pages}
+              </div>
+              <div className="flex gap-2">
+                {data.pagination.page > 1 && (
+                  <Link to={`?page=${data.pagination.page - 1}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`}>
+                    <Button variant="outline" size="sm" className="bg-[var(--glass-bg)]">
+                      Previous
+                    </Button>
+                  </Link>
+                )}
+                {data.pagination.page < data.pagination.total_pages && (
+                  <Link to={`?page=${data.pagination.page + 1}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`}>
+                    <Button variant="outline" size="sm" className="bg-[var(--glass-bg)]">
+                      Next
+                    </Button>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       </Card>
 

@@ -69,7 +69,8 @@ pub struct ListEventsQuery {
     pub page: i64,
     #[serde(
         default = "default_per_page",
-        deserialize_with = "deserialize_per_page"
+        deserialize_with = "deserialize_per_page",
+        alias = "limit"
     )]
     pub per_page: i64,
     /// Filter events by email address

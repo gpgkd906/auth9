@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Link, useLoaderData } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -8,7 +9,7 @@ import type { Action, ActionExecution, ActionStats } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant } from "~/lib/auth9-client";
 import { getAccessToken } from "~/services/session.server";
-import { ArrowLeftIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon, CodeIcon, ActivityLogIcon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon, CodeIcon, ActivityLogIcon, ChevronDownIcon, ChevronRightIcon } from "@radix-ui/react-icons";
 
 export const meta: MetaFunction<typeof loader> = ({ data }) => {
   return [{ title: `${data?.action.name || "Action"} - Auth9` }];
@@ -234,38 +235,82 @@ export default function ActionDetailPage() {
 }
 
 function ExecutionLogCard({ log }: { log: ActionExecution }) {
+  const [expanded, setExpanded] = useState(false);
+
   return (
     <div
-      className={`p-3 rounded-md border ${
+      className={`rounded-md border ${
         log.success ? "bg-green-50 border-green-200" : "bg-red-50 border-red-200"
       }`}
     >
-      <div className="flex items-center justify-between mb-2">
-        <div className="flex items-center gap-2">
-          {log.success ? (
-            <CheckCircledIcon className="h-4 w-4 text-green-600" />
-          ) : (
-            <CrossCircledIcon className="h-4 w-4 text-red-600" />
+      <button
+        type="button"
+        className="w-full p-3 text-left cursor-pointer"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            {expanded ? (
+              <ChevronDownIcon className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronRightIcon className="h-4 w-4 text-muted-foreground" />
+            )}
+            {log.success ? (
+              <CheckCircledIcon className="h-4 w-4 text-green-600" />
+            ) : (
+              <CrossCircledIcon className="h-4 w-4 text-red-600" />
+            )}
+            <span className="font-semibold text-sm">
+              {log.success ? "Success" : "Failed"}
+            </span>
+            {log.errorMessage && !expanded && (
+              <span className="text-xs text-red-600 truncate max-w-[300px]">
+                — {log.errorMessage}
+              </span>
+            )}
+          </div>
+          <div className="flex items-center gap-4 text-xs text-muted-foreground">
+            <span>{log.durationMs}ms</span>
+            <span>{new Date(log.executedAt).toLocaleString()}</span>
+          </div>
+        </div>
+      </button>
+
+      {expanded && (
+        <div className="px-3 pb-3 space-y-2 border-t border-inherit pt-2">
+          {log.errorMessage && (
+            <div>
+              <div className="text-xs font-medium text-muted-foreground mb-1">Error Message</div>
+              <div className="text-sm text-red-700 font-mono bg-white/50 p-2 rounded whitespace-pre-wrap break-all">
+                {log.errorMessage}
+              </div>
+            </div>
           )}
-          <span className="font-semibold text-sm">
-            {log.success ? "Success" : "Failed"}
-          </span>
-        </div>
-        <div className="flex items-center gap-4 text-xs text-muted-foreground">
-          <span>{log.durationMs}ms</span>
-          <span>{new Date(log.executedAt).toLocaleString()}</span>
-        </div>
-      </div>
 
-      {log.errorMessage && (
-        <div className="text-sm text-red-700 font-mono bg-white/50 p-2 rounded">
-          {log.errorMessage}
-        </div>
-      )}
-
-      {log.userId && (
-        <div className="text-xs text-muted-foreground mt-2">
-          User ID: <code className="bg-white/50 px-1 py-0.5 rounded">{log.userId}</code>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="text-muted-foreground">Execution ID:</span>{" "}
+              <code className="bg-white/50 px-1 py-0.5 rounded">{log.id}</code>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Trigger:</span>{" "}
+              <code className="bg-white/50 px-1 py-0.5 rounded">{log.triggerId}</code>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Duration:</span>{" "}
+              <span>{log.durationMs}ms</span>
+            </div>
+            <div>
+              <span className="text-muted-foreground">Executed At:</span>{" "}
+              <span>{new Date(log.executedAt).toLocaleString()}</span>
+            </div>
+            {log.userId && (
+              <div className="col-span-2">
+                <span className="text-muted-foreground">User ID:</span>{" "}
+                <code className="bg-white/50 px-1 py-0.5 rounded">{log.userId}</code>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </div>

@@ -898,7 +898,7 @@ async fn test_logout_with_valid_token_and_session() {
 
     // Logout with bearer token containing session ID
     let request = axum::http::Request::builder()
-        .method(axum::http::Method::GET)
+        .method(axum::http::Method::POST)
         .uri("/api/v1/auth/logout")
         .header("Authorization", format!("Bearer {}", token))
         .body(axum::body::Body::empty())
@@ -918,7 +918,7 @@ async fn test_logout_with_expired_token() {
 
     // Use an obviously invalid token (not a real JWT)
     let request = axum::http::Request::builder()
-        .method(axum::http::Method::GET)
+        .method(axum::http::Method::POST)
         .uri("/api/v1/auth/logout")
         .header("Authorization", "Bearer expired-invalid-token")
         .body(axum::body::Body::empty())
@@ -945,7 +945,7 @@ async fn test_logout_with_token_no_session_id() {
     let app = build_test_router(state);
 
     let request = axum::http::Request::builder()
-        .method(axum::http::Method::GET)
+        .method(axum::http::Method::POST)
         .uri("/api/v1/auth/logout")
         .header("Authorization", format!("Bearer {}", token))
         .body(axum::body::Body::empty())
@@ -1627,7 +1627,7 @@ async fn test_logout_with_session_and_all_params() {
 
     // Logout with bearer token AND query params
     let request = axum::http::Request::builder()
-        .method(axum::http::Method::GET)
+        .method(axum::http::Method::POST)
         .uri(
             "/api/v1/auth/logout?client_id=session-logout-client&id_token_hint=hint123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
         )

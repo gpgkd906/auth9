@@ -40,6 +40,8 @@ pub trait LoginEventRepository: Send + Sync {
         ip_address: &str,
         since: DateTime<Utc>,
     ) -> Result<i64>;
+    /// Count failed login attempts for a specific user/email across all IPs (account-level detection)
+    async fn count_failed_by_user(&self, email: &str, since: DateTime<Utc>) -> Result<i64>;
     async fn delete_old(&self, days: i64) -> Result<u64>;
 
     /// Nullify user_id for login events (preserve audit trail when user is deleted)
@@ -326,6 +328,23 @@ impl LoginEventRepository for LoginEventRepositoryImpl {
             "#,
         )
         .bind(ip_address)
+        .bind(since)
+        .fetch_one(&self.pool)
+        .await?;
+        Ok(row.0)
+    }
+
+    async fn count_failed_by_user(&self, email: &str, since: DateTime<Utc>) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            r#"
+            SELECT COUNT(*)
+            FROM login_events
+            WHERE email = ?
+              AND event_type IN ('failed_password', 'failed_mfa')
+              AND created_at >= ?
+            "#,
+        )
+        .bind(email)
         .bind(since)
         .fetch_one(&self.pool)
         .await?;

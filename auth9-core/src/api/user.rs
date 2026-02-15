@@ -30,7 +30,8 @@ pub struct UserListQuery {
     pub page: i64,
     #[serde(
         default = "default_per_page",
-        deserialize_with = "crate::api::deserialize_per_page"
+        deserialize_with = "crate::api::deserialize_per_page",
+        alias = "limit"
     )]
     pub per_page: i64,
     pub search: Option<String>,
@@ -168,21 +169,11 @@ pub async fn list<S: HasServices>(
             )))
         }
         TokenType::ServiceClient => {
-            // Service client: can only list users in their service's tenant
-            let tenant_id = auth.tenant_id.ok_or_else(|| {
-                AppError::Forbidden("Service client token has no tenant context".to_string())
-            })?;
-            let users = state
-                .user_service()
-                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                .await?;
-            let total = users.len() as i64;
-            Ok(Json(PaginatedResponse::new(
-                users,
-                query.page,
-                query.per_page,
-                total,
-            )))
+            // Service client tokens cannot list users — user management is not
+            // part of the M2M service scope (least-privilege principle).
+            Err(AppError::Forbidden(
+                "Service client tokens cannot access user management endpoints".to_string(),
+            ))
         }
         TokenType::TenantAccess => {
             // Tenant user: can only list users in their tenant

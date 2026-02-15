@@ -49,6 +49,8 @@ const mockLogs = [
   {
     id: "log-1",
     actionId: "action-1",
+    tenantId: "tenant-1",
+    triggerId: "post-login",
     userId: "user-1",
     success: true,
     durationMs: 150,
@@ -58,6 +60,8 @@ const mockLogs = [
   {
     id: "log-2",
     actionId: "action-1",
+    tenantId: "tenant-1",
+    triggerId: "post-login",
     userId: "user-2",
     success: false,
     durationMs: 50,
@@ -335,7 +339,7 @@ describe("Action Detail Page", () => {
     });
     expect(screen.getByText("Failed")).toBeInTheDocument();
     expect(screen.getByText("150ms")).toBeInTheDocument();
-    expect(screen.getByText("User not found")).toBeInTheDocument();
+    expect(screen.getByText(/User not found/)).toBeInTheDocument();
   });
 
   it("renders success log with green background", async () => {
@@ -400,7 +404,7 @@ describe("Action Detail Page", () => {
       const redBg = container.querySelector(".bg-red-50");
       expect(redBg).toBeInTheDocument();
     });
-    expect(screen.getByText("User not found")).toBeInTheDocument();
+    expect(screen.getByText(/User not found/)).toBeInTheDocument();
   });
 
   it("renders empty state when no logs", async () => {
@@ -430,6 +434,52 @@ describe("Action Detail Page", () => {
     await waitFor(() => {
       expect(screen.getByText("No executions yet")).toBeInTheDocument();
     });
+  });
+
+  it("expands log entry on click to show details", async () => {
+    const RoutesStub = createRoutesStub([
+      {
+        path: "/dashboard/tenants/:tenantId/actions/:actionId",
+        Component: ActionDetailPage,
+        loader: () => ({
+          tenantId: "tenant-1",
+          action: mockAction,
+          logs: mockLogs,
+          stats: null,
+        }),
+      },
+    ]);
+
+    const user = userEvent.setup();
+    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1"]} />);
+
+    await waitFor(() => {
+      expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
+    });
+
+    const logsTab = screen.getByText(/execution logs/i);
+    await user.click(logsTab);
+
+    await waitFor(() => {
+      expect(screen.getByText("Failed")).toBeInTheDocument();
+    });
+
+    // Execution ID should not be visible before expanding
+    expect(screen.queryByText("Execution ID:")).not.toBeInTheDocument();
+
+    // Click the failed log entry to expand it
+    const failedLogButton = screen.getByText("Failed").closest("button");
+    expect(failedLogButton).toBeInTheDocument();
+    await user.click(failedLogButton!);
+
+    // After expanding, should see detailed info
+    await waitFor(() => {
+      expect(screen.getByText("Execution ID:")).toBeInTheDocument();
+    });
+    expect(screen.getByText("log-2")).toBeInTheDocument();
+    expect(screen.getByText("Trigger:")).toBeInTheDocument();
+    expect(screen.getByText("post-login")).toBeInTheDocument();
+    expect(screen.getByText("Error Message")).toBeInTheDocument();
   });
 
   it("renders metadata section", async () => {

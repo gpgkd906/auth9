@@ -44,6 +44,22 @@ impl WebhookHttpClient for ReqwestWebhookHttpClient {
         body: String,
         timeout_dur: Duration,
     ) -> std::result::Result<(u16, Option<String>), String> {
+        // DNS rebinding protection: resolve hostname and validate IPs before sending
+        let parsed = url::Url::parse(url).map_err(|e| format!("Invalid URL: {e}"))?;
+        let host = parsed.host_str().unwrap_or("");
+        let port = parsed.port_or_known_default().unwrap_or(80);
+        let addrs = tokio::net::lookup_host(format!("{host}:{port}"))
+            .await
+            .map_err(|e| format!("DNS resolution failed: {e}"))?;
+        for addr in addrs {
+            if is_private_ip(addr.ip()) {
+                return Err(format!(
+                    "Webhook URL resolves to private IP address {}",
+                    addr.ip()
+                ));
+            }
+        }
+
         let mut req = self.client.post(url);
         for (k, v) in headers {
             req = req.header(k, v);
@@ -57,6 +73,23 @@ impl WebhookHttpClient for ReqwestWebhookHttpClient {
         let status = resp.status().as_u16();
         let text = resp.text().await.ok();
         Ok((status, text))
+    }
+}
+
+/// Check if an IP address is private, loopback, link-local, or a cloud metadata endpoint.
+fn is_private_ip(ip: std::net::IpAddr) -> bool {
+    match ip {
+        std::net::IpAddr::V4(v4) => {
+            v4.is_loopback()
+                || v4.is_private()
+                || v4.is_link_local()
+                || v4.is_unspecified()
+                // Cloud metadata endpoint (169.254.169.254)
+                || v4.octets() == [169, 254, 169, 254]
+        }
+        std::net::IpAddr::V6(v6) => {
+            v6.is_loopback() || v6.is_unspecified()
+        }
     }
 }
 
@@ -95,6 +128,7 @@ pub struct WebhookService<W: WebhookRepository> {
 impl<W: WebhookRepository + 'static> WebhookService<W> {
     pub fn new(webhook_repo: Arc<W>) -> Self {
         let http_client = reqwest::Client::builder()
+            .redirect(reqwest::redirect::Policy::none())
             .timeout(Duration::from_secs(30))
             .build()
             .unwrap_or_default();

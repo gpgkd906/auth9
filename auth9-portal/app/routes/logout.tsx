@@ -16,7 +16,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (accessToken) {
     try {
       const response = await fetch(`${AUTH9_CORE_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}&client_id=${encodeURIComponent(CLIENT_ID)}`, {
-        method: "GET",
+        method: "POST",
         headers: {
           "Authorization": `Bearer ${accessToken}`,
         },

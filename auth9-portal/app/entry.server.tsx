@@ -21,12 +21,12 @@ function setSecurityHeaders(headers: Headers): void {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=()"
   );
-  // Content Security Policy
+  // Content Security Policy - no unsafe-inline for scripts
   headers.set(
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      "script-src 'self'",
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: https:",
       "font-src 'self' data:",
