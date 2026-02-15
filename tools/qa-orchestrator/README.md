@@ -73,8 +73,9 @@ CLI examples:
 
 ## Workflow Model
 
-- Workflow is a configurable step pipeline: `init_once`, `qa`, `fix`, `retest`
+- Workflow is a configurable step pipeline: `init_once`, `qa`, `ticket_scan`, `fix`, `retest`
 - Each step can be enabled/disabled and mapped to an agent
+- `ticket_scan` is a built-in step (no agent required) that scans `ticket_dir` and maps active tickets to task items
 - Each step can define optional `prehook` rules to decide run/skip per item
 - Workflow supports `finalize.rules[]` to decide final item status (`skipped/qa_passed/fixed/verified/unresolved`) via CEL
 - Loop policy is defined per workflow: `once` or `infinite`
@@ -84,6 +85,7 @@ CLI examples:
 
 - Default editor is **Visual Rules** (no CEL required)
 - Built-in presets:
+  - `ticket_scan`: always run (or guard by active ticket context)
   - `fix`: run only when `active_ticket_count > 0`
   - `retest`: run only when `active_ticket_count > 0 && fix_exit_code == 0`
 - `Advanced CEL` mode is optional for power users

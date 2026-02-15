@@ -7,7 +7,7 @@ use qa_orchestrator::qa_utils::{new_ticket_diff, render_template, validate_works
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
@@ -85,6 +85,7 @@ impl AgentTemplates {
 enum WorkflowStepType {
     InitOnce,
     Qa,
+    TicketScan,
     Fix,
     Retest,
 }
@@ -151,6 +152,7 @@ impl WorkflowStepType {
         match self {
             Self::InitOnce => "init_once",
             Self::Qa => "qa",
+            Self::TicketScan => "ticket_scan",
             Self::Fix => "fix",
             Self::Retest => "retest",
         }
@@ -263,6 +265,7 @@ impl WorkflowConfig {
 
 fn default_workflow_steps(
     qa: Option<&str>,
+    ticket_scan: bool,
     fix: Option<&str>,
     retest: Option<&str>,
 ) -> Vec<WorkflowStepConfig> {
@@ -279,6 +282,13 @@ fn default_workflow_steps(
             step_type: WorkflowStepType::Qa,
             enabled: qa.is_some(),
             agent_id: qa.map(str::to_string),
+            prehook: None,
+        },
+        WorkflowStepConfig {
+            id: "ticket_scan".to_string(),
+            step_type: WorkflowStepType::TicketScan,
+            enabled: ticket_scan,
+            agent_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
@@ -460,7 +470,7 @@ impl Default for OrchestratorConfig {
         workflows.insert(
             "qa_only".to_string(),
             WorkflowConfig {
-                steps: default_workflow_steps(Some("opencode"), None, None),
+                steps: default_workflow_steps(Some("opencode"), false, None, None),
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: default_workflow_finalize_config(),
                 qa: None,
@@ -471,7 +481,7 @@ impl Default for OrchestratorConfig {
         workflows.insert(
             "qa_fix".to_string(),
             WorkflowConfig {
-                steps: default_workflow_steps(Some("opencode"), Some("claudecode"), None),
+                steps: default_workflow_steps(Some("opencode"), false, Some("claudecode"), None),
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: default_workflow_finalize_config(),
                 qa: None,
@@ -482,7 +492,7 @@ impl Default for OrchestratorConfig {
         workflows.insert(
             "only-fix".to_string(),
             WorkflowConfig {
-                steps: default_workflow_steps(None, Some("claudecode"), None),
+                steps: default_workflow_steps(None, true, Some("claudecode"), None),
                 loop_policy: WorkflowLoopConfig::default(),
                 finalize: default_workflow_finalize_config(),
                 qa: None,
@@ -495,6 +505,7 @@ impl Default for OrchestratorConfig {
             WorkflowConfig {
                 steps: default_workflow_steps(
                     Some("opencode"),
+                    false,
                     Some("claudecode"),
                     Some("opencode"),
                 ),
@@ -744,6 +755,12 @@ struct TaskDetail {
 }
 
 #[derive(Debug, Serialize)]
+struct DeleteTaskResponse {
+    task_id: String,
+    deleted: bool,
+}
+
+#[derive(Debug, Serialize)]
 struct LogChunk {
     run_id: String,
     phase: String,
@@ -757,6 +774,16 @@ struct TaskItemRow {
     id: String,
     qa_file_path: String,
 }
+
+#[derive(Debug, Clone)]
+struct TicketPreviewData {
+    path: String,
+    title: String,
+    status: String,
+    qa_document: String,
+}
+
+const UNASSIGNED_QA_FILE_PATH: &str = "__UNASSIGNED__";
 
 #[derive(Debug)]
 struct RunResult {
@@ -1053,6 +1080,29 @@ async fn retry_task_item(
 }
 
 #[tauri::command]
+async fn delete_task(
+    state: State<'_, ManagedState>,
+    app: AppHandle,
+    task_id: String,
+) -> Result<DeleteTaskResponse, String> {
+    stop_task_runtime_for_delete(state.inner.clone(), &task_id)
+        .await
+        .map_err(err_to_string)?;
+    delete_task_impl(&state.inner, &task_id).map_err(err_to_string)?;
+    emit_event(
+        &app,
+        &task_id,
+        None,
+        "task_deleted",
+        json!({ "task_id": task_id }),
+    );
+    Ok(DeleteTaskResponse {
+        task_id,
+        deleted: true,
+    })
+}
+
+#[tauri::command]
 async fn stream_task_logs(
     state: State<'_, ManagedState>,
     task_id: String,
@@ -1156,16 +1206,68 @@ fn resolve_workspace_path(workspace_root: &Path, rel_path: &str, field: &str) ->
 }
 
 fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
+    let had_ticket_scan_step = workflow
+        .steps
+        .iter()
+        .any(|step| step.step_type == WorkflowStepType::TicketScan);
     if workflow.steps.is_empty() {
         workflow.steps = default_workflow_steps(
             workflow.qa.as_deref(),
+            false,
             workflow.fix.as_deref(),
             workflow.retest.as_deref(),
         );
     }
+    let mut normalized: Vec<WorkflowStepConfig> = Vec::new();
+    let mut by_type: HashMap<&'static str, WorkflowStepConfig> = HashMap::new();
+    for step in workflow.steps.drain(..) {
+        by_type.entry(step.step_type.as_str()).or_insert(step);
+    }
+    for step_type in [
+        WorkflowStepType::InitOnce,
+        WorkflowStepType::Qa,
+        WorkflowStepType::TicketScan,
+        WorkflowStepType::Fix,
+        WorkflowStepType::Retest,
+    ] {
+        if let Some(step) = by_type.remove(step_type.as_str()) {
+            normalized.push(step);
+        } else {
+            normalized.push(WorkflowStepConfig {
+                id: step_type.as_str().to_string(),
+                step_type,
+                enabled: false,
+                agent_id: None,
+                prehook: None,
+            });
+        }
+    }
+    workflow.steps = normalized;
     for step in &mut workflow.steps {
         if step.id.trim().is_empty() {
             step.id = step.step_type.as_str().to_string();
+        }
+    }
+    let qa_enabled = workflow
+        .steps
+        .iter()
+        .any(|step| step.step_type == WorkflowStepType::Qa && step.enabled);
+    let fix_enabled = workflow
+        .steps
+        .iter()
+        .any(|step| step.step_type == WorkflowStepType::Fix && step.enabled);
+    let retest_enabled = workflow
+        .steps
+        .iter()
+        .any(|step| step.step_type == WorkflowStepType::Retest && step.enabled);
+    if !had_ticket_scan_step && !qa_enabled && fix_enabled && !retest_enabled {
+        if let Some(scan_step) = workflow
+            .steps
+            .iter_mut()
+            .find(|step| step.step_type == WorkflowStepType::TicketScan)
+        {
+            scan_step.enabled = true;
+            scan_step.agent_id = None;
         }
     }
     workflow.qa = None;
@@ -1208,6 +1310,12 @@ fn validate_workflow_config(
             continue;
         }
         enabled_count += 1;
+        if step.step_type == WorkflowStepType::TicketScan {
+            if let Some(prehook) = step.prehook.as_ref() {
+                validate_step_prehook(prehook, workflow_id, key)?;
+            }
+            continue;
+        }
         let agent_id = step.agent_id.as_deref().with_context(|| {
             format!("workflow '{}' step '{}' missing agent_id", workflow_id, key)
         })?;
@@ -1822,6 +1930,16 @@ fn build_execution_plan(
             continue;
         }
         let phase = step.step_type.as_str();
+        if step.step_type == WorkflowStepType::TicketScan {
+            steps.push(TaskExecutionStep {
+                id: step.id.clone(),
+                step_type: step.step_type.clone(),
+                agent_id: "builtin".to_string(),
+                template: String::new(),
+                prehook: step.prehook.clone(),
+            });
+            continue;
+        }
         let agent_id = step.agent_id.as_deref().with_context(|| {
             format!(
                 "workflow '{}' step '{}' missing agent_id",
@@ -2450,13 +2568,24 @@ fn create_task_impl(state: &InnerState, payload: CreateTaskPayload) -> Result<Ta
         LoopMode::Infinite => "infinite",
     };
 
-    let target_files = collect_target_files(
-        &workspace.root_path,
-        &workspace.qa_targets,
-        payload.target_files,
-    )?;
+    let target_files_input = payload.target_files.clone();
+    let seed_from_tickets =
+        should_seed_targets_from_active_tickets(target_files_input.as_ref(), &execution_plan);
+    let mut target_files = if seed_from_tickets {
+        collect_target_files_from_active_tickets(&workspace.root_path, &workspace.ticket_dir)?
+    } else {
+        collect_target_files(
+            &workspace.root_path,
+            &workspace.qa_targets,
+            target_files_input,
+        )?
+    };
     if target_files.is_empty() {
-        anyhow::bail!("No QA/Security markdown files found");
+        if seed_from_tickets {
+            target_files.push(UNASSIGNED_QA_FILE_PATH.to_string());
+        } else {
+            anyhow::bail!("No QA/Security markdown files found");
+        }
     }
 
     let task_id = Uuid::new_v4().to_string();
@@ -2555,6 +2684,49 @@ fn collect_target_files(
     files.sort();
     files.dedup();
     Ok(files)
+}
+
+fn should_seed_targets_from_active_tickets(
+    target_files: Option<&Vec<String>>,
+    execution_plan: &TaskExecutionPlan,
+) -> bool {
+    target_files.is_none()
+        && execution_plan.step(WorkflowStepType::Qa).is_none()
+        && execution_plan.step(WorkflowStepType::TicketScan).is_some()
+}
+
+fn collect_target_files_from_active_tickets(
+    workspace_root: &Path,
+    ticket_dir: &str,
+) -> Result<Vec<String>> {
+    let ticket_files = list_ticket_files_in_workspace(workspace_root, ticket_dir)?;
+    let mut targets: HashSet<String> = HashSet::new();
+    let mut include_unassigned = false;
+
+    for ticket in ticket_files {
+        let preview = read_ticket_preview_from_workspace(workspace_root, &ticket);
+        if !is_active_ticket_status(&preview.status) {
+            continue;
+        }
+        let normalized_doc = normalize_rel_path_for_match(&preview.qa_document);
+        if normalized_doc.is_empty() {
+            include_unassigned = true;
+            continue;
+        }
+        let qa_abs = resolve_workspace_path(workspace_root, &normalized_doc, "ticket qa_document");
+        if qa_abs.map(|path| path.is_file()).unwrap_or(false) {
+            targets.insert(normalized_doc);
+        } else {
+            include_unassigned = true;
+        }
+    }
+
+    let mut result: Vec<String> = targets.into_iter().collect();
+    result.sort();
+    if include_unassigned {
+        result.push(UNASSIGNED_QA_FILE_PATH.to_string());
+    }
+    Ok(result)
 }
 
 fn load_task_summary(state: &InnerState, task_id: &str) -> Result<TaskSummary> {
@@ -2695,6 +2867,58 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
         runs,
         events,
     })
+}
+
+fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
+    let conn = open_conn(&state.db_path)?;
+    let exists = conn
+        .query_row(
+            "SELECT 1 FROM tasks WHERE id = ?1",
+            params![task_id],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()?;
+    if exists.is_none() {
+        anyhow::bail!("task not found: {}", task_id);
+    }
+
+    let mut log_paths = HashSet::new();
+    let mut runs_stmt = conn.prepare(
+        "SELECT cr.stdout_path, cr.stderr_path
+         FROM command_runs cr
+         JOIN task_items ti ON ti.id = cr.task_item_id
+         WHERE ti.task_id = ?1",
+    )?;
+    for row in runs_stmt.query_map(params![task_id], |row| {
+        Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+    })? {
+        let (stdout_path, stderr_path) = row?;
+        if !stdout_path.trim().is_empty() {
+            log_paths.insert(stdout_path);
+        }
+        if !stderr_path.trim().is_empty() {
+            log_paths.insert(stderr_path);
+        }
+    }
+
+    let tx = conn.unchecked_transaction()?;
+    tx.execute("DELETE FROM events WHERE task_id = ?1", params![task_id])?;
+    tx.execute(
+        "DELETE FROM command_runs WHERE task_item_id IN (SELECT id FROM task_items WHERE task_id = ?1)",
+        params![task_id],
+    )?;
+    tx.execute(
+        "DELETE FROM task_items WHERE task_id = ?1",
+        params![task_id],
+    )?;
+    tx.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
+    tx.commit()?;
+
+    for path in log_paths {
+        let _ = std::fs::remove_file(path);
+    }
+
+    Ok(())
 }
 
 fn stream_task_logs_impl(
@@ -2994,12 +3218,72 @@ fn update_task_item(
     Ok(())
 }
 
-fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
-    let ticket_dir = resolve_workspace_path(
-        &task_ctx.workspace_root,
-        &task_ctx.ticket_dir,
-        "task.ticket_dir",
-    )?;
+fn normalize_rel_path_for_match(raw: &str) -> String {
+    let value = raw.trim().trim_matches('`').replace('\\', "/");
+    if value.is_empty() {
+        return String::new();
+    }
+    let mut parts: Vec<&str> = Vec::new();
+    for part in value.split('/') {
+        if part.is_empty() || part == "." {
+            continue;
+        }
+        if part == ".." {
+            return String::new();
+        }
+        parts.push(part);
+    }
+    parts.join("/")
+}
+
+fn is_active_ticket_status(status: &str) -> bool {
+    let normalized = status.trim().to_ascii_uppercase();
+    normalized.is_empty() || matches!(normalized.as_str(), "FAILED" | "OPEN")
+}
+
+fn parse_ticket_preview_content(rel_path: &str, content: &str) -> TicketPreviewData {
+    let mut title = String::new();
+    let mut status = String::new();
+    let mut qa_doc = String::new();
+    for line in content.lines().take(80) {
+        if line.starts_with("# Ticket:") {
+            title = line.trim_start_matches("# Ticket:").trim().to_string();
+        } else if line.starts_with("**Status**:") {
+            status = line.trim_start_matches("**Status**:").trim().to_string();
+        } else if line.starts_with("**QA Document**:") {
+            qa_doc = line
+                .trim_start_matches("**QA Document**:")
+                .trim()
+                .trim_matches('`')
+                .to_string();
+        }
+    }
+    TicketPreviewData {
+        path: rel_path.to_string(),
+        title,
+        status,
+        qa_document: qa_doc,
+    }
+}
+
+fn read_ticket_preview_from_workspace(workspace_root: &Path, rel_path: &str) -> TicketPreviewData {
+    let abs = match resolve_workspace_path(workspace_root, rel_path, "ticket preview path") {
+        Ok(value) => value,
+        Err(_) => {
+            return TicketPreviewData {
+                path: rel_path.to_string(),
+                title: String::new(),
+                status: String::new(),
+                qa_document: String::new(),
+            };
+        }
+    };
+    let content = std::fs::read_to_string(abs).unwrap_or_default();
+    parse_ticket_preview_content(rel_path, &content)
+}
+
+fn list_ticket_files_in_workspace(workspace_root: &Path, ticket_dir: &str) -> Result<Vec<String>> {
+    let ticket_dir = resolve_workspace_path(workspace_root, ticket_dir, "task.ticket_dir")?;
     if !ticket_dir.exists() {
         return Ok(Vec::new());
     }
@@ -3022,7 +3306,7 @@ fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
         {
             continue;
         }
-        let rel = pathdiff::diff_paths(entry.path(), &task_ctx.workspace_root)
+        let rel = pathdiff::diff_paths(entry.path(), workspace_root)
             .unwrap_or_else(|| entry.path().to_path_buf())
             .to_string_lossy()
             .to_string();
@@ -3032,19 +3316,29 @@ fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
     Ok(result)
 }
 
+fn list_ticket_files(task_ctx: &TaskRuntimeContext) -> Result<Vec<String>> {
+    list_ticket_files_in_workspace(&task_ctx.workspace_root, &task_ctx.ticket_dir)
+}
+
 fn list_existing_tickets_for_item(
     task_ctx: &TaskRuntimeContext,
     qa_file_path: &str,
 ) -> Result<Vec<String>> {
+    let normalized_target = normalize_rel_path_for_match(qa_file_path);
     let mut matched = Vec::new();
     for ticket in list_ticket_files(task_ctx)? {
-        let preview = read_ticket_preview(task_ctx, &ticket);
-        let qa_doc = preview
-            .get("qa_document")
-            .and_then(Value::as_str)
-            .unwrap_or("")
-            .trim();
-        if qa_doc == qa_file_path {
+        let preview = read_ticket_preview_from_workspace(&task_ctx.workspace_root, &ticket);
+        if !is_active_ticket_status(&preview.status) {
+            continue;
+        }
+        let normalized_doc = normalize_rel_path_for_match(&preview.qa_document);
+        if qa_file_path == UNASSIGNED_QA_FILE_PATH {
+            if normalized_doc.is_empty() {
+                matched.push(ticket);
+            }
+            continue;
+        }
+        if normalized_doc == normalized_target {
             matched.push(ticket);
         }
     }
@@ -3052,38 +3346,49 @@ fn list_existing_tickets_for_item(
     Ok(matched)
 }
 
-fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> Value {
-    let abs =
-        match resolve_workspace_path(&task_ctx.workspace_root, rel_path, "ticket preview path") {
-            Ok(value) => value,
-            Err(_) => {
-                return json!({"path": rel_path, "title": "", "status": "", "qa_document": ""})
-            }
-        };
-    let content = std::fs::read_to_string(abs).unwrap_or_default();
-    let mut title = String::new();
-    let mut status = String::new();
-    let mut qa_doc = String::new();
-    for line in content.lines().take(50) {
-        if line.starts_with("# Ticket:") {
-            title = line.trim_start_matches("# Ticket:").trim().to_string();
-        }
-        if line.starts_with("**Status**:") {
-            status = line.trim_start_matches("**Status**:").trim().to_string();
-        }
-        if line.starts_with("**QA Document**:") {
-            qa_doc = line
-                .trim_start_matches("**QA Document**:")
-                .trim()
-                .trim_matches('`')
-                .to_string();
+fn scan_active_tickets_for_task_items(
+    task_ctx: &TaskRuntimeContext,
+    task_item_paths: &[String],
+) -> Result<HashMap<String, Vec<String>>> {
+    let mut item_path_by_normalized: HashMap<String, String> = HashMap::new();
+    for path in task_item_paths {
+        let normalized = normalize_rel_path_for_match(path);
+        if !normalized.is_empty() {
+            item_path_by_normalized.insert(normalized, path.clone());
         }
     }
+
+    let mut grouped: HashMap<String, Vec<String>> = HashMap::new();
+    for ticket in list_ticket_files(task_ctx)? {
+        let preview = read_ticket_preview_from_workspace(&task_ctx.workspace_root, &ticket);
+        if !is_active_ticket_status(&preview.status) {
+            continue;
+        }
+        let normalized_doc = normalize_rel_path_for_match(&preview.qa_document);
+        let bucket = if normalized_doc.is_empty() {
+            UNASSIGNED_QA_FILE_PATH.to_string()
+        } else {
+            item_path_by_normalized
+                .get(&normalized_doc)
+                .cloned()
+                .unwrap_or_else(|| UNASSIGNED_QA_FILE_PATH.to_string())
+        };
+        grouped.entry(bucket).or_default().push(ticket);
+    }
+    for paths in grouped.values_mut() {
+        paths.sort();
+        paths.dedup();
+    }
+    Ok(grouped)
+}
+
+fn read_ticket_preview(task_ctx: &TaskRuntimeContext, rel_path: &str) -> Value {
+    let preview = read_ticket_preview_from_workspace(&task_ctx.workspace_root, rel_path);
     json!({
-        "path": rel_path,
-        "title": title,
-        "status": status,
-        "qa_document": qa_doc
+        "path": preview.path,
+        "title": preview.title,
+        "status": preview.status,
+        "qa_document": preview.qa_document
     })
 }
 
@@ -3331,6 +3636,33 @@ async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &str) 
     Ok(())
 }
 
+async fn stop_task_runtime_for_delete(state: Arc<InnerState>, task_id: &str) -> Result<()> {
+    let runtime = {
+        let running = state.running.lock().await;
+        running.get(task_id).cloned()
+    };
+    if let Some(runtime) = runtime {
+        runtime.stop_flag.store(true, Ordering::SeqCst);
+        kill_current_child(&runtime).await;
+
+        for _ in 0..100 {
+            let still_running = {
+                let running = state.running.lock().await;
+                running.contains_key(task_id)
+            };
+            if !still_running {
+                return Ok(());
+            }
+            sleep(Duration::from_millis(50)).await;
+        }
+        anyhow::bail!(
+            "task '{}' is still running after stop request, retry delete later",
+            task_id
+        );
+    }
+    Ok(())
+}
+
 async fn shutdown_running_tasks(state: Arc<InnerState>) {
     let runtimes: Vec<(String, RunningTask)> = {
         let running = state.running.lock().await;
@@ -3451,8 +3783,19 @@ async fn run_task_loop(
         }
 
         let items = list_task_items_for_cycle(&state, task_id)?;
+        let task_item_paths: Vec<String> =
+            items.iter().map(|item| item.qa_file_path.clone()).collect();
         for item in items {
-            process_item(&state, app, task_id, &item, &task_ctx, &runtime).await?;
+            process_item(
+                &state,
+                app,
+                task_id,
+                &item,
+                &task_item_paths,
+                &task_ctx,
+                &runtime,
+            )
+            .await?;
             if runtime.stop_flag.load(Ordering::SeqCst) {
                 continue 'cycle;
             }
@@ -3690,11 +4033,13 @@ async fn process_item(
     app: Option<&AppHandle>,
     task_id: &str,
     item: &TaskItemRow,
+    task_item_paths: &[String],
     task_ctx: &TaskRuntimeContext,
     runtime: &RunningTask,
 ) -> Result<()> {
     let item_id = item.id.as_str();
     let qa_step = task_ctx.execution_plan.step(WorkflowStepType::Qa);
+    let ticket_scan_step = task_ctx.execution_plan.step(WorkflowStepType::TicketScan);
     let fix_step = task_ctx.execution_plan.step(WorkflowStepType::Fix);
     let retest_step = task_ctx.execution_plan.step(WorkflowStepType::Retest);
     let qa_enabled = qa_step.is_some();
@@ -3847,6 +4192,55 @@ async fn process_item(
                 false,
             )?;
             item_status = "qa_failed".to_string();
+        }
+    }
+
+    if let Some(ticket_scan_step) = ticket_scan_step {
+        let should_run_scan = evaluate_step_prehook_with_error_event(
+            state,
+            app,
+            ticket_scan_step,
+            &StepPrehookContext {
+                task_id: task_id.to_string(),
+                task_item_id: item_id.to_string(),
+                cycle: task_ctx.current_cycle,
+                step: "ticket_scan".to_string(),
+                qa_file_path: item.qa_file_path.clone(),
+                item_status: item_status.clone(),
+                task_status: "running".to_string(),
+                qa_exit_code,
+                fix_exit_code,
+                retest_exit_code,
+                active_ticket_count: active_tickets.len() as i64,
+                new_ticket_count,
+                qa_failed,
+                fix_required: qa_failed || !active_tickets.is_empty(),
+            },
+        )?;
+        if should_run_scan {
+            let grouped = scan_active_tickets_for_task_items(task_ctx, task_item_paths)?;
+            active_tickets = grouped.get(&item.qa_file_path).cloned().unwrap_or_default();
+            new_ticket_count = active_tickets.len() as i64;
+            if qa_skipped && !active_tickets.is_empty() && item_status == "skipped" {
+                qa_failed = true;
+                let ticket_content: Vec<Value> = active_tickets
+                    .iter()
+                    .map(|path| read_ticket_preview(task_ctx, path))
+                    .collect();
+                update_task_item(
+                    state,
+                    item_id,
+                    "qa_failed",
+                    Some(&active_tickets),
+                    Some(&ticket_content),
+                    Some(true),
+                    Some(false),
+                    Some("ticket_scan found active tickets"),
+                    true,
+                    false,
+                )?;
+                item_status = "qa_failed".to_string();
+            }
         }
     }
 
@@ -4513,6 +4907,34 @@ mod prehook_tests {
     }
 
     #[test]
+    fn normalize_rel_path_for_match_strips_noise_and_blocks_parent_segments() {
+        assert_eq!(
+            normalize_rel_path_for_match("./docs/security/01.md"),
+            "docs/security/01.md"
+        );
+        assert_eq!(
+            normalize_rel_path_for_match("docs\\security\\01.md"),
+            "docs/security/01.md"
+        );
+        assert_eq!(normalize_rel_path_for_match("../docs/security/01.md"), "");
+    }
+
+    #[test]
+    fn parse_ticket_preview_and_active_status_rules_work() {
+        let content = "\
+# Ticket: demo
+**QA Document**: `docs/qa/demo.md`
+**Status**: FAILED
+";
+        let preview = parse_ticket_preview_content("docs/ticket/demo.md", content);
+        assert_eq!(preview.title, "demo");
+        assert_eq!(preview.qa_document, "docs/qa/demo.md");
+        assert!(is_active_ticket_status(&preview.status));
+        assert!(!is_active_ticket_status("CLOSED"));
+        assert!(is_active_ticket_status(""));
+    }
+
+    #[test]
     fn finalize_rules_mark_verified_after_clean_retest() {
         let finalize = default_workflow_finalize_config();
         let context = ItemFinalizeContext {
@@ -4645,6 +5067,7 @@ fn main() {
             start_task,
             pause_task,
             resume_task,
+            delete_task,
             retry_task_item,
             stream_task_logs,
             simulate_prehook

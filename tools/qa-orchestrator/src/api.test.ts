@@ -88,19 +88,24 @@ describe('api wrapper', () => {
       taskId: 'task-1'
     });
 
+    await api.deleteTask('task-1');
+    expect(invokeMock).toHaveBeenNthCalledWith(8, 'delete_task', {
+      taskId: 'task-1'
+    });
+
     await api.retryTaskItem('item-1');
-    expect(invokeMock).toHaveBeenNthCalledWith(8, 'retry_task_item', {
+    expect(invokeMock).toHaveBeenNthCalledWith(9, 'retry_task_item', {
       taskItemId: 'item-1'
     });
 
     await api.streamTaskLogs('task-1');
-    expect(invokeMock).toHaveBeenNthCalledWith(9, 'stream_task_logs', {
+    expect(invokeMock).toHaveBeenNthCalledWith(10, 'stream_task_logs', {
       taskId: 'task-1',
       limit: 300
     });
 
     await api.streamTaskLogs('task-1', 99);
-    expect(invokeMock).toHaveBeenNthCalledWith(10, 'stream_task_logs', {
+    expect(invokeMock).toHaveBeenNthCalledWith(11, 'stream_task_logs', {
       taskId: 'task-1',
       limit: 99
     });
@@ -119,7 +124,7 @@ describe('api wrapper', () => {
         fix_required: true
       }
     });
-    expect(invokeMock).toHaveBeenNthCalledWith(11, 'simulate_prehook', {
+    expect(invokeMock).toHaveBeenNthCalledWith(12, 'simulate_prehook', {
       payload: {
         expression: 'active_ticket_count > 0',
         step: 'fix',
