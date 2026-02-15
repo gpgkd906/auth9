@@ -188,7 +188,7 @@ export default function LoginEventsPage() {
                 <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                   {events.map((event: LoginEvent) => (
                     <tr key={event.id} className="hover:bg-[var(--sidebar-item-hover)]">
-                      <td className="px-4 py-3 whitespace-nowrap text-[var(--text-secondary)]">
+                      <td className="px-4 py-3 whitespace-nowrap text-[var(--text-secondary)]" suppressHydrationWarning>
                         {formatDate(event.created_at)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">

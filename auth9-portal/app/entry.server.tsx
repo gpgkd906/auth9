@@ -1,13 +1,19 @@
 import { PassThrough } from "stream";
+import crypto from "crypto";
 import type { EntryContext } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
 import { ServerRouter } from "react-router";
 import { isbot } from "isbot";
 import { renderToPipeableStream } from "react-dom/server";
+import { NonceContext } from "~/hooks/useNonce";
 
 const ABORT_DELAY = 5_000;
 
-function setSecurityHeaders(headers: Headers): void {
+function generateNonce(): string {
+  return crypto.randomBytes(16).toString("base64");
+}
+
+function setSecurityHeaders(headers: Headers, nonce: string): void {
   // Prevent MIME type sniffing
   headers.set("X-Content-Type-Options", "nosniff");
   // Prevent clickjacking
@@ -21,15 +27,15 @@ function setSecurityHeaders(headers: Headers): void {
     "Permissions-Policy",
     "camera=(), microphone=(), geolocation=(), payment=()"
   );
-  // Content Security Policy - no unsafe-inline for scripts
+  // Content Security Policy - nonce-based for React Router 7 hydration scripts
   headers.set(
     "Content-Security-Policy",
     [
       "default-src 'self'",
-      "script-src 'self'",
-      "style-src 'self' 'unsafe-inline'",
+      `script-src 'self' 'nonce-${nonce}'`,
+      "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https:",
-      "font-src 'self' data:",
+      "font-src 'self' data: https://fonts.gstatic.com",
       "connect-src 'self' http://localhost:* https://localhost:* ws://localhost:*",
       "frame-ancestors 'none'",
       "base-uri 'self'",
@@ -46,18 +52,22 @@ export default function handleRequest(
   responseHeaders: Headers,
   routerContext: EntryContext
 ) {
+  const nonce = generateNonce();
+
   return isbot(request.headers.get("user-agent") || "")
     ? handleBotRequest(
         request,
         responseStatusCode,
         responseHeaders,
-        routerContext
+        routerContext,
+        nonce
       )
     : handleBrowserRequest(
         request,
         responseStatusCode,
         responseHeaders,
-        routerContext
+        routerContext,
+        nonce
       );
 }
 
@@ -65,20 +75,24 @@ function handleBotRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
-  routerContext: EntryContext
+  routerContext: EntryContext,
+  nonce: string
 ) {
   return new Promise((resolve, reject) => {
     let shellRendered = false;
     const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter context={routerContext} url={request.url} />,
+      <NonceContext.Provider value={nonce}>
+        <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
+      </NonceContext.Provider>,
       {
+        nonce,
         onAllReady() {
           shellRendered = true;
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
-          setSecurityHeaders(responseHeaders);
+          setSecurityHeaders(responseHeaders, nonce);
 
           resolve(
             new Response(stream, {
@@ -109,20 +123,24 @@ function handleBrowserRequest(
   request: Request,
   responseStatusCode: number,
   responseHeaders: Headers,
-  routerContext: EntryContext
+  routerContext: EntryContext,
+  nonce: string
 ) {
   return new Promise((resolve, reject) => {
     let shellRendered = false;
     const { pipe, abort } = renderToPipeableStream(
-      <ServerRouter context={routerContext} url={request.url} />,
+      <NonceContext.Provider value={nonce}>
+        <ServerRouter context={routerContext} url={request.url} nonce={nonce} />
+      </NonceContext.Provider>,
       {
+        nonce,
         onShellReady() {
           shellRendered = true;
           const body = new PassThrough();
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
-          setSecurityHeaders(responseHeaders);
+          setSecurityHeaders(responseHeaders, nonce);
 
           resolve(
             new Response(stream, {

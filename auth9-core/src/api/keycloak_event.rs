@@ -86,6 +86,50 @@ pub struct KeycloakEventDetails {
     /// Code ID for auth codes
     #[serde(alias = "codeId")]
     pub code_id: Option<String>,
+    /// Capture any additional fields from the Keycloak details map.
+    /// This ensures we don't lose MFA-related fields that vary by Keycloak version
+    /// (e.g., `auth_type`, `authentication_session_tab`, `selected_credential_id`).
+    #[serde(flatten)]
+    pub extra: std::collections::HashMap<String, serde_json::Value>,
+}
+
+/// Check if the Keycloak event details indicate an MFA/OTP authentication step.
+///
+/// Keycloak versions vary in which fields they populate for MFA failures:
+/// - Some set `auth_method: "otp"` or `credential_type: "otp"/"totp"`
+/// - Others set extra fields like `selected_credential_id` or `auth_type`
+/// - Some only set `credential_type` in the `extra` map (not the typed field)
+fn is_mfa_context(details: &KeycloakEventDetails) -> bool {
+    // Check typed fields
+    if details.auth_method.as_deref() == Some("otp") {
+        return true;
+    }
+    if matches!(
+        details.credential_type.as_deref(),
+        Some("otp") | Some("totp")
+    ) {
+        return true;
+    }
+    // Check extra fields for MFA indicators from various Keycloak versions
+    for (key, value) in &details.extra {
+        let key_lower = key.to_lowercase();
+        if let Some(val_str) = value.as_str() {
+            let val_lower = val_str.to_lowercase();
+            // credential_type or auth_method in extra map (camelCase variant not captured by serde alias)
+            if (key_lower == "credential_type" || key_lower == "auth_method")
+                && (val_lower == "otp" || val_lower == "totp")
+            {
+                return true;
+            }
+            // Keycloak 23+ may include selected_credential_id pointing to an OTP credential
+            if key_lower == "selected_credential_type"
+                && (val_lower == "otp" || val_lower == "totp")
+            {
+                return true;
+            }
+        }
+    }
+    false
 }
 
 /// Map Keycloak event type to Auth9 LoginEventType
@@ -103,14 +147,7 @@ fn map_event_type_with_details(
         "LOGIN_ERROR" => {
             match error {
                 Some("invalid_user_credentials") => {
-                    // Check auth_method or credential_type to distinguish TOTP failures
-                    // Keycloak may send "otp" via authMethod or credentialType depending on version
-                    if details.auth_method.as_deref() == Some("otp")
-                        || matches!(
-                            details.credential_type.as_deref(),
-                            Some("otp") | Some("totp")
-                        )
-                    {
+                    if is_mfa_context(details) {
                         Some(LoginEventType::FailedMfa)
                     } else {
                         Some(LoginEventType::FailedPassword)
@@ -173,13 +210,7 @@ fn derive_failure_reason_with_details(
     error.map(|e| {
         match e {
             "invalid_user_credentials" => {
-                // Check auth_method or credential_type to distinguish TOTP failures
-                if details.auth_method.as_deref() == Some("otp")
-                    || matches!(
-                        details.credential_type.as_deref(),
-                        Some("otp") | Some("totp")
-                    )
-                {
+                if is_mfa_context(details) {
                     "Invalid MFA code"
                 } else {
                     "Invalid password"
@@ -372,7 +403,7 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
     );
 
     // 4. Map to our login event type (skip non-login events)
-    let login_event_type =
+    let mut login_event_type =
         match map_event_type_with_details(event_type_str, event.error.as_deref(), &event.details) {
             Some(t) => t,
             None => {
@@ -380,6 +411,43 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
                 return Ok(StatusCode::NO_CONTENT);
             }
         };
+
+    // 4b. MFA detection fallback: when Keycloak sends LOGIN_ERROR with
+    // invalid_user_credentials but without MFA-indicating fields, check if the
+    // user actually has TOTP credentials configured. If they do, reclassify
+    // this as FailedMfa since the password step must have already succeeded
+    // for Keycloak to show the MFA prompt.
+    if login_event_type == LoginEventType::FailedPassword
+        && event.error.as_deref() == Some("invalid_user_credentials")
+    {
+        if let Some(ref kc_user_id) = event.user_id {
+            match state
+                .keycloak_client()
+                .list_user_credentials(kc_user_id)
+                .await
+            {
+                Ok(creds) => {
+                    let has_otp = creds.iter().any(|c| {
+                        let ct = c.credential_type.to_lowercase();
+                        ct == "otp" || ct == "totp"
+                    });
+                    if has_otp {
+                        debug!(
+                            "User {} has OTP credentials; reclassifying LOGIN_ERROR as FailedMfa",
+                            kc_user_id
+                        );
+                        login_event_type = LoginEventType::FailedMfa;
+                    }
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to check user credentials for MFA detection, keeping FailedPassword: {}",
+                        e
+                    );
+                }
+            }
+        }
+    }
 
     // 5. Resolve Keycloak user ID to auth9 user ID
     // Keycloak sends its own internal user UUID, which differs from auth9's users.id.
@@ -433,7 +501,15 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
             .as_ref()
             .and_then(|id| uuid::Uuid::parse_str(id).ok())
             .map(StringUuid::from),
-        failure_reason: derive_failure_reason_with_details(event.error.as_deref(), &event.details),
+        failure_reason: if login_event_type == LoginEventType::FailedMfa
+            && event.error.as_deref() == Some("invalid_user_credentials")
+            && !is_mfa_context(&event.details)
+        {
+            // Reclassified via Keycloak credential check; override the failure reason
+            Some("Invalid MFA code".to_string())
+        } else {
+            derive_failure_reason_with_details(event.error.as_deref(), &event.details)
+        },
     };
 
     // 8. Record the login event

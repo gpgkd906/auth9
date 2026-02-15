@@ -713,6 +713,7 @@ impl Config {
                 max_response_bytes: parse_u64_env("ACTION_MAX_RESPONSE_BYTES", 1_048_576) as usize,
                 max_requests_per_execution: parse_u64_env("ACTION_MAX_REQUESTS", 5) as usize,
                 allow_private_ips: parse_bool_env("ACTION_ALLOW_PRIVATE_IPS", false),
+                max_heap_mb: parse_u64_env("ACTION_MAX_HEAP_MB", 64) as usize,
             },
         })
     }

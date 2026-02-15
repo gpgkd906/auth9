@@ -196,6 +196,15 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
         self.login_event_repo.get_daily_trend(start, end).await
     }
 
+    /// Get daily trend data for a specific date range
+    pub async fn get_daily_trend_for_range(
+        &self,
+        start: DateTime<Utc>,
+        end: DateTime<Utc>,
+    ) -> Result<Vec<DailyTrendPoint>> {
+        self.login_event_repo.get_daily_trend(start, end).await
+    }
+
     /// List login events with pagination
     pub async fn list_events(&self, page: i64, per_page: i64) -> Result<(Vec<LoginEvent>, i64)> {
         let offset = (page - 1) * per_page;

@@ -71,7 +71,7 @@ export function withTenant(client: Auth9HttpClient, tenantId: string) {
         if (options?.success !== undefined) params.append("success", String(options.success));
         if (options?.limit) params.append("limit", String(options.limit));
         const query = params.toString();
-        return client.get<{ data: ActionExecution[] }>(
+        return client.get<{ data: ActionExecution[]; pagination: { page: number; per_page: number; total: number; total_pages: number } }>(
           `/api/v1/tenants/${tenantId}/actions/logs${query ? `?${query}` : ""}`
         );
       },

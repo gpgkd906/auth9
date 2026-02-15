@@ -236,6 +236,36 @@ impl IdentityProviderTemplate {
             Self::saml(),
         ]
     }
+
+    /// Find template by provider_id
+    pub fn find(provider_id: &str) -> Option<Self> {
+        Self::all()
+            .into_iter()
+            .find(|t| t.provider_id == provider_id)
+    }
+
+    /// Validate that all required config fields are present
+    pub fn validate_config(
+        &self,
+        config: &HashMap<String, String>,
+    ) -> std::result::Result<(), Vec<String>> {
+        let missing: Vec<String> = self
+            .required_config
+            .iter()
+            .filter(|key| {
+                config
+                    .get(key.as_str())
+                    .map_or(true, |v| v.trim().is_empty())
+            })
+            .cloned()
+            .collect();
+
+        if missing.is_empty() {
+            Ok(())
+        } else {
+            Err(missing)
+        }
+    }
 }
 
 #[cfg(test)]
@@ -333,6 +363,54 @@ mod tests {
         assert!(provider_ids.contains(&"microsoft"));
         assert!(provider_ids.contains(&"oidc"));
         assert!(provider_ids.contains(&"saml"));
+    }
+
+    #[test]
+    fn test_template_find() {
+        assert!(IdentityProviderTemplate::find("google").is_some());
+        assert!(IdentityProviderTemplate::find("github").is_some());
+        assert!(IdentityProviderTemplate::find("unknown").is_none());
+    }
+
+    #[test]
+    fn test_validate_config_missing_required() {
+        let template = IdentityProviderTemplate::google();
+        let config = HashMap::new();
+        let result = template.validate_config(&config);
+        assert!(result.is_err());
+        let missing = result.unwrap_err();
+        assert!(missing.contains(&"clientId".to_string()));
+        assert!(missing.contains(&"clientSecret".to_string()));
+    }
+
+    #[test]
+    fn test_validate_config_partial() {
+        let template = IdentityProviderTemplate::google();
+        let mut config = HashMap::new();
+        config.insert("clientId".to_string(), "id".to_string());
+        let result = template.validate_config(&config);
+        assert!(result.is_err());
+        let missing = result.unwrap_err();
+        assert_eq!(missing, vec!["clientSecret".to_string()]);
+    }
+
+    #[test]
+    fn test_validate_config_complete() {
+        let template = IdentityProviderTemplate::google();
+        let mut config = HashMap::new();
+        config.insert("clientId".to_string(), "id".to_string());
+        config.insert("clientSecret".to_string(), "secret".to_string());
+        assert!(template.validate_config(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_config_empty_value() {
+        let template = IdentityProviderTemplate::google();
+        let mut config = HashMap::new();
+        config.insert("clientId".to_string(), "  ".to_string());
+        config.insert("clientSecret".to_string(), "secret".to_string());
+        let result = template.validate_config(&config);
+        assert!(result.is_err());
     }
 
     #[test]

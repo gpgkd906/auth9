@@ -40,6 +40,7 @@ pub trait ActionRepository: Send + Sync {
     ) -> Result<()>;
     async fn find_execution_by_id(&self, id: StringUuid) -> Result<Option<ActionExecution>>;
     async fn query_logs(&self, filter: &LogQueryFilter) -> Result<Vec<ActionExecution>>;
+    async fn count_logs(&self, filter: &LogQueryFilter) -> Result<i64>;
     async fn get_stats(&self, action_id: StringUuid) -> Result<Option<(i64, i64, f64, i64)>>;
 }
 
@@ -382,6 +383,59 @@ impl ActionRepository for ActionRepositoryImpl {
         let executions = query.fetch_all(&self.pool).await?;
 
         Ok(executions)
+    }
+
+    async fn count_logs(&self, filter: &LogQueryFilter) -> Result<i64> {
+        let mut query_str = String::from(
+            r#"
+            SELECT COUNT(*) as cnt
+            FROM action_executions
+            WHERE 1=1
+            "#,
+        );
+
+        let mut conditions = Vec::new();
+        if filter.action_id.is_some() {
+            conditions.push("action_id = ?");
+        }
+        if filter.user_id.is_some() {
+            conditions.push("user_id = ?");
+        }
+        if filter.success.is_some() {
+            conditions.push("success = ?");
+        }
+        if filter.from.is_some() {
+            conditions.push("executed_at >= ?");
+        }
+        if filter.to.is_some() {
+            conditions.push("executed_at <= ?");
+        }
+
+        for condition in conditions {
+            query_str.push_str(&format!(" AND {}", condition));
+        }
+
+        let mut query = sqlx::query_scalar::<_, i64>(&query_str);
+
+        if let Some(action_id) = filter.action_id {
+            query = query.bind(action_id);
+        }
+        if let Some(user_id) = filter.user_id {
+            query = query.bind(user_id);
+        }
+        if let Some(success) = filter.success {
+            query = query.bind(success);
+        }
+        if let Some(from) = filter.from {
+            query = query.bind(from);
+        }
+        if let Some(to) = filter.to {
+            query = query.bind(to);
+        }
+
+        let count = query.fetch_one(&self.pool).await?;
+
+        Ok(count)
     }
 
     async fn get_stats(&self, action_id: StringUuid) -> Result<Option<(i64, i64, f64, i64)>> {

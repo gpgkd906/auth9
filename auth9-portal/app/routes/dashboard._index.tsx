@@ -2,6 +2,7 @@ import { useLoaderData, redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { getAccessToken } from "~/services/session.server";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { FormattedDate } from "~/components/ui/formatted-date";
 import { auditApi, serviceApi, tenantApi, userApi } from "~/services/api";
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -74,7 +75,7 @@ export default function DashboardIndex() {
                     {activity.action} • {activity.resource_type}
                   </p>
                   <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-                    {new Date(activity.created_at).toLocaleString()}
+                    <FormattedDate date={activity.created_at} />
                   </p>
                 </div>
               </div>

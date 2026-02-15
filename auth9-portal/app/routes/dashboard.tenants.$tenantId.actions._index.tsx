@@ -8,6 +8,7 @@ import { Switch } from "~/components/ui/switch";
 import type { Action } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant, getTriggers } from "~/lib/auth9-client";
+import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { useState, useRef } from "react";
 import { PlusIcon, MagnifyingGlassIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon } from "@radix-ui/react-icons";
@@ -270,7 +271,7 @@ function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) 
             <div className="font-semibold flex items-center gap-1">
               <ClockIcon className="h-4 w-4" />
               {action.lastExecutedAt ? (
-                new Date(action.lastExecutedAt).toLocaleString()
+                <FormattedDate date={action.lastExecutedAt} />
               ) : (
                 "Never"
               )}

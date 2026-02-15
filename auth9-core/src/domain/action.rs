@@ -286,6 +286,8 @@ pub struct AsyncActionConfig {
     pub max_requests_per_execution: usize,
     /// Allow requests to private/loopback IPs (default: false, set true only for testing)
     pub allow_private_ips: bool,
+    /// Max V8 heap size in MB per isolate (default: 64MB)
+    pub max_heap_mb: usize,
 }
 
 impl Default for AsyncActionConfig {
@@ -296,6 +298,7 @@ impl Default for AsyncActionConfig {
             max_response_bytes: 1_048_576,
             max_requests_per_execution: 5,
             allow_private_ips: false,
+            max_heap_mb: 64,
         }
     }
 }
