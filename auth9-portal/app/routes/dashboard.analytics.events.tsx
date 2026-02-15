@@ -22,7 +22,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
-  const perPage = 50;
+  const perPage = 20;
   const email = url.searchParams.get("email") || undefined;
 
   try {

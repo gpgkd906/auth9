@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSP Test</title>
+</head>
+<body>
+    <h1>CSP Test Page</h1>
+    <div id="result"></div>
+    
+    <script>
+        // 测试内联脚本
+        try {
+            eval("document.getElementById('result').innerHTML = 'Inline script executed via eval'");
+            console.log("eval() succeeded - CSP may be weak");
+        } catch (e) {
+            console.log("eval() blocked by CSP:", e.message);
+        }
+        
+        // 测试外部脚本加载
+        var script = document.createElement('script');
+        script.src = 'https://evil.example.com/malicious.js';
+        script.onerror = function() {
+            console.log("External script blocked by CSP");
+        };
+        document.head.appendChild(script);
+    </script>
+</body>
+</html>

@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS actions (
     trigger_id VARCHAR(50) NOT NULL,
     script TEXT NOT NULL,
     enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    strict_mode BOOLEAN NOT NULL DEFAULT FALSE,
     execution_order INT NOT NULL DEFAULT 0,
     timeout_ms INT NOT NULL DEFAULT 3000,
     last_executed_at TIMESTAMP NULL,

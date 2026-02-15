@@ -9,7 +9,7 @@ import type { Action } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant, getTriggers } from "~/lib/auth9-client";
 import { getAccessToken } from "~/services/session.server";
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { PlusIcon, MagnifyingGlassIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon } from "@radix-ui/react-icons";
 
 export const meta: MetaFunction = () => {
@@ -187,6 +187,7 @@ export default function ActionsListPage() {
 
 function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) {
   const fetcher = useFetcher();
+  const toggleFormRef = useRef<HTMLFormElement>(null);
   const isToggling = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "toggle";
   const isDeleting = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "delete";
 
@@ -217,6 +218,9 @@ function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) 
               <Badge variant={enabled ? "default" : "secondary"}>
                 {enabled ? "Enabled" : "Disabled"}
               </Badge>
+              {action.strictMode && (
+                <Badge variant="destructive">Strict</Badge>
+              )}
               <Badge variant="outline">{TRIGGER_LABELS[action.triggerId]}</Badge>
             </div>
             {action.description && (
@@ -225,11 +229,17 @@ function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) 
           </div>
 
           <div className="flex items-center gap-2">
-            <fetcher.Form method="post">
+            <fetcher.Form method="post" ref={toggleFormRef}>
               <input type="hidden" name="intent" value="toggle" />
               <input type="hidden" name="actionId" value={action.id} />
               <input type="hidden" name="enabled" value={String(!enabled)} />
-              <Switch checked={enabled} disabled={isToggling} />
+              <Switch
+                checked={enabled}
+                disabled={isToggling}
+                onCheckedChange={() => {
+                  toggleFormRef.current?.requestSubmit();
+                }}
+              />
             </fetcher.Form>
           </div>
         </div>

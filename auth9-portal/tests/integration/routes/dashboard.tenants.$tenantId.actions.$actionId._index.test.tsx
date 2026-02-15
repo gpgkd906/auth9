@@ -34,6 +34,7 @@ const mockAction = {
   triggerId: ActionTrigger.PostLogin,
   script: 'context.claims = { department: "engineering", tier: "premium" };\ncontext;',
   enabled: true,
+  strictMode: false,
   executionOrder: 0,
   timeoutMs: 3000,
   executionCount: 100,

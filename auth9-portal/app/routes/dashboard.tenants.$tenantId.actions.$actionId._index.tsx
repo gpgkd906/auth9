@@ -68,6 +68,9 @@ export default function ActionDetailPage() {
             <Badge variant={action.enabled ? "default" : "secondary"}>
               {action.enabled ? "Enabled" : "Disabled"}
             </Badge>
+            {action.strictMode && (
+              <Badge variant="destructive">Strict Mode</Badge>
+            )}
             <Badge variant="outline">{TRIGGER_LABELS[action.triggerId]}</Badge>
           </div>
           {action.description && (

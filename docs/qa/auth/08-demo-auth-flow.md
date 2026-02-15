@@ -85,13 +85,13 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
 
 ### 初始状态
 - 已跳转到 Keycloak 登录页
-- admin 用户存在（admin / Admin123!）
+- admin 用户存在（admin / SecurePass123!）
 
 ### 目的
 验证输入凭证后完成 OAuth code exchange，获取 Auth9-signed Identity Token，正确显示用户信息
 
 ### 测试操作流程
-1. 在 Keycloak 登录页输入 username: `admin`, password: `Admin123!`
+1. 在 Keycloak 登录页输入 username: `admin`, password: `SecurePass123!`
 2. 点击 "Sign In"
 
 ### 预期结果

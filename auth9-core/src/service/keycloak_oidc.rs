@@ -921,6 +921,7 @@ mod tests {
             trigger_id: trigger_id.to_string(),
             script: script.to_string(),
             enabled: true,
+            strict_mode: true,
             execution_order: 0,
             timeout_ms: 3000,
             last_executed_at: None,

@@ -266,7 +266,7 @@ $DC ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || $DC ps
 
 echo ""
 echo "URLs:"
-echo "  Portal:     http://localhost:3000  (admin / Admin123!)"
+echo "  Portal:     http://localhost:3000  (admin / SecurePass123!)"
 echo "  Demo:       http://localhost:3002  (SDK integration guide)"
 echo "  Keycloak:   http://localhost:8081  (admin / admin)"
 echo "  Mailpit:    http://localhost:8025"

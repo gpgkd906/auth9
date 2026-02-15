@@ -1,0 +1,315 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - link "A9 Auth9" [ref=e7] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e8]: A9
+        - generic [ref=e9]: Auth9
+      - generic [ref=e10]:
+        - button "Switch to light mode" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+        - button "Switch to dark mode" [ref=e14] [cursor=pointer]:
+          - img [ref=e15]
+    - navigation "Main navigation" [ref=e17]:
+      - generic [ref=e18]:
+        - generic [ref=e19]: Main
+        - link "Overview" [ref=e20] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e21]
+          - text: Overview
+        - link "Tenants" [active] [ref=e23] [cursor=pointer]:
+          - /url: /dashboard/tenants
+          - img [ref=e24]
+          - text: Tenants
+        - link "Users" [ref=e26] [cursor=pointer]:
+          - /url: /dashboard/users
+          - img [ref=e27]
+          - text: Users
+        - link "Services" [ref=e29] [cursor=pointer]:
+          - /url: /dashboard/services
+          - img [ref=e30]
+          - text: Services
+      - generic [ref=e32]:
+        - generic [ref=e33]: Security
+        - link "Roles" [ref=e34] [cursor=pointer]:
+          - /url: /dashboard/roles
+          - img [ref=e35]
+          - text: Roles
+        - link "Analytics" [ref=e37] [cursor=pointer]:
+          - /url: /dashboard/analytics
+          - img [ref=e38]
+          - text: Analytics
+        - link "Security" [ref=e40] [cursor=pointer]:
+          - /url: /dashboard/security/alerts
+          - img [ref=e41]
+          - text: Security
+        - link "Audit Logs" [ref=e43] [cursor=pointer]:
+          - /url: /dashboard/audit-logs
+          - img [ref=e44]
+          - text: Audit Logs
+      - generic [ref=e46]:
+        - generic [ref=e47]: System
+        - link "Settings" [ref=e48] [cursor=pointer]:
+          - /url: /dashboard/settings
+          - img [ref=e49]
+          - text: Settings
+    - generic [ref=e53]:
+      - link "AU Admin User admin@auth9.local" [ref=e54] [cursor=pointer]:
+        - /url: /dashboard/account
+        - generic [ref=e56]: AU
+        - generic [ref=e57]:
+          - paragraph [ref=e58]: Admin User
+          - paragraph [ref=e59]: admin@auth9.local
+      - link "Sign out" [ref=e60] [cursor=pointer]:
+        - /url: /logout
+        - img [ref=e61]
+  - main [ref=e63]:
+    - generic [ref=e116]:
+      - generic [ref=e117]:
+        - generic [ref=e118]:
+          - heading "Tenants" [level=1] [ref=e119]
+          - paragraph [ref=e120]: Manage tenant lifecycle and settings
+        - button "Create Tenant" [ref=e121]:
+          - img [ref=e122]
+          - text: Create Tenant
+      - generic [ref=e124]:
+        - generic [ref=e126]:
+          - generic [ref=e127]:
+            - heading "Tenant List" [level=3] [ref=e128]
+            - paragraph [ref=e129]: 27 tenants • Page 1 of 2
+          - generic [ref=e130]:
+            - generic [ref=e131]:
+              - img [ref=e132]
+              - textbox "Search tenants..." [ref=e134]
+            - button "Search" [ref=e136]
+        - table [ref=e139]:
+          - rowgroup [ref=e140]:
+            - row "Name Slug Status Updated" [ref=e141]:
+              - columnheader "Name" [ref=e142]
+              - columnheader "Slug" [ref=e143]
+              - columnheader "Status" [ref=e144]
+              - columnheader "Updated" [ref=e145]
+              - columnheader [ref=e146]
+          - rowgroup [ref=e147]:
+            - row "Test Tenant 19 test-tenant-19 active 2026/2/15 08:10:40 Open menu" [ref=e148]:
+              - cell "Test Tenant 19" [ref=e149]:
+                - link "Test Tenant 19" [ref=e150] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fe4b5-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-19" [ref=e151]
+              - cell "active" [ref=e152]
+              - cell "2026/2/15 08:10:40" [ref=e153]
+              - cell "Open menu" [ref=e154]:
+                - button "Open menu" [ref=e155]:
+                  - generic [ref=e156]: Open menu
+                  - img [ref=e157]
+            - row "Test Tenant 18 test-tenant-18 active 2026/2/15 08:10:40 Open menu" [ref=e159]:
+              - cell "Test Tenant 18" [ref=e160]:
+                - link "Test Tenant 18" [ref=e161] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fe4b3-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-18" [ref=e162]
+              - cell "active" [ref=e163]
+              - cell "2026/2/15 08:10:40" [ref=e164]
+              - cell "Open menu" [ref=e165]:
+                - button "Open menu" [ref=e166]:
+                  - generic [ref=e167]: Open menu
+                  - img [ref=e168]
+            - row "Acme Corporation acme active 2026/2/15 08:10:40 Open menu" [ref=e170]:
+              - cell "Acme Corporation" [ref=e171]:
+                - link "Acme Corporation" [ref=e172] [cursor=pointer]:
+                  - /url: /dashboard/tenants/11111111-1111-1111-1111-111111111111
+              - cell "acme" [ref=e173]
+              - cell "active" [ref=e174]
+              - cell "2026/2/15 08:10:40" [ref=e175]
+              - cell "Open menu" [ref=e176]:
+                - button "Open menu" [ref=e177]:
+                  - generic [ref=e178]: Open menu
+                  - img [ref=e179]
+            - row "Beta Company beta active 2026/2/15 08:10:40 Open menu" [ref=e181]:
+              - cell "Beta Company" [ref=e182]:
+                - link "Beta Company" [ref=e183] [cursor=pointer]:
+                  - /url: /dashboard/tenants/22222222-2222-2222-2222-222222222222
+              - cell "beta" [ref=e184]
+              - cell "active" [ref=e185]
+              - cell "2026/2/15 08:10:40" [ref=e186]
+              - cell "Open menu" [ref=e187]:
+                - button "Open menu" [ref=e188]:
+                  - generic [ref=e189]: Open menu
+                  - img [ref=e190]
+            - row "Acme Labs acme-labs active 2026/2/15 08:10:40 Open menu" [ref=e192]:
+              - cell "Acme Labs" [ref=e193]:
+                - link "Acme Labs" [ref=e194] [cursor=pointer]:
+                  - /url: /dashboard/tenants/33333333-3333-3333-3333-333333333333
+              - cell "acme-labs" [ref=e195]
+              - cell "active" [ref=e196]
+              - cell "2026/2/15 08:10:40" [ref=e197]
+              - cell "Open menu" [ref=e198]:
+                - button "Open menu" [ref=e199]:
+                  - generic [ref=e200]: Open menu
+                  - img [ref=e201]
+            - row "Test Tenant 9 test-tenant-9 active 2026/2/15 08:10:40 Open menu" [ref=e203]:
+              - cell "Test Tenant 9" [ref=e204]:
+                - link "Test Tenant 9" [ref=e205] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fc962-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-9" [ref=e206]
+              - cell "active" [ref=e207]
+              - cell "2026/2/15 08:10:40" [ref=e208]
+              - cell "Open menu" [ref=e209]:
+                - button "Open menu" [ref=e210]:
+                  - generic [ref=e211]: Open menu
+                  - img [ref=e212]
+            - row "Test Tenant 2 test-tenant-2 active 2026/2/15 08:10:40 Open menu" [ref=e214]:
+              - cell "Test Tenant 2" [ref=e215]:
+                - link "Test Tenant 2" [ref=e216] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fc978-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-2" [ref=e217]
+              - cell "active" [ref=e218]
+              - cell "2026/2/15 08:10:40" [ref=e219]
+              - cell "Open menu" [ref=e220]:
+                - button "Open menu" [ref=e221]:
+                  - generic [ref=e222]: Open menu
+                  - img [ref=e223]
+            - row "Test Tenant 15 test-tenant-15 active 2026/2/15 08:10:40 Open menu" [ref=e225]:
+              - cell "Test Tenant 15" [ref=e226]:
+                - link "Test Tenant 15" [ref=e227] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fc97a-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-15" [ref=e228]
+              - cell "active" [ref=e229]
+              - cell "2026/2/15 08:10:40" [ref=e230]
+              - cell "Open menu" [ref=e231]:
+                - button "Open menu" [ref=e232]:
+                  - generic [ref=e233]: Open menu
+                  - img [ref=e234]
+            - row "Test Tenant 12 test-tenant-12 active 2026/2/15 08:10:40 Open menu" [ref=e236]:
+              - cell "Test Tenant 12" [ref=e237]:
+                - link "Test Tenant 12" [ref=e238] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fc97d-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-12" [ref=e239]
+              - cell "active" [ref=e240]
+              - cell "2026/2/15 08:10:40" [ref=e241]
+              - cell "Open menu" [ref=e242]:
+                - button "Open menu" [ref=e243]:
+                  - generic [ref=e244]: Open menu
+                  - img [ref=e245]
+            - row "Test Tenant 0 test-tenant-0 active 2026/2/15 08:10:40 Open menu" [ref=e247]:
+              - cell "Test Tenant 0" [ref=e248]:
+                - link "Test Tenant 0" [ref=e249] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd490-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-0" [ref=e250]
+              - cell "active" [ref=e251]
+              - cell "2026/2/15 08:10:40" [ref=e252]
+              - cell "Open menu" [ref=e253]:
+                - button "Open menu" [ref=e254]:
+                  - generic [ref=e255]: Open menu
+                  - img [ref=e256]
+            - row "Test Tenant 13 test-tenant-13 active 2026/2/15 08:10:40 Open menu" [ref=e258]:
+              - cell "Test Tenant 13" [ref=e259]:
+                - link "Test Tenant 13" [ref=e260] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd494-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-13" [ref=e261]
+              - cell "active" [ref=e262]
+              - cell "2026/2/15 08:10:40" [ref=e263]
+              - cell "Open menu" [ref=e264]:
+                - button "Open menu" [ref=e265]:
+                  - generic [ref=e266]: Open menu
+                  - img [ref=e267]
+            - row "Test Tenant 4 test-tenant-4 active 2026/2/15 08:10:40 Open menu" [ref=e269]:
+              - cell "Test Tenant 4" [ref=e270]:
+                - link "Test Tenant 4" [ref=e271] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd496-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-4" [ref=e272]
+              - cell "active" [ref=e273]
+              - cell "2026/2/15 08:10:40" [ref=e274]
+              - cell "Open menu" [ref=e275]:
+                - button "Open menu" [ref=e276]:
+                  - generic [ref=e277]: Open menu
+                  - img [ref=e278]
+            - row "Test Tenant 11 test-tenant-11 active 2026/2/15 08:10:40 Open menu" [ref=e280]:
+              - cell "Test Tenant 11" [ref=e281]:
+                - link "Test Tenant 11" [ref=e282] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd498-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-11" [ref=e283]
+              - cell "active" [ref=e284]
+              - cell "2026/2/15 08:10:40" [ref=e285]
+              - cell "Open menu" [ref=e286]:
+                - button "Open menu" [ref=e287]:
+                  - generic [ref=e288]: Open menu
+                  - img [ref=e289]
+            - row "Test Tenant 16 test-tenant-16 active 2026/2/15 08:10:40 Open menu" [ref=e291]:
+              - cell "Test Tenant 16" [ref=e292]:
+                - link "Test Tenant 16" [ref=e293] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd49a-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-16" [ref=e294]
+              - cell "active" [ref=e295]
+              - cell "2026/2/15 08:10:40" [ref=e296]
+              - cell "Open menu" [ref=e297]:
+                - button "Open menu" [ref=e298]:
+                  - generic [ref=e299]: Open menu
+                  - img [ref=e300]
+            - row "Test Tenant 1 test-tenant-1 active 2026/2/15 08:10:40 Open menu" [ref=e302]:
+              - cell "Test Tenant 1" [ref=e303]:
+                - link "Test Tenant 1" [ref=e304] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd49c-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-1" [ref=e305]
+              - cell "active" [ref=e306]
+              - cell "2026/2/15 08:10:40" [ref=e307]
+              - cell "Open menu" [ref=e308]:
+                - button "Open menu" [ref=e309]:
+                  - generic [ref=e310]: Open menu
+                  - img [ref=e311]
+            - row "Test Tenant 5 test-tenant-5 active 2026/2/15 08:10:40 Open menu" [ref=e313]:
+              - cell "Test Tenant 5" [ref=e314]:
+                - link "Test Tenant 5" [ref=e315] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fd49e-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-5" [ref=e316]
+              - cell "active" [ref=e317]
+              - cell "2026/2/15 08:10:40" [ref=e318]
+              - cell "Open menu" [ref=e319]:
+                - button "Open menu" [ref=e320]:
+                  - generic [ref=e321]: Open menu
+                  - img [ref=e322]
+            - row "Test Tenant 17 test-tenant-17 active 2026/2/15 08:10:40 Open menu" [ref=e324]:
+              - cell "Test Tenant 17" [ref=e325]:
+                - link "Test Tenant 17" [ref=e326] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fe135-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-17" [ref=e327]
+              - cell "active" [ref=e328]
+              - cell "2026/2/15 08:10:40" [ref=e329]
+              - cell "Open menu" [ref=e330]:
+                - button "Open menu" [ref=e331]:
+                  - generic [ref=e332]: Open menu
+                  - img [ref=e333]
+            - row "Test Tenant 10 test-tenant-10 active 2026/2/15 08:10:40 Open menu" [ref=e335]:
+              - cell "Test Tenant 10" [ref=e336]:
+                - link "Test Tenant 10" [ref=e337] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fe139-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-10" [ref=e338]
+              - cell "active" [ref=e339]
+              - cell "2026/2/15 08:10:40" [ref=e340]
+              - cell "Open menu" [ref=e341]:
+                - button "Open menu" [ref=e342]:
+                  - generic [ref=e343]: Open menu
+                  - img [ref=e344]
+            - row "Test Tenant 7 test-tenant-7 active 2026/2/15 08:10:40 Open menu" [ref=e346]:
+              - cell "Test Tenant 7" [ref=e347]:
+                - link "Test Tenant 7" [ref=e348] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fe4ae-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-7" [ref=e349]
+              - cell "active" [ref=e350]
+              - cell "2026/2/15 08:10:40" [ref=e351]
+              - cell "Open menu" [ref=e352]:
+                - button "Open menu" [ref=e353]:
+                  - generic [ref=e354]: Open menu
+                  - img [ref=e355]
+            - row "Test Tenant 8 test-tenant-8 active 2026/2/15 08:10:40 Open menu" [ref=e357]:
+              - cell "Test Tenant 8" [ref=e358]:
+                - link "Test Tenant 8" [ref=e359] [cursor=pointer]:
+                  - /url: /dashboard/tenants/616fe4b1-09fa-11f1-ace6-6a27068fb328
+              - cell "test-tenant-8" [ref=e360]
+              - cell "active" [ref=e361]
+              - cell "2026/2/15 08:10:40" [ref=e362]
+              - cell "Open menu" [ref=e363]:
+                - button "Open menu" [ref=e364]:
+                  - generic [ref=e365]: Open menu
+                  - img [ref=e366]

@@ -15,6 +15,7 @@ export interface Action {
   triggerId: string;
   script: string;
   enabled: boolean;
+  strictMode: boolean;
   executionOrder: number;
   timeoutMs: number;
   lastExecutedAt?: string;
@@ -31,6 +32,7 @@ export interface CreateActionInput {
   triggerId: string;
   script: string;
   enabled?: boolean;
+  strictMode?: boolean;
   executionOrder?: number;
   timeoutMs?: number;
 }
@@ -40,6 +42,7 @@ export interface UpdateActionInput {
   description?: string;
   script?: string;
   enabled?: boolean;
+  strictMode?: boolean;
   executionOrder?: number;
   timeoutMs?: number;
 }
@@ -104,6 +107,7 @@ export interface UpsertActionInput {
   triggerId: string;
   script: string;
   enabled: boolean;
+  strictMode: boolean;
   executionOrder: number;
   timeoutMs: number;
 }

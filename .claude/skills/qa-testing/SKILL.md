@@ -11,7 +11,7 @@ Execute scenario-based manual QA testing for Auth9 using Playwright browser auto
 
 1. **Docker services running**: auth9-core, auth9-portal, auth9-keycloak, auth9-tidb, auth9-redis
 2. **Service URLs**: Portal (3000), Auth9 Core (8080), Keycloak (8081)
-3. **Credentials**: Portal Admin `admin / Admin123!`, Keycloak Admin `admin / admin`
+3. **Credentials**: Portal Admin `admin / SecurePass123!`, Keycloak Admin `admin / admin`
 
 ## API Token Generation (IMPORTANT - Read First)
 
@@ -63,6 +63,14 @@ hey -n 20 -c 20 -m POST \
 ```
 
 Note: Rate limiting is active on some endpoints (e.g., forgot-password: 5 req/min, token: 10 req/min).
+
+## Test Scripts Directory (`scripts/qa/`)
+
+**IMPORTANT**: A collection of reusable QA test scripts already exists in `scripts/qa/`. Before writing any new test script, **always check `scripts/qa/` first** for an existing script that covers the same or similar scenario.
+
+- **Reuse first**: Run `ls scripts/qa/` or `Glob: scripts/qa/*` to find existing scripts. If a matching script exists, use it directly (or adapt it) instead of creating a new one.
+- **Create in `scripts/qa/`**: When a new test script is needed, always place it under `scripts/qa/` — never in the project root or other ad-hoc locations.
+- **Naming convention**: Follow the existing patterns — e.g., `test-{feature}.{js,mjs,py,sh}` or `{feature}_test.py`.
 
 ## Workflow
 
@@ -389,5 +397,5 @@ curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak
 ## Keycloak Admin API Pitfalls
 
 - **Keycloak 23**: `reset-password` endpoint returns 400 when password policy is active (no detailed error)
-- **Workaround**: Use seeded admin user (`admin / Admin123!`) or create users without passwords
+- **Workaround**: Use seeded admin user (`admin / SecurePass123!`) or create users without passwords
 - **Realm update**: Partial PUT may fail; use GET-merge-PUT pattern for safe updates
