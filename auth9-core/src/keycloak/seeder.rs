@@ -297,7 +297,8 @@ impl KeycloakSeeder {
                 "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
                 "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR",
                 "IDENTITY_PROVIDER_LOGIN", "IDENTITY_PROVIDER_LOGIN_ERROR",
-                "USER_DISABLED_BY_PERMANENT_LOCKOUT", "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
+                "USER_DISABLED_BY_PERMANENT_LOCKOUT", "USER_DISABLED_BY_TEMPORARY_LOCKOUT",
+                "LOGIN_WITH_OTP", "LOGIN_WITH_OTP_ERROR"
             ]));
             obj.insert("eventsExpiration".to_string(), serde_json::json!(2592000));
         }
