@@ -45,7 +45,7 @@ async function getTenantAccessToken() {
   const grpcurlCmd = `
     cd /Volumes/Yotta/auth9 && 
     .claude/skills/tools/grpcurl-docker.sh \
-      -insecure -import-path /proto -proto auth9.proto \
+      -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key -import-path /proto -proto auth9.proto \
       -H "x-api-key: dev-grpc-api-key" \
       -d '{"identity_token": "${identityToken}", "tenant_id": "${demoTenantId}", "service_id": "${serviceId}"}' \
       auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken

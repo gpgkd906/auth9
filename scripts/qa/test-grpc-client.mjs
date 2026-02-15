@@ -6,6 +6,7 @@
 
 import { Auth9 } from "./packages/node/dist/index.js";
 import { execSync } from "child_process";
+import { readFileSync } from "fs";
 
 const GREEN = "\x1b[32m";
 const RED = "\x1b[31m";
@@ -49,6 +50,16 @@ const userId = execSync(
   .toString()
   .trim();
 
+const certDir = "/Volumes/Yotta/auth9/deploy/dev-certs/grpc";
+const grpcAuth = {
+  apiKey: "dev-grpc-api-key",
+  mtls: {
+    ca: readFileSync(`${certDir}/ca.crt`),
+    cert: readFileSync(`${certDir}/client.crt`),
+    key: readFileSync(`${certDir}/client.key`),
+  },
+};
+
 async function runTests() {
   section("场景 1: gRPC Token Exchange 完整流程");
 
@@ -56,7 +67,7 @@ async function runTests() {
 
   try {
     const auth9 = new Auth9({ domain: "http://localhost:8080" });
-    const grpc = auth9.grpc({ address: "localhost:50051" }); // Use insecure connection for local testing
+    const grpc = auth9.grpc({ address: "localhost:50051", auth: grpcAuth });
 
     const result = await grpc.exchangeToken({
       identityToken,
@@ -121,7 +132,7 @@ async function runTests() {
 
   try {
     const auth9 = new Auth9({ domain: "http://localhost:8080" });
-    const grpc = auth9.grpc({ address: "localhost:50051" }); // Use insecure connection for local testing
+    const grpc = auth9.grpc({ address: "localhost:50051", auth: grpcAuth });
 
     // ValidateToken
     const validateResult = await grpc.validateToken({
@@ -201,7 +212,7 @@ async function runTests() {
 
   try {
     const auth9 = new Auth9({ domain: "http://localhost:8080" });
-    const grpc = auth9.grpc({ address: "localhost:50051" }); // Use insecure connection for local testing
+    const grpc = auth9.grpc({ address: "localhost:50051", auth: grpcAuth });
 
     const result = await grpc.getUserRoles({
       userId,

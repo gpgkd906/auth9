@@ -19,16 +19,20 @@ Always run `grpcurl` from an ephemeral Docker container on the same compose netw
 
 ```bash
 # List services is expected to FAIL (reflection disabled)
-.claude/skills/tools/grpcurl-docker.sh -insecure auth9-grpc-tls:50051 list
+.claude/skills/tools/grpcurl-docker.sh \
+  -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
+  auth9-grpc-tls:50051 list
 
 # Call ExchangeToken without API key is expected to FAIL (Missing API key)
-.claude/skills/tools/grpcurl-docker.sh -insecure \
+.claude/skills/tools/grpcurl-docker.sh \
+  -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
   -import-path /proto -proto auth9.proto \
   -d '{"identity_token":"dummy","tenant_id":"dummy","service_id":"dummy"}' \
   auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken
 
 # Call with API key should get past "Missing API key" (may still fail due to invalid token)
-.claude/skills/tools/grpcurl-docker.sh -insecure \
+.claude/skills/tools/grpcurl-docker.sh \
+  -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
   -H "x-api-key: dev-grpc-api-key" \
   -import-path /proto -proto auth9.proto \
   -d '{"identity_token":"dummy","tenant_id":"dummy","service_id":"dummy"}' \
@@ -42,4 +46,3 @@ Always run `grpcurl` from an ephemeral Docker container on the same compose netw
 - `GRPC_API_KEY`: default `dev-grpc-api-key`
 - `GRPC_IMPORT_PATH_HOST`: default `auth9-core/proto` (mounted to `/proto`)
 - `GRPC_PROTO`: default `auth9.proto`
-

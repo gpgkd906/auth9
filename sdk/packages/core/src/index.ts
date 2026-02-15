@@ -73,6 +73,8 @@ export { ActionTrigger } from "./types/action.js";
 // HTTP Client
 export { Auth9HttpClient } from "./http-client.js";
 export type { HttpClientConfig } from "./http-client.js";
+export { Auth9Client } from "./auth9-client.js";
+export type { Auth9ClientConfig } from "./auth9-client.js";
 
 // Errors
 export {

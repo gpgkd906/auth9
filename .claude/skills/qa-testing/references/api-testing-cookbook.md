@@ -10,6 +10,7 @@ Quick-reference recipes for common QA testing tasks. Avoids trial-and-error on k
 
 - **Service name**: `auth9.TokenExchange` (NOT `auth9.token_exchange.TokenExchange`)
 - **Reflection is disabled**: Must provide `-import-path /proto -proto auth9.proto`
+- **mTLS required on `auth9-grpc-tls:50051`**: Must provide `-cacert`, `-cert`, and `-key`
 - **API key required**: Header `x-api-key: dev-grpc-api-key`
 - **Host port 50051 is often blocked**: Use `grpcurl-docker.sh` helper or `docker run` inside the Docker network
 - **`service_id` expects OAuth client_id**: e.g. `"auth9-portal"`, NOT a service UUID
@@ -24,7 +25,9 @@ PLATFORM_TENANT_ID=$(mysql -u root -h 127.0.0.1 -P 4000 auth9 -N -e \
 
 # Via grpcurl-docker.sh (preferred)
 .claude/skills/tools/grpcurl-docker.sh \
-  -insecure \
+  -cacert /certs/ca.crt \
+  -cert /certs/client.crt \
+  -key /certs/client.key \
   -import-path /proto -proto auth9.proto \
   -H "x-api-key: dev-grpc-api-key" \
   -d "{\"identity_token\": \"$TOKEN\", \"tenant_id\": \"$PLATFORM_TENANT_ID\", \"service_id\": \"auth9-portal\"}" \
@@ -33,13 +36,16 @@ PLATFORM_TENANT_ID=$(mysql -u root -h 127.0.0.1 -P 4000 auth9 -N -e \
 # Via plain docker run (if helper not available)
 docker run --rm \
   --network auth9_auth9-network \
-  -v "$(pwd)/auth9-core/proto:/proto" \
+  -v "$(pwd)/auth9-core/proto:/proto:ro" \
+  -v "$(pwd)/deploy/dev-certs/grpc:/certs:ro" \
   fullstorydev/grpcurl:latest \
-  -plaintext \
+  -cacert /certs/ca.crt \
+  -cert /certs/client.crt \
+  -key /certs/client.key \
   -import-path /proto -proto auth9.proto \
   -H "x-api-key: dev-grpc-api-key" \
   -d "{\"identity_token\": \"$TOKEN\", \"tenant_id\": \"$PLATFORM_TENANT_ID\", \"service_id\": \"auth9-portal\"}" \
-  auth9-core:50051 auth9.TokenExchange/ExchangeToken
+  auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken
 ```
 
 ### Decode JWT to Verify Roles/Permissions
@@ -67,6 +73,8 @@ Expected output for admin user:
 | `Client not found for service_id ''` | Empty service_id | Add `"service_id": "auth9-portal"` |
 | `Service does not belong to the requested tenant` | Wrong tenant for service | Use `auth9-platform` tenant for `auth9-portal` service |
 | `context deadline exceeded` on localhost:50051 | Host port blocked | Use `grpcurl-docker.sh` or `docker run --network` |
+| `x509: certificate signed by unknown authority` | Missing CA trust | Add `-cacert /certs/ca.crt` |
+| `unexpected HTTP status code ... 400 (Bad Request)` | mTLS client cert missing | Add `-cert /certs/client.crt -key /certs/client.key` |
 | `target server does not expose service "auth9.token_exchange.TokenExchange"` | Wrong service name | Use `auth9.TokenExchange` (not `auth9.token_exchange.TokenExchange`) |
 
 ---

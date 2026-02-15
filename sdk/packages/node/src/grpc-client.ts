@@ -9,9 +9,10 @@ export interface GrpcClientConfig {
   /** Use TLS for the connection (server-side TLS, no client certs) */
   tls?: boolean;
   /** Authentication method */
-  auth?:
-    | { apiKey: string }
-    | { mtls: { cert: Buffer; key: Buffer; ca: Buffer } };
+  auth?: {
+    apiKey?: string;
+    mtls?: { cert: Buffer; key: Buffer; ca: Buffer };
+  };
 }
 
 export interface ExchangeTokenRequest {
@@ -129,7 +130,7 @@ export class Auth9GrpcClient {
     ) as unknown as ProtoGrpcType;
 
     let credentials: grpc.ChannelCredentials;
-    if (config.auth && "mtls" in config.auth) {
+    if (config.auth?.mtls) {
       credentials = grpc.credentials.createSsl(
         config.auth.mtls.ca,
         config.auth.mtls.key,
@@ -147,7 +148,7 @@ export class Auth9GrpcClient {
     ) as unknown as TokenExchangeClient;
 
     this.metadata = new grpc.Metadata();
-    if (config.auth && "apiKey" in config.auth) {
+    if (config.auth?.apiKey) {
       this.metadata.set("x-api-key", config.auth.apiKey);
     }
   }
