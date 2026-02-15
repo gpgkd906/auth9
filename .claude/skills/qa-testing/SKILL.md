@@ -356,6 +356,7 @@ oathtool --totp -b "$SECRET"
 **IMPORTANT**: See `references/api-testing-cookbook.md` for full recipes and common pitfalls.
 
 - **Service name**: `auth9.TokenExchange` (NOT `auth9.token_exchange.TokenExchange`)
+- **mTLS required**: Must pass `-cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key`
 - **API key**: `x-api-key: dev-grpc-api-key` (required)
 - **Host port 50051 is blocked**: Must use `grpcurl-docker.sh` or Docker network
 - **Reflection disabled**: Must pass `-import-path /proto -proto auth9.proto`
@@ -368,7 +369,8 @@ PLATFORM_TENANT_ID=$(mysql -u root -h 127.0.0.1 -P 4000 auth9 -N -e \
   "SELECT id FROM tenants WHERE slug = 'auth9-platform';")
 
 .claude/skills/tools/grpcurl-docker.sh \
-  -insecure -import-path /proto -proto auth9.proto \
+  -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key \
+  -import-path /proto -proto auth9.proto \
   -H "x-api-key: dev-grpc-api-key" \
   -d "{\"identity_token\": \"$TOKEN\", \"tenant_id\": \"$PLATFORM_TENANT_ID\", \"service_id\": \"auth9-portal\"}" \
   auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken

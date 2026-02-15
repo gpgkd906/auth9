@@ -14,7 +14,9 @@ def exchange_token(token, tenant_id, request_id):
     """执行Token Exchange"""
     cmd = [
         ".claude/skills/tools/grpcurl-docker.sh",
-        "-insecure",
+        "-cacert", "/certs/ca.crt",
+        "-cert", "/certs/client.crt",
+        "-key", "/certs/client.key",
         "-import-path", "/proto",
         "-proto", "auth9.proto",
         "-H", "x-api-key: dev-grpc-api-key",

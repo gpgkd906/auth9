@@ -46,7 +46,7 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     echo "Default: run QA docs via opencode in shell mode."
     echo "  --orchestrator       Launch tools/qa-orchestrator (Tauri UI workflow)"
     echo "  --orchestrator-cli   Run tools/qa-orchestrator in CLI automation mode"
-    echo "  --agent <mode>       Agent mode: 'opencode' (default) or 'gemini'"
+    echo "  --agent <mode>       Agent mode: 'opencode' (default), 'gemini', 'kimi', 'minimax', 'glm'"
     echo "  --uiux               Include UI/UX test documents (docs/uiux/)"
     exit 0
 fi
@@ -110,6 +110,15 @@ run_agent() {
             ;;
         gemini)
             gemini -m gemini-3-flash-preview -p "读取文档：${rel_path}，执行QA测试" --yolo
+            ;;
+        kimi)
+            opencode run "读取文档：${rel_path}，执行QA测试" -m "kimi-k2.5-free"
+            ;;
+        minimax)
+            opencode run "读取文档：${rel_path}，执行QA测试" -m "minimax-m2.1-free"
+            ;;
+        glm)
+            opencode run "读取文档：${rel_path}，执行QA测试" -m "glm-4.7-free"
             ;;
         *)
             echo -e "${RED}Unknown agent mode: ${AGENT_MODE}${NC}"
