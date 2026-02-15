@@ -59,23 +59,32 @@ pub struct KeycloakEvent {
 }
 
 /// Additional details from Keycloak events
+///
+/// Keycloak's event details map uses snake_case keys (e.g., `credential_type`, `auth_method`),
+/// matching the constants in `org.keycloak.events.Details`. The p2-inc/keycloak-events SPI
+/// forwards these keys as-is via `ModelToRepresentation.toRepresentation()`.
+/// We accept both snake_case and camelCase via aliases for robustness.
 #[derive(Debug, Clone, Default, Deserialize)]
-#[serde(rename_all = "camelCase")]
 pub struct KeycloakEventDetails {
     /// Username attempting to login
     pub username: Option<String>,
     /// Email of the user
     pub email: Option<String>,
     /// Authentication method (e.g., "password", "otp")
+    #[serde(alias = "authMethod")]
     pub auth_method: Option<String>,
     /// Credential type used in authentication (e.g., "password", "otp", "totp")
     /// Keycloak 21+ sends this for TOTP failures instead of auth_method
+    #[serde(alias = "credentialType")]
     pub credential_type: Option<String>,
     /// Identity provider alias for social logins
+    #[serde(alias = "identityProvider")]
     pub identity_provider: Option<String>,
     /// Redirect URI
+    #[serde(alias = "redirectUri")]
     pub redirect_uri: Option<String>,
     /// Code ID for auth codes
+    #[serde(alias = "codeId")]
     pub code_id: Option<String>,
 }
 
@@ -911,6 +920,45 @@ mod tests {
             Some("https://app.com/cb".to_string())
         );
         assert_eq!(event.details.code_id, Some("code-123".to_string()));
+    }
+
+    #[test]
+    fn test_keycloak_event_details_snake_case_keys() {
+        // Keycloak's event details use snake_case keys (from org.keycloak.events.Details)
+        let json = r#"{
+            "type": "LOGIN_ERROR",
+            "time": 0,
+            "error": "invalid_user_credentials",
+            "details": {
+                "username": "user1",
+                "email": "user1@test.com",
+                "auth_method": "otp",
+                "credential_type": "totp",
+                "identity_provider": "google",
+                "redirect_uri": "https://app.com/cb",
+                "code_id": "code-456"
+            }
+        }"#;
+
+        let event: KeycloakEvent = serde_json::from_str(json).unwrap();
+        assert_eq!(event.details.username, Some("user1".to_string()));
+        assert_eq!(event.details.email, Some("user1@test.com".to_string()));
+        assert_eq!(event.details.auth_method, Some("otp".to_string()));
+        assert_eq!(event.details.credential_type, Some("totp".to_string()));
+        assert_eq!(event.details.identity_provider, Some("google".to_string()));
+        assert_eq!(
+            event.details.redirect_uri,
+            Some("https://app.com/cb".to_string())
+        );
+        assert_eq!(event.details.code_id, Some("code-456".to_string()));
+
+        // Verify this correctly maps to FailedMfa
+        let event_type = map_event_type_with_details(
+            "LOGIN_ERROR",
+            Some("invalid_user_credentials"),
+            &event.details,
+        );
+        assert_eq!(event_type, Some(LoginEventType::FailedMfa));
     }
 
     #[test]
