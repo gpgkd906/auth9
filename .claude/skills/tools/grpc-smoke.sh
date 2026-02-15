@@ -5,7 +5,7 @@
 # - Reflection is disabled (list should fail).
 # - API key is required (call should fail with "Missing API key" without header).
 # - With API key, request gets past API key check (no longer "Missing API key").
-# - Plaintext against TLS endpoint should fail.
+# - Plaintext against mTLS endpoint should fail.
 
 set -euo pipefail
 
@@ -15,6 +15,9 @@ GRPCURL="$SCRIPT_DIR/grpcurl-docker.sh"
 GRPC_TARGET="${GRPC_TARGET:-auth9-grpc-tls:50051}"
 GRPC_API_KEY="${GRPC_API_KEY:-dev-grpc-api-key}"
 GRPC_PROTO="${GRPC_PROTO:-auth9.proto}"
+GRPC_CA_CERT="${GRPC_CA_CERT:-/certs/ca.crt}"
+GRPC_CLIENT_CERT="${GRPC_CLIENT_CERT:-/certs/client.crt}"
+GRPC_CLIENT_KEY="${GRPC_CLIENT_KEY:-/certs/client.key}"
 
 REQ_BODY='{"identity_token":"dummy","tenant_id":"dummy","service_id":"dummy"}'
 
@@ -81,13 +84,20 @@ echo "[1/4] Reflection should be disabled"
 run_expect_fail_contains \
   "reflection disabled" \
   "server does not support the reflection API" \
-  "$GRPCURL" -insecure "$GRPC_TARGET" list
+  "$GRPCURL" \
+    -cacert "$GRPC_CA_CERT" \
+    -cert "$GRPC_CLIENT_CERT" \
+    -key "$GRPC_CLIENT_KEY" \
+    "$GRPC_TARGET" list
 
 echo "[2/4] Missing API key should be rejected"
 run_expect_fail_contains \
   "missing api key" \
   "Missing API key" \
-  "$GRPCURL" -insecure \
+  "$GRPCURL" \
+    -cacert "$GRPC_CA_CERT" \
+    -cert "$GRPC_CLIENT_CERT" \
+    -key "$GRPC_CLIENT_KEY" \
     -import-path /proto -proto "$GRPC_PROTO" \
     -d "$REQ_BODY" \
     "$GRPC_TARGET" auth9.TokenExchange/ExchangeToken
@@ -96,7 +106,10 @@ echo "[3/4] With API key, should get past API key check"
 run_expect_fail_not_contains \
   "api key accepted" \
   "Missing API key" \
-  "$GRPCURL" -insecure \
+  "$GRPCURL" \
+    -cacert "$GRPC_CA_CERT" \
+    -cert "$GRPC_CLIENT_CERT" \
+    -key "$GRPC_CLIENT_KEY" \
     -H "x-api-key: $GRPC_API_KEY" \
     -import-path /proto -proto "$GRPC_PROTO" \
     -d "$REQ_BODY" \
@@ -111,4 +124,3 @@ run_expect_fail_any \
     "$GRPC_TARGET" auth9.TokenExchange/ExchangeToken
 
 echo "OK: gRPC smoke checks passed"
-

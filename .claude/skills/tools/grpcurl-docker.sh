@@ -3,14 +3,14 @@
 #
 # Why:
 # - Host -> container gRPC ports may be blocked.
-# - auth9-grpc-tls provides a TLS endpoint; use -insecure for local testing.
+# - auth9-grpc-tls enforces mTLS; use CA + client cert/key for local testing.
 #
 # Usage:
 #   .claude/skills/tools/grpcurl-docker.sh [grpcurl args...]
 #
 # Examples:
-#   .claude/skills/tools/grpcurl-docker.sh -insecure auth9-grpc-tls:50051 list
-#   .claude/skills/tools/grpcurl-docker.sh -insecure -H "x-api-key: dev-grpc-api-key" \
+#   .claude/skills/tools/grpcurl-docker.sh -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key auth9-grpc-tls:50051 list
+#   .claude/skills/tools/grpcurl-docker.sh -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key -H "x-api-key: dev-grpc-api-key" \
 #     -import-path /proto -proto auth9.proto \
 #     -d '{"identity_token":"dummy","tenant_id":"dummy","service_id":"dummy"}' \
 #     auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken
@@ -22,10 +22,12 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
 
 GRPC_TARGET_DEFAULT="auth9-grpc-tls:50051"
 GRPC_IMPORT_PATH_HOST_DEFAULT="auth9-core/proto"
+GRPC_CERTS_HOST_DEFAULT="deploy/dev-certs/grpc"
 GRPC_PROTO_DEFAULT="auth9.proto"
 
 GRPC_TARGET="${GRPC_TARGET:-$GRPC_TARGET_DEFAULT}"
 GRPC_IMPORT_PATH_HOST="${GRPC_IMPORT_PATH_HOST:-$GRPC_IMPORT_PATH_HOST_DEFAULT}"
+GRPC_CERTS_HOST="${GRPC_CERTS_HOST:-$GRPC_CERTS_HOST_DEFAULT}"
 GRPC_PROTO="${GRPC_PROTO:-$GRPC_PROTO_DEFAULT}"
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ] || [ $# -eq 0 ]; then
@@ -37,11 +39,15 @@ Environment:
   GRPC_NETWORK            Docker network name (auto-detect if unset)
   GRPC_TARGET             Default target (default: $GRPC_TARGET_DEFAULT)
   GRPC_IMPORT_PATH_HOST   Host proto dir (default: $GRPC_IMPORT_PATH_HOST_DEFAULT)
+  GRPC_CERTS_HOST         Host cert dir (default: $GRPC_CERTS_HOST_DEFAULT)
   GRPC_PROTO              Proto filename (default: $GRPC_PROTO_DEFAULT)
 
 Notes:
   - Mounts "\$PROJECT_ROOT/\$GRPC_IMPORT_PATH_HOST" to /proto:ro
-  - You usually want: -insecure -import-path /proto -proto \$GRPC_PROTO
+  - Mounts "\$PROJECT_ROOT/\$GRPC_CERTS_HOST" to /certs:ro
+  - For mTLS, you usually want:
+    -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key
+    -import-path /proto -proto \$GRPC_PROTO
 EOF
   exit 0
 fi
@@ -69,6 +75,6 @@ NETWORK="$(detect_network)"
 exec docker run --rm \
   --network "$NETWORK" \
   -v "$PROJECT_ROOT/$GRPC_IMPORT_PATH_HOST:/proto:ro" \
+  -v "$PROJECT_ROOT/$GRPC_CERTS_HOST:/certs:ro" \
   fullstorydev/grpcurl \
   "$@"
-

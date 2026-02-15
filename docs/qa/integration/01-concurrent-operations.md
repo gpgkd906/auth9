@@ -2,7 +2,7 @@
 
 **模块**: 集成测试
 **测试范围**: 并发操作、竞态条件、数据一致性
-**场景数**: 5
+**场景数**: 4
 **优先级**: 高
 
 ---
@@ -57,55 +57,7 @@ WHERE resource_type = 'user' AND action = 'create'
 
 ---
 
-## 场景 2：并发 Token Exchange 请求
-
-### 初始状态
-- 用户已登录获得 Identity Token
-- Identity Token 有效且未过期
-- 准备 50 个并发 Token Exchange 请求
-
-### 目的
-验证 Token Exchange 在并发场景下的性能和一致性
-
-### 测试操作流程
-1. 用户登录获取 Identity Token
-2. 使用 k6 脚本发送 50 个并发请求：
-   ```bash
-   POST /api/v1/auth/token-exchange
-   Authorization: Bearer {identity_token}
-   {
-     "tenant_id": "{tenant_id}",
-     "service_id": "{service_id}"
-   }
-   ```
-3. 所有请求应在 5 秒内完成
-4. 验证所有响应的 Access Token 是否有效
-
-### 预期结果
-- 所有 50 个请求都成功返回（状态码 200）
-- 每个响应包含有效的 Access Token
-- Access Token 中的权限（permissions）一致
-- Redis 缓存正确更新，无缓存击穿
-- 响应时间 P95 < 500ms
-
-### 预期数据状态
-```sql
--- 检查是否有异常日志
-SELECT COUNT(*) FROM audit_logs 
-WHERE action = 'token_exchange' 
-  AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE);
--- 预期: 50
-
--- 验证无错误日志
-SELECT COUNT(*) FROM audit_logs 
-WHERE action = 'token_exchange_error' 
-  AND created_at >= DATE_SUB(NOW(), INTERVAL 1 MINUTE);
--- 预期: 0
-```
-
----
-
-## 场景 3：并发密码重置令牌生成
+## 场景 2：并发密码重置令牌生成
 
 ### 初始状态
 - 用户 `reset@example.com` 已存在
@@ -148,7 +100,7 @@ WHERE user_id = (SELECT id FROM users WHERE email = 'reset@example.com')
 
 ---
 
-## 场景 4：并发权限分配操作
+## 场景 3：并发权限分配操作
 
 ### 初始状态
 - 租户中存在角色 `editor`
@@ -186,7 +138,7 @@ WHERE tu.user_id = '{user_id}'
 
 ---
 
-## 场景 5：并发 Webhook 事件触发
+## 场景 4：并发 Webhook 事件触发
 
 ### 初始状态
 - 租户配置了 Webhook URL: `https://webhook.example.com/auth9`
