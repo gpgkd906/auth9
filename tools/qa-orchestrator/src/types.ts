@@ -115,6 +115,11 @@ export interface CreateTaskRequest {
   target_files?: string[];
 }
 
+export interface DeleteTaskResponse {
+  task_id: string;
+  deleted: boolean;
+}
+
 export interface NamedOption {
   id: string;
 }
@@ -146,7 +151,7 @@ export interface AgentConfig {
   templates: AgentTemplates;
 }
 
-export type WorkflowStepType = 'init_once' | 'qa' | 'fix' | 'retest';
+export type WorkflowStepType = 'init_once' | 'qa' | 'ticket_scan' | 'fix' | 'retest';
 export type StepHookEngine = 'cel';
 export type StepPrehookUiMode = 'visual' | 'cel';
 export type StepPrehookVisualOp = 'all' | 'any';

@@ -1,222 +1,501 @@
 runner:
-  shell: "/bin/zsh"
-  shell_arg: "-lc"
-
+  shell: /bin/zsh
+  shell_arg: -lc
 resume:
   auto: true
-
 defaults:
-  workspace: "auth9"
-  workflow: "qa_fix_retest"
-
+  workspace: auth9
+  workflow: qa_fix_retest
 workspaces:
   auth9:
-    root_path: "../.."
+    root_path: ../..
     qa_targets:
-      - "docs/qa"
-      - "docs/security"
-    ticket_dir: "docs/ticket"
-
+    - docs/qa
+    - docs/security
+    ticket_dir: docs/ticket
 agents:
   opencode:
     templates:
-      init_once: "echo \"qa-orchestrator init_once\""
-      qa: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-      retest: "opencode run \"读取文档：{rel_path}，执行QA测试\" -m \"deepseek/deepseek-chat\""
-      loop_guard: "if [ \"{unresolved_items}\" -eq 0 ]; then echo stop; else echo continue; fi"
+      init_once: null
+      qa: opencode run "读取文档：{rel_path}，执行QA测试" -m "deepseek/deepseek-chat"
+      fix: null
+      retest: opencode run "读取文档：{rel_path}，执行QA测试" -m "deepseek/deepseek-chat"
+      loop_guard: null
   claudecode:
     templates:
-      fix: "claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json \"/ticket-fix {ticket_paths}\""
-
+      init_once: null
+      qa: null
+      fix: claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json "/ticket-fix {ticket_paths}"
+      retest: null
+      loop_guard: null
 workflows:
-  qa_only:
-    steps:
-      - id: "init_once"
-        type: "init_once"
-        enabled: false
-      - id: "qa"
-        type: "qa"
-        enabled: true
-        agent_id: "opencode"
-      - id: "fix"
-        type: "fix"
-        enabled: false
-      - id: "retest"
-        type: "retest"
-        enabled: false
-    loop:
-      mode: "once"
-      guard:
-        enabled: true
-        stop_when_no_unresolved: true
-        agent_id: null
   qa_fix:
     steps:
-      - id: "init_once"
-        type: "init_once"
-        enabled: false
-      - id: "qa"
-        type: "qa"
-        enabled: true
-        agent_id: "opencode"
-      - id: "fix"
-        type: "fix"
-        enabled: true
-        agent_id: "claudecode"
-        prehook:
-          engine: "cel"
-          when: "active_ticket_count > 0"
-          reason: "skip fix when no active tickets"
-          ui:
-            mode: "visual"
-            preset_id: "has_active_tickets"
-            expr:
-              op: "all"
-              rules:
-                - field: "active_ticket_count"
-                  cmp: ">"
-                  value: 0
-      - id: "retest"
-        type: "retest"
-        enabled: false
+    - id: init_once
+      type: init_once
+      enabled: false
+      agent_id: null
+    - id: qa
+      type: qa
+      enabled: true
+      agent_id: opencode
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: false
+      agent_id: null
+    - id: fix
+      type: fix
+      enabled: true
+      agent_id: claudecode
+    - id: retest
+      type: retest
+      enabled: false
+      agent_id: null
     loop:
-      mode: "once"
+      mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
+        max_cycles: null
         agent_id: null
-  only-fix:
-    steps:
-      - id: "init_once"
-        type: "init_once"
-        enabled: false
-      - id: "qa"
-        type: "qa"
-        enabled: false
-      - id: "fix"
-        type: "fix"
-        enabled: true
-        agent_id: "claudecode"
-      - id: "retest"
-        type: "retest"
-        enabled: false
-    loop:
-      mode: "once"
-      guard:
-        enabled: true
-        stop_when_no_unresolved: true
-        agent_id: null
-  qa_fix_retest:
-    steps:
-      - id: "init_once"
-        type: "init_once"
-        enabled: false
-      - id: "qa"
-        type: "qa"
-        enabled: true
-        agent_id: "opencode"
-      - id: "fix"
-        type: "fix"
-        enabled: true
-        agent_id: "claudecode"
-        prehook:
-          engine: "cel"
-          when: "active_ticket_count > 0"
-          reason: "skip fix when no active tickets"
-          ui:
-            mode: "visual"
-            preset_id: "has_active_tickets"
-            expr:
-              op: "all"
-              rules:
-                - field: "active_ticket_count"
-                  cmp: ">"
-                  value: 0
-      - id: "retest"
-        type: "retest"
-        enabled: true
-        agent_id: "opencode"
-        prehook:
-          engine: "cel"
-          when: "active_ticket_count > 0 && fix_exit_code == 0"
-          reason: "skip retest when fix did not run successfully"
-          ui:
-            mode: "visual"
-            preset_id: "retest_after_fix_success"
-            expr:
-              op: "all"
-              rules:
-                - field: "active_ticket_count"
-                  cmp: ">"
-                  value: 0
-                - field: "fix_exit_code"
-                  cmp: "=="
-                  value: 0
     finalize:
       rules:
-        - id: "skip_without_tickets"
-          engine: "cel"
-          when: "(qa_skipped == true || qa_enabled == false) && active_ticket_count == 0"
-          status: "skipped"
-          reason: "qa skipped and no tickets"
-        - id: "qa_passed_without_tickets"
-          engine: "cel"
-          when: "qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0"
-          status: "qa_passed"
-          reason: "qa passed with no tickets"
-        - id: "fix_disabled_with_tickets"
-          engine: "cel"
-          when: "fix_enabled == false && active_ticket_count > 0"
-          status: "unresolved"
-          reason: "fix disabled by workflow"
-        - id: "fix_failed"
-          engine: "cel"
-          when: "fix_ran == true && fix_success == false"
-          status: "unresolved"
-          reason: "fix failed"
-        - id: "fixed_without_retest"
-          engine: "cel"
-          when: "fix_success == true && retest_enabled == false"
-          status: "fixed"
-          reason: "fixed without retest"
-        - id: "fix_skipped_and_retest_disabled"
-          engine: "cel"
-          when: "fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0"
-          status: "unresolved"
-          reason: "fix skipped by prehook and retest disabled"
-        - id: "fixed_retest_skipped_after_fix_success"
-          engine: "cel"
-          when: "retest_enabled == true && retest_ran == false && fix_success == true"
-          status: "fixed"
-          reason: "retest skipped by prehook"
-        - id: "unresolved_retest_skipped_without_fix"
-          engine: "cel"
-          when: "retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0"
-          status: "unresolved"
-          reason: "fix skipped by prehook and retest skipped by prehook"
-        - id: "verified_after_retest"
-          engine: "cel"
-          when: "retest_ran == true && retest_success == true && retest_new_ticket_count == 0"
-          status: "verified"
-          reason: "retest passed"
-        - id: "unresolved_after_retest"
-          engine: "cel"
-          when: "retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)"
-          status: "unresolved"
-          reason: "retest still failing"
-        - id: "fallback_unresolved_with_tickets"
-          engine: "cel"
-          when: "active_ticket_count > 0"
-          status: "unresolved"
-          reason: "unresolved tickets remain"
-        - id: "fallback_qa_passed"
-          engine: "cel"
-          when: "active_ticket_count == 0"
-          status: "qa_passed"
-          reason: "no active tickets"
+      - id: skip_without_tickets
+        engine: cel
+        when: (qa_skipped == true || qa_enabled == false) && active_ticket_count == 0
+        status: skipped
+        reason: qa skipped and no tickets
+      - id: qa_passed_without_tickets
+        engine: cel
+        when: qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0
+        status: qa_passed
+        reason: qa passed with no tickets
+      - id: fix_disabled_with_tickets
+        engine: cel
+        when: fix_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix disabled by workflow
+      - id: fix_failed
+        engine: cel
+        when: fix_ran == true && fix_success == false
+        status: unresolved
+        reason: fix failed
+      - id: fixed_without_retest
+        engine: cel
+        when: fix_success == true && retest_enabled == false
+        status: fixed
+        reason: fixed without retest
+      - id: fix_skipped_and_retest_disabled
+        engine: cel
+        when: fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest disabled
+      - id: fixed_retest_skipped_after_fix_success
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == true
+        status: fixed
+        reason: retest skipped by prehook
+      - id: unresolved_retest_skipped_without_fix
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest skipped by prehook
+      - id: verified_after_retest
+        engine: cel
+        when: retest_ran == true && retest_success == true && retest_new_ticket_count == 0
+        status: verified
+        reason: retest passed
+      - id: unresolved_after_retest
+        engine: cel
+        when: retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)
+        status: unresolved
+        reason: retest still failing
+      - id: fallback_unresolved_with_tickets
+        engine: cel
+        when: active_ticket_count > 0
+        status: unresolved
+        reason: unresolved tickets remain
+      - id: fallback_qa_passed
+        engine: cel
+        when: active_ticket_count == 0
+        status: qa_passed
+        reason: no active tickets
+    qa: null
+    fix: null
+    retest: null
+  workflow-1771129413274:
+    steps:
+    - id: init_once
+      type: init_once
+      enabled: false
+      agent_id: null
+    - id: qa
+      type: qa
+      enabled: false
+      agent_id: null
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: true
+      agent_id: null
+    - id: fix
+      type: fix
+      enabled: true
+      agent_id: claudecode
+    - id: retest
+      type: retest
+      enabled: false
+      agent_id: null
     loop:
-      mode: "once"
+      mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
+        max_cycles: null
         agent_id: null
+    finalize:
+      rules:
+      - id: skip_without_tickets
+        engine: cel
+        when: (qa_skipped == true || qa_enabled == false) && active_ticket_count == 0
+        status: skipped
+        reason: qa skipped and no tickets
+      - id: qa_passed_without_tickets
+        engine: cel
+        when: qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0
+        status: qa_passed
+        reason: qa passed with no tickets
+      - id: fix_disabled_with_tickets
+        engine: cel
+        when: fix_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix disabled by workflow
+      - id: fix_failed
+        engine: cel
+        when: fix_ran == true && fix_success == false
+        status: unresolved
+        reason: fix failed
+      - id: fixed_without_retest
+        engine: cel
+        when: fix_success == true && retest_enabled == false
+        status: fixed
+        reason: fixed without retest
+      - id: fix_skipped_and_retest_disabled
+        engine: cel
+        when: fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest disabled
+      - id: fixed_retest_skipped_after_fix_success
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == true
+        status: fixed
+        reason: retest skipped by prehook
+      - id: unresolved_retest_skipped_without_fix
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest skipped by prehook
+      - id: verified_after_retest
+        engine: cel
+        when: retest_ran == true && retest_success == true && retest_new_ticket_count == 0
+        status: verified
+        reason: retest passed
+      - id: unresolved_after_retest
+        engine: cel
+        when: retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)
+        status: unresolved
+        reason: retest still failing
+      - id: fallback_unresolved_with_tickets
+        engine: cel
+        when: active_ticket_count > 0
+        status: unresolved
+        reason: unresolved tickets remain
+      - id: fallback_qa_passed
+        engine: cel
+        when: active_ticket_count == 0
+        status: qa_passed
+        reason: no active tickets
+    qa: null
+    fix: null
+    retest: null
+  qa_fix_retest:
+    steps:
+    - id: init_once
+      type: init_once
+      enabled: false
+      agent_id: null
+    - id: qa
+      type: qa
+      enabled: true
+      agent_id: opencode
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: false
+      agent_id: null
+    - id: fix
+      type: fix
+      enabled: true
+      agent_id: claudecode
+    - id: retest
+      type: retest
+      enabled: true
+      agent_id: opencode
+    loop:
+      mode: once
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        max_cycles: null
+        agent_id: null
+    finalize:
+      rules:
+      - id: skip_without_tickets
+        engine: cel
+        when: (qa_skipped == true || qa_enabled == false) && active_ticket_count == 0
+        status: skipped
+        reason: qa skipped and no tickets
+      - id: qa_passed_without_tickets
+        engine: cel
+        when: qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0
+        status: qa_passed
+        reason: qa passed with no tickets
+      - id: fix_disabled_with_tickets
+        engine: cel
+        when: fix_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix disabled by workflow
+      - id: fix_failed
+        engine: cel
+        when: fix_ran == true && fix_success == false
+        status: unresolved
+        reason: fix failed
+      - id: fixed_without_retest
+        engine: cel
+        when: fix_success == true && retest_enabled == false
+        status: fixed
+        reason: fixed without retest
+      - id: fix_skipped_and_retest_disabled
+        engine: cel
+        when: fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest disabled
+      - id: fixed_retest_skipped_after_fix_success
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == true
+        status: fixed
+        reason: retest skipped by prehook
+      - id: unresolved_retest_skipped_without_fix
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest skipped by prehook
+      - id: verified_after_retest
+        engine: cel
+        when: retest_ran == true && retest_success == true && retest_new_ticket_count == 0
+        status: verified
+        reason: retest passed
+      - id: unresolved_after_retest
+        engine: cel
+        when: retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)
+        status: unresolved
+        reason: retest still failing
+      - id: fallback_unresolved_with_tickets
+        engine: cel
+        when: active_ticket_count > 0
+        status: unresolved
+        reason: unresolved tickets remain
+      - id: fallback_qa_passed
+        engine: cel
+        when: active_ticket_count == 0
+        status: qa_passed
+        reason: no active tickets
+    qa: null
+    fix: null
+    retest: null
+  qa_only:
+    steps:
+    - id: init_once
+      type: init_once
+      enabled: false
+      agent_id: null
+    - id: qa
+      type: qa
+      enabled: true
+      agent_id: opencode
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: false
+      agent_id: null
+    - id: fix
+      type: fix
+      enabled: false
+      agent_id: null
+    - id: retest
+      type: retest
+      enabled: false
+      agent_id: null
+    loop:
+      mode: once
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        max_cycles: null
+        agent_id: null
+    finalize:
+      rules:
+      - id: skip_without_tickets
+        engine: cel
+        when: (qa_skipped == true || qa_enabled == false) && active_ticket_count == 0
+        status: skipped
+        reason: qa skipped and no tickets
+      - id: qa_passed_without_tickets
+        engine: cel
+        when: qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0
+        status: qa_passed
+        reason: qa passed with no tickets
+      - id: fix_disabled_with_tickets
+        engine: cel
+        when: fix_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix disabled by workflow
+      - id: fix_failed
+        engine: cel
+        when: fix_ran == true && fix_success == false
+        status: unresolved
+        reason: fix failed
+      - id: fixed_without_retest
+        engine: cel
+        when: fix_success == true && retest_enabled == false
+        status: fixed
+        reason: fixed without retest
+      - id: fix_skipped_and_retest_disabled
+        engine: cel
+        when: fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest disabled
+      - id: fixed_retest_skipped_after_fix_success
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == true
+        status: fixed
+        reason: retest skipped by prehook
+      - id: unresolved_retest_skipped_without_fix
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest skipped by prehook
+      - id: verified_after_retest
+        engine: cel
+        when: retest_ran == true && retest_success == true && retest_new_ticket_count == 0
+        status: verified
+        reason: retest passed
+      - id: unresolved_after_retest
+        engine: cel
+        when: retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)
+        status: unresolved
+        reason: retest still failing
+      - id: fallback_unresolved_with_tickets
+        engine: cel
+        when: active_ticket_count > 0
+        status: unresolved
+        reason: unresolved tickets remain
+      - id: fallback_qa_passed
+        engine: cel
+        when: active_ticket_count == 0
+        status: qa_passed
+        reason: no active tickets
+    qa: null
+    fix: null
+    retest: null
+  only_fix_scan:
+    steps:
+    - id: init_once
+      type: init_once
+      enabled: false
+      agent_id: null
+    - id: qa
+      type: qa
+      enabled: false
+      agent_id: null
+    - id: ticket_scan
+      type: ticket_scan
+      enabled: true
+      agent_id: null
+    - id: fix
+      type: fix
+      enabled: true
+      agent_id: claudecode
+    - id: retest
+      type: retest
+      enabled: false
+      agent_id: null
+    loop:
+      mode: once
+      guard:
+        enabled: true
+        stop_when_no_unresolved: true
+        max_cycles: null
+        agent_id: null
+    finalize:
+      rules:
+      - id: skip_without_tickets
+        engine: cel
+        when: (qa_skipped == true || qa_enabled == false) && active_ticket_count == 0
+        status: skipped
+        reason: qa skipped and no tickets
+      - id: qa_passed_without_tickets
+        engine: cel
+        when: qa_ran == true && qa_exit_code == 0 && active_ticket_count == 0
+        status: qa_passed
+        reason: qa passed with no tickets
+      - id: fix_disabled_with_tickets
+        engine: cel
+        when: fix_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix disabled by workflow
+      - id: fix_failed
+        engine: cel
+        when: fix_ran == true && fix_success == false
+        status: unresolved
+        reason: fix failed
+      - id: fixed_without_retest
+        engine: cel
+        when: fix_success == true && retest_enabled == false
+        status: fixed
+        reason: fixed without retest
+      - id: fix_skipped_and_retest_disabled
+        engine: cel
+        when: fix_enabled == true && fix_ran == false && fix_success == false && retest_enabled == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest disabled
+      - id: fixed_retest_skipped_after_fix_success
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == true
+        status: fixed
+        reason: retest skipped by prehook
+      - id: unresolved_retest_skipped_without_fix
+        engine: cel
+        when: retest_enabled == true && retest_ran == false && fix_success == false && active_ticket_count > 0
+        status: unresolved
+        reason: fix skipped by prehook and retest skipped by prehook
+      - id: verified_after_retest
+        engine: cel
+        when: retest_ran == true && retest_success == true && retest_new_ticket_count == 0
+        status: verified
+        reason: retest passed
+      - id: unresolved_after_retest
+        engine: cel
+        when: retest_ran == true && (retest_success == false || retest_new_ticket_count > 0)
+        status: unresolved
+        reason: retest still failing
+      - id: fallback_unresolved_with_tickets
+        engine: cel
+        when: active_ticket_count > 0
+        status: unresolved
+        reason: unresolved tickets remain
+      - id: fallback_qa_passed
+        engine: cel
+        when: active_ticket_count == 0
+        status: qa_passed
+        reason: no active tickets
+    qa: null
+    fix: null
+    retest: null

@@ -48,7 +48,7 @@ interface PendingEntitySwitch {
   kind: ConfigEntityKind;
   id: string;
 }
-const WORKFLOW_STEP_ORDER: WorkflowStepType[] = ['init_once', 'qa', 'fix', 'retest'];
+const WORKFLOW_STEP_ORDER: WorkflowStepType[] = ['init_once', 'qa', 'ticket_scan', 'fix', 'retest'];
 const CONFIG_FORM_TABS: Array<{ id: ConfigFormTab; label: string; hint: string }> = [
   { id: 'overview', label: '总览', hint: '默认入口与配置状态' },
   { id: 'workspace', label: 'Workspace', hint: '目录、目标与工单路径' },
@@ -137,6 +137,25 @@ const STEP_PREHOOK_PRESETS: Record<WorkflowStepType, PrehookPreset[]> = {
         rules: [{ field: 'fix_required', cmp: '==', value: true }]
       },
       reason: 'skip qa when fix is not required'
+    }
+  ],
+  ticket_scan: [
+    {
+      id: 'always_run',
+      label: 'Always run',
+      description: 'Scan ticket directory and map active tickets to task items.',
+      expr: { op: 'all', rules: [] },
+      reason: 'run ticket scan by default'
+    },
+    {
+      id: 'has_active_tickets',
+      label: 'Has active tickets',
+      description: 'Run scan only when known active tickets already exist in context.',
+      expr: {
+        op: 'all',
+        rules: [{ field: 'active_ticket_count', cmp: '>', value: 0 }]
+      },
+      reason: 'skip scan when no active tickets in context'
     }
   ],
   fix: [
@@ -386,6 +405,7 @@ function defaultWorkflowSteps(firstAgent: string) {
   return [
     { id: 'init_once', type: 'init_once' as const, enabled: false, agent_id: undefined },
     { id: 'qa', type: 'qa' as const, enabled: Boolean(firstAgent), agent_id: firstAgent || undefined },
+    { id: 'ticket_scan', type: 'ticket_scan' as const, enabled: false, agent_id: undefined },
     { id: 'fix', type: 'fix' as const, enabled: false, agent_id: undefined },
     { id: 'retest', type: 'retest' as const, enabled: false, agent_id: undefined }
   ];
@@ -763,6 +783,16 @@ export function App() {
       }
       return;
     }
+    if (event.event_type === 'task_deleted') {
+      const selectedId = selectedTaskIdRef.current;
+      if (selectedId && selectedId === event.task_id) {
+        setSelectedTaskId(null);
+        setDetail(null);
+        setLogs('');
+      }
+      scheduleRealtimeRefresh({ tasks: true, detail: false });
+      return;
+    }
     if (event.event_type === 'step_prehook_evaluated') {
       if (viewTabRef.current === 'tasks') {
         appendRealtimeRuleEvent(event);
@@ -976,6 +1006,37 @@ export function App() {
     try {
       await action();
       await refreshSnapshot(selectedTaskId);
+    } catch (err) {
+      setError(String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function deleteSelectedTask() {
+    if (!selectedTaskId) {
+      return;
+    }
+    const ok = window.confirm(
+      'Delete this task permanently? This removes task records and run logs, but keeps ticket markdown files.'
+    );
+    if (!ok) {
+      return;
+    }
+    setBusy(true);
+    try {
+      await api.deleteTask(selectedTaskId);
+      const latest = await api.listTasks();
+      setTasks(latest);
+      const nextTaskId = latest[0]?.id ?? null;
+      setSelectedTaskId(nextTaskId);
+      if (nextTaskId) {
+        await loadTaskDetails(nextTaskId);
+      } else {
+        setDetail(null);
+        setLogs('');
+      }
+      setError('');
     } catch (err) {
       setError(String(err));
     } finally {
@@ -1570,6 +1631,9 @@ export function App() {
               </button>
               <button disabled={!selectedTaskId || busy} onClick={() => withTaskAction(() => api.resumeTask(selectedTaskId!))}>
                 Resume
+              </button>
+              <button className="danger-button" disabled={!selectedTaskId || busy} onClick={() => void deleteSelectedTask()}>
+                Delete
               </button>
             </div>
 
@@ -2169,6 +2233,7 @@ export function App() {
                             if (!step) {
                               return null;
                             }
+                            const isBuiltinTicketScan = stepType === 'ticket_scan';
                             return (
                               <div key={stepType} className="step-row">
                                 <label>
@@ -2182,6 +2247,8 @@ export function App() {
                                           target.enabled = event.target.checked;
                                           if (!event.target.checked) {
                                             target.agent_id = undefined;
+                                          } else if (isBuiltinTicketScan) {
+                                            target.agent_id = undefined;
                                           } else if (!target.agent_id && agentKeys[0]) {
                                             target.agent_id = agentKeys[0];
                                           }
@@ -2192,17 +2259,22 @@ export function App() {
                                   {stepType}
                                 </label>
                                 <select
-                                  value={step.agent_id ?? ''}
-                                  disabled={!step.enabled}
+                                  value={isBuiltinTicketScan ? '' : (step.agent_id ?? '')}
+                                  disabled={!step.enabled || isBuiltinTicketScan}
                                   onChange={(event) =>
                                     updateConfig((draft) => {
                                       const target = draft.workflows[id].steps.find((entry) => entry.type === stepType);
                                       if (target) {
+                                        if (isBuiltinTicketScan) {
+                                          target.agent_id = undefined;
+                                          return;
+                                        }
                                         target.agent_id = event.target.value || undefined;
                                       }
                                     })
                                   }
                                 >
+                                  {isBuiltinTicketScan && <option value="">(builtin)</option>}
                                   <option value="">(none)</option>
                                   {agentKeys.map((agentId) => (
                                     <option key={agentId} value={agentId}>

@@ -7,6 +7,7 @@ import type {
   ConfigVersionSummary,
   CreateTaskOptions,
   CreateTaskRequest,
+  DeleteTaskResponse,
   SimulatePrehookRequest,
   SimulatePrehookResult,
   SaveConfigFormRequest,
@@ -44,6 +45,8 @@ export const api = {
     invoke<TaskSummary>('pause_task', { taskId }),
   resumeTask: (taskId: string) =>
     invoke<TaskSummary>('resume_task', { taskId }),
+  deleteTask: (taskId: string) =>
+    invoke<DeleteTaskResponse>('delete_task', { taskId }),
   retryTaskItem: (taskItemId: string) =>
     invoke<TaskSummary>('retry_task_item', { taskItemId }),
   streamTaskLogs: (taskId: string, limit = 300) =>
