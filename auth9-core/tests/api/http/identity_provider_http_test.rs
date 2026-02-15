@@ -351,7 +351,10 @@ async fn test_create_provider_conflict() {
         "display_name": "Google",
         "provider_id": "google",
         "enabled": true,
-        "config": {}
+        "config": {
+            "clientId": "test-client-id",
+            "clientSecret": "test-client-secret"
+        }
     });
 
     let (status, _): (StatusCode, Option<SuccessResponse<IdentityProvider>>) =
@@ -377,6 +380,29 @@ async fn test_create_provider_validation_error() {
         post_json(&app, "/api/v1/identity-providers", &input).await;
 
     // Bad request due to missing required field
+    assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
+}
+
+#[tokio::test]
+async fn test_create_provider_missing_config_fields() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    // Google provider without required clientId
+    let input = serde_json::json!({
+        "alias": "google-missing",
+        "provider_id": "google",
+        "enabled": true,
+        "config": {
+            "clientSecret": "test-secret"
+        }
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/identity-providers", &input).await;
+
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
 

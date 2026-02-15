@@ -13,7 +13,7 @@ use axum::{
     middleware::Next,
     response::{IntoResponse, Response},
 };
-use redis::{aio::ConnectionManager, AsyncCommands};
+use redis::{aio::ConnectionManager, Script};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
@@ -172,9 +172,11 @@ impl RateLimitState {
             .unwrap_or(1.0)
     }
 
-    /// Check rate limit and increment counter using sliding window algorithm
+    /// Check rate limit and increment counter using sliding window algorithm.
     ///
-    /// Returns Ok(remaining) if allowed, Err(retry_after_secs) if rate limited
+    /// Uses a Lua script to atomically clean up, count, and conditionally add
+    /// the request to the sorted set. This prevents race conditions where
+    /// concurrent requests could bypass the rate limit.
     pub async fn check_and_increment(
         &self,
         key: &RateLimitKey,
@@ -211,64 +213,68 @@ impl RateLimitState {
             .as_secs();
 
         let window_start = now - window_secs;
-
-        // Use Redis sorted set for sliding window
-        // Score = timestamp, Member = unique request ID
-        let mut conn = redis.clone();
-
-        // Clean up old entries and count current requests in a transaction
         let request_id = format!("{}:{}", now, uuid::Uuid::new_v4());
 
-        // Remove entries outside the window
-        let _: () = conn
-            .zrembyscore(&redis_key, 0i64, window_start as i64)
+        let mut conn = redis.clone();
+
+        // Atomic Lua script: clean up expired entries, count current, conditionally add.
+        // Returns: [allowed (0/1), current_count, oldest_score_or_0]
+        let script = Script::new(
+            r#"
+            -- Remove entries outside the window
+            redis.call('ZREMRANGEBYSCORE', KEYS[1], 0, ARGV[1])
+            -- Count current requests in window
+            local count = redis.call('ZCARD', KEYS[1])
+            if count >= tonumber(ARGV[4]) then
+                -- Rate limited: get oldest entry for retry-after calculation
+                local oldest = redis.call('ZRANGE', KEYS[1], 0, 0, 'WITHSCORES')
+                local oldest_score = 0
+                if #oldest >= 2 then
+                    oldest_score = tonumber(oldest[2])
+                end
+                return {0, count, oldest_score}
+            end
+            -- Allowed: add the new request and set expiry
+            redis.call('ZADD', KEYS[1], ARGV[2], ARGV[3])
+            redis.call('EXPIRE', KEYS[1], ARGV[5])
+            return {1, count, 0}
+            "#,
+        );
+
+        let result: Vec<i64> = script
+            .key(&redis_key)
+            .arg(window_start as i64)
+            .arg(now as i64)
+            .arg(&request_id)
+            .arg(max_requests as i64)
+            .arg((window_secs + 1) as i64)
+            .invoke_async(&mut conn)
             .await
             .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
 
-        // Count current requests in window
-        let current_count: u64 = conn
-            .zcount(&redis_key, window_start as i64, now as i64)
-            .await
-            .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
+        let allowed = result[0] == 1;
+        let current_count = result[1] as u64;
 
-        if current_count >= max_requests {
-            // Get the oldest entry to calculate retry-after
-            let oldest: Vec<(String, f64)> = conn
-                .zrange_withscores(&redis_key, 0, 0)
-                .await
-                .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
-
-            let retry_after = if let Some((_, score)) = oldest.first() {
-                let oldest_time = *score as u64;
-                (oldest_time + window_secs).saturating_sub(now)
+        if allowed {
+            Ok(RateLimitResult {
+                allowed: true,
+                remaining: max_requests.saturating_sub(current_count + 1),
+                reset_at: now + window_secs,
+            })
+        } else {
+            let oldest_score = result[2] as u64;
+            let retry_after = if oldest_score > 0 {
+                (oldest_score + window_secs).saturating_sub(now)
             } else {
                 window_secs
             };
 
-            return Ok(RateLimitResult {
+            Ok(RateLimitResult {
                 allowed: false,
                 remaining: 0,
                 reset_at: now + retry_after,
-            });
+            })
         }
-
-        // Add the new request
-        let _: () = conn
-            .zadd(&redis_key, &request_id, now as i64)
-            .await
-            .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
-
-        // Set expiry on the key
-        let _: () = conn
-            .expire(&redis_key, (window_secs + 1) as i64)
-            .await
-            .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
-
-        Ok(RateLimitResult {
-            allowed: true,
-            remaining: max_requests - current_count - 1,
-            reset_at: now + window_secs,
-        })
     }
 }
 

@@ -4,6 +4,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/ca
 import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
+import { FormattedDate } from "~/components/ui/formatted-date";
 
 // Type for tenant info embedded in user-tenant response
 interface TenantInfo {
@@ -379,7 +380,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3">{user.display_name || "-"}</td>
                     <td className="px-4 py-3">{user.mfa_enabled ? "Enabled" : "Disabled"}</td>
                     <td className="px-4 py-3">
-                      {new Date(user.updated_at).toLocaleString()}
+                      <FormattedDate date={user.updated_at} />
                     </td>
                     <td className="px-4 py-3">
                       <DropdownMenu>

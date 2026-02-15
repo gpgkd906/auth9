@@ -209,7 +209,7 @@ export default function SecurityAlertsPage() {
                           </span>
                         )}
                       </div>
-                      <div className="text-sm text-[var(--text-secondary)] mb-2">
+                      <div className="text-sm text-[var(--text-secondary)] mb-2" suppressHydrationWarning>
                         {formatDate(alert.created_at)}
                         {alert.user_id && ` • User: ${alert.user_id.slice(0, 8)}...`}
                       </div>

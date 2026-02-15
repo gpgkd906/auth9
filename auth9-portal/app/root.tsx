@@ -9,6 +9,7 @@ import {
 } from "react-router";
 import type { LinksFunction, MetaFunction } from "react-router";
 import { ConfirmProvider } from "~/hooks/useConfirm";
+import { useNonce } from "~/hooks/useNonce";
 import "./styles/tailwind.css";
 
 export const links: LinksFunction = () => [
@@ -32,6 +33,7 @@ export const meta: MetaFunction = () => {
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
+  const nonce = useNonce();
   return (
     <html lang="en" className="h-full">
       <head>
@@ -44,8 +46,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body className="h-full antialiased">
         {children}
-        <ScrollRestoration />
-        <Scripts />
+        <ScrollRestoration nonce={nonce} />
+        <Scripts nonce={nonce} />
       </body>
     </html>
   );

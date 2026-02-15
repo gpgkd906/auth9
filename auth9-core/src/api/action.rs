@@ -2,7 +2,7 @@
 //!
 //! Provides REST API endpoints for managing Auth9 Actions
 
-use crate::api::{MessageResponse, SuccessResponse};
+use crate::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use crate::domain::{
     Action, ActionContext, ActionExecution, ActionStats, ActionTrigger, BatchUpsertResponse,
     CreateActionInput, LogQueryFilter, StringUuid, TestActionResponse, UpdateActionInput,
@@ -189,7 +189,7 @@ pub async fn query_action_logs<S: HasServices>(
     auth: AuthUser,
     Path(tenant_id): Path<StringUuid>,
     Query(params): Query<LogQueryParams>,
-) -> Result<Json<SuccessResponse<Vec<ActionExecution>>>, AppError> {
+) -> Result<Json<PaginatedResponse<ActionExecution>>, AppError> {
     enforce(state.config(), &auth, &PolicyInput {
         action: PolicyAction::ActionRead,
         scope: ResourceScope::Tenant(tenant_id),
@@ -213,6 +213,10 @@ pub async fn query_action_logs<S: HasServices>(
         None
     };
 
+    let per_page = params.limit.unwrap_or(50) as i64;
+    let offset = params.offset.unwrap_or(0) as i64;
+    let page = offset / per_page + 1;
+
     let filter = LogQueryFilter {
         action_id,
         user_id,
@@ -224,9 +228,9 @@ pub async fn query_action_logs<S: HasServices>(
     };
 
     let action_service = state.action_service();
-    let logs = action_service.query_logs(tenant_id, filter).await?;
+    let (logs, total) = action_service.query_logs(tenant_id, filter).await?;
 
-    Ok(Json(SuccessResponse::new(logs)))
+    Ok(Json(PaginatedResponse::new(logs, page, per_page, total)))
 }
 
 /// Get action statistics

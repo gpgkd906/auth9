@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { Action, ActionExecution, ActionStats } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant } from "~/lib/auth9-client";
+import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { ArrowLeftIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon, CodeIcon, ActivityLogIcon, ChevronDownIcon, ChevronRightIcon } from "@radix-ui/react-icons";
 
@@ -222,11 +223,11 @@ export default function ActionDetailPage() {
           </div>
           <div>
             <div className="text-muted-foreground mb-1">Created At</div>
-            <div>{new Date(action.createdAt).toLocaleString()}</div>
+            <div><FormattedDate date={action.createdAt} /></div>
           </div>
           <div>
             <div className="text-muted-foreground mb-1">Updated At</div>
-            <div>{new Date(action.updatedAt).toLocaleString()}</div>
+            <div><FormattedDate date={action.updatedAt} /></div>
           </div>
         </CardContent>
       </Card>
@@ -271,7 +272,7 @@ function ExecutionLogCard({ log }: { log: ActionExecution }) {
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
             <span>{log.durationMs}ms</span>
-            <span>{new Date(log.executedAt).toLocaleString()}</span>
+            <FormattedDate date={log.executedAt} />
           </div>
         </div>
       </button>
@@ -302,7 +303,7 @@ function ExecutionLogCard({ log }: { log: ActionExecution }) {
             </div>
             <div>
               <span className="text-muted-foreground">Executed At:</span>{" "}
-              <span>{new Date(log.executedAt).toLocaleString()}</span>
+              <FormattedDate date={log.executedAt} />
             </div>
             {log.userId && (
               <div className="col-span-2">

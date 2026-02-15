@@ -2018,6 +2018,10 @@ impl ActionRepository for TestActionRepository {
         Ok(vec![])
     }
 
+    async fn count_logs(&self, _filter: &auth9_core::domain::LogQueryFilter) -> Result<i64> {
+        Ok(0)
+    }
+
     async fn get_stats(&self, action_id: StringUuid) -> Result<Option<(i64, i64, f64, i64)>> {
         let actions = self.actions.read().await;
         if let Some(action) = actions.iter().find(|a| a.id == action_id) {

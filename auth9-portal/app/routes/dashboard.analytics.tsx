@@ -36,7 +36,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   try {
     const [statsResponse, trendResponse] = await Promise.all([
       analyticsApi.getStats(startDate, endDate, accessToken),
-      analyticsApi.getDailyTrend(days, accessToken),
+      analyticsApi.getDailyTrend(days, accessToken, customStart ? startDate : undefined, customStart ? endDate : undefined),
     ]);
     return { stats: statsResponse.data, dailyTrend: trendResponse.data, days, rangeLabel, customStart, customEnd };
   } catch (error) {

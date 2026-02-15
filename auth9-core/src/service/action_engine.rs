@@ -290,8 +290,13 @@ fn create_js_runtime(
 ) -> Result<JsRuntime> {
     tracing::debug!("Creating thread-local V8 runtime with async extensions");
 
+    let max_heap_bytes = config.max_heap_mb * 1024 * 1024;
+    let create_params =
+        deno_core::v8::Isolate::create_params().heap_limits(0, max_heap_bytes);
+
     let mut runtime = JsRuntime::new(RuntimeOptions {
         extensions: vec![auth9_action_ext::init_ops_and_esm()],
+        create_params: Some(create_params),
         ..Default::default()
     });
 
@@ -538,11 +543,17 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         let (handle_tx, handle_rx) =
             tokio::sync::oneshot::channel::<deno_core::v8::IsolateHandle>();
 
+        // Flag to track if the watchdog terminated execution (shared with blocking task)
+        let was_terminated = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let was_terminated_clone = was_terminated.clone();
+
         // Spawn timeout watchdog that will terminate V8 execution if it exceeds the limit
         let timeout_duration = Duration::from_millis(timeout_ms as u64);
         let watchdog = tokio::spawn(async move {
             if let Ok(isolate_handle) = handle_rx.await {
                 tokio::time::sleep(timeout_duration).await;
+                // Mark as terminated so the runtime is discarded instead of reused
+                was_terminated_clone.store(true, std::sync::atomic::Ordering::Release);
                 // Forcibly terminate V8 execution (works even on synchronous infinite loops)
                 isolate_handle.terminate_execution();
             }
@@ -550,6 +561,8 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 
         // Execute in blocking thread pool (JsRuntime is !Send, must stay on one thread)
         let handle = tokio::task::spawn_blocking(move || {
+            let max_heap_bytes = async_config.max_heap_mb * 1024 * 1024;
+
             // 1. Take or create JsRuntime
             let mut js_runtime = match take_js_runtime() {
                 Some(rt) => rt,
@@ -563,8 +576,32 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             };
 
             // Send IsolateHandle to the timeout watchdog
-            let _ = handle_tx
-                .send(js_runtime.v8_isolate().thread_safe_handle());
+            let isolate_handle = js_runtime.v8_isolate().thread_safe_handle();
+            let _ = handle_tx.send(isolate_handle.clone());
+
+            // Set up near-heap-limit callback to terminate execution on OOM.
+            // Strategy: on first call, terminate execution and allow a 2x bump
+            // so V8 has room to process the termination. On subsequent calls,
+            // only allow a small bump to prevent runaway growth.
+            let heap_handle = isolate_handle;
+            let heap_callback_count = Rc::new(std::cell::Cell::new(0u32));
+            let heap_callback_count_clone = heap_callback_count.clone();
+            js_runtime.add_near_heap_limit_callback(move |current_limit, _initial_limit| {
+                let count = heap_callback_count_clone.get();
+                heap_callback_count_clone.set(count + 1);
+                if count == 0 {
+                    tracing::warn!(
+                        "V8 isolate approaching heap limit ({}MB), terminating execution",
+                        current_limit / (1024 * 1024)
+                    );
+                    heap_handle.terminate_execution();
+                    // Allow 2x bump for V8 to process termination
+                    current_limit * 2
+                } else {
+                    // Already terminating, don't grow further
+                    current_limit + 1
+                }
+            });
 
             // 2. Reset per-execution op state
             {
@@ -679,48 +716,68 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                 )?
             };
 
-            // 7. Cleanup: remove context, result, and any user-defined globalThis properties
-            let _ = js_runtime.execute_script(
-                "<cleanup>",
-                r#"
-                (function() {
-                    // Whitelist of built-in globalThis properties to keep
-                    const builtins = new Set([
-                        'Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt',
-                        'Infinity', 'NaN', 'undefined', 'Boolean', 'String', 'Symbol',
-                        'Date', 'Promise', 'RegExp', 'Error', 'AggregateError', 'EvalError',
-                        'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError',
-                        'globalThis', 'JSON', 'Math', 'Intl', 'ArrayBuffer', 'Uint8Array',
-                        'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array',
-                        'Float32Array', 'Float64Array', 'Uint8ClampedArray', 'BigUint64Array',
-                        'BigInt64Array', 'DataView', 'Map', 'BigInt', 'Set', 'WeakMap',
-                        'WeakSet', 'WeakRef', 'FinalizationRegistry', 'Proxy', 'Reflect',
-                        'SharedArrayBuffer', 'Atomics', 'decodeURI', 'decodeURIComponent',
-                        'encodeURI', 'encodeURIComponent', 'escape', 'unescape',
-                        'eval', 'isFinite', 'isNaN',
-                        // Deno runtime
-                        'Deno',
-                        // Our polyfills (must survive cleanup)
-                        'fetch', 'setTimeout', 'clearTimeout', 'console', '__timers',
-                    ]);
-                    for (const key of Object.getOwnPropertyNames(globalThis)) {
-                        if (!builtins.has(key)) {
-                            try { delete globalThis[key]; } catch(e) {}
+            // 7. Check if the runtime was terminated by timeout or heap limit.
+            //    A terminated runtime is in an inconsistent state and must NOT be reused.
+            let terminated = was_terminated.load(std::sync::atomic::Ordering::Acquire)
+                || heap_callback_count.get() > 0;
+
+            if terminated {
+                // Runtime was forcibly terminated — discard it entirely.
+                // Do NOT return to pool; it will be dropped here.
+                tracing::warn!("V8 runtime was terminated (timeout or OOM), discarding instead of reusing");
+                // drop(js_runtime) happens automatically
+            } else {
+                // 7b. Cleanup: remove context, result, and any user-defined globalThis properties
+                let cleanup_ok = js_runtime.execute_script(
+                    "<cleanup>",
+                    r#"
+                    (function() {
+                        // Whitelist of built-in globalThis properties to keep
+                        const builtins = new Set([
+                            'Object', 'Function', 'Array', 'Number', 'parseFloat', 'parseInt',
+                            'Infinity', 'NaN', 'undefined', 'Boolean', 'String', 'Symbol',
+                            'Date', 'Promise', 'RegExp', 'Error', 'AggregateError', 'EvalError',
+                            'RangeError', 'ReferenceError', 'SyntaxError', 'TypeError', 'URIError',
+                            'globalThis', 'JSON', 'Math', 'Intl', 'ArrayBuffer', 'Uint8Array',
+                            'Int8Array', 'Uint16Array', 'Int16Array', 'Uint32Array', 'Int32Array',
+                            'Float32Array', 'Float64Array', 'Uint8ClampedArray', 'BigUint64Array',
+                            'BigInt64Array', 'DataView', 'Map', 'BigInt', 'Set', 'WeakMap',
+                            'WeakSet', 'WeakRef', 'FinalizationRegistry', 'Proxy', 'Reflect',
+                            'SharedArrayBuffer', 'Atomics', 'decodeURI', 'decodeURIComponent',
+                            'encodeURI', 'encodeURIComponent', 'escape', 'unescape',
+                            'eval', 'isFinite', 'isNaN',
+                            // Deno runtime
+                            'Deno',
+                            // Our polyfills (must survive cleanup)
+                            'fetch', 'setTimeout', 'clearTimeout', 'console', '__timers',
+                        ]);
+                        for (const key of Object.getOwnPropertyNames(globalThis)) {
+                            if (!builtins.has(key)) {
+                                try { delete globalThis[key]; } catch(e) {}
+                            }
                         }
-                    }
-                    // Also clean up any Object.prototype pollution
-                    for (const key of Object.getOwnPropertyNames(Object.prototype)) {
-                        if (!['constructor','__defineGetter__','__defineSetter__',
-                             '__lookupGetter__','__lookupSetter__','__proto__',
-                             'hasOwnProperty','isPrototypeOf','propertyIsEnumerable',
-                             'toString','valueOf','toLocaleString'].includes(key)) {
-                            try { delete Object.prototype[key]; } catch(e) {}
+                        // Also clean up any Object.prototype pollution
+                        for (const key of Object.getOwnPropertyNames(Object.prototype)) {
+                            if (!['constructor','__defineGetter__','__defineSetter__',
+                                 '__lookupGetter__','__lookupSetter__','__proto__',
+                                 'hasOwnProperty','isPrototypeOf','propertyIsEnumerable',
+                                 'toString','valueOf','toLocaleString'].includes(key)) {
+                                try { delete Object.prototype[key]; } catch(e) {}
+                            }
                         }
-                    }
-                })();
-                "#,
-            );
-            return_js_runtime(js_runtime);
+                    })();
+                    "#,
+                );
+
+                if cleanup_ok.is_ok() {
+                    // Remove heap limit callback and reset heap limit before returning to pool
+                    js_runtime.remove_near_heap_limit_callback(max_heap_bytes);
+                    return_js_runtime(js_runtime);
+                } else {
+                    // Cleanup script failed — runtime may be in a bad state, discard it
+                    tracing::warn!("V8 runtime cleanup failed, discarding runtime");
+                }
+            }
 
             Ok(modified_context)
         });
