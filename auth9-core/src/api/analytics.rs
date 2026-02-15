@@ -152,6 +152,10 @@ pub async fn list_tenant_events<S: HasAnalytics>(
 pub struct DailyTrendQuery {
     /// Number of days to show (default: 7)
     pub days: Option<i64>,
+    /// Start date in ISO 8601 format (e.g., "2024-01-01T00:00:00Z")
+    pub start: Option<String>,
+    /// End date in ISO 8601 format (e.g., "2024-01-31T23:59:59Z")
+    pub end: Option<String>,
 }
 
 /// Get daily login trend data
@@ -159,6 +163,20 @@ pub async fn get_daily_trend<S: HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<DailyTrendQuery>,
 ) -> Result<Json<SuccessResponse<Vec<DailyTrendPoint>>>, AppError> {
+    // First check for start/end date parameters
+    if let (Some(start), Some(end)) = (&params.start, &params.end) {
+        if let (Ok(start_dt), Ok(end_dt)) =
+            (start.parse::<DateTime<Utc>>(), end.parse::<DateTime<Utc>>())
+        {
+            let trend = state
+                .analytics_service()
+                .get_daily_trend_for_range(start_dt, end_dt)
+                .await?;
+            return Ok(Json(SuccessResponse::new(trend)));
+        }
+    }
+
+    // Fallback to days parameter
     let days = params.days.unwrap_or(7);
     let trend = state.analytics_service().get_daily_trend(days).await?;
     Ok(Json(SuccessResponse::new(trend)))

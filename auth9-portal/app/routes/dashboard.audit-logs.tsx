@@ -4,6 +4,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/ca
 import { Button } from "~/components/ui/button";
 import { auditApi } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { FormattedDate } from "~/components/ui/formatted-date";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Audit Logs - Auth9" }];
@@ -55,7 +56,7 @@ export default function AuditLogsPage() {
                     </td>
                     <td className="px-4 py-3">{log.actor_email || log.actor_display_name || "-"}</td>
                     <td className="px-4 py-3">
-                      {new Date(log.created_at).toLocaleString()}
+                      <FormattedDate date={log.created_at} />
                     </td>
                   </tr>
                 ))}

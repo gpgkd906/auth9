@@ -1353,9 +1353,18 @@ export const analyticsApi = {
 
   getDailyTrend: async (
     days = 7,
-    accessToken?: string
+    accessToken?: string,
+    startDate?: string,
+    endDate?: string
   ): Promise<{ data: DailyTrendPoint[] }> => {
-    const url = `${API_BASE_URL}/api/v1/analytics/daily-trend?days=${days}`;
+    const params = new URLSearchParams();
+    if (startDate && endDate) {
+      params.set("start", startDate);
+      params.set("end", endDate);
+    } else {
+      params.set("days", String(days));
+    }
+    const url = `${API_BASE_URL}/api/v1/analytics/daily-trend?${params}`;
     const response = await fetch(url, { headers: getHeaders(accessToken) });
     return handleResponse(response);
   },
@@ -1686,7 +1695,7 @@ export const actionApi = {
     success?: boolean,
     limit = 50,
     accessToken?: string
-  ): Promise<{ data: ActionExecution[] }> => {
+  ): Promise<{ data: ActionExecution[]; pagination: { page: number; per_page: number; total: number; total_pages: number } }> => {
     let url = `${API_BASE_URL}/api/v1/tenants/${tenantId}/actions/logs?limit=${limit}`;
     if (actionId) url += `&action_id=${actionId}`;
     if (success !== undefined) url += `&success=${success}`;

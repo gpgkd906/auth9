@@ -57,6 +57,17 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
     ) -> Result<IdentityProvider> {
         input.validate()?;
 
+        // Validate required config fields based on provider template
+        if let Some(template) = IdentityProviderTemplate::find(&input.provider_id) {
+            if let Err(missing) = template.validate_config(&input.config) {
+                return Err(AppError::Validation(format!(
+                    "Missing required config fields for '{}' provider: {}",
+                    input.provider_id,
+                    missing.join(", ")
+                )));
+            }
+        }
+
         let kc_provider = KeycloakIdentityProvider {
             alias: input.alias.clone(),
             display_name: input.display_name,

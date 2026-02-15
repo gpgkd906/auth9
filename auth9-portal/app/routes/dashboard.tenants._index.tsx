@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "~/components/ui/dialog";
+import { FormattedDate } from "~/components/ui/formatted-date";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -243,7 +244,7 @@ export default function TenantsIndexPage() {
                     <td className="px-4 py-3">{tenant.slug}</td>
                     <td className="px-4 py-3 capitalize">{tenant.status}</td>
                     <td className="px-4 py-3">
-                      {new Date(tenant.updated_at).toLocaleString()}
+                      <FormattedDate date={tenant.updated_at} />
                     </td>
                     <td className="px-4 py-3">
                       <DropdownMenu>

@@ -322,18 +322,21 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         Ok(execution)
     }
 
-    /// Query execution logs
+    /// Query execution logs with total count for pagination
     pub async fn query_logs(
         &self,
         tenant_id: StringUuid,
         filter: LogQueryFilter,
-    ) -> Result<Vec<ActionExecution>> {
+    ) -> Result<(Vec<ActionExecution>, i64)> {
         // If action_id is specified, verify it belongs to tenant
         if let Some(action_id) = filter.action_id {
             let _action = self.get(action_id, tenant_id).await?;
         }
 
-        self.action_repo.query_logs(&filter).await
+        let logs = self.action_repo.query_logs(&filter).await?;
+        let total = self.action_repo.count_logs(&filter).await?;
+
+        Ok((logs, total))
     }
 
     /// Get action statistics
@@ -985,13 +988,17 @@ mod tests {
         let executions_clone = executions.clone();
         mock.expect_query_logs()
             .returning(move |_| Ok(executions_clone.clone()));
+        mock.expect_count_logs()
+            .returning(|_| Ok(1));
 
         let service = ActionService::new(Arc::new(mock), None);
         let filter = LogQueryFilter::default();
         let result = service.query_logs(tenant_id, filter).await;
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 1);
+        let (logs, total) = result.unwrap();
+        assert_eq!(logs.len(), 1);
+        assert_eq!(total, 1);
     }
 
     // ---------------------------------------------------------------

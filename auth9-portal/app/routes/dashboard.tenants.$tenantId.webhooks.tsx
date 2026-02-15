@@ -269,7 +269,7 @@ export default function WebhooksPage() {
                     <div className="text-sm text-[var(--text-secondary)] truncate">
                       {webhook.url}
                     </div>
-                    <div className="text-xs text-[var(--text-tertiary)] mt-1">
+                    <div className="text-xs text-[var(--text-tertiary)] mt-1" suppressHydrationWarning>
                       {webhook.events.length} events •{" "}
                       {webhook.failure_count > 0 && (
                         <span className="text-[var(--accent-red)]">

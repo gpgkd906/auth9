@@ -10,6 +10,7 @@ import { Switch } from "~/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant, getTriggers } from "~/lib/auth9-client";
+import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { ArrowLeftIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
@@ -258,7 +259,7 @@ export default function EditActionPage() {
                 <div className="text-muted-foreground mb-1">Last Executed</div>
                 <div className="text-sm font-semibold">
                   {action.lastExecutedAt
-                    ? new Date(action.lastExecutedAt).toLocaleString()
+                    ? <FormattedDate date={action.lastExecutedAt} />
                     : "Never"}
                 </div>
               </div>

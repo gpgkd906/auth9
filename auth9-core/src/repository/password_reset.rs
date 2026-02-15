@@ -176,16 +176,8 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
         let id = StringUuid::new_v4();
         let mut tx = self.pool.begin().await?;
 
-        sqlx::query(
-            r#"
-            DELETE FROM password_reset_tokens
-            WHERE user_id = ?
-            "#,
-        )
-        .bind(input.user_id)
-        .execute(&mut *tx)
-        .await?;
-
+        // Insert the new token first to avoid the race where a concurrent DELETE
+        // removes a token that was just inserted by another transaction.
         sqlx::query(
             r#"
             INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
@@ -199,11 +191,35 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
         .execute(&mut *tx)
         .await?;
 
+        // Delete all OTHER tokens for this user (keep only the one we just inserted).
+        // This ensures concurrent requests don't delete each other's tokens.
+        sqlx::query(
+            r#"
+            DELETE FROM password_reset_tokens
+            WHERE user_id = ? AND id != ?
+            "#,
+        )
+        .bind(input.user_id)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+
+        // Read the token within the transaction to avoid a race where a concurrent
+        // transaction deletes this token between our COMMIT and a subsequent SELECT.
+        let token = sqlx::query_as::<_, PasswordResetToken>(
+            r#"
+            SELECT id, user_id, token_hash, expires_at, used_at, created_at
+            FROM password_reset_tokens
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_one(&mut *tx)
+        .await?;
+
         tx.commit().await?;
 
-        self.find_by_id(id).await?.ok_or_else(|| {
-            AppError::Internal(anyhow::anyhow!("Failed to create password reset token"))
-        })
+        Ok(token)
     }
 }
 

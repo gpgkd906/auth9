@@ -607,21 +607,47 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     .await
     .context("Failed to seed demo tenant")?;
 
-    // 3. INSERT admin user (ON DUPLICATE KEY UPDATE handles Keycloak reset)
-    let admin_user_id = uuid::Uuid::new_v4().to_string();
+    // 3. Upsert admin user (handles Keycloak reset where keycloak_id changes)
+    // First try to find existing admin by display_name (stable across resets)
+    let existing_admin: Option<(String,)> =
+        sqlx::query_as("SELECT id FROM users WHERE display_name = ? LIMIT 1")
+            .bind(SEED_ADMIN_DISPLAY_NAME)
+            .fetch_optional(&pool)
+            .await
+            .context("Failed to check existing admin user")?;
 
-    sqlx::query(
-        r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
-        VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
-        ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), email = VALUES(email), mfa_enabled = FALSE"#,
-    )
-    .bind(&admin_user_id)
-    .bind(&keycloak_id)
-    .bind(&admin_email)
-    .bind(SEED_ADMIN_DISPLAY_NAME)
-    .execute(&pool)
-    .await
-    .context("Failed to seed admin user")?;
+    if let Some((existing_id,)) = existing_admin {
+        // Update existing admin user's keycloak_id and email
+        sqlx::query(
+            r#"UPDATE users SET keycloak_id = ?, email = ?, updated_at = NOW()
+            WHERE id = ?"#,
+        )
+        .bind(&keycloak_id)
+        .bind(&admin_email)
+        .bind(&existing_id)
+        .execute(&pool)
+        .await
+        .context("Failed to update admin user keycloak_id")?;
+
+        info!("Updated existing admin user keycloak_id to {}", keycloak_id);
+    } else {
+        // Insert new admin user
+        let admin_user_id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), email = VALUES(email), mfa_enabled = FALSE"#,
+        )
+        .bind(&admin_user_id)
+        .bind(&keycloak_id)
+        .bind(&admin_email)
+        .bind(SEED_ADMIN_DISPLAY_NAME)
+        .execute(&pool)
+        .await
+        .context("Failed to seed admin user")?;
+
+        info!("Created new admin user with keycloak_id {}", keycloak_id);
+    }
 
     // 4. SELECT actual IDs (handles case where records already existed)
     let (actual_platform_id,): (String,) = sqlx::query_as("SELECT id FROM tenants WHERE slug = ?")

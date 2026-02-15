@@ -10,6 +10,7 @@ import { redirect } from "react-router";
 import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi } from "~/services/api";
 import { formatErrorMessage } from "~/lib/error-messages";
 import { getAccessToken } from "~/services/session.server";
+import { FormattedDate } from "~/components/ui/formatted-date";
 
 export const meta: MetaFunction<typeof loader> = ({ data }) => {
   return [{ title: `${data?.tenant.name || "Tenant"} - Auth9` }];
@@ -176,7 +177,7 @@ export default function TenantDetailPage() {
                   <div className="space-y-2">
                     <Label className="text-[var(--text-tertiary)]">Created</Label>
                     <div className="text-sm">
-                      {new Date(tenant.created_at).toLocaleString()}
+                      <FormattedDate date={tenant.created_at} />
                     </div>
                   </div>
                 </div>

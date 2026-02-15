@@ -27,6 +27,7 @@ import {
 import { serviceApi } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
+import { FormattedDate } from "~/components/ui/formatted-date";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Services - Auth9" }];
@@ -189,7 +190,7 @@ export default function ServicesPage() {
                     <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{service.name}</td>
                     <td className="px-4 py-3 capitalize">{service.status}</td>
                     <td className="px-4 py-3">
-                      {new Date(service.updated_at).toLocaleString()}
+                      <FormattedDate date={service.updated_at} />
                     </td>
                     <td className="px-4 py-3">
                       <DropdownMenu>
