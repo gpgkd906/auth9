@@ -36,6 +36,7 @@ const mockAction = {
   triggerId: ActionTrigger.PostLogin,
   script: 'context.claims = { department: "engineering" };\ncontext;',
   enabled: true,
+  strictMode: false,
   executionOrder: 0,
   timeoutMs: 3000,
   executionCount: 100,
@@ -149,8 +150,11 @@ describe("Edit Action Page", () => {
     const timeoutInput = screen.getByLabelText(/timeout/i) as HTMLInputElement;
     expect(timeoutInput).toHaveValue(3000);
 
-    const enabledSwitch = screen.getByRole("switch");
+    const switches = screen.getAllByRole("switch");
+    const enabledSwitch = switches[0];
+    const strictModeSwitch = switches[1];
     expect(enabledSwitch).toBeChecked();
+    expect(strictModeSwitch).not.toBeChecked();
   });
 
   it("renders trigger as read-only", async () => {
@@ -354,6 +358,7 @@ describe("Edit Action Page", () => {
         description: "Updated description",
         script: 'context.claims = { role: "admin" }; context;',
         enabled: true,
+        strictMode: false,
         executionOrder: 1,
         timeoutMs: 5000,
       });

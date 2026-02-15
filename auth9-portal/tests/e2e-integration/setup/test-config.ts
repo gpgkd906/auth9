@@ -21,14 +21,14 @@ export const TEST_CONFIG = {
     standard: {
       username: "e2e-test-user",
       email: "e2e-test@example.com",
-      password: "Test123!",
+      password: "TestPass1234!",
       firstName: "E2E",
       lastName: "TestUser",
     },
     admin: {
       username: "e2e-admin-user",
       email: "e2e-admin@example.com",
-      password: "Admin123!",
+      password: "SecurePass123!",
       firstName: "E2E",
       lastName: "AdminUser",
     },

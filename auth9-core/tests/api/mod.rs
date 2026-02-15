@@ -1880,6 +1880,7 @@ impl ActionRepository for TestActionRepository {
             trigger_id: input.trigger_id.clone(),
             script: input.script.clone(),
             enabled: input.enabled,
+            strict_mode: input.strict_mode,
             execution_order: input.execution_order,
             timeout_ms: input.timeout_ms,
             last_executed_at: None,
@@ -1943,6 +1944,9 @@ impl ActionRepository for TestActionRepository {
         }
         if let Some(enabled) = input.enabled {
             action.enabled = enabled;
+        }
+        if let Some(strict_mode) = input.strict_mode {
+            action.strict_mode = strict_mode;
         }
         if let Some(execution_order) = input.execution_order {
             action.execution_order = execution_order;
@@ -2794,6 +2798,7 @@ pub fn create_test_action(tenant_id: Uuid, name: &str) -> Action {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
         last_executed_at: None,

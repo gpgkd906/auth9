@@ -111,8 +111,11 @@ describe("New Action Page", () => {
     const timeoutInput = screen.getByLabelText(/timeout/i) as HTMLInputElement;
     expect(timeoutInput).toHaveValue(3000);
 
-    const enabledSwitch = screen.getByRole("switch");
+    const switches = screen.getAllByRole("switch");
+    const enabledSwitch = switches[0];
+    const strictModeSwitch = switches[1];
     expect(enabledSwitch).toBeChecked(); // Default is enabled
+    expect(strictModeSwitch).not.toBeChecked(); // Default strict mode is off
   });
 
   it("renders trigger dropdown with all options", async () => {
@@ -364,6 +367,7 @@ describe("New Action Page", () => {
         triggerId: ActionTrigger.PostLogin,
         script: "context;",
         enabled: true,
+        strictMode: false,
         executionOrder: 0,
         timeoutMs: 3000,
       });

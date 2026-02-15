@@ -60,9 +60,9 @@ impl ActionRepository for ActionRepositoryImpl {
         sqlx::query(
             r#"
             INSERT INTO actions (id, tenant_id, name, description, trigger_id, script,
-                                 enabled, execution_order, timeout_ms,
+                                 enabled, strict_mode, execution_order, timeout_ms,
                                  created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             "#,
         )
         .bind(id)
@@ -72,6 +72,7 @@ impl ActionRepository for ActionRepositoryImpl {
         .bind(&input.trigger_id)
         .bind(&input.script)
         .bind(input.enabled)
+        .bind(input.strict_mode)
         .bind(input.execution_order)
         .bind(input.timeout_ms)
         .execute(&self.pool)
@@ -86,7 +87,7 @@ impl ActionRepository for ActionRepositoryImpl {
         let action = sqlx::query_as::<_, Action>(
             r#"
             SELECT id, tenant_id, name, description, trigger_id, script, enabled,
-                   execution_order, timeout_ms, last_executed_at, execution_count,
+                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
                    error_count, last_error, created_at, updated_at
             FROM actions
             WHERE id = ?
@@ -103,7 +104,7 @@ impl ActionRepository for ActionRepositoryImpl {
         let actions = sqlx::query_as::<_, Action>(
             r#"
             SELECT id, tenant_id, name, description, trigger_id, script, enabled,
-                   execution_order, timeout_ms, last_executed_at, execution_count,
+                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
                    error_count, last_error, created_at, updated_at
             FROM actions
             WHERE tenant_id = ?
@@ -126,7 +127,7 @@ impl ActionRepository for ActionRepositoryImpl {
         let query = if enabled_only {
             r#"
             SELECT id, tenant_id, name, description, trigger_id, script, enabled,
-                   execution_order, timeout_ms, last_executed_at, execution_count,
+                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
                    error_count, last_error, created_at, updated_at
             FROM actions
             WHERE tenant_id = ? AND trigger_id = ? AND enabled = TRUE
@@ -135,7 +136,7 @@ impl ActionRepository for ActionRepositoryImpl {
         } else {
             r#"
             SELECT id, tenant_id, name, description, trigger_id, script, enabled,
-                   execution_order, timeout_ms, last_executed_at, execution_count,
+                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
                    error_count, last_error, created_at, updated_at
             FROM actions
             WHERE tenant_id = ? AND trigger_id = ?
@@ -172,6 +173,10 @@ impl ActionRepository for ActionRepositoryImpl {
         if let Some(enabled) = input.enabled {
             updates.push("enabled = ?");
             bindings.push((enabled as i32).to_string());
+        }
+        if let Some(strict_mode) = input.strict_mode {
+            updates.push("strict_mode = ?");
+            bindings.push((strict_mode as i32).to_string());
         }
         if let Some(execution_order) = input.execution_order {
             updates.push("execution_order = ?");

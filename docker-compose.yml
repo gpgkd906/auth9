@@ -24,7 +24,7 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}
-      AUTH9_ADMIN_PASSWORD: Admin123!  # Fixed password for local development
+      AUTH9_ADMIN_PASSWORD: SecurePass123!  # Fixed password for local development (must meet 12-char policy)
       DEV_SMTP_HOST: mailpit  # Enable dev email config seeding
       # Password Reset Security
       PASSWORD_RESET_HMAC_KEY: dev-password-reset-hmac-key-change-in-production

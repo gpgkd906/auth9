@@ -58,8 +58,8 @@ export const TEST_CONFIG = {
   auth9CoreUrl: "http://localhost:8080",
   keycloakUrl: "http://localhost:8081",
   testUsers: {
-    standard: { username: "e2e-test-user", password: "Test123!" },
-    admin: { username: "e2e-admin-user", password: "Admin123!" },
+    standard: { username: "e2e-test-user", password: "TestPass1234!" },
+    admin: { username: "e2e-admin-user", password: "SecurePass123!" },
   },
 };
 ```

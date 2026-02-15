@@ -48,7 +48,7 @@ const payload = {
   iss: "http://localhost:8080",
   aud: "auth9",
   iat: now,
-  exp: now + 3600
+  exp: now + 3600  // 1小时后过期
 };
 
 try {

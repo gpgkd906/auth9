@@ -48,7 +48,7 @@ const mockEvents = [
 
 const mockPagination = {
   page: 1,
-  per_page: 50,
+  per_page: 20,
   total: 2,
   total_pages: 1,
 };
@@ -75,7 +75,7 @@ describe("Login Events Page", () => {
       events: mockEvents,
       pagination: mockPagination,
     });
-    expect(analyticsApi.listEvents).toHaveBeenCalledWith(1, 50, undefined, "mock-access-token");
+    expect(analyticsApi.listEvents).toHaveBeenCalledWith(1, 20, undefined, "mock-access-token");
   });
 
   it("loader uses page parameter from URL", async () => {
@@ -89,7 +89,7 @@ describe("Login Events Page", () => {
     );
     const response = await loader({ request, params: {}, context: {} });
 
-    expect(analyticsApi.listEvents).toHaveBeenCalledWith(2, 50, undefined, "mock-access-token");
+    expect(analyticsApi.listEvents).toHaveBeenCalledWith(2, 20, undefined, "mock-access-token");
     expect(response.pagination.page).toBe(2);
   });
 
@@ -101,7 +101,7 @@ describe("Login Events Page", () => {
 
     expect(response).toEqual({
       events: [],
-      pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+      pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
       error: "Failed to load events",
     });
   });
@@ -207,7 +207,7 @@ describe("Login Events Page", () => {
         Component: LoginEventsPage,
         loader: () => ({
           events: [],
-          pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+          pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
         }),
       },
     ]);
@@ -226,7 +226,7 @@ describe("Login Events Page", () => {
         Component: LoginEventsPage,
         loader: () => ({
           events: [],
-          pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+          pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
           error: "Failed to load events",
         }),
       },

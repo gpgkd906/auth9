@@ -43,6 +43,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
   const triggerId = formData.get("trigger_id") as string;
   const script = formData.get("script") as string;
   const enabled = formData.get("enabled") === "on";
+  const strictMode = formData.get("strict_mode") === "on";
   const executionOrder = parseInt(formData.get("execution_order") as string) || 0;
   const timeoutMs = parseInt(formData.get("timeout_ms") as string) || 3000;
 
@@ -56,6 +57,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
       triggerId,
       script,
       enabled,
+      strictMode,
       executionOrder,
       timeoutMs,
     });
@@ -250,6 +252,14 @@ export default function NewActionPage() {
             <div className="flex items-center space-x-2">
               <Switch id="enabled" name="enabled" defaultChecked />
               <Label htmlFor="enabled">Enabled</Label>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <Switch id="strict_mode" name="strict_mode" />
+              <Label htmlFor="strict_mode">Strict Mode</Label>
+              <span className="text-sm text-muted-foreground">
+                Block authentication flow on action failure
+              </span>
             </div>
           </CardContent>
         </Card>

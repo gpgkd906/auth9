@@ -3,59 +3,71 @@
 <head>
     <title>Clickjacking Test</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-        }
-        .overlay {
-            position: absolute;
-            top: 50px;
-            left: 50px;
-            background: rgba(255, 0, 0, 0.3);
-            padding: 10px;
-            border: 2px solid red;
-            z-index: 1000;
-        }
-        iframe {
-            border: 2px solid #ccc;
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        .test-frame { 
+            border: 2px solid red; 
+            width: 800px; 
+            height: 600px; 
             margin: 20px 0;
         }
+        .result {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 5px;
+        }
+        .success { background-color: #d4edda; color: #155724; }
+        .warning { background-color: #fff3cd; color: #856404; }
+        .danger { background-color: #f8d7da; color: #721c24; }
     </style>
 </head>
 <body>
     <h1>Clickjacking Test Page</h1>
-    <p>This page attempts to embed the Auth9 portal in an iframe.</p>
     
-    <div class="overlay">
-        <h3>Malicious Overlay</h3>
-        <p>This overlay tries to trick users into clicking on the iframe below.</p>
-        <button onclick="alert('Malicious button clicked!')">Click Me (Malicious)</button>
+    <div class="result warning">
+        <strong>Test 1: Loading Auth9 Portal in iframe</strong>
+        <p>If X-Frame-Options is set to DENY, this iframe should be empty or show an error.</p>
     </div>
     
-    <iframe src="http://localhost:3000" width="800" height="600" id="auth9-frame"></iframe>
+    <iframe src="http://localhost:3000/" class="test-frame" id="frame1"></iframe>
     
-    <div>
-        <p>Frame status: <span id="status">Loading...</span></p>
-        <button onclick="checkFrame()">Check Frame Status</button>
+    <div class="result warning">
+        <strong>Test 2: Loading Auth9 Login page in iframe</strong>
+        <p>Login pages should never be embeddable in iframes.</p>
     </div>
+    
+    <iframe src="http://localhost:3000/login" class="test-frame" id="frame2"></iframe>
+    
+    <div class="result warning">
+        <strong>Test 3: Loading Auth9 API health endpoint</strong>
+        <p>API endpoints should also have X-Frame-Options protection.</p>
+    </div>
+    
+    <iframe src="http://localhost:8080/health" class="test-frame" id="frame3"></iframe>
     
     <script>
-        function checkFrame() {
-            const frame = document.getElementById('auth9-frame');
-            try {
-                const content = frame.contentWindow.document.body.innerHTML;
-                document.getElementById('status').textContent = 'Frame loaded successfully';
-                console.log('Frame content accessible:', content.substring(0, 100));
-            } catch (e) {
-                document.getElementById('status').textContent = 'Frame blocked: ' + e.message;
-                console.log('Frame blocked:', e.message);
-            }
+        // 检查iframe加载状态
+        function checkFrameStatus() {
+            var frames = document.querySelectorAll('iframe');
+            frames.forEach(function(frame, index) {
+                try {
+                    var doc = frame.contentDocument || frame.contentWindow.document;
+                    if (doc && doc.body && doc.body.innerHTML) {
+                        console.log('Frame ' + (index + 1) + ' loaded successfully');
+                        frame.parentElement.querySelector('.result').className = 'result danger';
+                        frame.parentElement.querySelector('.result').innerHTML += 
+                            '<br><strong>⚠️ SECURITY ISSUE: Page loaded in iframe!</strong>';
+                    }
+                } catch (e) {
+                    console.log('Frame ' + (index + 1) + ' blocked: ' + e.message);
+                    frame.parentElement.querySelector('.result').className = 'result success';
+                    frame.parentElement.querySelector('.result').innerHTML += 
+                        '<br><strong>✅ SECURE: Frame loading blocked</strong>';
+                }
+            });
         }
         
-        // Auto-check after load
-        window.onload = function() {
-            setTimeout(checkFrame, 2000);
-        };
+        // 等待iframe加载
+        setTimeout(checkFrameStatus, 3000);
     </script>
 </body>
 </html>

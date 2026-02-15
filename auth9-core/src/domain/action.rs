@@ -82,6 +82,7 @@ pub struct Action {
     pub trigger_id: String,
     pub script: String,
     pub enabled: bool,
+    pub strict_mode: bool,
     pub execution_order: i32,
     pub timeout_ms: i32,
     pub last_executed_at: Option<DateTime<Utc>>,
@@ -103,6 +104,7 @@ impl Default for Action {
             trigger_id: String::new(),
             script: String::new(),
             enabled: true,
+            strict_mode: false,
             execution_order: 0,
             timeout_ms: 3000,
             last_executed_at: None,
@@ -129,6 +131,8 @@ pub struct CreateActionInput {
     #[serde(default = "default_true")]
     pub enabled: bool,
     #[serde(default)]
+    pub strict_mode: bool,
+    #[serde(default)]
     pub execution_order: i32,
     #[validate(range(min = 1, max = 30000))]
     #[serde(default = "default_timeout")]
@@ -153,6 +157,7 @@ pub struct UpdateActionInput {
     #[validate(length(min = 1))]
     pub script: Option<String>,
     pub enabled: Option<bool>,
+    pub strict_mode: Option<bool>,
     pub execution_order: Option<i32>,
     #[validate(range(min = 1, max = 30000))]
     pub timeout_ms: Option<i32>,
@@ -221,6 +226,8 @@ pub struct UpsertActionInput {
     pub script: String,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
+    pub strict_mode: bool,
     #[serde(default)]
     pub execution_order: i32,
     #[validate(range(min = 1, max = 30000))]
@@ -414,6 +421,7 @@ mod tests {
         assert_eq!(action.trigger_id, "");
         assert_eq!(action.script, "");
         assert!(action.enabled);
+        assert!(!action.strict_mode);
         assert_eq!(action.execution_order, 0);
         assert_eq!(action.timeout_ms, 3000);
         assert!(action.last_executed_at.is_none());
@@ -440,6 +448,7 @@ mod tests {
         assert_eq!(input.script, "console.log('hello');");
         assert!(input.description.is_none());
         assert!(input.enabled); // default_true
+        assert!(!input.strict_mode); // serde default
         assert_eq!(input.execution_order, 0); // serde default
         assert_eq!(input.timeout_ms, 3000); // default_timeout
     }
@@ -470,6 +479,7 @@ mod tests {
         assert!(input.description.is_none());
         assert!(input.script.is_none());
         assert!(input.enabled.is_none());
+        assert!(input.strict_mode.is_none());
         assert!(input.execution_order.is_none());
         assert!(input.timeout_ms.is_none());
     }
@@ -684,6 +694,7 @@ mod tests {
         assert!(input.id.is_none());
         assert_eq!(input.name, "Upsert Action");
         assert!(input.enabled); // default_true
+        assert!(!input.strict_mode); // serde default
         assert_eq!(input.timeout_ms, 3000); // default_timeout
         assert_eq!(input.execution_order, 0);
     }
