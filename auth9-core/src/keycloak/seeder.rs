@@ -272,38 +272,41 @@ impl KeycloakSeeder {
             events_listeners.push("ext-event-http");
         }
 
-        let update = serde_json::json!({
-            "sslRequired": self.config.ssl_required,
-            "loginTheme": "auth9",
-            // Default to false - Auth9 controls this via BrandingConfig
-            "registrationAllowed": false,
-            // Enable event storage and listeners for login event tracking
-            "eventsEnabled": true,
-            "eventsListeners": events_listeners,
-            // Track login-related events for security monitoring
-            "enabledEventTypes": [
-                "LOGIN",
-                "LOGIN_ERROR",
-                "LOGOUT",
-                "LOGOUT_ERROR",
-                "CODE_TO_TOKEN",
-                "CODE_TO_TOKEN_ERROR",
-                "REFRESH_TOKEN",
-                "REFRESH_TOKEN_ERROR",
-                "IDENTITY_PROVIDER_LOGIN",
-                "IDENTITY_PROVIDER_LOGIN_ERROR",
-                "USER_DISABLED_BY_PERMANENT_LOCKOUT",
-                "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
-            ],
-            // Retain events for 30 days (for troubleshooting)
-            "eventsExpiration": 2592000
-        });
+        // Use GET-merge-PUT pattern to avoid resetting fields not included in our update.
+        // Partial PUTs in Keycloak 23 can reset boolean fields to false when omitted.
+        let current: serde_json::Value = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to get realm for settings update")?
+            .json()
+            .await
+            .context("Failed to parse realm JSON")?;
+
+        let mut updated = current;
+        if let Some(obj) = updated.as_object_mut() {
+            obj.insert("sslRequired".to_string(), serde_json::json!(self.config.ssl_required));
+            obj.insert("loginTheme".to_string(), serde_json::json!("auth9"));
+            obj.insert("registrationAllowed".to_string(), serde_json::json!(false));
+            obj.insert("eventsEnabled".to_string(), serde_json::json!(true));
+            obj.insert("eventsListeners".to_string(), serde_json::json!(events_listeners));
+            obj.insert("enabledEventTypes".to_string(), serde_json::json!([
+                "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
+                "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
+                "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR",
+                "IDENTITY_PROVIDER_LOGIN", "IDENTITY_PROVIDER_LOGIN_ERROR",
+                "USER_DISABLED_BY_PERMANENT_LOCKOUT", "USER_DISABLED_BY_TEMPORARY_LOCKOUT"
+            ]));
+            obj.insert("eventsExpiration".to_string(), serde_json::json!(2592000));
+        }
 
         let response = self
             .http_client
             .put(&url)
             .bearer_auth(token)
-            .json(&update)
+            .json(&updated)
             .send()
             .await
             .context("Failed to update realm settings")?;
@@ -326,11 +329,9 @@ impl KeycloakSeeder {
                 .await?;
         }
 
-        // IMPORTANT: configure_realm_security must be called LAST because it uses GET-merge-PUT
-        // to apply brute force protection and password policy. Earlier partial PUTs (events config,
-        // ext-event-http attributes) can reset boolean fields like bruteForceProtected to false
-        // when those fields are omitted from the partial JSON payload.
-        self.configure_realm_security(token).await?;
+        // NOTE: configure_realm_security is NOT called here. It is called separately via
+        // apply_realm_security() AFTER admin user seeding, because Keycloak 23's
+        // reset-password endpoint returns 400 when a password policy is active.
 
         Ok(())
     }
@@ -425,17 +426,36 @@ impl KeycloakSeeder {
             "hmacAlgorithm": "HmacSHA256"
         });
 
-        let update = serde_json::json!({
-            "attributes": {
-                "_providerConfig.ext-event-http": provider_config.to_string()
+        // Use GET-merge-PUT to avoid resetting other realm fields
+        let current: serde_json::Value = self
+            .http_client
+            .get(&url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to get realm for ext-event-http config")?
+            .json()
+            .await
+            .context("Failed to parse realm JSON")?;
+
+        let mut updated = current;
+        if let Some(obj) = updated.as_object_mut() {
+            let attributes = obj
+                .entry("attributes")
+                .or_insert_with(|| serde_json::json!({}));
+            if let Some(attrs) = attributes.as_object_mut() {
+                attrs.insert(
+                    "_providerConfig.ext-event-http".to_string(),
+                    serde_json::json!(provider_config.to_string()),
+                );
             }
-        });
+        }
 
         let response = self
             .http_client
             .put(&url)
             .bearer_auth(token)
-            .json(&update)
+            .json(&updated)
             .send()
             .await
             .context("Failed to configure ext-event-http provider")?;
@@ -454,7 +474,10 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Ensure realm exists (create if not) and configure settings
+    /// Ensure realm exists (create if not). Does NOT configure any settings yet.
+    /// All settings (events, security, password policy) are applied separately via
+    /// `apply_realm_settings()` AFTER admin user seeding, because Keycloak 23 rejects
+    /// user creation with credentials when a password policy is active.
     pub async fn ensure_realm_exists(&self) -> anyhow::Result<()> {
         let token = self.get_master_admin_token().await?;
 
@@ -464,8 +487,19 @@ impl KeycloakSeeder {
             self.create_realm(&token).await?;
         }
 
-        // Always update settings (SSL, login theme, event listeners) for both new and existing realms
+        Ok(())
+    }
+
+    /// Apply ALL realm settings: events, SSL, login theme, ext-event-http, password policy,
+    /// and brute force protection.
+    /// Call this AFTER seeding the admin user, because Keycloak 23 rejects user creation
+    /// with credentials (POST /users returns 400 "Password policy not met") and
+    /// reset-password also returns 400 when a password policy is active.
+    pub async fn apply_realm_settings(&self) -> anyhow::Result<()> {
+        let token = self.get_master_admin_token().await?;
         self.update_realm_settings(&token).await?;
+        // configure_realm_security uses GET-merge-PUT so it must run AFTER update_realm_settings
+        self.configure_realm_security(&token).await?;
         Ok(())
     }
 
@@ -493,8 +527,12 @@ impl KeycloakSeeder {
         Ok(!users.is_empty())
     }
 
-    /// Create default admin user with a randomly generated password
-    /// Returns the generated password if user was created
+    /// Create default admin user and set password via reset-password.
+    /// IMPORTANT: This must be called BEFORE `apply_realm_settings()` because
+    /// Keycloak 23's reset-password endpoint returns 400 when a password policy is active.
+    /// We create the user WITHOUT credentials first, then set password separately,
+    /// because Keycloak 23 silently fails to hash credentials included in POST /users.
+    /// Returns the generated password if user was created.
     async fn create_admin_user(&self, token: &str) -> anyhow::Result<Option<String>> {
         let url = format!(
             "{}/admin/realms/{}/users",
@@ -504,6 +542,8 @@ impl KeycloakSeeder {
         let password = get_admin_password();
         let email = get_admin_email();
 
+        // Create user WITHOUT credentials — Keycloak 23 silently fails to hash
+        // credentials included in POST /users, resulting in unusable passwords.
         let user = CreateKeycloakUserInput {
             username: DEFAULT_ADMIN_USERNAME.to_string(),
             email,
@@ -511,11 +551,7 @@ impl KeycloakSeeder {
             last_name: Some(DEFAULT_ADMIN_LAST_NAME.to_string()),
             enabled: true,
             email_verified: true,
-            credentials: Some(vec![KeycloakCredential {
-                credential_type: "password".to_string(),
-                value: password.clone(),
-                temporary: false,
-            }]),
+            credentials: None,
         };
 
         let response = self
@@ -539,6 +575,12 @@ impl KeycloakSeeder {
         }
 
         info!("Created admin user '{}'", DEFAULT_ADMIN_USERNAME);
+
+        // Set password via reset-password endpoint (must be called before password policy is applied)
+        if let Ok(Some((user_uuid, _))) = self.get_admin_user_keycloak_id().await {
+            self.reset_admin_password(token, &user_uuid).await?;
+        }
+
         Ok(Some(password))
     }
 
@@ -700,6 +742,8 @@ impl KeycloakSeeder {
                 self.remove_totp_credentials(&token, &user_uuid).await?;
                 self.update_admin_email(&token, &user_uuid, &current_email)
                     .await?;
+                // Reset password to ensure it matches AUTH9_ADMIN_PASSWORD
+                self.reset_admin_password(&token, &user_uuid).await?;
                 // Clear brute force status so lockout protection is active
                 self.clear_brute_force_status(&token, &user_uuid).await?;
             }
@@ -724,6 +768,49 @@ impl KeycloakSeeder {
             if let Ok(Some((user_uuid, _))) = self.get_admin_user_keycloak_id().await {
                 self.clear_brute_force_status(&token, &user_uuid).await?;
             }
+        }
+
+        Ok(())
+    }
+
+    /// Reset admin user password to the configured AUTH9_ADMIN_PASSWORD value.
+    async fn reset_admin_password(
+        &self,
+        token: &str,
+        user_uuid: &str,
+    ) -> anyhow::Result<()> {
+        let password = get_admin_password();
+        let url = format!(
+            "{}/admin/realms/{}/users/{}/reset-password",
+            self.config.url, self.config.realm, user_uuid
+        );
+
+        let body = serde_json::json!({
+            "type": "password",
+            "value": password,
+            "temporary": false,
+        });
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(token)
+            .json(&body)
+            .send()
+            .await
+            .context("Failed to reset admin password")?;
+
+        if response.status().is_success() {
+            info!("Reset admin user password");
+        } else {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            anyhow::bail!(
+                "Failed to reset admin password: {} - {}. \
+                 Ensure this is called BEFORE applying password policy.",
+                status,
+                body
+            );
         }
 
         Ok(())

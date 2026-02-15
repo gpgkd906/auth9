@@ -242,8 +242,8 @@ WHERE tu.user_id = '{claims.sub}' AND tu.tenant_id = '{claims.tenantId}';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | Identity Token 验证 | ☐ | | | |
-| 2 | Tenant Access Token 验证 | ☐ | | | |
-| 3 | Token 签名验证失败 | ☐ | | | |
-| 4 | Audience 验证 | ☐ | | | |
-| 5 | Auth9 主类统一入口 | ☐ | | | |
+| 1 | Identity Token 验证 | ✅ | 2025-02-15 | QA测试 | 通过：tokenType=identity, aud=auth9, 有效claims |
+| 2 | Tenant Access Token 验证 | ✅ | 2025-02-15 | QA测试 | 通过：tokenType=tenantAccess, aud=auth9-demo, 包含tenantId, roles, permissions |
+| 3 | Token 签名验证失败 | ✅ | 2025-02-15 | QA测试 | 通过：无效token、篡改token、过期token均被正确拒绝 |
+| 4 | Audience 验证 | ✅ | 2025-02-15 | QA测试 | 通过：audience不匹配被拒绝，不配置audience接受所有有效token |
+| 5 | Auth9 主类统一入口 | ✅ | 2025-02-15 | QA测试 | 通过：verifyToken()返回claims，getServiceToken()无凭证时抛出明确错误 |

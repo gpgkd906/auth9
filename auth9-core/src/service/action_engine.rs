@@ -502,8 +502,16 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     // Record error metrics
                     counter!("auth9_action_executions_total", "trigger" => trigger_id.to_string(), "result" => "error").increment(1);
 
-                    // Strict mode: abort entire flow on first failure
-                    return Err(AppError::ActionExecutionFailed(error_msg));
+                    if action.strict_mode {
+                        // Strict mode: abort entire flow on first failure
+                        return Err(AppError::ActionExecutionFailed(error_msg));
+                    } else {
+                        // Non-strict mode: log error and continue
+                        tracing::warn!(
+                            "Action {} failed but strict_mode is off, continuing flow",
+                            action.name
+                        );
+                    }
                 }
             }
         }
@@ -862,6 +870,7 @@ mod tests {
             trigger_id: "post-login".to_string(),
             script: script.to_string(),
             enabled: true,
+            strict_mode: false,
             execution_order: 0,
             timeout_ms: 5000,
             last_executed_at: None,

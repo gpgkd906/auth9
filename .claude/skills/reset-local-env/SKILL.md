@@ -45,7 +45,7 @@ After reset, use these credentials:
 
 | Service | URL | Username | Password |
 |---------|-----|----------|----------|
-| Admin Portal | http://localhost:3000 | admin@auth9.local | Admin123! |
+| Admin Portal | http://localhost:3000 | admin@auth9.local | SecurePass123! |
 | Keycloak Admin | http://localhost:8081 | admin | admin |
 
 ---

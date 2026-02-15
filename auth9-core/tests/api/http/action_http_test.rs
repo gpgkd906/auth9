@@ -66,6 +66,7 @@ async fn test_create_action_returns_200() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -106,6 +107,7 @@ async fn test_create_action_validates_input() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -145,6 +147,7 @@ async fn test_create_action_rejects_duplicate_name() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -181,6 +184,7 @@ async fn test_create_action_validates_trigger_id() {
         trigger_id: "invalid-trigger".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -393,6 +397,7 @@ async fn test_update_action_returns_200() {
         description: None,
         script: None,
         enabled: Some(false),
+        strict_mode: None,
         execution_order: None,
         timeout_ms: None,
     };
@@ -436,6 +441,7 @@ async fn test_update_action_validates_input() {
         description: None,
         script: None,
         enabled: None,
+        strict_mode: None,
         execution_order: None,
         timeout_ms: None,
     };
@@ -470,6 +476,7 @@ async fn test_update_action_returns_404() {
         description: None,
         script: None,
         enabled: None,
+        strict_mode: None,
         execution_order: None,
         timeout_ms: None,
     };
@@ -861,6 +868,7 @@ async fn test_platform_admin_can_create_action() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -918,6 +926,7 @@ async fn test_tenant_admin_can_manage_actions() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -953,6 +962,7 @@ async fn test_tenant_owner_can_manage_actions() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -1017,6 +1027,7 @@ async fn test_action_write_permission_allows_write() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -1052,6 +1063,7 @@ async fn test_action_wildcard_permission_allows_all() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -1087,6 +1099,7 @@ async fn test_missing_permission_returns_403() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -1110,6 +1123,7 @@ async fn test_missing_token_returns_401() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -1144,6 +1158,7 @@ async fn test_invalid_token_returns_401() {
         trigger_id: "post-login".to_string(),
         script: "export default async function(ctx) { return ctx; }".to_string(),
         enabled: true,
+        strict_mode: false,
         execution_order: 0,
         timeout_ms: 5000,
     };
@@ -1225,6 +1240,7 @@ async fn test_update_action_from_different_tenant_returns_404() {
         description: None,
         script: None,
         enabled: None,
+        strict_mode: None,
         execution_order: None,
         timeout_ms: None,
     };

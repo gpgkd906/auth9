@@ -173,18 +173,28 @@ pub async fn seed_keycloak(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed admin client in master realm")?;
 
-    // Create realm if not exists
+    // Create realm if not exists (no settings applied yet)
     info!("Ensuring realm '{}' exists...", config.keycloak.realm);
     seeder
         .ensure_realm_exists()
         .await
         .context("Failed to create realm")?;
 
-    // Seed default admin user (non-fatal if fails)
+    // Seed default admin user BEFORE applying any realm settings.
+    // Keycloak 23 rejects user creation with credentials (POST /users returns 400
+    // "Password policy not met") when a password policy is active.
     info!("Seeding default admin user...");
     if let Err(e) = seeder.seed_admin_user().await {
         warn!("Failed to seed admin user (non-fatal): {}", e);
     }
+
+    // Apply ALL realm settings (events, SSL, login theme, password policy, brute force)
+    // This must happen AFTER admin user seeding due to Keycloak 23 password policy bug.
+    info!("Applying realm settings...");
+    seeder
+        .apply_realm_settings()
+        .await
+        .context("Failed to apply realm settings")?;
 
     // Seed portal client (OIDC client for auth9-portal)
     info!("Seeding portal client in Keycloak...");
