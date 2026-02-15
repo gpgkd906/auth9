@@ -785,20 +785,6 @@ async fn test_list_users_service_client_with_tenant() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let tenant_id = Uuid::new_v4();
-    let user_id = Uuid::new_v4();
-
-    // Add a user to this tenant
-    let user = create_test_user(Some(user_id));
-    state.user_repo.add_user(user).await;
-
-    let tu = TenantUser {
-        id: auth9_core::domain::StringUuid::new_v4(),
-        user_id: auth9_core::domain::StringUuid::from(user_id),
-        tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
-        role_in_tenant: "member".to_string(),
-        joined_at: chrono::Utc::now(),
-    };
-    state.user_repo.add_tenant_user(tu).await;
 
     // ServiceClient token with tenant context
     let jwt_manager = crate::api::create_test_jwt_manager();
@@ -808,13 +794,11 @@ async fn test_list_users_service_client_with_tenant() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<PaginatedResponse<User>>) =
+    // Service client tokens are forbidden from listing users (least-privilege)
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
         get_json_with_auth(&app, "/api/v1/users", &token).await;
 
-    assert_eq!(status, StatusCode::OK);
-    assert!(body.is_some());
-    let response = body.unwrap();
-    assert_eq!(response.data.len(), 1);
+    assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
 #[tokio::test]

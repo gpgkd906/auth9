@@ -1,12 +1,11 @@
 //! Email template API handlers
 
-use crate::api::{write_audit_log_generic, SuccessResponse};
-use crate::config::Config;
+use crate::api::{require_platform_admin_with_db, write_audit_log_generic, SuccessResponse};
 use crate::domain::{
     EmailAddress, EmailMessage, EmailTemplateContent, EmailTemplateType, EmailTemplateWithContent,
 };
 use crate::error::{AppError, Result};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
 use crate::state::{HasEmailTemplates, HasServices, HasSystemSettings};
 use axum::{
     extract::{Path, State},
@@ -78,23 +77,6 @@ pub struct SendTestEmailResponse {
     pub message_id: Option<String>,
 }
 
-/// Check if user is a platform admin (required for email template management)
-fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden("Platform admin required".to_string()))
-            }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Platform admin required: only platform administrators can manage email templates"
-                .to_string(),
-        )),
-    }
-}
-
 /// List all email templates
 ///
 /// GET /api/v1/system/email-templates
@@ -102,7 +84,7 @@ pub async fn list_templates<S: HasEmailTemplates + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let templates = state.email_template_service().list_templates().await?;
     Ok(Json(ListTemplatesResponse { data: templates }))
 }
@@ -115,7 +97,7 @@ pub async fn get_template<S: HasEmailTemplates + HasServices>(
     auth: AuthUser,
     Path(template_type): Path<String>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let template_type = parse_template_type(&template_type)?;
     let template = state
         .email_template_service()
@@ -134,7 +116,7 @@ pub async fn update_template<S: HasEmailTemplates + HasServices>(
     Path(template_type): Path<String>,
     Json(request): Json<UpdateTemplateRequest>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let template_type = parse_template_type(&template_type)?;
     let content: EmailTemplateContent = request.into();
     let template = state
@@ -164,7 +146,7 @@ pub async fn reset_template<S: HasEmailTemplates + HasServices>(
     auth: AuthUser,
     Path(template_type): Path<String>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let template_type = parse_template_type(&template_type)?;
     let template = state
         .email_template_service()
@@ -182,7 +164,7 @@ pub async fn preview_template<S: HasEmailTemplates + HasServices>(
     Path(template_type): Path<String>,
     Json(request): Json<PreviewTemplateRequest>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let template_type = parse_template_type(&template_type)?;
     let content: EmailTemplateContent = request.into();
     let preview = state
@@ -201,7 +183,7 @@ pub async fn send_test_email<S: HasEmailTemplates + HasSystemSettings + HasServi
     Path(template_type): Path<String>,
     Json(request): Json<SendTestEmailRequest>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let template_type = parse_template_type(&template_type)?;
 
     // Build the template content from the request

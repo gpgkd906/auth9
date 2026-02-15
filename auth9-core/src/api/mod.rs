@@ -23,7 +23,9 @@ pub mod user;
 pub mod webauthn;
 pub mod webhook;
 
-use crate::error::Result;
+use crate::domain::StringUuid;
+use crate::error::{AppError, Result};
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::repository::audit::CreateAuditLogInput;
 use crate::repository::AuditRepository;
 use crate::server::AppState;
@@ -35,6 +37,50 @@ use uuid::Uuid;
 /// Maximum allowed per_page value for pagination
 pub(crate) const MAX_PER_PAGE: i64 = 100;
 
+/// Check if user is a platform admin.
+/// First checks the `PLATFORM_ADMIN_EMAILS` config (fast path), then falls back
+/// to checking if the user is an admin of the `auth9-platform` tenant in the DB.
+pub(crate) async fn is_platform_admin_with_db<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+) -> bool {
+    if auth.token_type != TokenType::Identity {
+        return false;
+    }
+
+    // Fast path: config-based check
+    if state.config().is_platform_admin_email(&auth.email) {
+        return true;
+    }
+
+    // Fallback: check if user is an admin of the platform tenant in the database
+    if let Ok(user_tenants) = state
+        .user_service()
+        .get_user_tenants_with_tenant(StringUuid::from(auth.user_id))
+        .await
+    {
+        return user_tenants
+            .iter()
+            .any(|tu| tu.tenant.slug == "auth9-platform" && tu.role_in_tenant == "admin");
+    }
+
+    false
+}
+
+/// Require platform admin access. Returns Forbidden if the user is not a platform admin.
+pub(crate) async fn require_platform_admin_with_db<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+) -> Result<()> {
+    if is_platform_admin_with_db(state, auth).await {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden(
+            "Platform admin required".to_string(),
+        ))
+    }
+}
+
 /// Pagination query parameters
 #[derive(Debug, Clone, Deserialize, Serialize)]
 pub struct PaginationQuery {
@@ -42,7 +88,8 @@ pub struct PaginationQuery {
     pub page: i64,
     #[serde(
         default = "default_per_page",
-        deserialize_with = "deserialize_per_page"
+        deserialize_with = "deserialize_per_page",
+        alias = "limit"
     )]
     pub per_page: i64,
 }
@@ -241,7 +288,7 @@ pub(crate) fn extract_actor_id_generic<S: HasServices>(
     None
 }
 
-fn extract_ip(headers: &HeaderMap) -> Option<String> {
+pub(crate) fn extract_ip(headers: &HeaderMap) -> Option<String> {
     if let Some(value) = headers.get("x-forwarded-for") {
         if let Ok(forwarded) = value.to_str() {
             if let Some(first) = forwarded.split(',').next() {

@@ -32,9 +32,13 @@ impl Default for PasswordResetToken {
 }
 
 /// Password policy configuration for a tenant
+///
+/// Defaults must match the Keycloak realm password policy configured in
+/// `seeder.rs::configure_realm_security` to avoid Keycloak rejecting
+/// passwords that pass auth9 validation.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 pub struct PasswordPolicy {
-    /// Minimum password length (default: 8)
+    /// Minimum password length (default: 12, matches Keycloak realm `length(12)`)
     #[serde(default = "default_min_length")]
     pub min_length: u32,
     /// Require at least one uppercase letter
@@ -46,14 +50,14 @@ pub struct PasswordPolicy {
     /// Require at least one number
     #[serde(default = "default_true")]
     pub require_numbers: bool,
-    /// Require at least one symbol
-    #[serde(default)]
+    /// Require at least one symbol (matches Keycloak realm `specialChars(1)`)
+    #[serde(default = "default_true")]
     pub require_symbols: bool,
     /// Maximum password age in days (0 = no expiry)
     #[serde(default)]
     pub max_age_days: u32,
-    /// Number of previous passwords to remember (0 = disabled)
-    #[serde(default)]
+    /// Number of previous passwords to remember (0 = disabled, matches Keycloak `passwordHistory(5)`)
+    #[serde(default = "default_history_count")]
     pub history_count: u32,
     /// Number of failed attempts before lockout (0 = disabled)
     #[serde(default)]
@@ -66,13 +70,13 @@ pub struct PasswordPolicy {
 impl Default for PasswordPolicy {
     fn default() -> Self {
         Self {
-            min_length: 8,
+            min_length: 12,
             require_uppercase: true,
             require_lowercase: true,
             require_numbers: true,
-            require_symbols: false,
+            require_symbols: true,
             max_age_days: 0,
-            history_count: 0,
+            history_count: 5,
             lockout_threshold: 0,
             lockout_duration_mins: 15,
         }
@@ -84,7 +88,11 @@ fn default_true() -> bool {
 }
 
 fn default_min_length() -> u32 {
-    8
+    12
+}
+
+fn default_history_count() -> u32 {
+    5
 }
 
 fn default_lockout_duration() -> u32 {
@@ -201,13 +209,13 @@ mod tests {
     #[test]
     fn test_password_policy_default() {
         let policy = PasswordPolicy::default();
-        assert_eq!(policy.min_length, 8);
+        assert_eq!(policy.min_length, 12);
         assert!(policy.require_uppercase);
         assert!(policy.require_lowercase);
         assert!(policy.require_numbers);
-        assert!(!policy.require_symbols);
+        assert!(policy.require_symbols);
         assert_eq!(policy.max_age_days, 0);
-        assert_eq!(policy.history_count, 0);
+        assert_eq!(policy.history_count, 5);
         assert_eq!(policy.lockout_threshold, 0);
         assert_eq!(policy.lockout_duration_mins, 15);
     }
@@ -216,6 +224,8 @@ mod tests {
     fn test_password_policy_validate_min_length() {
         let policy = PasswordPolicy {
             min_length: 10,
+            require_symbols: false,
+            history_count: 0,
             ..Default::default()
         };
 
@@ -228,6 +238,8 @@ mod tests {
         let policy = PasswordPolicy {
             min_length: 8,
             require_uppercase: true,
+            require_symbols: false,
+            history_count: 0,
             ..Default::default()
         };
 
@@ -240,6 +252,8 @@ mod tests {
         let policy = PasswordPolicy {
             min_length: 8,
             require_lowercase: true,
+            require_symbols: false,
+            history_count: 0,
             ..Default::default()
         };
 
@@ -252,6 +266,8 @@ mod tests {
         let policy = PasswordPolicy {
             min_length: 8,
             require_numbers: true,
+            require_symbols: false,
+            history_count: 0,
             ..Default::default()
         };
 
@@ -264,6 +280,7 @@ mod tests {
         let policy = PasswordPolicy {
             min_length: 8,
             require_symbols: true,
+            history_count: 0,
             ..Default::default()
         };
 
@@ -389,11 +406,12 @@ mod tests {
         let json = r#"{}"#;
         let policy: PasswordPolicy = serde_json::from_str(json).unwrap();
 
-        assert_eq!(policy.min_length, 8);
+        assert_eq!(policy.min_length, 12);
         assert!(policy.require_uppercase);
         assert!(policy.require_lowercase);
         assert!(policy.require_numbers);
-        assert!(!policy.require_symbols);
+        assert!(policy.require_symbols);
+        assert_eq!(policy.history_count, 5);
         assert_eq!(policy.lockout_duration_mins, 15);
     }
 

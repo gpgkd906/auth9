@@ -39,21 +39,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
-        {/* Inline script to prevent theme flash on page load */}
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              (function() {
-                try {
-                  var theme = localStorage.getItem('auth9-theme');
-                  if (theme === 'dark' || (!theme && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
-                    document.documentElement.setAttribute('data-theme', 'dark');
-                  }
-                } catch (e) {}
-              })();
-            `,
-          }}
-        />
+        {/* External script to prevent theme flash on page load */}
+        <script src="/theme-init.js" />
       </head>
       <body className="h-full antialiased">
         {children}

@@ -16,6 +16,7 @@ use axum::{
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
+use chrono::Utc;
 use tracing::{debug, error, info, warn};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -47,6 +48,8 @@ pub struct KeycloakEvent {
     pub ip_address: Option<String>,
     /// Error code if this is an error event
     pub error: Option<String>,
+    /// Optional event ID for deduplication
+    pub id: Option<String>,
     /// Event timestamp (epoch millis)
     #[serde(default)]
     pub time: i64,
@@ -191,6 +194,35 @@ fn derive_failure_reason(error: Option<&str>) -> Option<String> {
     derive_failure_reason_with_details(error, &KeycloakEventDetails::default())
 }
 
+/// Derive a location label from an IP address.
+///
+/// Uses a simple heuristic: private/loopback IPs → "Local Network",
+/// public IPs → a label based on the IP itself so that different public IPs
+/// produce different locations (enabling impossible_travel detection).
+/// In production, this should be replaced with a proper GeoIP lookup.
+fn derive_location_from_ip(ip: &str) -> String {
+    // Strip IPv6 zone ID if present
+    let ip_clean = ip.split('%').next().unwrap_or(ip);
+
+    // Check for loopback and common private ranges
+    if ip_clean == "127.0.0.1"
+        || ip_clean == "::1"
+        || ip_clean == "0:0:0:0:0:0:0:1"
+        || ip_clean.starts_with("10.")
+        || ip_clean.starts_with("192.168.")
+        || ip_clean.starts_with("172.")
+        || ip_clean.starts_with("fc")
+        || ip_clean.starts_with("fd")
+    {
+        return "Local Network".to_string();
+    }
+
+    // For public IPs, use the IP itself as a location identifier.
+    // This ensures different public IPs produce different "locations",
+    // which is sufficient for impossible_travel detection.
+    format!("IP:{}", ip_clean)
+}
+
 /// Verify HMAC-SHA256 signature from Keycloak webhook
 fn verify_signature(secret: &str, body: &[u8], signature: &str) -> bool {
     // Signature format: "sha256=<hex>"
@@ -269,15 +301,35 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         }
     };
 
-    // 2b. Deduplicate webhook events using Redis SETNX
-    // Compose a dedup key from event type + user_id + session_id + timestamp
-    let dedup_key = format!(
-        "{}:{}:{}:{}",
-        event.event_type.as_deref().unwrap_or("admin"),
-        event.user_id.as_deref().unwrap_or("none"),
-        event.session_id.as_deref().unwrap_or("none"),
-        event.time,
-    );
+    // 2b. Reject expired events (older than 5 minutes)
+    if event.time > 0 {
+        let now_millis = Utc::now().timestamp_millis();
+        let age_secs = (now_millis - event.time) / 1000;
+        if age_secs > 300 {
+            warn!(
+                "Rejecting expired Keycloak event: age={}s, type={:?}, user_id={:?}",
+                age_secs, event.event_type, event.user_id
+            );
+            return Err(AppError::BadRequest(format!(
+                "Event timestamp too old ({}s > 300s)",
+                age_secs
+            )));
+        }
+    }
+
+    // 2c. Deduplicate webhook events using Redis SETNX
+    // Use event ID if available, otherwise compose key from event attributes
+    let dedup_key = if let Some(ref id) = event.id {
+        id.clone()
+    } else {
+        format!(
+            "{}:{}:{}:{}",
+            event.event_type.as_deref().unwrap_or("admin"),
+            event.user_id.as_deref().unwrap_or("none"),
+            event.session_id.as_deref().unwrap_or("none"),
+            event.time,
+        )
+    };
     match state
         .cache()
         .check_and_mark_webhook_event(&dedup_key, 3600)
@@ -348,19 +400,25 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         .or_else(|| event.details.username.clone());
 
     // 7. Create login event input
+    // Resolve IP address: prefer Keycloak's ipAddress field, fall back to HTTP headers
+    let ip_address = event
+        .ip_address
+        .clone()
+        .or_else(|| super::extract_ip(&headers));
+
     let input = CreateLoginEventInput {
         user_id,
-        email,
+        email: email.clone(),
         tenant_id: None, // Keycloak events are realm-level, not tenant-specific
-        event_type: login_event_type,
-        ip_address: event.ip_address.clone(),
+        event_type: login_event_type.clone(),
+        ip_address: ip_address.clone(),
         user_agent: headers
             .get("x-forwarded-user-agent")
             .or_else(|| headers.get("user-agent"))
             .and_then(|v| v.to_str().ok())
             .map(String::from),
-        device_type: None, // Could be derived from user-agent
-        location: None,    // Could be derived from IP via geoip
+        device_type: None,
+        location: ip_address.as_deref().map(derive_location_from_ip),
         session_id: event
             .session_id
             .as_ref()
@@ -377,7 +435,61 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         event_id, event_type_str, event.user_id
     );
 
-    // 9. Trigger security detection analysis
+    // 9. Auto-detect account lockout from consecutive failures
+    // When we record a failed login, check if the user has hit the lockout threshold
+    // (5+ consecutive failures). If so, also record a "locked" event.
+    if login_event_type == LoginEventType::FailedPassword
+        || login_event_type == LoginEventType::FailedMfa
+    {
+        if let Some(ref email_val) = email {
+            let since = Utc::now() - chrono::Duration::minutes(10);
+            let failed_count = state
+                .analytics_service()
+                .list_events_by_email(email_val, 1, 10)
+                .await
+                .map(|(events, _)| {
+                    // Count consecutive failures (stop at first non-failure)
+                    events
+                        .iter()
+                        .take_while(|e| {
+                            e.event_type == LoginEventType::FailedPassword
+                                || e.event_type == LoginEventType::FailedMfa
+                        })
+                        .filter(|e| e.created_at >= since)
+                        .count()
+                })
+                .unwrap_or(0);
+
+            if failed_count >= 5 {
+                let locked_input = CreateLoginEventInput {
+                    user_id,
+                    email: email.clone(),
+                    tenant_id: None,
+                    event_type: LoginEventType::Locked,
+                    ip_address: ip_address.clone(),
+                    user_agent: None,
+                    device_type: None,
+                    location: ip_address.as_deref().map(derive_location_from_ip),
+                    session_id: None,
+                    failure_reason: Some("Account temporarily locked due to repeated login failures".to_string()),
+                };
+
+                match state.analytics_service().record_login_event(locked_input).await {
+                    Ok(locked_id) => {
+                        info!(
+                            "Auto-recorded account lockout event: id={}, email={}, consecutive_failures={}",
+                            locked_id, email_val, failed_count
+                        );
+                    }
+                    Err(err) => {
+                        error!("Failed to record lockout event for {}: {}", email_val, err);
+                    }
+                }
+            }
+        }
+    }
+
+    // 10. Trigger security detection analysis
     // Fetch the event we just created by its ID to pass to security detection
     if let Ok(Some(login_event)) = state.analytics_service().get_event(event_id).await {
         if let Err(err) = state
@@ -807,5 +919,38 @@ mod tests {
         let event: KeycloakEvent = serde_json::from_str(json).unwrap();
         assert!(event.details.username.is_none());
         assert!(event.details.email.is_none());
+    }
+
+    #[test]
+    fn test_derive_location_from_ip_loopback() {
+        assert_eq!(derive_location_from_ip("127.0.0.1"), "Local Network");
+        assert_eq!(derive_location_from_ip("::1"), "Local Network");
+        assert_eq!(
+            derive_location_from_ip("0:0:0:0:0:0:0:1"),
+            "Local Network"
+        );
+    }
+
+    #[test]
+    fn test_derive_location_from_ip_private() {
+        assert_eq!(derive_location_from_ip("10.0.0.1"), "Local Network");
+        assert_eq!(derive_location_from_ip("192.168.1.100"), "Local Network");
+        assert_eq!(derive_location_from_ip("172.16.0.1"), "Local Network");
+    }
+
+    #[test]
+    fn test_derive_location_from_ip_public() {
+        assert_eq!(derive_location_from_ip("8.8.8.8"), "IP:8.8.8.8");
+        assert_eq!(
+            derive_location_from_ip("203.0.113.50"),
+            "IP:203.0.113.50"
+        );
+    }
+
+    #[test]
+    fn test_derive_location_different_public_ips_differ() {
+        let loc1 = derive_location_from_ip("1.2.3.4");
+        let loc2 = derive_location_from_ip("5.6.7.8");
+        assert_ne!(loc1, loc2);
     }
 }

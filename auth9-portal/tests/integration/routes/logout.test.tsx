@@ -72,7 +72,7 @@ describe("Logout Page", () => {
     expect(mockFetch).toHaveBeenCalledWith(
       expect.stringContaining("/api/v1/auth/logout"),
       expect.objectContaining({
-        method: "GET",
+        method: "POST",
         headers: expect.objectContaining({
           Authorization: "Bearer valid-token",
         }),

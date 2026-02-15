@@ -58,6 +58,11 @@ SELECT COUNT(*) FROM users WHERE email = 'policy-test@example.com';
 
 ## 场景 2：密码历史检查（防止重用）
 
+> **架构说明**: Auth9 采用 Headless Keycloak 架构，密码历史检查由 Keycloak 的
+> `passwordHistory(N)` 策略执行。Auth9 负责将 `history_count` 同步到 Keycloak realm
+> 密码策略字符串中。Auth9 侧不存储密码历史（无 `password_history` 表），所有密码
+> 存储和历史比对由 Keycloak 管理。
+
 ### 初始状态
 - 租户密码策略配置：
   ```json
@@ -65,30 +70,39 @@ SELECT COUNT(*) FROM users WHERE email = 'policy-test@example.com';
     "history_count": 5
   }
   ```
-- 用户已存在，历史密码为：`OldPass1!`, `OldPass2!`, `OldPass3!`, `OldPass4!`, `OldPass5!`
+- 用户已存在，通过 Keycloak 有密码修改历史
 
 ### 目的
-验证用户不能重用最近 5 个密码
+验证 Auth9 将 `history_count` 同步到 Keycloak 的 `passwordHistory` 策略
 
 ### 测试操作流程
-1. 用户尝试修改密码为 `OldPass3!`（历史密码）
-2. 尝试修改密码为 `OldPass5!`（历史密码）
-3. 尝试修改密码为 `NewSecurePass1!`（新密码）
+1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
+2. 验证 Keycloak realm 密码策略字符串包含 `passwordHistory(5)`
+3. 用户通过 Keycloak OIDC 登录后尝试修改密码为历史密码
+
+### 验证方式
+```bash
+# 验证 Keycloak 策略同步
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -s "http://localhost:8081/admin/realms/auth9" \
+  -H "Authorization: Bearer $KC_TOKEN" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin).get('passwordPolicy',''))"
+# 预期包含: passwordHistory(5)
+```
 
 ### 预期结果
-- 步骤 1-2 失败，错误信息：「Password has been used recently」
-- 步骤 3 成功修改密码
+- 步骤 2: Keycloak 策略字符串包含 `passwordHistory(5)`
+- 步骤 3: Keycloak 拒绝重用密码（由 Keycloak 直接返回错误）
 
 ### 预期数据状态
 ```sql
--- 假设有 password_history 表（如果实现）
-SELECT COUNT(*) FROM password_history 
-WHERE user_id = '{user_id}' 
-ORDER BY created_at DESC 
-LIMIT 5;
--- 预期: 5 条记录（保留最近 5 个）
-
--- 或者检查 Keycloak 密码策略配置
+-- Auth9 侧验证密码策略配置
+SELECT JSON_EXTRACT(password_policy, '$.history_count') AS history_count
+FROM tenants WHERE slug = 'test-tenant';
+-- 预期: 5
 ```
 
 ---
@@ -301,16 +315,11 @@ UPDATE tenants SET password_policy = JSON_OBJECT(
 WHERE slug = 'test-tenant';
 ```
 
-### 模拟历史密码（如果有 password_history 表）
-```sql
--- 插入 5 个历史密码哈希
-INSERT INTO password_history (user_id, password_hash, created_at)
-VALUES 
-  ('{user_id}', '$2a$...', DATE_SUB(NOW(), INTERVAL 120 DAY)),
-  ('{user_id}', '$2a$...', DATE_SUB(NOW(), INTERVAL 90 DAY)),
-  ('{user_id}', '$2a$...', DATE_SUB(NOW(), INTERVAL 60 DAY)),
-  ('{user_id}', '$2a$...', DATE_SUB(NOW(), INTERVAL 30 DAY)),
-  ('{user_id}', '$2a$...', NOW());
+### 密码历史（Keycloak 管理）
+```
+密码历史由 Keycloak 的 passwordHistory(N) 策略管理。
+Auth9 不存储密码历史（无 password_history 表）。
+验证方式：通过 Keycloak Admin API 查看 realm 密码策略字符串。
 ```
 
 ---

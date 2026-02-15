@@ -458,6 +458,45 @@ pub struct LogoutRequest {
     pub state: Option<String>,
 }
 
+/// GET logout - redirect-only, no session revocation (CSRF-safe).
+/// Per OIDC spec, the end_session_endpoint supports GET for browser redirects.
+/// Session revocation requires POST with a bearer token.
+pub async fn logout_redirect<S: HasServices>(
+    State(state): State<S>,
+    Query(params): Query<LogoutRequest>,
+) -> Result<Response> {
+    // Validate post_logout_redirect_uri against the service's logout_uris
+    if let Some(ref redirect_uri) = params.post_logout_redirect_uri {
+        if let Some(ref client_id) = params.client_id {
+            let service = state
+                .client_service()
+                .get_by_client_id(client_id)
+                .await?;
+            if !service.logout_uris.contains(redirect_uri) {
+                return Err(AppError::BadRequest(
+                    "Invalid post_logout_redirect_uri".to_string(),
+                ));
+            }
+        } else {
+            return Err(AppError::BadRequest(
+                "client_id is required when post_logout_redirect_uri is specified".to_string(),
+            ));
+        }
+    }
+
+    let logout_url = build_keycloak_logout_url(
+        &state.config().keycloak.public_url,
+        &state.config().keycloak.realm,
+        params.id_token_hint.as_deref(),
+        params.post_logout_redirect_uri.as_deref(),
+        params.state.as_deref(),
+    )?;
+
+    Ok(Redirect::temporary(&logout_url).into_response())
+}
+
+/// POST logout - revokes session and redirects to Keycloak.
+/// Requires bearer token for session revocation. CSRF-protected by requiring POST.
 pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
     State(state): State<S>,
     auth: Option<TypedHeader<Authorization<Bearer>>>,

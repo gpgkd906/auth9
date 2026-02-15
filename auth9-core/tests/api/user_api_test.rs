@@ -224,23 +224,24 @@ async fn test_create_user_minimal() {
 }
 
 #[tokio::test]
-async fn test_create_user_duplicate_email() {
+async fn test_create_user_duplicate_keycloak_id() {
     let builder = TestServicesBuilder::new();
 
-    // Add existing user
+    // Add existing user with keycloak_id "kc-existing"
     let mut existing = create_test_user(None);
+    existing.keycloak_id = "kc-existing".to_string();
     existing.email = "existing@example.com".to_string();
     builder.user_repo.add_user(existing).await;
 
     let service = builder.build_user_service();
 
     let input = CreateUserInput {
-        email: "existing@example.com".to_string(),
+        email: "another@example.com".to_string(),
         display_name: None,
         avatar_url: None,
     };
 
-    let result = service.create("kc-new", input).await;
+    let result = service.create("kc-existing", input).await;
     assert!(matches!(result, Err(AppError::Conflict(_))));
 }
 

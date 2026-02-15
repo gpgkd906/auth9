@@ -1,10 +1,9 @@
 //! System settings API handlers
 
-use crate::api::{write_audit_log_generic, SuccessResponse};
-use crate::config::Config;
+use crate::api::{require_platform_admin_with_db, write_audit_log_generic, SuccessResponse};
 use crate::domain::EmailProviderConfig;
 use crate::error::{AppError, Result};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
 use crate::state::{HasServices, HasSystemSettings};
 use axum::{
     extract::State,
@@ -34,29 +33,12 @@ pub struct SendTestEmailRequest {
     pub to_email: String,
 }
 
-/// Check if user is a platform admin (required for system settings)
-fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden("Platform admin required".to_string()))
-            }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Platform admin required: only platform administrators can modify system settings"
-                .to_string(),
-        )),
-    }
-}
-
 /// Get email provider settings (with sensitive data masked)
 pub async fn get_email_settings<S: HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let settings = state
         .system_settings_service()
         .get_email_config_masked()
@@ -71,7 +53,7 @@ pub async fn update_email_settings<S: HasSystemSettings + HasServices>(
     headers: HeaderMap,
     Json(request): Json<UpdateEmailSettingsRequest>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     // Validate the configuration
     state
@@ -109,7 +91,7 @@ pub async fn test_email_connection<S: HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     state.email_service().test_connection(None).await?;
 
@@ -126,7 +108,7 @@ pub async fn send_test_email<S: HasSystemSettings + HasServices>(
     auth: AuthUser,
     Json(request): Json<SendTestEmailRequest>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     // Basic email validation
     if !request.to_email.contains('@') {
         return Err(AppError::Validation("Invalid email address".to_string()));

@@ -2009,6 +2009,10 @@ impl ActionRepository for TestActionRepository {
         Ok(())
     }
 
+    async fn find_execution_by_id(&self, _id: StringUuid) -> Result<Option<auth9_core::domain::ActionExecution>> {
+        Ok(None)
+    }
+
     async fn query_logs(&self, _filter: &auth9_core::domain::LogQueryFilter) -> Result<Vec<auth9_core::domain::ActionExecution>> {
         // For test repository, return empty logs
         Ok(vec![])
@@ -2459,6 +2463,21 @@ impl LoginEventRepository for TestLoginEventRepository {
             })
             .collect();
         Ok(unique_users.len() as i64)
+    }
+
+    async fn count_failed_by_user(&self, email: &str, since: DateTime<Utc>) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| {
+                e.email.as_deref() == Some(email)
+                    && e.created_at >= since
+                    && matches!(
+                        e.event_type,
+                        LoginEventType::FailedPassword | LoginEventType::FailedMfa
+                    )
+            })
+            .count() as i64)
     }
 
     async fn delete_old(&self, days: i64) -> Result<u64> {

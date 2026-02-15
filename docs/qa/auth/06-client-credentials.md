@@ -184,7 +184,8 @@ SELECT client_id FROM clients WHERE service_id = '{service_id}';
 - Service Token 通过验证
 - Token Claims 包含：
   - `sub`: service_id
-  - `token_type`: `"service_client"`
+  - `token_type`: `"service"`
+  - `aud`: `"auth9-service"`
   - `tenant_id`: 服务关联的 tenant_id（如果有）
 - Token 有过期时间
 
