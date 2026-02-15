@@ -9,9 +9,14 @@
 ## 架构说明
 
 Auth9 采用 Headless Keycloak 架构：
-1. Keycloak 处理 OIDC/MFA 认证
-2. Auth9 Core 处理业务逻辑
-3. Token Exchange 将 Identity Token 转换为 Tenant Access Token
+1. **Keycloak** 仅作为底层 OIDC/MFA 认证引擎，不直接暴露给终端用户
+2. **auth9-keycloak-theme** 对 Keycloak 的登录/注册页面进行完全自定义（基于 Keycloakify），用户看到的是 Auth9 品牌风格的登录界面，而非 Keycloak 原生 UI
+3. **Auth9 Core** 处理所有业务逻辑（用户管理、多租户、RBAC 等）
+4. **Token Exchange** 将 Keycloak 签发的 Identity Token 转换为包含角色/权限的 Tenant Access Token
+
+**登录流程中的页面归属**：
+- 登录/注册/MFA 页面 → 由 Keycloak 托管，但使用 auth9-keycloak-theme 自定义外观
+- Dashboard/管理页面 → 由 Auth9 Portal（React Router 7）提供
 
 ---
 
