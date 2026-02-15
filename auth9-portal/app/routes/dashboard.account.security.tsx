@@ -17,10 +17,6 @@ export async function action({ request }: ActionFunctionArgs) {
     return { error: "All password fields are required" };
   }
 
-  if (newPassword.length < 8) {
-    return { error: "New password must be at least 8 characters" };
-  }
-
   if (newPassword !== confirmPassword) {
     return { error: "New passwords do not match" };
   }
@@ -68,7 +64,7 @@ export default function AccountSecurityPage() {
                 name="newPassword"
                 type="password"
               />
-              <p className="text-xs text-[var(--text-secondary)]">Must be at least 8 characters</p>
+              <p className="text-xs text-[var(--text-secondary)]">Must be at least 12 characters with uppercase, lowercase, numbers, and symbols</p>
             </div>
 
             <div className="space-y-2">

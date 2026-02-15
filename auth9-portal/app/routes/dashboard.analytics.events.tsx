@@ -3,7 +3,6 @@ import { useLoaderData, Link, redirect, useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Form } from "react-router";
 import { analyticsApi, type LoginEvent } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { useState } from "react";
@@ -125,16 +124,28 @@ export default function LoginEventsPage() {
       )}
 
       {/* Filter */}
-      <Form onSubmit={handleFilterSubmit} className="flex gap-2">
+      <form onSubmit={handleFilterSubmit} className="flex gap-2">
         <Input
-          type="email"
+          type="text"
           placeholder="Filter by email address..."
           value={emailFilter}
           onChange={(e) => setEmailFilter(e.target.value)}
           className="flex-1"
         />
         <Button type="submit" variant="outline">Filter</Button>
-      </Form>
+        {emailFilter && (
+          <Button
+            type="button"
+            variant="ghost"
+            onClick={() => {
+              setEmailFilter("");
+              navigate("/dashboard/analytics/events");
+            }}
+          >
+            Clear
+          </Button>
+        )}
+      </form>
 
       {/* Events Table */}
       <Card>

@@ -46,14 +46,11 @@ use std::time::Duration;
 use tokio::net::TcpListener;
 use tonic::transport::Server as TonicServer;
 use tower::ServiceBuilder;
-use tower_http::{
-    cors::{AllowOrigin, Any, CorsLayer},
-    timeout::TimeoutLayer,
-    trace::TraceLayer,
-};
+use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::info;
 
 use crate::config::CorsConfig;
+
 use crate::middleware::rate_limit::{
     rate_limit_middleware, RateLimitConfig as RateLimitMiddlewareConfig, RateLimitRule,
     RateLimitState,
@@ -930,49 +927,142 @@ async fn shutdown_signal() {
     info!("Shutdown signal received, starting graceful shutdown");
 }
 
-/// Build CORS layer from configuration
+const CORS_ALLOW_METHODS: &str = "GET,POST,PUT,DELETE,PATCH,OPTIONS";
+const CORS_ALLOW_HEADERS: &str =
+    "authorization,content-type,accept,origin,x-tenant-id,x-api-key";
+
+/// Custom CORS middleware service that only returns CORS headers when the origin matches.
+#[derive(Clone)]
+struct CorsMiddleware<S> {
+    inner: S,
+    allowed_origins: Arc<Vec<String>>,
+    allow_credentials: bool,
+    is_wildcard: bool,
+}
+
+impl<S> tower::Service<axum::http::Request<axum::body::Body>> for CorsMiddleware<S>
+where
+    S: tower::Service<axum::http::Request<axum::body::Body>, Response = axum::response::Response>
+        + Clone
+        + Send
+        + 'static,
+    S::Future: Send,
+{
+    type Response = axum::response::Response;
+    type Error = S::Error;
+    type Future = std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<Self::Response, Self::Error>> + Send>,
+    >;
+
+    fn poll_ready(
+        &mut self,
+        cx: &mut std::task::Context<'_>,
+    ) -> std::task::Poll<Result<(), Self::Error>> {
+        self.inner.poll_ready(cx)
+    }
+
+    fn call(&mut self, req: axum::http::Request<axum::body::Body>) -> Self::Future {
+        use axum::http::{header, HeaderValue, Method};
+        use axum::response::IntoResponse;
+
+        let allowed_origins = self.allowed_origins.clone();
+        let allow_credentials = self.allow_credentials;
+        let is_wildcard = self.is_wildcard;
+
+        let origin = req
+            .headers()
+            .get(header::ORIGIN)
+            .and_then(|v| v.to_str().ok())
+            .map(|s| s.to_string());
+
+        let is_preflight = req.method() == Method::OPTIONS;
+
+        // Check if origin is allowed
+        let origin_allowed = match &origin {
+            Some(o) if is_wildcard => Some(o.clone()),
+            Some(o) if allowed_origins.iter().any(|allowed| allowed == o) => Some(o.clone()),
+            _ => None,
+        };
+
+        let set_cors_headers =
+            move |headers: &mut axum::http::HeaderMap, matched_origin: &str| {
+                if is_wildcard {
+                    headers.insert(
+                        header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                        HeaderValue::from_static("*"),
+                    );
+                } else {
+                    if let Ok(val) = HeaderValue::from_str(matched_origin) {
+                        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, val);
+                    }
+                    if allow_credentials {
+                        headers.insert(
+                            header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                            HeaderValue::from_static("true"),
+                        );
+                    }
+                }
+                headers.insert(header::VARY, HeaderValue::from_static("origin"));
+            };
+
+        if is_preflight {
+            return Box::pin(async move {
+                let mut response = axum::http::StatusCode::OK.into_response();
+                if let Some(matched_origin) = origin_allowed {
+                    let headers = response.headers_mut();
+                    set_cors_headers(headers, &matched_origin);
+                    headers.insert(
+                        header::ACCESS_CONTROL_ALLOW_METHODS,
+                        HeaderValue::from_static(CORS_ALLOW_METHODS),
+                    );
+                    headers.insert(
+                        header::ACCESS_CONTROL_ALLOW_HEADERS,
+                        HeaderValue::from_static(CORS_ALLOW_HEADERS),
+                    );
+                }
+                Ok(response)
+            });
+        }
+
+        let mut inner = self.inner.clone();
+        Box::pin(async move {
+            let mut response = inner.call(req).await?;
+            if let Some(matched_origin) = origin_allowed {
+                set_cors_headers(response.headers_mut(), &matched_origin);
+            }
+            Ok(response)
+        })
+    }
+}
+
+/// Layer that wraps services with CorsMiddleware
+#[derive(Clone)]
+struct CorsLayer {
+    allowed_origins: Arc<Vec<String>>,
+    allow_credentials: bool,
+    is_wildcard: bool,
+}
+
+impl<S> tower::Layer<S> for CorsLayer {
+    type Service = CorsMiddleware<S>;
+
+    fn layer(&self, inner: S) -> Self::Service {
+        CorsMiddleware {
+            inner,
+            allowed_origins: self.allowed_origins.clone(),
+            allow_credentials: self.allow_credentials,
+            is_wildcard: self.is_wildcard,
+        }
+    }
+}
+
+/// Build a custom CORS layer that only returns CORS headers when the origin matches.
 fn build_cors_layer(config: &CorsConfig) -> CorsLayer {
-    use axum::http::{header, Method};
-
-    let cors = CorsLayer::new()
-        .allow_methods([
-            Method::GET,
-            Method::POST,
-            Method::PUT,
-            Method::DELETE,
-            Method::PATCH,
-            Method::OPTIONS,
-        ])
-        .allow_headers([
-            header::AUTHORIZATION,
-            header::CONTENT_TYPE,
-            header::ACCEPT,
-            header::ORIGIN,
-            "x-tenant-id".parse().unwrap(),
-            "x-api-key".parse().unwrap(),
-        ]);
-
-    // Configure allowed origins
-    let cors = if config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*" {
-        // Wildcard: allow any origin
-        cors.allow_origin(Any)
-    } else {
-        // Specific origins
-        let origins: Vec<_> = config
-            .allowed_origins
-            .iter()
-            .filter_map(|o| o.parse().ok())
-            .collect();
-        cors.allow_origin(AllowOrigin::list(origins))
-    };
-
-    // Configure credentials
-    if config.allow_credentials
-        && !(config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*")
-    {
-        cors.allow_credentials(true)
-    } else {
-        cors.allow_credentials(false)
+    let is_wildcard = config.allowed_origins.len() == 1 && config.allowed_origins[0] == "*";
+    CorsLayer {
+        allowed_origins: Arc::new(config.allowed_origins.clone()),
+        allow_credentials: config.allow_credentials && !is_wildcard,
+        is_wildcard,
     }
 }
 
@@ -1032,7 +1122,7 @@ where
         .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
         .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
         .route("/api/v1/auth/token", post(api::auth::token::<S>))
-        .route("/api/v1/auth/logout", get(api::auth::logout::<S>).post(api::auth::logout::<S>))
+        .route("/api/v1/auth/logout", get(api::auth::logout_redirect::<S>).post(api::auth::logout::<S>))
         // Password reset flow (unauthenticated by design)
         .route(
             "/api/v1/auth/forgot-password",
@@ -1375,6 +1465,10 @@ where
         .route(
             "/api/v1/tenants/{tenant_id}/actions/logs",
             get(api::action::query_action_logs::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/actions/logs/{log_id}",
+            get(api::action::get_action_log::<S>),
         )
         .route(
             "/api/v1/actions/triggers",

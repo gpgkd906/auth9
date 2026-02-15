@@ -460,6 +460,11 @@ impl Config {
                     );
                 }
             }
+            if self.grpc_security.enable_reflection {
+                anyhow::bail!(
+                    "gRPC reflection is enabled (GRPC_ENABLE_REFLECTION=true) in production; disable it to prevent information leakage"
+                );
+            }
             if self.jwt_tenant_access_allowed_audiences.is_empty() {
                 anyhow::bail!(
                     "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"

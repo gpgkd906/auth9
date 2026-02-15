@@ -92,7 +92,7 @@ export const tenantApi = {
   delete: async (id: string, accessToken?: string): Promise<void> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${id}`, {
       method: "DELETE",
-      headers: getHeaders(accessToken),
+      headers: { ...getHeaders(accessToken), "X-Confirm-Destructive": "true" },
     });
     if (!response.ok) {
       const error: ApiError = await response.json();

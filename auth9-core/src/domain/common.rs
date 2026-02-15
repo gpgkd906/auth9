@@ -169,6 +169,7 @@ pub fn validate_url_no_ssrf_strict(url: &str) -> Result<(), ValidationError> {
     let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
     let is_loopback = host == "127.0.0.1"
         || host == "::1"
+        || host == "[::1]"
         || host == "0.0.0.0"
         || host == "localhost";
     let is_private = host.starts_with("192.168.")
@@ -180,6 +181,7 @@ pub fn validate_url_no_ssrf_strict(url: &str) -> Result<(), ValidationError> {
                 .and_then(|s| s.parse::<u8>().ok())
                 .map(|n| (16..=31).contains(&n))
                 .unwrap_or(false));
+    let is_link_local = host.starts_with("169.254.");
 
     if is_cloud_metadata {
         let mut err = ValidationError::new("ssrf_blocked");
@@ -187,7 +189,7 @@ pub fn validate_url_no_ssrf_strict(url: &str) -> Result<(), ValidationError> {
         return Err(err);
     }
 
-    if is_loopback || is_private {
+    if is_loopback || is_private || is_link_local {
         let mut err = ValidationError::new("internal_ip_blocked");
         err.message = Some("Internal IP addresses are not allowed".into());
         return Err(err);

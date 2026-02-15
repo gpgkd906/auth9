@@ -143,8 +143,8 @@ async fn test_get_password_policy_default() {
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let policy = body.unwrap().data;
-    // Should return default policy
-    assert_eq!(policy.min_length, 8);
+    // Should return default policy (matches Keycloak realm settings)
+    assert_eq!(policy.min_length, 12);
 }
 
 #[tokio::test]

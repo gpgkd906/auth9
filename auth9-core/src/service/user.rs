@@ -127,11 +127,16 @@ impl<
     pub async fn create(&self, keycloak_id: &str, input: CreateUserInput) -> Result<User> {
         input.validate()?;
 
-        // Check for duplicate email
-        if self.repo.find_by_email(&input.email).await?.is_some() {
+        // Check for duplicate keycloak_id (not email — multiple IdP users may share an email)
+        if self
+            .repo
+            .find_by_keycloak_id(keycloak_id)
+            .await?
+            .is_some()
+        {
             return Err(AppError::Conflict(format!(
-                "User with email '{}' already exists",
-                input.email
+                "User with keycloak_id '{}' already exists",
+                keycloak_id
             )));
         }
 
@@ -447,8 +452,8 @@ mod tests {
     async fn test_create_user_success() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_email()
-            .with(eq("test@example.com"))
+        mock.expect_find_by_keycloak_id()
+            .with(eq("kc-123"))
             .returning(|_| Ok(None));
 
         mock.expect_create().returning(|keycloak_id, input| {
@@ -476,13 +481,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_duplicate_email() {
+    async fn test_create_user_duplicate_keycloak_id() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_email()
-            .with(eq("existing@example.com"))
+        mock.expect_find_by_keycloak_id()
+            .with(eq("kc-existing"))
             .returning(|_| {
                 Ok(Some(User {
+                    keycloak_id: "kc-existing".to_string(),
                     email: "existing@example.com".to_string(),
                     ..Default::default()
                 }))
@@ -496,7 +502,7 @@ mod tests {
             avatar_url: None,
         };
 
-        let result = service.create("kc-123", input).await;
+        let result = service.create("kc-existing", input).await;
         assert!(matches!(result, Err(AppError::Conflict(_))));
     }
 

@@ -61,6 +61,10 @@ export function withTenant(client: Auth9HttpClient, tenantId: string) {
           `/api/v1/tenants/${tenantId}/actions/${id}/test`,
           { context }
         ),
+      getLog: (logId: string) =>
+        client.get<{ data: ActionExecution }>(
+          `/api/v1/tenants/${tenantId}/actions/logs/${logId}`
+        ),
       logs: (options?: { actionId?: string; success?: boolean; limit?: number }) => {
         const params = new URLSearchParams();
         if (options?.actionId) params.append("action_id", options.actionId);

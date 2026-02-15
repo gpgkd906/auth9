@@ -1,8 +1,9 @@
 //! Tenant API handlers
 
 use crate::api::{
-    deserialize_page, deserialize_per_page, write_audit_log_generic, MessageResponse,
-    PaginatedResponse, SuccessResponse,
+    deserialize_page, deserialize_per_page, is_platform_admin_with_db,
+    require_platform_admin_with_db, write_audit_log_generic, MessageResponse, PaginatedResponse,
+    SuccessResponse,
 };
 use crate::config::Config;
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
@@ -54,26 +55,6 @@ fn check_tenant_access(config: &Config, auth: &AuthUser, tenant_id: Uuid) -> Res
     }
 }
 
-/// Check if user is a platform admin (can create/delete tenants)
-fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden("Platform admin required".to_string()))
-            }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => {
-            // Tenant access and service client tokens cannot create/delete tenants
-            Err(AppError::Forbidden(
-                "Platform admin required: only platform administrators can create or delete tenants"
-                    .to_string(),
-            ))
-        }
-    }
-}
-
 /// Query parameters for tenant list endpoint with search
 #[derive(Debug, Deserialize)]
 pub struct TenantListQuery {
@@ -81,7 +62,8 @@ pub struct TenantListQuery {
     pub page: i64,
     #[serde(
         default = "default_per_page",
-        deserialize_with = "deserialize_per_page"
+        deserialize_with = "deserialize_per_page",
+        alias = "limit"
     )]
     pub per_page: i64,
     pub search: Option<String>,
@@ -96,7 +78,8 @@ fn default_per_page() -> i64 {
 }
 
 /// List tenants
-/// - Platform admin (Identity token): can list all tenants
+/// - Platform admin (Identity token with config email or platform tenant admin): can list all tenants
+/// - Non-admin Identity token: can see tenants they belong to
 /// - Tenant user (TenantAccess token): can only see their own tenant
 pub async fn list<S: HasServices>(
     State(state): State<S>,
@@ -105,26 +88,43 @@ pub async fn list<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     match auth.token_type {
         TokenType::Identity => {
-            require_platform_admin(state.config(), &auth)?;
-            // Platform admin: can list all tenants
-            let (tenants, total) = if let Some(ref search) = query.search {
-                state
-                    .tenant_service()
-                    .search(search, query.page, query.per_page)
-                    .await?
-            } else {
-                state
-                    .tenant_service()
-                    .list(query.page, query.per_page)
-                    .await?
-            };
+            let is_platform_admin = is_platform_admin_with_db(&state, &auth).await;
 
-            Ok(Json(PaginatedResponse::new(
-                tenants,
-                query.page,
-                query.per_page,
-                total,
-            )))
+            if is_platform_admin {
+                // Platform admin: can list all tenants
+                let (tenants, total) = if let Some(ref search) = query.search {
+                    state
+                        .tenant_service()
+                        .search(search, query.page, query.per_page)
+                        .await?
+                } else {
+                    state
+                        .tenant_service()
+                        .list(query.page, query.per_page)
+                        .await?
+                };
+
+                Ok(Json(PaginatedResponse::new(
+                    tenants,
+                    query.page,
+                    query.per_page,
+                    total,
+                )))
+            } else {
+                // Non-admin Identity token: show tenants they belong to
+                let user_tenants = state
+                    .user_service()
+                    .get_user_tenants(StringUuid::from(auth.user_id))
+                    .await?;
+                let mut tenants = Vec::new();
+                for tu in &user_tenants {
+                    if let Ok(tenant) = state.tenant_service().get(tu.tenant_id).await {
+                        tenants.push(tenant);
+                    }
+                }
+                let total = tenants.len() as i64;
+                Ok(Json(PaginatedResponse::new(tenants, 1, total, total)))
+            }
         }
         TokenType::TenantAccess | TokenType::ServiceClient => {
             // Tenant user / service client: can only see their own tenant
@@ -163,7 +163,7 @@ pub async fn create<S: HasServices>(
     Json(input): Json<CreateTenantInput>,
 ) -> Result<impl IntoResponse> {
     // Only platform admins can create tenants
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     let tenant = state.tenant_service().create(input).await?;
     let _ = write_audit_log_generic(
@@ -217,7 +217,7 @@ pub async fn delete<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Only platform admins can delete tenants
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     // Require explicit confirmation header for destructive operation
     let confirmed = headers

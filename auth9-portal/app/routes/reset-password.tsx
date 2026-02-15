@@ -28,8 +28,8 @@ export async function action({ request }: ActionFunctionArgs) {
     return { error: "Invalid reset token" };
   }
 
-  if (!password || password.length < 8) {
-    return { error: "Password must be at least 8 characters" };
+  if (!password) {
+    return { error: "Password is required" };
   }
 
   if (password !== confirmPassword) {
@@ -117,10 +117,9 @@ export default function ResetPasswordPage() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
-                minLength={8}
                 autoFocus
               />
-              <p className="text-xs text-gray-500">Must be at least 8 characters</p>
+              <p className="text-xs text-gray-500">Must be at least 12 characters with uppercase, lowercase, numbers, and symbols</p>
             </div>
 
             <div className="space-y-2">

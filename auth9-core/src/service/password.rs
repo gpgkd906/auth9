@@ -171,6 +171,22 @@ impl<
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
+        // Validate new password against tenant password policy before sending to Keycloak
+        if let Some(ref tenant_repo) = self.tenant_repo {
+            let tenant_users = self
+                .user_repo
+                .find_user_tenants(reset_token.user_id)
+                .await?;
+            if let Some(tu) = tenant_users.first() {
+                if let Ok(Some(tenant)) = tenant_repo.find_by_id(tu.tenant_id).await {
+                    let policy = tenant.password_policy.unwrap_or_default();
+                    if let Err(errors) = policy.validate_password(&input.new_password) {
+                        return Err(AppError::Validation(errors.join("; ")));
+                    }
+                }
+            }
+        }
+
         // Reset password in Keycloak
         self.keycloak
             .reset_user_password(&user.keycloak_id, &input.new_password, false)
@@ -206,6 +222,20 @@ impl<
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
+        // Validate new password against tenant password policy before sending to Keycloak.
+        // This gives a clear validation error instead of an opaque Keycloak 400 error.
+        if let Some(ref tenant_repo) = self.tenant_repo {
+            let tenant_users = self.user_repo.find_user_tenants(user_id).await?;
+            if let Some(tu) = tenant_users.first() {
+                if let Ok(Some(tenant)) = tenant_repo.find_by_id(tu.tenant_id).await {
+                    let policy = tenant.password_policy.unwrap_or_default();
+                    if let Err(errors) = policy.validate_password(&input.new_password) {
+                        return Err(AppError::Validation(errors.join("; ")));
+                    }
+                }
+            }
+        }
+
         // Verify current password with Keycloak
         let is_valid = self
             .keycloak
@@ -225,12 +255,6 @@ impl<
 
         // Track password change timestamp
         let _ = self.user_repo.update_password_changed_at(user_id).await;
-
-        // Note: PostChangePassword trigger integration is pending due to complexity:
-        // - Password change is user-level operation (may affect multiple tenants)
-        // - Requires querying user's tenant memberships
-        // - Will be implemented when multi-tenant context handling is clarified
-        // See: docs/debt/001-action-test-endpoint-axum-tonic-conflict.md for related issues
 
         // Send password changed notification (best-effort: password is already changed)
         let _ = self
@@ -465,11 +489,13 @@ mod tests {
     fn test_password_policy_default() {
         let policy = PasswordPolicy::default();
 
-        // Default policy requires uppercase + lowercase + numbers
-        assert!(policy.validate_password("Simple123").is_ok());
-        assert!(policy.validate_password("simple123").is_err()); // missing uppercase
-        assert!(policy.validate_password("SIMPLE123").is_err()); // missing lowercase
-        assert!(policy.validate_password("Simpleabc").is_err()); // missing number
+        // Default policy requires uppercase + lowercase + numbers + symbols, min 12 chars
+        assert!(policy.validate_password("SimplePass1!").is_ok());
+        assert!(policy.validate_password("simplepass1!").is_err()); // missing uppercase
+        assert!(policy.validate_password("SIMPLEPASS1!").is_err()); // missing lowercase
+        assert!(policy.validate_password("Simplepasss!").is_err()); // missing number
+        assert!(policy.validate_password("SimplePass12").is_err()); // missing symbol
+        assert!(policy.validate_password("SimPass1!").is_err()); // too short
     }
 
     #[test]

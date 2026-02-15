@@ -47,10 +47,19 @@
    ```bash
    curl http://localhost:8080/api/v1/public/branding
    ```
-2. 管理员更新品牌颜色：
+2. 管理员更新品牌颜色（需要完整的 config 对象，所有颜色字段必填）：
    ```bash
-   PUT /api/v1/system/branding
-   { "primary_color": "#ff6600" }
+   curl -X PUT http://localhost:8080/api/v1/system/branding \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer {admin_token}" \
+     -d '{
+       "config": {
+         "primary_color": "#ff6600",
+         "secondary_color": "#5856D6",
+         "background_color": "#F5F5F7",
+         "text_color": "#1D1D1F"
+       }
+     }'
    ```
 3. 再次调用公开 branding：
    ```bash
@@ -58,6 +67,7 @@
    ```
 
 ### 预期结果
+- 步骤 2：返回 200，branding 配置已更新
 - 步骤 3 返回的 `primary_color` = `"#ff6600"`
 - 变更即时生效，无缓存延迟
 

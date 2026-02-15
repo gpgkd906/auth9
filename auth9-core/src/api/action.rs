@@ -166,6 +166,23 @@ pub async fn test_action<S: HasServices>(
     Ok(Json(SuccessResponse::new(response)))
 }
 
+/// Get a single execution log by ID
+pub async fn get_action_log<S: HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    Path((tenant_id, log_id)): Path<(StringUuid, StringUuid)>,
+) -> Result<Json<SuccessResponse<ActionExecution>>, AppError> {
+    enforce(state.config(), &auth, &PolicyInput {
+        action: PolicyAction::ActionRead,
+        scope: ResourceScope::Tenant(tenant_id),
+    })?;
+
+    let action_service = state.action_service();
+    let execution = action_service.get_execution(log_id, tenant_id).await?;
+
+    Ok(Json(SuccessResponse::new(execution)))
+}
+
 /// Query action execution logs
 pub async fn query_action_logs<S: HasServices>(
     State(state): State<S>,

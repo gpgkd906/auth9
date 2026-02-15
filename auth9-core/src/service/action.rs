@@ -300,6 +300,28 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         }
     }
 
+    /// Get a single execution log by ID
+    pub async fn get_execution(
+        &self,
+        execution_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<ActionExecution> {
+        let execution = self
+            .action_repo
+            .find_execution_by_id(execution_id)
+            .await?
+            .ok_or_else(|| AppError::NotFound("Execution log not found".to_string()))?;
+
+        // Verify tenant ownership
+        if execution.tenant_id != tenant_id {
+            return Err(AppError::Forbidden(
+                "Execution log does not belong to this tenant".to_string(),
+            ));
+        }
+
+        Ok(execution)
+    }
+
     /// Query execution logs
     pub async fn query_logs(
         &self,
@@ -838,6 +860,106 @@ mod tests {
             .unwrap()
             .contains("not available"));
         assert!(response.modified_context.is_none());
+    }
+
+    // ---------------------------------------------------------------
+    // get_execution - success
+    // ---------------------------------------------------------------
+    #[tokio::test]
+    async fn test_get_execution_success() {
+        let tenant_id = StringUuid::new_v4();
+        let execution_id = StringUuid::new_v4();
+        let now = Utc::now();
+        let execution = ActionExecution {
+            id: execution_id,
+            action_id: StringUuid::new_v4(),
+            tenant_id,
+            trigger_id: "post-login".to_string(),
+            user_id: None,
+            success: false,
+            duration_ms: 123,
+            error_message: Some("Test error".to_string()),
+            executed_at: now,
+        };
+
+        let mut mock = MockActionRepository::new();
+        let execution_clone = execution.clone();
+        mock.expect_find_execution_by_id()
+            .with(eq(execution_id))
+            .returning(move |_| Ok(Some(execution_clone.clone())));
+
+        let service = ActionService::new(Arc::new(mock), None);
+        let result = service.get_execution(execution_id, tenant_id).await;
+
+        assert!(result.is_ok());
+        let exec = result.unwrap();
+        assert_eq!(exec.id, execution_id);
+        assert!(!exec.success);
+        assert_eq!(exec.error_message.as_deref(), Some("Test error"));
+    }
+
+    // ---------------------------------------------------------------
+    // get_execution - not found
+    // ---------------------------------------------------------------
+    #[tokio::test]
+    async fn test_get_execution_not_found() {
+        let tenant_id = StringUuid::new_v4();
+        let execution_id = StringUuid::new_v4();
+
+        let mut mock = MockActionRepository::new();
+        mock.expect_find_execution_by_id()
+            .with(eq(execution_id))
+            .returning(|_| Ok(None));
+
+        let service = ActionService::new(Arc::new(mock), None);
+        let result = service.get_execution(execution_id, tenant_id).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, AppError::NotFound(_)),
+            "Expected NotFound error, got: {:?}",
+            err
+        );
+    }
+
+    // ---------------------------------------------------------------
+    // get_execution - wrong tenant
+    // ---------------------------------------------------------------
+    #[tokio::test]
+    async fn test_get_execution_wrong_tenant() {
+        let owner_tenant = StringUuid::new_v4();
+        let other_tenant = StringUuid::new_v4();
+        let execution_id = StringUuid::new_v4();
+        let now = Utc::now();
+        let execution = ActionExecution {
+            id: execution_id,
+            action_id: StringUuid::new_v4(),
+            tenant_id: owner_tenant,
+            trigger_id: "post-login".to_string(),
+            user_id: None,
+            success: true,
+            duration_ms: 10,
+            error_message: None,
+            executed_at: now,
+        };
+
+        let mut mock = MockActionRepository::new();
+        let execution_clone = execution.clone();
+        mock.expect_find_execution_by_id()
+            .with(eq(execution_id))
+            .returning(move |_| Ok(Some(execution_clone.clone())));
+
+        let service = ActionService::new(Arc::new(mock), None);
+        let result = service.get_execution(execution_id, other_tenant).await;
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            matches!(err, AppError::Forbidden(_)),
+            "Expected Forbidden error, got: {:?}",
+            err
+        );
     }
 
     // ---------------------------------------------------------------

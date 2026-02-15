@@ -901,17 +901,17 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
         "use_tls": false
     });
 
-    // Try to update existing setting first
-    let result = sqlx::query(
-        "UPDATE system_settings SET value = ? WHERE category = 'email' AND setting_key = 'provider'"
+    // Only insert if no email config exists yet (don't overwrite user-configured settings)
+    let existing: (i64,) = sqlx::query_as(
+        "SELECT COUNT(*) FROM system_settings WHERE category = 'email' AND setting_key = 'provider'"
     )
-    .bind(email_config.to_string())
-    .execute(&pool)
+    .fetch_one(&pool)
     .await
-    .context("Failed to update email config")?;
+    .context("Failed to check existing email config")?;
 
-    if result.rows_affected() == 0 {
-        // Setting doesn't exist, insert it (id is AUTO_INCREMENT)
+    if existing.0 > 0 {
+        info!("Email config already exists, skipping dev seed (SMTP: {}:1025)", smtp_host);
+    } else {
         sqlx::query(
             "INSERT INTO system_settings (category, setting_key, value, created_at, updated_at) VALUES ('email', 'provider', ?, NOW(), NOW())"
         )
@@ -921,8 +921,6 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
         .context("Failed to insert email config")?;
 
         info!("Dev email config inserted (SMTP: {}:1025)", smtp_host);
-    } else {
-        info!("Dev email config updated (SMTP: {}:1025)", smtp_host);
     }
 
     pool.close().await;

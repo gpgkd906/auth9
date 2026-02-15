@@ -1,7 +1,8 @@
 //! Role and permission API handlers
 
 use crate::api::{
-    extract_actor_id_generic, write_audit_log_generic, MessageResponse, SuccessResponse,
+    extract_actor_id_generic, require_platform_admin_with_db, write_audit_log_generic,
+    MessageResponse, SuccessResponse,
 };
 use crate::config::Config;
 use crate::domain::{
@@ -19,24 +20,6 @@ use axum::{
 };
 use serde::Deserialize;
 use uuid::Uuid;
-
-/// Check if user is a platform admin (can manage roles and permissions)
-fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Platform admin required: identity token is not a platform admin".to_string(),
-                ))
-            }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Platform admin required: this operation requires platform-level access".to_string(),
-        )),
-    }
-}
 
 /// Check if user can manage RBAC within a tenant
 /// Platform admin can always manage, tenant owner can manage their tenant
@@ -94,7 +77,7 @@ pub async fn create_permission<S: HasServices>(
     Json(input): Json<CreatePermissionInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     // Validate that the service_id references an existing service
     state
@@ -128,7 +111,7 @@ pub async fn delete_permission<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     let id = StringUuid::from(id);
     let before = state.rbac_service().get_permission(id).await?;
@@ -179,7 +162,7 @@ pub async fn create_role<S: HasServices>(
     Json(input): Json<CreateRoleInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     // Validate that the service_id references an existing service
     state
@@ -214,7 +197,7 @@ pub async fn update_role<S: HasServices>(
     Json(input): Json<UpdateRoleInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     let id = StringUuid::from(id);
     let before = state.rbac_service().get_role(id).await?;
@@ -241,7 +224,7 @@ pub async fn delete_role<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     let id = StringUuid::from(id);
     let before = state.rbac_service().get_role(id).await?;
@@ -276,7 +259,7 @@ pub async fn assign_permission<S: HasServices>(
     Json(input): Json<AssignPermissionInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     let role_id = StringUuid::from(role_id);
     let permission_id = StringUuid::from(input.permission_id);
@@ -306,7 +289,7 @@ pub async fn remove_permission<S: HasServices>(
     Path((role_id, permission_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
 
     let role_id = StringUuid::from(role_id);
     let permission_id = StringUuid::from(permission_id);

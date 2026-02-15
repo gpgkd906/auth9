@@ -1,10 +1,9 @@
 //! Branding API handlers
 
-use crate::api::{write_audit_log_generic, SuccessResponse};
-use crate::config::Config;
+use crate::api::{require_platform_admin_with_db, write_audit_log_generic, SuccessResponse};
 use crate::domain::UpdateBrandingRequest;
-use crate::error::{AppError, Result};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::error::Result;
+use crate::middleware::auth::AuthUser;
 use crate::state::{HasBranding, HasServices};
 use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 
@@ -21,22 +20,6 @@ pub async fn get_public_branding<S: HasBranding>(
     Ok(Json(SuccessResponse::new(config)))
 }
 
-/// Check if user is a platform admin (required for branding management)
-fn require_platform_admin(config: &Config, auth: &AuthUser) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden("Platform admin required".to_string()))
-            }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Platform admin required: only platform administrators can modify branding".to_string(),
-        )),
-    }
-}
-
 /// Get branding configuration (authenticated endpoint)
 ///
 /// GET /api/v1/system/branding
@@ -44,7 +27,7 @@ pub async fn get_branding<S: HasBranding + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let config = state.branding_service().get_branding().await?;
     Ok(Json(SuccessResponse::new(config)))
 }
@@ -58,7 +41,7 @@ pub async fn update_branding<S: HasBranding + HasServices>(
     headers: HeaderMap,
     Json(request): Json<UpdateBrandingRequest>,
 ) -> Result<impl IntoResponse> {
-    require_platform_admin(state.config(), &auth)?;
+    require_platform_admin_with_db(&state, &auth).await?;
     let config = state
         .branding_service()
         .update_branding(request.config)

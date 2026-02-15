@@ -338,13 +338,13 @@ mod tests {
     fn test_to_keycloak_policy_string_default() {
         let policy = PasswordPolicy::default();
         let result = KeycloakSyncService::to_keycloak_policy_string(&policy);
-        assert!(result.contains("length(8)"));
+        assert!(result.contains("length(12)"));
         assert!(result.contains("upperCase(1)"));
         assert!(result.contains("lowerCase(1)"));
         assert!(result.contains("digits(1)"));
+        assert!(result.contains("specialChars(1)"));
         assert!(result.contains("notUsername()"));
-        assert!(!result.contains("specialChars"));
-        assert!(!result.contains("passwordHistory"));
+        assert!(result.contains("passwordHistory(5)"));
     }
 
     #[test]

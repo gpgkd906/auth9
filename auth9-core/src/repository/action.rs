@@ -38,6 +38,7 @@ pub trait ActionRepository: Send + Sync {
         success: bool,
         error: Option<String>,
     ) -> Result<()>;
+    async fn find_execution_by_id(&self, id: StringUuid) -> Result<Option<ActionExecution>>;
     async fn query_logs(&self, filter: &LogQueryFilter) -> Result<Vec<ActionExecution>>;
     async fn get_stats(&self, action_id: StringUuid) -> Result<Option<(i64, i64, f64, i64)>>;
 }
@@ -302,6 +303,22 @@ impl ActionRepository for ActionRepositoryImpl {
         }
 
         Ok(())
+    }
+
+    async fn find_execution_by_id(&self, id: StringUuid) -> Result<Option<ActionExecution>> {
+        let execution = sqlx::query_as::<_, ActionExecution>(
+            r#"
+            SELECT id, action_id, tenant_id, trigger_id, user_id, success,
+                   duration_ms, error_message, executed_at
+            FROM action_executions
+            WHERE id = ?
+            "#,
+        )
+        .bind(id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(execution)
     }
 
     async fn query_logs(&self, filter: &LogQueryFilter) -> Result<Vec<ActionExecution>> {

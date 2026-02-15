@@ -61,29 +61,25 @@ print("A" * 60000)
 PY
 )"
 
-# 1) 先写入一个“正常 UA”的成功登录事件（建立已知设备）
+# 1) 先写入一个"正常 UA"的成功登录事件（建立已知设备）
+#    注意：两次事件的 time 字段必须不同，否则会被事件去重逻辑视为重复事件跳过。
+#    这里使用当前时间戳（毫秒）。
+TIME1=$(python3 -c "import time; print(int(time.time()*1000))")
+BODY1="{\"type\":\"LOGIN\",\"time\":${TIME1},\"userId\":\"00000000-0000-0000-0000-000000000001\",\"ipAddress\":\"203.0.113.10\",\"details\":{\"email\":\"qa-big-payload@example.com\"}}"
 curl -sS -X POST "http://localhost:8080/api/v1/keycloak/events" \
   -H "Content-Type: application/json" \
   -H "User-Agent: qa-small-ua" \
-  -d '{
-    "type": "LOGIN",
-    "time": 0,
-    "userId": "00000000-0000-0000-0000-000000000001",
-    "ipAddress": "203.0.113.10",
-    "details": { "email": "qa-big-payload@example.com" }
-  }' >/dev/null
+  -d "$BODY1" >/dev/null
 
-# 2) 再写入一个“超长 UA”的成功登录事件，期望触发 security.alert(new_device)
+sleep 1
+
+# 2) 再写入一个"超长 UA"的成功登录事件，期望触发 security.alert(new_device)
+TIME2=$(python3 -c "import time; print(int(time.time()*1000))")
+BODY2="{\"type\":\"LOGIN\",\"time\":${TIME2},\"userId\":\"00000000-0000-0000-0000-000000000001\",\"ipAddress\":\"203.0.113.10\",\"details\":{\"email\":\"qa-big-payload@example.com\"}}"
 curl -sS -X POST "http://localhost:8080/api/v1/keycloak/events" \
   -H "Content-Type: application/json" \
   -H "User-Agent: ${UA}" \
-  -d '{
-    "type": "LOGIN",
-    "time": 0,
-    "userId": "00000000-0000-0000-0000-000000000001",
-    "ipAddress": "203.0.113.10",
-    "details": { "email": "qa-big-payload@example.com" }
-  }' >/dev/null
+  -d "$BODY2" >/dev/null
 ```
 
 说明：
