@@ -6,6 +6,20 @@
 
 ---
 
+## 架构说明
+
+Auth9 采用 Headless Keycloak 架构，密码相关的用户交互页面均由 Keycloak 托管：
+
+1. **忘记密码 / 重置密码页面** → 由 Keycloak 托管，使用 auth9-keycloak-theme 自定义外观（基于 Keycloakify），用户看到的是 Auth9 品牌风格而非 Keycloak 原生 UI
+2. **密码强度验证** → 由 Keycloak 根据 realm 密码策略执行，Auth9 通过 KeycloakSyncService 将租户密码策略同步到 Keycloak
+3. **修改密码（已登录用户）** → 在 Auth9 Portal 的设置页面发起，后端通过 Keycloak Admin API 完成密码更新
+
+**页面归属**：
+- 忘记密码 / 重置密码 / 密码强度提示页面 → Keycloak 托管（auth9-keycloak-theme 定制外观）
+- 已登录用户的「设置 → 安全 → 修改密码」→ Auth9 Portal 页面
+
+---
+
 ## 场景 1：忘记密码 - 发送重置邮件
 
 ### 初始状态

@@ -6,6 +6,20 @@
 
 ---
 
+## 架构说明
+
+Auth9 采用 Headless Keycloak 架构，品牌设置影响的是 Keycloak 登录页面的外观：
+
+1. **品牌配置存储在 Auth9** → 管理员在 Auth9 Portal 的「设置 → 登录页品牌」页面配置颜色、Logo、公司名称等
+2. **auth9-keycloak-theme 消费品牌配置** → Keycloak 使用 auth9-keycloak-theme（基于 Keycloakify），该主题在渲染登录/注册页面时通过公开端点 `GET /api/v1/public/branding` 获取 Auth9 中的品牌配置
+3. **最终用户看到的效果** → 用户在 Keycloak 托管的登录/注册/忘记密码等页面上看到的是 Auth9 品牌风格的界面
+
+**页面归属**：
+- 「设置 → 登录页品牌」管理页面 → Auth9 Portal
+- 受品牌设置影响的登录/注册页面 → Keycloak 托管（auth9-keycloak-theme 渲染）
+
+---
+
 ## 数据库表结构参考
 
 ### system_settings 表
@@ -135,17 +149,17 @@ WHERE category = 'branding' AND setting_key = 'config';
 - 当前允许注册设置为关闭
 
 ### 目的
-验证注册开关功能影响 Keycloak 登录页
+验证注册开关功能影响 Keycloak 登录页（auth9-keycloak-theme 定制外观）
 
 ### 测试操作流程
 1. 进入「设置」→「登录页品牌」
 2. 开启「Allow Registration」开关
 3. 点击「Save Changes」
-4. 访问 Keycloak 登录页面
+4. 访问 Keycloak 登录页面（由 auth9-keycloak-theme 渲染）
 
 ### 预期结果
 - 设置保存成功
-- Keycloak 登录页显示「Create account」链接
+- Keycloak 登录页（Auth9 品牌风格）显示「Create account」链接
 
 ### 预期数据状态
 ```sql
