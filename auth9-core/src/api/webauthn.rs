@@ -306,7 +306,10 @@ mod tests {
     #[test]
     fn test_extract_client_ip_xff_with_spaces() {
         let mut headers = HeaderMap::new();
-        headers.insert("x-forwarded-for", "  192.168.1.1 , 10.0.0.1 ".parse().unwrap());
+        headers.insert(
+            "x-forwarded-for",
+            "  192.168.1.1 , 10.0.0.1 ".parse().unwrap(),
+        );
         let ip = extract_client_ip(&headers);
         assert_eq!(ip, Some("192.168.1.1".to_string()));
     }

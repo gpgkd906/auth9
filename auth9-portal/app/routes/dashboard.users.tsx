@@ -339,18 +339,18 @@ export default function UsersPage() {
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
           <p className="text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
         </div>
-        <Button onClick={() => setCreatingUser(true)} className="w-full sm:w-auto">+ Create User</Button>
+        <Button onClick={() => setCreatingUser(true)} className="w-full min-h-11 sm:w-auto sm:min-h-10">+ Create User</Button>
       </div>
 
       <Form onSubmit={handleSearchSubmit} className="flex gap-2">
         <Input
-          type="search"
+          type="text"
           placeholder="Search by email or name..."
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="flex-1"
         />
-        <Button type="submit" variant="outline">Search</Button>
+        <Button type="submit" variant="outline" className="min-h-11 sm:min-h-10">Search</Button>
       </Form>
 
       <Card>
@@ -362,8 +362,61 @@ export default function UsersPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
-            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
+          <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)] md:hidden">
+            {users.data.length > 0 ? (
+              <div className="space-y-3 p-3">
+                {users.data.map((user: User) => (
+                  <div key={user.id} className="rounded-lg border border-[var(--glass-border-subtle)] bg-[var(--sidebar-item-hover)]/20 p-3">
+                    <div className="space-y-1 text-sm">
+                      <p className="font-semibold text-[var(--text-primary)] break-all">{user.email}</p>
+                      <p className="text-[var(--text-secondary)]">Name: {user.display_name || "-"}</p>
+                      <p className="text-[var(--text-secondary)]">MFA: {user.mfa_enabled ? "Enabled" : "Disabled"}</p>
+                      <p className="text-[var(--text-tertiary)] text-xs">
+                        Updated: <FormattedDate date={user.updated_at} />
+                      </p>
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <Button
+                        variant="outline"
+                        className="min-h-11 text-[13px]"
+                        onClick={() => setManagingTenantsUser(user)}
+                      >
+                        Manage Tenants
+                      </Button>
+                      <Button
+                        variant="secondary"
+                        className="min-h-11 text-[13px]"
+                        onClick={() => setEditingUser(user)}
+                      >
+                        Edit
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <div className="px-4 py-6 text-center text-[var(--text-tertiary)]">
+                <p>No users found</p>
+                {currentSearch && (
+                  <div className="mt-4">
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="min-h-11"
+                      onClick={() => {
+                        setSearchInput("");
+                        navigate("/dashboard/users?page=1");
+                      }}
+                    >
+                      Clear Filter
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          <div className="mt-2 hidden overflow-x-auto rounded-xl border border-[var(--glass-border-subtle)] md:block">
+            <table className="min-w-[600px] divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Email</th>
@@ -385,7 +438,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
+                          <Button variant="ghost" className="h-11 w-11 p-0 sm:h-8 sm:w-8">
                             <span className="sr-only">Open menu</span>
                             <DotsHorizontalIcon className="h-4 w-4" />
                           </Button>
@@ -467,7 +520,22 @@ export default function UsersPage() {
                 {users.data.length === 0 && (
                   <tr>
                     <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
-                      No users found
+                      <div className="flex flex-col items-center">
+                        <p>No users found</p>
+                        {currentSearch && (
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            className="mt-4 min-h-10"
+                            onClick={() => {
+                              setSearchInput("");
+                              navigate("/dashboard/users?page=1");
+                            }}
+                          >
+                            Clear Filter
+                          </Button>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 )}
@@ -709,7 +777,7 @@ export default function UsersPage() {
             </div>
 
             {selectedServiceId && (
-              <div className="space-y-2 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
+              <div className="space-y-3 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
                 {availableRoles.length === 0 ? (
                   <p className="text-sm text-[var(--text-tertiary)]">No roles defined for this service.</p>
                 ) : (
@@ -717,7 +785,7 @@ export default function UsersPage() {
                     const isAssigned = assignedRoleIds.has(role.id);
                     const wasOriginallyAssigned = allAssignedRoles.some((r: Role) => r.id === role.id);
                     return (
-                      <div key={role.id} className="flex items-center space-x-2">
+                      <div key={role.id} className="flex min-h-10 items-center gap-3">
                         <Checkbox
                           id={role.id}
                           checked={isAssigned}

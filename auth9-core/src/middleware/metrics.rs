@@ -99,7 +99,10 @@ fn normalize_path(path: &str) -> String {
 }
 
 fn looks_like_uuid(s: &str) -> bool {
-    s.len() == 36 && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
+    // Match standard UUIDs (36 chars with hyphens) and non-standard hex IDs
+    // (e.g. TiDB-generated IDs that may have fewer hex digits or different groupings).
+    // Criteria: at least 20 chars, only hex digits and hyphens, at least one hyphen.
+    s.len() >= 20 && s.contains('-') && s.chars().all(|c| c.is_ascii_hexdigit() || c == '-')
 }
 
 #[cfg(test)]
@@ -127,8 +130,16 @@ mod tests {
     #[test]
     fn test_looks_like_uuid() {
         assert!(looks_like_uuid("550e8400-e29b-41d4-a716-446655440000"));
+        assert!(looks_like_uuid("87aa555f-4fe7-ac21-236844b36487"));
         assert!(!looks_like_uuid("tenants"));
         assert!(!looks_like_uuid("v1"));
         assert!(!looks_like_uuid(""));
+    }
+
+    #[test]
+    fn test_normalize_path_non_standard_uuid() {
+        // UUIDs with non-standard hyphen placement should still be collapsed
+        let path = "/api/v1/tenants/87aa555f-4fe7-ac21-236844b36487/actions/550e8400-e29b-41d4-a716-446655440000";
+        assert_eq!(normalize_path(path), "/api/v1/tenants/{id}/actions/{id}");
     }
 }

@@ -240,7 +240,7 @@ describe("Tenants Page", () => {
 
         await waitFor(() => {
             expect(screen.getByText(/50 tenants/)).toBeInTheDocument();
-            expect(screen.getByText(/Page 3 of/)).toBeInTheDocument();
+            expect(screen.getAllByText(/Page 3 of/).length).toBeGreaterThan(0);
         });
     });
 

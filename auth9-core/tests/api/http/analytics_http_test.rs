@@ -256,8 +256,11 @@ async fn test_get_stats_with_invalid_dates_falls_back() {
     let app = build_analytics_test_router(state);
 
     // Invalid date format - should fallback to default (7 days)
-    let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) =
-        get_json(&app, "/api/v1/analytics/login-stats?start=invalid&end=invalid").await;
+    let (status, body): (StatusCode, Option<SuccessResponse<LoginStats>>) = get_json(
+        &app,
+        "/api/v1/analytics/login-stats?start=invalid&end=invalid",
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -369,7 +372,10 @@ async fn test_list_user_events_pagination() {
 
     let (status, body): (StatusCode, Option<PaginatedResponse<LoginEvent>>) = get_json(
         &app,
-        &format!("/api/v1/analytics/users/{}/events?page=2&per_page=10", user_id),
+        &format!(
+            "/api/v1/analytics/users/{}/events?page=2&per_page=10",
+            user_id
+        ),
     )
     .await;
 

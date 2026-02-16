@@ -124,18 +124,18 @@ export default function TenantsIndexPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
+      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+        <div className="space-y-1">
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Tenants</h1>
           <p className="text-sm text-[var(--text-secondary)]">Manage tenant lifecycle and settings</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="w-full sm:w-auto">
+            <Button className="relative left-1/2 w-screen -translate-x-1/2 md:static md:w-auto md:translate-x-0">
               <PlusIcon className="mr-2 h-4 w-4" /> Create Tenant
             </Button>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent aria-modal="true">
             <DialogHeader>
               <DialogTitle>Create Tenant</DialogTitle>
               <DialogDescription>
@@ -146,11 +146,11 @@ export default function TenantsIndexPage() {
               <input type="hidden" name="intent" value="create" />
               <div className="space-y-1.5">
                 <Label htmlFor="create-name">Name</Label>
-                <Input id="create-name" name="name" placeholder="Acme Corp" required />
+                <Input id="create-name" name="name" placeholder="Acme Corp" required aria-required="true" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="create-slug">Slug</Label>
-                <Input id="create-slug" name="slug" placeholder="acme" required />
+                <Input id="create-slug" name="slug" placeholder="acme" required aria-required="true" />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="create-logo">Logo URL</Label>
@@ -159,11 +159,16 @@ export default function TenantsIndexPage() {
               {actionData && "error" in actionData && (
                 <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
               )}
-              <DialogFooter>
-                <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setIsCreateOpen(false)}>
+              <DialogFooter className="-mx-6 sm:mx-0">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full bg-[var(--glass-bg)] sm:w-auto"
+                  onClick={() => setIsCreateOpen(false)}
+                >
                   Cancel
                 </Button>
-                <Button type="submit" disabled={isSubmitting}>
+                <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
                   {isSubmitting ? "Creating..." : "Create"}
                 </Button>
               </DialogFooter>

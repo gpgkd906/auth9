@@ -312,7 +312,6 @@ pub struct ActionStats {
     pub last_24h_count: i64,
 }
 
-
 #[cfg(test)]
 mod tests {
     use super::*;

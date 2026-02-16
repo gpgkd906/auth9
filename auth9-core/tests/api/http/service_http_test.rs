@@ -765,9 +765,18 @@ async fn test_integration_info_success() {
     assert_eq!(clients[0]["public_client"], false);
 
     // Verify endpoints
-    assert!(data["endpoints"]["authorize"].as_str().unwrap().contains("/api/v1/auth/authorize"));
-    assert!(data["endpoints"]["token"].as_str().unwrap().contains("/api/v1/auth/token"));
-    assert!(data["endpoints"]["jwks"].as_str().unwrap().contains("/.well-known/jwks.json"));
+    assert!(data["endpoints"]["authorize"]
+        .as_str()
+        .unwrap()
+        .contains("/api/v1/auth/authorize"));
+    assert!(data["endpoints"]["token"]
+        .as_str()
+        .unwrap()
+        .contains("/api/v1/auth/token"));
+    assert!(data["endpoints"]["jwks"]
+        .as_str()
+        .unwrap()
+        .contains("/.well-known/jwks.json"));
 
     // Verify grpc
     assert!(data["grpc"]["address"].is_string());
@@ -776,8 +785,12 @@ async fn test_integration_info_success() {
     // Verify environment_variables
     let env_vars = data["environment_variables"].as_array().unwrap();
     assert!(env_vars.iter().any(|v| v["key"] == "AUTH9_DOMAIN"));
-    assert!(env_vars.iter().any(|v| v["key"] == "AUTH9_CLIENT_ID" && v["value"] == "test-client"));
-    assert!(env_vars.iter().any(|v| v["key"] == "AUTH9_CLIENT_SECRET" && v["value"] == "the-secret-value"));
+    assert!(env_vars
+        .iter()
+        .any(|v| v["key"] == "AUTH9_CLIENT_ID" && v["value"] == "test-client"));
+    assert!(env_vars
+        .iter()
+        .any(|v| v["key"] == "AUTH9_CLIENT_SECRET" && v["value"] == "the-secret-value"));
 }
 
 #[tokio::test]

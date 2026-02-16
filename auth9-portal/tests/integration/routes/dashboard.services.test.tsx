@@ -147,7 +147,7 @@ describe("Services Page", () => {
         });
     });
 
-    it("displays table headers", async () => {
+    it("displays service card metadata", async () => {
         vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
 
         const RoutesStub = createRoutesStub([
@@ -161,9 +161,9 @@ describe("Services Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/services"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("Name")).toBeInTheDocument();
-            expect(screen.getByText("Status")).toBeInTheDocument();
-            expect(screen.getByText("Updated")).toBeInTheDocument();
+            expect(screen.getByText("Service Registry")).toBeInTheDocument();
+            expect(screen.getByText("ID: s1")).toBeInTheDocument();
+            expect(screen.getByText(/Updated/i)).toBeInTheDocument();
         });
     });
 

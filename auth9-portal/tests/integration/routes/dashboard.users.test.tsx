@@ -60,6 +60,25 @@ describe("Users Page", () => {
         vi.clearAllMocks();
     });
 
+    async function openUserActionMenu(
+        user: ReturnType<typeof userEvent.setup>,
+        index = 0
+    ) {
+        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
+        await user.click(menuButtons[index]);
+        return screen.findByRole("menu");
+    }
+
+    async function clickMenuItem(
+        user: ReturnType<typeof userEvent.setup>,
+        label: RegExp | string,
+        index = 0
+    ) {
+        const menu = await openUserActionMenu(user, index);
+        const item = within(menu).getByRole("menuitem", { name: label });
+        await user.click(item);
+    }
+
     const mockUsers = {
         data: [
             {
@@ -113,7 +132,7 @@ describe("Users Page", () => {
 
         await waitFor(() => {
             expect(screen.getByText("Alice")).toBeInTheDocument();
-            expect(screen.getByText("alice@example.com")).toBeInTheDocument();
+            expect(screen.getAllByText("alice@example.com").length).toBeGreaterThan(0);
         });
     });
 
@@ -158,8 +177,8 @@ describe("Users Page", () => {
 
         await waitFor(() => {
             // Alice has MFA disabled, Bob has MFA enabled
-            expect(screen.getByText("Disabled")).toBeInTheDocument();
-            expect(screen.getByText("Enabled")).toBeInTheDocument();
+            expect(screen.getAllByText("Disabled").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Enabled").length).toBeGreaterThan(0);
         });
     });
 
@@ -182,7 +201,7 @@ describe("Users Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/users"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("No users found")).toBeInTheDocument();
+            expect(screen.getAllByText("No users found").length).toBeGreaterThan(0);
         });
     });
 
@@ -251,13 +270,7 @@ describe("Users Page", () => {
             expect(screen.getByText("Alice")).toBeInTheDocument();
         });
 
-        // Click the dropdown menu (first one for Alice)
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-
-        // Click Edit User option
-        const editOption = await screen.findByText("Edit User");
-        await user.click(editOption);
+        await clickMenuItem(user, "Edit User");
 
         // Verify edit dialog opens
         expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -287,13 +300,7 @@ describe("Users Page", () => {
             expect(screen.getByText("Alice")).toBeInTheDocument();
         });
 
-        // Click dropdown
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-
-        // Click Manage Tenants option
-        const manageTenants = await screen.findByText("Manage Tenants");
-        await user.click(manageTenants);
+        await clickMenuItem(user, "Manage Tenants");
 
         // Verify manage tenants dialog opens
         expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -329,9 +336,7 @@ describe("Users Page", () => {
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-        await user.click(await screen.findByText("Manage Tenants"));
+        await clickMenuItem(user, "Manage Tenants");
 
         await waitFor(() => {
             expect(screen.getByText("Tenant 1")).toBeInTheDocument();
@@ -359,9 +364,7 @@ describe("Users Page", () => {
 
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-        await user.click(await screen.findByText("Manage Tenants"));
+        await clickMenuItem(user, "Manage Tenants");
 
         await waitFor(() => {
             expect(screen.getByText("Not a member of any tenant.")).toBeInTheDocument();
@@ -420,9 +423,7 @@ describe("Users Page", () => {
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
         // Open dropdown menu
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-        await user.click(await screen.findByText("Manage Tenants"));
+        await clickMenuItem(user, "Manage Tenants");
 
         // Click Roles button for the tenant
         await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
@@ -466,9 +467,7 @@ describe("Users Page", () => {
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
         // Navigate to roles dialog
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-        await user.click(await screen.findByText("Manage Tenants"));
+        await clickMenuItem(user, "Manage Tenants");
         await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
         await user.click(screen.getByRole("button", { name: /Roles/i }));
 
@@ -513,9 +512,7 @@ describe("Users Page", () => {
         await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
         // Navigate to roles dialog
-        const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-        await user.click(menuButtons[0]);
-        await user.click(await screen.findByText("Manage Tenants"));
+        await clickMenuItem(user, "Manage Tenants");
         await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
         await user.click(screen.getByRole("button", { name: /Roles/i }));
 
@@ -548,9 +545,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Edit User"));
+            await clickMenuItem(user, "Edit User");
 
             await waitFor(() => {
                 const dialog = screen.getByRole("dialog");
@@ -578,9 +573,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Edit User"));
+            await clickMenuItem(user, "Edit User");
 
             await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
 
@@ -612,9 +605,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Edit User"));
+            await clickMenuItem(user, "Edit User");
 
             await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
 
@@ -885,9 +876,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Delete"));
+            await clickMenuItem(user, "Delete");
 
             // Confirmation dialog should appear
             await waitFor(() => {
@@ -922,9 +911,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Delete"));
+            await clickMenuItem(user, "Delete");
 
             await waitFor(() => {
                 expect(screen.getByTestId("confirm-dialog-title")).toHaveTextContent("Delete User");
@@ -961,9 +948,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Force Logout"));
+            await clickMenuItem(user, "Force Logout");
 
             // Confirmation dialog should appear
             await waitFor(() => {
@@ -998,9 +983,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Force Logout"));
+            await clickMenuItem(user, "Force Logout");
 
             await waitFor(() => {
                 expect(screen.getByTestId("confirm-dialog-title")).toHaveTextContent("Force Logout");
@@ -1047,9 +1030,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Manage Tenants"));
+            await clickMenuItem(user, "Manage Tenants");
 
             await waitFor(() => {
                 expect(screen.getByText("Tenant 1")).toBeInTheDocument();
@@ -1083,9 +1064,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Manage Tenants"));
+            await clickMenuItem(user, "Manage Tenants");
 
             await waitFor(() => {
                 expect(screen.getByText("Add to Tenant")).toBeInTheDocument();
@@ -1113,9 +1092,7 @@ describe("Users Page", () => {
 
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[0]);
-            await user.click(await screen.findByText("Manage Tenants"));
+            await clickMenuItem(user, "Manage Tenants");
 
             await waitFor(() => expect(screen.getByRole("dialog")).toBeInTheDocument());
 
@@ -1148,11 +1125,7 @@ describe("Users Page", () => {
         async function openRolesDialog(user: ReturnType<typeof userEvent.setup>) {
             await waitFor(() => expect(screen.getByText("Alice")).toBeInTheDocument());
 
-            const aliceEmailCell = screen.getByText("alice@example.com");
-            const aliceRow = aliceEmailCell.closest("tr");
-            expect(aliceRow).not.toBeNull();
-            await user.click(within(aliceRow as HTMLTableRowElement).getByRole("button", { name: /open menu/i }));
-            await user.click(await screen.findByText("Manage Tenants"));
+            await clickMenuItem(user, "Manage Tenants");
 
             const manageTenantsDialog = await screen.findByRole("dialog", { name: /Manage Tenants for/i });
             await waitFor(() => expect(within(manageTenantsDialog).getByText("Tenant 1")).toBeInTheDocument());
@@ -1340,15 +1313,11 @@ describe("Users Page", () => {
             await waitFor(() => expect(screen.getByText("Bob")).toBeInTheDocument());
 
             // Open dropdown for Bob (second user)
-            const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
-            await user.click(menuButtons[1]);
-
-            await waitFor(() => {
-                expect(screen.getByText("Edit User")).toBeInTheDocument();
-                expect(screen.getByText("Manage Tenants")).toBeInTheDocument();
-                expect(screen.getByText("Force Logout")).toBeInTheDocument();
-                expect(screen.getByText("Delete")).toBeInTheDocument();
-            });
+            const menu = await openUserActionMenu(user, 1);
+            expect(within(menu).getByRole("menuitem", { name: "Edit User" })).toBeInTheDocument();
+            expect(within(menu).getByRole("menuitem", { name: "Manage Tenants" })).toBeInTheDocument();
+            expect(within(menu).getByRole("menuitem", { name: "Force Logout" })).toBeInTheDocument();
+            expect(within(menu).getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
         });
     });
 

@@ -115,7 +115,6 @@ describe("Login Page", () => {
         formData.append("accessToken", "test-token");
         formData.append("expiresIn", "7200"); // 2 hours
 
-        const now = Date.now();
         const request = new Request("http://localhost:3000/login", {
             method: "POST",
             body: formData,

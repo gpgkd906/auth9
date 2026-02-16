@@ -286,15 +286,33 @@ async fn test_authorize_with_nonce() {
 // ============================================================================
 
 #[tokio::test]
-async fn test_logout_minimal() {
+async fn test_logout_get_returns_method_not_allowed() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
     let (status, _body) = get_raw(&app, "/api/v1/auth/logout").await;
 
+    // GET should be rejected to prevent CSRF-triggered logout
+    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+}
+
+#[tokio::test]
+async fn test_logout_minimal() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let app = build_test_router(state);
+
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/v1/auth/logout")
+        .body(axum::body::Body::empty())
+        .unwrap();
+
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
     // Should redirect to Keycloak logout
-    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
 }
 
 #[tokio::test]
@@ -303,13 +321,15 @@ async fn test_logout_with_id_token_hint() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
-    let (status, _body) = get_raw(
-        &app,
-        "/api/v1/auth/logout?id_token_hint=eyJhbGciOiJSUzI1NiJ9.test",
-    )
-    .await;
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/v1/auth/logout?id_token_hint=eyJhbGciOiJSUzI1NiJ9.test")
+        .body(axum::body::Body::empty())
+        .unwrap();
 
-    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
 }
 
 #[tokio::test]
@@ -336,13 +356,15 @@ async fn test_logout_with_post_redirect_uri() {
 
     let app = build_test_router(state);
 
-    let (status, _body) = get_raw(
-        &app,
-        "/api/v1/auth/logout?client_id=logout-test-client&post_logout_redirect_uri=https://app.example.com/logged-out",
-    )
-    .await;
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/v1/auth/logout?client_id=logout-test-client&post_logout_redirect_uri=https://app.example.com/logged-out")
+        .body(axum::body::Body::empty())
+        .unwrap();
 
-    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
 }
 
 #[tokio::test]
@@ -351,13 +373,15 @@ async fn test_logout_with_post_redirect_uri_rejected_without_client_id() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
-    let (status, _body) = get_raw(
-        &app,
-        "/api/v1/auth/logout?post_logout_redirect_uri=https://app.example.com/logged-out",
-    )
-    .await;
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/v1/auth/logout?post_logout_redirect_uri=https://app.example.com/logged-out")
+        .body(axum::body::Body::empty())
+        .unwrap();
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -383,13 +407,15 @@ async fn test_logout_with_invalid_post_redirect_uri() {
 
     let app = build_test_router(state);
 
-    let (status, _body) = get_raw(
-        &app,
-        "/api/v1/auth/logout?client_id=logout-test-client2&post_logout_redirect_uri=https://evil.com/logout",
-    )
-    .await;
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/v1/auth/logout?client_id=logout-test-client2&post_logout_redirect_uri=https://evil.com/logout")
+        .body(axum::body::Body::empty())
+        .unwrap();
 
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
 }
 
 #[tokio::test]
@@ -415,12 +441,15 @@ async fn test_logout_full_params() {
 
     let app = build_test_router(state);
 
-    let (status, _body) = get_raw(
-        &app,
-        "/api/v1/auth/logout?client_id=logout-full-client&id_token_hint=token123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state",
-    ).await;
+    let request = axum::http::Request::builder()
+        .method(axum::http::Method::POST)
+        .uri("/api/v1/auth/logout?client_id=logout-full-client&id_token_hint=token123&post_logout_redirect_uri=https://app.example.com/logged-out&state=logout-state")
+        .body(axum::body::Body::empty())
+        .unwrap();
 
-    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
+    let response = tower::ServiceExt::oneshot(app, request).await.unwrap();
+
+    assert_eq!(response.status(), StatusCode::TEMPORARY_REDIRECT);
 }
 
 // ============================================================================

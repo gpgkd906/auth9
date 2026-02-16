@@ -1,7 +1,8 @@
 //! Invitation API handlers
 
 use crate::api::{
-    deserialize_page, deserialize_per_page, MessageResponse, PaginatedResponse, SuccessResponse,
+    deserialize_page, deserialize_per_page, write_audit_log_generic, MessageResponse,
+    PaginatedResponse, SuccessResponse,
 };
 use crate::domain::{
     AddUserToTenantInput, AssignRolesInput, CreateInvitationInput, CreateUserInput,
@@ -196,6 +197,17 @@ pub async fn create<S: HasInvitations>(
         .create(tenant_id, invited_by, inviter_name, input)
         .await?;
 
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "invitation.created",
+        "invitation",
+        Some(*invitation.id),
+        None,
+        serde_json::to_value(&InvitationResponse::from(invitation.clone())).ok(),
+    )
+    .await;
+
     let response: InvitationResponse = invitation.into();
 
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(response))))
@@ -365,6 +377,21 @@ pub async fn accept<S: HasInvitations>(
         .invitation_service()
         .mark_accepted(invitation.id)
         .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &HeaderMap::new(),
+        "invitation.accepted",
+        "invitation",
+        Some(*invitation.id),
+        None,
+        Some(serde_json::json!({
+            "user_id": user.id.to_string(),
+            "tenant_id": invitation.tenant_id.to_string(),
+        })),
+    )
+    .await;
+
     let response: InvitationResponse = invitation.into();
 
     Ok(Json(SuccessResponse::new(response)))

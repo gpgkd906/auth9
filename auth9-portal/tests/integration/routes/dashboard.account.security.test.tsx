@@ -51,7 +51,7 @@ describe("Account Security Page", () => {
         expect(result).toEqual({ error: "All password fields are required" });
     });
 
-    it("action returns error when new password is too short", async () => {
+    it("action accepts short password and delegates validation to backend", async () => {
         const request = createFormRequest("http://localhost/dashboard/account/security", {
             currentPassword: "oldpass123",
             newPassword: "short",
@@ -59,7 +59,8 @@ describe("Account Security Page", () => {
         });
 
         const result = await action({ request, params: {}, context: {} });
-        expect(result).toEqual({ error: "New password must be at least 8 characters" });
+        expect(result).toEqual({ success: true, message: "Password changed successfully" });
+        expect(passwordApi.changePassword).toHaveBeenCalledWith("oldpass123", "short", "test-token");
     });
 
     it("action returns error when passwords don't match", async () => {
@@ -136,7 +137,7 @@ describe("Account Security Page", () => {
         expect(screen.getByRole("button", { name: /Change password/i })).toBeInTheDocument();
     });
 
-    it("displays password minimum length hint", async () => {
+    it("displays password policy hint", async () => {
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard/account/security",
@@ -146,6 +147,6 @@ describe("Account Security Page", () => {
 
         render(<RoutesStub initialEntries={["/dashboard/account/security"]} />);
 
-        expect(await screen.findByText("Must be at least 8 characters")).toBeInTheDocument();
+        expect(await screen.findByText("Must be at least 12 characters with uppercase, lowercase, numbers, and symbols")).toBeInTheDocument();
     });
 });

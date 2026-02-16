@@ -7,6 +7,7 @@ use crate::grpc::proto::{
     Role as ProtoRole, ValidateTokenRequest, ValidateTokenResponse,
 };
 use crate::jwt::JwtManager;
+use crate::repository::audit::{AuditRepository, CreateAuditLogInput};
 use crate::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
 use std::sync::Arc;
 use tonic::{Request, Response, Status};
@@ -126,6 +127,7 @@ where
     service_repo: Arc<S>,
     rbac_repo: Arc<R>,
     tenant_repo: Option<Arc<dyn TenantRepository>>,
+    audit_repo: Option<Arc<dyn AuditRepository>>,
     is_production: bool,
 }
 
@@ -151,6 +153,7 @@ where
             service_repo,
             rbac_repo,
             tenant_repo: None,
+            audit_repo: None,
             is_production,
         }
     }
@@ -171,7 +174,35 @@ where
             service_repo,
             rbac_repo,
             tenant_repo: Some(tenant_repo),
+            audit_repo: None,
             is_production,
+        }
+    }
+
+    pub fn with_audit_repo(mut self, audit_repo: Arc<dyn AuditRepository>) -> Self {
+        self.audit_repo = Some(audit_repo);
+        self
+    }
+
+    async fn write_exchange_audit_log(
+        &self,
+        actor_id: Option<Uuid>,
+        action: &str,
+        resource_id: Option<Uuid>,
+        details: serde_json::Value,
+    ) {
+        if let Some(audit_repo) = &self.audit_repo {
+            let _ = audit_repo
+                .create(&CreateAuditLogInput {
+                    actor_id,
+                    action: action.to_string(),
+                    resource_type: "token_exchange".to_string(),
+                    resource_id,
+                    old_value: None,
+                    new_value: Some(details),
+                    ip_address: None,
+                })
+                .await;
         }
     }
 }
@@ -190,17 +221,36 @@ where
     ) -> Result<Response<ExchangeTokenResponse>, Status> {
         let start = std::time::Instant::now();
         let req = request.into_inner();
+        let requested_tenant = req.tenant_id.clone();
+        let requested_service = req.service_id.clone();
 
         // Verify identity token
-        let claims = self
-            .jwt_manager
-            .verify_identity_token(&req.identity_token)
-            .map_err(|e| Status::unauthenticated(format!("Invalid identity token: {}", e)))?;
+        let claims = match self.jwt_manager.verify_identity_token(&req.identity_token) {
+            Ok(claims) => claims,
+            Err(e) => {
+                self.write_exchange_audit_log(
+                    None,
+                    "token_exchange.exchange.failed",
+                    None,
+                    serde_json::json!({
+                        "tenant_id": requested_tenant,
+                        "service_id": requested_service,
+                        "reason": "invalid_identity_token"
+                    }),
+                )
+                .await;
+                return Err(Status::unauthenticated(format!(
+                    "Invalid identity token: {}",
+                    e
+                )));
+            }
+        };
 
         let user_id = claims
             .sub
             .parse::<StringUuid>()
             .map_err(|_| Status::internal("Invalid user ID in token"))?;
+        let actor_id = Uuid::from(user_id);
 
         // Accept both UUID and tenant slug
         let tenant_id = match req.tenant_id.parse::<StringUuid>() {
@@ -210,9 +260,7 @@ where
                     let tenant = tenant_repo
                         .find_by_slug(&req.tenant_id)
                         .await
-                        .map_err(|e| {
-                            Status::internal(format!("Failed to lookup tenant: {}", e))
-                        })?
+                        .map_err(|e| Status::internal(format!("Failed to lookup tenant: {}", e)))?
                         .ok_or_else(|| {
                             Status::not_found(format!(
                                 "Tenant '{}' not found. Provide a valid tenant UUID or slug.",
@@ -237,12 +285,30 @@ where
         }
 
         // Verify user is a member of the target tenant (security check)
-        let _tenant_user_id = self
+        let _tenant_user_id = match self
             .rbac_repo
             .find_tenant_user_id(user_id, tenant_id)
             .await
             .map_err(|e| Status::internal(format!("Failed to check tenant membership: {}", e)))?
-            .ok_or_else(|| Status::permission_denied("User is not a member of this tenant"))?;
+        {
+            Some(tenant_user_id) => tenant_user_id,
+            None => {
+                self.write_exchange_audit_log(
+                    Some(actor_id),
+                    "token_exchange.exchange.failed",
+                    None,
+                    serde_json::json!({
+                        "tenant_id": Uuid::from(tenant_id),
+                        "service_id": req.service_id,
+                        "reason": "not_tenant_member"
+                    }),
+                )
+                .await;
+                return Err(Status::permission_denied(
+                    "User is not a member of this tenant",
+                ));
+            }
+        };
 
         // Verify client exists
         let client = self
@@ -268,32 +334,77 @@ where
         // Verify service belongs to the requested tenant (prevent cross-tenant abuse)
         if let Some(service_tenant_id) = service.tenant_id {
             if service_tenant_id != tenant_id {
+                self.write_exchange_audit_log(
+                    Some(actor_id),
+                    "token_exchange.exchange.failed",
+                    Some(service.id.0),
+                    serde_json::json!({
+                        "tenant_id": Uuid::from(tenant_id),
+                        "service_id": req.service_id,
+                        "reason": "service_tenant_mismatch"
+                    }),
+                )
+                .await;
                 return Err(Status::permission_denied(
                     "Service does not belong to the requested tenant",
                 ));
             }
         }
 
-        let user_roles = match self
+        // Populate cache for other consumers, but we'll re-fetch fresh data
+        // after the membership re-check below to prevent stale roles in tokens.
+        if let Ok(None) | Err(_) = self
             .cache_manager
             .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service.id.0)
             .await
         {
-            Ok(Some(roles)) => roles,
-            _ => {
-                let roles = self
-                    .rbac_repo
-                    .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id)
-                    .await
-                    .map_err(|e| Status::internal(format!("Failed to get user roles: {}", e)))?;
-
+            if let Ok(roles) = self
+                .rbac_repo
+                .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id)
+                .await
+            {
                 let _ = self
                     .cache_manager
                     .set_user_roles_for_service(&roles, service.id.0)
                     .await;
-                roles
+            }
+        }
+
+        // Re-verify membership before token issuance to close TOCTOU race window.
+        // Between the initial membership check and role fetching, the user's
+        // membership could have been revoked by a concurrent request.
+        let _recheck = match self
+            .rbac_repo
+            .find_tenant_user_id(user_id, tenant_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to re-check tenant membership: {}", e)))?
+        {
+            Some(tenant_user_id) => tenant_user_id,
+            None => {
+                self.write_exchange_audit_log(
+                    Some(actor_id),
+                    "token_exchange.exchange.failed",
+                    Some(service.id.0),
+                    serde_json::json!({
+                        "tenant_id": Uuid::from(tenant_id),
+                        "service_id": req.service_id,
+                        "reason": "membership_revoked_during_exchange"
+                    }),
+                )
+                .await;
+                return Err(Status::permission_denied(
+                    "User membership was revoked during token exchange",
+                ));
             }
         };
+
+        // Re-fetch roles from DB (bypass cache) to ensure token reflects
+        // the current state of permissions at the moment of issuance.
+        let user_roles = self
+            .rbac_repo
+            .find_user_roles_in_tenant_for_service(user_id, tenant_id, service.id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to re-fetch user roles: {}", e)))?;
 
         // Create tenant access token
         let access_token = self
@@ -320,6 +431,16 @@ where
         metrics::counter!("auth9_auth_token_exchange_total", "result" => "success").increment(1);
         metrics::histogram!("auth9_grpc_request_duration_seconds", "service" => "TokenExchange", "method" => "exchange_token").record(start.elapsed().as_secs_f64());
         metrics::counter!("auth9_grpc_requests_total", "service" => "TokenExchange", "method" => "exchange_token", "status" => "ok").increment(1);
+        self.write_exchange_audit_log(
+            Some(actor_id),
+            "token_exchange.exchange.succeeded",
+            Some(service.id.0),
+            serde_json::json!({
+                "tenant_id": Uuid::from(tenant_id),
+                "service_id": req.service_id
+            }),
+        )
+        .await;
 
         Ok(Response::new(ExchangeTokenResponse {
             access_token,
@@ -336,7 +457,10 @@ where
         let req = request.into_inner();
 
         // Try service client token first (aud: "auth9-service")
-        if let Ok(claims) = self.jwt_manager.verify_service_client_token(&req.access_token) {
+        if let Ok(claims) = self
+            .jwt_manager
+            .verify_service_client_token(&req.access_token)
+        {
             metrics::counter!("auth9_auth_token_validation_total", "result" => "valid")
                 .increment(1);
             return Ok(Response::new(ValidateTokenResponse {
@@ -403,9 +527,7 @@ where
                     let tenant = tenant_repo
                         .find_by_slug(&req.tenant_id)
                         .await
-                        .map_err(|e| {
-                            Status::internal(format!("Failed to lookup tenant: {}", e))
-                        })?
+                        .map_err(|e| Status::internal(format!("Failed to lookup tenant: {}", e)))?
                         .ok_or_else(|| {
                             Status::not_found(format!(
                                 "Tenant '{}' not found. Provide a valid tenant UUID or slug.",

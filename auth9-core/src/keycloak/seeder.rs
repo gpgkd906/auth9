@@ -287,19 +287,36 @@ impl KeycloakSeeder {
 
         let mut updated = current;
         if let Some(obj) = updated.as_object_mut() {
-            obj.insert("sslRequired".to_string(), serde_json::json!(self.config.ssl_required));
+            obj.insert(
+                "sslRequired".to_string(),
+                serde_json::json!(self.config.ssl_required),
+            );
             obj.insert("loginTheme".to_string(), serde_json::json!("auth9"));
             obj.insert("registrationAllowed".to_string(), serde_json::json!(false));
             obj.insert("eventsEnabled".to_string(), serde_json::json!(true));
-            obj.insert("eventsListeners".to_string(), serde_json::json!(events_listeners));
-            obj.insert("enabledEventTypes".to_string(), serde_json::json!([
-                "LOGIN", "LOGIN_ERROR", "LOGOUT", "LOGOUT_ERROR",
-                "CODE_TO_TOKEN", "CODE_TO_TOKEN_ERROR",
-                "REFRESH_TOKEN", "REFRESH_TOKEN_ERROR",
-                "IDENTITY_PROVIDER_LOGIN", "IDENTITY_PROVIDER_LOGIN_ERROR",
-                "USER_DISABLED_BY_PERMANENT_LOCKOUT", "USER_DISABLED_BY_TEMPORARY_LOCKOUT",
-                "LOGIN_WITH_OTP", "LOGIN_WITH_OTP_ERROR"
-            ]));
+            obj.insert(
+                "eventsListeners".to_string(),
+                serde_json::json!(events_listeners),
+            );
+            obj.insert(
+                "enabledEventTypes".to_string(),
+                serde_json::json!([
+                    "LOGIN",
+                    "LOGIN_ERROR",
+                    "LOGOUT",
+                    "LOGOUT_ERROR",
+                    "CODE_TO_TOKEN",
+                    "CODE_TO_TOKEN_ERROR",
+                    "REFRESH_TOKEN",
+                    "REFRESH_TOKEN_ERROR",
+                    "IDENTITY_PROVIDER_LOGIN",
+                    "IDENTITY_PROVIDER_LOGIN_ERROR",
+                    "USER_DISABLED_BY_PERMANENT_LOCKOUT",
+                    "USER_DISABLED_BY_TEMPORARY_LOCKOUT",
+                    "LOGIN_WITH_OTP",
+                    "LOGIN_WITH_OTP_ERROR"
+                ]),
+            );
             obj.insert("eventsExpiration".to_string(), serde_json::json!(2592000));
         }
 
@@ -357,6 +374,7 @@ impl KeycloakSeeder {
         let mut updated = current;
         if let Some(obj) = updated.as_object_mut() {
             obj.insert("bruteForceProtected".to_string(), serde_json::json!(true));
+            obj.insert("permanentLockout".to_string(), serde_json::json!(false));
             obj.insert("failureFactor".to_string(), serde_json::json!(5));
             obj.insert("maxDeltaTimeSeconds".to_string(), serde_json::json!(600));
             obj.insert("waitIncrementSeconds".to_string(), serde_json::json!(60));
@@ -369,10 +387,21 @@ impl KeycloakSeeder {
                 "quickLoginCheckMilliSeconds".to_string(),
                 serde_json::json!(1000),
             );
+            // OTP policy: tighten TOTP settings to reduce brute force window
+            // Note: Keycloak 23 brute force protection covers OTP failures
+            // when bruteForceProtected is enabled
+            obj.insert("otpPolicyType".to_string(), serde_json::json!("totp"));
+            obj.insert(
+                "otpPolicyAlgorithm".to_string(),
+                serde_json::json!("HmacSHA256"),
+            );
+            obj.insert("otpPolicyDigits".to_string(), serde_json::json!(6));
+            obj.insert("otpPolicyPeriod".to_string(), serde_json::json!(30));
+            obj.insert("otpPolicyLookAheadWindow".to_string(), serde_json::json!(1));
             obj.insert(
                 "passwordPolicy".to_string(),
                 serde_json::json!(
-                    "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername() and passwordHistory(5)"
+                    "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername() and passwordHistory(5) and hashIterations(100000)"
                 ),
             );
         }
@@ -397,7 +426,7 @@ impl KeycloakSeeder {
         }
 
         info!(
-            "Configured realm '{}' security: bruteForceProtected=true, failureFactor=5, passwordPolicy=enabled",
+            "Configured realm '{}' security: bruteForceProtected=true, permanentLockout=false, failureFactor=5, passwordPolicy=enabled",
             self.config.realm
         );
 
@@ -677,10 +706,7 @@ impl KeycloakSeeder {
         } else {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            warn!(
-                "Failed to update admin user email: {} - {}",
-                status, body
-            );
+            warn!("Failed to update admin user email: {} - {}", status, body);
         }
 
         Ok(())
@@ -689,11 +715,7 @@ impl KeycloakSeeder {
     /// Clear brute force detection status for a user.
     /// This resets failed login counters and ensures brute force lockout protection
     /// is active (not disabled) for the user.
-    async fn clear_brute_force_status(
-        &self,
-        token: &str,
-        user_uuid: &str,
-    ) -> anyhow::Result<()> {
+    async fn clear_brute_force_status(&self, token: &str, user_uuid: &str) -> anyhow::Result<()> {
         let url = format!(
             "{}/admin/realms/{}/attack-detection/brute-force/users/{}",
             self.config.url, self.config.realm, user_uuid
@@ -713,10 +735,7 @@ impl KeycloakSeeder {
             Ok(r) => {
                 // 404 is expected if no brute force record exists yet
                 if r.status() != StatusCode::NOT_FOUND {
-                    warn!(
-                        "Failed to clear brute force status: {}",
-                        r.status()
-                    );
+                    warn!("Failed to clear brute force status: {}", r.status());
                 }
             }
             Err(e) => {
@@ -775,11 +794,7 @@ impl KeycloakSeeder {
     }
 
     /// Reset admin user password to the configured AUTH9_ADMIN_PASSWORD value.
-    async fn reset_admin_password(
-        &self,
-        token: &str,
-        user_uuid: &str,
-    ) -> anyhow::Result<()> {
+    async fn reset_admin_password(&self, token: &str, user_uuid: &str) -> anyhow::Result<()> {
         let password = get_admin_password();
         let url = format!(
             "{}/admin/realms/{}/users/{}/reset-password",
@@ -1121,7 +1136,11 @@ impl KeycloakSeeder {
         if !response.status().is_success() {
             let status = response.status();
             let body = response.text().await.unwrap_or_default();
-            anyhow::bail!("Failed to check demo client existence: {} - {}", status, body);
+            anyhow::bail!(
+                "Failed to check demo client existence: {} - {}",
+                status,
+                body
+            );
         }
 
         let clients: Vec<serde_json::Value> = response.json().await?;
@@ -1250,10 +1269,7 @@ impl KeycloakSeeder {
             .context("Failed to create demo client")?;
 
         if response.status() == StatusCode::CONFLICT {
-            info!(
-                "Demo client '{}' already exists",
-                DEFAULT_DEMO_CLIENT_ID
-            );
+            info!("Demo client '{}' already exists", DEFAULT_DEMO_CLIENT_ID);
             return Ok(());
         }
 

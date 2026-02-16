@@ -295,12 +295,11 @@ async fn seed_demo_service(config: &Config) -> Result<()> {
 
     // Get actual service ID
     let actual_service_id = if service_result.rows_affected() == 0 {
-        let row: (String,) =
-            sqlx::query_as("SELECT id FROM services WHERE name = ?")
-                .bind(DEFAULT_DEMO_SERVICE_NAME)
-                .fetch_one(&pool)
-                .await
-                .context("Failed to get existing demo service")?;
+        let row: (String,) = sqlx::query_as("SELECT id FROM services WHERE name = ?")
+            .bind(DEFAULT_DEMO_SERVICE_NAME)
+            .fetch_one(&pool)
+            .await
+            .context("Failed to get existing demo service")?;
         row.0
     } else {
         service_id
@@ -329,10 +328,7 @@ async fn seed_demo_service(config: &Config) -> Result<()> {
             DEFAULT_DEMO_CLIENT_ID
         );
     } else {
-        info!(
-            "Demo client '{}' already exists",
-            DEFAULT_DEMO_CLIENT_ID
-        );
+        info!("Demo client '{}' already exists", DEFAULT_DEMO_CLIENT_ID);
     }
 
     Ok(())
@@ -406,12 +402,11 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     // If service was not inserted (already exists), get the existing service_id
     let actual_service_id = if service_result.rows_affected() == 0 {
         info!("Portal service already exists, using existing record");
-        let row: (String,) =
-            sqlx::query_as("SELECT id FROM services WHERE name = ?")
-                .bind(DEFAULT_PORTAL_NAME)
-                .fetch_one(&pool)
-                .await
-                .context("Failed to get existing portal service")?;
+        let row: (String,) = sqlx::query_as("SELECT id FROM services WHERE name = ?")
+            .bind(DEFAULT_PORTAL_NAME)
+            .fetch_one(&pool)
+            .await
+            .context("Failed to get existing portal service")?;
         row.0
     } else {
         service_id
@@ -503,17 +498,16 @@ async fn seed_m2m_test_service(config: &Config) -> Result<()> {
     .context("Failed to create M2M test service")?;
 
     // Get actual service ID (may have been created before via unique constraint)
-    let actual_service_id: String = match sqlx::query_as::<_, (String,)>(
-        "SELECT id FROM services WHERE name = ?",
-    )
-    .bind(DEFAULT_M2M_SERVICE_NAME)
-    .fetch_optional(&pool)
-    .await
-    .context("Failed to query M2M service")?
-    {
-        Some((id,)) => id,
-        None => service_id,
-    };
+    let actual_service_id: String =
+        match sqlx::query_as::<_, (String,)>("SELECT id FROM services WHERE name = ?")
+            .bind(DEFAULT_M2M_SERVICE_NAME)
+            .fetch_optional(&pool)
+            .await
+            .context("Failed to query M2M service")?
+        {
+            Some((id,)) => id,
+            None => service_id,
+        };
 
     // Create confidential client with known secret
     let client_result = sqlx::query(
@@ -732,18 +726,24 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         info!("Seeded tenant_services for both tenants → Auth9 Admin Portal");
 
         // 7. Seed RBAC: default roles, permissions, and assignments for admin user
-        seed_rbac_for_service(&pool, &service_id, &actual_platform_id, &actual_demo_id, &actual_user_id).await?;
+        seed_rbac_for_service(
+            &pool,
+            &service_id,
+            &actual_platform_id,
+            &actual_demo_id,
+            &actual_user_id,
+        )
+        .await?;
     } else {
         warn!("Auth9 Admin Portal service not found in database, skipping tenant_services seed");
     }
 
     // 8. Link M2M test service to Demo tenant
-    let m2m_service: Option<(String,)> =
-        sqlx::query_as("SELECT id FROM services WHERE name = ?")
-            .bind(DEFAULT_M2M_SERVICE_NAME)
-            .fetch_optional(&pool)
-            .await
-            .context("Failed to query M2M service")?;
+    let m2m_service: Option<(String,)> = sqlx::query_as("SELECT id FROM services WHERE name = ?")
+        .bind(DEFAULT_M2M_SERVICE_NAME)
+        .fetch_optional(&pool)
+        .await
+        .context("Failed to query M2M service")?;
 
     if let Some((m2m_service_id,)) = m2m_service {
         sqlx::query("UPDATE services SET tenant_id = ? WHERE id = ? AND tenant_id IS NULL")
@@ -768,12 +768,11 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     }
 
     // 9. Link Demo service to Demo tenant
-    let demo_service: Option<(String,)> =
-        sqlx::query_as("SELECT id FROM services WHERE name = ?")
-            .bind(DEFAULT_DEMO_SERVICE_NAME)
-            .fetch_optional(&pool)
-            .await
-            .context("Failed to query Demo service")?;
+    let demo_service: Option<(String,)> = sqlx::query_as("SELECT id FROM services WHERE name = ?")
+        .bind(DEFAULT_DEMO_SERVICE_NAME)
+        .fetch_optional(&pool)
+        .await
+        .context("Failed to query Demo service")?;
 
     if let Some((demo_service_id,)) = demo_service {
         // Assign Demo service to Demo tenant
@@ -867,14 +866,13 @@ async fn seed_rbac_for_service(
     // Assign admin role to admin user in both tenants
     for tenant_id in [platform_tenant_id, demo_tenant_id] {
         // Get tenant_user_id for this user+tenant pair
-        let tenant_user: Option<(String,)> = sqlx::query_as(
-            "SELECT id FROM tenant_users WHERE tenant_id = ? AND user_id = ?",
-        )
-        .bind(tenant_id)
-        .bind(admin_user_id)
-        .fetch_optional(pool)
-        .await
-        .context("Failed to query tenant_user")?;
+        let tenant_user: Option<(String,)> =
+            sqlx::query_as("SELECT id FROM tenant_users WHERE tenant_id = ? AND user_id = ?")
+                .bind(tenant_id)
+                .bind(admin_user_id)
+                .fetch_optional(pool)
+                .await
+                .context("Failed to query tenant_user")?;
 
         if let Some((tenant_user_id,)) = tenant_user {
             sqlx::query(
@@ -936,7 +934,10 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
     .context("Failed to check existing email config")?;
 
     if existing.0 > 0 {
-        info!("Email config already exists, skipping dev seed (SMTP: {}:1025)", smtp_host);
+        info!(
+            "Email config already exists, skipping dev seed (SMTP: {}:1025)",
+            smtp_host
+        );
     } else {
         sqlx::query(
             "INSERT INTO system_settings (category, setting_key, value, created_at, updated_at) VALUES ('email', 'provider', ?, NOW(), NOW())"

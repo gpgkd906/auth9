@@ -13,10 +13,10 @@ use axum::{
     http::{HeaderMap, StatusCode},
     response::IntoResponse,
 };
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
-use chrono::Utc;
 use tracing::{debug, error, info, warn};
 
 type HmacSha256 = Hmac<Sha256>;
@@ -556,10 +556,16 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
                     device_type: None,
                     location: ip_address.as_deref().map(derive_location_from_ip),
                     session_id: None,
-                    failure_reason: Some("Account temporarily locked due to repeated login failures".to_string()),
+                    failure_reason: Some(
+                        "Account temporarily locked due to repeated login failures".to_string(),
+                    ),
                 };
 
-                match state.analytics_service().record_login_event(locked_input).await {
+                match state
+                    .analytics_service()
+                    .record_login_event(locked_input)
+                    .await
+                {
                     Ok(locked_id) => {
                         info!(
                             "Auto-recorded account lockout event: id={}, email={}, consecutive_failures={}",
@@ -986,10 +992,7 @@ mod tests {
         assert_eq!(event.details.username, Some("user1".to_string()));
         assert_eq!(event.details.email, Some("user1@test.com".to_string()));
         assert_eq!(event.details.auth_method, Some("password".to_string()));
-        assert_eq!(
-            event.details.credential_type,
-            Some("password".to_string())
-        );
+        assert_eq!(event.details.credential_type, Some("password".to_string()));
         assert_eq!(event.details.identity_provider, Some("google".to_string()));
         assert_eq!(
             event.details.redirect_uri,
@@ -1049,10 +1052,7 @@ mod tests {
     fn test_derive_location_from_ip_loopback() {
         assert_eq!(derive_location_from_ip("127.0.0.1"), "Local Network");
         assert_eq!(derive_location_from_ip("::1"), "Local Network");
-        assert_eq!(
-            derive_location_from_ip("0:0:0:0:0:0:0:1"),
-            "Local Network"
-        );
+        assert_eq!(derive_location_from_ip("0:0:0:0:0:0:0:1"), "Local Network");
     }
 
     #[test]
@@ -1065,10 +1065,7 @@ mod tests {
     #[test]
     fn test_derive_location_from_ip_public() {
         assert_eq!(derive_location_from_ip("8.8.8.8"), "IP:8.8.8.8");
-        assert_eq!(
-            derive_location_from_ip("203.0.113.50"),
-            "IP:203.0.113.50"
-        );
+        assert_eq!(derive_location_from_ip("203.0.113.50"), "IP:203.0.113.50");
     }
 
     #[test]

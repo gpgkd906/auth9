@@ -13,13 +13,12 @@ pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
-    action::ActionRepositoryImpl, audit::AuditRepositoryImpl,
-    invitation::InvitationRepositoryImpl, linked_identity::LinkedIdentityRepositoryImpl,
-    login_event::LoginEventRepositoryImpl, password_reset::PasswordResetRepositoryImpl,
-    rbac::RbacRepositoryImpl, security_alert::SecurityAlertRepositoryImpl,
-    service::ServiceRepositoryImpl, session::SessionRepositoryImpl,
-    system_settings::SystemSettingsRepositoryImpl, tenant::TenantRepositoryImpl,
-    user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
+    action::ActionRepositoryImpl, audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl,
+    linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
+    password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
+    security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
+    session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
+    tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
 use crate::service::{
     security_detection::SecurityDetectionConfig, tenant::TenantRepositoryBundle,
@@ -434,7 +433,10 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     );
 
     // Create ActionService
-    let action_service = Arc::new(ActionService::new(action_repo.clone(), Some(action_engine.clone())));
+    let action_service = Arc::new(ActionService::new(
+        action_repo.clone(),
+        Some(action_engine.clone()),
+    ));
     info!("ActionService initialized");
 
     // Create TenantService with repository bundle
@@ -657,7 +659,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         rbac_repo,
         tenant_repo.clone(),
         config.is_production(),
-    );
+    )
+    .with_audit_repo(audit_repo.clone());
 
     // Wrap prometheus handle in Arc for sharing
     let prom_handle = Arc::new(prometheus_handle);
@@ -775,21 +778,36 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 
         // Load TLS configuration if mTLS mode is enabled
         let tls_config = if config.grpc_security.auth_mode == "mtls" {
-            let cert_path = config.grpc_security.tls_cert_path
+            let cert_path = config
+                .grpc_security
+                .tls_cert_path
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("mTLS mode requires GRPC_TLS_CERT_PATH"))?;
-            let key_path = config.grpc_security.tls_key_path
+            let key_path = config
+                .grpc_security
+                .tls_key_path
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("mTLS mode requires GRPC_TLS_KEY_PATH"))?;
-            let ca_cert_path = config.grpc_security.tls_ca_cert_path
+            let ca_cert_path = config
+                .grpc_security
+                .tls_ca_cert_path
                 .as_ref()
                 .ok_or_else(|| anyhow::anyhow!("mTLS mode requires GRPC_TLS_CA_CERT_PATH"))?;
 
-            info!("Loading gRPC mTLS certificates: cert={}, key={}, ca={}", cert_path, key_path, ca_cert_path);
+            info!(
+                "Loading gRPC mTLS certificates: cert={}, key={}, ca={}",
+                cert_path, key_path, ca_cert_path
+            );
 
-            let cert = tokio::fs::read(cert_path).await.context("Failed to read TLS certificate")?;
-            let key = tokio::fs::read(key_path).await.context("Failed to read TLS private key")?;
-            let ca_cert = tokio::fs::read(ca_cert_path).await.context("Failed to read CA certificate")?;
+            let cert = tokio::fs::read(cert_path)
+                .await
+                .context("Failed to read TLS certificate")?;
+            let key = tokio::fs::read(key_path)
+                .await
+                .context("Failed to read TLS private key")?;
+            let ca_cert = tokio::fs::read(ca_cert_path)
+                .await
+                .context("Failed to read CA certificate")?;
 
             let identity = tonic::transport::Identity::from_pem(&cert, &key);
             let ca = tonic::transport::Certificate::from_pem(&ca_cert);
@@ -798,7 +816,10 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
                 .identity(identity)
                 .client_ca_root(ca);
 
-            info!("gRPC server starting with mTLS on {} (client verification enabled)", grpc_addr);
+            info!(
+                "gRPC server starting with mTLS on {} (client verification enabled)",
+                grpc_addr
+            );
             Some(tls)
         } else {
             info!(
@@ -928,8 +949,7 @@ async fn shutdown_signal() {
 }
 
 const CORS_ALLOW_METHODS: &str = "GET,POST,PUT,DELETE,PATCH,OPTIONS";
-const CORS_ALLOW_HEADERS: &str =
-    "authorization,content-type,accept,origin,x-tenant-id,x-api-key";
+const CORS_ALLOW_HEADERS: &str = "authorization,content-type,accept,origin,x-tenant-id,x-api-key";
 
 /// Custom CORS middleware service that only returns CORS headers when the origin matches.
 #[derive(Clone)]
@@ -984,26 +1004,25 @@ where
             _ => None,
         };
 
-        let set_cors_headers =
-            move |headers: &mut axum::http::HeaderMap, matched_origin: &str| {
-                if is_wildcard {
-                    headers.insert(
-                        header::ACCESS_CONTROL_ALLOW_ORIGIN,
-                        HeaderValue::from_static("*"),
-                    );
-                } else {
-                    if let Ok(val) = HeaderValue::from_str(matched_origin) {
-                        headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, val);
-                    }
-                    if allow_credentials {
-                        headers.insert(
-                            header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
-                            HeaderValue::from_static("true"),
-                        );
-                    }
+        let set_cors_headers = move |headers: &mut axum::http::HeaderMap, matched_origin: &str| {
+            if is_wildcard {
+                headers.insert(
+                    header::ACCESS_CONTROL_ALLOW_ORIGIN,
+                    HeaderValue::from_static("*"),
+                );
+            } else {
+                if let Ok(val) = HeaderValue::from_str(matched_origin) {
+                    headers.insert(header::ACCESS_CONTROL_ALLOW_ORIGIN, val);
                 }
-                headers.insert(header::VARY, HeaderValue::from_static("origin"));
-            };
+                if allow_credentials {
+                    headers.insert(
+                        header::ACCESS_CONTROL_ALLOW_CREDENTIALS,
+                        HeaderValue::from_static("true"),
+                    );
+                }
+            }
+            headers.insert(header::VARY, HeaderValue::from_static("origin"));
+        };
 
         if is_preflight {
             return Box::pin(async move {
@@ -1122,7 +1141,7 @@ where
         .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
         .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
         .route("/api/v1/auth/token", post(api::auth::token::<S>))
-        .route("/api/v1/auth/logout", get(api::auth::logout_redirect::<S>).post(api::auth::logout::<S>))
+        .route("/api/v1/auth/logout", post(api::auth::logout::<S>))
         // Password reset flow (unauthenticated by design)
         .route(
             "/api/v1/auth/forgot-password",
@@ -1509,13 +1528,14 @@ where
         required_token: state.config().telemetry.metrics_token.clone(),
     };
 
-    // In production, require METRICS_TOKEN to be set for metrics access
-    let effective_metrics_state = if state.config().is_production()
-        && metrics_state.required_token.is_none()
-    {
-        tracing::warn!(
-            "⚠️  /metrics endpoint disabled in production (set METRICS_TOKEN to enable)"
-        );
+    // Require METRICS_TOKEN to be set for metrics access in all environments.
+    // Without a token, the endpoint is disabled to prevent information disclosure.
+    let effective_metrics_state = if metrics_state.required_token.is_none() {
+        if state.config().is_production() {
+            tracing::warn!("⚠️  /metrics endpoint disabled (set METRICS_TOKEN to enable)");
+        } else {
+            tracing::info!("ℹ️  /metrics endpoint disabled (set METRICS_TOKEN to enable)");
+        }
         crate::api::metrics::MetricsState {
             handle: Arc::new(None), // Disable metrics endpoint
             required_token: None,
@@ -1544,16 +1564,22 @@ where
         // (axum skips .layer() middleware for its implicit 404 fallback)
         .fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not Found") })
         // --- Innermost layers (run first on request, last on response) ---
+        // 0. Path traversal guard - reject requests with `..` in path
+        .layer(axum::middleware::from_fn(
+            crate::middleware::path_guard::path_guard_middleware,
+        ))
         // 1. Body size limit - reject oversized request bodies (prevents OOM)
         .layer(DefaultBodyLimit::max(body_limit))
-        // 2. Security headers - adds security headers to all responses
+        // 2. Error response normalization - consistent JSON error format
+        //    (must be inner to security headers so headers are added AFTER
+        //     normalization potentially replaces the response object)
+        .layer(axum::middleware::from_fn(
+            crate::middleware::normalize_error_response,
+        ))
+        // 3. Security headers - adds security headers to all responses
         .layer(axum::middleware::from_fn_with_state(
             security_headers_config,
             security_headers_middleware,
-        ))
-        // 3. Error response normalization - consistent JSON error format
-        .layer(axum::middleware::from_fn(
-            crate::middleware::normalize_error_response,
         ))
         // 4. Tracing - for request logging
         .layer(TraceLayer::new_for_http())
@@ -1576,9 +1602,7 @@ where
         .layer(
             ServiceBuilder::new()
                 .layer(axum::error_handling::HandleErrorLayer::new(
-                    |_: tower::BoxError| async {
-                        axum::http::StatusCode::SERVICE_UNAVAILABLE
-                    },
+                    |_: tower::BoxError| async { axum::http::StatusCode::SERVICE_UNAVAILABLE },
                 ))
                 .load_shed()
                 .concurrency_limit(concurrency_limit),

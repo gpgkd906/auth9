@@ -9,7 +9,7 @@
 #   ./scripts/reset-docker.sh          # Smart reset (skips unchanged components)
 #   ./scripts/reset-docker.sh --purge  # Full purge (rebuild everything, clear all caches)
 
-set -e
+set -eo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_DIR="$(dirname "$SCRIPT_DIR")"
@@ -38,22 +38,22 @@ compute_hash() {
   local component="$1"
   local hash_input=""
 
+  # Disable pipefail/errexit here: find may return non-zero for missing dirs, which is expected
   case "$component" in
     auth9-core)
-      hash_input=$(find auth9-core/src auth9-core/migrations auth9-core/proto -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-core/Cargo.toml auth9-core/Cargo.lock auth9-core/Dockerfile 2>/dev/null)
+      hash_input=$(set +eo pipefail; find auth9-core/src auth9-core/migrations auth9-core/proto -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-core/Cargo.toml auth9-core/Cargo.lock auth9-core/Dockerfile 2>/dev/null; true)
       ;;
     auth9-portal)
-      hash_input=$(find auth9-portal/app sdk/packages/core/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-portal/package.json auth9-portal/package-lock.json auth9-portal/Dockerfile sdk/packages/core/package.json 2>/dev/null)
+      hash_input=$(set +eo pipefail; find auth9-portal/app sdk/packages/core/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-portal/package.json auth9-portal/package-lock.json auth9-portal/Dockerfile sdk/packages/core/package.json 2>/dev/null; true)
       ;;
     auth9-demo)
-      hash_input=$(find auth9-demo/src sdk/packages/core/src sdk/packages/node/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-demo/package.json auth9-demo/package-lock.json auth9-demo/tsconfig.json auth9-demo/Dockerfile sdk/packages/core/package.json sdk/packages/node/package.json 2>/dev/null)
+      hash_input=$(set +eo pipefail; find auth9-demo/src sdk/packages/core/src sdk/packages/node/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-demo/package.json auth9-demo/package-lock.json auth9-demo/tsconfig.json auth9-demo/Dockerfile sdk/packages/core/package.json sdk/packages/node/package.json 2>/dev/null; true)
       ;;
     auth9-theme-builder)
-      hash_input=$(find auth9-keycloak-theme/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-keycloak-theme/package.json auth9-keycloak-theme/package-lock.json auth9-keycloak-theme/Dockerfile 2>/dev/null)
+      hash_input=$(set +eo pipefail; find auth9-keycloak-theme/src -type f 2>/dev/null | sort | xargs cat 2>/dev/null; cat auth9-keycloak-theme/package.json auth9-keycloak-theme/package-lock.json auth9-keycloak-theme/Dockerfile 2>/dev/null; true)
       ;;
     auth9-keycloak-events-builder)
-      # Only the Dockerfile matters — source is git-cloned from a pinned version (v0.47)
-      hash_input=$(cat auth9-keycloak-events/Dockerfile 2>/dev/null)
+      hash_input=$(cat auth9-keycloak-events/Dockerfile 2>/dev/null || true)
       ;;
   esac
 
@@ -147,7 +147,7 @@ fi
 
 # Step 1: Stop and remove all containers and volumes
 echo "[1/7] Stopping containers..."
-$DC --profile build down -v --remove-orphans 2>&1 | tail -1 || true
+$DC --profile build down -v --remove-orphans > /dev/null 2>&1 || true
 
 # Step 2: Remove project images (only those that need rebuilding)
 echo "[2/7] Removing images..."
@@ -169,7 +169,7 @@ docker volume rm auth9_tidb-data auth9_redis-data auth9_keycloak-theme auth9_key
 # Step 4: Prune builder cache (only in --purge mode)
 if [ "$PURGE" = true ]; then
   echo "[4/7] Pruning ALL builder cache (--purge)..."
-  docker builder prune -af 2>/dev/null | tail -1 || true
+  docker builder prune -af > /dev/null 2>&1 || true
   # Clear all stored hashes
   rm -f "$CACHE_DIR"/*.hash
 else
@@ -194,10 +194,11 @@ APP_BUILD_TARGETS=""
 
 BUILD_PLUGINS_PID=""
 BUILD_APP_PID=""
+BUILD_LOG_DIR=$(mktemp -d)
 
 if [ -n "$PLUGIN_BUILD_TARGETS" ]; then
   echo "  Building plugins:$PLUGIN_BUILD_TARGETS"
-  $DC --profile build build --no-cache --parallel $PLUGIN_BUILD_TARGETS 2>&1 | grep -E '(Built|ERROR|built)' || true &
+  ( $DC --profile build build --no-cache --parallel $PLUGIN_BUILD_TARGETS > "$BUILD_LOG_DIR/plugins.log" 2>&1 ) &
   BUILD_PLUGINS_PID=$!
 else
   echo "  Plugins: all unchanged, skipping"
@@ -205,7 +206,7 @@ fi
 
 if [ -n "$APP_BUILD_TARGETS" ]; then
   echo "  Building apps:$APP_BUILD_TARGETS"
-  $DC build --no-cache --parallel $APP_BUILD_TARGETS 2>&1 | grep -E '(Built|ERROR|built)' || true &
+  ( $DC build --no-cache --parallel $APP_BUILD_TARGETS > "$BUILD_LOG_DIR/apps.log" 2>&1 ) &
   BUILD_APP_PID=$!
 else
   echo "  Apps: all unchanged, skipping"
@@ -213,11 +214,22 @@ fi
 
 # Wait for builds to complete
 if [ -n "$BUILD_PLUGINS_PID" ]; then
-  wait $BUILD_PLUGINS_PID || { echo "ERROR: Plugin build failed"; exit 1; }
+  if ! wait $BUILD_PLUGINS_PID; then
+    echo "ERROR: Plugin build failed. Log:"
+    tail -20 "$BUILD_LOG_DIR/plugins.log" 2>/dev/null
+    rm -rf "$BUILD_LOG_DIR"
+    exit 1
+  fi
 fi
 if [ -n "$BUILD_APP_PID" ]; then
-  wait $BUILD_APP_PID || { echo "ERROR: App build failed"; exit 1; }
+  if ! wait $BUILD_APP_PID; then
+    echo "ERROR: App build failed. Log:"
+    tail -20 "$BUILD_LOG_DIR/apps.log" 2>/dev/null
+    rm -rf "$BUILD_LOG_DIR"
+    exit 1
+  fi
 fi
+rm -rf "$BUILD_LOG_DIR"
 
 # Tag auth9-core image as auth9-init (same binary, different command at runtime)
 if [ "$REBUILD_CORE" = true ]; then
@@ -233,31 +245,84 @@ fi
 
 # Run plugin builders to copy JARs to volumes (always needed since volumes are recreated)
 echo "  Copying Keycloak plugin JARs..."
-$DC --profile build up auth9-theme-builder 2>&1 | tail -1 &
-$DC --profile build up auth9-keycloak-events-builder 2>&1 | tail -1 &
-wait
+$DC --profile build up auth9-theme-builder > /dev/null 2>&1 &
+THEME_PID=$!
+$DC --profile build up auth9-keycloak-events-builder > /dev/null 2>&1 &
+EVENTS_PID=$!
+wait $THEME_PID || { echo "WARNING: Theme builder failed (non-fatal)"; }
+wait $EVENTS_PID || { echo "WARNING: Events builder failed (non-fatal)"; }
 
 # Step 6: Start all services and wait for health checks
 echo "[6/7] Starting services..."
-$DC up -d 2>&1 | tail -1
+$DC up -d
 
 echo "  Waiting for services to become healthy..."
-TIMEOUT=120
+CRITICAL_SERVICES="auth9-core auth9-portal"
+TIMEOUT=180
 ELAPSED=0
+INIT_CHECKED=false
+
 while [ $ELAPSED -lt $TIMEOUT ]; do
-  # Count services that are still starting or unhealthy
-  NOT_READY=$($DC ps --format "{{.Status}}" 2>/dev/null | grep -ciE "starting|unhealthy" || true)
-  if [ "$NOT_READY" -eq 0 ]; then
-    echo "  All services healthy! (${ELAPSED}s)"
-    break
+  # Check if auth9-init failed (only need to check once after it exits)
+  if [ "$INIT_CHECKED" = false ]; then
+    INIT_STATUS=$($DC ps auth9-init --format "{{.Status}}" 2>/dev/null || true)
+    if echo "$INIT_STATUS" | grep -qiE "exited"; then
+      if echo "$INIT_STATUS" | grep -qiE "exited \(0\)"; then
+        INIT_CHECKED=true
+      else
+        echo ""
+        echo "  ERROR: auth9-init failed! Dependent services (auth9-core, auth9-portal) cannot start."
+        echo "  auth9-init logs:"
+        $DC logs --tail=30 auth9-init 2>/dev/null || true
+        echo ""
+        echo "  All service statuses:"
+        $DC ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || $DC ps
+        exit 1
+      fi
+    fi
   fi
+
+  # Count services that are NOT ready (starting, unhealthy, created but not running, or exited with error)
+  NOT_READY=$($DC ps --format "{{.Status}}" 2>/dev/null | grep -ciE "starting|unhealthy|created|exited \([^0]" || true)
+  if [ "$NOT_READY" -eq 0 ]; then
+    # Double-check: verify critical services are actually running
+    ALL_CRITICAL_UP=true
+    for svc in $CRITICAL_SERVICES; do
+      SVC_STATUS=$($DC ps "$svc" --format "{{.Status}}" 2>/dev/null || true)
+      if ! echo "$SVC_STATUS" | grep -qiE "^up|running"; then
+        ALL_CRITICAL_UP=false
+        break
+      fi
+    done
+
+    if [ "$ALL_CRITICAL_UP" = true ]; then
+      echo "  All services healthy! (${ELAPSED}s)"
+      break
+    fi
+  fi
+
   sleep 5
   ELAPSED=$((ELAPSED + 5))
-  echo "  Still waiting... ($NOT_READY services not ready, ${ELAPSED}s elapsed)"
+  if [ $((ELAPSED % 15)) -eq 0 ]; then
+    echo "  Still waiting... ($NOT_READY services not ready, ${ELAPSED}s elapsed)"
+  fi
 done
 
 if [ $ELAPSED -ge $TIMEOUT ]; then
-  echo "  WARNING: Timed out after ${TIMEOUT}s, some services may not be healthy"
+  echo ""
+  echo "  ERROR: Timed out after ${TIMEOUT}s. Service statuses:"
+  $DC ps --format "table {{.Name}}\t{{.Status}}" 2>/dev/null || $DC ps
+  echo ""
+  # Show logs of critical services that aren't running
+  for svc in $CRITICAL_SERVICES; do
+    SVC_STATUS=$($DC ps "$svc" --format "{{.Status}}" 2>/dev/null || true)
+    if ! echo "$SVC_STATUS" | grep -qiE "^up|running"; then
+      echo "  $svc is not running (status: $SVC_STATUS). Logs:"
+      $DC logs --tail=15 "$svc" 2>/dev/null || true
+      echo ""
+    fi
+  done
+  exit 1
 fi
 
 # Step 7: Verify

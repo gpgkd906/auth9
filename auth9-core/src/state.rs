@@ -17,9 +17,9 @@ use crate::repository::{
 };
 use crate::service::{
     ActionService, AnalyticsService, BrandingService, ClientService, EmailService,
-    EmailTemplateService, IdentityProviderService, InvitationService, PasswordService,
-    RbacService, SecurityDetectionService, SessionService, SystemSettingsService, TenantService,
-    UserService, WebAuthnService, WebhookService,
+    EmailTemplateService, IdentityProviderService, InvitationService, PasswordService, RbacService,
+    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
+    WebAuthnService, WebhookService,
 };
 
 // ============================================================

@@ -75,7 +75,7 @@ describe("Analytics Page", () => {
       rangeLabel: "Last 7 days",
     });
     expect(analyticsApi.getStats).toHaveBeenCalled();
-    expect(analyticsApi.getDailyTrend).toHaveBeenCalledWith(7, "mock-access-token");
+    expect(analyticsApi.getDailyTrend).toHaveBeenCalledWith(7, "mock-access-token", undefined, undefined);
   });
 
   it("loader uses custom days parameter", async () => {

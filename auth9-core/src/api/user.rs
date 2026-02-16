@@ -4,7 +4,7 @@ use crate::api::{
     write_audit_log_generic, MessageResponse, PaginatedResponse, PaginationQuery, SuccessResponse,
 };
 use crate::config::Config;
-use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput};
+use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
 use crate::middleware::auth::{AuthUser, TokenType};
@@ -16,7 +16,7 @@ use axum::{
     response::IntoResponse,
     Json,
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 use validator::Validate;
 
@@ -35,6 +35,23 @@ pub struct UserListQuery {
     )]
     pub per_page: i64,
     pub search: Option<String>,
+    /// Optional tenant_id filter (platform admin only) to scope user list to a specific tenant
+    pub tenant_id: Option<Uuid>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct UserListItem {
+    #[serde(flatten)]
+    user: User,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    tenant_id: Option<Uuid>,
+}
+
+fn with_tenant_context(users: Vec<User>, tenant_id: Option<Uuid>) -> Vec<UserListItem> {
+    users
+        .into_iter()
+        .map(|user| UserListItem { user, tenant_id })
+        .collect()
 }
 
 fn default_page() -> i64 {
@@ -90,6 +107,47 @@ async fn require_tenant_owner<S: HasServices>(
     ))
 }
 
+/// Check if user is actually an owner of the target tenant (no platform admin bypass).
+/// Used for ownership transfer operations where only the current owner should be allowed.
+async fn require_actual_tenant_owner<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    target_tenant_id: Uuid,
+) -> Result<()> {
+    // Service client tokens cannot perform tenant owner operations
+    if auth.token_type == TokenType::ServiceClient {
+        return Err(AppError::Forbidden(
+            "Service client tokens cannot perform tenant owner operations".to_string(),
+        ));
+    }
+
+    // For TenantAccess tokens, check if the token is for this tenant with owner role
+    if auth.token_type == TokenType::TenantAccess {
+        if auth.tenant_id == Some(target_tenant_id) && auth.roles.iter().any(|r| r == "owner") {
+            return Ok(());
+        }
+        return Err(AppError::Forbidden(
+            "Only the current tenant owner can transfer ownership".to_string(),
+        ));
+    }
+
+    // For Identity tokens, always check the database for actual owner role
+    // (no platform admin bypass for ownership transfer)
+    let user_id = StringUuid::from(auth.user_id);
+    let tenant_id = StringUuid::from(target_tenant_id);
+    let tenant_users = state.user_service().get_user_tenants(user_id).await?;
+
+    for tu in tenant_users {
+        if tu.tenant_id == tenant_id && tu.role_in_tenant == "owner" {
+            return Ok(());
+        }
+    }
+
+    Err(AppError::Forbidden(
+        "Only the current tenant owner can transfer ownership".to_string(),
+    ))
+}
+
 /// Check if user can manage users within a tenant
 /// Platform admin can always manage, tenant admin with appropriate role can manage their tenant
 fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
@@ -141,6 +199,20 @@ pub async fn list<S: HasServices>(
                     "Platform admin required to list all users".to_string(),
                 ));
             }
+            // Platform admin: if tenant_id is specified, scope to that tenant
+            if let Some(tenant_id) = query.tenant_id {
+                let users = state
+                    .user_service()
+                    .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+                    .await?;
+                let total = users.len() as i64;
+                return Ok(Json(PaginatedResponse::new(
+                    with_tenant_context(users, Some(tenant_id)),
+                    query.page,
+                    query.per_page,
+                    total,
+                )));
+            }
             // Platform admin: can list all users (with optional search)
             let (users, total) = if let Some(ref search) = query.search {
                 if !search.is_empty() {
@@ -162,7 +234,7 @@ pub async fn list<S: HasServices>(
             };
 
             Ok(Json(PaginatedResponse::new(
-                users,
+                with_tenant_context(users, None),
                 query.page,
                 query.per_page,
                 total,
@@ -187,7 +259,7 @@ pub async fn list<S: HasServices>(
             // list_tenant_users returns Vec, wrap in PaginatedResponse
             let total = users.len() as i64;
             Ok(Json(PaginatedResponse::new(
-                users,
+                with_tenant_context(users, Some(tenant_id)),
                 query.page,
                 query.per_page,
                 total,
@@ -612,8 +684,16 @@ pub struct UpdateRoleInTenantRequest {
     pub role_in_tenant: String,
 }
 
+/// Request body for MFA enable/disable operations (admin re-authentication)
+#[derive(Debug, Clone, Deserialize)]
+pub struct MfaToggleInput {
+    pub current_password: Option<String>,
+}
+
 /// Update user's role in a tenant
-/// Requires the caller to be an owner of the target tenant
+/// Requires the caller to be an owner of the target tenant.
+/// Setting role to "owner" (ownership transfer) always requires the caller
+/// to be the current tenant owner — platform admin bypass is not sufficient.
 pub async fn update_role_in_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -624,8 +704,14 @@ pub async fn update_role_in_tenant<S: HasServices>(
     // Validate role_in_tenant enum
     validate_role_in_tenant(&input.role_in_tenant)?;
 
-    // Check authorization: require owner of the target tenant
-    require_tenant_owner(&state, &auth, tenant_id).await?;
+    // Ownership transfer requires the caller to actually be the tenant owner
+    // (platform admin bypass is NOT allowed for ownership changes)
+    if input.role_in_tenant == "owner" {
+        require_actual_tenant_owner(&state, &auth, tenant_id).await?;
+    } else {
+        // Check authorization: require owner of the target tenant
+        require_tenant_owner(&state, &auth, tenant_id).await?;
+    };
 
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
@@ -691,15 +777,31 @@ pub async fn get_tenants<S: HasServices>(
 }
 
 /// Enable MFA for a user
-/// Requires platform admin or tenant admin
+/// Requires platform admin or tenant admin, plus re-authentication with current password
 pub async fn enable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    body: Option<Json<MfaToggleInput>>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
+
+    // Require admin re-authentication for this sensitive operation
+    let password = body
+        .and_then(|b| b.current_password.clone())
+        .ok_or_else(|| AppError::BadRequest("Current password required".to_string()))?;
+    let admin_keycloak_id = auth.user_id.to_string();
+    let is_valid = state
+        .keycloak_client()
+        .validate_user_password(&admin_keycloak_id, &password)
+        .await?;
+    if !is_valid {
+        return Err(AppError::BadRequest(
+            "Current password is incorrect".to_string(),
+        ));
+    }
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -731,15 +833,31 @@ pub async fn enable_mfa<S: HasServices>(
 }
 
 /// Disable MFA for a user
-/// Requires platform admin or tenant admin
+/// Requires platform admin or tenant admin, plus re-authentication with current password
 pub async fn disable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    body: Option<Json<MfaToggleInput>>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
+
+    // Require admin re-authentication for this sensitive operation
+    let password = body
+        .and_then(|b| b.current_password.clone())
+        .ok_or_else(|| AppError::BadRequest("Current password required".to_string()))?;
+    let admin_keycloak_id = auth.user_id.to_string();
+    let is_valid = state
+        .keycloak_client()
+        .validate_user_password(&admin_keycloak_id, &password)
+        .await?;
+    if !is_valid {
+        return Err(AppError::BadRequest(
+            "Current password is incorrect".to_string(),
+        ));
+    }
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -1106,5 +1224,25 @@ mod tests {
         assert!(validate_role_in_tenant("viewer").is_err());
         assert!(validate_role_in_tenant("platform_admin").is_err());
         assert!(validate_role_in_tenant("").is_err());
+    }
+
+    #[test]
+    fn test_user_list_item_serializes_tenant_id_when_present() {
+        let item = UserListItem {
+            user: User::default(),
+            tenant_id: Some(Uuid::new_v4()),
+        };
+        let value = serde_json::to_value(item).unwrap();
+        assert!(value.get("tenant_id").is_some());
+    }
+
+    #[test]
+    fn test_user_list_item_omits_tenant_id_when_absent() {
+        let item = UserListItem {
+            user: User::default(),
+            tenant_id: None,
+        };
+        let value = serde_json::to_value(item).unwrap();
+        assert!(value.get("tenant_id").is_none());
     }
 }

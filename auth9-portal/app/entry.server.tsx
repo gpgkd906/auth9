@@ -14,6 +14,9 @@ function generateNonce(): string {
 }
 
 function setSecurityHeaders(headers: Headers, nonce: string): void {
+  // Prevent browser caching of authenticated pages (mitigates bfcache leaking sensitive data)
+  headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  headers.set("Pragma", "no-cache");
   // Prevent MIME type sniffing
   headers.set("X-Content-Type-Options", "nosniff");
   // Prevent clickjacking

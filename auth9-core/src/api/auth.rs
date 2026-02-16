@@ -1,9 +1,7 @@
 //! Authentication API handlers
 
 use crate::cache::CacheOperations;
-use crate::domain::{
-    ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
-};
+use crate::domain::{ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser};
 use crate::error::{AppError, Result};
 use crate::state::{HasCache, HasServices, HasSessionManagement};
 use axum::{
@@ -70,7 +68,14 @@ pub async fn authorize<S: HasServices + HasCache>(
     // Validate and filter scope against whitelist
     let filtered_scope = filter_scopes(&params.scope)?;
 
-    let callback_url = build_callback_url(&state.config().jwt.issuer);
+    let callback_url = build_callback_url(
+        state
+            .config()
+            .keycloak
+            .core_public_url
+            .as_deref()
+            .unwrap_or(&state.config().jwt.issuer),
+    );
 
     let state_payload = CallbackState {
         redirect_uri: params.redirect_uri,
@@ -120,13 +125,10 @@ pub async fn callback<S: HasServices + HasCache>(
     State(state): State<S>,
     Query(params): Query<CallbackRequest>,
 ) -> Result<Response> {
-    let state_nonce = params
-        .state
-        .as_deref()
-        .ok_or_else(|| {
-            metrics::counter!("auth9_auth_invalid_state_total", "reason" => "missing").increment(1);
-            AppError::BadRequest("Missing state".to_string())
-        })?;
+    let state_nonce = params.state.as_deref().ok_or_else(|| {
+        metrics::counter!("auth9_auth_invalid_state_total", "reason" => "missing").increment(1);
+        AppError::BadRequest("Missing state".to_string())
+    })?;
     let state_payload_json = state
         .cache()
         .consume_oidc_state(state_nonce)
@@ -136,12 +138,11 @@ pub async fn callback<S: HasServices + HasCache>(
                 .increment(1);
             AppError::BadRequest("Invalid or expired state".to_string())
         })?;
-    let state_payload: CallbackState =
-        serde_json::from_str(&state_payload_json).map_err(|e| {
-            metrics::counter!("auth9_auth_invalid_state_total", "reason" => "deserialize_error")
-                .increment(1);
-            AppError::Internal(e.into())
-        })?;
+    let state_payload: CallbackState = serde_json::from_str(&state_payload_json).map_err(|e| {
+        metrics::counter!("auth9_auth_invalid_state_total", "reason" => "deserialize_error")
+            .increment(1);
+        AppError::Internal(e.into())
+    })?;
 
     let mut redirect_url = Url::parse(&state_payload.redirect_uri)
         .map_err(|e| AppError::BadRequest(format!("Invalid redirect_uri: {}", e)))?;
@@ -221,7 +222,8 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
                         if let Err(e) = state.user_service().add_to_tenant(add_input).await {
                             tracing::warn!(
                                 "Failed to auto-assign new user {} to default tenant: {}",
-                                new_user.id, e
+                                new_user.id,
+                                e
                             );
                         }
                     }
@@ -287,11 +289,7 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
                             modified_context.claims
                         }
                         Err(e) => {
-                            tracing::error!(
-                                "PostLogin action failed for user {}: {}",
-                                user.id,
-                                e
-                            );
+                            tracing::error!("PostLogin action failed for user {}: {}", user.id, e);
                             // Strict mode actions propagate error to block authentication
                             return Err(e);
                         }
@@ -467,10 +465,7 @@ pub async fn logout_redirect<S: HasServices>(
     // Validate post_logout_redirect_uri against the service's logout_uris
     if let Some(ref redirect_uri) = params.post_logout_redirect_uri {
         if let Some(ref client_id) = params.client_id {
-            let service = state
-                .client_service()
-                .get_by_client_id(client_id)
-                .await?;
+            let service = state.client_service().get_by_client_id(client_id).await?;
             if !service.logout_uris.contains(redirect_uri) {
                 return Err(AppError::BadRequest(
                     "Invalid post_logout_redirect_uri".to_string(),
@@ -561,6 +556,24 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
                             );
                         }
                     }
+
+                    // Clean up all refresh token sessions bound to this session
+                    if let Err(e) = state
+                        .cache()
+                        .remove_all_refresh_sessions_for_session(sid)
+                        .await
+                    {
+                        tracing::warn!(
+                            session_id = %sid,
+                            error = %e,
+                            "Failed to clean up refresh sessions on logout"
+                        );
+                    } else {
+                        tracing::debug!(
+                            session_id = %sid,
+                            "Cleaned up refresh token sessions on logout"
+                        );
+                    }
                 } else {
                     tracing::debug!("Logout request has valid token but no session ID (sid claim)");
                 }
@@ -576,10 +589,7 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
     // Validate post_logout_redirect_uri against the service's logout_uris
     if let Some(ref redirect_uri) = params.post_logout_redirect_uri {
         if let Some(ref client_id) = params.client_id {
-            let service = state
-                .client_service()
-                .get_by_client_id(client_id)
-                .await?;
+            let service = state.client_service().get_by_client_id(client_id).await?;
             if !service.logout_uris.contains(redirect_uri) {
                 return Err(AppError::BadRequest(
                     "Invalid post_logout_redirect_uri".to_string(),
@@ -1021,18 +1031,34 @@ pub async fn jwks<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
     let n = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key.n().to_bytes_be());
     let e = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(public_key.e().to_bytes_be());
 
-    let jwks = Jwks {
-        keys: vec![JwkKey {
-            kty: "RSA".to_string(),
-            use_: "sig".to_string(),
-            alg: "RS256".to_string(),
-            kid: "auth9-default".to_string(),
-            n,
-            e,
-        }],
-    };
+    let mut keys = vec![JwkKey {
+        kty: "RSA".to_string(),
+        use_: "sig".to_string(),
+        alg: "RS256".to_string(),
+        kid: "auth9-current".to_string(),
+        n,
+        e,
+    }];
 
-    Json(jwks).into_response()
+    // Include previous key for rotation support (allows verifying tokens signed with old key)
+    if let Some(prev_pem) = state.jwt_manager().previous_public_key_pem() {
+        if let Ok(prev_key) = RsaPublicKey::from_public_key_pem(prev_pem) {
+            let prev_n =
+                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(prev_key.n().to_bytes_be());
+            let prev_e =
+                base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(prev_key.e().to_bytes_be());
+            keys.push(JwkKey {
+                kty: "RSA".to_string(),
+                use_: "sig".to_string(),
+                alg: "RS256".to_string(),
+                kid: "auth9-previous".to_string(),
+                n: prev_n,
+                e: prev_e,
+            });
+        }
+    }
+
+    Json(Jwks { keys }).into_response()
 }
 
 #[cfg(test)]
