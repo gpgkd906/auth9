@@ -44,6 +44,8 @@ A self-hosted identity and access management service, designed to replace expens
 - **Token Exchange**: Service-to-service authentication
 - **Audit Logs**: Track all administrative actions
 - **Modern UI**: React Router 7-based design system
+- **Action Engine**: Event-driven automation workflows with JavaScript/TypeScript
+- **TypeScript SDK**: Official SDK for seamless integration
 - **Invitation System**: Email-based user onboarding with automated workflows
 - **Brand Customization**: Custom logos, colors, themes for tenant branding
 - **Email Templates**: Flexible email template system with multi-language support
@@ -144,10 +146,15 @@ ghcr.io/gpgkd906/auth9-portal:latest
 
 ## Documentation
 
+- **[Wiki 主页](wiki/Home.md)** - 完整的中文文档
+- **[用户操作指南](userguide/USER_GUIDE.md)** - 详细的操作手册
 - **[Architecture](docs/architecture.md)** - System design and architecture overview
 - **[Design System](docs/design-system.md)** - Liquid Glass UI design language
+- **[Action Engine](wiki/操作引擎-Action-Engine.md)** - 自动化工作流系统
+- **[SDK Integration](wiki/SDK集成指南.md)** - TypeScript SDK 使用指南
 - **[QA Test Cases](docs/qa/README.md)** - Functional testing scenarios (185 scenarios)
 - **[UI/UX Test Cases](docs/uiux/README.md)** - UI/UX testing scenarios (27 scenarios)
+- **[Security Test Cases](docs/security/README.md)** - Security testing scenarios (177 scenarios)
 - **[Keycloak Theme](docs/keycloak-theme.md)** - Customizing Keycloak login pages
 
 ## Development
