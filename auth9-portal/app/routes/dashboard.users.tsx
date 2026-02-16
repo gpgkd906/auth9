@@ -555,7 +555,7 @@ export default function UsersPage() {
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
-              Update the user's profile details.
+              Update the user&apos;s profile details.
             </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">

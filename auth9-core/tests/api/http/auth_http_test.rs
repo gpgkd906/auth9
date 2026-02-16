@@ -286,15 +286,15 @@ async fn test_authorize_with_nonce() {
 // ============================================================================
 
 #[tokio::test]
-async fn test_logout_get_returns_method_not_allowed() {
+async fn test_logout_get_redirects_to_keycloak_logout() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let app = build_test_router(state);
 
     let (status, _body) = get_raw(&app, "/api/v1/auth/logout").await;
 
-    // GET should be rejected to prevent CSRF-triggered logout
-    assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+    // GET is redirect-only (no session revocation) for browser logout flow
+    assert_eq!(status, StatusCode::TEMPORARY_REDIRECT);
 }
 
 #[tokio::test]

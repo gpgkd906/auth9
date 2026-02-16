@@ -111,28 +111,30 @@ auth9-core/
 ├── src/
 │   ├── main.rs
 │   ├── lib.rs
-│   ├── config/           # 配置管理
-│   ├── api/              # REST API handlers
-│   │   ├── mod.rs
-│   │   ├── tenant.rs
-│   │   ├── user.rs
-│   │   ├── service.rs
-│   │   ├── role.rs
-│   │   └── auth.rs
-│   ├── grpc/             # gRPC services
-│   │   ├── mod.rs
-│   │   └── token_exchange.rs
-│   ├── domain/           # 领域模型
-│   │   ├── tenant.rs
-│   │   ├── user.rs
-│   │   ├── service.rs
-│   │   └── rbac.rs
-│   ├── repository/       # 数据访问层
-│   ├── service/          # 业务逻辑层
-│   ├── keycloak/         # Keycloak Admin API 客户端
-│   ├── jwt/              # JWT 签发与验证
-│   ├── cache/            # Redis 缓存层
-│   └── error/            # 统一错误处理
+│   ├── config/                         # 配置管理
+│   ├── domains/                        # 领域化模块（主入口）
+│   │   ├── mod.rs                      # DomainRouterState 聚合约束
+│   │   ├── identity/
+│   │   │   ├── api/                    # auth/session/password/webauthn...
+│   │   │   ├── service/                # session/password/webauthn/oidc...
+│   │   │   ├── context.rs
+│   │   │   ├── routes.rs
+│   │   │   └── services.rs             # 领域 service facade
+│   │   ├── tenant_access/
+│   │   ├── authorization/
+│   │   ├── platform/
+│   │   ├── integration/
+│   │   └── security_observability/
+│   ├── api/                            # 兼容层 + 通用 HTTP 类型/函数
+│   ├── grpc/                           # gRPC services
+│   ├── domain/                         # 核心领域模型（实体/值对象）
+│   ├── repository/                     # 数据访问层
+│   ├── service/                        # 兼容层（re-export 到 domains）
+│   ├── server/                         # Router 组装与启动
+│   ├── keycloak/                       # Keycloak Admin API 客户端
+│   ├── jwt/                            # JWT 签发与验证
+│   ├── cache/                          # Redis 缓存层
+│   └── error/                          # 统一错误处理
 ├── tests/                # 集成测试
 │   ├── common/           # 测试工具
 │   ├── api/              # API 集成测试
@@ -142,6 +144,8 @@ auth9-core/
 ├── Dockerfile
 └── Cargo.toml
 ```
+
+> 说明：`src/api/*` 与 `src/service/*` 在重构阶段保留为兼容 shim（`pub use crate::domains::...`），外部行为保持不变。
 
 ### 4.2 auth9-portal 模块结构
 
