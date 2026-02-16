@@ -1,0 +1,35 @@
+//! Domain-oriented route assembly modules.
+//!
+//! This is an incremental refactor layer: business logic remains in existing
+//! service/repository modules while HTTP route wiring is grouped by domain.
+
+pub mod authorization;
+pub mod identity;
+pub mod integration;
+pub mod platform;
+pub mod security_observability;
+pub mod tenant_access;
+
+/// Aggregate trait for building the full HTTP router from domain route modules.
+///
+/// This narrows server-level generics to a single domain-centric bound while
+/// keeping compatibility with existing `Has*` traits underneath.
+pub trait DomainRouterState:
+    identity::context::IdentityContext
+    + tenant_access::context::TenantAccessContext
+    + authorization::context::AuthorizationContext
+    + platform::context::PlatformContext
+    + integration::context::IntegrationContext
+    + security_observability::context::SecurityObservabilityContext
+{
+}
+
+impl<T> DomainRouterState for T where
+    T: identity::context::IdentityContext
+        + tenant_access::context::TenantAccessContext
+        + authorization::context::AuthorizationContext
+        + platform::context::PlatformContext
+        + integration::context::IntegrationContext
+        + security_observability::context::SecurityObservabilityContext
+{
+}

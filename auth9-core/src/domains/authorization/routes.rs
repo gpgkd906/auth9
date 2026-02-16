@@ -1,0 +1,100 @@
+use crate::domains::authorization::api as authorization_api;
+use crate::domains::authorization::context::AuthorizationContext;
+use axum::{
+    routing::{delete, get, post},
+    Router,
+};
+
+pub fn protected_routes<S>() -> Router<S>
+where
+    S: AuthorizationContext,
+{
+    Router::new()
+        .route(
+            "/api/v1/services",
+            get(authorization_api::service::list::<S>)
+                .post(authorization_api::service::create::<S>),
+        )
+        .route(
+            "/api/v1/services/{id}",
+            get(authorization_api::service::get::<S>)
+                .put(authorization_api::service::update::<S>)
+                .delete(authorization_api::service::delete::<S>),
+        )
+        .route(
+            "/api/v1/services/{id}/integration",
+            get(authorization_api::service::integration_info::<S>),
+        )
+        .route(
+            "/api/v1/services/{id}/clients",
+            get(authorization_api::service::list_clients::<S>)
+                .post(authorization_api::service::create_client::<S>),
+        )
+        .route(
+            "/api/v1/services/{service_id}/clients/{client_id}",
+            delete(authorization_api::service::delete_client::<S>),
+        )
+        .route(
+            "/api/v1/services/{service_id}/clients/{client_id}/regenerate-secret",
+            post(authorization_api::service::regenerate_client_secret::<S>),
+        )
+        .route(
+            "/api/v1/permissions",
+            post(authorization_api::role::create_permission::<S>),
+        )
+        .route(
+            "/api/v1/permissions/{id}",
+            delete(authorization_api::role::delete_permission::<S>),
+        )
+        .route(
+            "/api/v1/services/{service_id}/permissions",
+            get(authorization_api::role::list_permissions::<S>),
+        )
+        .route(
+            "/api/v1/roles",
+            post(authorization_api::role::create_role::<S>),
+        )
+        .route(
+            "/api/v1/roles/{id}",
+            get(authorization_api::role::get_role::<S>)
+                .put(authorization_api::role::update_role::<S>)
+                .delete(authorization_api::role::delete_role::<S>),
+        )
+        .route(
+            "/api/v1/services/{service_id}/roles",
+            get(authorization_api::role::list_roles::<S>),
+        )
+        .route(
+            "/api/v1/roles/{role_id}/permissions",
+            post(authorization_api::role::assign_permission::<S>),
+        )
+        .route(
+            "/api/v1/roles/{role_id}/permissions/{permission_id}",
+            delete(authorization_api::role::remove_permission::<S>),
+        )
+        .route(
+            "/api/v1/rbac/assign",
+            post(authorization_api::role::assign_roles::<S>),
+        )
+        .route(
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles",
+            get(authorization_api::role::get_user_roles::<S>),
+        )
+        .route(
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/assigned-roles",
+            get(authorization_api::role::get_user_assigned_roles::<S>),
+        )
+        .route(
+            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}",
+            delete(authorization_api::role::unassign_role::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/services",
+            get(authorization_api::tenant_service::list_services::<S>)
+                .post(authorization_api::tenant_service::toggle_service::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/services/enabled",
+            get(authorization_api::tenant_service::get_enabled_services::<S>),
+        )
+}

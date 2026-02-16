@@ -1,9 +1,9 @@
 //! Server initialization and routing
 
-use crate::api;
 use crate::cache::CacheManager;
 use crate::config::Config;
 use crate::crypto::EncryptionKey;
+use crate::domains;
 use crate::grpc::interceptor::{ApiKeyAuthenticator, AuthInterceptor};
 use crate::grpc::proto::token_exchange_server::TokenExchangeServer;
 use crate::grpc::TokenExchangeService;
@@ -33,11 +33,7 @@ use crate::state::{
     HasSystemSettings, HasWebAuthn, HasWebhooks,
 };
 use anyhow::Result;
-use axum::{
-    extract::DefaultBodyLimit,
-    routing::{delete, get, post},
-    Router,
-};
+use axum::{extract::DefaultBodyLimit, routing::get, Router};
 use metrics_exporter_prometheus::PrometheusHandle;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 use std::sync::Arc;
@@ -1095,20 +1091,7 @@ pub fn build_full_router<S>(
     prometheus_handle: Arc<Option<PrometheusHandle>>,
 ) -> Router
 where
-    S: HasServices
-        + HasSystemSettings
-        + HasInvitations
-        + HasEmailTemplates
-        + HasBranding
-        + HasPasswordManagement
-        + HasSessionManagement
-        + HasWebAuthn
-        + HasIdentityProviders
-        + HasAnalytics
-        + HasWebhooks
-        + HasSecurityAlerts
-        + HasDbPool
-        + HasCache,
+    S: domains::DomainRouterState + HasServices + HasCache,
 {
     // Get CORS configuration from state
     let cors_config = state.config().cors.clone();
@@ -1128,390 +1111,22 @@ where
     // PUBLIC ROUTES (no authentication required)
     // ============================================================
     let public_routes = Router::new()
-        // Health endpoints
-        .route("/health", get(api::health::health))
-        .route("/ready", get(api::health::ready::<S>))
-        // OpenID Connect Discovery
-        .route(
-            "/.well-known/openid-configuration",
-            get(api::auth::openid_configuration::<S>),
-        )
-        .route("/.well-known/jwks.json", get(api::auth::jwks::<S>))
-        // OAuth2/OIDC flow endpoints (used by clients during auth flow)
-        .route("/api/v1/auth/authorize", get(api::auth::authorize::<S>))
-        .route("/api/v1/auth/callback", get(api::auth::callback::<S>))
-        .route("/api/v1/auth/token", post(api::auth::token::<S>))
-        .route("/api/v1/auth/logout", post(api::auth::logout::<S>))
-        // Password reset flow (unauthenticated by design)
-        .route(
-            "/api/v1/auth/forgot-password",
-            post(api::password::forgot_password::<S>),
-        )
-        .route(
-            "/api/v1/auth/reset-password",
-            post(api::password::reset_password::<S>),
-        )
-        // Public branding endpoint (for Keycloak themes, login page)
-        .route(
-            "/api/v1/public/branding",
-            get(api::branding::get_public_branding::<S>),
-        )
-        // Invitation acceptance (uses invitation token, not JWT)
-        .route(
-            "/api/v1/invitations/accept",
-            post(api::invitation::accept::<S>),
-        )
-        // Keycloak event webhook (uses webhook secret for auth)
-        .route(
-            "/api/v1/keycloak/events",
-            post(api::keycloak_event::receive::<S>),
-        )
-        // WebAuthn authentication endpoints (public, no auth required)
-        .route(
-            "/api/v1/auth/webauthn/authenticate/start",
-            post(api::webauthn::start_authentication::<S>),
-        )
-        .route(
-            "/api/v1/auth/webauthn/authenticate/complete",
-            post(api::webauthn::complete_authentication::<S>),
-        )
-        // User endpoints on /api/v1/users:
-        // - POST: public registration (handler has internal auth check)
-        // - GET: list users (AuthUser extractor enforces auth)
-        // Both must be on the same router to avoid axum route merge conflicts.
-        .route(
-            "/api/v1/users",
-            get(api::user::list::<S>).post(api::user::create::<S>),
-        );
+        .merge(domains::security_observability::routes::public_routes::<S>())
+        .merge(domains::identity::routes::public_routes::<S>())
+        .merge(domains::platform::routes::public_routes::<S>())
+        .merge(domains::integration::routes::public_routes::<S>())
+        .merge(domains::tenant_access::routes::public_routes::<S>());
 
     // ============================================================
     // PROTECTED ROUTES (authentication required)
     // ============================================================
     let protected_routes = Router::new()
-        // Auth userinfo (requires valid token)
-        .route("/api/v1/auth/userinfo", get(api::auth::userinfo::<S>))
-        // Tenant endpoints
-        .route(
-            "/api/v1/tenants",
-            get(api::tenant::list::<S>).post(api::tenant::create::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{id}",
-            get(api::tenant::get::<S>)
-                .put(api::tenant::update::<S>)
-                .delete(api::tenant::delete::<S>),
-        )
-        // Current user profile endpoints (must be before /api/v1/users/{id})
-        .route(
-            "/api/v1/users/me",
-            get(api::user::get_me::<S>).put(api::user::update_me::<S>),
-        )
-        // User endpoints (GET/POST on /api/v1/users is in public_routes to avoid merge conflict)
-        .route(
-            "/api/v1/users/{id}",
-            get(api::user::get::<S>)
-                .put(api::user::update::<S>)
-                .delete(api::user::delete::<S>),
-        )
-        .route(
-            "/api/v1/users/{id}/mfa",
-            post(api::user::enable_mfa::<S>).delete(api::user::disable_mfa::<S>),
-        )
-        .route(
-            "/api/v1/users/{id}/tenants",
-            get(api::user::get_tenants::<S>).post(api::user::add_to_tenant::<S>),
-        )
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}",
-            delete(api::user::remove_from_tenant::<S>).put(api::user::update_role_in_tenant::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/users",
-            get(api::user::list_by_tenant::<S>),
-        )
-        // Service endpoints
-        .route(
-            "/api/v1/services",
-            get(api::service::list::<S>).post(api::service::create::<S>),
-        )
-        .route(
-            "/api/v1/services/{id}",
-            get(api::service::get::<S>)
-                .put(api::service::update::<S>)
-                .delete(api::service::delete::<S>),
-        )
-        .route(
-            "/api/v1/services/{id}/integration",
-            get(api::service::integration_info::<S>),
-        )
-        .route(
-            "/api/v1/services/{id}/clients",
-            get(api::service::list_clients::<S>).post(api::service::create_client::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/clients/{client_id}",
-            delete(api::service::delete_client::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/clients/{client_id}/regenerate-secret",
-            post(api::service::regenerate_client_secret::<S>),
-        )
-        // Permission endpoints
-        .route(
-            "/api/v1/permissions",
-            post(api::role::create_permission::<S>),
-        )
-        .route(
-            "/api/v1/permissions/{id}",
-            delete(api::role::delete_permission::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/permissions",
-            get(api::role::list_permissions::<S>),
-        )
-        // Role endpoints
-        .route("/api/v1/roles", post(api::role::create_role::<S>))
-        .route(
-            "/api/v1/roles/{id}",
-            get(api::role::get_role::<S>)
-                .put(api::role::update_role::<S>)
-                .delete(api::role::delete_role::<S>),
-        )
-        .route(
-            "/api/v1/services/{service_id}/roles",
-            get(api::role::list_roles::<S>),
-        )
-        .route(
-            "/api/v1/roles/{role_id}/permissions",
-            post(api::role::assign_permission::<S>),
-        )
-        .route(
-            "/api/v1/roles/{role_id}/permissions/{permission_id}",
-            delete(api::role::remove_permission::<S>),
-        )
-        // RBAC assignment
-        .route("/api/v1/rbac/assign", post(api::role::assign_roles::<S>))
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles",
-            get(api::role::get_user_roles::<S>),
-        )
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}/assigned-roles",
-            get(api::role::get_user_assigned_roles::<S>),
-        )
-        .route(
-            "/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}",
-            delete(api::role::unassign_role::<S>),
-        )
-        // Audit logs
-        .route("/api/v1/audit-logs", get(api::audit::list::<S>))
-        // System settings endpoints (admin only)
-        .route(
-            "/api/v1/system/email",
-            get(api::system_settings::get_email_settings::<S>)
-                .put(api::system_settings::update_email_settings::<S>),
-        )
-        .route(
-            "/api/v1/system/email/test",
-            post(api::system_settings::test_email_connection::<S>),
-        )
-        .route(
-            "/api/v1/system/email/send-test",
-            post(api::system_settings::send_test_email::<S>),
-        )
-        // Email template endpoints
-        .route(
-            "/api/v1/system/email-templates",
-            get(api::email_template::list_templates::<S>),
-        )
-        .route(
-            "/api/v1/system/email-templates/{type}",
-            get(api::email_template::get_template::<S>)
-                .put(api::email_template::update_template::<S>)
-                .delete(api::email_template::reset_template::<S>),
-        )
-        .route(
-            "/api/v1/system/email-templates/{type}/preview",
-            post(api::email_template::preview_template::<S>),
-        )
-        .route(
-            "/api/v1/system/email-templates/{type}/send-test",
-            post(api::email_template::send_test_email::<S>),
-        )
-        // Invitation endpoints (managing invitations requires auth)
-        .route(
-            "/api/v1/tenants/{tenant_id}/invitations",
-            get(api::invitation::list::<S>).post(api::invitation::create::<S>),
-        )
-        .route(
-            "/api/v1/invitations/{id}",
-            get(api::invitation::get::<S>).delete(api::invitation::delete::<S>),
-        )
-        .route(
-            "/api/v1/invitations/{id}/revoke",
-            post(api::invitation::revoke::<S>),
-        )
-        .route(
-            "/api/v1/invitations/{id}/resend",
-            post(api::invitation::resend::<S>),
-        )
-        // Admin branding endpoint
-        .route(
-            "/api/v1/system/branding",
-            get(api::branding::get_branding::<S>).put(api::branding::update_branding::<S>),
-        )
-        // User password change (requires auth)
-        .route(
-            "/api/v1/users/me/password",
-            post(api::password::change_password::<S>),
-        )
-        // Admin set password for a user (supports temporary passwords)
-        .route(
-            "/api/v1/users/{id}/password",
-            axum::routing::put(api::password::admin_set_password::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{id}/password-policy",
-            get(api::password::get_password_policy::<S>)
-                .put(api::password::update_password_policy::<S>),
-        )
-        // Session Management endpoints
-        .route(
-            "/api/v1/users/me/sessions",
-            get(api::session::list_my_sessions::<S>)
-                .delete(api::session::revoke_other_sessions::<S>),
-        )
-        .route(
-            "/api/v1/users/me/sessions/{id}",
-            delete(api::session::revoke_session::<S>),
-        )
-        .route(
-            "/api/v1/admin/users/{id}/logout",
-            post(api::session::force_logout_user::<S>),
-        )
-        // WebAuthn/Passkey endpoints
-        .route(
-            "/api/v1/users/me/passkeys",
-            get(api::webauthn::list_passkeys::<S>),
-        )
-        .route(
-            "/api/v1/users/me/passkeys/{id}",
-            delete(api::webauthn::delete_passkey::<S>),
-        )
-        .route(
-            "/api/v1/users/me/passkeys/register/start",
-            post(api::webauthn::start_registration::<S>),
-        )
-        .route(
-            "/api/v1/users/me/passkeys/register/complete",
-            post(api::webauthn::complete_registration::<S>),
-        )
-        // Identity Provider endpoints
-        .route(
-            "/api/v1/identity-providers",
-            get(api::identity_provider::list_providers::<S>)
-                .post(api::identity_provider::create_provider::<S>),
-        )
-        .route(
-            "/api/v1/identity-providers/{alias}",
-            get(api::identity_provider::get_provider::<S>)
-                .put(api::identity_provider::update_provider::<S>)
-                .delete(api::identity_provider::delete_provider::<S>),
-        )
-        .route(
-            "/api/v1/users/me/linked-identities",
-            get(api::identity_provider::list_my_linked_identities::<S>),
-        )
-        .route(
-            "/api/v1/users/me/linked-identities/{id}",
-            delete(api::identity_provider::unlink_identity::<S>),
-        )
-        // Analytics endpoints
-        .route(
-            "/api/v1/analytics/login-stats",
-            get(api::analytics::get_stats::<S>),
-        )
-        .route(
-            "/api/v1/analytics/login-events",
-            get(api::analytics::list_events::<S>),
-        )
-        .route(
-            "/api/v1/analytics/daily-trend",
-            get(api::analytics::get_daily_trend::<S>),
-        )
-        // Webhook endpoints
-        .route(
-            "/api/v1/tenants/{tenant_id}/webhooks",
-            get(api::webhook::list_webhooks::<S>).post(api::webhook::create_webhook::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/webhooks/{id}",
-            get(api::webhook::get_webhook::<S>)
-                .put(api::webhook::update_webhook::<S>)
-                .delete(api::webhook::delete_webhook::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/webhooks/{id}/test",
-            post(api::webhook::test_webhook::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/webhooks/{id}/regenerate-secret",
-            post(api::webhook::regenerate_webhook_secret::<S>),
-        )
-        // Action endpoints (Auth9 Actions system)
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions",
-            get(api::action::list_actions::<S>).post(api::action::create_action::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions/{action_id}",
-            get(api::action::get_action::<S>)
-                .patch(api::action::update_action::<S>)
-                .delete(api::action::delete_action::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions/batch",
-            post(api::action::batch_upsert_actions::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions/{action_id}/test",
-            post(api::action::test_action::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions/{action_id}/stats",
-            get(api::action::get_action_stats::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions/logs",
-            get(api::action::query_action_logs::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/actions/logs/{log_id}",
-            get(api::action::get_action_log::<S>),
-        )
-        .route(
-            "/api/v1/actions/triggers",
-            get(api::action::get_triggers::<S>),
-        )
-        // Security Alert endpoints
-        .route(
-            "/api/v1/security/alerts",
-            get(api::security_alert::list_alerts::<S>),
-        )
-        .route(
-            "/api/v1/security/alerts/{id}/resolve",
-            post(api::security_alert::resolve_alert::<S>),
-        )
-        // Tenant-Service toggle endpoints
-        .route(
-            "/api/v1/tenants/{tenant_id}/services",
-            get(api::tenant_service::list_services::<S>)
-                .post(api::tenant_service::toggle_service::<S>),
-        )
-        .route(
-            "/api/v1/tenants/{tenant_id}/services/enabled",
-            get(api::tenant_service::get_enabled_services::<S>),
-        )
+        .merge(domains::identity::routes::protected_routes::<S>())
+        .merge(domains::tenant_access::routes::protected_routes::<S>())
+        .merge(domains::authorization::routes::protected_routes::<S>())
+        .merge(domains::platform::routes::protected_routes::<S>())
+        .merge(domains::integration::routes::protected_routes::<S>())
+        .merge(domains::security_observability::routes::protected_routes::<S>())
         // Apply authentication middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             auth_state,
