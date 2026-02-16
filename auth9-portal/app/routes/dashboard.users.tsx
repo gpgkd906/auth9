@@ -53,6 +53,10 @@ export const meta: MetaFunction = () => {
   return [{ title: "Users - Auth9" }];
 };
 
+export function HydrateFallback() {
+  return null;
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
@@ -416,7 +420,7 @@ export default function UsersPage() {
             )}
           </div>
           <div className="mt-2 hidden overflow-x-auto rounded-xl border border-[var(--glass-border-subtle)] md:block">
-            <table className="min-w-[600px] divide-y divide-[var(--glass-border-subtle)] text-sm">
+            <table className="min-w-[600px] w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Email</th>
@@ -550,6 +554,9 @@ export default function UsersPage() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update the user's profile details.
+            </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update_user" />
@@ -698,7 +705,7 @@ export default function UsersPage() {
                       </Button>
                       <Form method="post" className="inline">
                         <input type="hidden" name="intent" value="remove_from_tenant" />
-                        <input type="hidden" name="user_id" value={managingTenantsUser?.id} />
+                        <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
                         <input type="hidden" name="tenant_id" value={ut.tenant_id} />
                         <Button size="sm" variant="ghost" className="text-[var(--accent-red)] hover:text-[var(--accent-red)]">
                           Remove
@@ -715,7 +722,7 @@ export default function UsersPage() {
               <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">Add to Tenant</h4>
               <Form method="post" className="flex gap-4 items-end">
                 <input type="hidden" name="intent" value="add_to_tenant" />
-                <input type="hidden" name="user_id" value={managingTenantsUser?.id} />
+                <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
                 <div className="flex-1 space-y-2">
                   <Label>Tenant</Label>
                   <Select name="tenant_id">
