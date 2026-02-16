@@ -4,7 +4,7 @@
  * QA Document: docs/qa/sdk/04-grpc-client-credentials.md
  */
 
-import { Auth9 } from "./packages/node/dist/index.js";
+import { Auth9 } from "../../sdk/packages/node/dist/index.js";
 import { execSync } from "child_process";
 import { readFileSync } from "fs";
 

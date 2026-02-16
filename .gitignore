@@ -54,3 +54,6 @@ docs/ticket/*.md
 !docs/ticket/README.md
 !docs/ticket/.example_ticket.md
 sdk/.turbo/
+
+# QA runner progress file
+scripts/qa/.run-qa-test.json
