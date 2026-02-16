@@ -145,10 +145,10 @@ fi
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
     echo "Usage: $0 [--orchestrator] [--orchestrator-cli] [--agent opencode|gemini] [--uiux] [--resume] [cli-options]"
     echo ""
-    echo "Default: run QA docs via opencode in shell mode."
+    echo "Default: run QA docs via minimax agent."
     echo "  --orchestrator       Launch tools/qa-orchestrator (Tauri UI workflow)"
     echo "  --orchestrator-cli   Run tools/qa-orchestrator in CLI automation mode"
-    echo "  --agent <mode>       Agent mode: 'opencode' (default), 'gemini', 'kimi', 'minimax',"
+    echo "  --agent <mode>       Agent mode: 'minimax' (default), 'opencode', 'gemini', 'kimi',"
     echo "                       'big-pickle', 'glm-air', 'glm-5', 'gpt-oss', 'kilo-minimax', 'qwen3-coder'"
     echo "  --uiux               Include UI/UX test documents (docs/uiux/)"
     echo "  --resume             Resume from last interrupted run"
@@ -156,14 +156,14 @@ if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
 fi
 
 # Parse flags
-AGENT_MODE="opencode"
+AGENT_MODE="minimax"
 INCLUDE_UIUX=false
 INCLUDE_UIUX_EXPLICIT=false
 RESUME=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --agent)
-            AGENT_MODE="${2:-opencode}"
+            AGENT_MODE="${2:-minimax}"
             shift 2
             ;;
         --uiux)

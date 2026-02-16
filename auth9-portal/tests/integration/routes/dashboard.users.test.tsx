@@ -124,6 +124,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -145,6 +146,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -169,6 +171,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -194,6 +197,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -214,6 +218,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -235,6 +240,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -249,6 +255,31 @@ describe("Users Page", () => {
         });
     });
 
+    it("uses full-width desktop table layout", async () => {
+        vi.mocked(userApi.list).mockResolvedValue(mockUsers);
+        vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
+        vi.mocked(serviceApi.list).mockResolvedValue(mockServices);
+
+        const RoutesStub = createRoutesStub([
+            {
+                path: "/dashboard/users",
+                Component: WrappedPage,
+                HydrateFallback: () => null,
+                loader,
+            },
+        ]);
+
+        const { container } = render(<RoutesStub initialEntries={["/dashboard/users"]} />);
+
+        await waitFor(() => {
+            expect(screen.getByText("User Directory")).toBeInTheDocument();
+        });
+
+        const desktopTable = container.querySelector("table");
+        expect(desktopTable).not.toBeNull();
+        expect(desktopTable?.className).toContain("w-full");
+    });
+
     it("opens edit user dialog when clicking edit", async () => {
         vi.mocked(userApi.list).mockResolvedValue(mockUsers);
         vi.mocked(tenantApi.list).mockResolvedValue(mockTenants);
@@ -258,6 +289,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -287,6 +319,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
                 action,
             },
@@ -326,6 +359,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
                 action,
             },
@@ -354,6 +388,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
                 action,
             },
@@ -380,6 +415,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
             },
         ]);
@@ -412,6 +448,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
                 action,
             },
@@ -456,6 +493,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
                 action,
             },
@@ -501,6 +539,7 @@ describe("Users Page", () => {
             {
                 path: "/dashboard/users",
                 Component: WrappedPage,
+                HydrateFallback: () => null,
                 loader,
                 action,
             },
@@ -536,6 +575,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -564,6 +604,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -595,6 +636,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -631,6 +673,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -657,6 +700,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -687,6 +731,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -716,6 +761,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -751,6 +797,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -793,6 +840,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -827,6 +875,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -866,6 +915,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -901,6 +951,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -938,6 +989,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -973,6 +1025,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1020,6 +1073,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1054,6 +1108,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1082,6 +1137,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1145,6 +1201,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1171,6 +1228,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1198,6 +1256,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1226,6 +1285,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1251,6 +1311,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                     action,
                 },
@@ -1280,6 +1341,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
@@ -1303,6 +1365,7 @@ describe("Users Page", () => {
                 {
                     path: "/dashboard/users",
                     Component: WrappedPage,
+                HydrateFallback: () => null,
                     loader,
                 },
             ]);
