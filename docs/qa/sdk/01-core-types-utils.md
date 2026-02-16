@@ -247,8 +247,8 @@ cd sdk && pnpm run --filter @auth9/core test
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | snake_case → camelCase 转换 | ☐ | | | |
-| 2 | camelCase → snake_case 转换 | ☐ | | | |
-| 3 | 转换边界条件 | ☐ | | | |
-| 4 | 错误类型体系 | ☐ | | | |
-| 5 | Token Claims 类型辨别 | ☐ | | | |
+| 1 | snake_case → camelCase 转换 | ✅ | 2026-02-16 | Kilo | utils.test.ts 覆盖 |
+| 2 | camelCase → snake_case 转换 | ✅ | 2026-02-16 | Kilo | utils.test.ts 覆盖 |
+| 3 | 转换边界条件 | ✅ | 2026-02-16 | Kilo | utils.test.ts 覆盖 |
+| 4 | 错误类型体系 | ✅ | 2026-02-16 | Kilo | errors.test.ts 覆盖 |
+| 5 | Token Claims 类型辨别 | ✅ | 2026-02-16 | Kilo | claims.test.ts 覆盖 |

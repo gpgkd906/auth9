@@ -1,281 +1,307 @@
-# 文件安全 - 文件上传安全测试
+# URL 输入安全 - 路径遍历与注入测试
 
 **模块**: 文件与资源安全
-**测试范围**: 文件上传验证、存储安全、下载授权
-**场景数**: 4
+**测试范围**: URL 字段输入验证（路径遍历、Scheme 注入、SSRF）
+**场景数**: 3
 **风险等级**: 🟠 高
-**OWASP ASVS**: V12.1, V12.2, V12.4
+**OWASP ASVS**: V5.1, V12.4, V13.2
 
 ---
 
 ## 背景知识
 
-Auth9 中涉及文件处理的功能：
-- **头像上传**: 用户/租户 Logo 图片上传
-- **Branding 资源**: 自定义品牌素材
-- **Email 模板**: 可能包含嵌入资源
-- **导出功能**: 数据导出生成文件
+Auth9 中**不存在文件上传功能**，所有图片/资源通过 **URL 字符串** 引用。涉及 URL 输入的字段：
 
-文件上传攻击可导致：远程代码执行、XSS（恶意 SVG/HTML）、拒绝服务、目录遍历。
+| 字段 | 所在模块 | 验证函数 |
+|------|---------|---------|
+| `avatar_url` | User (CreateUserInput, UpdateUserInput) | `validate_avatar_url` |
+| `logo_url` | Tenant (CreateTenantInput, UpdateTenantInput) | `validate_url_no_ssrf_strict` |
+| `logo_url` | TenantBranding | `validate_branding_logo_url` |
+| `logo_url` | BrandingConfig | `validate_url_no_ssrf_strict_option` |
+| `favicon_url` | BrandingConfig | `validate_url_no_ssrf_strict_option` |
+| `url` | Webhook (CreateWebhookInput) | `validate_url_no_ssrf_strict` |
+
+前端直接将 URL 字符串通过 `<img src="...">` 渲染，若 URL 未经充分验证，可能导致：
+- **路径遍历**：`../../etc/passwd` 等恶意路径注入
+- **Scheme 注入**：`javascript:alert(1)` 或 `data:text/html,...` 导致 XSS
+- **SSRF**：指向内网 IP 或云元数据端点，导致敏感信息泄露
 
 ---
 
-## 场景 1：文件类型验证绕过
+## 场景 1：URL 路径遍历攻击
 
 ### 前置条件
-- 具有文件上传权限的 Token
-- 准备各种格式的恶意文件
+- 具有用户/租户管理权限的 Token
+- API 端点可接受 URL 字段
 
 ### 攻击目标
-验证文件上传是否仅通过 Content-Type 头验证，可被绕过
+验证 URL 字段是否拒绝包含 `../`、null 字节等路径遍历字符的恶意输入
 
 ### 攻击步骤
-1. 上传正常图片确认功能工作
-2. 修改 Content-Type 为 `image/png`，但文件内容为 PHP/HTML/JS
-3. 使用双扩展名：`avatar.php.png`, `avatar.html.jpg`
-4. 使用空字节截断：`avatar.png%00.php`
-5. 上传 SVG 文件（含 `<script>` 标签）
-6. 上传 polyglot 文件（同时是有效图片和有效 HTML）
+1. 提交 `avatar_url` 包含 `../../etc/passwd`（无 scheme）
+2. 提交 `avatar_url` 包含 `https://example.com/../../etc/passwd`（有 scheme + 遍历）
+3. 提交 URL 编码遍历：`..%2F..%2Fetc%2Fpasswd`
+4. 提交 null 字节注入：`https://example.com/avatar\x00.png`
+5. 提交 Tenant `logo_url` 包含路径遍历字符
+6. ⚠️ 提交 TenantBranding `logo_url` 包含路径遍历（`validate_branding_logo_url` 仅检查 scheme，未检查 `..`）
+7. ⚠️ 提交 TenantBranding `logo_url` 包含 null 字节
 
 ### 预期安全行为
-- 基于文件内容（magic bytes）验证，不仅依赖 Content-Type
-- 拒绝非图片格式文件
-- 双扩展名和空字节截断被检测
-- SVG 文件被拒绝或清理危险标签
-- 返回文件时设置安全的 Content-Type
+- 无 scheme 的路径遍历被拒绝（`validate_avatar_url` 要求 http/https）
+- 包含 `..` 的 URL 被拒绝（`validate_avatar_url` 检查 `..`）
+- null 字节被拒绝
+- `logo_url` 通过 `url::Url::parse` 解析，畸形 URL 被拒绝
+- ⚠️ TenantBranding `logo_url` 应拒绝包含 `..` 的 URL，但**当前实现未检查**
 
 ### 验证方法
 ```bash
-# 正常图片上传
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@test.png" \
-  http://localhost:8080/api/v1/users/me/avatar
+# 1. avatar_url - 纯路径遍历（无 scheme）
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "../../etc/passwd"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期: 400 - Avatar URL must use http:// or https:// scheme
+
+# 2. avatar_url - https + 路径遍历
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "https://example.com/../../etc/passwd"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期: 400 - Avatar URL contains invalid characters
+
+# 3. avatar_url - URL 编码遍历（无 scheme）
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "..%2F..%2Fetc%2Fpasswd"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期: 400 - 无 http(s):// scheme
+
+# 4. avatar_url - null 字节注入
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "https://example.com/avatar\u0000.png"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期: 400 - Avatar URL contains invalid characters
+
+# 5. tenant logo_url - 路径遍历（validate_url_no_ssrf_strict）
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "https://example.com/../../etc/passwd"}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 400
+# 注意: url::Url::parse 会将 /../ 规范化为 /，可能不会报错（需验证）
+
+# 6. ⚠️ [漏洞] TenantBranding logo_url - 路径遍历
+#    validate_branding_logo_url 仅检查 scheme，不检查 .. 字符
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"settings": {"branding": {"logo_url": "https://example.com/../../etc/passwd"}}}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期应为: 400
+# 当前实际: 200 - url::Url::parse 规范化路径后未拒绝
+
+# 7. ⚠️ [漏洞] TenantBranding logo_url - null 字节
+#    validate_branding_logo_url 未检查 null 字节
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"settings": {"branding": {"logo_url": "https://example.com/logo\u0000.png"}}}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期应为: 400
+# 当前实际: 取决于 url::Url::parse 对 null 字节的处理
+
+# 8. 正常 URL 应该通过
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "https://cdn.example.com/avatars/user123.png"}' \
+  http://localhost:8080/api/v1/users/me
 # 预期: 200
-
-# 伪装 Content-Type
-echo '<?php phpinfo(); ?>' > /tmp/evil.php
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/evil.php;type=image/png" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 400 - Invalid file type
-
-# 双扩展名
-cp test.png /tmp/test.php.png
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/test.php.png" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 400 或仅保存为 .png
-
-# SVG with script
-cat > /tmp/evil.svg << 'EOF'
-<svg xmlns="http://www.w3.org/2000/svg">
-  <script>alert('XSS')</script>
-  <rect width="100" height="100" fill="red"/>
-</svg>
-EOF
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/evil.svg" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 400 - SVG not allowed，或 script 标签被清理
-
-# HTML 伪装
-echo '<html><body><script>alert(1)</script></body></html>' > /tmp/evil.html
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/evil.html;type=image/jpeg;filename=avatar.jpg" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 400 - 通过 magic bytes 检测非图片
 ```
-
-### 修复建议
-- 使用 magic bytes 验证文件实际类型（如 Rust `infer` crate）
-- 白名单允许的文件类型（如仅 PNG/JPEG/WebP）
-- 拒绝 SVG 或使用 SVG sanitizer 清理
-- 重命名文件为随机 UUID，丢弃原始扩展名
-- 返回文件时设置 `Content-Type: image/png` 和 `Content-Disposition: inline`
 
 ---
 
-## 场景 2：文件大小与资源耗尽
+## 场景 2：URL Scheme 注入
 
 ### 前置条件
-- 文件上传端点
-- 能够生成大文件
+- 具有用户/租户管理权限的 Token
+- 前端通过 `<img src="...">` 渲染 URL
 
 ### 攻击目标
-验证文件上传是否有大小限制，防止磁盘或内存耗尽
+验证 URL 字段是否拒绝 `javascript:`、`data:`、`ftp:` 等危险 scheme，防止 XSS
 
 ### 攻击步骤
-1. 上传 1MB 图片（正常大小）
-2. 上传 100MB 图片（超大）
-3. 上传 1GB 图片（极端情况）
-4. 发送 `Content-Length: 999999999` 但缓慢传输数据（Slow POST）
-5. 上传 zip bomb（小文件解压后极大）
-6. 并发上传大量小文件消耗文件描述符
+1. 提交 `avatar_url = "javascript:alert(document.cookie)"`
+2. 提交 `logo_url = "data:text/html,<script>alert(1)</script>"`
+3. 提交 `favicon_url = "ftp://evil.com/malware.exe"`
+4. 提交大小写绕过 `Java\x00Script:alert(1)`
+5. 提交 `logo_url = "data:image/svg+xml;base64,PHN2Zy..."`（Base64 编码的恶意 SVG）
 
 ### 预期安全行为
-- 文件大小限制（如 ≤ 5MB）
-- 请求体大小限制在 Web 框架层
-- 超大 Content-Length 在读取完整数据前被拒绝
-- 并发上传有频率限制
-- 返回 413 Payload Too Large
+- 所有字段仅允许 `http://` 和 `https://` scheme
+- `javascript:`、`data:`、`ftp:` 等被拒绝
+- 大小写变体和编码绕过被拒绝
 
 ### 验证方法
 ```bash
-# 生成测试文件
-dd if=/dev/urandom of=/tmp/large.bin bs=1M count=100
+# 1. avatar_url - javascript scheme
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "javascript:alert(document.cookie)"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期: 400 - Avatar URL must use http:// or https:// scheme
 
-# 上传超大文件
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@/tmp/large.bin;type=image/png" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 413 Payload Too Large
+# 2. tenant logo_url - data scheme
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "data:text/html,<script>alert(1)</script>"}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 400 - invalid_scheme
 
-# 测试请求体限制
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/octet-stream" \
-  -H "Content-Length: 999999999" \
-  --data-binary @/dev/zero \
-  --max-time 10 \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 连接在读取限制大小后被断开
+# 3. branding favicon_url - ftp scheme
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"favicon_url": "ftp://evil.com/malware.exe", "primary_color": "#007AFF", "secondary_color": "#5856D6", "background_color": "#F5F5F7", "text_color": "#1D1D1F"}}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID/branding
+# 预期: 400 - invalid_scheme
 
-# 并发上传
-seq 1 100 | parallel -j50 \
-  "curl -s -o /dev/null -w '%{http_code}\n' \
-    -X POST -H 'Authorization: Bearer $TOKEN' \
-    -F 'file=@test.png' \
-    http://localhost:8080/api/v1/users/me/avatar"
-# 预期: 前几个成功，后续被限流 (429)
+# 4. data URI with base64 SVG
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciPjxzY3JpcHQ+YWxlcnQoMSk8L3NjcmlwdD48L3N2Zz4="}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 400
+
+# 5. 正常 HTTPS URL 应通过
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "https://cdn.example.com/logo.png"}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 200
 ```
-
-### 修复建议
-- axum/tower 层设置 `content_length_limit`
-- 流式读取文件，不一次性加载到内存
-- 文件大小限制：头像 ≤ 2MB，其他 ≤ 10MB
-- 每用户上传频率限制
-- 磁盘使用监控和告警
 
 ---
 
-## 场景 3：文件存储路径遍历
+## 场景 3：SSRF - 通过 URL 字段探测内网
 
 ### 前置条件
-- 文件上传功能
-- 了解文件存储路径结构
+- 具有租户/品牌管理权限的 Token
+- 目标服务运行在内网环境
 
 ### 攻击目标
-验证上传文件名是否可被利用进行目录遍历
+验证 URL 字段是否阻止指向内网 IP、localhost 和云元数据端点的 URL，防止 SSRF
 
 ### 攻击步骤
-1. 上传文件名包含路径遍历字符：`../../etc/crontab`
-2. 上传文件名包含 URL 编码遍历：`..%2F..%2Fetc%2Fpasswd`
-3. 上传文件名包含 null 字节：`avatar.png\x00../../etc/passwd`
-4. 上传文件名包含特殊字符：`avatar\n.png`, `avatar;.png`
+1. 提交 Tenant `logo_url = "http://127.0.0.1:8080/admin"`
+2. 提交 Tenant `logo_url = "https://192.168.1.1/internal"`
+3. 提交 Tenant `logo_url = "http://10.0.0.1/secret"`
+4. 提交 Tenant `logo_url = "http://169.254.169.254/latest/meta-data/"` (AWS 元数据)
+5. 提交 Tenant `logo_url = "http://metadata.google.internal/"` (GCP 元数据)
+6. 提交 Tenant `logo_url = "http://[::1]/admin"` (IPv6 localhost)
+7. 提交 Tenant `logo_url = "http://0.0.0.0/admin"`
+8. 提交外部 HTTP（非 HTTPS）：`http://example.com/logo.png`
+9. ⚠️ 提交 `avatar_url` 指向 localhost / 私有 IP / 云元数据（`validate_avatar_url` 不检查 SSRF）
+10. ⚠️ 提交 `avatar_url` 指向 `http://0.0.0.0`、`http://[::1]` 等变体
 
 ### 预期安全行为
-- 服务端忽略客户端提供的文件名，使用随机生成的文件名
-- 路径遍历字符被过滤
-- 文件存储在固定目录下，不受用户输入影响
-- null 字节被正确处理
+- `validate_url_no_ssrf_strict` 阻止所有私有/回环 IP（Tenant logo_url, BrandingConfig, Webhook）
+- 云元数据端点被阻止
+- 外部 HTTP URL 被拒绝（仅允许 HTTPS）
+- ⚠️ `validate_avatar_url` 应阻止私有 IP / 云元数据，但**当前实现未检查 SSRF**
 
 ### 验证方法
 ```bash
-# 路径遍历文件名
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@test.png;filename=../../etc/crontab" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 200 但文件名被忽略/重命名
+# 1. tenant logo_url - localhost
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "http://127.0.0.1:8080/admin"}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 400 - Internal IP addresses are not allowed
 
-# URL 编码遍历
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@test.png;filename=..%2F..%2Fetc%2Fpasswd" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 200 但文件安全存储
+# 2. tenant logo_url - 私有网段
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "https://192.168.1.1/internal"}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 400 - Internal IP addresses are not allowed
 
-# 检查实际存储路径
-# 如果可以访问存储目录，验证文件名是 UUID 而非用户提供的名称
-ls -la /path/to/upload/dir/
-# 预期: 文件名为 uuid.png 格式
+# 3. branding logo_url - AWS 元数据
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"config": {"logo_url": "http://169.254.169.254/latest/meta-data/", "primary_color": "#007AFF", "secondary_color": "#5856D6", "background_color": "#F5F5F7", "text_color": "#1D1D1F"}}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID/branding
+# 预期: 400 - ssrf_blocked 或 internal_ip_blocked
 
-# Null byte
-curl -X POST -H "Authorization: Bearer $TOKEN" \
-  -F "file=@test.png;filename=avatar.png%00../../etc/passwd" \
-  http://localhost:8080/api/v1/users/me/avatar
-# 预期: 正常处理，忽略 null 字节后的内容
+# 4. tenant logo_url - 外部 HTTP（非 HTTPS）
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"logo_url": "http://example.com/logo.png"}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID
+# 预期: 400 - Only HTTPS URLs are allowed
+
+# 5. webhook url - IPv6 localhost
+curl -s -X POST -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "test", "url": "http://[::1]/hook", "events": ["user.created"]}' \
+  http://localhost:8080/api/v1/tenants/$TENANT_ID/webhooks
+# 预期: 400 - Internal IP addresses are not allowed
+
+# 6. ⚠️ [漏洞] avatar_url - AWS 云元数据
+#    validate_avatar_url 仅检查 scheme + .. / null，不做 SSRF 防护
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "http://169.254.169.254/latest/meta-data/"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期应为: 400
+# 当前实际: 200 - validate_avatar_url 不检查 IP 地址
+
+# 7. ⚠️ [漏洞] avatar_url - localhost
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "http://127.0.0.1:8080/admin"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期应为: 400
+# 当前实际: 200 - validate_avatar_url 不检查 IP 地址
+
+# 8. ⚠️ [漏洞] avatar_url - 私有网段
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "http://192.168.1.1/internal-dashboard"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期应为: 400
+# 当前实际: 200 - validate_avatar_url 不检查 IP 地址
+
+# 9. ⚠️ [漏洞] avatar_url - GCP 元数据
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "http://metadata.google.internal/computeMetadata/v1/"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期应为: 400
+# 当前实际: 200 - validate_avatar_url 不检查主机名
+
+# 10. ⚠️ [漏洞] avatar_url - IPv6 localhost
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "http://[::1]/admin"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期应为: 400
+# 当前实际: 200 - validate_avatar_url 不检查 IP 地址
+
+# 11. ⚠️ [漏洞] avatar_url - 0.0.0.0
+curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"avatar_url": "http://0.0.0.0/admin"}' \
+  http://localhost:8080/api/v1/users/me
+# 预期应为: 400
+# 当前实际: 200 - validate_avatar_url 不检查 IP 地址
 ```
-
-### 修复建议
-- 服务端始终使用随机生成的文件名（UUID）
-- 文件存储路径由服务端完全控制，不包含用户输入
-- 使用 Rust 的 `Path::file_name()` 提取纯文件名
-- 过滤 `..`, `/`, `\`, null 字节等特殊字符
 
 ---
 
-## 场景 4：文件下载授权验证
+## 已知验证漏洞汇总
 
-### 前置条件
-- 已上传的文件（不同用户/租户）
-- 文件访问 URL
-
-### 攻击目标
-验证文件下载是否有访问控制，防止越权访问其他用户/租户的文件
-
-### 攻击步骤
-1. 用户 A 上传文件，获取文件 URL
-2. 用户 B 尝试直接访问用户 A 的文件 URL
-3. 尝试枚举文件 URL（如递增 ID 或可预测的文件名）
-4. 不带认证 Token 直接访问文件 URL
-5. 使用其他租户的 Token 访问文件
-
-### 预期安全行为
-- 文件 URL 不可预测（使用 UUID 或签名 URL）
-- 文件下载需要认证
-- 跨用户/跨租户文件访问被拒绝
-- 未认证访问返回 401
-- 文件 URL 有时效性（签名 URL 过期机制）
-
-### 验证方法
-```bash
-# 用户 A 上传文件
-UPLOAD=$(curl -s -X POST -H "Authorization: Bearer $TOKEN_A" \
-  -F "file=@test.png" \
-  http://localhost:8080/api/v1/users/me/avatar)
-FILE_URL=$(echo $UPLOAD | jq -r '.url')
-
-# 用户 B 尝试访问
-curl -s -o /dev/null -w "%{http_code}" \
-  -H "Authorization: Bearer $TOKEN_B" \
-  "$FILE_URL"
-# 预期: 403 Forbidden
-
-# 无认证访问
-curl -s -o /dev/null -w "%{http_code}" "$FILE_URL"
-# 预期: 401 Unauthorized
-
-# URL 枚举
-# 如果 URL 包含 UUID，尝试修改 UUID
-MODIFIED_URL=$(echo $FILE_URL | sed 's/[0-9a-f]\{8\}/00000000/')
-curl -s -o /dev/null -w "%{http_code}" \
-  -H "Authorization: Bearer $TOKEN_A" \
-  "$MODIFIED_URL"
-# 预期: 404 Not Found
-
-# 检查响应头
-curl -s -I -H "Authorization: Bearer $TOKEN_A" "$FILE_URL"
-# 预期包含:
-# Content-Type: image/png
-# X-Content-Type-Options: nosniff
-# Content-Disposition: inline (或 attachment)
-# Cache-Control: private
-```
-
-### 修复建议
-- 文件 URL 使用 UUID，不可枚举
-- 文件下载需验证请求者与文件所有者的关系
-- 考虑使用签名 URL（预签名 + 过期时间）
-- 返回文件时设置 `X-Content-Type-Options: nosniff`
-- 非图片文件使用 `Content-Disposition: attachment`
+| # | 漏洞 | 影响字段 | 验证函数 | 缺失检查 | 建议修复 |
+|---|------|---------|---------|---------|---------|
+| V1 | avatar_url 缺少 SSRF 防护 | `User.avatar_url` | `validate_avatar_url` | 私有 IP / 回环地址 / 云元数据 | 改用 `validate_url_no_ssrf_strict` 或添加 IP 检查 |
+| V2 | TenantBranding logo_url 缺少路径遍历检查 | `TenantBranding.logo_url` | `validate_branding_logo_url` | `..` 和 null 字节 | 添加 `..` / `\0` 检查或改用 `validate_url_no_ssrf_strict` |
 
 ---
 
@@ -283,16 +309,23 @@ curl -s -I -H "Authorization: Bearer $TOKEN_A" "$FILE_URL"
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
-| 1 | 文件类型验证绕过 | ☐ | | | |
-| 2 | 文件大小与资源耗尽 | ☐ | | | |
-| 3 | 文件存储路径遍历 | ☐ | | | |
-| 4 | 文件下载授权验证 | ☐ | | | |
+| 1 | URL 路径遍历攻击 | ☐ | | | |
+| 1.6 | ⚠️ TenantBranding logo_url 路径遍历（漏洞 V2） | ☐ | | | |
+| 1.7 | ⚠️ TenantBranding logo_url null 字节（漏洞 V2） | ☐ | | | |
+| 2 | URL Scheme 注入 | ☐ | | | |
+| 3 | SSRF - 通过 URL 字段探测内网 | ☐ | | | |
+| 3.6 | ⚠️ avatar_url AWS 云元数据 SSRF（漏洞 V1） | ☐ | | | |
+| 3.7 | ⚠️ avatar_url localhost SSRF（漏洞 V1） | ☐ | | | |
+| 3.8 | ⚠️ avatar_url 私有网段 SSRF（漏洞 V1） | ☐ | | | |
+| 3.9 | ⚠️ avatar_url GCP 元数据 SSRF（漏洞 V1） | ☐ | | | |
+| 3.10 | ⚠️ avatar_url IPv6 localhost SSRF（漏洞 V1） | ☐ | | | |
+| 3.11 | ⚠️ avatar_url 0.0.0.0 SSRF（漏洞 V1） | ☐ | | | |
 
 ---
 
 ## 参考资料
 
-- [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
-- [CWE-434: Unrestricted Upload of File with Dangerous Type](https://cwe.mitre.org/data/definitions/434.html)
+- [OWASP SSRF Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server-Side_Request_Forgery_Prevention_Cheat_Sheet.html)
 - [CWE-22: Path Traversal](https://cwe.mitre.org/data/definitions/22.html)
-- [CWE-400: Uncontrolled Resource Consumption](https://cwe.mitre.org/data/definitions/400.html)
+- [CWE-918: Server-Side Request Forgery (SSRF)](https://cwe.mitre.org/data/definitions/918.html)
+- [CWE-79: XSS via Scheme Injection](https://cwe.mitre.org/data/definitions/79.html)

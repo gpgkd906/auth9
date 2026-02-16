@@ -233,7 +233,7 @@ ORDER BY executed_at ASC;
 ## 场景 5：Action 超时控制
 
 ### 初始状态
-创建一个会超时的 Action（timeout_ms=1000）：
+创建一个会超时的 Action（timeout_ms=1000，且 `strict_mode=true`）：
 ```typescript
 // 故意延迟
 const start = Date.now();
@@ -247,7 +247,7 @@ context;
 验证 Action 超时保护机制
 
 ### 测试操作流程
-1. 创建上述 Action，设置 timeout_ms = 1000
+1. 创建上述 Action，设置 `timeout_ms = 1000` 且 `strict_mode = true`
 2. 尝试登录
 3. 观察是否在 1 秒后超时中断
 
@@ -255,6 +255,9 @@ context;
 - 登录失败或超时错误
 - 执行日志记录超时错误
 - 用户体验：等待约 1 秒后返回错误
+
+> 说明：仅当 `strict_mode=true` 时，Action 超时/报错才会中断认证流程。  
+> 若 `strict_mode=false`，超时会被记录，但登录流程继续。
 
 ### 预期数据状态
 ```sql
