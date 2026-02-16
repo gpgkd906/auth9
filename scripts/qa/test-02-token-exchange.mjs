@@ -29,6 +29,7 @@ const PROJECT_ROOT = "/Volumes/Yotta/auth9";
 const PRIVATE_KEY_PATH = path.join(PROJECT_ROOT, ".claude/skills/tools/jwt_private_clean.key");
 const GRPCURL_SH = path.join(PROJECT_ROOT, ".claude/skills/tools/grpcurl-docker.sh");
 const GEN_ADMIN_TOKEN_SH = path.join(PROJECT_ROOT, ".claude/skills/tools/gen-admin-token.sh");
+const MYSQL = "mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e";
 
 // Helper to run grpcurl
 function grpcurl(method, data) {
@@ -36,14 +37,33 @@ function grpcurl(method, data) {
   return execSync(cmd, { cwd: PROJECT_ROOT, stdio: 'pipe' }).toString();
 }
 
+function mysqlScalar(sql) {
+  return execSync(`${MYSQL} "${sql}"`).toString().trim();
+}
+
+function ensureNonMemberTenant() {
+  let tenantId = mysqlScalar("SELECT id FROM tenants WHERE slug = 'audit-test-tenant';");
+  if (tenantId) return tenantId;
+
+  execSync(
+    `${MYSQL} "INSERT INTO tenants (id, name, slug, settings, status) VALUES (UUID(), 'Audit Test Tenant', 'audit-test-tenant', '{}', 'active');"`
+  );
+  tenantId = mysqlScalar("SELECT id FROM tenants WHERE slug = 'audit-test-tenant';");
+
+  if (!tenantId) {
+    throw new Error("Failed to create audit-test-tenant");
+  }
+  return tenantId;
+}
+
 async function runTests() {
   console.log("Starting Token Exchange QA Tests...");
 
   // Get test data
-  const demoTenantId = execSync("mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e \"SELECT id FROM tenants WHERE slug = 'demo';\"").toString().trim();
-  const platformTenantId = execSync("mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e \"SELECT id FROM tenants WHERE slug = 'auth9-platform';\"").toString().trim();
-  const emptyTenantId = execSync("mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e \"SELECT id FROM tenants WHERE slug = 'audit-test-tenant';\"").toString().trim();
-  const adminId = execSync("mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e \"SELECT id FROM users WHERE email = 'admin@auth9.local';\"").toString().trim();
+  const demoTenantId = mysqlScalar("SELECT id FROM tenants WHERE slug = 'demo';");
+  const platformTenantId = mysqlScalar("SELECT id FROM tenants WHERE slug = 'auth9-platform';");
+  const emptyTenantId = ensureNonMemberTenant();
+  const adminId = mysqlScalar("SELECT id FROM users WHERE email = 'admin@auth9.local';");
   const identityToken = execSync(GEN_ADMIN_TOKEN_SH).toString().trim();
 
   let tenantAccessToken = "";

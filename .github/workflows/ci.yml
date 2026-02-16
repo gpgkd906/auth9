@@ -22,6 +22,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify domain boundaries
+        run: ./scripts/check-domain-boundaries.sh
+
       - name: Install Rust toolchain
         uses: dtolnay/rust-action@stable
         with:

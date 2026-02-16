@@ -1,0 +1,119 @@
+use crate::domains::identity::api as identity_api;
+use crate::domains::identity::context::IdentityContext;
+use axum::{
+    routing::{delete, get, post},
+    Router,
+};
+
+pub fn public_routes<S>() -> Router<S>
+where
+    S: IdentityContext,
+{
+    Router::new()
+        .route(
+            "/.well-known/openid-configuration",
+            get(identity_api::auth::openid_configuration::<S>),
+        )
+        .route("/.well-known/jwks.json", get(identity_api::auth::jwks::<S>))
+        .route(
+            "/api/v1/auth/authorize",
+            get(identity_api::auth::authorize::<S>),
+        )
+        .route(
+            "/api/v1/auth/callback",
+            get(identity_api::auth::callback::<S>),
+        )
+        .route("/api/v1/auth/token", post(identity_api::auth::token::<S>))
+        .route(
+            "/api/v1/auth/logout",
+            get(identity_api::auth::logout_redirect::<S>).post(identity_api::auth::logout::<S>),
+        )
+        .route(
+            "/api/v1/auth/forgot-password",
+            post(identity_api::password::forgot_password::<S>),
+        )
+        .route(
+            "/api/v1/auth/reset-password",
+            post(identity_api::password::reset_password::<S>),
+        )
+        .route(
+            "/api/v1/auth/webauthn/authenticate/start",
+            post(identity_api::webauthn::start_authentication::<S>),
+        )
+        .route(
+            "/api/v1/auth/webauthn/authenticate/complete",
+            post(identity_api::webauthn::complete_authentication::<S>),
+        )
+}
+
+pub fn protected_routes<S>() -> Router<S>
+where
+    S: IdentityContext,
+{
+    Router::new()
+        .route(
+            "/api/v1/auth/userinfo",
+            get(identity_api::auth::userinfo::<S>),
+        )
+        .route(
+            "/api/v1/users/me/password",
+            post(identity_api::password::change_password::<S>),
+        )
+        .route(
+            "/api/v1/users/{id}/password",
+            axum::routing::put(identity_api::password::admin_set_password::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{id}/password-policy",
+            get(identity_api::password::get_password_policy::<S>)
+                .put(identity_api::password::update_password_policy::<S>),
+        )
+        .route(
+            "/api/v1/users/me/sessions",
+            get(identity_api::session::list_my_sessions::<S>)
+                .delete(identity_api::session::revoke_other_sessions::<S>),
+        )
+        .route(
+            "/api/v1/users/me/sessions/{id}",
+            delete(identity_api::session::revoke_session::<S>),
+        )
+        .route(
+            "/api/v1/admin/users/{id}/logout",
+            post(identity_api::session::force_logout_user::<S>),
+        )
+        .route(
+            "/api/v1/users/me/passkeys",
+            get(identity_api::webauthn::list_passkeys::<S>),
+        )
+        .route(
+            "/api/v1/users/me/passkeys/{id}",
+            delete(identity_api::webauthn::delete_passkey::<S>),
+        )
+        .route(
+            "/api/v1/users/me/passkeys/register/start",
+            post(identity_api::webauthn::start_registration::<S>),
+        )
+        .route(
+            "/api/v1/users/me/passkeys/register/complete",
+            post(identity_api::webauthn::complete_registration::<S>),
+        )
+        .route(
+            "/api/v1/identity-providers",
+            get(identity_api::identity_provider::list_providers::<S>)
+                .post(identity_api::identity_provider::create_provider::<S>),
+        )
+        .route(
+            "/api/v1/identity-providers/{alias}",
+            get(identity_api::identity_provider::get_provider::<S>)
+                .put(identity_api::identity_provider::update_provider::<S>)
+                .delete(identity_api::identity_provider::delete_provider::<S>),
+        )
+        .route(
+            "/api/v1/users/me/linked-identities",
+            get(identity_api::identity_provider::list_my_linked_identities::<S>),
+        )
+        .route(
+            "/api/v1/users/me/linked-identities/{id}",
+            delete(identity_api::identity_provider::unlink_identity::<S>),
+        )
+}
