@@ -109,6 +109,7 @@ pub struct JwtManager {
     decoding_key: DecodingKey,
     algorithm: Algorithm,
     public_key_pem: Option<String>,
+    previous_public_key_pem: Option<String>,
 }
 
 impl JwtManager {
@@ -119,6 +120,7 @@ impl JwtManager {
             Algorithm::HS256
         };
         let public_key_pem = config.public_key_pem.clone();
+        let previous_public_key_pem = config.previous_public_key_pem.clone();
         let encoding_key = match config.private_key_pem.as_ref() {
             Some(private_key) => EncodingKey::from_rsa_pem(private_key.as_bytes())
                 .expect("Failed to load JWT private key"),
@@ -139,6 +141,7 @@ impl JwtManager {
             decoding_key,
             algorithm,
             public_key_pem,
+            previous_public_key_pem,
         }
     }
 
@@ -386,6 +389,10 @@ impl JwtManager {
     pub fn public_key_pem(&self) -> Option<&str> {
         self.public_key_pem.as_deref()
     }
+
+    pub fn previous_public_key_pem(&self) -> Option<&str> {
+        self.previous_public_key_pem.as_deref()
+    }
 }
 
 #[cfg(test)]
@@ -400,6 +407,7 @@ mod tests {
             refresh_token_ttl_secs: 604800,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         }
     }
 
@@ -749,6 +757,7 @@ mod tests {
             refresh_token_ttl_secs: 86400,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         };
 
         let manager = JwtManager::new(config);

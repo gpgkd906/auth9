@@ -25,9 +25,9 @@ export default function SettingsLayout() {
         <p className="text-sm text-[var(--text-secondary)]">Manage system and organization preferences</p>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-4 md:flex-row md:gap-6">
         {/* Settings Navigation */}
-        <nav className="w-48 flex-shrink-0">
+        <nav className="w-full flex-shrink-0 md:w-48">
           <ul className="space-y-1">
             {settingsNav.map((item) => {
               const isActive = location.pathname === item.href;
@@ -36,7 +36,7 @@ export default function SettingsLayout() {
                   <Link
                     to={item.href}
                     className={cn(
-                      "block px-3 py-2 rounded-xl text-sm transition-colors",
+                      "flex min-h-11 items-center rounded-xl px-3 text-sm transition-colors",
                       isActive
                         ? "bg-[var(--accent-blue)] text-white"
                         : "text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"

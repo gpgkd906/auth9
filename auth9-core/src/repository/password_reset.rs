@@ -174,10 +174,21 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
         input: &CreatePasswordResetTokenInput,
     ) -> Result<PasswordResetToken> {
         let id = StringUuid::new_v4();
-        let mut tx = self.pool.begin().await?;
 
-        // Insert the new token first to avoid the race where a concurrent DELETE
-        // removes a token that was just inserted by another transaction.
+        // Step 1: Delete all existing tokens for this user (non-transactional).
+        // Under concurrency, multiple requests may execute this concurrently,
+        // but each DELETE is individually atomic and visible to subsequent reads.
+        sqlx::query(
+            r#"
+            DELETE FROM password_reset_tokens
+            WHERE user_id = ?
+            "#,
+        )
+        .bind(input.user_id)
+        .execute(&self.pool)
+        .await?;
+
+        // Step 2: Insert the new token.
         sqlx::query(
             r#"
             INSERT INTO password_reset_tokens (id, user_id, token_hash, expires_at, created_at)
@@ -188,36 +199,44 @@ impl PasswordResetRepository for PasswordResetRepositoryImpl {
         .bind(input.user_id)
         .bind(&input.token_hash)
         .bind(input.expires_at)
-        .execute(&mut *tx)
+        .execute(&self.pool)
         .await?;
 
-        // Delete all OTHER tokens for this user (keep only the one we just inserted).
-        // This ensures concurrent requests don't delete each other's tokens.
+        // Step 3: Post-insert cleanup — keep only the latest token for this user.
+        // This handles the race where concurrent requests each insert a token
+        // between each other's DELETE and INSERT. After this cleanup, exactly
+        // one valid token remains (the one with the most recent created_at).
         sqlx::query(
             r#"
             DELETE FROM password_reset_tokens
-            WHERE user_id = ? AND id != ?
+            WHERE user_id = ? AND id != (
+                SELECT latest_id FROM (
+                    SELECT id AS latest_id FROM password_reset_tokens
+                    WHERE user_id = ?
+                    ORDER BY created_at DESC
+                    LIMIT 1
+                ) AS t
+            )
             "#,
         )
         .bind(input.user_id)
-        .bind(id)
-        .execute(&mut *tx)
+        .bind(input.user_id)
+        .execute(&self.pool)
         .await?;
 
-        // Read the token within the transaction to avoid a race where a concurrent
-        // transaction deletes this token between our COMMIT and a subsequent SELECT.
+        // Read back whichever token survived the cleanup.
         let token = sqlx::query_as::<_, PasswordResetToken>(
             r#"
             SELECT id, user_id, token_hash, expires_at, used_at, created_at
             FROM password_reset_tokens
-            WHERE id = ?
+            WHERE user_id = ?
+            ORDER BY created_at DESC
+            LIMIT 1
             "#,
         )
-        .bind(id)
-        .fetch_one(&mut *tx)
+        .bind(input.user_id)
+        .fetch_one(&self.pool)
         .await?;
-
-        tx.commit().await?;
 
         Ok(token)
     }

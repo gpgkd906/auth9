@@ -15,9 +15,9 @@ use async_trait::async_trait;
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::JwtConfig;
 use auth9_core::domain::{
-    Action, AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client,
-    CreateActionInput, CreateInvitationInput, CreateLinkedIdentityInput, CreateLoginEventInput,
-    CreatePasskeyInput, CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
+    Action, AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateActionInput,
+    CreateInvitationInput, CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasskeyInput,
+    CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
     CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput,
     CreateUserInput, CreateWebhookInput, Invitation, InvitationStatus, LinkedIdentity, LoginEvent,
     LoginEventType, LoginStats, PasswordResetToken, Permission, Role, SecurityAlert, Service,
@@ -59,6 +59,7 @@ pub fn test_jwt_config() -> JwtConfig {
         refresh_token_ttl_secs: 604800,
         private_key_pem: None,
         public_key_pem: None,
+        previous_public_key_pem: None,
     }
 }
 
@@ -83,6 +84,15 @@ pub fn create_test_identity_token_for_user(user_id: Uuid) -> String {
     let jwt_manager = create_test_jwt_manager();
     jwt_manager
         .create_identity_token(user_id, "test-user@test.com", Some("Test User"))
+        .expect("Failed to create test identity token")
+}
+
+/// Create an identity token for a specific user ID with platform admin privileges
+#[allow(dead_code)]
+pub fn create_test_admin_token_for_user(user_id: Uuid) -> String {
+    let jwt_manager = create_test_jwt_manager();
+    jwt_manager
+        .create_identity_token(user_id, "admin@auth9.local", Some("Platform Admin"))
         .expect("Failed to create test identity token")
 }
 
@@ -2009,11 +2019,17 @@ impl ActionRepository for TestActionRepository {
         Ok(())
     }
 
-    async fn find_execution_by_id(&self, _id: StringUuid) -> Result<Option<auth9_core::domain::ActionExecution>> {
+    async fn find_execution_by_id(
+        &self,
+        _id: StringUuid,
+    ) -> Result<Option<auth9_core::domain::ActionExecution>> {
         Ok(None)
     }
 
-    async fn query_logs(&self, _filter: &auth9_core::domain::LogQueryFilter) -> Result<Vec<auth9_core::domain::ActionExecution>> {
+    async fn query_logs(
+        &self,
+        _filter: &auth9_core::domain::LogQueryFilter,
+    ) -> Result<Vec<auth9_core::domain::ActionExecution>> {
         // For test repository, return empty logs
         Ok(vec![])
     }

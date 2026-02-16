@@ -71,6 +71,13 @@ impl<R: RbacRepository> RbacService<R> {
 
     pub async fn create_role(&self, input: CreateRoleInput) -> Result<Role> {
         input.validate()?;
+
+        // Check inheritance depth if a parent role is specified
+        if let Some(parent_id) = input.parent_role_id {
+            self.check_parent_chain_depth(StringUuid::from(parent_id))
+                .await?;
+        }
+
         let role = self.repo.create_role(&input).await?;
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_all_user_roles().await;
@@ -116,8 +123,12 @@ impl<R: RbacRepository> RbacService<R> {
         Ok(role)
     }
 
+    /// Maximum allowed depth for role inheritance chains.
+    const MAX_ROLE_INHERITANCE_DEPTH: usize = 10;
+
     /// Check for circular inheritance by traversing the parent chain.
-    /// Returns error if setting `new_parent_id` as parent of `role_id` would create a cycle.
+    /// Returns error if setting `new_parent_id` as parent of `role_id` would create a cycle
+    /// or if the resulting chain would exceed the maximum depth limit.
     async fn check_circular_inheritance(
         &self,
         role_id: StringUuid,
@@ -135,6 +146,7 @@ impl<R: RbacRepository> RbacService<R> {
         let mut current_id = Some(new_parent_id);
         let mut visited = std::collections::HashSet::new();
         visited.insert(role_id); // The role we're updating
+        let mut depth: usize = 1; // Start at 1 since we already have role_id -> new_parent_id
 
         while let Some(parent_id) = current_id {
             if visited.contains(&parent_id) {
@@ -142,6 +154,15 @@ impl<R: RbacRepository> RbacService<R> {
                     "Circular inheritance detected: this would create a cycle in the role hierarchy".to_string(),
                 ));
             }
+
+            depth += 1;
+            if depth > Self::MAX_ROLE_INHERITANCE_DEPTH {
+                return Err(AppError::BadRequest(format!(
+                    "Role inheritance depth exceeds maximum limit of {}",
+                    Self::MAX_ROLE_INHERITANCE_DEPTH
+                )));
+            }
+
             visited.insert(parent_id);
 
             // Get the parent role to find its parent
@@ -154,6 +175,45 @@ impl<R: RbacRepository> RbacService<R> {
                     return Err(AppError::NotFound(format!(
                         "Parent role {} not found",
                         parent_id
+                    )));
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Check that the parent chain depth from `parent_id` upward does not exceed
+    /// the maximum allowed depth. Used during role creation where the new role
+    /// does not yet have an ID.
+    async fn check_parent_chain_depth(&self, parent_id: StringUuid) -> Result<()> {
+        let mut current_id = Some(parent_id);
+        let mut depth: usize = 1; // The new role itself counts as depth 1
+        let mut visited = std::collections::HashSet::new();
+
+        while let Some(id) = current_id {
+            depth += 1;
+            if depth > Self::MAX_ROLE_INHERITANCE_DEPTH {
+                return Err(AppError::BadRequest(format!(
+                    "Role inheritance depth exceeds maximum limit of {}",
+                    Self::MAX_ROLE_INHERITANCE_DEPTH
+                )));
+            }
+
+            if !visited.insert(id) {
+                return Err(AppError::BadRequest(
+                    "Circular inheritance detected in existing role hierarchy".to_string(),
+                ));
+            }
+
+            match self.repo.find_role_by_id(id).await? {
+                Some(role) => {
+                    current_id = role.parent_role_id;
+                }
+                None => {
+                    return Err(AppError::NotFound(format!(
+                        "Parent role {} not found",
+                        id
                     )));
                 }
             }
@@ -962,6 +1022,64 @@ mod tests {
         assert!(matches!(result, Err(AppError::BadRequest(_))));
         if let Err(AppError::BadRequest(msg)) = result {
             assert!(msg.contains("Circular inheritance"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_role_inheritance_depth_limit_exceeded() {
+        let mut mock = MockRbacRepository::new();
+
+        // Create 12 role IDs: target + 11 parents in a chain
+        // target -> parent_1 -> parent_2 -> ... -> parent_11
+        // depth starts at 1 (target->parent_1), increments each loop iteration
+        // At parent_10 (i=10), depth = 11 > MAX_DEPTH(10), triggers error
+        let role_ids: Vec<StringUuid> = (0..12).map(|_| StringUuid::new_v4()).collect();
+        let target_role_id = role_ids[0];
+
+        // First call: get the role being updated (target) — used by update_role to check existence
+        let target_role = Role {
+            id: target_role_id,
+            name: "Target".to_string(),
+            parent_role_id: None,
+            ..Default::default()
+        };
+        let target_clone = target_role.clone();
+        mock.expect_find_role_by_id()
+            .with(eq(target_role_id))
+            .times(1)
+            .returning(move |_| Ok(Some(target_clone.clone())));
+
+        // Set up chain: parent_1 -> parent_2 -> ... -> parent_11 (no parent)
+        // The check traverses from parent_1 upward. It should hit depth limit
+        // before reaching parent_11.
+        for i in 1..12 {
+            let parent = if i < 11 { Some(role_ids[i + 1]) } else { None };
+            let role = Role {
+                id: role_ids[i],
+                name: format!("Role_{}", i),
+                parent_role_id: parent,
+                ..Default::default()
+            };
+            let role_clone = role.clone();
+            let rid = role_ids[i];
+            mock.expect_find_role_by_id()
+                .with(eq(rid))
+                .times(..=1) // May be called 0 or 1 times (depth limit may stop early)
+                .returning(move |_| Ok(Some(role_clone.clone())));
+        }
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let input = UpdateRoleInput {
+            name: None,
+            description: None,
+            parent_role_id: Some(Some(*role_ids[1])),
+        };
+
+        let result = service.update_role(target_role_id, input).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        if let Err(AppError::BadRequest(msg)) = result {
+            assert!(msg.contains("depth exceeds maximum"));
         }
     }
 

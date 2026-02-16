@@ -143,9 +143,14 @@ impl<
 
         // Send the reset email
         // The token is passed to the email template which builds the reset URL
-        self.email_service
+        // Errors are logged but NOT propagated to prevent email enumeration
+        if let Err(e) = self
+            .email_service
             .send_password_reset(&input.email, &token, user.display_name.as_deref())
-            .await?;
+            .await
+        {
+            tracing::error!("Failed to send password reset email: {}", e);
+        }
 
         Ok(())
     }
@@ -432,7 +437,10 @@ mod tests {
         let token = "test-token-123";
         let hash1 = hash_token(token, b"key1").unwrap();
         let hash2 = hash_token(token, b"key2").unwrap();
-        assert_ne!(hash1, hash2, "Different keys should produce different hashes");
+        assert_ne!(
+            hash1, hash2,
+            "Different keys should produce different hashes"
+        );
     }
 
     #[test]

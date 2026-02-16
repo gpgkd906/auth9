@@ -481,6 +481,7 @@ async fn test_exchange_token_cache_hit() {
 
     let user_repo = builder.user_repo.clone();
     let service_repo = builder.service_repo.clone();
+    let rbac_repo = builder.rbac_repo.clone();
 
     user_repo.add_user(create_test_user(user_id)).await;
     service_repo
@@ -490,7 +491,18 @@ async fn test_exchange_token_cache_hit() {
         .add_client(create_test_client(client_uuid, service_id, "test-client"))
         .await;
 
-    // Pre-populate cache - no need to set up rbac_repo data
+    // Set up DB roles (fresh data used for token signing)
+    let db_roles = create_user_roles(
+        user_id,
+        tenant_id,
+        vec!["db-admin".to_string()],
+        vec!["db:read".to_string()],
+    );
+    rbac_repo
+        .set_user_roles_for_service(user_id, tenant_id, service_id, db_roles)
+        .await;
+
+    // Pre-populate cache with stale/different roles
     let mock_cache = MockCacheManager::new();
     mock_cache
         .seed_roles_for_service(
@@ -518,7 +530,7 @@ async fn test_exchange_token_cache_hit() {
     let response = service.exchange_token(request).await;
     assert!(response.is_ok());
 
-    // Verify the token contains cached roles
+    // Verify the token contains fresh DB roles (not stale cached roles)
     let response = response.unwrap().into_inner();
     let claims = jwt_manager
         .verify_tenant_access_token_with_optional_audience(
@@ -526,6 +538,6 @@ async fn test_exchange_token_cache_hit() {
             Some("test-client"),
         )
         .unwrap();
-    assert_eq!(claims.roles, vec!["cached-admin"]);
-    assert_eq!(claims.permissions, vec!["cached:read"]);
+    assert_eq!(claims.roles, vec!["db-admin"]);
+    assert_eq!(claims.permissions, vec!["db:read"]);
 }

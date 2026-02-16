@@ -207,6 +207,43 @@ async fn test_force_logout_user_no_sessions() {
     assert_eq!(response.revoked_count, 0);
 }
 
+#[tokio::test]
+async fn test_force_logout_user_rejects_non_admin() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create a tenant access token with viewer role (non-admin)
+    let tenant_id = uuid::Uuid::new_v4();
+    let user_id = uuid::Uuid::new_v4();
+    let token = state
+        .jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "jane@example.com",
+            tenant_id,
+            "test-client",
+            vec!["viewer".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let target_user = create_test_user(None);
+    let target_user_id = target_user.id;
+    state.user_repo.add_user(target_user).await;
+
+    let app = build_session_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/admin/users/{}/logout", target_user_id),
+        &(),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
 // ============================================================================
 // Session Info Tests
 // ============================================================================

@@ -35,6 +35,9 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Destroy the portal session cookie so the user can't access dashboard after logout
   const session = await getSession(request);
   const headers = new Headers();
+  headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
+  headers.set("Pragma", "no-cache");
+  headers.set("Expires", "0");
   if (session) {
     headers.append("Set-Cookie", await destroySession(session));
   }

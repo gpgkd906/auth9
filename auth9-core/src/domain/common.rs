@@ -377,8 +377,7 @@ mod tests {
 
     #[test]
     fn test_ssrf_blocks_gcp_metadata() {
-        let result =
-            validate_url_no_ssrf("http://metadata.google.internal/computeMetadata/v1/");
+        let result = validate_url_no_ssrf("http://metadata.google.internal/computeMetadata/v1/");
         assert!(result.is_err());
         assert_eq!(result.unwrap_err().code.as_ref(), "ssrf_blocked");
     }

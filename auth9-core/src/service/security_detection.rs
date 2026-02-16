@@ -268,8 +268,8 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         );
 
         // Check if current fingerprint is new (and there are existing known devices)
-        let is_new_device =
-            !known_fingerprints.contains_key(&current_fingerprint) && !known_fingerprints.is_empty();
+        let is_new_device = !known_fingerprints.contains_key(&current_fingerprint)
+            && !known_fingerprints.is_empty();
 
         if is_new_device {
             let input = CreateSecurityAlertInput {
@@ -541,9 +541,7 @@ mod tests {
         assert!(alerts
             .iter()
             .any(|a| a.alert_type == SecurityAlertType::BruteForce));
-        assert!(alerts
-            .iter()
-            .all(|a| a.severity == AlertSeverity::High));
+        assert!(alerts.iter().all(|a| a.severity == AlertSeverity::High));
     }
 
     #[tokio::test]
@@ -714,8 +712,8 @@ mod tests {
                 email: Some("test@example.com".to_string()),
                 tenant_id: None,
                 event_type: LoginEventType::Success,
-                ip_address: Some("10.0.0.1".to_string()),          // Different IP
-                user_agent: Some("Keycloak/24.0".to_string()),     // Same server UA
+                ip_address: Some("10.0.0.1".to_string()), // Different IP
+                user_agent: Some("Keycloak/24.0".to_string()), // Same server UA
                 device_type: None,
                 location: None,
                 session_id: None,
@@ -752,8 +750,8 @@ mod tests {
             email: Some("test@example.com".to_string()),
             tenant_id: None,
             event_type: LoginEventType::Success,
-            ip_address: Some("192.168.1.100".to_string()),     // New IP
-            user_agent: Some("Keycloak/24.0".to_string()),     // Same server UA
+            ip_address: Some("192.168.1.100".to_string()), // New IP
+            user_agent: Some("Keycloak/24.0".to_string()), // Same server UA
             device_type: None,
             location: None,
             session_id: None,

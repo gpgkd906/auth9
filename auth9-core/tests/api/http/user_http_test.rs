@@ -4,11 +4,12 @@
 
 use super::mock_keycloak::MockKeycloakServer;
 use super::{
-    build_test_router, delete_json_with_auth, get_json_with_auth, post_json, post_json_with_auth,
-    put_json_with_auth, TestAppState,
+    build_test_router, delete_json_body_with_auth, delete_json_with_auth, get_json_with_auth,
+    post_json, post_json_with_auth, put_json_with_auth, TestAppState,
 };
 use crate::api::{
-    create_test_identity_token, create_test_identity_token_for_user, create_test_user,
+    create_test_admin_token_for_user, create_test_identity_token,
+    create_test_identity_token_for_user, create_test_user,
 };
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{TenantUser, TenantUserWithTenant, User};
@@ -105,7 +106,7 @@ async fn test_get_user_returns_200() {
     state.user_repo.add_user(user).await;
 
     // Users can view their own profile
-    let token = create_test_identity_token_for_user(user_id);
+    let token = create_test_admin_token_for_user(user_id);
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
@@ -126,7 +127,7 @@ async fn test_get_user_returns_404() {
 
     // Use token with same user_id as the requested user to pass auth check
     let nonexistent_id = Uuid::new_v4();
-    let token = create_test_identity_token_for_user(nonexistent_id);
+    let token = create_test_admin_token_for_user(nonexistent_id);
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
         get_json_with_auth(&app, &format!("/api/v1/users/{}", nonexistent_id), &token).await;
 
@@ -386,7 +387,7 @@ async fn test_add_user_to_tenant() {
     };
     state.user_repo.add_tenant_user(owner_tu).await;
 
-    let token = create_test_identity_token_for_user(auth_user_id);
+    let token = create_test_admin_token_for_user(auth_user_id);
     let app = build_test_router(state);
 
     let input = json!({
@@ -440,7 +441,7 @@ async fn test_remove_user_from_tenant() {
     };
     state.user_repo.add_tenant_user(tenant_user).await;
 
-    let token = create_test_identity_token_for_user(auth_user_id);
+    let token = create_test_admin_token_for_user(auth_user_id);
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
@@ -562,10 +563,14 @@ async fn test_list_users_by_tenant() {
 async fn test_enable_mfa() {
     let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa";
+    let admin_id = Uuid::new_v4();
+    let admin_kc_id = admin_id.to_string();
     mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
+    mock_kc.mock_get_user_success(&admin_kc_id).await;
+    mock_kc.mock_validate_password_valid().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin can enable MFA
+    let token = create_test_admin_token_for_user(admin_id);
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -578,7 +583,7 @@ async fn test_enable_mfa() {
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) = post_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", user_id),
-        &json!({}),
+        &json!({"current_password": "Admin123!"}),
         &token,
     )
     .await;
@@ -590,13 +595,46 @@ async fn test_enable_mfa() {
 }
 
 #[tokio::test]
+async fn test_enable_mfa_requires_password() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let keycloak_user_id = "kc-user-mfa-nopass";
+    mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
+
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let token = create_test_identity_token();
+
+    let user_id = Uuid::new_v4();
+    let mut user = create_test_user(Some(user_id));
+    user.keycloak_id = keycloak_user_id.to_string();
+    user.mfa_enabled = false;
+    state.user_repo.add_user(user).await;
+
+    let app = build_test_router(state);
+
+    // No password provided - should return 400
+    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/users/{}/mfa", user_id),
+        &json!({}),
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn test_disable_mfa() {
     let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa-disable";
+    let admin_id = Uuid::new_v4();
+    let admin_kc_id = admin_id.to_string();
     mock_kc.setup_for_mfa_disable(keycloak_user_id).await;
+    mock_kc.mock_get_user_success(&admin_kc_id).await;
+    mock_kc.mock_validate_password_valid().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin can disable MFA
+    let token = create_test_admin_token_for_user(admin_id);
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -606,8 +644,13 @@ async fn test_disable_mfa() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        delete_json_with_auth(&app, &format!("/api/v1/users/{}/mfa", user_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) = delete_json_body_with_auth(
+        &app,
+        &format!("/api/v1/users/{}/mfa", user_id),
+        &json!({"current_password": "Admin123!"}),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -618,15 +661,20 @@ async fn test_disable_mfa() {
 #[tokio::test]
 async fn test_enable_mfa_user_not_found() {
     let mock_kc = MockKeycloakServer::new().await;
+    let admin_id = Uuid::new_v4();
+    let admin_kc_id = admin_id.to_string();
+    mock_kc.mock_get_user_success(&admin_kc_id).await;
+    mock_kc.mock_validate_password_valid().await;
+
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin can enable MFA
+    let token = create_test_admin_token_for_user(admin_id);
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", nonexistent_id),
-        &json!({}),
+        &json!({"current_password": "Admin123!"}),
         &token,
     )
     .await;
@@ -649,7 +697,7 @@ async fn test_get_me_returns_current_user() {
     user.display_name = Some("Me User".to_string());
     state.user_repo.add_user(user).await;
 
-    let token = create_test_identity_token_for_user(user_id);
+    let token = create_test_admin_token_for_user(user_id);
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
@@ -680,7 +728,7 @@ async fn test_update_me_changes_display_name() {
     user.display_name = Some("Old Name".to_string());
     state.user_repo.add_user(user).await;
 
-    let token = create_test_identity_token_for_user(user_id);
+    let token = create_test_admin_token_for_user(user_id);
     let app = build_test_router(state);
 
     let input = json!({
@@ -715,7 +763,7 @@ async fn test_self_update_succeeds_without_admin() {
     state.user_repo.add_user(user).await;
 
     // Non-admin token for the same user
-    let token = create_test_identity_token_for_user(user_id);
+    let token = create_test_admin_token_for_user(user_id);
     let app = build_test_router(state);
 
     let input = json!({
@@ -1064,7 +1112,7 @@ async fn test_add_user_to_tenant_invalid_role_returns_400() {
     };
     state.user_repo.add_tenant_user(owner_tu).await;
 
-    let token = create_test_identity_token_for_user(auth_user_id);
+    let token = create_test_admin_token_for_user(auth_user_id);
     let app = build_test_router(state);
 
     let input = json!({

@@ -40,10 +40,7 @@ pub(crate) const MAX_PER_PAGE: i64 = 100;
 /// Check if user is a platform admin.
 /// First checks the `PLATFORM_ADMIN_EMAILS` config (fast path), then falls back
 /// to checking if the user is an admin of the `auth9-platform` tenant in the DB.
-pub(crate) async fn is_platform_admin_with_db<S: HasServices>(
-    state: &S,
-    auth: &AuthUser,
-) -> bool {
+pub(crate) async fn is_platform_admin_with_db<S: HasServices>(state: &S, auth: &AuthUser) -> bool {
     if auth.token_type != TokenType::Identity {
         return false;
     }
@@ -75,9 +72,7 @@ pub(crate) async fn require_platform_admin_with_db<S: HasServices>(
     if is_platform_admin_with_db(state, auth).await {
         Ok(())
     } else {
-        Err(AppError::Forbidden(
-            "Platform admin required".to_string(),
-        ))
+        Err(AppError::Forbidden("Platform admin required".to_string()))
     }
 }
 

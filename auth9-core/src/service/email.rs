@@ -12,6 +12,16 @@ use crate::service::SystemSettingsService;
 use async_trait::async_trait;
 use std::sync::Arc;
 
+/// HTML-escape user-controlled text to prevent XSS in email bodies.
+fn html_escape(input: &str) -> String {
+    input
+        .replace('&', "&amp;")
+        .replace('<', "&lt;")
+        .replace('>', "&gt;")
+        .replace('"', "&quot;")
+        .replace('\'', "&#x27;")
+}
+
 /// Factory for building an [`EmailProvider`] from configuration.
 ///
 /// This indirection keeps unit tests hermetic (no AWS SDK TLS/root-store requirements).
@@ -165,7 +175,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         reset_token: &str,
         user_name: Option<&str>,
     ) -> Result<EmailSendResult> {
-        let display_name = user_name.unwrap_or("User");
+        let display_name = html_escape(user_name.unwrap_or("User"));
         let reset_url = format!(
             "{}/reset-password?token={}",
             std::env::var("AUTH9_PORTAL_URL")
@@ -226,7 +236,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         to_email: &str,
         user_name: Option<&str>,
     ) -> Result<EmailSendResult> {
-        let display_name = user_name.unwrap_or("User");
+        let display_name = html_escape(user_name.unwrap_or("User"));
         let now = chrono::Utc::now();
 
         let html_body = format!(

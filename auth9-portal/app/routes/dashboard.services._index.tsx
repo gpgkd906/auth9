@@ -174,69 +174,76 @@ export default function ServicesPage() {
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
-            <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
-              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">Name</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Updated</th>
-                  <th className="px-4 py-3 font-semibold w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
-                {data.data.map((service) => (
-                  <tr key={service.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{service.name}</td>
-                    <td className="px-4 py-3 capitalize">{service.status}</td>
-                    <td className="px-4 py-3">
-                      <FormattedDate date={service.updated_at} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
-                            <DotsHorizontalIcon className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
-                          <DropdownMenuItem asChild>
-                            <a href={`/dashboard/services/${service.id}`} className="flex items-center cursor-pointer">
-                              <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Details
-                            </a>
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: "Delete Service",
-                                description: "Are you sure you want to delete this service?",
-                                variant: "destructive",
-                              });
-                              if (ok) {
-                                submit({ intent: "delete", id: service.id }, { method: "post" });
-                              }
-                            }}
-                          >
-                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-                {data.data.length === 0 && (
-                  <tr>
-                    <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={4}>
-                      No services found
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            {data.data.map((service) => (
+              <div
+                key={service.id}
+                className="h-full rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-4 flex flex-col gap-3"
+              >
+                <div className="flex items-start justify-between gap-2">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-semibold text-[var(--text-primary)]" title={service.name}>
+                      {service.name}
+                    </p>
+                    <p className="mt-1 text-xs text-[var(--text-tertiary)]">ID: {service.id}</p>
+                  </div>
+                  <span className="shrink-0 rounded-full bg-[var(--accent-blue)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent-blue)] capitalize">
+                    {service.status}
+                  </span>
+                </div>
+
+                <div className="text-xs text-[var(--text-secondary)]">
+                  Updated <FormattedDate date={service.updated_at} />
+                </div>
+
+                <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+                  <a
+                    href={`/dashboard/services/${service.id}`}
+                    className="inline-flex items-center rounded-md border border-[var(--glass-border-subtle)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
+                  >
+                    <Pencil2Icon className="mr-1.5 h-3.5 w-3.5" />
+                    Details
+                  </a>
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="ghost" className="h-9 w-9 p-0">
+                        <span className="sr-only">Open menu</span>
+                        <DotsHorizontalIcon className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                      <DropdownMenuItem asChild>
+                        <a href={`/dashboard/services/${service.id}`} className="flex items-center cursor-pointer">
+                          <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Details
+                        </a>
+                      </DropdownMenuItem>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem
+                        className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
+                        onClick={async () => {
+                          const ok = await confirm({
+                            title: "Delete Service",
+                            description: "Are you sure you want to delete this service?",
+                            variant: "destructive",
+                          });
+                          if (ok) {
+                            submit({ intent: "delete", id: service.id }, { method: "post" });
+                          }
+                        }}
+                      >
+                        <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
+                      </DropdownMenuItem>
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+            ))}
+            {data.data.length === 0 && (
+              <div className="col-span-full rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] px-4 py-6 text-center text-[var(--text-secondary)]">
+                No services found
+              </div>
+            )}
           </div>
         </div>
       </Card>

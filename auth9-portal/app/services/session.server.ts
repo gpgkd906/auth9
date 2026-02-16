@@ -9,6 +9,12 @@ const isProduction = process.env.NODE_ENV === "production";
 // restore session cookies across restarts ("continue where you left off").
 const SESSION_MAX_AGE = 8 * 60 * 60;
 
+export const NO_STORE_HEADERS: HeadersInit = {
+  "Cache-Control": "no-store, no-cache, must-revalidate, private",
+  Pragma: "no-cache",
+  Expires: "0",
+};
+
 export const sessionCookie = createCookie("auth9_session", {
   secrets: [process.env.SESSION_SECRET || "default-secret-change-me"],
   path: "/",
@@ -177,13 +183,13 @@ export async function requireAuthWithUpdate(
 ): Promise<SessionUpdateResult> {
   const session = await getSession(request);
   if (!session || !session.accessToken) {
-    throw redirect("/login");
+    throw redirect("/login", { headers: NO_STORE_HEADERS });
   }
 
   if (isTokenExpired(session)) {
     const newSession = await refreshAccessToken(session);
     if (!newSession) {
-      throw redirect("/login");
+      throw redirect("/login", { headers: NO_STORE_HEADERS });
     }
     return {
       session: newSession,

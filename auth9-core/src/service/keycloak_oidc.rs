@@ -340,11 +340,18 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                         .await
                     {
                         Ok(_) => {
-                            tracing::info!("PreUserRegistration actions passed for email {}", input.email);
+                            tracing::info!(
+                                "PreUserRegistration actions passed for email {}",
+                                input.email
+                            );
                         }
                         Err(e) => {
                             // Strict mode: abort registration on action failure
-                            tracing::error!("PreUserRegistration action failed for email {}: {}", input.email, e);
+                            tracing::error!(
+                                "PreUserRegistration action failed for email {}: {}",
+                                input.email,
+                                e
+                            );
                             return Err(e);
                         }
                     }
@@ -381,9 +388,16 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                         .await
                     {
                         // Log error but don't abort (user already created)
-                        tracing::error!("PostUserRegistration action failed for user {}: {}", new_user.id, e);
+                        tracing::error!(
+                            "PostUserRegistration action failed for user {}: {}",
+                            new_user.id,
+                            e
+                        );
                     } else {
-                        tracing::info!("PostUserRegistration actions executed for user {}", new_user.id);
+                        tracing::info!(
+                            "PostUserRegistration actions executed for user {}",
+                            new_user.id
+                        );
                     }
                 }
 
@@ -420,7 +434,10 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                 .await
             {
                 Ok(modified_context) => {
-                    tracing::info!("PostLogin actions executed successfully for user {}", user.id);
+                    tracing::info!(
+                        "PostLogin actions executed successfully for user {}",
+                        user.id
+                    );
                     modified_context.claims
                 }
                 Err(e) => {
@@ -822,6 +839,7 @@ mod tests {
             refresh_token_ttl_secs: 86400,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         };
         JwtManager::new(config)
     }
@@ -2020,7 +2038,11 @@ mod tests {
             .with(eq(tenant_id), eq("pre-user-registration"), eq(true))
             .returning(move |_, _, _| {
                 let script = r#"throw new Error("Email domain not allowed");"#;
-                Ok(vec![create_test_action("pre-user-registration", script, tenant_id)])
+                Ok(vec![create_test_action(
+                    "pre-user-registration",
+                    script,
+                    tenant_id,
+                )])
             });
         action_repo
             .expect_record_execution()
@@ -2136,7 +2158,11 @@ mod tests {
             .with(eq(tenant_id), eq("pre-user-registration"), eq(true))
             .returning(move |_, _, _| {
                 let script = r#"context;"#; // Just return context unchanged
-                Ok(vec![create_test_action("pre-user-registration", script, tenant_id)])
+                Ok(vec![create_test_action(
+                    "pre-user-registration",
+                    script,
+                    tenant_id,
+                )])
             });
 
         // PostUserRegistration - executes
@@ -2145,7 +2171,11 @@ mod tests {
             .with(eq(tenant_id), eq("post-user-registration"), eq(true))
             .returning(move |_, _, _| {
                 let script = r#"console.log('User registered successfully'); context;"#;
-                Ok(vec![create_test_action("post-user-registration", script, tenant_id)])
+                Ok(vec![create_test_action(
+                    "post-user-registration",
+                    script,
+                    tenant_id,
+                )])
             });
 
         // PostLogin - no actions
@@ -2321,10 +2351,15 @@ mod tests {
         // Decode the identity token to verify custom claims
         let callback_result = result.unwrap();
         let jwt_manager = create_test_jwt_manager();
-        let claims = jwt_manager.verify_identity_token(&callback_result.identity_token).unwrap();
+        let claims = jwt_manager
+            .verify_identity_token(&callback_result.identity_token)
+            .unwrap();
 
         // Verify custom claims were added
-        let extra = claims.extra.as_ref().expect("extra claims should be present");
+        let extra = claims
+            .extra
+            .as_ref()
+            .expect("extra claims should be present");
         assert!(extra.contains_key("department"));
         assert_eq!(extra.get("department").unwrap(), "engineering");
         assert!(extra.contains_key("tier"));
@@ -2378,7 +2413,11 @@ mod tests {
             .with(eq(tenant_id), eq("pre-token-refresh"), eq(true))
             .returning(move |_, _, _| {
                 let script = r#"throw new Error("User account suspended");"#;
-                Ok(vec![create_test_action("pre-token-refresh", script, tenant_id)])
+                Ok(vec![create_test_action(
+                    "pre-token-refresh",
+                    script,
+                    tenant_id,
+                )])
             });
         action_repo
             .expect_record_execution()
@@ -2429,7 +2468,9 @@ mod tests {
         );
 
         // PreTokenRefresh should block token refresh
-        let result = service.refresh_token("old-refresh-token", "test-client").await;
+        let result = service
+            .refresh_token("old-refresh-token", "test-client")
+            .await;
         assert!(result.is_err());
         match result {
             Err(AppError::ActionExecutionFailed(_)) => {

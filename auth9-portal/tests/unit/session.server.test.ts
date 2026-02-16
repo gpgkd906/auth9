@@ -275,7 +275,16 @@ describe("session.server", () => {
       const request = new Request("http://localhost");
 
       await expect(requireAuth(request)).rejects.toBeDefined();
-      expect(redirect).toHaveBeenCalledWith("/login");
+      expect(redirect).toHaveBeenCalledWith(
+        "/login",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "Cache-Control": "no-store, no-cache, must-revalidate, private",
+            Pragma: "no-cache",
+            Expires: "0",
+          }),
+        })
+      );
     });
 
     it("throws redirect when session has no accessToken", async () => {
@@ -284,7 +293,16 @@ describe("session.server", () => {
       const request = new Request("http://localhost");
 
       await expect(requireAuth(request)).rejects.toBeDefined();
-      expect(redirect).toHaveBeenCalledWith("/login");
+      expect(redirect).toHaveBeenCalledWith(
+        "/login",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "Cache-Control": "no-store, no-cache, must-revalidate, private",
+            Pragma: "no-cache",
+            Expires: "0",
+          }),
+        })
+      );
     });
 
     it("returns refreshed session when expired and refresh succeeds", async () => {
@@ -328,7 +346,16 @@ describe("session.server", () => {
       });
 
       await expect(requireAuth(request)).rejects.toBeDefined();
-      expect(redirect).toHaveBeenCalledWith("/login");
+      expect(redirect).toHaveBeenCalledWith(
+        "/login",
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            "Cache-Control": "no-store, no-cache, must-revalidate, private",
+            Pragma: "no-cache",
+            Expires: "0",
+          }),
+        })
+      );
     });
   });
 });

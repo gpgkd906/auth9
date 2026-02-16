@@ -269,6 +269,7 @@ mod tests {
                 refresh_token_ttl_secs: 604800,
                 private_key_pem: None,
                 public_key_pem: None,
+                previous_public_key_pem: None,
             },
             keycloak: KeycloakConfig {
                 url: "http://localhost:8081".to_string(),

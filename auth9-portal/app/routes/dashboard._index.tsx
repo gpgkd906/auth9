@@ -1,7 +1,9 @@
-import { useLoaderData, redirect } from "react-router";
+import { useLoaderData, redirect, Link } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
+import { ArrowRightIcon, PlusIcon } from "@radix-ui/react-icons";
 import { getAccessToken } from "~/services/session.server";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { Button } from "~/components/ui/button";
 import { FormattedDate } from "~/components/ui/formatted-date";
 import { auditApi, serviceApi, tenantApi, userApi } from "~/services/api";
 
@@ -52,13 +54,32 @@ export default function DashboardIndex() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} color="blue" delay="delay-1" />
-        <StatsCard title="Active Users" value={data.totals.users.toString()} color="purple" delay="delay-2" />
-        <StatsCard title="Services" value={data.totals.services.toString()} color="green" delay="delay-3" />
-        <StatsCard title="Audit Events" value={data.audits.length.toString()} color="cyan" delay="delay-4" />
+        <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} color="blue" delay="delay-1" href="/dashboard/tenants" />
+        <StatsCard title="Active Users" value={data.totals.users.toString()} color="purple" delay="delay-2" href="/dashboard/users" />
+        <StatsCard title="Services" value={data.totals.services.toString()} color="green" delay="delay-3" href="/dashboard/services" />
+        <StatsCard title="Audit Events" value={data.audits.length.toString()} color="cyan" delay="delay-4" href="/dashboard/audit-logs" />
       </div>
 
-      <Card className="animate-fade-in-up delay-5">
+      {data.totals.tenants === 0 && (
+        <Card className="animate-fade-in-up delay-5">
+          <CardContent className="p-6 md:p-8">
+            <div className="mx-auto max-w-2xl rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] px-5 py-6 text-center md:px-8 md:py-7">
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Start by creating your first tenant</h2>
+              <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
+                Tenants isolate identities and policies for each environment or customer. Create one to unlock the rest of the dashboard workflow.
+              </p>
+              <Button asChild className="mt-5 h-11 w-full !flex px-4 md:h-10 md:w-auto">
+                <Link to="/dashboard/tenants/new">
+                  <PlusIcon className="mr-2 h-4 w-4" />
+                  开始创建
+                </Link>
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      <Card className="animate-fade-in-up delay-6">
         <CardHeader>
           <CardTitle>Recent Activity</CardTitle>
         </CardHeader>
@@ -96,12 +117,14 @@ function StatsCard({
   title,
   value,
   color,
-  delay
+  delay,
+  href,
 }: {
   title: string;
   value: string;
   color: "blue" | "purple" | "green" | "cyan";
   delay: string;
+  href: string;
 }) {
   const colorClasses = {
     blue: "from-[var(--accent-blue)]/20 to-transparent",
@@ -111,11 +134,17 @@ function StatsCard({
   };
 
   return (
-    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full`}>
+    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full shadow-[0_12px_36px_var(--glass-shadow-strong)] hover:shadow-[0_16px_44px_var(--glass-shadow-strong)]`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${colorClasses[color]} pointer-events-none`} />
-      <CardContent className="pt-5 relative">
+      <CardContent className="pt-5 relative h-full flex flex-col">
         <p className="text-[13px] font-medium text-[var(--text-secondary)]">{title}</p>
         <p className="mt-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{value}</p>
+        <Button asChild variant="outline" size="sm" className="mt-4 h-11 w-full !flex justify-between px-4 text-xs sm:mt-3 sm:h-8 sm:w-auto sm:gap-1 sm:px-3 sm:justify-center">
+          <Link to={href}>
+            View details
+            <ArrowRightIcon className="h-3.5 w-3.5" />
+          </Link>
+        </Button>
       </CardContent>
     </Card>
   );

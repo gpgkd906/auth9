@@ -792,9 +792,7 @@ mod tests {
             .returning(|_| Ok(0));
 
         let mut action_repo = MockActionRepository::new();
-        action_repo
-            .expect_delete_by_tenant()
-            .returning(|_| Ok(0));
+        action_repo.expect_delete_by_tenant().returning(|_| Ok(0));
 
         let service = create_test_service_full(
             tenant_repo,
@@ -893,9 +891,7 @@ mod tests {
             .returning(|_| Ok(5));
 
         let mut action_repo = MockActionRepository::new();
-        action_repo
-            .expect_delete_by_tenant()
-            .returning(|_| Ok(3));
+        action_repo.expect_delete_by_tenant().returning(|_| Ok(3));
 
         let service = create_test_service_full(
             tenant_repo,

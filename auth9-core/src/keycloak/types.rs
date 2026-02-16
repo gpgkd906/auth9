@@ -132,6 +132,10 @@ pub struct KeycloakIdentityProvider {
     pub first_broker_login_flow_alias: Option<String>,
     #[serde(default)]
     pub config: HashMap<String, String>,
+    /// Capture extra Keycloak fields (e.g. internalId) so GET→modify→PUT round-trips
+    /// don't drop required fields that Keycloak expects.
+    #[serde(flatten)]
+    pub extra: HashMap<String, serde_json::Value>,
 }
 
 /// Keycloak federated identity representation

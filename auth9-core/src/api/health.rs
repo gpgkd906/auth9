@@ -59,7 +59,10 @@ mod tests {
 
     #[test]
     fn test_health_response_deserialization() {
-        let json = format!(r#"{{"status": "healthy", "version": "{}"}}"#, env!("CARGO_PKG_VERSION"));
+        let json = format!(
+            r#"{{"status": "healthy", "version": "{}"}}"#,
+            env!("CARGO_PKG_VERSION")
+        );
         let response: HealthResponse = serde_json::from_str(&json).unwrap();
 
         assert_eq!(response.status, "healthy");

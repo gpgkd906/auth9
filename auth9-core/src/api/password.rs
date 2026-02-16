@@ -29,11 +29,22 @@ pub async fn forgot_password<S: HasPasswordManagement>(
 }
 
 /// Reset password using token
-pub async fn reset_password<S: HasPasswordManagement>(
+pub async fn reset_password<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
     Json(input): Json<ResetPasswordInput>,
 ) -> Result<Json<MessageResponse>, AppError> {
     state.password_service().reset_password(input).await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &HeaderMap::new(),
+        "password.reset",
+        "user",
+        None,
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(MessageResponse::new(
         "Password has been reset successfully.",
@@ -53,6 +64,17 @@ pub async fn change_password<S: HasPasswordManagement + HasServices>(
         .password_service()
         .change_password(user_id, input)
         .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "password.changed",
+        "user",
+        Some(*user_id),
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(MessageResponse::new(
         "Password has been changed successfully.",

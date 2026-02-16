@@ -91,6 +91,10 @@ pub trait CacheOperations: Send + Sync {
     async fn get_refresh_token_session(&self, refresh_token: &str) -> Result<Option<String>>;
     async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()>;
 
+    /// Remove all refresh token sessions bound to a given session ID.
+    /// Used during logout to clean up all refresh tokens for the session.
+    async fn remove_all_refresh_sessions_for_session(&self, session_id: &str) -> Result<()>;
+
     // ==================== Webhook Event Deduplication ====================
 
     /// Check if a webhook event has already been processed (returns true if duplicate).
@@ -109,6 +113,7 @@ mod keys {
     pub const WEBAUTHN_AUTH: &str = "auth9:webauthn_auth";
     pub const OIDC_STATE: &str = "auth9:oidc_state";
     pub const REFRESH_TOKEN_SESSION: &str = "auth9:refresh_session";
+    pub const SESSION_REFRESH_TOKENS: &str = "auth9:session_tokens";
     pub const WEBHOOK_EVENT_DEDUP: &str = "auth9:webhook_dedup";
 }
 
@@ -494,6 +499,24 @@ impl CacheManager {
         let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, token_hash);
         let mut conn = self.conn.clone();
         let _: () = conn.set_ex(&key, session_id, ttl_secs).await?;
+
+        // Maintain reverse index: session_id → set of token hashes
+        let set_key = format!("{}:{}", keys::SESSION_REFRESH_TOKENS, session_id);
+        let mut conn2 = self.conn.clone();
+        let _: () = redis::cmd("SADD")
+            .arg(&set_key)
+            .arg(&token_hash)
+            .query_async(&mut conn2)
+            .await
+            .map_err(AppError::from)?;
+        // Set TTL on the set to match the refresh token TTL (extend if needed)
+        let _: () = redis::cmd("EXPIRE")
+            .arg(&set_key)
+            .arg(ttl_secs)
+            .query_async(&mut conn2)
+            .await
+            .map_err(AppError::from)?;
+
         Ok(())
     }
 
@@ -508,6 +531,29 @@ impl CacheManager {
         let token_hash = Self::refresh_token_hash(refresh_token);
         let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, token_hash);
         self.delete(&key).await
+    }
+
+    pub async fn remove_all_refresh_sessions_for_session(&self, session_id: &str) -> Result<()> {
+        let set_key = format!("{}:{}", keys::SESSION_REFRESH_TOKENS, session_id);
+        let mut conn = self.conn.clone();
+
+        // Get all token hashes for this session
+        let token_hashes: Vec<String> = redis::cmd("SMEMBERS")
+            .arg(&set_key)
+            .query_async(&mut conn)
+            .await
+            .unwrap_or_default();
+
+        // Delete each refresh_session key
+        for hash in &token_hashes {
+            let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, hash);
+            let _ = self.delete(&key).await;
+        }
+
+        // Delete the reverse index set itself
+        let _ = self.delete(&set_key).await;
+
+        Ok(())
     }
 
     // ==================== Webhook Event Deduplication ====================
@@ -653,6 +699,10 @@ impl CacheOperations for CacheManager {
 
     async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
         CacheManager::remove_refresh_token_session(self, refresh_token).await
+    }
+
+    async fn remove_all_refresh_sessions_for_session(&self, session_id: &str) -> Result<()> {
+        CacheManager::remove_all_refresh_sessions_for_session(self, session_id).await
     }
 
     async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool> {
@@ -818,6 +868,12 @@ impl NoOpCacheManager {
         Ok(())
     }
 
+    pub async fn remove_all_refresh_sessions_for_session(&self, session_id: &str) -> Result<()> {
+        let mut sessions = self.refresh_sessions.write().await;
+        sessions.retain(|_, v| v != session_id);
+        Ok(())
+    }
+
     pub async fn check_and_mark_webhook_event(
         &self,
         _event_key: &str,
@@ -956,6 +1012,10 @@ impl CacheOperations for NoOpCacheManager {
 
     async fn remove_refresh_token_session(&self, refresh_token: &str) -> Result<()> {
         NoOpCacheManager::remove_refresh_token_session(self, refresh_token).await
+    }
+
+    async fn remove_all_refresh_sessions_for_session(&self, session_id: &str) -> Result<()> {
+        NoOpCacheManager::remove_all_refresh_sessions_for_session(self, session_id).await
     }
 
     async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool> {
@@ -1382,7 +1442,9 @@ mod tests {
         let cache = NoOpCacheManager::new();
         let user_id = Uuid::new_v4();
         let tenant_id = Uuid::new_v4();
-        let result = cache.invalidate_user_roles_for_tenant(user_id, tenant_id).await;
+        let result = cache
+            .invalidate_user_roles_for_tenant(user_id, tenant_id)
+            .await;
         assert!(result.is_ok());
     }
 
@@ -1393,7 +1455,10 @@ mod tests {
     #[tokio::test]
     async fn test_noop_cache_operations_trait_oidc_state() {
         let cache: &dyn CacheOperations = &NoOpCacheManager::new();
-        assert!(cache.store_oidc_state("nonce-1", "payload", 300).await.is_ok());
+        assert!(cache
+            .store_oidc_state("nonce-1", "payload", 300)
+            .await
+            .is_ok());
         // NoOp impl stores in-memory, so consuming works
         let result = cache.consume_oidc_state("nonce-1").await.unwrap();
         assert!(result.is_some());
@@ -1404,7 +1469,10 @@ mod tests {
     #[tokio::test]
     async fn test_noop_cache_operations_trait_refresh_session() {
         let cache: &dyn CacheOperations = &NoOpCacheManager::new();
-        assert!(cache.bind_refresh_token_session("rt-1", "sid-1", 300).await.is_ok());
+        assert!(cache
+            .bind_refresh_token_session("rt-1", "sid-1", 300)
+            .await
+            .is_ok());
         let result = cache.get_refresh_token_session("rt-1").await.unwrap();
         assert_eq!(result.as_deref(), Some("sid-1"));
         assert!(cache.remove_refresh_token_session("rt-1").await.is_ok());
@@ -1447,5 +1515,4 @@ mod tests {
         let key = format!("{}:{}", keys::REFRESH_TOKEN_SESSION, "hash-abc");
         assert_eq!(key, "auth9:refresh_session:hash-abc");
     }
-
 }

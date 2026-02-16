@@ -47,9 +47,9 @@ use auth9_core::server::build_full_router;
 use auth9_core::service::{
     tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ActionService, AnalyticsService,
     BrandingService, ClientService, EmailService, EmailTemplateService, IdentityProviderService,
-    InvitationService, KeycloakSyncService, PasswordService, RbacService,
-    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
-    WebAuthnService, WebhookService,
+    InvitationService, KeycloakSyncService, PasswordService, RbacService, SecurityDetectionService,
+    SessionService, SystemSettingsService, TenantService, UserService, WebAuthnService,
+    WebhookService,
 };
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -95,6 +95,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             refresh_token_ttl_secs: 604800,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         },
         keycloak: KeycloakConfig {
             url: keycloak_url.to_string(),
@@ -1004,6 +1005,39 @@ pub async fn delete_json_with_auth<R: DeserializeOwned>(
         .uri(path)
         .header("Authorization", format!("Bearer {}", token))
         .body(Body::empty())
+        .unwrap();
+
+    let response = app.clone().oneshot(request).await.unwrap();
+    let status = response.status();
+
+    let body_bytes = axum::body::to_bytes(response.into_body(), usize::MAX)
+        .await
+        .unwrap_or_default();
+
+    if body_bytes.is_empty() {
+        return (status, None);
+    }
+
+    match serde_json::from_slice(&body_bytes) {
+        Ok(data) => (status, Some(data)),
+        Err(_) => (status, None),
+    }
+}
+
+/// Send a DELETE request with a JSON body and auth header
+#[allow(dead_code)]
+pub async fn delete_json_body_with_auth<T: Serialize, R: DeserializeOwned>(
+    app: &Router,
+    path: &str,
+    body: &T,
+    token: &str,
+) -> (StatusCode, Option<R>) {
+    let request = Request::builder()
+        .method(Method::DELETE)
+        .uri(path)
+        .header("Content-Type", "application/json")
+        .header("Authorization", format!("Bearer {}", token))
+        .body(Body::from(serde_json::to_string(body).unwrap()))
         .unwrap();
 
     let response = app.clone().oneshot(request).await.unwrap();

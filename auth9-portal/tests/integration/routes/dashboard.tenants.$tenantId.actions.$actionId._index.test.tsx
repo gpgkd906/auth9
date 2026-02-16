@@ -12,10 +12,10 @@ vi.mock("~/services/session.server", () => ({
 
 // Mock the auth9-client module
 vi.mock("~/lib/auth9-client", () => ({
-  getAuth9Client: vi.fn((token) => ({
+  getAuth9Client: vi.fn(() => ({
     actions: mockActionsApi,
   })),
-  withTenant: vi.fn((client, tenantId) => ({
+  withTenant: vi.fn(() => ({
     actions: mockActionsApi,
   })),
 }));

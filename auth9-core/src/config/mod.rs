@@ -287,6 +287,8 @@ pub struct JwtConfig {
     pub refresh_token_ttl_secs: i64,
     pub private_key_pem: Option<String>,
     pub public_key_pem: Option<String>,
+    /// Previous public key for rotation (allows verifying tokens signed with the old key)
+    pub previous_public_key_pem: Option<String>,
 }
 
 impl fmt::Debug for JwtConfig {
@@ -303,6 +305,10 @@ impl fmt::Debug for JwtConfig {
             .field(
                 "public_key_pem",
                 &self.public_key_pem.as_ref().map(|_| "<REDACTED>"),
+            )
+            .field(
+                "previous_public_key_pem",
+                &self.previous_public_key_pem.as_ref().map(|_| "<REDACTED>"),
             )
             .finish()
     }
@@ -566,6 +572,9 @@ impl Config {
                 public_key_pem: env::var("JWT_PUBLIC_KEY")
                     .ok()
                     .map(|value| value.replace("\\n", "\n")),
+                previous_public_key_pem: env::var("JWT_PREVIOUS_PUBLIC_KEY")
+                    .ok()
+                    .map(|value| value.replace("\\n", "\n")),
             },
             keycloak: {
                 let url = env::var("KEYCLOAK_URL")
@@ -797,6 +806,7 @@ mod tests {
                 refresh_token_ttl_secs: 604800,
                 private_key_pem: None,
                 public_key_pem: None,
+                previous_public_key_pem: None,
             },
             keycloak: KeycloakConfig {
                 url: "http://localhost:8081".to_string(),
@@ -945,6 +955,7 @@ mod tests {
             public_key_pem: Some(
                 "-----BEGIN PUBLIC KEY-----\ntest\n-----END PUBLIC KEY-----".to_string(),
             ),
+            previous_public_key_pem: None,
         };
 
         assert!(jwt.private_key_pem.is_some());
@@ -960,6 +971,7 @@ mod tests {
             refresh_token_ttl_secs: 604800,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         };
         let jwt2 = jwt.clone();
 
@@ -976,6 +988,7 @@ mod tests {
             refresh_token_ttl_secs: 604800,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         };
         let debug_str = format!("{:?}", jwt);
 
@@ -1067,6 +1080,7 @@ mod tests {
                 refresh_token_ttl_secs: 2592000,
                 private_key_pem: None,
                 public_key_pem: None,
+                previous_public_key_pem: None,
             },
             keycloak: KeycloakConfig {
                 url: "http://keycloak.internal:8080".to_string(),
@@ -1683,6 +1697,7 @@ mod tests {
                 public_key_pem: Some(
                     "-----BEGIN PUBLIC KEY-----\npublickey\n-----END PUBLIC KEY-----".to_string(),
                 ),
+                previous_public_key_pem: None,
             },
             keycloak: KeycloakConfig {
                 url: "http://keycloak:8080".to_string(),

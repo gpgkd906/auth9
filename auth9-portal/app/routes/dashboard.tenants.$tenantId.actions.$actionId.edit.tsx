@@ -7,7 +7,6 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { Switch } from "~/components/ui/switch";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant, getTriggers } from "~/lib/auth9-client";
 import { FormattedDate } from "~/components/ui/formatted-date";

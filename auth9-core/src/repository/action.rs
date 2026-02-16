@@ -199,10 +199,7 @@ impl ActionRepository for ActionRepositoryImpl {
 
         updates.push("updated_at = NOW()");
 
-        let query_str = format!(
-            "UPDATE actions SET {} WHERE id = ?",
-            updates.join(", ")
-        );
+        let query_str = format!("UPDATE actions SET {} WHERE id = ?", updates.join(", "));
 
         let mut query = sqlx::query(&query_str);
         for binding in bindings {

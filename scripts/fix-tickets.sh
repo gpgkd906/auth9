@@ -10,6 +10,7 @@ ORCHESTRATOR_LAUNCHER="$PROJECT_ROOT/tools/qa-orchestrator/scripts/open-ui.sh"
 ORCHESTRATOR_CLI="$PROJECT_ROOT/tools/qa-orchestrator/scripts/run-cli.sh"
 BATCH_SIZE="${BATCH_SIZE:-3}"
 MAX_BATCHES="${MAX_BATCHES:-0}" # 0 = unlimited
+AGENT="${AGENT:-claude}" # claude or codex
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -34,6 +35,7 @@ usage() {
     echo "Scan docs/ticket/ and fix tickets in batches using Claude Code agent."
     echo ""
     echo "Options:"
+    echo "  -a, --agent NAME      Agent to use: claude (default), codex"
     echo "  -b, --batch-size N    Number of tickets per batch (default: 3)"
     echo "  -m, --max-batches N   Maximum number of batches to process (default: 0 = unlimited)"
     echo "  -d, --dry-run         Show what would be processed without running"
@@ -42,6 +44,7 @@ usage() {
     echo "  -h, --help            Show this help message"
     echo ""
     echo "Environment Variables:"
+    echo "  AGENT                 Same as --agent"
     echo "  BATCH_SIZE            Same as --batch-size"
     echo "  MAX_BATCHES           Same as --max-batches"
     exit 0
@@ -51,6 +54,14 @@ usage() {
 DRY_RUN=false
 while [[ $# -gt 0 ]]; do
     case $1 in
+        -a|--agent)
+            AGENT="$2"
+            if [[ "$AGENT" != "claude" && "$AGENT" != "codex" ]]; then
+                echo -e "${RED}Unknown agent: $AGENT (supported: claude, codex)${NC}"
+                exit 1
+            fi
+            shift 2
+            ;;
         -b|--batch-size)
             BATCH_SIZE="$2"
             shift 2
@@ -91,6 +102,7 @@ done
 echo -e "${CYAN}${BOLD}========================================${NC}"
 echo -e "${CYAN}${BOLD}  Auth9 Ticket Fix Runner${NC}"
 echo -e "${CYAN}${BOLD}========================================${NC}"
+echo -e "  Agent:        ${BOLD}${AGENT}${NC}"
 echo -e "  Batch size:   ${BOLD}${BATCH_SIZE}${NC}"
 echo -e "  Max batches:  ${BOLD}${MAX_BATCHES:-unlimited}${NC}"
 echo -e "  Log file:     ${LOG_FILE}"
@@ -158,43 +170,59 @@ for (( b=0; b < batch_count; b++ )); do
 
     if $DRY_RUN; then
         echo -e "${YELLOW}[DRY RUN] Would run:${NC}"
-        echo -e "  claude -p --model opus \"${prompt}\""
+        if [[ "$AGENT" == "codex" ]]; then
+            echo -e "  codex exec -m gpt-5.3-codex --full-auto \"${prompt}\""
+        else
+            echo -e "  claude -p --model opus \"${prompt}\""
+        fi
         echo ""
         continue
     fi
 
-    log "Batch ${batch_num}: Processing ${batch_paths[*]}"
-    echo -e "${YELLOW}Starting claude agent (streaming output)...${NC}"
+    log "Batch ${batch_num}: Processing ${batch_paths[*]} (agent: ${AGENT})"
+    echo -e "${YELLOW}Starting ${AGENT} agent...${NC}"
     echo ""
 
-    # Run Claude Code agent with streaming JSON for real-time progress
     batch_output_file="$PROJECT_ROOT/.fix-tickets-batch-${batch_num}.tmp"
     set +e
-    claude -p \
-        --dangerously-skip-permissions \
-        --verbose \
-        --model opus \
-        --output-format stream-json \
-        "$prompt" \
-        2>&1 | while IFS= read -r line; do
-            # Extract meaningful content from stream-json lines
-            # Each line is a JSON object; extract "content" text for display
-            if echo "$line" | grep -q '"type":"assistant"'; then
-                # Extract text content from assistant messages
-                content=$(echo "$line" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p' 2>/dev/null)
-                if [[ -n "$content" ]]; then
-                    echo -e "  ${CYAN}│${NC} $content"
+    if [[ "$AGENT" == "codex" ]]; then
+        # Run Codex agent
+        codex exec \
+            -m gpt-5.3-codex \
+            --full-auto \
+            "$prompt" \
+            2>&1 | while IFS= read -r line; do
+                echo -e "  ${CYAN}│${NC} $line"
+                echo "$line" >> "$LOG_FILE"
+            done
+    else
+        # Run Claude Code agent with streaming JSON for real-time progress
+        claude -p \
+            --dangerously-skip-permissions \
+            --verbose \
+            --model opus \
+            --output-format stream-json \
+            "$prompt" \
+            2>&1 | while IFS= read -r line; do
+                # Extract meaningful content from stream-json lines
+                # Each line is a JSON object; extract "content" text for display
+                if echo "$line" | grep -q '"type":"assistant"'; then
+                    # Extract text content from assistant messages
+                    content=$(echo "$line" | sed -n 's/.*"content":"\([^"]*\)".*/\1/p' 2>/dev/null)
+                    if [[ -n "$content" ]]; then
+                        echo -e "  ${CYAN}│${NC} $content"
+                    fi
+                elif echo "$line" | grep -q '"type":"tool_use"'; then
+                    tool=$(echo "$line" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' 2>/dev/null)
+                    if [[ -n "$tool" ]]; then
+                        echo -e "  ${YELLOW}│ 🔧 $tool${NC}"
+                    fi
+                elif echo "$line" | grep -q '"type":"result"'; then
+                    echo -e "  ${GREEN}│ ✓ Result received${NC}"
                 fi
-            elif echo "$line" | grep -q '"type":"tool_use"'; then
-                tool=$(echo "$line" | sed -n 's/.*"name":"\([^"]*\)".*/\1/p' 2>/dev/null)
-                if [[ -n "$tool" ]]; then
-                    echo -e "  ${YELLOW}│ 🔧 $tool${NC}"
-                fi
-            elif echo "$line" | grep -q '"type":"result"'; then
-                echo -e "  ${GREEN}│ ✓ Result received${NC}"
-            fi
-            echo "$line" >> "$LOG_FILE"
-        done
+                echo "$line" >> "$LOG_FILE"
+            done
+    fi
     exit_code=${PIPESTATUS[0]}
     set -e
 

@@ -114,7 +114,7 @@ describe("Reset Password Page", () => {
       expect(screen.getByLabelText(/new password/i)).toBeInTheDocument();
     });
     expect(screen.getByLabelText(/confirm password/i)).toBeInTheDocument();
-    expect(screen.getByText(/must be at least 8 characters/i)).toBeInTheDocument();
+    expect(screen.getByText(/must be at least 12 characters with uppercase, lowercase, numbers, and symbols/i)).toBeInTheDocument();
   });
 
   it("renders submit button", async () => {
@@ -170,7 +170,9 @@ describe("Reset Password Page", () => {
     expect(response).toEqual({ error: "Invalid reset token" });
   });
 
-  it("action returns error when password is too short", async () => {
+  it("action allows short password and defers policy checks to backend", async () => {
+    vi.mocked(passwordApi.resetPassword).mockResolvedValue(undefined);
+
     const formData = new FormData();
     formData.append("token", "valid-token");
     formData.append("password", "short");
@@ -183,7 +185,8 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Password must be at least 8 characters" });
+    expect(passwordApi.resetPassword).toHaveBeenCalledWith("valid-token", "short");
+    expect(response).toEqual({ success: true });
   });
 
   it("action returns error when passwords do not match", async () => {
@@ -270,7 +273,7 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Password must be at least 8 characters" });
+    expect(response).toEqual({ error: "Password is required" });
   });
 
   it("action succeeds with password exactly 8 characters", async () => {
@@ -292,7 +295,9 @@ describe("Reset Password Page", () => {
     expect(response).toEqual({ success: true });
   });
 
-  it("action returns error with password of 7 characters", async () => {
+  it("action succeeds with password of 7 characters", async () => {
+    vi.mocked(passwordApi.resetPassword).mockResolvedValue(undefined);
+
     const formData = new FormData();
     formData.append("token", "valid-token");
     formData.append("password", "seven77");
@@ -305,7 +310,8 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Password must be at least 8 characters" });
+    expect(passwordApi.resetPassword).toHaveBeenCalledWith("valid-token", "seven77");
+    expect(response).toEqual({ success: true });
   });
 
   it("action does not call API when validation fails", async () => {
