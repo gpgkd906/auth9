@@ -18,8 +18,9 @@
 12. [分析与监控](#12-分析与监控-analytics)
 13. [安全告警](#13-安全告警-security-alerts)
 14. [Webhook 配置](#14-webhook-配置)
-15. [常见问题](#15-常见问题)
-16. [常见工作流程](#16-常见工作流程)
+15. [操作引擎 (Action Engine)](#15-操作引擎-action-engine)
+16. [常见问题](#16-常见问题)
+17. [常见工作流程](#17-常见工作流程)
 
 ## 快速开始
 
@@ -661,7 +662,301 @@ Webhook 列表显示：
 
 ---
 
-## 15. 常见问题
+## 15. 操作引擎 (Action Engine)
+
+操作引擎（Action Engine）是 Auth9 的自动化工作流系统，允许您在特定事件触发时执行自定义的 JavaScript/TypeScript 代码。
+
+### 什么是 Action？
+
+Action 是一段在特定认证事件（如用户登录、注册、密码重置等）触发时自动执行的代码。通过 Action，您可以：
+
+- 📧 自动发送欢迎邮件
+- 🔔 发送实时通知到 Slack、钉钉等
+- 📊 同步用户数据到 CRM 或数据仓库
+- 🔐 执行额外的安全检查
+- 🎯 集成第三方服务和 API
+
+### 创建 Action
+
+1. 选择目标租户，导航到 **Actions** 页面
+2. 点击 **Create Action** 按钮
+3. 填写以下信息：
+   - **Name**: Action 名称（例如："发送欢迎邮件"）
+   - **Trigger**: 选择触发事件类型
+   - **Code**: 编写 JavaScript/TypeScript 代码
+   - **Enabled**: 是否立即启用
+4. 点击 **Save** 保存
+
+### 支持的触发器
+
+| 触发器 | 触发时机 |
+|--------|---------|
+| `login.success` | 用户登录成功 |
+| `login.failed` | 用户登录失败 |
+| `user.created` | 新用户创建 |
+| `user.updated` | 用户信息更新 |
+| `user.deleted` | 用户删除 |
+| `password.changed` | 密码修改 |
+| `password.reset` | 密码重置请求 |
+| `mfa.enabled` | 启用 MFA |
+| `mfa.disabled` | 禁用 MFA |
+| `session.revoked` | 会话撤销 |
+| `invitation.created` | 创建邀请 |
+
+### 编写 Action 代码
+
+Action 代码是标准的 JavaScript/TypeScript，支持 `async/await` 和 `fetch()` API。
+
+**基础模板**：
+```javascript
+async function handler(context) {
+  // context 包含用户、租户和事件信息
+  const { user, tenant, event } = context;
+  
+  // 您的业务逻辑
+  console.log(`User ${user.email} logged in`);
+  
+  // 返回结果（可选）
+  return { success: true };
+}
+```
+
+**示例 1：发送欢迎邮件**
+```javascript
+async function handler(context) {
+  const { user, tenant } = context;
+  
+  // 调用邮件服务 API
+  const response = await fetch('https://api.sendgrid.com/v3/mail/send', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${context.secrets.SENDGRID_API_KEY}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({
+      personalizations: [{
+        to: [{ email: user.email, name: user.name }]
+      }],
+      from: { email: 'noreply@example.com', name: tenant.name },
+      subject: `欢迎加入 ${tenant.name}！`,
+      content: [{
+        type: 'text/html',
+        value: `<h1>欢迎，${user.name}！</h1>`
+      }]
+    })
+  });
+  
+  if (!response.ok) {
+    throw new Error('发送邮件失败');
+  }
+  
+  console.log(`欢迎邮件已发送到 ${user.email}`);
+  return { success: true };
+}
+```
+
+**示例 2：Slack 通知**
+```javascript
+async function handler(context) {
+  const { user, tenant } = context;
+  
+  await fetch(context.secrets.SLACK_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      text: `🎉 新用户注册`,
+      blocks: [{
+        type: 'section',
+        text: {
+          type: 'mrkdwn',
+          text: `*新用户注册*\n• 邮箱: ${user.email}\n• 姓名: ${user.name}\n• 租户: ${tenant.name}`
+        }
+      }]
+    })
+  });
+  
+  return { notified: true };
+}
+```
+
+### Context API
+
+每个 Action 接收一个 `context` 对象：
+
+```javascript
+{
+  trigger: "login.success",    // 触发器类型
+  user: {
+    id: "user_123",
+    email: "user@example.com",
+    name: "John Doe",
+    first_name: "John",
+    last_name: "Doe"
+  },
+  tenant: {
+    id: "tenant_456",
+    name: "Acme Corp",
+    slug: "acme",
+    logo_url: "https://..."
+  },
+  event: {
+    type: "login",
+    timestamp: "2026-02-16T10:00:00Z",
+    ip_address: "192.168.1.1",
+    device_type: "Desktop - Chrome"
+  },
+  secrets: {
+    // 您配置的环境变量（API 密钥等）
+  }
+}
+```
+
+### 配置环境变量（密钥）
+
+Action 经常需要访问第三方 API 密钥。配置方法：
+
+1. 在 Action 编辑页面，点击 **Secrets** 标签
+2. 添加环境变量：
+   - **Name**: 变量名（如 `SENDGRID_API_KEY`）
+   - **Value**: 密钥值
+3. 点击 **Save**
+
+在代码中使用：
+```javascript
+const apiKey = context.secrets.SENDGRID_API_KEY;
+```
+
+**安全提示**：
+- 密钥在数据库中加密存储
+- 不会出现在日志中
+- 仅 Action 代码可访问
+
+### 测试 Action
+
+在保存前测试 Action：
+
+1. 在 Action 编辑页面，点击 **Test** 按钮
+2. 提供测试数据（模拟真实事件）
+3. 点击 **Run Test**
+4. 查看执行结果和日志
+
+测试数据示例：
+```json
+{
+  "trigger": "user.created",
+  "user": {
+    "id": "test_user",
+    "email": "test@example.com",
+    "name": "Test User"
+  },
+  "tenant": {
+    "id": "test_tenant",
+    "name": "Test Corp",
+    "slug": "test"
+  }
+}
+```
+
+### 查看执行日志
+
+1. 导航到 **Actions** > **Logs** 页面
+2. 查看所有 Action 的执行历史
+3. 可以看到：
+   - 执行时间
+   - 状态（成功/失败）
+   - 执行时长
+   - 日志输出（`console.log` 的内容）
+   - 错误信息
+
+### 调试技巧
+
+**使用 console.log 输出调试信息**：
+```javascript
+async function handler(context) {
+  console.log('Context:', JSON.stringify(context, null, 2));
+  console.log('User email:', context.user.email);
+  
+  try {
+    const result = await someOperation();
+    console.log('Result:', result);
+  } catch (error) {
+    console.error('Error:', error.message);
+    throw error;
+  }
+}
+```
+
+### 监控和统计
+
+在 Action 列表页面，每个 Action 显示：
+- **Total Executions**: 总执行次数
+- **Success Rate**: 成功率
+- **Avg Duration**: 平均执行时长
+- **Last Run**: 最后执行时间
+
+点击 Action 名称可查看详细统计图表。
+
+### 常见用例
+
+**1. 用户注册自动化**
+- 发送欢迎邮件
+- 同步到 CRM（HubSpot、Salesforce）
+- 通知 Slack 频道
+- 初始化用户配置
+
+**2. 登录安全检测**
+- 检测新设备登录
+- 异常 IP 告警
+- 记录登录历史
+- 发送登录通知
+
+**3. 数据同步**
+- 同步用户信息到外部系统
+- 更新数据仓库
+- 触发 ETL 流程
+
+**4. 审计和合规**
+- 记录敏感操作
+- 生成审计报告
+- 满足合规要求
+
+### 最佳实践
+
+1. **错误处理**：始终使用 try-catch 处理异步操作
+2. **超时控制**：为外部 API 调用设置超时
+3. **日志记录**：使用 console.log 记录关键信息
+4. **性能优化**：使用 Promise.all 并行执行多个请求
+5. **安全性**：使用环境变量存储敏感信息
+
+### 限制
+
+- **执行超时**: 30 秒
+- **内存限制**: 128MB
+- **并发执行**: 最多 100 个 Action 同时执行
+- **日志大小**: 单次执行最多 10KB 日志
+
+### 常见问题
+
+**Q: Action 未执行？**
+- 检查 Action 是否启用（Enabled 开关）
+- 验证触发器类型是否正确
+- 查看执行日志中的错误信息
+
+**Q: 外部 API 调用失败？**
+- 检查 API 密钥是否正确配置
+- 验证网络连接
+- 查看 API 提供商的速率限制
+
+**Q: 如何查看详细错误？**
+- 导航到 **Actions** > **Logs**
+- 找到失败的执行记录
+- 查看错误信息和堆栈跟踪
+
+更多详情请参考 [操作引擎 (Action Engine)](../wiki/操作引擎-Action-Engine.md) 文档。
+
+---
+
+## 16. 常见问题
 
 ### 认证问题
 - **无法登录？** 检查 Redirect URI 是否配置正确。
@@ -691,7 +986,7 @@ Webhook 列表显示：
 
 ---
 
-## 16. 常见工作流程
+## 17. 常见工作流程
 
 ### 16.1 B2B 租户入驻流程
 
@@ -775,14 +1070,16 @@ Webhook 列表显示：
 - [社交登录与SSO](../wiki/社交登录与SSO.md)
 - [分析与安全告警](../wiki/分析与安全告警.md)
 - [Webhook集成](../wiki/Webhook集成.md)
+- [操作引擎 (Action Engine)](../wiki/操作引擎-Action-Engine.md)
+- [SDK 集成指南](../wiki/SDK集成指南.md)
 - [运维手册](../wiki/运维手册.md)
 
 ---
 
-**文档版本**: 1.4.0
-**最后更新**: 2026-02-10
+**文档版本**: 1.5.0
+**最后更新**: 2026-02-16
 **适用版本**: Auth9 v0.1.0+
 
 **更新内容**:
-- 新增 "常见工作流程" 章节
+- 新增 "操作引擎 (Action Engine)" 章节
 - 更新相关文档链接
