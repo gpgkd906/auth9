@@ -82,8 +82,13 @@ pub struct TenantSettings {
     /// Allowed authentication methods
     #[serde(default)]
     pub allowed_auth_methods: Vec<String>,
-    /// Session timeout in seconds
+    /// Session timeout in seconds (min: 300 = 5 minutes, max: 2592000 = 30 days)
     #[serde(default = "default_session_timeout")]
+    #[validate(range(
+        min = 300,
+        max = 2_592_000,
+        message = "session_timeout_secs must be between 300 (5 minutes) and 2592000 (30 days)"
+    ))]
     pub session_timeout_secs: i64,
     /// Custom branding colors
     #[serde(default)]
@@ -118,7 +123,8 @@ fn validate_branding_logo_url(url: &str) -> Result<(), validator::ValidationErro
     if url.is_empty() {
         return Ok(());
     }
-    let parsed = url::Url::parse(url).map_err(|_| validator::ValidationError::new("invalid_url"))?;
+    let parsed =
+        url::Url::parse(url).map_err(|_| validator::ValidationError::new("invalid_url"))?;
     let scheme = parsed.scheme();
     if scheme != "http" && scheme != "https" {
         let mut err = validator::ValidationError::new("invalid_scheme");
@@ -673,5 +679,75 @@ mod tests {
         let settings: TenantSettings = serde_json::from_str(json).unwrap();
         assert!(settings.require_mfa);
         assert_eq!(settings.session_timeout_secs, 3600); // default
+    }
+
+    #[test]
+    fn test_session_timeout_max_value_rejected() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                session_timeout_secs: 31_536_000, // 1 year - exceeds 30 day max
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_session_timeout_negative_rejected() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                session_timeout_secs: -1,
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_session_timeout_zero_rejected() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                session_timeout_secs: 0,
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_err());
+    }
+
+    #[test]
+    fn test_session_timeout_valid_30_days() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                session_timeout_secs: 2_592_000, // exactly 30 days
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_session_timeout_valid_minimum() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                session_timeout_secs: 300, // 5 minutes minimum
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_ok());
     }
 }

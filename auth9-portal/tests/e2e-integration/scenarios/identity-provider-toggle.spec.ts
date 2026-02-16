@@ -6,7 +6,9 @@ const KC_TOKEN = (() => {
   try {
     const out = execSync(`curl -s "http://localhost:8081/realms/master/protocol/openid-connect/token" -X POST -H "Content-Type: application/x-www-form-urlencoded" -d "username=admin&password=admin&grant_type=password&client_id=auth9-admin&client_secret=dev-client-secret-change-in-production"`, { encoding: "utf8" });
     return JSON.parse(out).access_token;
-  } catch (e) { return null; }
+  } catch {
+    return null;
+  }
 })();
 
 async function createIdp(alias: string, enabled = true) {
@@ -20,22 +22,30 @@ async function createIdp(alias: string, enabled = true) {
   });
   try {
     execSync(`curl -s -X POST "http://localhost:8081/admin/realms/auth9/identity-provider/instances" -H "Authorization: Bearer ${KC_TOKEN}" -H "Content-Type: application/json" -d '${data}'`, { encoding: "utf8" });
-  } catch (e) {}
+  } catch {
+    // Ignore setup collisions and proceed with test flow.
+  }
 }
 
 async function deleteIdp(alias: string) {
   if (!KC_TOKEN) return;
   try {
     execSync(`curl -s -X DELETE "http://localhost:8081/admin/realms/auth9/identity-provider/instances/${alias}" -H "Authorization: Bearer ${KC_TOKEN}"`, { encoding: "utf8" });
-  } catch (e) {}
+  } catch {
+    // Ignore cleanup failures to keep teardown idempotent.
+  }
 }
 
-async function getIdp(alias: string): Promise<any> {
+type IdentityProviderInfo = { enabled?: boolean } | null;
+
+async function getIdp(alias: string): Promise<IdentityProviderInfo> {
   if (!KC_TOKEN) return null;
   try {
     const out = execSync(`curl -s "http://localhost:8081/admin/realms/auth9/identity-provider/instances/${alias}" -H "Authorization: Bearer ${KC_TOKEN}"`, { encoding: "utf8" });
-    return JSON.parse(out);
-  } catch (e) { return null; }
+    return JSON.parse(out) as IdentityProviderInfo;
+  } catch {
+    return null;
+  }
 }
 
 test.describe("QA Scenario: Identity Provider Toggle Validation", () => {

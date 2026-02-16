@@ -181,6 +181,7 @@ mod tests {
             refresh_token_ttl_secs: 86400,
             private_key_pem: None,
             public_key_pem: None,
+            previous_public_key_pem: None,
         };
         JwtManager::new(config)
     }

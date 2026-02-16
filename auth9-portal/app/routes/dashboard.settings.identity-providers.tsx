@@ -1,6 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -188,6 +188,14 @@ export default function IdentityProvidersPage() {
   }
 
   const template = getProviderTemplate(selectedTemplate);
+
+  // Check for duplicate alias (only during creation, not editing)
+  const isDuplicateAlias = useMemo(() => {
+    if (editingProvider) return false;
+    const alias = formData.alias.trim();
+    if (!alias) return false;
+    return providers.some((p) => p.alias.toLowerCase() === alias.toLowerCase());
+  }, [formData.alias, providers, editingProvider]);
 
   // Validate required fields are filled
   const hasRequiredFields = (() => {
@@ -408,6 +416,11 @@ export default function IdentityProvidersPage() {
                     disabled={!!editingProvider}
                     placeholder="e.g., google-enterprise"
                   />
+                  {isDuplicateAlias && (
+                    <p className="text-sm text-[var(--accent-red)]">
+                      Identity provider with this alias already exists
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -524,7 +537,7 @@ export default function IdentityProvidersPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || (!selectedTemplate && !editingProvider) || (!!template && !hasRequiredFields)}
+                disabled={isSubmitting || (!selectedTemplate && !editingProvider) || (!!template && !hasRequiredFields) || isDuplicateAlias}
               >
                 {isSubmitting
                   ? "Saving..."

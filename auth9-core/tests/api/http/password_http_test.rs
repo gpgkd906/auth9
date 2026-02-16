@@ -35,9 +35,9 @@ async fn test_forgot_password_existing_user_no_email_configured() {
     let (status, _): (StatusCode, Option<MessageResponse>) =
         post_json(&app, "/api/v1/password/forgot", &input).await;
 
-    // Returns BAD_REQUEST because email provider is not configured in tests
-    // In production with email configured, this would return OK
-    assert_eq!(status, StatusCode::BAD_REQUEST);
+    // Returns OK even when email provider is not configured to prevent email enumeration
+    // The error is logged server-side but not exposed to the client
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[tokio::test]

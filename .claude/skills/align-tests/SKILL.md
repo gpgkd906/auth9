@@ -44,7 +44,17 @@ Run a strict test-alignment workflow after major refactors.
 - Re-run full relevant unit-test set before finishing.
 - Stop only when tests pass or a clear blocker is identified.
 
-6. Report outcome clearly.
+6. Run and fix backend/frontend lint.
+- Backend:
+  - `cd auth9-core && cargo clippy`
+  - If clippy suggests formatting-related changes: `cd auth9-core && cargo fmt`
+- Frontend:
+  - `cd auth9-portal && npm run lint`
+  - If failures indicate type drift: `cd auth9-portal && npm run typecheck`
+- Fix lint findings with minimal blast radius, then re-run lint commands until clean.
+- After lint is clean, re-run relevant unit tests to ensure no regressions.
+
+7. Report outcome clearly.
 - Summarize:
   - Failing tests and root causes.
   - Files updated.
@@ -55,4 +65,5 @@ Run a strict test-alignment workflow after major refactors.
 - Do not skip failure analysis; every failing test must have a cause.
 - Do not mass-disable tests to get green.
 - Do not introduce external dependencies for Rust test execution.
+- Do not skip lint verification for touched backend/frontend modules.
 - If a blocker prevents completion, provide exact failing command and error snippet.

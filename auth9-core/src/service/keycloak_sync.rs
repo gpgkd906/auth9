@@ -99,7 +99,10 @@ impl KeycloakSyncService {
             parts.push(format!("passwordHistory({})", policy.history_count));
         }
         if policy.max_age_days > 0 {
-            parts.push(format!("forceExpiredPasswordChange({})", policy.max_age_days));
+            parts.push(format!(
+                "forceExpiredPasswordChange({})",
+                policy.max_age_days
+            ));
         }
 
         parts.push("notUsername()".to_string());
@@ -127,8 +130,7 @@ impl KeycloakSyncService {
             realm_update.max_failure_wait_seconds =
                 Some((policy.lockout_duration_mins * 60) as i32);
             realm_update.failure_factor = Some(policy.lockout_threshold as i32);
-            realm_update.wait_increment_seconds =
-                Some((policy.lockout_duration_mins * 60) as i32);
+            realm_update.wait_increment_seconds = Some((policy.lockout_duration_mins * 60) as i32);
         } else {
             realm_update.brute_force_protected = Some(false);
         }

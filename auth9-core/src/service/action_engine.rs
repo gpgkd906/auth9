@@ -77,8 +77,8 @@ async fn op_fetch(
     }
 
     // Parse URL and check domain
-    let parsed_url = url::Url::parse(&url)
-        .map_err(|e| ActionOpError(format!("Invalid URL: {}", e)))?;
+    let parsed_url =
+        url::Url::parse(&url).map_err(|e| ActionOpError(format!("Invalid URL: {}", e)))?;
 
     let host = parsed_url
         .host_str()
@@ -131,18 +131,16 @@ async fn op_fetch(
     }
 
     // Execute with per-request timeout
-    let response = tokio::time::timeout(
-        Duration::from_millis(config.request_timeout_ms),
-        req.send(),
-    )
-    .await
-    .map_err(|_| {
-        ActionOpError(format!(
-            "Request timed out after {}ms",
-            config.request_timeout_ms
-        ))
-    })?
-    .map_err(|e| ActionOpError(format!("HTTP request failed: {}", e)))?;
+    let response =
+        tokio::time::timeout(Duration::from_millis(config.request_timeout_ms), req.send())
+            .await
+            .map_err(|_| {
+                ActionOpError(format!(
+                    "Request timed out after {}ms",
+                    config.request_timeout_ms
+                ))
+            })?
+            .map_err(|e| ActionOpError(format!("HTTP request failed: {}", e)))?;
 
     let status = response.status().as_u16();
     let resp_headers: HashMap<String, String> = response
@@ -208,9 +206,7 @@ fn is_private_ip(host: &str) -> bool {
         }
     } else {
         // Hostname: block common internal names
-        host == "localhost"
-            || host.ends_with(".local")
-            || host.ends_with(".internal")
+        host == "localhost" || host.ends_with(".local") || host.ends_with(".internal")
     }
 }
 
@@ -284,15 +280,11 @@ fn return_js_runtime(runtime: JsRuntime) {
 }
 
 /// Create a new JsRuntime with async extension + polyfills
-fn create_js_runtime(
-    http_client: reqwest::Client,
-    config: AsyncActionConfig,
-) -> Result<JsRuntime> {
+fn create_js_runtime(http_client: reqwest::Client, config: AsyncActionConfig) -> Result<JsRuntime> {
     tracing::debug!("Creating thread-local V8 runtime with async extensions");
 
     let max_heap_bytes = config.max_heap_mb * 1024 * 1024;
-    let create_params =
-        deno_core::v8::Isolate::create_params().heap_limits(0, max_heap_bytes);
+    let create_params = deno_core::v8::Isolate::create_params().heap_limits(0, max_heap_bytes);
 
     let mut runtime = JsRuntime::new(RuntimeOptions {
         extensions: vec![auth9_action_ext::init_ops_and_esm()],
@@ -312,9 +304,7 @@ fn create_js_runtime(
     // Inject polyfills (fetch, setTimeout, console)
     runtime
         .execute_script("<polyfills>", POLYFILLS_JS)
-        .map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to load polyfills: {}", e))
-        })?;
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to load polyfills: {}", e)))?;
 
     Ok(runtime)
 }
@@ -388,9 +378,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 
         Self {
             action_repo,
-            script_cache: Arc::new(RwLock::new(LruCache::new(
-                NonZeroUsize::new(100).unwrap(),
-            ))),
+            script_cache: Arc::new(RwLock::new(LruCache::new(NonZeroUsize::new(100).unwrap()))),
             http_client,
             async_config,
         }
@@ -547,6 +535,10 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         let was_terminated = Arc::new(std::sync::atomic::AtomicBool::new(false));
         let was_terminated_clone = was_terminated.clone();
 
+        // Flag to track if V8 hit the heap limit (OOM) — shared across threads
+        let was_oom = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let was_oom_clone = was_oom.clone();
+
         // Spawn timeout watchdog that will terminate V8 execution if it exceeds the limit
         let timeout_duration = Duration::from_millis(timeout_ms as u64);
         let watchdog = tokio::spawn(async move {
@@ -566,13 +558,11 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             // 1. Take or create JsRuntime
             let mut js_runtime = match take_js_runtime() {
                 Some(rt) => rt,
-                None => create_js_runtime(http_client.clone(), async_config.clone())
-                    .map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!(
-                            "Failed to create V8 runtime: {}",
-                            e
-                        ))
-                    })?,
+                None => {
+                    create_js_runtime(http_client.clone(), async_config.clone()).map_err(|e| {
+                        AppError::Internal(anyhow::anyhow!("Failed to create V8 runtime: {}", e))
+                    })?
+                }
             };
 
             // Send IsolateHandle to the timeout watchdog
@@ -580,26 +570,34 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             let _ = handle_tx.send(isolate_handle.clone());
 
             // Set up near-heap-limit callback to terminate execution on OOM.
-            // Strategy: on first call, terminate execution and allow a 2x bump
-            // so V8 has room to process the termination. On subsequent calls,
-            // only allow a small bump to prevent runaway growth.
+            // Strategy: on first call, terminate execution and allow a small bump
+            // (5MB) so V8 has room to process the termination. On subsequent calls,
+            // keep bumping by 5MB (up to 5 times) so V8 can complete GC and
+            // termination without hitting the fatal OOM handler that aborts the process.
             let heap_handle = isolate_handle;
             let heap_callback_count = Rc::new(std::cell::Cell::new(0u32));
             let heap_callback_count_clone = heap_callback_count.clone();
+            let was_oom_inner = was_oom_clone.clone();
             js_runtime.add_near_heap_limit_callback(move |current_limit, _initial_limit| {
                 let count = heap_callback_count_clone.get();
                 heap_callback_count_clone.set(count + 1);
+                was_oom_inner.store(true, std::sync::atomic::Ordering::Release);
                 if count == 0 {
                     tracing::warn!(
                         "V8 isolate approaching heap limit ({}MB), terminating execution",
                         current_limit / (1024 * 1024)
                     );
                     heap_handle.terminate_execution();
-                    // Allow 2x bump for V8 to process termination
-                    current_limit * 2
+                    // Allow 3x bump for V8 to complete the current allocation
+                    // and process the termination signal. Large single allocations
+                    // (e.g. new Array(10M)) can request memory exceeding the current
+                    // limit in one shot, so a generous first bump prevents V8 from
+                    // invoking its fatal OOM handler which aborts the process.
+                    current_limit * 3
                 } else {
-                    // Already terminating, don't grow further
-                    current_limit + 1
+                    // Already terminating — allow proportional bump (50% of current)
+                    // so V8 has room to complete GC and process termination.
+                    current_limit + current_limit / 2
                 }
             });
 
@@ -615,13 +613,9 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             // 3. Inject context into globalThis
             {
                 let scope = &mut js_runtime.handle_scope();
-                let context_value =
-                    serde_v8::to_v8(scope, &context_clone).map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!(
-                            "Failed to serialize context: {}",
-                            e
-                        ))
-                    })?;
+                let context_value = serde_v8::to_v8(scope, &context_clone).map_err(|e| {
+                    AppError::Internal(anyhow::anyhow!("Failed to serialize context: {}", e))
+                })?;
 
                 let global = scope.get_current_context().global(scope);
                 let key = deno_core::v8::String::new(scope, "context").unwrap();
@@ -632,17 +626,13 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             let result_global = js_runtime
                 .execute_script("<action_script>", transpiled_code)
                 .map_err(|e| {
-                    AppError::ActionExecutionFailed(format!(
-                        "Script execution error: {}",
-                        e
-                    ))
+                    AppError::ActionExecutionFailed(format!("Script execution error: {}", e))
                 })?;
 
             // 5. Detect if result is a Promise and pump event loop
             let is_promise = {
                 let scope = &mut js_runtime.handle_scope();
-                let local =
-                    deno_core::v8::Local::new(scope, result_global.clone());
+                let local = deno_core::v8::Local::new(scope, result_global.clone());
                 local.is_promise()
             };
 
@@ -650,20 +640,14 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                 // Take thread-local tokio runtime to drive async ops
                 let tokio_rt = take_local_tokio_rt();
 
-                let event_loop_result = tokio_rt.block_on(async {
-                    js_runtime
-                        .run_event_loop(Default::default())
-                        .await
-                });
+                let event_loop_result = tokio_rt
+                    .block_on(async { js_runtime.run_event_loop(Default::default()).await });
 
                 // Return tokio runtime to thread-local
                 return_local_tokio_rt(tokio_rt);
 
                 event_loop_result.map_err(|e| {
-                    AppError::ActionExecutionFailed(format!(
-                        "Async execution error: {}",
-                        e
-                    ))
+                    AppError::ActionExecutionFailed(format!("Async execution error: {}", e))
                 })?;
             }
 
@@ -673,32 +657,24 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                 let local = deno_core::v8::Local::new(scope, result_global);
 
                 let value = if local.is_promise() {
-                    let promise =
-                        deno_core::v8::Local::<deno_core::v8::Promise>::try_from(
-                            local,
-                        )
+                    let promise = deno_core::v8::Local::<deno_core::v8::Promise>::try_from(local)
                         .map_err(|e| {
-                            AppError::ActionExecutionFailed(format!(
-                                "Invalid promise: {}",
-                                e
-                            ))
-                        })?;
+                        AppError::ActionExecutionFailed(format!("Invalid promise: {}", e))
+                    })?;
 
                     match promise.state() {
-                        deno_core::v8::PromiseState::Fulfilled => {
-                            promise.result(scope)
-                        }
+                        deno_core::v8::PromiseState::Fulfilled => promise.result(scope),
                         deno_core::v8::PromiseState::Rejected => {
                             let err = promise.result(scope);
                             let msg = err.to_rust_string_lossy(scope);
-                            return Err(AppError::ActionExecutionFailed(
-                                format!("Promise rejected: {}", msg),
-                            ));
+                            return Err(AppError::ActionExecutionFailed(format!(
+                                "Promise rejected: {}",
+                                msg
+                            )));
                         }
                         deno_core::v8::PromiseState::Pending => {
                             return Err(AppError::ActionExecutionFailed(
-                                "Promise still pending after event loop completed"
-                                    .into(),
+                                "Promise still pending after event loop completed".into(),
                             ));
                         }
                     }
@@ -706,14 +682,12 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     local
                 };
 
-                serde_v8::from_v8::<ActionContext>(scope, value).map_err(
-                    |e| {
-                        AppError::ActionExecutionFailed(format!(
-                            "Failed to extract context from script result: {}",
-                            e
-                        ))
-                    },
-                )?
+                serde_v8::from_v8::<ActionContext>(scope, value).map_err(|e| {
+                    AppError::ActionExecutionFailed(format!(
+                        "Failed to extract context from script result: {}",
+                        e
+                    ))
+                })?
             };
 
             // 7. Check if the runtime was terminated by timeout or heap limit.
@@ -724,7 +698,9 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             if terminated {
                 // Runtime was forcibly terminated — discard it entirely.
                 // Do NOT return to pool; it will be dropped here.
-                tracing::warn!("V8 runtime was terminated (timeout or OOM), discarding instead of reusing");
+                tracing::warn!(
+                    "V8 runtime was terminated (timeout or OOM), discarding instead of reusing"
+                );
                 // drop(js_runtime) happens automatically
             } else {
                 // 7b. Cleanup: remove context, result, and any user-defined globalThis properties
@@ -784,24 +760,29 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 
         let result = handle
             .await
-            .map_err(|e| {
-                AppError::Internal(anyhow::anyhow!("Blocking task error: {}", e))
-            })?;
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Blocking task error: {}", e)))?;
 
         // Cancel the watchdog (script finished before timeout)
         watchdog.abort();
 
-        // If V8 was terminated by the watchdog, the script error will contain
-        // "Uncaught Error: execution terminated". Map it to a clear timeout error.
+        // If V8 was terminated, the script error will contain
+        // "Uncaught Error: execution terminated". Map it to a clear error message
+        // distinguishing OOM from timeout.
         match result {
             Ok(ctx) => Ok(ctx),
             Err(e) => {
                 let msg = e.to_string();
                 if msg.contains("execution terminated") {
-                    Err(AppError::ActionExecutionFailed(format!(
-                        "Action timed out after {}ms",
-                        timeout_ms
-                    )))
+                    if was_oom.load(std::sync::atomic::Ordering::Acquire) {
+                        Err(AppError::ActionExecutionFailed(
+                            "Action exceeded memory limit and was terminated".to_string(),
+                        ))
+                    } else {
+                        Err(AppError::ActionExecutionFailed(format!(
+                            "Action timed out after {}ms",
+                            timeout_ms
+                        )))
+                    }
                 } else {
                     Err(e)
                 }
@@ -846,9 +827,8 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         let trimmed = script.trim();
 
         // Detect async patterns
-        let is_async = trimmed.contains("await ")
-            || trimmed.contains("async ")
-            || trimmed.contains("fetch(");
+        let is_async =
+            trimmed.contains("await ") || trimmed.contains("async ") || trimmed.contains("fetch(");
 
         if is_async {
             // Wrap in async IIFE that returns context
@@ -890,9 +870,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::domain::{
-        ActionContextRequest, ActionContextTenant, ActionContextUser, StringUuid,
-    };
+    use crate::domain::{ActionContextRequest, ActionContextTenant, ActionContextUser, StringUuid};
     use crate::repository::action::MockActionRepository;
     use chrono::Utc;
 
@@ -1249,10 +1227,7 @@ mod tests {
         assert!(result.is_ok());
         let modified = result.unwrap();
         let claims = modified.claims.unwrap();
-        assert_eq!(
-            claims.get("fetch_available").unwrap().as_bool(),
-            Some(true)
-        );
+        assert_eq!(claims.get("fetch_available").unwrap().as_bool(), Some(true));
         assert_eq!(
             claims.get("console_available").unwrap().as_bool(),
             Some(true)
@@ -1351,9 +1326,13 @@ mod tests {
 
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
+        // Should return OOM error without crashing the process
+        assert!(result.is_err(), "Should fail with OOM error");
+        let err = result.unwrap_err().to_string();
         assert!(
-            result.is_ok() || result.is_err(),
-            "Should handle memory pressure without crashing the process"
+            err.contains("memory limit") || err.contains("timed out"),
+            "Error should mention memory limit or timeout, got: {}",
+            err
         );
     }
 
@@ -1492,7 +1471,11 @@ mod tests {
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
 
-        assert!(result.is_ok(), "Async/await should work: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Async/await should work: {:?}",
+            result.err()
+        );
         let modified = result.unwrap();
         let claims = modified.claims.unwrap();
         assert_eq!(claims.get("role").unwrap().as_str().unwrap(), "admin");
@@ -1598,8 +1581,7 @@ mod tests {
 
         Mock::given(method("GET"))
             .respond_with(
-                ResponseTemplate::new(200)
-                    .set_body_json(serde_json::json!({"role": "admin"})),
+                ResponseTemplate::new(200).set_body_json(serde_json::json!({"role": "admin"})),
             )
             .mount(&mock_server)
             .await;
@@ -1607,11 +1589,7 @@ mod tests {
         // Extract host:port from wiremock URI
         let server_uri = mock_server.uri();
         let parsed = url::Url::parse(&server_uri).unwrap();
-        let host_port = format!(
-            "{}:{}",
-            parsed.host_str().unwrap(),
-            parsed.port().unwrap()
-        );
+        let host_port = format!("{}:{}", parsed.host_str().unwrap(), parsed.port().unwrap());
 
         let config = AsyncActionConfig {
             allowed_domains: vec![host_port],
@@ -1700,11 +1678,7 @@ mod tests {
 
         let server_uri = mock_server.uri();
         let parsed = url::Url::parse(&server_uri).unwrap();
-        let host_port = format!(
-            "{}:{}",
-            parsed.host_str().unwrap(),
-            parsed.port().unwrap()
-        );
+        let host_port = format!("{}:{}", parsed.host_str().unwrap(), parsed.port().unwrap());
 
         let config = AsyncActionConfig {
             allowed_domains: vec![host_port],
@@ -1736,7 +1710,11 @@ mod tests {
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
 
-        assert!(result.is_ok(), "Script should handle limit: {:?}", result.err());
+        assert!(
+            result.is_ok(),
+            "Script should handle limit: {:?}",
+            result.err()
+        );
         let modified = result.unwrap();
         let claims = modified.claims.unwrap();
         let results = claims.get("results").unwrap().as_array().unwrap();
@@ -1797,11 +1775,7 @@ mod tests {
         let context = create_test_context();
         let result = engine.execute_action(&action, &context).await;
 
-        assert!(
-            result.is_ok(),
-            "setTimeout should work: {:?}",
-            result.err()
-        );
+        assert!(result.is_ok(), "setTimeout should work: {:?}", result.err());
         let modified = result.unwrap();
         let claims = modified.claims.unwrap();
         assert_eq!(claims.get("delayed").unwrap().as_bool(), Some(true));

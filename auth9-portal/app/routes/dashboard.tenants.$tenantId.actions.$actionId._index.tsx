@@ -5,7 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Button } from "~/components/ui/button";
 import { Badge } from "~/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import type { Action, ActionExecution, ActionStats } from "@auth9/core";
+import type { ActionExecution } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withTenant } from "~/lib/auth9-client";
 import { FormattedDate } from "~/components/ui/formatted-date";

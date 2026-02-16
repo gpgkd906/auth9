@@ -1,11 +1,12 @@
 //! Session management API handlers
 
 use crate::api::{MessageResponse, SuccessResponse};
+use crate::cache::CacheOperations;
 use crate::domain::{SessionInfo, StringUuid};
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
-use crate::state::{HasServices, HasSessionManagement};
+use crate::state::{HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -61,7 +62,7 @@ pub async fn revoke_other_sessions<S: HasSessionManagement>(
 }
 
 /// Admin: Force logout a user (revoke all sessions)
-pub async fn force_logout_user<S: HasSessionManagement + HasServices>(
+pub async fn force_logout_user<S: HasSessionManagement + HasServices + HasCache>(
     State(state): State<S>,
     auth: AuthUser,
     Path(user_id): Path<StringUuid>,
@@ -75,7 +76,43 @@ pub async fn force_logout_user<S: HasSessionManagement + HasServices>(
         },
     )?;
 
+    // Collect active session IDs before revoking so we can blacklist them
+    let active_sessions = state
+        .session_service()
+        .get_user_sessions_admin(user_id)
+        .await
+        .unwrap_or_default();
+
     let count = state.session_service().force_logout_user(user_id).await?;
+
+    // Blacklist all active session tokens and clean up refresh sessions
+    // Use the configured access token TTL as the blacklist TTL
+    let blacklist_ttl = state.config().jwt.access_token_ttl_secs.unsigned_abs();
+    let cache = state.cache();
+    for session in &active_sessions {
+        let sid = &session.id;
+        if let Err(e) = cache.add_to_token_blacklist(sid, blacklist_ttl).await {
+            tracing::warn!(
+                session_id = %sid,
+                error = %e,
+                "Failed to blacklist session token during force logout"
+            );
+        }
+        if let Err(e) = cache.remove_all_refresh_sessions_for_session(sid).await {
+            tracing::warn!(
+                session_id = %sid,
+                error = %e,
+                "Failed to clean up refresh sessions during force logout"
+            );
+        }
+    }
+
+    tracing::info!(
+        user_id = %user_id,
+        revoked_count = count,
+        blacklisted_sessions = active_sessions.len(),
+        "Force logout completed with token blacklisting"
+    );
 
     Ok(Json(SuccessResponse::new(RevokeSessionsResponse {
         revoked_count: count,

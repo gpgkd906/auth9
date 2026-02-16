@@ -919,10 +919,7 @@ mod tests {
 
     #[test]
     fn test_extract_client_ip_unknown() {
-        let request = Request::builder()
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
         let ip = extract_client_ip(&request);
         assert_eq!(ip, "unknown");
     }
@@ -1018,10 +1015,7 @@ mod tests {
     #[test]
     fn test_extract_key_from_verified_token_no_auth_header() {
         let state = RateLimitState::noop();
-        let request = Request::builder()
-            .uri("/test")
-            .body(Body::empty())
-            .unwrap();
+        let request = Request::builder().uri("/test").body(Body::empty()).unwrap();
         let result = extract_key_from_verified_token(&state, &request);
         assert!(result.is_none());
     }
@@ -1038,5 +1032,4 @@ mod tests {
         assert!(json.contains("RATE_LIMITED"));
         assert!(json.contains("60"));
     }
-
 }

@@ -132,12 +132,11 @@ function CopyValue({ value, fieldId }: { value: string; fieldId: string }) {
     const [copied, setCopied] = useState(false);
 
     return (
-        <div className="flex items-center gap-2">
-            <code className="font-mono text-sm text-[var(--text-primary)] break-all select-all">{value}</code>
+        <div className="flex items-center gap-2 min-w-0">
+            <code className="flex-1 min-w-0 font-mono text-sm text-[var(--text-primary)] break-all select-all whitespace-normal">{value}</code>
             <Button
                 variant="ghost"
-                size="icon"
-                className="h-6 w-6 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                className="h-11 min-w-11 px-2 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] sm:h-8 sm:min-w-8 sm:px-2"
                 onClick={async () => {
                     await copyToClipboard(value);
                     setCopied(true);
@@ -145,7 +144,8 @@ function CopyValue({ value, fieldId }: { value: string; fieldId: string }) {
                 }}
                 title={`Copy ${fieldId}`}
             >
-                {copied ? <span className="text-xs text-[var(--accent-green)]">&#10003;</span> : <CopyIcon className="h-3 w-3" />}
+                {copied ? <span className="text-xs text-[var(--accent-green)]">&#10003;</span> : <CopyIcon className="h-3.5 w-3.5" />}
+                <span className="ml-1 hidden sm:inline text-xs">Copy</span>
             </Button>
         </div>
     );
@@ -207,27 +207,29 @@ function IntegrationTab({ integration }: { integration: ServiceIntegrationInfo }
                                     <div>
                                         <Label className="text-xs text-[var(--text-tertiary)]">Client Secret</Label>
                                         {client.client_secret ? (
-                                            <div className="flex items-center gap-2">
-                                                <code className="font-mono text-sm text-[var(--text-primary)] break-all select-all">
+                                            <div className="flex items-center gap-2 min-w-0">
+                                                <code className="flex-1 min-w-0 font-mono text-sm text-[var(--text-primary)] break-all select-all whitespace-normal">
                                                     {revealedSecrets.has(client.client_id) ? client.client_secret : "••••••••••••••••••••••••"}
                                                 </code>
                                                 <Button
                                                     variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                                                    className="h-11 min-w-11 px-2 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] sm:h-8 sm:min-w-8 sm:px-2"
                                                     onClick={() => toggleReveal(client.client_id)}
                                                     title={revealedSecrets.has(client.client_id) ? "Hide" : "Reveal"}
                                                 >
-                                                    {revealedSecrets.has(client.client_id) ? <EyeClosedIcon className="h-3 w-3" /> : <EyeOpenIcon className="h-3 w-3" />}
+                                                    {revealedSecrets.has(client.client_id) ? <EyeClosedIcon className="h-3.5 w-3.5" /> : <EyeOpenIcon className="h-3.5 w-3.5" />}
+                                                    <span className="ml-1 hidden sm:inline text-xs">
+                                                        {revealedSecrets.has(client.client_id) ? "Hide" : "Reveal"}
+                                                    </span>
                                                 </Button>
                                                 <Button
                                                     variant="ghost"
-                                                    size="icon"
-                                                    className="h-6 w-6 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                                                    className="h-11 min-w-11 px-2 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] sm:h-8 sm:min-w-8 sm:px-2"
                                                     onClick={() => copyToClipboard(client.client_secret!)}
                                                     title="Copy secret"
                                                 >
-                                                    <CopyIcon className="h-3 w-3" />
+                                                    <CopyIcon className="h-3.5 w-3.5" />
+                                                    <span className="ml-1 hidden sm:inline text-xs">Copy</span>
                                                 </Button>
                                             </div>
                                         ) : (

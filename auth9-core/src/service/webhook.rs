@@ -87,9 +87,7 @@ fn is_private_ip(ip: std::net::IpAddr) -> bool {
                 // Cloud metadata endpoint (169.254.169.254)
                 || v4.octets() == [169, 254, 169, 254]
         }
-        std::net::IpAddr::V6(v6) => {
-            v6.is_loopback() || v6.is_unspecified()
-        }
+        std::net::IpAddr::V6(v6) => v6.is_loopback() || v6.is_unspecified(),
     }
 }
 
@@ -205,25 +203,29 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
         };
 
         let start = Instant::now();
-        let result = match deliver_webhook_with_status(self.http_client.as_ref(), &webhook, &test_event).await {
-            Ok(response) => WebhookTestResult {
-                success: true,
-                status_code: Some(response.status_code),
-                response_body: response.body,
-                error: None,
-                response_time_ms: Some(start.elapsed().as_millis() as u64),
-            },
-            Err((status_code, error_msg)) => WebhookTestResult {
-                success: false,
-                status_code,
-                response_body: None,
-                error: Some(error_msg),
-                response_time_ms: Some(start.elapsed().as_millis() as u64),
-            },
-        };
+        let result =
+            match deliver_webhook_with_status(self.http_client.as_ref(), &webhook, &test_event)
+                .await
+            {
+                Ok(response) => WebhookTestResult {
+                    success: true,
+                    status_code: Some(response.status_code),
+                    response_body: response.body,
+                    error: None,
+                    response_time_ms: Some(start.elapsed().as_millis() as u64),
+                },
+                Err((status_code, error_msg)) => WebhookTestResult {
+                    success: false,
+                    status_code,
+                    response_body: None,
+                    error: Some(error_msg),
+                    response_time_ms: Some(start.elapsed().as_millis() as u64),
+                },
+            };
 
         // Update webhook status (reset failure_count on success, increment on failure)
         let _ = self.webhook_repo.update_triggered(id, result.success).await;
+        self.auto_disable_if_needed(id, result.success).await;
 
         Ok(result)
     }
@@ -240,6 +242,32 @@ impl<W: WebhookRepository + 'static> WebhookService<W> {
                 },
             )
             .await
+    }
+
+    async fn auto_disable_if_needed(&self, id: StringUuid, success: bool) {
+        if success {
+            return;
+        }
+
+        if let Ok(Some(w)) = self.webhook_repo.find_by_id(id).await {
+            if w.failure_count >= MAX_FAILURE_COUNT {
+                tracing::warn!(
+                    "Auto-disabling webhook {} after {} consecutive failures",
+                    id,
+                    w.failure_count
+                );
+                let _ = self
+                    .webhook_repo
+                    .update(
+                        id,
+                        &UpdateWebhookInput {
+                            enabled: Some(false),
+                            ..Default::default()
+                        },
+                    )
+                    .await;
+            }
+        }
     }
 }
 
@@ -852,6 +880,56 @@ mod tests {
         assert!(result.error.unwrap().contains("500"));
         // response_time_ms should be present
         assert!(result.response_time_ms.is_some());
+    }
+
+    #[tokio::test]
+    async fn test_test_webhook_auto_disables_when_failure_threshold_reached() {
+        let http = Arc::new(RecordingHttpClient {
+            requests: Arc::new(Mutex::new(Vec::new())),
+            status: 500,
+            body: Some("Internal Server Error".to_string()),
+        });
+
+        let webhook_id = StringUuid::new_v4();
+        let webhook_at_threshold = Webhook {
+            id: webhook_id,
+            name: "Flaky Webhook".to_string(),
+            url: "https://example.com/webhook".to_string(),
+            enabled: true,
+            failure_count: MAX_FAILURE_COUNT,
+            ..Default::default()
+        };
+        let webhook_after_disable = Webhook {
+            enabled: false,
+            ..webhook_at_threshold.clone()
+        };
+
+        let mut mock = MockWebhookRepository::new();
+        mock.expect_find_by_id()
+            .with(eq(webhook_id))
+            .times(2)
+            .returning(move |_| Ok(Some(webhook_at_threshold.clone())));
+        mock.expect_update_triggered()
+            .with(eq(webhook_id), eq(false))
+            .returning(|_, _| Ok(()))
+            .times(1);
+        mock.expect_update()
+            .withf(move |id, input| {
+                *id == webhook_id
+                    && input.enabled == Some(false)
+                    && input.name.is_none()
+                    && input.url.is_none()
+                    && input.secret.is_none()
+                    && input.events.is_none()
+            })
+            .returning(move |_, _| Ok(webhook_after_disable.clone()))
+            .times(1);
+
+        let service = WebhookService::new_with_http(Arc::new(mock), http);
+        let result = service.test(webhook_id).await.unwrap();
+
+        assert!(!result.success);
+        assert_eq!(result.status_code, Some(500));
     }
 
     #[tokio::test]

@@ -300,16 +300,22 @@ impl InvitationRepository for InvitationRepositoryImpl {
     }
 
     async fn mark_accepted(&self, id: StringUuid) -> Result<Invitation> {
-        sqlx::query(
+        let result = sqlx::query(
             r#"
             UPDATE invitations
             SET status = 'accepted', accepted_at = NOW(), updated_at = NOW()
-            WHERE id = ?
+            WHERE id = ? AND status = 'pending'
             "#,
         )
         .bind(id)
         .execute(&self.pool)
         .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::Conflict(
+                "Invitation has already been accepted or is no longer pending".to_string(),
+            ));
+        }
 
         self.find_by_id(id)
             .await?

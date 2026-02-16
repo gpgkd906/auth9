@@ -309,61 +309,63 @@ export default function BrandingSettingsPage() {
             <div className="space-y-4">
               <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Preview</h3>
               <div
-                className="rounded-lg p-8 flex items-center justify-center min-h-[300px]"
+                className="rounded-lg p-0 sm:p-8 flex items-center justify-center min-h-[300px]"
                 style={{ backgroundColor }}
               >
-                <div className="w-full max-w-sm bg-white rounded-xl shadow-lg p-6">
-                  {logoUrl ? (
-                    <img src={logoUrl} alt="Logo" className="h-10 mx-auto mb-4 object-contain" />
-                  ) : companyName ? (
-                    <h2
-                      className="text-xl font-semibold text-center mb-4"
-                      style={{ color: primaryColor }}
-                    >
-                      {companyName}
-                    </h2>
-                  ) : (
-                    <div
-                      className="h-10 w-32 mx-auto mb-4 rounded"
-                      style={{ backgroundColor: primaryColor, opacity: 0.2 }}
-                    />
-                  )}
+                <div className="w-full">
+                  <div className="w-full max-w-none sm:max-w-sm bg-white rounded-xl shadow-lg p-6">
+                    {logoUrl ? (
+                      <img src={logoUrl} alt="Logo" className="h-10 mx-auto mb-4 object-contain" />
+                    ) : companyName ? (
+                      <h2
+                        className="text-xl font-semibold text-center mb-4"
+                        style={{ color: primaryColor }}
+                      >
+                        {companyName}
+                      </h2>
+                    ) : (
+                      <div
+                        className="h-10 w-32 mx-auto mb-4 rounded"
+                        style={{ backgroundColor: primaryColor, opacity: 0.2 }}
+                      />
+                    )}
 
-                  <div className="space-y-4">
-                    <div>
-                      <span
-                        className="block text-sm font-medium mb-1"
-                        style={{ color: textColor }}
+                    <div className="space-y-4">
+                      <div>
+                        <span
+                          className="block text-sm font-medium mb-1"
+                          style={{ color: textColor }}
+                        >
+                          Email
+                        </span>
+                        <div
+                          className="w-full h-10 rounded-md border"
+                          style={{ borderColor: secondaryColor }}
+                        />
+                      </div>
+                      <div>
+                        <span
+                          className="block text-sm font-medium mb-1"
+                          style={{ color: textColor }}
+                        >
+                          Password
+                        </span>
+                        <div
+                          className="w-full h-10 rounded-md border"
+                          style={{ borderColor: secondaryColor }}
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="w-full h-10 rounded-md text-white font-medium"
+                        style={{ backgroundColor: primaryColor }}
                       >
-                        Email
-                      </span>
-                      <div
-                        className="w-full h-10 rounded-md border"
-                        style={{ borderColor: secondaryColor }}
-                      />
+                        Sign In
+                      </button>
+                      <p className="text-center text-sm" style={{ color: secondaryColor }}>
+                        Forgot password?
+                      </p>
                     </div>
-                    <div>
-                      <span
-                        className="block text-sm font-medium mb-1"
-                        style={{ color: textColor }}
-                      >
-                        Password
-                      </span>
-                      <div
-                        className="w-full h-10 rounded-md border"
-                        style={{ borderColor: secondaryColor }}
-                      />
-                    </div>
-                    <button
-                      type="button"
-                      className="w-full h-10 rounded-md text-white font-medium"
-                      style={{ backgroundColor: primaryColor }}
-                    >
-                      Sign In
-                    </button>
-                    <p className="text-center text-sm" style={{ color: secondaryColor }}>
-                      Forgot password?
-                    </p>
                   </div>
                 </div>
               </div>

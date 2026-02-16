@@ -708,19 +708,62 @@ pub async fn integration_info<S: HasServices>(
                 if kc_client.public_client {
                     (true, None)
                 } else {
-                    // Confidential — fetch secret
+                    // Confidential — fetch secret from Keycloak
                     let secret = match kc_client.id {
-                        Some(ref kc_uuid) => state
-                            .keycloak_client()
-                            .get_client_secret(kc_uuid)
-                            .await
-                            .ok(),
-                        None => None,
+                        Some(ref kc_uuid) => {
+                            match state.keycloak_client().get_client_secret(kc_uuid).await {
+                                Ok(s) => Some(s),
+                                Err(e) => {
+                                    tracing::warn!(
+                                        client_id = %c.client_id,
+                                        keycloak_uuid = %kc_uuid,
+                                        error = %e,
+                                        "Failed to fetch client secret from Keycloak, attempting to regenerate"
+                                    );
+                                    // Secret may not exist yet — try regenerating
+                                    match state
+                                        .keycloak_client()
+                                        .regenerate_client_secret(kc_uuid)
+                                        .await
+                                    {
+                                        Ok(s) => Some(s),
+                                        Err(e2) => {
+                                            tracing::error!(
+                                                client_id = %c.client_id,
+                                                error = %e2,
+                                                "Failed to regenerate client secret"
+                                            );
+                                            None
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                        None => {
+                            tracing::warn!(
+                                client_id = %c.client_id,
+                                "Client missing UUID in Keycloak response"
+                            );
+                            None
+                        }
                     };
                     (false, secret)
                 }
             }
-            Err(_) => (false, None), // Keycloak not reachable — degrade gracefully
+            Err(_) => {
+                // Client not in Keycloak — check if it's a database-managed confidential client
+                let is_confidential = !c.client_secret_hash.is_empty();
+                (
+                    !is_confidential,
+                    if is_confidential {
+                        // Secret is managed in auth9 database (e.g., M2M client_credentials flow)
+                        // We cannot return the plaintext since it's hashed; indicate it exists
+                        Some("(set — use the secret configured at creation)".to_string())
+                    } else {
+                        None
+                    },
+                )
+            }
         };
 
         clients.push(ClientIntegrationInfo {
@@ -1010,6 +1053,7 @@ mod tests {
                 refresh_token_ttl_secs: 604800,
                 private_key_pem: None,
                 public_key_pem: None,
+                previous_public_key_pem: None,
             },
             keycloak: crate::config::KeycloakConfig {
                 url: "http://localhost:8081".to_string(),
@@ -1104,7 +1148,9 @@ mod tests {
         let vars = build_env_vars(&ep, &grpc, &clients);
 
         assert!(vars.iter().any(|v| v.key == "AUTH9_DOMAIN"));
-        assert!(vars.iter().any(|v| v.key == "AUTH9_CLIENT_ID" && v.value == "my-client"));
+        assert!(vars
+            .iter()
+            .any(|v| v.key == "AUTH9_CLIENT_ID" && v.value == "my-client"));
         assert!(vars
             .iter()
             .any(|v| v.key == "AUTH9_CLIENT_SECRET" && v.value == "secret-123"));

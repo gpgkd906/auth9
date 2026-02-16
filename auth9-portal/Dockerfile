@@ -40,8 +40,9 @@ RUN npm run build
 # ==================== Runtime Stage ====================
 FROM node:20-alpine
 
-# Create non-root user
-RUN addgroup -g 1001 -S nodejs && \
+# Apply security patches and create non-root user
+RUN apk upgrade --no-cache && \
+    addgroup -g 1001 -S nodejs && \
     adduser -S remix -u 1001
 
 WORKDIR /app

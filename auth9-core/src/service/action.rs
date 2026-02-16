@@ -30,11 +30,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     }
 
     /// Create a new action
-    pub async fn create(
-        &self,
-        tenant_id: StringUuid,
-        input: CreateActionInput,
-    ) -> Result<Action> {
+    pub async fn create(&self, tenant_id: StringUuid, input: CreateActionInput) -> Result<Action> {
         let start = Instant::now();
 
         // Validate input
@@ -65,8 +61,10 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         // Record metrics
         let duration = start.elapsed().as_secs_f64();
         let status = if result.is_ok() { "success" } else { "error" };
-        counter!("auth9_action_operations_total", "operation" => "create", "result" => status).increment(1);
-        histogram!("auth9_action_operation_duration_seconds", "operation" => "create").record(duration);
+        counter!("auth9_action_operations_total", "operation" => "create", "result" => status)
+            .increment(1);
+        histogram!("auth9_action_operation_duration_seconds", "operation" => "create")
+            .record(duration);
 
         result
     }
@@ -95,8 +93,10 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         let result = self.action_repo.list_by_tenant(tenant_id).await;
         let duration = start.elapsed().as_secs_f64();
         let status = if result.is_ok() { "success" } else { "error" };
-        counter!("auth9_action_operations_total", "operation" => "list", "result" => status).increment(1);
-        histogram!("auth9_action_operation_duration_seconds", "operation" => "list").record(duration);
+        counter!("auth9_action_operations_total", "operation" => "list", "result" => status)
+            .increment(1);
+        histogram!("auth9_action_operation_duration_seconds", "operation" => "list")
+            .record(duration);
         result
     }
 
@@ -140,8 +140,10 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         // Record metrics
         let duration = start.elapsed().as_secs_f64();
         let status = if result.is_ok() { "success" } else { "error" };
-        counter!("auth9_action_operations_total", "operation" => "update", "result" => status).increment(1);
-        histogram!("auth9_action_operation_duration_seconds", "operation" => "update").record(duration);
+        counter!("auth9_action_operations_total", "operation" => "update", "result" => status)
+            .increment(1);
+        histogram!("auth9_action_operation_duration_seconds", "operation" => "update")
+            .record(duration);
 
         result
     }
@@ -158,8 +160,10 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         // Record metrics
         let duration = start.elapsed().as_secs_f64();
         let status = if result.is_ok() { "success" } else { "error" };
-        counter!("auth9_action_operations_total", "operation" => "delete", "result" => status).increment(1);
-        histogram!("auth9_action_operation_duration_seconds", "operation" => "delete").record(duration);
+        counter!("auth9_action_operations_total", "operation" => "delete", "result" => status)
+            .increment(1);
+        histogram!("auth9_action_operation_duration_seconds", "operation" => "delete")
+            .record(duration);
 
         result
     }
@@ -362,9 +366,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     fn validate_script(&self, script: &str) -> Result<()> {
         // Basic validation: check script is not empty
         if script.trim().is_empty() {
-            return Err(AppError::Validation(
-                "Script cannot be empty".to_string(),
-            ));
+            return Err(AppError::Validation("Script cannot be empty".to_string()));
         }
 
         // TODO: Add more sophisticated validation
@@ -469,9 +471,7 @@ mod tests {
 
         // list_by_trigger should return empty (no duplicate)
         mock.expect_list_by_trigger()
-            .withf(move |tid, trig, enabled| {
-                *tid == tenant_id && trig == "post-login" && !enabled
-            })
+            .withf(move |tid, trig, enabled| *tid == tenant_id && trig == "post-login" && !enabled)
             .returning(|_, _, _| Ok(vec![]));
 
         // create should succeed
@@ -500,9 +500,8 @@ mod tests {
         let mut mock = MockActionRepository::new();
 
         // list_by_trigger returns an action with the same name
-        mock.expect_list_by_trigger().returning(move |_, _, _| {
-            Ok(vec![existing.clone()])
-        });
+        mock.expect_list_by_trigger()
+            .returning(move |_, _, _| Ok(vec![existing.clone()]));
 
         let service = ActionService::new(Arc::new(mock), None);
         let result = service.create(tenant_id, input).await;
@@ -667,9 +666,7 @@ mod tests {
         let mut mock = MockActionRepository::new();
         let actions_clone = actions.clone();
         mock.expect_list_by_trigger()
-            .withf(move |tid, trig, enabled| {
-                *tid == tenant_id && trig == "post-login" && !enabled
-            })
+            .withf(move |tid, trig, enabled| *tid == tenant_id && trig == "post-login" && !enabled)
             .returning(move |_, _, _| Ok(actions_clone.clone()));
 
         let service = ActionService::new(Arc::new(mock), None);
@@ -858,10 +855,7 @@ mod tests {
         let response = result.unwrap();
         assert!(!response.success);
         assert!(response.error_message.is_some());
-        assert!(response
-            .error_message
-            .unwrap()
-            .contains("not available"));
+        assert!(response.error_message.unwrap().contains("not available"));
         assert!(response.modified_context.is_none());
     }
 
@@ -988,8 +982,7 @@ mod tests {
         let executions_clone = executions.clone();
         mock.expect_query_logs()
             .returning(move |_| Ok(executions_clone.clone()));
-        mock.expect_count_logs()
-            .returning(|_| Ok(1));
+        mock.expect_count_logs().returning(|_| Ok(1));
 
         let service = ActionService::new(Arc::new(mock), None);
         let filter = LogQueryFilter::default();
@@ -1093,8 +1086,7 @@ mod tests {
     async fn test_validate_script_valid_succeeds() {
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result =
-            service.validate_script("export default async function(ctx) { return ctx; }");
+        let result = service.validate_script("export default async function(ctx) { return ctx; }");
 
         assert!(result.is_ok());
     }

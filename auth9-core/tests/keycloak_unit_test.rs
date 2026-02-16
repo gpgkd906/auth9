@@ -1794,6 +1794,7 @@ async fn test_create_identity_provider_success() {
         link_only: false,
         first_broker_login_flow_alias: None,
         config: std::collections::HashMap::new(),
+        extra: std::collections::HashMap::new(),
     };
 
     let result = client.create_identity_provider(&provider).await;
@@ -1836,6 +1837,7 @@ async fn test_create_identity_provider_conflict() {
         link_only: false,
         first_broker_login_flow_alias: None,
         config: std::collections::HashMap::new(),
+        extra: std::collections::HashMap::new(),
     };
 
     let result = client.create_identity_provider(&provider).await;
@@ -2393,6 +2395,7 @@ async fn test_update_identity_provider_success() {
         link_only: false,
         first_broker_login_flow_alias: None,
         config: std::collections::HashMap::new(),
+        extra: std::collections::HashMap::new(),
     };
 
     let result = client.update_identity_provider("google", &provider).await;
@@ -2435,6 +2438,7 @@ async fn test_update_identity_provider_not_found() {
         link_only: false,
         first_broker_login_flow_alias: None,
         config: std::collections::HashMap::new(),
+        extra: std::collections::HashMap::new(),
     };
 
     let result = client

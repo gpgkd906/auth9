@@ -1325,7 +1325,7 @@ describe('API Service', () => {
       await securityAlertApi.list(1, 50);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/v1/security/alerts?limit=50&offset=0'),
+        expect.stringContaining('/api/v1/security/alerts?page=1&per_page=50'),
         expect.any(Object)
       );
       // Should NOT contain unresolved param
@@ -1341,7 +1341,7 @@ describe('API Service', () => {
       await securityAlertApi.list(1, 50, true);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('unresolved=true'),
+        expect.stringContaining('unresolved_only=true'),
         expect.any(Object)
       );
     });
@@ -1355,7 +1355,7 @@ describe('API Service', () => {
       await securityAlertApi.list(3, 25);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('limit=25&offset=50'),
+        expect.stringContaining('page=3&per_page=25'),
         expect.any(Object)
       );
     });

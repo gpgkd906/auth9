@@ -78,6 +78,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             link_only: input.link_only,
             first_broker_login_flow_alias: None,
             config: input.config,
+            extra: HashMap::new(),
         };
 
         self.keycloak.create_identity_provider(&kc_provider).await?;
@@ -97,7 +98,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
         // Get existing provider
         let existing = self.keycloak.get_identity_provider(alias).await?;
 
-        // Merge updates
+        // Merge updates (preserve extra Keycloak fields like internalId for round-trip)
         let updated = KeycloakIdentityProvider {
             alias: existing.alias,
             display_name: input.display_name.or(existing.display_name),
@@ -108,6 +109,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             link_only: input.link_only.unwrap_or(existing.link_only),
             first_broker_login_flow_alias: existing.first_broker_login_flow_alias,
             config: input.config.unwrap_or(existing.config),
+            extra: existing.extra,
         };
 
         self.keycloak

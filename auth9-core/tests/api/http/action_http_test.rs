@@ -6,9 +6,13 @@ use super::{
     build_test_router, delete_json_with_auth, get_json_with_auth, patch_json_with_auth,
     post_json_with_auth, put_json_with_auth, TestAppState,
 };
-use crate::api::{create_test_action, create_test_identity_token, create_test_tenant, MockKeycloakServer};
+use crate::api::{
+    create_test_action, create_test_identity_token, create_test_tenant, MockKeycloakServer,
+};
 use auth9_core::api::{MessageResponse, SuccessResponse};
-use auth9_core::domain::{Action, ActionStats, ActionTrigger, CreateActionInput, StringUuid, UpdateActionInput};
+use auth9_core::domain::{
+    Action, ActionStats, ActionTrigger, CreateActionInput, StringUuid, UpdateActionInput,
+};
 use auth9_core::jwt::JwtManager;
 use axum::http::StatusCode;
 use serde_json::json;
@@ -72,8 +76,13 @@ async fn test_create_action_returns_200() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -113,8 +122,13 @@ async fn test_create_action_validates_input() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -153,8 +167,13 @@ async fn test_create_action_rejects_duplicate_name() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::CONFLICT);
 }
@@ -190,8 +209,13 @@ async fn test_create_action_validates_trigger_id() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<MessageResponse>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     // Invalid trigger_id is rejected at creation time with 400
     assert_eq!(status, StatusCode::BAD_REQUEST);
@@ -229,8 +253,12 @@ async fn test_list_actions_returns_all() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -269,8 +297,15 @@ async fn test_list_actions_filters_by_trigger() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions?trigger_id=post-login", tenant_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/actions?trigger_id=post-login",
+            tenant_id
+        ),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -298,8 +333,12 @@ async fn test_list_actions_empty() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -334,8 +373,12 @@ async fn test_get_action_returns_200() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -364,8 +407,12 @@ async fn test_get_action_returns_404() {
 
     let non_existent_id = Uuid::new_v4();
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id), &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -403,8 +450,13 @@ async fn test_update_action_returns_200() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) =
-        patch_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id), &input, &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = patch_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -447,8 +499,13 @@ async fn test_update_action_validates_input() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        patch_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
 }
@@ -483,8 +540,13 @@ async fn test_update_action_returns_404() {
 
     let non_existent_id = Uuid::new_v4();
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        patch_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -512,8 +574,12 @@ async fn test_delete_action_returns_200() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id), &token).await;
+    let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -539,8 +605,12 @@ async fn test_delete_action_returns_404() {
 
     let non_existent_id = Uuid::new_v4();
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id), &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -586,7 +656,13 @@ async fn test_batch_upsert_creates_new() {
 
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/batch", tenant_id), &batch_request, &token).await;
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/actions/batch", tenant_id),
+            &batch_request,
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -626,7 +702,13 @@ async fn test_batch_upsert_updates_existing() {
 
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/batch", tenant_id), &batch_request, &token).await;
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/actions/batch", tenant_id),
+            &batch_request,
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -662,8 +744,13 @@ async fn test_batch_upsert_handles_errors() {
     });
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/batch", tenant_id), &batch_request, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/batch", tenant_id),
+        &batch_request,
+        &token,
+    )
+    .await;
 
     // Note: Trigger validation happens at execution time, not at creation
     // So this test currently returns 200. Consider adding validation in batch_upsert.
@@ -690,7 +777,12 @@ async fn test_query_logs_returns_all() {
 
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/logs", tenant_id), &token).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/actions/logs", tenant_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -719,8 +811,15 @@ async fn test_query_logs_filters_by_action_id() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/logs?action_id={}", tenant_id, action_id), &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = get_json_with_auth(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/actions/logs?action_id={}",
+            tenant_id, action_id
+        ),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -744,8 +843,15 @@ async fn test_query_logs_filters_by_user_id() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/logs?user_id={}", tenant_id, user_id), &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = get_json_with_auth(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/actions/logs?user_id={}",
+            tenant_id, user_id
+        ),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -769,8 +875,12 @@ async fn test_query_logs_filters_by_success() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/logs?success=true", tenant_id), &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/logs?success=true", tenant_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -798,8 +908,12 @@ async fn test_get_stats_returns_200() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<ActionStats>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}/stats", tenant_id, action_id), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<ActionStats>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}/stats", tenant_id, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -825,8 +939,15 @@ async fn test_get_stats_returns_404() {
 
     let non_existent_id = Uuid::new_v4();
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}/stats", tenant_id, non_existent_id), &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
+        &app,
+        &format!(
+            "/api/v1/tenants/{}/actions/{}/stats",
+            tenant_id, non_existent_id
+        ),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -874,8 +995,13 @@ async fn test_platform_admin_can_create_action() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -896,8 +1022,12 @@ async fn test_platform_admin_can_read_action() {
     let token = create_test_identity_token();
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id), &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -932,8 +1062,13 @@ async fn test_tenant_admin_can_manage_actions() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -968,8 +1103,13 @@ async fn test_tenant_owner_can_manage_actions() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -997,8 +1137,12 @@ async fn test_action_read_permission_allows_read() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id), &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -1033,8 +1177,13 @@ async fn test_action_write_permission_allows_write() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -1069,8 +1218,13 @@ async fn test_action_wildcard_permission_allows_all() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
 }
@@ -1105,8 +1259,13 @@ async fn test_missing_permission_returns_403() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
@@ -1164,8 +1323,13 @@ async fn test_invalid_token_returns_401() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        post_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id), &input, "invalid-token").await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &input,
+        "invalid-token",
+    )
+    .await;
 
     assert_eq!(status, StatusCode::UNAUTHORIZED);
 }
@@ -1202,8 +1366,12 @@ async fn test_get_action_from_different_tenant_returns_404() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id), &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN); // Permission check happens first
 }
@@ -1246,8 +1414,13 @@ async fn test_update_action_from_different_tenant_returns_404() {
     };
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        patch_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id), &input, &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id),
+        &input,
+        &token,
+    )
+    .await;
 
     // Returns 403 (not 404) because permission check happens before resource lookup
     // This is correct security behavior - don't reveal if resources exist in other tenants
@@ -1282,8 +1455,12 @@ async fn test_delete_action_from_different_tenant_returns_404() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, _): (StatusCode, Option<MessageResponse>) =
-        delete_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id), &token).await;
+    let (status, _): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN); // Permission check happens first
 }
@@ -1322,14 +1499,21 @@ async fn test_list_actions_only_returns_own_tenant() {
     );
 
     let app = build_test_router(state.clone());
-    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions", tenant_id_1), &token).await;
+    let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/tenants/{}/actions", tenant_id_1),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
     let response = body.unwrap();
     assert_eq!(response.data.len(), 2); // Only tenant 1's actions
-    assert!(response.data.iter().all(|a| a.tenant_id == StringUuid::from(tenant_id_1)));
+    assert!(response
+        .data
+        .iter()
+        .all(|a| a.tenant_id == StringUuid::from(tenant_id_1)));
 }
 
 #[tokio::test]
@@ -1355,7 +1539,12 @@ async fn test_query_logs_only_returns_own_tenant() {
 
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
-        get_json_with_auth(&app, &format!("/api/v1/tenants/{}/actions/logs", tenant_id_1), &token).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/tenants/{}/actions/logs", tenant_id_1),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

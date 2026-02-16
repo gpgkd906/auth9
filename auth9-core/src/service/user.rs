@@ -128,12 +128,7 @@ impl<
         input.validate()?;
 
         // Check for duplicate keycloak_id (not email — multiple IdP users may share an email)
-        if self
-            .repo
-            .find_by_keycloak_id(keycloak_id)
-            .await?
-            .is_some()
-        {
+        if self.repo.find_by_keycloak_id(keycloak_id).await?.is_some() {
             return Err(AppError::Conflict(format!(
                 "User with keycloak_id '{}' already exists",
                 keycloak_id

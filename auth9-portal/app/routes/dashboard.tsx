@@ -78,7 +78,7 @@ export default function Dashboard() {
         </Link>
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-          className="p-2 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--glass-border-subtle)] transition-colors"
+          className="h-11 w-11 inline-flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--glass-border-subtle)] transition-colors"
           aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
         >
           {isSidebarOpen ? (
@@ -223,6 +223,9 @@ export default function Dashboard() {
           <Outlet />
         </div>
       </main>
+      <footer role="contentinfo" className="sr-only">
+        Auth9 Dashboard Footer
+      </footer>
     </div>
   );
 }
