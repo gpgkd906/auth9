@@ -15,7 +15,7 @@ use tauri::{AppHandle, Manager, State};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex;
-use tokio::time::{sleep, Duration};
+use tokio::time::{sleep, Duration, Instant};
 use uuid::Uuid;
 use walkdir::WalkDir;
 
@@ -26,6 +26,8 @@ struct OrchestratorConfig {
     defaults: ConfigDefaults,
     workspaces: HashMap<String, WorkspaceConfig>,
     agents: HashMap<String, AgentConfig>,
+    #[serde(default)]
+    agent_groups: HashMap<String, AgentGroupConfig>,
     workflows: HashMap<String, WorkflowConfig>,
 }
 
@@ -78,6 +80,11 @@ impl AgentTemplates {
             _ => None,
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct AgentGroupConfig {
+    agents: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -177,7 +184,8 @@ struct WorkflowLoopGuardConfig {
     enabled: bool,
     stop_when_no_unresolved: bool,
     max_cycles: Option<u32>,
-    agent_id: Option<String>,
+    #[serde(default, alias = "agent_id")]
+    agent_group_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     agent_template: Option<String>,
 }
@@ -188,7 +196,7 @@ impl Default for WorkflowLoopGuardConfig {
             enabled: true,
             stop_when_no_unresolved: true,
             max_cycles: None,
-            agent_id: None,
+            agent_group_id: None,
             agent_template: None,
         }
     }
@@ -207,7 +215,8 @@ struct WorkflowStepConfig {
     #[serde(rename = "type")]
     step_type: WorkflowStepType,
     enabled: bool,
-    agent_id: Option<String>,
+    #[serde(default, alias = "agent_id")]
+    agent_group_id: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prehook: Option<StepPrehookConfig>,
 }
@@ -217,8 +226,7 @@ struct TaskExecutionStep {
     id: String,
     #[serde(rename = "type")]
     step_type: WorkflowStepType,
-    agent_id: String,
-    template: String,
+    agent_group_id: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     prehook: Option<StepPrehookConfig>,
 }
@@ -255,11 +263,11 @@ struct WorkflowConfig {
 }
 
 impl WorkflowConfig {
-    fn uses_agent(&self, agent_id: &str) -> bool {
+    fn uses_agent_group(&self, group_id: &str) -> bool {
         self.steps
             .iter()
-            .any(|step| step.enabled && step.agent_id.as_deref() == Some(agent_id))
-            || self.loop_policy.guard.agent_id.as_deref() == Some(agent_id)
+            .any(|step| step.enabled && step.agent_group_id.as_deref() == Some(group_id))
+            || self.loop_policy.guard.agent_group_id.as_deref() == Some(group_id)
     }
 }
 
@@ -274,35 +282,35 @@ fn default_workflow_steps(
             id: "init_once".to_string(),
             step_type: WorkflowStepType::InitOnce,
             enabled: false,
-            agent_id: None,
+            agent_group_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
             id: "qa".to_string(),
             step_type: WorkflowStepType::Qa,
             enabled: qa.is_some(),
-            agent_id: qa.map(str::to_string),
+            agent_group_id: qa.map(str::to_string),
             prehook: None,
         },
         WorkflowStepConfig {
             id: "ticket_scan".to_string(),
             step_type: WorkflowStepType::TicketScan,
             enabled: ticket_scan,
-            agent_id: None,
+            agent_group_id: None,
             prehook: None,
         },
         WorkflowStepConfig {
             id: "fix".to_string(),
             step_type: WorkflowStepType::Fix,
             enabled: fix.is_some(),
-            agent_id: fix.map(str::to_string),
+            agent_group_id: fix.map(str::to_string),
             prehook: None,
         },
         WorkflowStepConfig {
             id: "retest".to_string(),
             step_type: WorkflowStepType::Retest,
             enabled: retest.is_some(),
-            agent_id: retest.map(str::to_string),
+            agent_group_id: retest.map(str::to_string),
             prehook: None,
         },
     ]
@@ -517,6 +525,20 @@ impl Default for OrchestratorConfig {
             },
         );
 
+        let mut agent_groups = HashMap::new();
+        agent_groups.insert(
+            "opencode".to_string(),
+            AgentGroupConfig {
+                agents: vec!["opencode".to_string()],
+            },
+        );
+        agent_groups.insert(
+            "claudecode".to_string(),
+            AgentGroupConfig {
+                agents: vec!["claudecode".to_string()],
+            },
+        );
+
         Self {
             runner: RunnerConfig {
                 shell: "/bin/zsh".to_string(),
@@ -529,6 +551,7 @@ impl Default for OrchestratorConfig {
             },
             workspaces,
             agents,
+            agent_groups,
             workflows,
         }
     }
@@ -546,6 +569,7 @@ struct InnerState {
     config_path: PathBuf,
     active_config: RwLock<ActiveConfig>,
     running: Mutex<HashMap<String, RunningTask>>,
+    agent_health: std::sync::RwLock<HashMap<String, AgentHealthState>>,
 }
 
 #[derive(Clone)]
@@ -791,6 +815,167 @@ struct RunResult {
     exit_code: i64,
     stdout_path: String,
     stderr_path: String,
+    timed_out: bool,
+}
+
+#[derive(Debug, Clone)]
+struct AgentHealthState {
+    diseased_until: Option<chrono::DateTime<Utc>>,
+    consecutive_errors: u32,
+}
+
+const DISEASE_DURATION_HOURS: i64 = 5;
+const CONSECUTIVE_ERROR_THRESHOLD: u32 = 2;
+const IDLE_TIMEOUT_SECS: u64 = 600; // 10 minutes
+
+fn is_agent_healthy(health_map: &HashMap<String, AgentHealthState>, agent_id: &str) -> bool {
+    match health_map.get(agent_id) {
+        None => true,
+        Some(state) => match state.diseased_until {
+            None => true,
+            Some(until) => Utc::now() >= until,
+        },
+    }
+}
+
+fn mark_agent_diseased(state: &InnerState, app: Option<&AppHandle>, agent_id: &str) {
+    let mut health = state.agent_health.write().unwrap();
+    let entry = health
+        .entry(agent_id.to_string())
+        .or_insert(AgentHealthState {
+            diseased_until: None,
+            consecutive_errors: 0,
+        });
+    entry.diseased_until = Some(Utc::now() + chrono::Duration::hours(DISEASE_DURATION_HOURS));
+    let diseased_until = entry.diseased_until;
+    let consecutive_errors = entry.consecutive_errors;
+    drop(health);
+    if let Some(app) = app {
+        emit_event(
+            app,
+            "",
+            None,
+            "agent_health_changed",
+            json!({
+                "agent_id": agent_id,
+                "healthy": false,
+                "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
+                "consecutive_errors": consecutive_errors
+            }),
+        );
+    }
+}
+
+fn increment_consecutive_errors(
+    state: &InnerState,
+    app: Option<&AppHandle>,
+    agent_id: &str,
+) -> u32 {
+    let mut health = state.agent_health.write().unwrap();
+    let entry = health
+        .entry(agent_id.to_string())
+        .or_insert(AgentHealthState {
+            diseased_until: None,
+            consecutive_errors: 0,
+        });
+    entry.consecutive_errors += 1;
+    let consecutive_errors = entry.consecutive_errors;
+    let diseased_until = entry.diseased_until;
+    let healthy = match diseased_until {
+        None => true,
+        Some(until) => Utc::now() >= until,
+    };
+    drop(health);
+    if let Some(app) = app {
+        emit_event(
+            app,
+            "",
+            None,
+            "agent_health_changed",
+            json!({
+                "agent_id": agent_id,
+                "healthy": healthy,
+                "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
+                "consecutive_errors": consecutive_errors
+            }),
+        );
+    }
+    consecutive_errors
+}
+
+fn reset_consecutive_errors(state: &InnerState, app: Option<&AppHandle>, agent_id: &str) {
+    let mut health = state.agent_health.write().unwrap();
+    if let Some(entry) = health.get_mut(agent_id) {
+        if entry.consecutive_errors == 0 {
+            return;
+        }
+        entry.consecutive_errors = 0;
+        let diseased_until = entry.diseased_until;
+        let healthy = match diseased_until {
+            None => true,
+            Some(until) => Utc::now() >= until,
+        };
+        drop(health);
+        if let Some(app) = app {
+            emit_event(
+                app,
+                "",
+                None,
+                "agent_health_changed",
+                json!({
+                    "agent_id": agent_id,
+                    "healthy": healthy,
+                    "diseased_until": diseased_until.map(|d| d.to_rfc3339()),
+                    "consecutive_errors": 0
+                }),
+            );
+        }
+    }
+}
+
+fn resolve_agent_from_group(
+    state: &InnerState,
+    config: &OrchestratorConfig,
+    group_id: &str,
+    phase: &str,
+) -> Result<(String, String)> {
+    let group = config
+        .agent_groups
+        .get(group_id)
+        .with_context(|| format!("unknown agent_group '{}'", group_id))?;
+    let health = state.agent_health.read().unwrap();
+
+    let candidates: Vec<&str> = group
+        .agents
+        .iter()
+        .filter(|id| is_agent_healthy(&health, id))
+        .filter(|id| {
+            config
+                .agents
+                .get(id.as_str())
+                .and_then(|a| a.templates.phase_template(phase))
+                .is_some()
+        })
+        .map(|s| s.as_str())
+        .collect();
+
+    if candidates.is_empty() {
+        anyhow::bail!(
+            "agent_group '{}' has no healthy agents for phase '{}'",
+            group_id,
+            phase
+        );
+    }
+
+    use rand::Rng;
+    let idx = rand::thread_rng().gen_range(0..candidates.len());
+    let agent_id = candidates[idx];
+    let template = config.agents[agent_id]
+        .templates
+        .phase_template(phase)
+        .unwrap();
+
+    Ok((agent_id.to_string(), template.to_string()))
 }
 
 #[derive(Debug, Clone)]
@@ -1085,10 +1270,16 @@ async fn delete_task(
     app: AppHandle,
     task_id: String,
 ) -> Result<DeleteTaskResponse, String> {
+    println!("[qa-orchestrator][delete] begin task_id={}", task_id);
     stop_task_runtime_for_delete(state.inner.clone(), &task_id)
         .await
         .map_err(err_to_string)?;
+    println!(
+        "[qa-orchestrator][delete] runtime detached/stopped task_id={}",
+        task_id
+    );
     delete_task_impl(&state.inner, &task_id).map_err(err_to_string)?;
+    println!("[qa-orchestrator][delete] db records removed task_id={}", task_id);
     emit_event(
         &app,
         &task_id,
@@ -1096,6 +1287,7 @@ async fn delete_task(
         "task_deleted",
         json!({ "task_id": task_id }),
     );
+    println!("[qa-orchestrator][delete] emitted task_deleted task_id={}", task_id);
     Ok(DeleteTaskResponse {
         task_id,
         deleted: true,
@@ -1116,6 +1308,46 @@ async fn simulate_prehook(
     payload: SimulatePrehookPayload,
 ) -> Result<SimulatePrehookResult, String> {
     simulate_prehook_impl(payload).map_err(err_to_string)
+}
+
+#[derive(Debug, Clone, Serialize)]
+struct AgentHealthInfo {
+    agent_id: String,
+    healthy: bool,
+    diseased_until: Option<String>,
+    consecutive_errors: u32,
+}
+
+#[tauri::command]
+async fn get_agent_health(state: State<'_, ManagedState>) -> Result<Vec<AgentHealthInfo>, String> {
+    let health = state.inner.agent_health.read().map_err(|e| e.to_string())?;
+    let now = Utc::now();
+    let mut result = Vec::new();
+    // Include all agents from config
+    let active = read_active_config(&state.inner).map_err(err_to_string)?;
+    for agent_id in active.config.agents.keys() {
+        let (healthy, diseased_until, consecutive_errors) = match health.get(agent_id) {
+            None => (true, None, 0),
+            Some(state) => {
+                let is_healthy = match state.diseased_until {
+                    None => true,
+                    Some(until) => now >= until,
+                };
+                (
+                    is_healthy,
+                    state.diseased_until.map(|t| t.to_rfc3339()),
+                    state.consecutive_errors,
+                )
+            }
+        };
+        result.push(AgentHealthInfo {
+            agent_id: agent_id.clone(),
+            healthy,
+            diseased_until,
+            consecutive_errors,
+        });
+    }
+    Ok(result)
 }
 
 fn now_ts() -> String {
@@ -1237,7 +1469,7 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
                 id: step_type.as_str().to_string(),
                 step_type,
                 enabled: false,
-                agent_id: None,
+                agent_group_id: None,
                 prehook: None,
             });
         }
@@ -1267,7 +1499,7 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
             .find(|step| step.step_type == WorkflowStepType::TicketScan)
         {
             scan_step.enabled = true;
-            scan_step.agent_id = None;
+            scan_step.agent_group_id = None;
         }
     }
     workflow.qa = None;
@@ -1280,6 +1512,30 @@ fn normalize_workflow_config(workflow: &mut WorkflowConfig) {
 }
 
 fn normalize_config(mut config: OrchestratorConfig) -> OrchestratorConfig {
+    // Auto-migrate: if agent_groups is empty, create a 1:1 group for each referenced agent
+    if config.agent_groups.is_empty() && !config.agents.is_empty() {
+        let mut referenced: HashSet<String> = HashSet::new();
+        for workflow in config.workflows.values() {
+            for step in &workflow.steps {
+                if let Some(id) = &step.agent_group_id {
+                    referenced.insert(id.clone());
+                }
+            }
+            if let Some(id) = &workflow.loop_policy.guard.agent_group_id {
+                referenced.insert(id.clone());
+            }
+        }
+        for id in &referenced {
+            if config.agents.contains_key(id) && !config.agent_groups.contains_key(id) {
+                config.agent_groups.insert(
+                    id.clone(),
+                    AgentGroupConfig {
+                        agents: vec![id.clone()],
+                    },
+                );
+            }
+        }
+    }
     for workflow in config.workflows.values_mut() {
         normalize_workflow_config(workflow);
     }
@@ -1316,22 +1572,43 @@ fn validate_workflow_config(
             }
             continue;
         }
-        let agent_id = step.agent_id.as_deref().with_context(|| {
-            format!("workflow '{}' step '{}' missing agent_id", workflow_id, key)
-        })?;
-        let agent = config.agents.get(agent_id).with_context(|| {
+        let group_id = step.agent_group_id.as_deref().with_context(|| {
             format!(
-                "workflow '{}' step '{}' references unknown agent '{}'",
-                workflow_id, key, agent_id
+                "workflow '{}' step '{}' missing agent_group_id",
+                workflow_id, key
             )
         })?;
-        if agent.templates.phase_template(key).is_none() {
+        let group = config.agent_groups.get(group_id).with_context(|| {
+            format!(
+                "workflow '{}' step '{}' references unknown agent_group '{}'",
+                workflow_id, key, group_id
+            )
+        })?;
+        // Verify at least one agent in group has the required template
+        let has_template = group.agents.iter().any(|aid| {
+            config
+                .agents
+                .get(aid)
+                .and_then(|a| a.templates.phase_template(key))
+                .is_some()
+        });
+        if !has_template {
             anyhow::bail!(
-                "agent '{}' is missing template for step '{}' used by workflow '{}'",
-                agent_id,
+                "agent_group '{}' has no agent with template for step '{}' used by workflow '{}'",
+                group_id,
                 key,
                 workflow_id
             );
+        }
+        // Verify all agents in group exist
+        for aid in &group.agents {
+            if !config.agents.contains_key(aid) {
+                anyhow::bail!(
+                    "agent_group '{}' references unknown agent '{}'",
+                    group_id,
+                    aid
+                );
+            }
         }
         if let Some(prehook) = step.prehook.as_ref() {
             validate_step_prehook(prehook, workflow_id, key)?;
@@ -1352,18 +1629,25 @@ fn validate_workflow_config(
         }
     }
     if workflow.loop_policy.guard.enabled {
-        if let Some(agent_id) = workflow.loop_policy.guard.agent_id.as_deref() {
-            let agent = config.agents.get(agent_id).with_context(|| {
+        if let Some(group_id) = workflow.loop_policy.guard.agent_group_id.as_deref() {
+            let group = config.agent_groups.get(group_id).with_context(|| {
                 format!(
-                    "workflow '{}' loop.guard references unknown agent '{}'",
-                    workflow_id, agent_id
+                    "workflow '{}' loop.guard references unknown agent_group '{}'",
+                    workflow_id, group_id
                 )
             })?;
-            if agent.templates.phase_template("loop_guard").is_none() {
+            let has_loop_guard = group.agents.iter().any(|aid| {
+                config
+                    .agents
+                    .get(aid)
+                    .and_then(|a| a.templates.phase_template("loop_guard"))
+                    .is_some()
+            });
+            if !has_loop_guard {
                 anyhow::bail!(
-                    "workflow '{}' loop.guard agent '{}' has no loop_guard template",
+                    "workflow '{}' loop.guard agent_group '{}' has no agent with loop_guard template",
                     workflow_id,
-                    agent_id
+                    group_id
                 );
             }
         }
@@ -1929,53 +2213,30 @@ fn build_execution_plan(
         if !step.enabled {
             continue;
         }
-        let phase = step.step_type.as_str();
         if step.step_type == WorkflowStepType::TicketScan {
             steps.push(TaskExecutionStep {
                 id: step.id.clone(),
                 step_type: step.step_type.clone(),
-                agent_id: "builtin".to_string(),
-                template: String::new(),
+                agent_group_id: "builtin".to_string(),
                 prehook: step.prehook.clone(),
             });
             continue;
         }
-        let agent_id = step.agent_id.as_deref().with_context(|| {
+        let group_id = step.agent_group_id.as_deref().with_context(|| {
             format!(
-                "workflow '{}' step '{}' missing agent_id",
-                workflow_id, phase
+                "workflow '{}' step '{}' missing agent_group_id",
+                workflow_id,
+                step.step_type.as_str()
             )
         })?;
-        let agent = config
-            .agents
-            .get(agent_id)
-            .with_context(|| format!("unknown agent '{}'", agent_id))?;
-        let template = agent
-            .templates
-            .phase_template(phase)
-            .with_context(|| format!("agent '{}' missing template '{}'", agent_id, phase))?;
         steps.push(TaskExecutionStep {
             id: step.id.clone(),
             step_type: step.step_type.clone(),
-            agent_id: agent_id.to_string(),
-            template: template.to_string(),
+            agent_group_id: group_id.to_string(),
             prehook: step.prehook.clone(),
         });
     }
-    let mut loop_policy = workflow.loop_policy.clone();
-    if let Some(agent_id) = loop_policy.guard.agent_id.clone() {
-        let agent = config
-            .agents
-            .get(&agent_id)
-            .with_context(|| format!("unknown loop guard agent '{}'", agent_id))?;
-        let template = agent
-            .templates
-            .phase_template("loop_guard")
-            .with_context(|| format!("agent '{}' missing template 'loop_guard'", agent_id))?;
-        loop_policy.guard.agent_template = Some(template.to_string());
-    } else {
-        loop_policy.guard.agent_template = None;
-    }
+    let loop_policy = workflow.loop_policy.clone();
     Ok(TaskExecutionPlan {
         steps,
         loop_policy,
@@ -1990,8 +2251,8 @@ fn resolve_and_validate_workspaces(
     if config.workspaces.is_empty() {
         anyhow::bail!("config.workspaces cannot be empty");
     }
-    if config.agents.is_empty() {
-        anyhow::bail!("config.agents cannot be empty");
+    if config.agents.is_empty() && config.agent_groups.is_empty() {
+        anyhow::bail!("config.agents and config.agent_groups cannot both be empty");
     }
     if config.workflows.is_empty() {
         anyhow::bail!("config.workflows cannot be empty");
@@ -2149,8 +2410,8 @@ fn count_tasks_by_workflow(conn: &Connection, workflow_id: &str) -> Result<i64> 
     Ok(count)
 }
 
-fn agent_is_referenced(workflows: &HashMap<String, WorkflowConfig>, agent_id: &str) -> bool {
-    workflows.values().any(|wf| wf.uses_agent(agent_id))
+fn agent_group_is_referenced(workflows: &HashMap<String, WorkflowConfig>, group_id: &str) -> bool {
+    workflows.values().any(|wf| wf.uses_agent_group(group_id))
 }
 
 fn enforce_deletion_guards(
@@ -2198,11 +2459,30 @@ fn enforce_deletion_guards(
         .filter(|id| !candidate.agents.contains_key(*id))
         .cloned()
         .collect();
-    for agent_id in removed_agents {
-        if agent_is_referenced(&candidate.workflows, &agent_id) {
+    for agent_id in &removed_agents {
+        // Check if agent is still referenced by any agent_group
+        for (gid, group) in &candidate.agent_groups {
+            if group.agents.contains(agent_id) {
+                anyhow::bail!(
+                    "cannot delete agent '{}' because agent_group '{}' still references it",
+                    agent_id,
+                    gid
+                );
+            }
+        }
+    }
+
+    let removed_groups: Vec<String> = previous
+        .agent_groups
+        .keys()
+        .filter(|id| !candidate.agent_groups.contains_key(*id))
+        .cloned()
+        .collect();
+    for group_id in removed_groups {
+        if agent_group_is_referenced(&candidate.workflows, &group_id) {
             anyhow::bail!(
-                "cannot delete agent '{}' because workflows still reference it",
-                agent_id
+                "cannot delete agent_group '{}' because workflows still reference it",
+                group_id
             );
         }
     }
@@ -2314,6 +2594,7 @@ fn init_state() -> Result<ManagedState> {
             config_path,
             active_config: RwLock::new(active),
             running: Mutex::new(HashMap::new()),
+            agent_health: std::sync::RwLock::new(HashMap::new()),
         }),
     })
 }
@@ -2870,6 +3151,7 @@ fn get_task_details_impl(state: &InnerState, task_id: &str) -> Result<TaskDetail
 }
 
 fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
+    println!("[qa-orchestrator][delete] delete_task_impl start task_id={}", task_id);
     let conn = open_conn(&state.db_path)?;
     let exists = conn
         .query_row(
@@ -2913,10 +3195,20 @@ fn delete_task_impl(state: &InnerState, task_id: &str) -> Result<()> {
     )?;
     tx.execute("DELETE FROM tasks WHERE id = ?1", params![task_id])?;
     tx.commit()?;
+    println!(
+        "[qa-orchestrator][delete] delete_task_impl committed tx task_id={}",
+        task_id
+    );
 
+    let log_file_count = log_paths.len();
     for path in log_paths {
         let _ = std::fs::remove_file(path);
     }
+    println!(
+        "[qa-orchestrator][delete] delete_task_impl removed {} log files task_id={}",
+        log_file_count,
+        task_id
+    );
 
     Ok(())
 }
@@ -3467,17 +3759,6 @@ fn load_task_runtime_context(state: &InnerState, task_id: &str) -> Result<TaskRu
     })
 }
 
-fn build_phase_command(
-    step: &TaskExecutionStep,
-    rel_path: &str,
-    ticket_paths: &[String],
-) -> Result<(String, String)> {
-    Ok((
-        step.agent_id.clone(),
-        render_template(&step.template, rel_path, ticket_paths),
-    ))
-}
-
 fn find_latest_resumable_task_id(
     state: &InnerState,
     include_pending: bool,
@@ -3637,26 +3918,26 @@ async fn stop_task_runtime(state: Arc<InnerState>, task_id: &str, status: &str) 
 }
 
 async fn stop_task_runtime_for_delete(state: Arc<InnerState>, task_id: &str) -> Result<()> {
+    // Force-detach runtime from active map first so delete flow does not block on
+    // long-running runner cleanup.
     let runtime = {
-        let running = state.running.lock().await;
-        running.get(task_id).cloned()
+        let mut running = state.running.lock().await;
+        running.remove(task_id)
     };
     if let Some(runtime) = runtime {
+        println!(
+            "[qa-orchestrator][delete] runtime found, sending stop/kill task_id={}",
+            task_id
+        );
         runtime.stop_flag.store(true, Ordering::SeqCst);
         kill_current_child(&runtime).await;
-
-        for _ in 0..100 {
-            let still_running = {
-                let running = state.running.lock().await;
-                running.contains_key(task_id)
-            };
-            if !still_running {
-                return Ok(());
-            }
-            sleep(Duration::from_millis(50)).await;
-        }
-        anyhow::bail!(
-            "task '{}' is still running after stop request, retry delete later",
+        println!(
+            "[qa-orchestrator][delete] stop/kill dispatched task_id={}",
+            task_id
+        );
+    } else {
+        println!(
+            "[qa-orchestrator][delete] no runtime found task_id={}, continue delete",
             task_id
         );
     }
@@ -3717,17 +3998,17 @@ async fn run_task_loop(
                     "step_started",
                     json!({"step":"init_once"}),
                 )?;
-                let (_, init_cmd) = build_phase_command(step, ".", &[])?;
-                let init_result = run_phase(
+                let init_result = run_phase_with_rotation(
                     &state,
                     app,
                     task_id,
                     &anchor_item_id,
                     "init_once",
-                    init_cmd,
+                    &step.agent_group_id,
+                    ".",
+                    &[],
                     &task_ctx.workspace_root,
                     &task_ctx.workspace_id,
-                    &step.agent_id,
                     &runtime,
                 )
                 .await?;
@@ -3808,11 +4089,11 @@ async fn run_task_loop(
             unresolved,
         ) {
             (decision, reason)
-        } else if let Some(agent_id) = task_ctx
+        } else if let Some(group_id) = task_ctx
             .execution_plan
             .loop_policy
             .guard
-            .agent_id
+            .agent_group_id
             .as_deref()
         {
             run_guard_agent_decision(
@@ -3823,7 +4104,7 @@ async fn run_task_loop(
                 &runtime,
                 task_ctx.current_cycle,
                 unresolved,
-                agent_id,
+                group_id,
             )
             .await?
         } else if task_ctx
@@ -3974,7 +4255,7 @@ async fn run_guard_agent_decision(
     runtime: &RunningTask,
     current_cycle: u32,
     unresolved: i64,
-    agent_id: &str,
+    agent_group_id: &str,
 ) -> Result<(bool, String)> {
     let Some(anchor_item_id) = first_task_item_id(state, task_id)? else {
         anyhow::bail!(
@@ -3982,19 +4263,12 @@ async fn run_guard_agent_decision(
             task_id
         );
     };
-    let template = task_ctx
-        .execution_plan
-        .loop_policy
-        .guard
-        .agent_template
-        .as_deref()
-        .with_context(|| {
-            format!(
-                "workflow loop guard template is missing for agent '{}'",
-                agent_id
-            )
-        })?;
-    let command = render_loop_guard_template(template, task_id, current_cycle, unresolved);
+    // Resolve agent dynamically and build the loop guard command
+    let (agent_id, template) = {
+        let active = read_active_config(state)?;
+        resolve_agent_from_group(state, &active.config, agent_group_id, "loop_guard")?
+    };
+    let command = render_loop_guard_template(&template, task_id, current_cycle, unresolved);
     let result = run_phase(
         state,
         app,
@@ -4004,7 +4278,7 @@ async fn run_guard_agent_decision(
         command,
         &task_ctx.workspace_root,
         &task_ctx.workspace_id,
-        agent_id,
+        &agent_id,
         runtime,
     )
     .await?;
@@ -4123,17 +4397,17 @@ async fn process_item(
                 false,
             )?;
             let before_tickets = list_ticket_files(task_ctx)?;
-            let (qa_agent_id, qa_cmd) = build_phase_command(qa_step, &item.qa_file_path, &[])?;
-            let qa_result = run_phase(
+            let qa_result = run_phase_with_rotation(
                 state,
                 app,
                 task_id,
                 item_id,
                 "qa",
-                qa_cmd,
+                &qa_step.agent_group_id,
+                &item.qa_file_path,
+                &[],
                 &task_ctx.workspace_root,
                 &task_ctx.workspace_id,
-                &qa_agent_id,
                 runtime,
             )
             .await?;
@@ -4282,18 +4556,17 @@ async fn process_item(
                     false,
                 )?;
                 item_status = "fix_running".to_string();
-                let (fix_agent_id, fix_cmd) =
-                    build_phase_command(fix_step, &item.qa_file_path, &active_tickets)?;
-                let fix_result = run_phase(
+                let fix_result = run_phase_with_rotation(
                     state,
                     app,
                     task_id,
                     item_id,
                     "fix",
-                    fix_cmd,
+                    &fix_step.agent_group_id,
+                    &item.qa_file_path,
+                    &active_tickets,
                     &task_ctx.workspace_root,
                     &task_ctx.workspace_id,
-                    &fix_agent_id,
                     runtime,
                 )
                 .await?;
@@ -4341,18 +4614,17 @@ async fn process_item(
                     false,
                 )?;
                 let before_retest_tickets = list_ticket_files(task_ctx)?;
-                let (retest_agent_id, retest_cmd) =
-                    build_phase_command(retest_step, &item.qa_file_path, &[])?;
-                let retest_result = run_phase(
+                let retest_result = run_phase_with_rotation(
                     state,
                     app,
                     task_id,
                     item_id,
                     "retest",
-                    retest_cmd,
+                    &retest_step.agent_group_id,
+                    &item.qa_file_path,
+                    &[],
                     &task_ctx.workspace_root,
                     &task_ctx.workspace_id,
-                    &retest_agent_id,
                     runtime,
                 )
                 .await?;
@@ -4493,6 +4765,72 @@ async fn process_item(
     Ok(())
 }
 
+async fn run_phase_with_rotation(
+    state: &Arc<InnerState>,
+    app: Option<&AppHandle>,
+    task_id: &str,
+    task_item_id: &str,
+    phase: &str,
+    agent_group_id: &str,
+    rel_path: &str,
+    ticket_paths: &[String],
+    workspace_root: &Path,
+    workspace_id: &str,
+    runtime: &RunningTask,
+) -> Result<RunResult> {
+    let group_size = {
+        let active = read_active_config(state)?;
+        active
+            .config
+            .agent_groups
+            .get(agent_group_id)
+            .map(|g| g.agents.len())
+            .unwrap_or(1)
+    };
+    let max_retries = group_size;
+    for _attempt in 0..max_retries {
+        let (agent_id, template) = {
+            let active = read_active_config(state)?;
+            resolve_agent_from_group(state, &active.config, agent_group_id, phase)?
+        };
+        let command = render_template(&template, rel_path, ticket_paths);
+        let result = run_phase(
+            state,
+            app,
+            task_id,
+            task_item_id,
+            phase,
+            command,
+            workspace_root,
+            workspace_id,
+            &agent_id,
+            runtime,
+        )
+        .await?;
+
+        if result.timed_out {
+            mark_agent_diseased(state, app, &agent_id);
+            continue;
+        }
+        if !result.success {
+            let errors = increment_consecutive_errors(state, app, &agent_id);
+            if errors >= CONSECUTIVE_ERROR_THRESHOLD {
+                mark_agent_diseased(state, app, &agent_id);
+                continue;
+            }
+        }
+        if result.success {
+            reset_consecutive_errors(state, app, &agent_id);
+        }
+        return Ok(result);
+    }
+    anyhow::bail!(
+        "all agents in group '{}' are diseased for phase '{}'",
+        agent_group_id,
+        phase
+    );
+}
+
 async fn run_phase(
     state: &Arc<InnerState>,
     app: Option<&AppHandle>,
@@ -4593,6 +4931,10 @@ async fn run_phase(
     let run_id_for_stdout = run_id.clone();
     let run_id_for_stderr = run_id.clone();
 
+    let last_output_time = Arc::new(Mutex::new(Instant::now()));
+    let last_output_for_stdout = last_output_time.clone();
+    let last_output_for_stderr = last_output_time.clone();
+
     let stdout_task = tokio::spawn(async move {
         let mut out_file = tokio::fs::OpenOptions::new()
             .create(true)
@@ -4607,6 +4949,10 @@ async fn run_phase(
                 .write_all(format!("{}\n", line).as_bytes())
                 .await
                 .context("writing stdout line")?;
+            {
+                let mut ts = last_output_for_stdout.lock().await;
+                *ts = Instant::now();
+            }
             if let Some(app_handle) = &app_for_stdout {
                 emit_event(
                     app_handle,
@@ -4639,6 +4985,10 @@ async fn run_phase(
                 .write_all(format!("{}\n", line).as_bytes())
                 .await
                 .context("writing stderr line")?;
+            {
+                let mut ts = last_output_for_stderr.lock().await;
+                *ts = Instant::now();
+            }
             if let Some(app_handle) = &app_for_stderr {
                 emit_event(
                     app_handle,
@@ -4662,7 +5012,9 @@ async fn run_phase(
         *slot = Some(child);
     }
 
+    let idle_timeout = Duration::from_secs(IDLE_TIMEOUT_SECS);
     let mut interrupted = false;
+    let mut timed_out = false;
     let exit_code = loop {
         if runtime.stop_flag.load(Ordering::SeqCst) {
             interrupted = true;
@@ -4688,6 +5040,17 @@ async fn run_phase(
         };
         if is_empty {
             break 1;
+        }
+
+        // Check idle timeout (10 min with no stdout/stderr output)
+        {
+            let last_ts = last_output_time.lock().await;
+            if last_ts.elapsed() >= idle_timeout {
+                drop(last_ts);
+                timed_out = true;
+                kill_current_child(runtime).await;
+                break -1;
+            }
         }
 
         sleep(Duration::from_millis(350)).await;
@@ -4733,17 +5096,20 @@ async fn run_phase(
     }
 
     Ok(RunResult {
-        success: exit_code == 0 && !interrupted,
+        success: exit_code == 0 && !interrupted && !timed_out,
         exit_code,
         stdout_path,
         stderr_path,
+        timed_out,
     })
 }
 
 async fn kill_current_child(runtime: &RunningTask) {
     let mut slot = runtime.child.lock().await;
     if let Some(child) = slot.as_mut() {
-        let _ = child.kill().await;
+        // Send kill signal without awaiting process reap to avoid command handlers
+        // getting stuck when child shutdown/cleanup hangs.
+        let _ = child.start_kill();
     }
 }
 
@@ -5070,7 +5436,8 @@ fn main() {
             delete_task,
             retry_task_item,
             stream_task_logs,
-            simulate_prehook
+            simulate_prehook,
+            get_agent_health
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

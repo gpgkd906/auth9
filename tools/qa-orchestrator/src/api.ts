@@ -1,6 +1,7 @@
 import { invoke } from '@tauri-apps/api/tauri';
 import { listen } from '@tauri-apps/api/event';
 import type {
+  AgentHealthInfo,
   ConfigOverview,
   ConfigValidationResult,
   ConfigVersionDetail,
@@ -53,6 +54,8 @@ export const api = {
     invoke<LogChunk[]>('stream_task_logs', { taskId, limit }),
   simulatePrehook: (payload: SimulatePrehookRequest) =>
     invoke<SimulatePrehookResult>('simulate_prehook', { payload }),
+  getAgentHealth: () =>
+    invoke<AgentHealthInfo[]>('get_agent_health'),
   subscribeTaskEvents: (handler: (event: TaskEventEnvelope) => void) =>
     listen<TaskEventEnvelope>('task-event', (event) => {
       handler(event.payload);

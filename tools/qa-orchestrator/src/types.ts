@@ -151,6 +151,17 @@ export interface AgentConfig {
   templates: AgentTemplates;
 }
 
+export interface AgentGroupConfig {
+  agents: string[];
+}
+
+export interface AgentHealthInfo {
+  agent_id: string;
+  healthy: boolean;
+  diseased_until: string | null;
+  consecutive_errors: number;
+}
+
 export type WorkflowStepType = 'init_once' | 'qa' | 'ticket_scan' | 'fix' | 'retest';
 export type StepHookEngine = 'cel';
 export type StepPrehookUiMode = 'visual' | 'cel';
@@ -196,7 +207,7 @@ export interface WorkflowStepConfig {
   id: string;
   type: WorkflowStepType;
   enabled: boolean;
-  agent_id?: string;
+  agent_group_id?: string;
   prehook?: StepPrehookConfig;
 }
 
@@ -204,7 +215,7 @@ export interface WorkflowLoopGuardConfig {
   enabled: boolean;
   stop_when_no_unresolved: boolean;
   max_cycles?: number;
-  agent_id?: string;
+  agent_group_id?: string;
 }
 
 export interface WorkflowLoopConfig {
@@ -244,6 +255,7 @@ export interface OrchestratorConfigModel {
   };
   workspaces: Record<string, WorkspaceConfig>;
   agents: Record<string, AgentConfig>;
+  agent_groups: Record<string, AgentGroupConfig>;
   workflows: Record<string, WorkflowConfig>;
 }
 

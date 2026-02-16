@@ -28,36 +28,43 @@ agents:
       fix: claude -p --dangerously-skip-permissions --verbose --model opus --output-format stream-json "/ticket-fix {ticket_paths}"
       retest: null
       loop_guard: null
+agent_groups:
+  qa_group:
+    agents:
+    - opencode
+  fix_group:
+    agents:
+    - claudecode
 workflows:
   qa_fix:
     steps:
     - id: init_once
       type: init_once
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: qa
       type: qa
       enabled: true
-      agent_id: opencode
+      agent_group_id: qa_group
     - id: ticket_scan
       type: ticket_scan
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: fix
       type: fix
       enabled: true
-      agent_id: claudecode
+      agent_group_id: fix_group
     - id: retest
       type: retest
       enabled: false
-      agent_id: null
+      agent_group_id: null
     loop:
       mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
         max_cycles: null
-        agent_id: null
+        agent_group_id: null
     finalize:
       rules:
       - id: skip_without_tickets
@@ -128,30 +135,30 @@ workflows:
     - id: init_once
       type: init_once
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: qa
       type: qa
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: ticket_scan
       type: ticket_scan
       enabled: true
-      agent_id: null
+      agent_group_id: null
     - id: fix
       type: fix
       enabled: true
-      agent_id: claudecode
+      agent_group_id: fix_group
     - id: retest
       type: retest
       enabled: false
-      agent_id: null
+      agent_group_id: null
     loop:
       mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
         max_cycles: null
-        agent_id: null
+        agent_group_id: null
     finalize:
       rules:
       - id: skip_without_tickets
@@ -222,30 +229,30 @@ workflows:
     - id: init_once
       type: init_once
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: qa
       type: qa
       enabled: true
-      agent_id: opencode
+      agent_group_id: qa_group
     - id: ticket_scan
       type: ticket_scan
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: fix
       type: fix
       enabled: true
-      agent_id: claudecode
+      agent_group_id: fix_group
     - id: retest
       type: retest
       enabled: true
-      agent_id: opencode
+      agent_group_id: qa_group
     loop:
       mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
         max_cycles: null
-        agent_id: null
+        agent_group_id: null
     finalize:
       rules:
       - id: skip_without_tickets
@@ -316,30 +323,30 @@ workflows:
     - id: init_once
       type: init_once
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: qa
       type: qa
       enabled: true
-      agent_id: opencode
+      agent_group_id: qa_group
     - id: ticket_scan
       type: ticket_scan
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: fix
       type: fix
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: retest
       type: retest
       enabled: false
-      agent_id: null
+      agent_group_id: null
     loop:
       mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
         max_cycles: null
-        agent_id: null
+        agent_group_id: null
     finalize:
       rules:
       - id: skip_without_tickets
@@ -410,30 +417,30 @@ workflows:
     - id: init_once
       type: init_once
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: qa
       type: qa
       enabled: false
-      agent_id: null
+      agent_group_id: null
     - id: ticket_scan
       type: ticket_scan
       enabled: true
-      agent_id: null
+      agent_group_id: null
     - id: fix
       type: fix
       enabled: true
-      agent_id: claudecode
+      agent_group_id: fix_group
     - id: retest
       type: retest
       enabled: false
-      agent_id: null
+      agent_group_id: null
     loop:
       mode: once
       guard:
         enabled: true
         stop_when_no_unresolved: true
         max_cycles: null
-        agent_id: null
+        agent_group_id: null
     finalize:
       rules:
       - id: skip_without_tickets
