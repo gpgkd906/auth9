@@ -277,8 +277,14 @@ async fn seed_demo_service(config: &Config) -> Result<()> {
 
     let service_id = uuid::Uuid::new_v4().to_string();
     let client_record_id = uuid::Uuid::new_v4().to_string();
-    // Public client has no secret
-    let placeholder_hash = "public-client-no-secret";
+    // Public client: hash the placeholder so PasswordHash::new() can parse it
+    use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+    use rand::rngs::OsRng;
+    let salt = SaltString::generate(&mut OsRng);
+    let placeholder_hash = Argon2::default()
+        .hash_password(b"public-client-no-secret", &salt)
+        .map_err(|e| anyhow::anyhow!("Failed to hash placeholder secret: {}", e))?
+        .to_string();
 
     // Create service (tenant_id will be linked later)
     let service_result = sqlx::query(
@@ -380,7 +386,14 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
     // Generate UUIDs for service and client
     let service_id = uuid::Uuid::new_v4().to_string();
     let client_id_record = uuid::Uuid::new_v4().to_string();
-    let placeholder_hash = "public-client-no-secret";
+    // Public client: hash the placeholder so PasswordHash::new() can parse it
+    use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+    use rand::rngs::OsRng;
+    let salt = SaltString::generate(&mut OsRng);
+    let placeholder_hash = Argon2::default()
+        .hash_password(b"public-client-no-secret", &salt)
+        .map_err(|e| anyhow::anyhow!("Failed to hash placeholder secret: {}", e))?
+        .to_string();
 
     // Use INSERT IGNORE to prevent duplicate key errors from race conditions
     // The unique constraint on services(tenant_id_key, name) prevents duplicates
@@ -925,29 +938,44 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
         "use_tls": false
     });
 
-    // Only insert if no email config exists yet (don't overwrite user-configured settings)
-    let existing: (i64,) = sqlx::query_as(
-        "SELECT COUNT(*) FROM system_settings WHERE category = 'email' AND setting_key = 'provider'"
+    // Upsert dev email config: insert if not exists, update if current config is "none"
+    let existing: Option<(serde_json::Value,)> = sqlx::query_as(
+        "SELECT value FROM system_settings WHERE category = 'email' AND setting_key = 'provider'"
     )
-    .fetch_one(&pool)
+    .fetch_optional(&pool)
     .await
     .context("Failed to check existing email config")?;
 
-    if existing.0 > 0 {
-        info!(
-            "Email config already exists, skipping dev seed (SMTP: {}:1025)",
-            smtp_host
-        );
-    } else {
-        sqlx::query(
-            "INSERT INTO system_settings (category, setting_key, value, created_at, updated_at) VALUES ('email', 'provider', ?, NOW(), NOW())"
-        )
-        .bind(email_config.to_string())
-        .execute(&pool)
-        .await
-        .context("Failed to insert email config")?;
+    match existing {
+        Some((value,)) if value.get("type").and_then(|t| t.as_str()) != Some("none") => {
+            info!(
+                "Email config already configured (not 'none'), skipping dev seed (SMTP: {}:1025)",
+                smtp_host
+            );
+        }
+        Some(_) => {
+            // Existing config is "none" (from migration default), update it
+            sqlx::query(
+                "UPDATE system_settings SET value = ?, updated_at = NOW() WHERE category = 'email' AND setting_key = 'provider'"
+            )
+            .bind(email_config.to_string())
+            .execute(&pool)
+            .await
+            .context("Failed to update email config")?;
 
-        info!("Dev email config inserted (SMTP: {}:1025)", smtp_host);
+            info!("Dev email config updated from 'none' to SMTP ({}:1025)", smtp_host);
+        }
+        None => {
+            sqlx::query(
+                "INSERT INTO system_settings (category, setting_key, value, created_at, updated_at) VALUES ('email', 'provider', ?, NOW(), NOW())"
+            )
+            .bind(email_config.to_string())
+            .execute(&pool)
+            .await
+            .context("Failed to insert email config")?;
+
+            info!("Dev email config inserted (SMTP: {}:1025)", smtp_host);
+        }
     }
 
     pool.close().await;

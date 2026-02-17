@@ -48,15 +48,19 @@ impl WebhookHttpClient for ReqwestWebhookHttpClient {
         let parsed = url::Url::parse(url).map_err(|e| format!("Invalid URL: {e}"))?;
         let host = parsed.host_str().unwrap_or("");
         let port = parsed.port_or_known_default().unwrap_or(80);
-        let addrs = tokio::net::lookup_host(format!("{host}:{port}"))
-            .await
-            .map_err(|e| format!("DNS resolution failed: {e}"))?;
-        for addr in addrs {
-            if is_private_ip(addr.ip()) {
-                return Err(format!(
-                    "Webhook URL resolves to private IP address {}",
-                    addr.ip()
-                ));
+        // Allow localhost/loopback for local development
+        let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
+        if !is_localhost {
+            let addrs = tokio::net::lookup_host(format!("{host}:{port}"))
+                .await
+                .map_err(|e| format!("DNS resolution failed: {e}"))?;
+            for addr in addrs {
+                if is_private_ip(addr.ip()) {
+                    return Err(format!(
+                        "Webhook URL resolves to private IP address {}",
+                        addr.ip()
+                    ));
+                }
             }
         }
 

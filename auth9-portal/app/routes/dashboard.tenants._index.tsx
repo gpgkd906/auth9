@@ -144,15 +144,15 @@ export default function TenantsIndexPage() {
             </DialogHeader>
             <Form method="post" className="space-y-4">
               <input type="hidden" name="intent" value="create" />
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-name">Name</Label>
                 <Input id="create-name" name="name" placeholder="Acme Corp" required aria-required="true" />
               </div>
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-slug">Slug</Label>
                 <Input id="create-slug" name="slug" placeholder="acme" required aria-required="true" />
               </div>
-              <div className="space-y-1.5">
+              <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-logo">Logo URL</Label>
                 <Input id="create-logo" name="logo_url" placeholder="https://..." />
               </div>
@@ -179,7 +179,7 @@ export default function TenantsIndexPage() {
 
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <CardTitle>Tenant List</CardTitle>
               <CardDescription>
@@ -187,7 +187,7 @@ export default function TenantsIndexPage() {
                 {data.pagination.total_pages}
               </CardDescription>
             </div>
-            <Form method="get" className="flex flex-col sm:flex-row items-center gap-2 w-full sm:w-auto mb-6">
+            <Form method="get" className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
               <div className="relative w-full sm:w-auto">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
                 <Input
@@ -345,7 +345,7 @@ export default function TenantsIndexPage() {
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update" />
             <input type="hidden" name="id" value={editingTenant?.id || ""} />
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-name">Name</Label>
               <Input
                 id="edit-name"
@@ -354,7 +354,7 @@ export default function TenantsIndexPage() {
                 required
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-slug">Slug</Label>
               <Input
                 id="edit-slug"
@@ -363,7 +363,7 @@ export default function TenantsIndexPage() {
                 required
               />
             </div>
-            <div className="space-y-1.5">
+            <div className="flex flex-col gap-1.5">
               <Label htmlFor="edit-logo">Logo URL</Label>
               <Input
                 id="edit-logo"

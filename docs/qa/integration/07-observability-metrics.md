@@ -54,9 +54,9 @@ Auth9 全栈可观测性功能通过以下环境变量启用：
 验证 /metrics 端点正常暴露 Prometheus 格式指标
 
 ### 测试操作流程
-1. 调用 /metrics 端点：
+1. 调用 /metrics 端点（需携带 METRICS_TOKEN）：
    ```bash
-   curl -s http://localhost:8080/metrics
+   curl -s -H "Authorization: Bearer dev-metrics-token" http://localhost:8080/metrics
    ```
 2. 检查输出是否包含 HELP 和 TYPE 行
 3. 验证包含核心指标名称
@@ -67,7 +67,7 @@ Auth9 全栈可观测性功能通过以下环境变量启用：
 - 输出包含 `# HELP auth9_http_requests_total Total number of HTTP requests`
 - 输出包含 `# TYPE auth9_http_requests_total counter`
 - 输出包含所有 17 个指标的 HELP/TYPE 定义
-- 无需 Authorization 头
+- 需携带 `Authorization: Bearer <METRICS_TOKEN>` 头（由 `docker-compose.observability.yml` 中 `METRICS_TOKEN` 环境变量配置）
 
 ---
 
@@ -83,7 +83,7 @@ Auth9 全栈可观测性功能通过以下环境变量启用：
 ### 测试操作流程
 1. 记录当前指标基线：
    ```bash
-   curl -s http://localhost:8080/metrics | grep auth9_http_requests_total
+   curl -s -H "Authorization: Bearer dev-metrics-token" http://localhost:8080/metrics | grep auth9_http_requests_total
    ```
 2. 发送已知请求：
    ```bash
@@ -93,11 +93,11 @@ Auth9 全栈可观测性功能通过以下环境变量启用：
    ```
 3. 再次读取指标：
    ```bash
-   curl -s http://localhost:8080/metrics | grep auth9_http_requests_total
+   curl -s -H "Authorization: Bearer dev-metrics-token" http://localhost:8080/metrics | grep auth9_http_requests_total
    ```
 4. 检查请求延迟 histogram：
    ```bash
-   curl -s http://localhost:8080/metrics | grep auth9_http_request_duration_seconds
+   curl -s -H "Authorization: Bearer dev-metrics-token" http://localhost:8080/metrics | grep auth9_http_request_duration_seconds
    ```
 
 ### 预期结果
@@ -160,7 +160,7 @@ Auth9 全栈可观测性功能通过以下环境变量启用：
    ```
 3. 检查指标中的 path 标签：
    ```bash
-   curl -s http://localhost:8080/metrics | grep 'auth9_http_requests_total.*tenants'
+   curl -s -H "Authorization: Bearer dev-metrics-token" http://localhost:8080/metrics | grep 'auth9_http_requests_total.*tenants'
    ```
 
 ### 预期结果

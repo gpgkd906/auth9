@@ -1,6 +1,6 @@
 //! Webhook API handlers
 
-use crate::api::{MessageResponse, SuccessResponse};
+use crate::api::{write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::domain::{CreateWebhookInput, StringUuid, UpdateWebhookInput, Webhook};
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
@@ -9,6 +9,7 @@ use crate::service::WebhookTestResult;
 use crate::state::{HasServices, HasWebhooks};
 use axum::{
     extract::{Path, State},
+    http::HeaderMap,
     Json,
 };
 
@@ -131,6 +132,7 @@ pub async fn delete_webhook<S: HasWebhooks + HasServices>(
 pub async fn regenerate_webhook_secret<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
+    headers: HeaderMap,
     Path((tenant_id, webhook_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<Webhook>>, AppError> {
     enforce(
@@ -152,6 +154,18 @@ pub async fn regenerate_webhook_secret<S: HasWebhooks + HasServices>(
         .webhook_service()
         .regenerate_secret(webhook_id)
         .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "webhook.regenerate_secret",
+        "webhook",
+        Some(*webhook_id),
+        serde_json::to_value(&existing.id.to_string()).ok(),
+        None,
+    )
+    .await;
+
     Ok(Json(SuccessResponse::new(webhook)))
 }
 

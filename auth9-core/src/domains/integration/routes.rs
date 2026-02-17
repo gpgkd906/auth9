@@ -26,17 +26,17 @@ where
                 .post(integration_api::webhook::create_webhook::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/webhooks/{id}",
+            "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}",
             get(integration_api::webhook::get_webhook::<S>)
                 .put(integration_api::webhook::update_webhook::<S>)
                 .delete(integration_api::webhook::delete_webhook::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/webhooks/{id}/test",
+            "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}/test",
             post(integration_api::webhook::test_webhook::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/webhooks/{id}/regenerate-secret",
+            "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}/regenerate-secret",
             post(integration_api::webhook::regenerate_webhook_secret::<S>),
         )
         .route(

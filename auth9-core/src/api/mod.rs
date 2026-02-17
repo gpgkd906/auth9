@@ -222,6 +222,41 @@ pub async fn write_audit_log_generic<S: HasServices>(
         .await
 }
 
+/// Enforce policy and log access_denied audit event on Forbidden errors.
+///
+/// This wraps `policy::enforce()` and automatically records an audit log entry
+/// when access is denied (Forbidden), capturing the actor, IP, and denied action.
+pub async fn enforce_with_audit<S: HasServices>(
+    state: &S,
+    headers: &HeaderMap,
+    auth: &AuthUser,
+    input: &crate::policy::PolicyInput,
+) -> Result<()> {
+    let result = crate::policy::enforce(state.config(), auth, input);
+    if let Err(AppError::Forbidden(ref reason)) = result {
+        let actor_id = extract_actor_id_generic(state, headers);
+        let ip_address = extract_ip(headers);
+        let _ = state
+            .audit_repo()
+            .create(&CreateAuditLogInput {
+                actor_id,
+                action: "access_denied".to_string(),
+                resource_type: format!("{:?}", input.action),
+                resource_id: None,
+                old_value: None,
+                new_value: serde_json::to_value(serde_json::json!({
+                    "reason": reason,
+                    "scope": format!("{:?}", input.scope),
+                    "actor_email": &auth.email,
+                }))
+                .ok(),
+                ip_address,
+            })
+            .await;
+    }
+    result
+}
+
 pub(crate) fn extract_actor_id(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
     let auth_header = headers.get(axum::http::header::AUTHORIZATION)?;
     let auth_str = auth_header.to_str().ok()?;

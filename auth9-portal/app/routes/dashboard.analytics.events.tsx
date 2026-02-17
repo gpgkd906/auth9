@@ -215,16 +215,18 @@ export default function LoginEventsPage() {
                         </span>
                       </td>
                       <td className="px-4 py-3">
-                        {event.failure_reason && (
-                          <span className="text-[var(--accent-red)] text-xs">
-                            {event.failure_reason}
-                          </span>
-                        )}
-                        {event.location && (
-                          <span className="text-[var(--text-secondary)] text-xs">
-                            {event.location}
-                          </span>
-                        )}
+                        <div className="flex flex-col gap-0.5">
+                          {event.failure_reason && (
+                            <span className="text-[var(--accent-red)] text-xs font-medium">
+                              {event.failure_reason}
+                            </span>
+                          )}
+                          {event.location && (
+                            <span className="text-[var(--text-secondary)] text-xs">
+                              {event.location}
+                            </span>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   ))}

@@ -47,8 +47,8 @@ export default function DashboardIndex() {
   return (
     <div className="space-y-6">
       <div className="animate-fade-in-up">
-        <h1 className="text-[28px] font-bold text-[var(--text-primary)] tracking-tight">Dashboard</h1>
-        <p className="mt-1 text-[15px] text-[var(--text-secondary)]">
+        <h1 className="mb-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">Dashboard</h1>
+        <p className="mb-6 text-[15px] text-[var(--text-secondary)]">
           Welcome to Auth9. Here&apos;s an overview of your identity service.
         </p>
       </div>
@@ -92,7 +92,7 @@ export default function DashboardIndex() {
               >
                 <div className="w-2 h-2 rounded-full bg-[var(--accent-blue)] mt-1.5 shrink-0" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-[13px] leading-snug text-[var(--text-primary)]">
+                  <p className="text-[13px] font-semibold leading-snug text-[var(--text-primary)]">
                     {activity.action} • {activity.resource_type}
                   </p>
                   <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">

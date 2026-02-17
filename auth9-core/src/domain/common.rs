@@ -104,7 +104,8 @@ pub fn validate_url_no_ssrf(url: &str) -> Result<(), ValidationError> {
 
     // Block cloud metadata endpoints for ALL schemes
     let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
-    let is_loopback = host == "127.0.0.1" || host == "::1" || host == "0.0.0.0";
+    let is_loopback =
+        host == "127.0.0.1" || host == "::1" || host == "[::1]" || host == "0.0.0.0";
     let is_private = host.starts_with("192.168.")
         || host.starts_with("10.")
         || (host.starts_with("172.")
@@ -133,7 +134,8 @@ pub fn validate_url_no_ssrf(url: &str) -> Result<(), ValidationError> {
 
     // HTTP only allowed for localhost/private networks (dev environment)
     if scheme == "http" {
-        let is_localhost = host == "localhost" || host == "127.0.0.1" || host == "::1";
+        let is_localhost =
+            host == "localhost" || host == "127.0.0.1" || host == "::1" || host == "[::1]";
         if is_localhost || is_private {
             return Ok(());
         }
@@ -156,6 +158,20 @@ pub fn validate_url_no_ssrf_option(url: &str) -> Result<(), ValidationError> {
 /// Strict URL validation that blocks ALL private/loopback IPs regardless of scheme.
 /// Use for user-supplied URLs that will be stored and rendered (e.g. branding logos).
 pub fn validate_url_no_ssrf_strict(url: &str) -> Result<(), ValidationError> {
+    // Check raw input for null bytes before parsing
+    if url.contains('\0') {
+        let mut err = ValidationError::new("null_byte");
+        err.message = Some("URL must not contain null bytes".into());
+        return Err(err);
+    }
+
+    // Check raw input for path traversal before URL parsing normalizes it away
+    if url.contains("..") {
+        let mut err = ValidationError::new("path_traversal");
+        err.message = Some("URL must not contain path traversal sequences".into());
+        return Err(err);
+    }
+
     let parsed = Url::parse(url).map_err(|_| ValidationError::new("invalid_url"))?;
 
     let scheme = parsed.scheme();

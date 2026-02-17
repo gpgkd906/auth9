@@ -1,7 +1,7 @@
 //! Security Alert API handlers
 
 use crate::api::{PaginatedResponse, SuccessResponse};
-use crate::domain::{SecurityAlert, StringUuid};
+use crate::domain::{AlertSeverity, SecurityAlert, SecurityAlertType, StringUuid};
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
@@ -29,18 +29,18 @@ pub async fn list_alerts<S: HasSecurityAlerts + HasServices>(
 
     let page = params.page.unwrap_or(1);
     let per_page = params.per_page.unwrap_or(20);
+    let unresolved_only = params.unresolved_only.unwrap_or(false);
 
-    let (alerts, total) = if params.unresolved_only.unwrap_or(false) {
-        state
-            .security_detection_service()
-            .list_unresolved(page, per_page)
-            .await?
-    } else {
-        state
-            .security_detection_service()
-            .list(page, per_page)
-            .await?
-    };
+    let (alerts, total) = state
+        .security_detection_service()
+        .list_filtered(
+            page,
+            per_page,
+            unresolved_only,
+            params.severity,
+            params.alert_type,
+        )
+        .await?;
 
     Ok(Json(PaginatedResponse::new(alerts, page, per_page, total)))
 }
@@ -52,6 +52,10 @@ pub struct AlertsQuery {
     pub per_page: Option<i64>,
     /// If true, only return unresolved alerts
     pub unresolved_only: Option<bool>,
+    /// Filter by severity: low, medium, high, critical
+    pub severity: Option<AlertSeverity>,
+    /// Filter by alert type: brute_force, new_device, impossible_travel, suspicious_ip
+    pub alert_type: Option<SecurityAlertType>,
 }
 
 /// Get a security alert by ID
@@ -138,6 +142,8 @@ mod tests {
         assert_eq!(query.page, None);
         assert_eq!(query.per_page, None);
         assert_eq!(query.unresolved_only, None);
+        assert!(query.severity.is_none());
+        assert!(query.alert_type.is_none());
     }
 
     #[test]
@@ -148,6 +154,16 @@ mod tests {
         assert_eq!(query.page, Some(2));
         assert_eq!(query.per_page, Some(50));
         assert_eq!(query.unresolved_only, Some(true));
+    }
+
+    #[test]
+    fn test_alerts_query_with_filters() {
+        let query: AlertsQuery = serde_json::from_str(
+            r#"{"severity": "high", "alert_type": "brute_force"}"#,
+        )
+        .unwrap();
+        assert_eq!(query.severity, Some(AlertSeverity::High));
+        assert_eq!(query.alert_type, Some(SecurityAlertType::BruteForce));
     }
 
     #[test]

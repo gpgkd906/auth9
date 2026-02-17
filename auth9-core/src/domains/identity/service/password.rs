@@ -176,20 +176,13 @@ impl<
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
-        // Validate new password against tenant password policy before sending to Keycloak
-        if let Some(ref tenant_repo) = self.tenant_repo {
-            let tenant_users = self
-                .user_repo
-                .find_user_tenants(reset_token.user_id)
-                .await?;
-            if let Some(tu) = tenant_users.first() {
-                if let Ok(Some(tenant)) = tenant_repo.find_by_id(tu.tenant_id).await {
-                    let policy = tenant.password_policy.unwrap_or_default();
-                    if let Err(errors) = policy.validate_password(&input.new_password) {
-                        return Err(AppError::Validation(errors.join("; ")));
-                    }
-                }
-            }
+        // Validate new password against tenant password policy before sending to Keycloak.
+        // Falls back to default policy when tenant lookup fails to ensure enforcement.
+        let policy = self
+            .resolve_user_password_policy(reset_token.user_id)
+            .await;
+        if let Err(errors) = policy.validate_password(&input.new_password) {
+            return Err(AppError::Validation(errors.join("; ")));
         }
 
         // Reset password in Keycloak
@@ -228,17 +221,10 @@ impl<
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
         // Validate new password against tenant password policy before sending to Keycloak.
-        // This gives a clear validation error instead of an opaque Keycloak 400 error.
-        if let Some(ref tenant_repo) = self.tenant_repo {
-            let tenant_users = self.user_repo.find_user_tenants(user_id).await?;
-            if let Some(tu) = tenant_users.first() {
-                if let Ok(Some(tenant)) = tenant_repo.find_by_id(tu.tenant_id).await {
-                    let policy = tenant.password_policy.unwrap_or_default();
-                    if let Err(errors) = policy.validate_password(&input.new_password) {
-                        return Err(AppError::Validation(errors.join("; ")));
-                    }
-                }
-            }
+        // Falls back to default policy when tenant lookup fails to ensure enforcement.
+        let policy = self.resolve_user_password_policy(user_id).await;
+        if let Err(errors) = policy.validate_password(&input.new_password) {
+            return Err(AppError::Validation(errors.join("; ")));
         }
 
         // Verify current password with Keycloak
@@ -283,9 +269,9 @@ impl<
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
-        // Admin bypass: set password directly in Keycloak without policy validation
+        // Admin bypass: set password in Keycloak, bypassing realm password policy
         self.keycloak
-            .reset_user_password(&user.keycloak_id, password, temporary)
+            .admin_reset_user_password(&user.keycloak_id, password, temporary)
             .await?;
 
         // Track password change timestamp
@@ -353,6 +339,31 @@ impl<
         }
 
         Ok(updated)
+    }
+
+    /// Resolve the password policy for a user by looking up their tenant.
+    /// Always returns at least the default policy to ensure enforcement
+    /// even when no tenant association is found.
+    async fn resolve_user_password_policy(&self, user_id: StringUuid) -> PasswordPolicy {
+        if let Some(ref tenant_repo) = self.tenant_repo {
+            match self.user_repo.find_user_tenants(user_id).await {
+                Ok(tenant_users) => {
+                    if let Some(tu) = tenant_users.first() {
+                        if let Ok(Some(tenant)) = tenant_repo.find_by_id(tu.tenant_id).await {
+                            return tenant.password_policy.unwrap_or_default();
+                        }
+                    }
+                }
+                Err(e) => {
+                    tracing::warn!(
+                        "Failed to resolve tenant for password policy (user_id={}): {}",
+                        user_id,
+                        e
+                    );
+                }
+            }
+        }
+        PasswordPolicy::default()
     }
 
     /// Clean up expired tokens

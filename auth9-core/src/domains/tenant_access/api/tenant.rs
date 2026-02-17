@@ -1,14 +1,16 @@
 //! Tenant API handlers
 
 use crate::api::{
-    deserialize_page, deserialize_per_page, is_platform_admin_with_db,
-    require_platform_admin_with_db, write_audit_log_generic, MessageResponse, PaginatedResponse,
-    SuccessResponse,
+    deserialize_page, deserialize_per_page, extract_ip, extract_actor_id_generic,
+    is_platform_admin_with_db, require_platform_admin_with_db, write_audit_log_generic,
+    MessageResponse, PaginatedResponse, SuccessResponse,
 };
 use crate::config::Config;
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::middleware::auth::{AuthUser, TokenType};
+use crate::repository::audit::CreateAuditLogInput;
+use crate::repository::AuditRepository;
 use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
@@ -20,8 +22,38 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
-/// Check if user has access to a specific tenant
-fn check_tenant_access(config: &Config, auth: &AuthUser, tenant_id: Uuid) -> Result<()> {
+/// Check if user has access to a specific tenant, logging access_denied events to audit log
+async fn check_tenant_access<S: HasServices>(
+    state: &S,
+    headers: &HeaderMap,
+    auth: &AuthUser,
+    tenant_id: Uuid,
+) -> Result<()> {
+    let result = check_tenant_access_inner(state.config(), auth, tenant_id);
+    if let Err(AppError::Forbidden(ref reason)) = result {
+        let actor_id = extract_actor_id_generic(state, headers);
+        let ip_address = extract_ip(headers);
+        let _ = state
+            .audit_repo()
+            .create(&CreateAuditLogInput {
+                actor_id,
+                action: "access_denied".to_string(),
+                resource_type: "tenant".to_string(),
+                resource_id: Some(tenant_id),
+                old_value: None,
+                new_value: serde_json::to_value(serde_json::json!({
+                    "reason": reason,
+                    "actor_email": &auth.email,
+                }))
+                .ok(),
+                ip_address,
+            })
+            .await;
+    }
+    result
+}
+
+fn check_tenant_access_inner(config: &Config, auth: &AuthUser, tenant_id: Uuid) -> Result<()> {
     match auth.token_type {
         TokenType::Identity => {
             if config.is_platform_admin_email(&auth.email) {
@@ -145,10 +177,11 @@ pub async fn list<S: HasServices>(
 pub async fn get<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
+    headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Check tenant access before returning data
-    check_tenant_access(state.config(), &auth, id)?;
+    check_tenant_access(&state, &headers, &auth, id).await?;
 
     let tenant = state.tenant_service().get(StringUuid::from(id)).await?;
     Ok(Json(SuccessResponse::new(tenant)))
@@ -189,7 +222,7 @@ pub async fn update<S: HasServices>(
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<impl IntoResponse> {
     // Check tenant access before updating
-    check_tenant_access(state.config(), &auth, id)?;
+    check_tenant_access(&state, &headers, &auth, id).await?;
 
     let id = StringUuid::from(id);
     let before = state.tenant_service().get(id).await?;

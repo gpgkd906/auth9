@@ -82,12 +82,12 @@ pub struct TenantSettings {
     /// Allowed authentication methods
     #[serde(default)]
     pub allowed_auth_methods: Vec<String>,
-    /// Session timeout in seconds (min: 300 = 5 minutes, max: 2592000 = 30 days)
+    /// Session timeout in seconds (min: 300 = 5 minutes, max: 86400 = 24 hours)
     #[serde(default = "default_session_timeout")]
     #[validate(range(
         min = 300,
-        max = 2_592_000,
-        message = "session_timeout_secs must be between 300 (5 minutes) and 2592000 (30 days)"
+        max = 86_400,
+        message = "session_timeout_secs must be between 300 (5 minutes) and 86400 (24 hours)"
     ))]
     pub session_timeout_secs: i64,
     /// Custom branding colors
@@ -118,20 +118,12 @@ pub struct TenantBranding {
     pub logo_url: Option<String>,
 }
 
-/// Validate branding logo_url - only allow http/https schemes (block javascript: etc.)
+/// Validate branding logo_url - delegates to strict SSRF validation
 fn validate_branding_logo_url(url: &str) -> Result<(), validator::ValidationError> {
     if url.is_empty() {
         return Ok(());
     }
-    let parsed =
-        url::Url::parse(url).map_err(|_| validator::ValidationError::new("invalid_url"))?;
-    let scheme = parsed.scheme();
-    if scheme != "http" && scheme != "https" {
-        let mut err = validator::ValidationError::new("invalid_scheme");
-        err.message = Some("Only http and https URLs are allowed".into());
-        return Err(err);
-    }
-    Ok(())
+    crate::domain::common::validate_url_no_ssrf_strict(url)
 }
 
 /// Tenant entity
@@ -687,7 +679,7 @@ mod tests {
             name: None,
             logo_url: None,
             settings: Some(TenantSettings {
-                session_timeout_secs: 31_536_000, // 1 year - exceeds 30 day max
+                session_timeout_secs: 86_401, // exceeds 24 hour max
                 ..Default::default()
             }),
             status: None,
@@ -724,17 +716,31 @@ mod tests {
     }
 
     #[test]
-    fn test_session_timeout_valid_30_days() {
+    fn test_session_timeout_valid_24_hours() {
         let input = UpdateTenantInput {
             name: None,
             logo_url: None,
             settings: Some(TenantSettings {
-                session_timeout_secs: 2_592_000, // exactly 30 days
+                session_timeout_secs: 86_400, // exactly 24 hours
                 ..Default::default()
             }),
             status: None,
         };
         assert!(input.validate().is_ok());
+    }
+
+    #[test]
+    fn test_session_timeout_30_days_rejected() {
+        let input = UpdateTenantInput {
+            name: None,
+            logo_url: None,
+            settings: Some(TenantSettings {
+                session_timeout_secs: 2_592_000, // 30 days - exceeds 24 hour max
+                ..Default::default()
+            }),
+            status: None,
+        };
+        assert!(input.validate().is_err());
     }
 
     #[test]

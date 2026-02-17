@@ -1543,10 +1543,14 @@ export const securityAlertApi = {
     page = 1,
     perPage = 50,
     unresolvedOnly = false,
-    accessToken?: string
+    accessToken?: string,
+    severity?: AlertSeverity,
+    alertType?: SecurityAlertType,
   ): Promise<PaginatedResponse<SecurityAlert>> => {
     let url = `${API_BASE_URL}/api/v1/security/alerts?page=${page}&per_page=${perPage}`;
     if (unresolvedOnly) url += "&unresolved_only=true";
+    if (severity) url += `&severity=${severity}`;
+    if (alertType) url += `&alert_type=${alertType}`;
     const response = await fetch(url, {
       headers: getHeaders(accessToken),
     });

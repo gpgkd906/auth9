@@ -16,7 +16,7 @@ const CardHeader = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
   ({ className, ...props }, ref) => (
     <div
       ref={ref}
-      className={cn("flex flex-col space-y-1 p-5 pb-0", className)}
+      className={cn("flex flex-col gap-2 p-5 pb-0", className)}
       {...props}
     />
   )

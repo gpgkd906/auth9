@@ -27,6 +27,20 @@ pub trait SecurityAlertRepository: Send + Sync {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<SecurityAlert>>;
+    async fn list_filtered(
+        &self,
+        offset: i64,
+        limit: i64,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<Vec<SecurityAlert>>;
+    async fn count_filtered(
+        &self,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<i64>;
     async fn count(&self) -> Result<i64>;
     async fn count_unresolved(&self) -> Result<i64>;
     async fn resolve(&self, id: StringUuid, resolved_by: StringUuid) -> Result<SecurityAlert>;
@@ -189,6 +203,71 @@ impl SecurityAlertRepository for SecurityAlertRepositoryImpl {
         .await?;
 
         Ok(alerts)
+    }
+
+    async fn list_filtered(
+        &self,
+        offset: i64,
+        limit: i64,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<Vec<SecurityAlert>> {
+        let mut sql = String::from(
+            "SELECT id, user_id, tenant_id, alert_type, severity, details, \
+             resolved_at, resolved_by, created_at FROM security_alerts WHERE 1=1",
+        );
+        if unresolved_only {
+            sql.push_str(" AND resolved_at IS NULL");
+        }
+        if severity.is_some() {
+            sql.push_str(" AND severity = ?");
+        }
+        if alert_type.is_some() {
+            sql.push_str(" AND alert_type = ?");
+        }
+        sql.push_str(" ORDER BY created_at DESC LIMIT ? OFFSET ?");
+
+        let mut query = sqlx::query_as::<_, SecurityAlert>(&sql);
+        if let Some(ref s) = severity {
+            query = query.bind(s);
+        }
+        if let Some(ref t) = alert_type {
+            query = query.bind(t);
+        }
+        query = query.bind(limit).bind(offset);
+
+        let alerts = query.fetch_all(&self.pool).await?;
+        Ok(alerts)
+    }
+
+    async fn count_filtered(
+        &self,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<i64> {
+        let mut sql = String::from("SELECT COUNT(*) FROM security_alerts WHERE 1=1");
+        if unresolved_only {
+            sql.push_str(" AND resolved_at IS NULL");
+        }
+        if severity.is_some() {
+            sql.push_str(" AND severity = ?");
+        }
+        if alert_type.is_some() {
+            sql.push_str(" AND alert_type = ?");
+        }
+
+        let mut query = sqlx::query_as::<_, (i64,)>(&sql);
+        if let Some(ref s) = severity {
+            query = query.bind(s);
+        }
+        if let Some(ref t) = alert_type {
+            query = query.bind(t);
+        }
+
+        let row = query.fetch_one(&self.pool).await?;
+        Ok(row.0)
     }
 
     async fn count(&self) -> Result<i64> {
