@@ -940,7 +940,7 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
 
     // Upsert dev email config: insert if not exists, update if current config is "none"
     let existing: Option<(serde_json::Value,)> = sqlx::query_as(
-        "SELECT value FROM system_settings WHERE category = 'email' AND setting_key = 'provider'"
+        "SELECT value FROM system_settings WHERE category = 'email' AND setting_key = 'provider'",
     )
     .fetch_optional(&pool)
     .await
@@ -963,7 +963,10 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
             .await
             .context("Failed to update email config")?;
 
-            info!("Dev email config updated from 'none' to SMTP ({}:1025)", smtp_host);
+            info!(
+                "Dev email config updated from 'none' to SMTP ({}:1025)",
+                smtp_host
+            );
         }
         None => {
             sqlx::query(

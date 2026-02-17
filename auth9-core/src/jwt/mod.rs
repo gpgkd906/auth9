@@ -320,9 +320,7 @@ impl JwtManager {
 
         // Prevent token confusion attacks: only accept tokens with token_type "identity"
         if token_data.claims.token_type != "identity" {
-            return Err(AppError::Unauthorized(
-                "Not an identity token".to_string(),
-            ));
+            return Err(AppError::Unauthorized("Not an identity token".to_string()));
         }
 
         Ok(token_data.claims)

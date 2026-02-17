@@ -550,3 +550,342 @@ fn map_conflict_if_duplicate(error: sqlx::Error) -> AppError {
     }
     AppError::Database(error)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashMap;
+
+    // =========================================================================
+    // normalize_provider_type
+    // =========================================================================
+
+    #[test]
+    fn normalize_provider_type_saml_lowercase() {
+        assert_eq!(normalize_provider_type("saml").unwrap(), "saml");
+    }
+
+    #[test]
+    fn normalize_provider_type_saml_uppercase() {
+        assert_eq!(normalize_provider_type("SAML").unwrap(), "saml");
+    }
+
+    #[test]
+    fn normalize_provider_type_saml_mixed_case() {
+        assert_eq!(normalize_provider_type("Saml").unwrap(), "saml");
+    }
+
+    #[test]
+    fn normalize_provider_type_oidc_lowercase() {
+        assert_eq!(normalize_provider_type("oidc").unwrap(), "oidc");
+    }
+
+    #[test]
+    fn normalize_provider_type_oidc_uppercase() {
+        assert_eq!(normalize_provider_type("OIDC").unwrap(), "oidc");
+    }
+
+    #[test]
+    fn normalize_provider_type_with_whitespace() {
+        assert_eq!(normalize_provider_type("  saml  ").unwrap(), "saml");
+    }
+
+    #[test]
+    fn normalize_provider_type_invalid() {
+        let err = normalize_provider_type("ldap").unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn normalize_provider_type_empty() {
+        let err = normalize_provider_type("").unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    // =========================================================================
+    // normalize_config
+    // =========================================================================
+
+    #[test]
+    fn normalize_config_saml_renames_sso_url() {
+        let config = HashMap::from([
+            ("ssoUrl".to_string(), "https://idp.example.com/sso".to_string()),
+        ]);
+        let result = normalize_config("saml", config);
+        assert_eq!(
+            result.get("singleSignOnServiceUrl").unwrap(),
+            "https://idp.example.com/sso"
+        );
+        assert!(!result.contains_key("ssoUrl"));
+    }
+
+    #[test]
+    fn normalize_config_saml_renames_certificate() {
+        let config = HashMap::from([
+            ("certificate".to_string(), "MIID...".to_string()),
+        ]);
+        let result = normalize_config("saml", config);
+        assert_eq!(result.get("signingCertificate").unwrap(), "MIID...");
+        assert!(!result.contains_key("certificate"));
+    }
+
+    #[test]
+    fn normalize_config_saml_does_not_overwrite_existing_keys() {
+        let config = HashMap::from([
+            ("ssoUrl".to_string(), "https://old.example.com".to_string()),
+            ("singleSignOnServiceUrl".to_string(), "https://existing.example.com".to_string()),
+        ]);
+        let result = normalize_config("saml", config);
+        // existing key should NOT be overwritten
+        assert_eq!(
+            result.get("singleSignOnServiceUrl").unwrap(),
+            "https://existing.example.com"
+        );
+    }
+
+    #[test]
+    fn normalize_config_oidc_no_renames() {
+        let config = HashMap::from([
+            ("ssoUrl".to_string(), "https://idp.example.com".to_string()),
+            ("certificate".to_string(), "cert".to_string()),
+        ]);
+        let result = normalize_config("oidc", config);
+        // OIDC should not rename anything
+        assert!(result.contains_key("ssoUrl"));
+        assert!(result.contains_key("certificate"));
+        assert!(!result.contains_key("singleSignOnServiceUrl"));
+    }
+
+    #[test]
+    fn normalize_config_saml_both_renames() {
+        let config = HashMap::from([
+            ("ssoUrl".to_string(), "https://idp.example.com/sso".to_string()),
+            ("certificate".to_string(), "MIID...".to_string()),
+            ("entityId".to_string(), "https://sp.example.com".to_string()),
+        ]);
+        let result = normalize_config("saml", config);
+        assert!(result.contains_key("singleSignOnServiceUrl"));
+        assert!(result.contains_key("signingCertificate"));
+        assert!(result.contains_key("entityId"));
+        assert!(!result.contains_key("ssoUrl"));
+        assert!(!result.contains_key("certificate"));
+    }
+
+    #[test]
+    fn normalize_config_empty_map() {
+        let result = normalize_config("saml", HashMap::new());
+        assert!(result.is_empty());
+    }
+
+    // =========================================================================
+    // validate_required_config
+    // =========================================================================
+
+    #[test]
+    fn validate_required_config_saml_all_present() {
+        let config = HashMap::from([
+            ("entityId".to_string(), "https://sp.example.com".to_string()),
+            ("singleSignOnServiceUrl".to_string(), "https://idp.example.com/sso".to_string()),
+            ("signingCertificate".to_string(), "MIID...".to_string()),
+        ]);
+        assert!(validate_required_config("saml", &config).is_ok());
+    }
+
+    #[test]
+    fn validate_required_config_saml_missing_entity_id() {
+        let config = HashMap::from([
+            ("singleSignOnServiceUrl".to_string(), "https://idp.example.com/sso".to_string()),
+            ("signingCertificate".to_string(), "MIID...".to_string()),
+        ]);
+        let err = validate_required_config("saml", &config).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert!(msg.contains("entityId")),
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn validate_required_config_saml_missing_sso_url() {
+        let config = HashMap::from([
+            ("entityId".to_string(), "https://sp.example.com".to_string()),
+            ("signingCertificate".to_string(), "MIID...".to_string()),
+        ]);
+        let err = validate_required_config("saml", &config).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert!(msg.contains("singleSignOnServiceUrl")),
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn validate_required_config_saml_empty_value_treated_as_missing() {
+        let config = HashMap::from([
+            ("entityId".to_string(), "https://sp.example.com".to_string()),
+            ("singleSignOnServiceUrl".to_string(), "   ".to_string()),
+            ("signingCertificate".to_string(), "MIID...".to_string()),
+        ]);
+        let err = validate_required_config("saml", &config).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert!(msg.contains("singleSignOnServiceUrl")),
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn validate_required_config_saml_all_missing() {
+        let err = validate_required_config("saml", &HashMap::new()).unwrap_err();
+        match err {
+            AppError::Validation(msg) => {
+                assert!(msg.contains("entityId"));
+                assert!(msg.contains("singleSignOnServiceUrl"));
+                assert!(msg.contains("signingCertificate"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn validate_required_config_oidc_all_present() {
+        let config = HashMap::from([
+            ("clientId".to_string(), "my-client".to_string()),
+            ("clientSecret".to_string(), "secret".to_string()),
+            ("authorizationUrl".to_string(), "https://idp.example.com/auth".to_string()),
+            ("tokenUrl".to_string(), "https://idp.example.com/token".to_string()),
+        ]);
+        assert!(validate_required_config("oidc", &config).is_ok());
+    }
+
+    #[test]
+    fn validate_required_config_oidc_missing_fields() {
+        let config = HashMap::from([
+            ("clientId".to_string(), "my-client".to_string()),
+        ]);
+        let err = validate_required_config("oidc", &config).unwrap_err();
+        match err {
+            AppError::Validation(msg) => {
+                assert!(msg.contains("clientSecret"));
+                assert!(msg.contains("authorizationUrl"));
+                assert!(msg.contains("tokenUrl"));
+            }
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn validate_required_config_unknown_type_no_requirements() {
+        assert!(validate_required_config("ldap", &HashMap::new()).is_ok());
+    }
+
+    // =========================================================================
+    // normalize_domains
+    // =========================================================================
+
+    #[test]
+    fn normalize_domains_valid_single() {
+        let result = normalize_domains(vec!["example.com".to_string()]).unwrap();
+        assert_eq!(result, vec!["example.com"]);
+    }
+
+    #[test]
+    fn normalize_domains_valid_multiple() {
+        let result = normalize_domains(vec![
+            "example.com".to_string(),
+            "acme.org".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["example.com", "acme.org"]);
+    }
+
+    #[test]
+    fn normalize_domains_trims_and_lowercases() {
+        let result = normalize_domains(vec!["  Example.COM  ".to_string()]).unwrap();
+        assert_eq!(result, vec!["example.com"]);
+    }
+
+    #[test]
+    fn normalize_domains_deduplicates() {
+        let result = normalize_domains(vec![
+            "example.com".to_string(),
+            "EXAMPLE.COM".to_string(),
+            "example.com".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["example.com"]);
+    }
+
+    #[test]
+    fn normalize_domains_empty_list_fails() {
+        let err = normalize_domains(vec![]).unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn normalize_domains_all_blank_entries_fails() {
+        let err = normalize_domains(vec!["  ".to_string(), "".to_string()]).unwrap_err();
+        assert!(matches!(err, AppError::Validation(_)));
+    }
+
+    #[test]
+    fn normalize_domains_no_dot_fails() {
+        let err = normalize_domains(vec!["localhost".to_string()]).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert!(msg.contains("Invalid domain")),
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn normalize_domains_contains_space_fails() {
+        let err = normalize_domains(vec!["ex ample.com".to_string()]).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert!(msg.contains("Invalid domain")),
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn normalize_domains_contains_at_sign_fails() {
+        let err = normalize_domains(vec!["user@example.com".to_string()]).unwrap_err();
+        match err {
+            AppError::Validation(msg) => assert!(msg.contains("Invalid domain")),
+            _ => panic!("Expected Validation error"),
+        }
+    }
+
+    #[test]
+    fn normalize_domains_mixed_valid_and_blank() {
+        let result = normalize_domains(vec![
+            "  ".to_string(),
+            "example.com".to_string(),
+            "".to_string(),
+        ])
+        .unwrap();
+        assert_eq!(result, vec!["example.com"]);
+    }
+
+    // =========================================================================
+    // ConnectorTestResult serialization
+    // =========================================================================
+
+    #[test]
+    fn connector_test_result_serialization() {
+        let result = ConnectorTestResult {
+            ok: true,
+            message: "All good".to_string(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["ok"], true);
+        assert_eq!(json["message"], "All good");
+    }
+
+    #[test]
+    fn connector_test_result_failure_serialization() {
+        let result = ConnectorTestResult {
+            ok: false,
+            message: "Connection refused".to_string(),
+        };
+        let json = serde_json::to_value(&result).unwrap();
+        assert_eq!(json["ok"], false);
+        assert_eq!(json["message"], "Connection refused");
+    }
+}

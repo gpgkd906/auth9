@@ -1,7 +1,7 @@
 //! Tenant API handlers
 
 use crate::api::{
-    deserialize_page, deserialize_per_page, extract_ip, extract_actor_id_generic,
+    deserialize_page, deserialize_per_page, extract_actor_id_generic, extract_ip,
     is_platform_admin_with_db, require_platform_admin_with_db, write_audit_log_generic,
     MessageResponse, PaginatedResponse, SuccessResponse,
 };
