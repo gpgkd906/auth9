@@ -9,6 +9,7 @@ services:
       OTEL_TRACING_ENABLED: "true"
       OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo:4317"
       LOG_FORMAT: "json"
+      METRICS_TOKEN: "dev-metrics-token"
     labels:
       logging: "promtail"
 

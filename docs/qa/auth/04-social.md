@@ -8,9 +8,9 @@
 
 ## 架构说明
 
-Auth9 采用 Headless Keycloak 架构，社交登录的入口在 Keycloak 登录页面上：
+Auth9 采用 Headless Keycloak 架构，社交登录通过 Auth9 登录入口触发，底层由 Keycloak 处理：
 
-1. **社交登录按钮**（如「使用 Google 登录」）→ 显示在 Keycloak 登录页面上，由 auth9-keycloak-theme（基于 Keycloakify）定制外观，而非 Keycloak 原生 UI
+1. **社交登录按钮**（如「使用 Google 登录」）→ 显示在 Auth9 品牌化登录页上（底层由 Keycloak + auth9-keycloak-theme 渲染），而非 Keycloak 原生 UI
 2. **社交登录 OAuth 流程** → 用户点击按钮后，Keycloak 负责与第三方 IdP（Google、GitHub 等）的 OAuth 交互
 3. **身份关联管理**（关联/解除社交账户）→ 在 Auth9 Portal 的设置页面操作，后端通过 Keycloak Admin API 完成
 
@@ -30,7 +30,7 @@ Auth9 采用 Headless Keycloak 架构，社交登录的入口在 Keycloak 登录
 验证 Google 社交登录
 
 ### 测试操作流程
-1. 在 Keycloak 登录页面（auth9-keycloak-theme 定制外观）点击「使用 Google 登录」
+1. 在 Auth9 登录入口展示的品牌化登录页点击「使用 Google 登录」
 2. 跳转到 Google 登录页
 3. 完成 Google 授权
 4. Google 回调到 Keycloak，Keycloak 完成身份映射后重定向回 Auth9
