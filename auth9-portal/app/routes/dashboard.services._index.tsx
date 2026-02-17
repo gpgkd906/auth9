@@ -178,7 +178,7 @@ export default function ServicesPage() {
             {data.data.map((service) => (
               <div
                 key={service.id}
-                className="h-full rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-4 flex flex-col gap-3"
+                className="h-full rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-5 flex flex-col gap-3"
               >
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">

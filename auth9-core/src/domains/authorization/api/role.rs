@@ -323,6 +323,13 @@ pub async fn assign_roles<S: HasServices>(
     // Check authorization: require platform admin or tenant owner
     require_rbac_management_permission(state.config(), &auth)?;
 
+    // Prevent self-assignment: users cannot assign roles to themselves
+    if auth.user_id == input.user_id {
+        return Err(AppError::Forbidden(
+            "Cannot assign roles to yourself".to_string(),
+        ));
+    }
+
     // Additional check: for tenant access tokens, ensure user can only assign within their tenant
     if let TokenType::TenantAccess = auth.token_type {
         if auth.tenant_id != Some(input.tenant_id) {

@@ -301,6 +301,7 @@ export default function IdentityProvidersPage() {
                       <Button
                         variant="ghost"
                         size="sm"
+                        aria-label="Edit provider"
                         onClick={() => openEditDialog(provider)}
                       >
                         <Pencil2Icon className="h-4 w-4" />
@@ -312,6 +313,7 @@ export default function IdentityProvidersPage() {
                           type="submit"
                           variant="ghost"
                           size="sm"
+                          aria-label="Delete provider"
                           className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
                           disabled={isSubmitting}
                         >

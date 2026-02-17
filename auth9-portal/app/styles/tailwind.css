@@ -24,7 +24,7 @@
 
   /* Text colors */
   --text-primary: #1D1D1F;
-  --text-secondary: #86868B;
+  --text-secondary: #6E6E73;
   --text-tertiary: #AEAEB2;
   --text-inverse: #FFFFFF;
 
@@ -267,7 +267,7 @@
       0 12px 40px var(--glass-shadow-strong),
       inset 0 1px 0 var(--glass-highlight),
       inset 0 -1px 0 rgba(0, 0, 0, 0.05);
-    transform: translateY(-2px);
+    translate: 0 -2px;
   }
 
   /* Liquid Glass Pill (for buttons, badges) */

@@ -111,7 +111,7 @@ export default function SecuritySettingsPage() {
     <div className="space-y-6">
       {/* Password Policy Section (Admin only) */}
       <Card>
-        <CardHeader className="space-y-2">
+        <CardHeader>
           <CardTitle>Password Policy</CardTitle>
           <CardDescription>
             Configure password requirements for tenant users.
@@ -224,8 +224,8 @@ export default function SecuritySettingsPage() {
 
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Character requirements</h4>
-                  <div className="grid gap-4 md:grid-cols-2">
-                    <div className="flex min-h-11 items-center justify-between leading-[44px]">
+                  <div className="grid gap-0 md:grid-cols-2">
+                    <div className="flex h-11 items-center justify-between gap-3">
                       <Label htmlFor="requireUppercase">Require uppercase</Label>
                       <input
                         type="hidden"
@@ -244,7 +244,7 @@ export default function SecuritySettingsPage() {
                       />
                     </div>
 
-                    <div className="flex min-h-11 items-center justify-between leading-[44px]">
+                    <div className="flex h-11 items-center justify-between gap-3">
                       <Label htmlFor="requireLowercase">Require lowercase</Label>
                       <input
                         type="hidden"
@@ -263,7 +263,7 @@ export default function SecuritySettingsPage() {
                       />
                     </div>
 
-                    <div className="flex min-h-11 items-center justify-between leading-[44px]">
+                    <div className="flex h-11 items-center justify-between gap-3">
                       <Label htmlFor="requireNumbers">Require numbers</Label>
                       <input
                         type="hidden"
@@ -282,7 +282,7 @@ export default function SecuritySettingsPage() {
                       />
                     </div>
 
-                    <div className="flex min-h-11 items-center justify-between leading-[44px]">
+                    <div className="flex h-11 items-center justify-between gap-3">
                       <Label htmlFor="requireSymbols">Require symbols</Label>
                       <input
                         type="hidden"

@@ -857,13 +857,56 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         context: ActionContext,
     ) -> Result<(ActionContext, i32, Vec<String>)> {
         let start = Instant::now();
+        let user_id = context.user.id.parse().ok();
 
-        let modified_context = self.execute_action(action, &context).await?;
+        match self.execute_action(action, &context).await {
+            Ok(modified_context) => {
+                let duration_ms = start.elapsed().as_millis() as i32;
 
-        let duration_ms = start.elapsed().as_millis() as i32;
-        let console_logs = Vec::new(); // TODO: Capture console.log output via op state
+                // Record successful test execution
+                if let Err(e) = self
+                    .action_repo
+                    .record_execution(
+                        action.id,
+                        action.tenant_id,
+                        "test".to_string(),
+                        user_id,
+                        true,
+                        duration_ms,
+                        None,
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to record action test execution: {}", e);
+                }
 
-        Ok((modified_context, duration_ms, console_logs))
+                let console_logs = Vec::new(); // TODO: Capture console.log output via op state
+                Ok((modified_context, duration_ms, console_logs))
+            }
+            Err(e) => {
+                let duration_ms = start.elapsed().as_millis() as i32;
+                let error_msg = format!("Test action '{}' failed: {}", action.name, e);
+
+                // Record failed test execution
+                if let Err(record_err) = self
+                    .action_repo
+                    .record_execution(
+                        action.id,
+                        action.tenant_id,
+                        "test".to_string(),
+                        user_id,
+                        false,
+                        duration_ms,
+                        Some(error_msg),
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to record action test execution: {}", record_err);
+                }
+
+                Err(e)
+            }
+        }
     }
 }
 

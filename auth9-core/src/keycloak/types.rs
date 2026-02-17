@@ -176,6 +176,9 @@ pub struct KeycloakRealm {
     /// Login theme name (e.g., "auth9", "keycloak")
     #[serde(skip_serializing_if = "Option::is_none")]
     pub login_theme: Option<String>,
+    /// Keycloak password policy string
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub password_policy: Option<String>,
 }
 
 /// Keycloak SMTP server configuration

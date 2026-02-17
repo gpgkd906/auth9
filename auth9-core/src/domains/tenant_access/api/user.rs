@@ -684,11 +684,6 @@ pub struct UpdateRoleInTenantRequest {
     pub role_in_tenant: String,
 }
 
-/// Request body for MFA enable/disable operations (admin re-authentication)
-#[derive(Debug, Clone, Deserialize)]
-pub struct MfaToggleInput {
-    pub current_password: Option<String>,
-}
 
 /// Update user's role in a tenant
 /// Requires the caller to be an owner of the target tenant.
@@ -777,31 +772,15 @@ pub async fn get_tenants<S: HasServices>(
 }
 
 /// Enable MFA for a user
-/// Requires platform admin or tenant admin, plus re-authentication with current password
+/// Requires platform admin or tenant admin
 pub async fn enable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
-    body: Option<Json<MfaToggleInput>>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
-
-    // Require admin re-authentication for this sensitive operation
-    let password = body
-        .and_then(|b| b.current_password.clone())
-        .ok_or_else(|| AppError::BadRequest("Current password required".to_string()))?;
-    let admin_keycloak_id = auth.user_id.to_string();
-    let is_valid = state
-        .keycloak_client()
-        .validate_user_password(&admin_keycloak_id, &password)
-        .await?;
-    if !is_valid {
-        return Err(AppError::BadRequest(
-            "Current password is incorrect".to_string(),
-        ));
-    }
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -833,31 +812,15 @@ pub async fn enable_mfa<S: HasServices>(
 }
 
 /// Disable MFA for a user
-/// Requires platform admin or tenant admin, plus re-authentication with current password
+/// Requires platform admin or tenant admin
 pub async fn disable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
-    body: Option<Json<MfaToggleInput>>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
-
-    // Require admin re-authentication for this sensitive operation
-    let password = body
-        .and_then(|b| b.current_password.clone())
-        .ok_or_else(|| AppError::BadRequest("Current password required".to_string()))?;
-    let admin_keycloak_id = auth.user_id.to_string();
-    let is_valid = state
-        .keycloak_client()
-        .validate_user_password(&admin_keycloak_id, &password)
-        .await?;
-    if !is_valid {
-        return Err(AppError::BadRequest(
-            "Current password is incorrect".to_string(),
-        ));
-    }
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;

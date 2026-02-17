@@ -1,6 +1,6 @@
 //! User domain model
 
-use super::common::StringUuid;
+use super::common::{validate_url_no_ssrf_strict, StringUuid};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -83,22 +83,13 @@ fn validate_no_html(value: &str) -> Result<(), validator::ValidationError> {
     }
 }
 
-/// Validate avatar URL - must use http:// or https:// scheme and contain no path traversal
+/// Validate avatar URL with SSRF protection.
+/// Blocks private IPs, loopback addresses, cloud metadata endpoints, and requires HTTPS for external URLs.
 fn validate_avatar_url(url: &str) -> Result<(), validator::ValidationError> {
     if url.is_empty() {
         return Ok(());
     }
-    if !url.starts_with("http://") && !url.starts_with("https://") {
-        let mut err = validator::ValidationError::new("invalid_avatar_url");
-        err.message = Some("Avatar URL must use http:// or https:// scheme".into());
-        return Err(err);
-    }
-    if url.contains("..") || url.contains('\0') {
-        let mut err = validator::ValidationError::new("invalid_avatar_url");
-        err.message = Some("Avatar URL contains invalid characters".into());
-        return Err(err);
-    }
-    Ok(())
+    validate_url_no_ssrf_strict(url)
 }
 
 /// Input for updating a user
