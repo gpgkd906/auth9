@@ -4,6 +4,7 @@
 
 ## 目录
 
+0. [B2B 首次入驻](#0-b2b-首次入驻-onboarding)
 1. [租户管理](#1-租户管理-tenant-management)
 2. [服务注册](#2-服务注册-service-registration)
 3. [角色与权限管理](#3-角色与权限管理-rbac)
@@ -15,24 +16,116 @@
 9. [会话管理](#9-会话管理-session-management)
 10. [Passkey 管理](#10-passkey-管理-webauthn)
 11. [社交登录与企业 SSO](#11-社交登录与企业-sso-identity-providers)
-12. [分析与监控](#12-分析与监控-analytics)
-13. [安全告警](#13-安全告警-security-alerts)
-14. [Webhook 配置](#14-webhook-配置)
-15. [操作引擎 (Action Engine)](#15-操作引擎-action-engine)
-16. [常见问题](#16-常见问题)
-17. [常见工作流程](#17-常见工作流程)
+12. [企业级 SSO 连接器](#12-企业级-sso-连接器-enterprise-sso)
+13. [分析与监控](#13-分析与监控-analytics)
+14. [安全告警](#14-安全告警-security-alerts)
+15. [Webhook 配置](#15-webhook-配置)
+16. [操作引擎 (Action Engine)](#16-操作引擎-action-engine)
+17. [常见问题](#17-常见问题)
+18. [常见工作流程](#18-常见工作流程)
 
 ## 快速开始
 
 首次使用 Auth9？按照以下步骤快速上手：
 
+**新用户注册流程**：
+1. **注册账号** - 访问注册页面创建个人账号
+2. **创建组织** - 注册成功后引导创建组织（租户）
+3. **注册服务** - 为您的应用程序注册服务
+4. **创建角色** - 为服务定义角色和权限
+5. **邀请用户** - 添加团队成员并分配角色
+
+**已有账号管理员**：
 1. **登录系统** - 使用管理员账号登录 Auth9 Portal
-2. **创建租户** - 创建第一个租户组织
+2. **管理租户** - 查看和管理现有租户
 3. **注册服务** - 注册您的应用程序
 4. **创建角色** - 为服务定义角色和权限
 5. **邀请用户** - 添加用户并分配角色
 
 详细操作请参考下面的各个章节。
+
+---
+
+## 0. B2B 首次入驻 (Onboarding)
+
+Auth9 支持 B2B 场景的自助入驻流程，企业用户可以自行注册并创建组织。
+
+### 用户注册
+
+#### 步骤 1：访问注册页面
+
+访问 Auth9 注册页面：
+```
+https://your-auth9-domain.com/register
+```
+
+#### 步骤 2：填写注册信息
+
+填写以下信息：
+- **邮箱** - 企业邮箱或个人邮箱
+- **密码** - 符合密码策略要求
+- **确认密码** - 再次输入密码
+
+#### 步骤 3：提交注册
+
+点击 **Register** 按钮完成注册。如果启用了邮箱验证，需要先验证邮箱。
+
+### 创建组织（租户）
+
+注册成功后，如果您还没有加入任何组织，系统会自动引导至 **Onboard** 页面。
+
+#### 步骤 1：进入组织创建页面
+
+系统自动跳转到 `/onboard` 页面，或者在首次登录时引导创建组织。
+
+#### 步骤 2：填写组织信息
+
+填写以下信息：
+- **组织名称 (Organization Name)** - 组织的显示名称（如 "Acme Corporation"）
+- **组织标识 (Slug)** - 唯一的 URL 标识符（如 "acme"）
+  - 仅包含小写字母、数字和连字符
+  - 3-63 个字符
+  - 全系统唯一
+- **企业域名 (Domain)** - 组织的企业邮箱域名（如 "acme.com"）
+  - 如果使用企业邮箱注册，系统会自动建议域名
+  - 域名用于企业 SSO、自动用户关联等功能
+  - 一个域名只能关联一个组织
+
+#### 步骤 3：创建组织
+
+点击 **Create Organization** 按钮：
+- 系统创建组织并将您设为管理员
+- 自动跳转到组织管理界面
+- 您现在可以开始配置服务、角色和邀请成员
+
+### 组织设置
+
+创建组织后，您可以：
+
+1. **配置品牌** - 设置 Logo、颜色、主题
+2. **注册服务** - 添加您的应用程序
+3. **创建角色** - 定义角色和权限
+4. **邀请成员** - 添加团队成员
+5. **配置企业 SSO** - 对接企业身份提供商（可选）
+
+详见后续章节的详细说明。
+
+### 加入已有组织
+
+如果您收到组织管理员的邀请：
+
+1. 点击邀请邮件中的链接
+2. 如果还没有账号，先完成注册
+3. 登录后自动加入该组织
+
+详见 [邀请系统](#5-邀请系统-invitation-system) 章节。
+
+### 多组织支持
+
+一个用户可以同时属于多个组织：
+- 在不同组织中拥有不同角色
+- 通过顶部导航栏切换组织
+- 每个组织的数据完全隔离
 
 ---
 
@@ -509,9 +602,287 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 **注意**: 确保解绑后仍有其他登录方式（如密码或其他关联账户）。
 
+**说明**: 上述配置为**系统级别**的身份提供商，所有租户共享。如需配置**租户级别**的企业 SSO，请参考下一章节。
+
 ---
 
-## 12. 分析与监控 (Analytics)
+## 12. 企业级 SSO 连接器 (Enterprise SSO)
+
+为租户独立配置企业 SSO 连接器，支持租户级别的 OIDC 和 SAML 2.0 集成。
+
+### 什么是企业 SSO 连接器
+
+企业 SSO 连接器是**租户级别**的身份提供商配置，与全局身份提供商的区别：
+
+| 特性 | 全局身份提供商 | 企业 SSO 连接器 |
+|------|--------------|---------------|
+| **配置级别** | 系统级别 | 租户级别 |
+| **适用范围** | 所有租户共享 | 单个租户独享 |
+| **典型场景** | Google、GitHub | 企业 OIDC、SAML |
+| **配置位置** | Settings > Identity Providers | Tenants > [租户] > SSO |
+
+### 支持的协议
+
+- **OIDC (OpenID Connect)** - 现代企业身份提供商
+  - Azure AD / Entra ID
+  - Okta
+  - Auth0
+  - Google Workspace
+  - 自建 OIDC 服务
+
+- **SAML 2.0** - 传统企业身份提供商
+  - ADFS (Active Directory Federation Services)
+  - Shibboleth
+  - PingFederate
+  - 传统企业 SSO
+
+### 创建企业 SSO 连接器
+
+#### 步骤 1：进入租户 SSO 设置
+
+1. 导航到 **Tenants**
+2. 点击目标租户进入详情页
+3. 点击 **SSO** 标签页
+
+#### 步骤 2：添加 SSO 连接器
+
+1. 点击 **Add SSO Connector** 按钮
+2. 选择协议类型：**OIDC** 或 **SAML**
+
+#### 步骤 3：配置 OIDC 连接器
+
+填写 OIDC 配置信息：
+
+**基本信息**:
+- **别名 (Alias)** - 唯一标识符（如 "acme-azure-ad"）
+- **显示名称 (Display Name)** - 显示在登录页面的名称
+- **优先级 (Priority)** - 数字越小优先级越高（默认 100）
+
+**OIDC 配置**:
+- **Client ID** - 从身份提供商获取
+- **Client Secret** - 从身份提供商获取
+- **Authorization Endpoint** - 授权端点 URL
+- **Token Endpoint** - Token 端点 URL
+- **User Info Endpoint** - 用户信息端点 URL
+- **Scopes** - 请求的权限范围（如 "openid profile email"）
+
+**高级选项**:
+- **Issuer** - (可选) Token 签发者验证
+- **JWKS URI** - (可选) 公钥 URL
+- **声明映射** - 将 SSO 声明映射到用户属性
+
+**示例（Azure AD）**:
+```
+Client ID: abc123-def456-...
+Client Secret: your-secret
+Authorization Endpoint: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/authorize
+Token Endpoint: https://login.microsoftonline.com/{tenant}/oauth2/v2.0/token
+User Info Endpoint: https://graph.microsoft.com/oidc/userinfo
+Scopes: openid profile email
+```
+
+#### 步骤 4：配置 SAML 连接器
+
+填写 SAML 配置信息：
+
+**基本信息**:
+- **别名 (Alias)** - 唯一标识符
+- **显示名称 (Display Name)** - 显示名称
+- **优先级 (Priority)** - 优先级设置
+
+**SAML 配置**:
+- **Entity ID** - IdP Entity ID
+- **SSO Service URL** - 单点登录端点
+- **Logout Service URL** - (可选) 单点登出端点
+- **Signing Certificate** - IdP 签名证书（PEM 格式）
+- **Name ID Format** - 用户标识格式
+- **属性映射** - 将 SAML 属性映射到用户属性
+
+**示例（ADFS）**:
+```
+Entity ID: https://adfs.company.com/adfs/services/trust
+SSO Service URL: https://adfs.company.com/adfs/ls/
+Name ID Format: urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress
+```
+
+#### 步骤 5：保存并测试
+
+1. 点击 **Create** 保存配置
+2. 在 SSO 连接器列表中找到刚创建的连接器
+3. 点击 **Test** 按钮测试连接
+4. 使用企业账号登录验证配置
+
+### 绑定企业域名
+
+将 SSO 连接器绑定到企业域名，实现域名自动路由：
+
+#### 步骤 1：管理域名
+
+1. 在 SSO 连接器列表中找到目标连接器
+2. 点击 **Manage Domains**
+
+#### 步骤 2：添加域名
+
+1. 点击 **Add Domain**
+2. 输入域名（如 "acme.com"）
+3. 选择是否设为主域名
+4. 点击 **Add** 保存
+
+#### 步骤 3：域名自动路由
+
+配置完成后，用户使用该域名邮箱登录时会自动使用对应的 SSO 连接器：
+
+```
+用户输入邮箱: zhangsan@acme.com
+系统检测域名: acme.com
+自动跳转到: Acme Azure AD SSO
+```
+
+### 管理 SSO 连接器
+
+#### 启用/禁用连接器
+
+1. 在 SSO 连接器列表中找到目标连接器
+2. 使用 **Enabled** 开关切换状态
+3. 禁用后，该连接器将不可用于登录
+
+#### 编辑连接器
+
+1. 点击连接器右侧的 `...` 菜单
+2. 选择 **Edit**
+3. 修改配置信息
+4. 点击 **Save Changes**
+
+#### 删除连接器
+
+1. 点击连接器右侧的 `...` 菜单
+2. 选择 **Delete**
+3. 确认删除操作
+
+**警告**: 删除连接器会影响使用该连接器登录的用户。
+
+### 用户登录流程
+
+#### 使用绑定域名的邮箱登录
+
+1. 用户在登录页面输入邮箱（如 zhangsan@acme.com）
+2. 系统检测到域名 acme.com 绑定了 SSO 连接器
+3. 自动跳转到企业 SSO 登录页面
+4. 用户在企业身份提供商完成认证
+5. 回调到 Auth9，完成登录并返回 Token
+
+#### 手动选择 SSO 连接器
+
+如果未配置域名绑定或需要手动选择：
+
+1. 在登录页面点击 **Enterprise SSO**
+2. 选择目标租户
+3. 选择 SSO 连接器
+4. 跳转到身份提供商登录
+
+### 声明/属性映射
+
+配置如何从 SSO 提供商的声明映射到 Auth9 用户属性。
+
+#### OIDC 声明映射
+
+在高级选项中配置 Claim Mappings：
+
+```json
+{
+  "username": "preferred_username",
+  "email": "email",
+  "firstName": "given_name",
+  "lastName": "family_name"
+}
+```
+
+#### SAML 属性映射
+
+配置 Attribute Mappings：
+
+```json
+{
+  "email": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress",
+  "firstName": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname",
+  "lastName": "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname"
+}
+```
+
+### 用户身份关联
+
+#### 首次登录
+
+用户通过企业 SSO 首次登录时：
+
+1. 在 Auth9 数据库创建用户记录
+2. 关联企业身份到用户
+3. 自动加入对应租户
+4. 分配默认角色（如果配置）
+
+#### 已有用户登录
+
+如果用户已存在（通过邮箱匹配）：
+
+1. 关联企业身份到现有用户
+2. 如果用户未加入该租户，自动加入
+3. 从企业 SSO 更新用户信息
+
+### 故障排查
+
+#### 问题 1: SSO 登录失败
+
+**排查步骤**:
+1. 检查 Client ID/Secret 是否正确
+2. 检查端点 URL 是否可访问
+3. 检查回调 URL 是否正确配置
+4. 查看浏览器控制台和网络请求
+
+#### 问题 2: 无法获取用户信息
+
+**可能原因**:
+1. Scopes 不包含 profile 或 email
+2. User Info Endpoint 不正确
+3. 声明映射配置错误
+
+**解决方法**:
+- 确保 Scopes 包含必要权限
+- 验证端点 URL
+- 检查声明映射配置
+
+#### 问题 3: 域名路由不生效
+
+**检查清单**:
+- [ ] 域名已正确绑定到 SSO 连接器
+- [ ] SSO 连接器已启用
+- [ ] 用户邮箱域名与绑定域名完全匹配
+- [ ] 没有更高优先级的连接器覆盖
+
+### 最佳实践
+
+1. **使用专用 Client Credentials**
+   - 为每个租户创建独立的 Client ID 和 Secret
+   - 定期轮换密钥
+
+2. **最小化声明/属性**
+   - 只请求必要的用户信息
+   - 遵循最小权限原则
+
+3. **配置登出回调**
+   - 确保单点登出正常工作
+   - 配置 Logout Redirect URI
+
+4. **监控和告警**
+   - 监控 SSO 登录成功率
+   - 告警 SSO 连接器故障
+
+5. **测试覆盖**
+   - 创建后立即测试连接
+   - 定期验证 SSO 功能正常
+
+---
+
+## 13. 分析与监控 (Analytics)
 
 查看登录统计和用户活动分析。
 
@@ -551,7 +922,7 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 ---
 
-## 13. 安全告警 (Security Alerts)
+## 14. 安全告警 (Security Alerts)
 
 监控和响应安全威胁。
 
@@ -592,7 +963,7 @@ Passkey 是一种更安全、更便捷的无密码认证方式，基于 WebAuthn
 
 ---
 
-## 14. Webhook 配置
+## 15. Webhook 配置
 
 配置 Webhook 接收实时事件通知。
 
@@ -662,7 +1033,7 @@ Webhook 列表显示：
 
 ---
 
-## 15. 操作引擎 (Action Engine)
+## 16. 操作引擎 (Action Engine)
 
 操作引擎（Action Engine）是 Auth9 的自动化工作流系统，允许您在特定事件触发时执行自定义的 JavaScript/TypeScript 代码。
 
@@ -956,7 +1327,7 @@ async function handler(context) {
 
 ---
 
-## 16. 常见问题
+## 17. 常见问题
 
 ### 认证问题
 - **无法登录？** 检查 Redirect URI 是否配置正确。

@@ -39,7 +39,9 @@ A self-hosted identity and access management service, designed to replace expens
 ## Features
 
 - **Multi-tenant**: Isolated tenants with custom settings
+- **B2B Onboarding**: Self-service organization creation for enterprise users
 - **SSO**: Single Sign-On via OIDC
+- **Enterprise SSO Connectors**: Tenant-level OIDC/SAML identity provider configuration
 - **Dynamic RBAC**: Roles, permissions, inheritance
 - **Token Exchange**: Service-to-service authentication
 - **Audit Logs**: Track all administrative actions
@@ -148,6 +150,8 @@ ghcr.io/gpgkd906/auth9-portal:latest
 
 - **[Wiki 主页](wiki/Home.md)** - 完整的中文文档
 - **[用户操作指南](userguide/USER_GUIDE.md)** - 详细的操作手册
+- **[B2B 入驻与组织创建](wiki/B2B入驻与组织创建.md)** - 企业自助入驻流程
+- **[企业级 SSO 连接器](wiki/企业级SSO连接器.md)** - 租户级 OIDC/SAML 配置
 - **[Architecture](docs/architecture.md)** - System design and architecture overview
 - **[Design System](docs/design-system.md)** - Liquid Glass UI design language
 - **[Action Engine](wiki/操作引擎-Action-Engine.md)** - 自动化工作流系统
