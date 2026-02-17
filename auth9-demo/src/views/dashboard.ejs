@@ -131,6 +131,30 @@
             margin-bottom: 10px;
             font-size: 14px;
         }
+
+        .input {
+            background: #0d1117;
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 10px;
+            min-width: 160px;
+            font-size: 13px;
+        }
+
+        .row {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+            align-items: center;
+        }
+
+        .muted {
+            color: var(--text-secondary);
+            font-size: 13px;
+            margin-bottom: 12px;
+        }
     </style>
 </head>
 
@@ -186,20 +210,85 @@
             </p>
 
             <div class="token-box">
-                <button id="exchangeBtn" class="btn">Exchange Token for 'demo' tenant</button>
+                <button id="exchangeBtn" class="btn">Exchange Token</button>
                 <div id="exchangeResult" style="margin-top: 15px; display: none;">
                     <div class="label">Tenant Access Token Payload:</div>
                     <pre id="exchangeOutput">Processing...</pre>
                 </div>
             </div>
         </div>
+
+        <div class="card">
+            <h2>Enterprise SSO QA Panel</h2>
+            <p class="muted">用于测试租户企业连接器管理与域名发现。连接器管理需要配置 AUTH9_ADMIN_TOKEN。</p>
+
+            <div class="row">
+                <input id="tenantId" class="input" value="<%= config.defaultTenantId %>" placeholder="tenant id" />
+                <input id="adminTokenInput" class="input" placeholder="admin token (optional if env configured)" />
+                <button id="listConnectorsBtn" class="btn">List Connectors</button>
+            </div>
+
+            <div class="row">
+                <input id="emailInput" class="input" placeholder="qa-user@corp.example.com" />
+                <button id="discoveryBtn" class="btn">Run Discovery</button>
+            </div>
+
+            <div class="row">
+                <input id="aliasInput" class="input" placeholder="alias: corp-saml" />
+                <input id="domainInput" class="input" placeholder="domain: corp.example.com" />
+                <button id="createConnectorBtn" class="btn">Create SAML Connector</button>
+            </div>
+
+            <div class="row">
+                <input id="connectorIdInput" class="input" placeholder="connector id" />
+                <button id="testConnectorBtn" class="btn">Test Connector</button>
+                <button id="deleteConnectorBtn" class="btn btn-logout">Delete Connector</button>
+            </div>
+
+            <div style="margin-top: 12px;">
+                <div class="label">Enterprise API Output:</div>
+                <pre id="enterpriseOutput">Ready.</pre>
+            </div>
+        </div>
     </div>
 
     <script>
+        const tenantIdInput = document.getElementById('tenantId');
+        const emailInput = document.getElementById('emailInput');
+        const adminTokenInput = document.getElementById('adminTokenInput');
+        const aliasInput = document.getElementById('aliasInput');
+        const domainInput = document.getElementById('domainInput');
+        const connectorIdInput = document.getElementById('connectorIdInput');
+        const enterpriseOutput = document.getElementById('enterpriseOutput');
+
+        const showJson = async (response) => {
+            const text = await response.text();
+            let parsed;
+            try {
+                parsed = JSON.parse(text);
+            } catch (_err) {
+                parsed = { raw: text };
+            }
+            enterpriseOutput.textContent = JSON.stringify({
+                status: response.status,
+                body: parsed
+            }, null, 2);
+        };
+
+        const managementHeaders = () => {
+            const token = (adminTokenInput.value || '').trim();
+            const headers = { 'Content-Type': 'application/json' };
+            if (token) {
+                headers['x-admin-token'] = token;
+            }
+            return headers;
+        };
+
         document.getElementById('exchangeBtn').addEventListener('click', async () => {
             const output = document.getElementById('exchangeOutput');
             const resultDiv = document.getElementById('exchangeResult');
             const btn = document.getElementById('exchangeBtn');
+            const tenantId = tenantIdInput.value || '<%= config.defaultTenantId %>';
 
             resultDiv.style.display = 'block';
             output.textContent = 'Exchanging token...';
@@ -215,7 +304,7 @@
                         'Authorization': 'Bearer <%= identityToken %>'
                     },
                     body: JSON.stringify({
-                        tenantId: 'demo' // We try for the 'demo' tenant
+                        tenantId
                     })
                 });
 
@@ -226,6 +315,87 @@
             } finally {
                 btn.disabled = false;
             }
+        });
+
+        document.getElementById('listConnectorsBtn').addEventListener('click', async () => {
+            const tenantId = encodeURIComponent(tenantIdInput.value || '<%= config.defaultTenantId %>');
+            const response = await fetch(`/demo/enterprise/connectors?tenantId=${tenantId}`, {
+                headers: managementHeaders()
+            });
+            await showJson(response);
+        });
+
+        document.getElementById('discoveryBtn').addEventListener('click', async () => {
+            const email = (emailInput.value || '').trim();
+            if (!email) {
+                enterpriseOutput.textContent = 'Please input email.';
+                return;
+            }
+            const response = await fetch('/demo/enterprise/discovery', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ email })
+            });
+            await showJson(response);
+        });
+
+        document.getElementById('createConnectorBtn').addEventListener('click', async () => {
+            const tenantId = tenantIdInput.value || '<%= config.defaultTenantId %>';
+            const alias = (aliasInput.value || '').trim();
+            const domain = (domainInput.value || '').trim();
+            if (!alias || !domain) {
+                enterpriseOutput.textContent = 'alias and domain are required.';
+                return;
+            }
+            const payload = {
+                tenantId,
+                alias,
+                provider_type: 'saml',
+                enabled: true,
+                priority: 100,
+                domains: [domain],
+                keycloak_alias: alias,
+                config: {
+                    entityId: `urn:demo:${alias}`,
+                    singleSignOnServiceUrl: `https://idp.example.com/${alias}/sso`,
+                    signingCertificate: '-----BEGIN CERTIFICATE-----\\nMIID...demo...\\n-----END CERTIFICATE-----'
+                }
+            };
+            const response = await fetch('/demo/enterprise/connectors', {
+                method: 'POST',
+                headers: managementHeaders(),
+                body: JSON.stringify(payload)
+            });
+            await showJson(response);
+        });
+
+        document.getElementById('testConnectorBtn').addEventListener('click', async () => {
+            const tenantId = tenantIdInput.value || '<%= config.defaultTenantId %>';
+            const connectorId = (connectorIdInput.value || '').trim();
+            if (!connectorId) {
+                enterpriseOutput.textContent = 'connector id is required.';
+                return;
+            }
+            const response = await fetch(`/demo/enterprise/connectors/${encodeURIComponent(connectorId)}/test`, {
+                method: 'POST',
+                headers: managementHeaders(),
+                body: JSON.stringify({ tenantId })
+            });
+            await showJson(response);
+        });
+
+        document.getElementById('deleteConnectorBtn').addEventListener('click', async () => {
+            const tenantId = tenantIdInput.value || '<%= config.defaultTenantId %>';
+            const connectorId = (connectorIdInput.value || '').trim();
+            if (!connectorId) {
+                enterpriseOutput.textContent = 'connector id is required.';
+                return;
+            }
+            const response = await fetch(
+                `/demo/enterprise/connectors/${encodeURIComponent(connectorId)}?tenantId=${encodeURIComponent(tenantId)}`,
+                { method: 'DELETE', headers: managementHeaders() }
+            );
+            await showJson(response);
         });
     </script>
 </body>

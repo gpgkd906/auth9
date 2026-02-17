@@ -1,17 +1,19 @@
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { redirect, Form, useLoaderData, useNavigation } from "react-router";
+import { redirect, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useCallback } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Input } from "~/components/ui/input";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import { commitSession } from "~/services/session.server";
+import { enterpriseSsoApi } from "~/services/api";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Sign In - Auth9" }];
 };
 
-function buildAuthorizeUrl(requestUrl: URL) {
+function buildAuthorizeParams(requestUrl: URL) {
   const corePublicUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const portalUrl = requestUrl.origin;
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
@@ -23,14 +25,15 @@ function buildAuthorizeUrl(requestUrl: URL) {
     : crypto.randomUUID();
   const state = Buffer.from(typeof statePayload === "string" ? statePayload : statePayload).toString("base64url");
 
-  const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
-  authorizeUrl.searchParams.set("response_type", "code");
-  authorizeUrl.searchParams.set("client_id", clientId);
-  authorizeUrl.searchParams.set("redirect_uri", redirectUri);
-  authorizeUrl.searchParams.set("scope", "openid email profile");
-  authorizeUrl.searchParams.set("state", state);
-
-  return authorizeUrl.toString();
+  return {
+    corePublicUrl,
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: "openid email profile",
+    state,
+    nonce: crypto.randomUUID(),
+  };
 }
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -43,15 +46,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (error) {
     return { error, showPasskey: true, apiBaseUrl };
   }
-
-  // If passkey mode requested, show the login page with passkey option
-  if (showPasskey) {
-    return { error: null, showPasskey: true, apiBaseUrl };
-  }
-
-  // Default: auto-redirect to SSO
-  const authorizeUrl = buildAuthorizeUrl(url);
-  return redirect(authorizeUrl);
+  return { error: null, showPasskey, apiBaseUrl };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -82,9 +77,23 @@ export async function action({ request }: ActionFunctionArgs) {
     });
   }
 
-  // Default: redirect to SSO
-  const authorizeUrl = buildAuthorizeUrl(url);
-  return redirect(authorizeUrl);
+  if (intent === "sso-login") {
+    const email = String(formData.get("email") || "").trim();
+    if (!email) {
+      return { error: "Email is required for enterprise SSO discovery" };
+    }
+
+    const auth = buildAuthorizeParams(url);
+    try {
+      const result = await enterpriseSsoApi.discover({ email }, auth);
+      return redirect(result.data.authorize_url);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Enterprise SSO discovery failed";
+      return { error: message };
+    }
+  }
+
+  return { error: "Invalid action" };
 }
 
 // ==================== Base64URL Helpers ====================
@@ -132,6 +141,7 @@ function toRequestOptions(publicKey: Record<string, unknown>): PublicKeyCredenti
 
 export default function Login() {
   const data = useLoaderData<typeof loader>() as { error: string | null; showPasskey: boolean; apiBaseUrl: string };
+  const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
@@ -262,10 +272,25 @@ export default function Login() {
             <div className="space-y-4">
               {/* SSO Login Button */}
               <Form method="post">
+                <input type="hidden" name="intent" value="sso-login" />
+                <Input
+                  type="email"
+                  name="email"
+                  required
+                  placeholder="you@company.com"
+                  className="mb-3"
+                />
                 <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? "Redirecting..." : "Sign in with SSO"}
+                  {isSubmitting ? "Finding your SSO..." : "Continue with Enterprise SSO"}
                 </Button>
               </Form>
+
+              {data.error && (
+                <p className="text-sm text-[var(--accent-red)]">{data.error}</p>
+              )}
+              {actionData?.error && (
+                <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
+              )}
 
               {/* Divider */}
               <div className="relative">

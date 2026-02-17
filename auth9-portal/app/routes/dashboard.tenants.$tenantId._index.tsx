@@ -277,6 +277,12 @@ export default function TenantDetailPage() {
                   </span>
                 </Link>
               </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link to={`/dashboard/tenants/${tenant.id}/sso`}>
+                  <Link2Icon className="mr-2 h-4 w-4" />
+                  Enterprise SSO
+                </Link>
+              </Button>
             </CardContent>
           </Card>
 
