@@ -10,12 +10,18 @@
 
 Auth9 采用 Headless Keycloak 架构，社交登录通过 Auth9 登录入口触发，底层由 Keycloak 处理：
 
-1. **社交登录按钮**（如「使用 Google 登录」）→ 显示在 Auth9 品牌化登录页上（底层由 Keycloak + auth9-keycloak-theme 渲染），而非 Keycloak 原生 UI
+1. **社交登录按钮**（如「使用 Google 登录」）→ 显示在 Keycloak 品牌化登录页上（由 Keycloak + auth9-keycloak-theme 渲染），而非 Portal `/login` 页面
 2. **社交登录 OAuth 流程** → 用户点击按钮后，Keycloak 负责与第三方 IdP（Google、GitHub 等）的 OAuth 交互
 3. **身份关联管理**（关联/解除社交账户）→ 在 Auth9 Portal 的设置页面操作，后端通过 Keycloak Admin API 完成
 
+**进入社交登录的路径**：
+- Portal `/login` → 点击「**Sign in with password**」→ 跳转到 Keycloak 品牌化登录页 → 页面底部显示社交登录按钮（如 Google、GitHub）
+
+> **注意**：社交登录按钮不在 Portal `/login` 页面上，而是在 Keycloak 品牌化登录页上。QA 需要先点击「Sign in with password」进入 Keycloak 页面才能看到社交登录选项。
+
 **页面归属**：
-- 登录页面上的社交登录按钮 → Keycloak 托管（auth9-keycloak-theme 定制外观）
+- Portal `/login` 页面 → 认证方式选择（Enterprise SSO / Password / Passkey）
+- Keycloak 品牌化登录页 → 用户名密码表单 + 社交登录按钮（auth9-keycloak-theme 定制外观）
 - 「设置 → 关联账户」管理页面 → Auth9 Portal 页面
 
 ---
@@ -30,7 +36,8 @@ Auth9 采用 Headless Keycloak 架构，社交登录通过 Auth9 登录入口触
 验证 Google 社交登录
 
 ### 测试操作流程
-1. 在 Auth9 登录入口展示的品牌化登录页点击「使用 Google 登录」
+1. 在 Portal `/login` 页面点击「**Sign in with password**」进入 Keycloak 品牌化登录页
+2. 在 Keycloak 登录页底部点击「使用 Google 登录」
 2. 跳转到 Google 登录页
 3. 完成 Google 授权
 4. Google 回调到 Keycloak，Keycloak 完成身份映射后重定向回 Auth9

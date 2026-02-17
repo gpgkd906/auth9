@@ -96,6 +96,23 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   }
 
+  if (intent === "password-login") {
+    const auth = buildAuthorizeParams(url);
+    const corePublicUrl = auth.corePublicUrl;
+    const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
+    authorizeUrl.searchParams.set("response_type", auth.response_type);
+    authorizeUrl.searchParams.set("client_id", auth.client_id);
+    authorizeUrl.searchParams.set("redirect_uri", auth.redirect_uri);
+    authorizeUrl.searchParams.set("scope", auth.scope);
+    authorizeUrl.searchParams.set("state", auth.state);
+    authorizeUrl.searchParams.set("nonce", auth.nonce);
+
+    const oauthCookie = await serializeOAuthState(auth.state);
+    return redirect(authorizeUrl.toString(), {
+      headers: { "Set-Cookie": oauthCookie },
+    });
+  }
+
   return { error: "Invalid action" };
 }
 
@@ -304,6 +321,14 @@ export default function Login() {
                   <span className="bg-[var(--card-bg)] px-2 text-[var(--text-tertiary)]">or</span>
                 </div>
               </div>
+
+              {/* Password Login Button */}
+              <Form method="post">
+                <input type="hidden" name="intent" value="password-login" />
+                <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
+                  {isSubmitting ? "Redirecting..." : "Sign in with password"}
+                </Button>
+              </Form>
 
               {/* Passkey Login Button */}
               <Button

@@ -68,14 +68,14 @@
 ### 认证流程 (8 个文档, 38 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程 | 5 |
+| [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 5 |
 | [auth/02-token-exchange.md](./auth/02-token-exchange.md) | Token Exchange | 5 |
-| [auth/03-password.md](./auth/03-password.md) | 密码管理 | 5 |
-| [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点 | 5 |
+| [auth/03-password.md](./auth/03-password.md) | 密码管理（**Sign in with password** 路径进入） | 5 |
+| [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点（**Sign in with password** 路径进入 Keycloak 页面） | 5 |
 | [auth/05-boundary.md](./auth/05-boundary.md) | 边界测试 | 3 |
-| [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（OAuth 登录、Token Exchange、登出） | 5 |
-| [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与 `kc_idp_hint` 登录路由 | 5 |
-| [auth/10-b2b-onboarding-flow.md](./auth/10-b2b-onboarding-flow.md) | B2B 首次入驻流程（Onboarding 向导、Dashboard 租户路由、组织切换器） | 5 |
+| [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（等价 **Sign in with password** 路径） | 5 |
+| [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与登录路由（**Continue with Enterprise SSO** 路径） | 5 |
+| [auth/10-b2b-onboarding-flow.md](./auth/10-b2b-onboarding-flow.md) | B2B 首次入驻流程（三种登录方式均可触发） | 5 |
 
 ### 系统设置 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |

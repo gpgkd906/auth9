@@ -11,6 +11,8 @@
 
 本功能新增企业 SSO 发现端点，通过用户邮箱域名匹配租户连接器并返回重定向地址。
 
+**本文档测试的是 Portal `/login` 页面上「Continue with Enterprise SSO」路径**，即输入企业邮箱 → 域名发现 → 跳转到对应的企业 IdP。与「Sign in with password」（直接跳 Keycloak 密码登录页）是不同的认证路径。
+
 端点：
 - `POST /api/v1/enterprise-sso/discovery`
 - `GET /api/v1/auth/authorize`（新增 `connector_alias` 参数，映射 `kc_idp_hint`）
