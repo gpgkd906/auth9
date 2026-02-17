@@ -447,10 +447,10 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         security_alert_repo.clone(),
         action_repo.clone(),
     );
-    let tenant_service = Arc::new(TenantService::new(
-        tenant_repos,
-        Some(cache_manager.clone()),
-    ));
+    let tenant_service = Arc::new(
+        TenantService::new(tenant_repos, Some(cache_manager.clone()))
+            .with_pool(db_pool.clone()),
+    );
 
     // Create UserService with repository bundle
     let user_repos = UserRepositoryBundle::new(
@@ -463,11 +463,14 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         audit_repo.clone(),
         rbac_repo.clone(),
     );
-    let user_service = Arc::new(UserService::new(
-        user_repos,
-        Some(keycloak_client.clone()),
-        Some(webhook_service.clone()), // webhook event publisher
-    ));
+    let user_service = Arc::new(
+        UserService::new(
+            user_repos,
+            Some(keycloak_client.clone()),
+            Some(webhook_service.clone()), // webhook event publisher
+        )
+        .with_pool(db_pool.clone()),
+    );
     let client_service = Arc::new(ClientService::new(
         service_repo.clone(),
         rbac_repo.clone(),

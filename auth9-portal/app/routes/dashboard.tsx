@@ -1,11 +1,12 @@
 import { useState } from "react";
-import type { LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Link, Outlet, useLocation, useLoaderData } from "react-router";
+import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
+import { Link, Outlet, useLocation, useLoaderData, redirect } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
-import { requireAuthWithUpdate } from "~/services/session.server";
-import { userApi, type User } from "~/services/api";
+import { OrgSwitcher } from "~/components/OrgSwitcher";
+import { requireAuthWithUpdate, commitSession, setActiveTenant } from "~/services/session.server";
+import { userApi, type User, type TenantUserWithTenant } from "~/services/api";
 
 export const meta: MetaFunction = () => {
   return [{ title: "Dashboard - Auth9" }];
@@ -23,11 +24,65 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // fallback to null
   }
 
-  // Return with updated cookie if session was refreshed
-  if (headers) {
-    return Response.json({ currentUser }, { headers });
+  // Get user's tenants for org switcher
+  let tenants: TenantUserWithTenant[] = [];
+  try {
+    const res = await userApi.getMyTenants(session.accessToken);
+    tenants = res.data;
+  } catch {
+    // fallback to empty
   }
-  return { currentUser };
+
+  // No tenants -> redirect to onboard
+  if (tenants.length === 0) {
+    throw redirect("/onboard");
+  }
+
+  // Determine active tenant
+  let activeTenantId = session.activeTenantId;
+  const validTenant = tenants.find((t) => t.tenant_id === activeTenantId);
+  const responseHeaders: [string, string][] = [];
+
+  if (!validTenant) {
+    activeTenantId = tenants[0].tenant_id;
+    // Update session with the active tenant
+    const updatedSession = { ...session, activeTenantId };
+    responseHeaders.push(["Set-Cookie", await commitSession(updatedSession)]);
+  }
+
+  // Add refresh headers if session was refreshed
+  if (headers) {
+    const setCookie = (headers as Record<string, string>)["Set-Cookie"];
+    if (setCookie) {
+      responseHeaders.push(["Set-Cookie", setCookie]);
+    }
+  }
+
+  const activeTenant = tenants.find((t) => t.tenant_id === activeTenantId);
+
+  const data = { currentUser, tenants, activeTenant, activeTenantId };
+
+  if (responseHeaders.length > 0) {
+    return Response.json(data, { headers: responseHeaders });
+  }
+  return data;
+}
+
+export async function action({ request }: ActionFunctionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent");
+
+  if (intent === "switch-tenant") {
+    const tenantId = formData.get("tenantId") as string;
+    if (tenantId) {
+      const cookie = await setActiveTenant(request, tenantId);
+      return redirect("/dashboard", {
+        headers: { "Set-Cookie": cookie },
+      });
+    }
+  }
+
+  return null;
 }
 
 const navigation = [
@@ -44,7 +99,12 @@ const navigation = [
 
 export default function Dashboard() {
   const location = useLocation();
-  const { currentUser } = useLoaderData<typeof loader>();
+  const { currentUser, tenants, activeTenantId } = useLoaderData<typeof loader>() as {
+    currentUser: User | null;
+    tenants: TenantUserWithTenant[];
+    activeTenant: TenantUserWithTenant | undefined;
+    activeTenantId: string | undefined;
+  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
   const displayName = currentUser?.display_name || currentUser?.email || "User";
@@ -113,6 +173,9 @@ export default function Dashboard() {
           </Link>
           <ThemeToggle />
         </div>
+
+        {/* Org Switcher */}
+        <OrgSwitcher tenants={tenants} activeTenantId={activeTenantId} />
 
         {/* Navigation */}
         <nav className="sidebar-nav" aria-label="Main navigation">

@@ -4,9 +4,10 @@ import { describe, it, expect, vi } from "vitest";
 import Login, { loader, action, meta } from "~/routes/login";
 import { enterpriseSsoApi } from "~/services/api";
 
-// Mock commitSession
+// Mock session.server
 vi.mock("~/services/session.server", () => ({
     commitSession: vi.fn().mockResolvedValue("mock-session-cookie"),
+    serializeOAuthState: vi.fn().mockResolvedValue("oauth_state=mock-state"),
 }));
 
 vi.mock("~/services/api", () => ({

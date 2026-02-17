@@ -4,11 +4,13 @@
 
 ## 测试用例索引
 
-### 租户管理 (2 个文档, 10 个场景)
+### 租户管理 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [tenant/01-crud.md](./tenant/01-crud.md) | 创建、更新、删除操作 | 5 |
 | [tenant/02-list-settings.md](./tenant/02-list-settings.md) | 列表、搜索、设置 | 5 |
+| [tenant/03-status-lifecycle.md](./tenant/03-status-lifecycle.md) | 租户状态生命周期（Active/Inactive/Suspended）及业务影响 | 5 |
+| [tenant/04-b2b-org-creation.md](./tenant/04-b2b-org-creation.md) | B2B 组织自助创建、域名验证、Pending 状态、/users/me/tenants | 5 |
 
 ### 用户管理 (6 个文档, 28 个场景)
 | 文档 | 描述 | 场景数 |
@@ -44,7 +46,7 @@
 | [invitation/02-accept.md](./invitation/02-accept.md) | 接受邀请流程 | 5 |
 | [invitation/03-manage.md](./invitation/03-manage.md) | 撤销、删除、过滤 | 5 |
 
-### 会话与安全 (5 个文档, 25 个场景)
+### 会话与安全 (7 个文档, 34 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [session/01-session.md](./session/01-session.md) | 会话管理、撤销 | 5 |
@@ -52,6 +54,8 @@
 | [session/03-alerts.md](./session/03-alerts.md) | 安全告警检测 | 5 |
 | [session/04-boundary.md](./session/04-boundary.md) | 边界测试 | 5 |
 | [session/05-auth-security-regression.md](./session/05-auth-security-regression.md) | 鉴权与令牌安全回归（越权强退、refresh 撤销一致性、callback token 泄露、限流绕过） | 5 |
+| [session/06-token-blacklist-failsafe.md](./session/06-token-blacklist-failsafe.md) | Token 黑名单 Fail-Closed 策略（Redis 故障 503、重试机制、向后兼容） | 4 |
+| [session/07-oauth-state-csrf.md](./session/07-oauth-state-csrf.md) | OAuth State CSRF 校验（cookie 存储、回调校验、过期、安全属性） | 5 |
 
 ### Webhook (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 |
@@ -61,7 +65,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (7 个文档, 33 个场景)
+### 认证流程 (8 个文档, 38 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程 | 5 |
@@ -71,6 +75,7 @@
 | [auth/05-boundary.md](./auth/05-boundary.md) | 边界测试 | 3 |
 | [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（OAuth 登录、Token Exchange、登出） | 5 |
 | [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与 `kc_idp_hint` 登录路由 | 5 |
+| [auth/10-b2b-onboarding-flow.md](./auth/10-b2b-onboarding-flow.md) | B2B 首次入驻流程（Onboarding 向导、Dashboard 租户路由、组织切换器） | 5 |
 
 ### 系统设置 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -124,7 +129,7 @@
 | [sdk/05-express-middleware.md](./sdk/05-express-middleware.md) | Express 中间件、权限控制、角色控制、AuthInfo | 5 |
 | [sdk/06-middleware-testing.md](./sdk/06-middleware-testing.md) | Next.js/Fastify 中间件、Mock Token、构建输出 | 5 |
 
-### 集成测试 (6 个文档, 30 个场景)
+### 集成测试 (7 个文档, 35 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 5 |
@@ -133,6 +138,7 @@
 | [integration/07-observability-metrics.md](./integration/07-observability-metrics.md) | Prometheus /metrics 端点、HTTP 指标、X-Request-ID、路径折叠 | 5 |
 | [integration/08-observability-stack.md](./integration/08-observability-stack.md) | 可观测性栈启动、Grafana 仪表盘、业务指标、限流指标 | 5 |
 | [integration/09-security-hardening-config.md](./integration/09-security-hardening-config.md) | 生产环境安全启动校验、REST aud 严格校验、HSTS 条件下发、gRPC audience 必填 | 5 |
+| [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Webhook Secret 生产强制校验、外部系统同步 | 5 |
 
 ---
 
@@ -140,14 +146,14 @@
 
 | 模块 | 文档数 | 场景数 |
 |------|--------|--------|
-| 租户管理 | 2 | 10 |
+| 租户管理 | 4 | 20 |
 | 用户管理 | 6 | 28 |
 | RBAC 角色权限 | 4 | 17 |
 | 服务与客户端 | 5 | 25 |
 | 邀请管理 | 3 | 15 |
-| 会话与安全 | 5 | 25 |
+| 会话与安全 | 7 | 34 |
 | Webhook | 4 | 17 |
-| 认证流程 | 7 | 33 |
+| 认证流程 | 8 | 38 |
 | 系统设置 | 3 | 15 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
@@ -155,8 +161,8 @@
 | 审计日志 | 1 | 5 |
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
-| 集成测试 | 6 | 30 |
-| **总计** | **66** | **325** |
+| 集成测试 | 7 | 35 |
+| **总计** | **72** | **354** |
 
 ---
 
@@ -300,6 +306,8 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-18 | 4.3.0 | 新增 B2B 入驻流程与 OAuth State CSRF 修复测试：OAuth State CSRF 校验（`session/07`）、B2B 组织自助创建 API（`tenant/04`）、B2B 首次入驻与租户路由（`auth/10`），覆盖 state cookie 生命周期、域名验证、Pending 状态、Onboarding 向导、组织切换器；共 72 个文档 354 个场景 |
+| 2026-02-18 | 4.2.0 | 新增安全加固第二轮测试：Token 黑名单 Fail-Closed 策略（`session/06`）、事务性级联删除原子性 & Webhook Secret 生产强制校验（`integration/10`），覆盖 P0-1/P0-2/P0-3 安全改进；共 68 个文档 334 个场景 |
 | 2026-02-17 | 4.1.1 | 对齐企业 SSO 测试执行路径：`auth/09-enterprise-sso-discovery.md`、`identity-provider/03-tenant-enterprise-sso-connectors.md` 新增 `auth9-demo`（`/enterprise/login` 与 `/demo/enterprise/*`）操作步骤；文档总数与场景数不变（66/325） |
 | 2026-02-17 | 4.1.0 | 新增企业 SSO 测试文档：`auth/09-enterprise-sso-discovery.md` 与 `identity-provider/03-tenant-enterprise-sso-connectors.md`，覆盖域名发现、`kc_idp_hint` 路由、租户级连接器 CRUD 与冲突校验；共 66 个文档 325 个场景 |
 | 2026-02-14 | 4.0.0 | 新增 Service Integration Info（API 端点 + Portal Integration 标签页），共 64 个文档 315 个场景 |

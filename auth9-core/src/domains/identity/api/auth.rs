@@ -294,22 +294,6 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                     };
                     let new_user = state.user_service().create(&userinfo.sub, input).await?;
 
-                    // Auto-assign new user to default tenant so they can access the dashboard
-                    if let Ok(default_tenant) = state.tenant_service().get_by_slug("demo").await {
-                        let add_input = crate::domain::AddUserToTenantInput {
-                            user_id: new_user.id.into(),
-                            tenant_id: default_tenant.id.into(),
-                            role_in_tenant: "member".to_string(),
-                        };
-                        if let Err(e) = state.user_service().add_to_tenant(add_input).await {
-                            tracing::warn!(
-                                "Failed to auto-assign new user {} to default tenant: {}",
-                                new_user.id,
-                                e
-                            );
-                        }
-                    }
-
                     new_user
                 }
                 Err(e) => return Err(e),

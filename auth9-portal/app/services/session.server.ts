@@ -29,6 +29,31 @@ export interface SessionData {
   refreshToken?: string;
   idToken?: string;
   expiresAt?: number;
+  activeTenantId?: string;
+}
+
+// OAuth state cookie for CSRF protection
+export const oauthStateCookie = createCookie("oauth_state", {
+  secrets: [process.env.SESSION_SECRET || "default-secret-change-me"],
+  path: "/",
+  sameSite: "lax",
+  httpOnly: true,
+  secure: isProduction,
+  maxAge: 5 * 60, // 5 minutes
+});
+
+export async function serializeOAuthState(state: string): Promise<string> {
+  return oauthStateCookie.serialize(state);
+}
+
+export async function getOAuthState(request: Request): Promise<string | null> {
+  const cookieHeader = request.headers.get("Cookie");
+  const value = await oauthStateCookie.parse(cookieHeader);
+  return typeof value === "string" && value.length > 0 ? value : null;
+}
+
+export async function clearOAuthStateCookie(): Promise<string> {
+  return oauthStateCookie.serialize("", { maxAge: 0 });
 }
 
 export async function getSession(request: Request): Promise<SessionData | null> {
@@ -200,4 +225,13 @@ export async function requireAuthWithUpdate(
   }
 
   return { session };
+}
+
+export async function setActiveTenant(
+  request: Request,
+  tenantId: string
+): Promise<string> {
+  const session = await getSession(request);
+  if (!session) throw redirect("/login");
+  return commitSession({ ...session, activeTenantId: tenantId });
 }

@@ -1,6 +1,6 @@
 import type { LoaderFunctionArgs } from "react-router";
 import { redirect } from "react-router";
-import { commitSession } from "~/services/session.server";
+import { commitSession, getOAuthState, clearOAuthStateCookie } from "~/services/session.server";
 import { invitationApi } from "~/services/api";
 
 function parseOAuthState(stateParam: string | null): { inviteToken?: string } {
@@ -33,6 +33,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Only authorization code flow is supported.
     if (!code) {
         return redirect("/login");
+    }
+
+    // Validate OAuth state to prevent Login CSRF
+    const storedState = await getOAuthState(request);
+    if (!storedState || storedState !== state) {
+        console.error("OAuth state mismatch", { hasStored: !!storedState, hasReceived: !!state });
+        return redirect("/login?error=state_mismatch");
     }
 
     try {
@@ -79,9 +86,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
         }
 
         return redirect("/dashboard", {
-            headers: {
-                "Set-Cookie": await commitSession(session),
-            },
+            headers: [
+                ["Set-Cookie", await commitSession(session)],
+                ["Set-Cookie", await clearOAuthStateCookie()],
+            ],
         });
 
     } catch (err) {

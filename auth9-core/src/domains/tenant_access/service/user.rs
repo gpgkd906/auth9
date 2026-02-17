@@ -12,6 +12,7 @@ use crate::repository::{
 };
 use crate::service::WebhookEventPublisher;
 use chrono::Utc;
+use sqlx::MySqlPool;
 use std::sync::Arc;
 use tracing::warn;
 use validator::Validate;
@@ -91,6 +92,9 @@ pub struct UserService<
     rbac_repo: Arc<Rbac>,
     keycloak: Option<KeycloakClient>,
     webhook_publisher: Option<Arc<dyn WebhookEventPublisher>>,
+    /// Database pool for transactional cascade deletes.
+    /// When available, delete operations are wrapped in a transaction.
+    pool: Option<MySqlPool>,
 }
 
 impl<
@@ -121,7 +125,14 @@ impl<
             rbac_repo: repos.rbac,
             keycloak,
             webhook_publisher,
+            pool: None,
         }
+    }
+
+    /// Set the database pool for transactional cascade deletes
+    pub fn with_pool(mut self, pool: MySqlPool) -> Self {
+        self.pool = Some(pool);
+        self
     }
 
     pub async fn create(&self, keycloak_id: &str, input: CreateUserInput) -> Result<User> {
@@ -215,7 +226,10 @@ impl<
 
     /// Delete a user with cascade delete of all related data.
     ///
-    /// Cascade order:
+    /// When a database pool is available, all cascade operations run within a single
+    /// transaction. External operations (Keycloak delete, webhooks) run after commit.
+    ///
+    /// Cascade order (within transaction):
     /// 1. Delete user_tenant_roles for all tenant memberships
     /// 2. Delete tenant_users (user's tenant memberships)
     /// 3. Delete sessions
@@ -224,41 +238,128 @@ impl<
     /// 6. Nullify user_id in login_events (preserve audit trail)
     /// 7. Nullify user_id in security_alerts (preserve audit trail)
     /// 8. Nullify actor_id in audit_logs (preserve audit trail)
-    /// 9. Delete user from Keycloak (tolerant of NotFound)
-    /// 10. Delete users record
+    /// 9. Delete users record
+    ///
+    /// After commit:
+    /// 10. Delete user from Keycloak (tolerant of NotFound)
+    /// 11. Trigger user.deleted webhook event
     pub async fn delete(&self, id: StringUuid) -> Result<()> {
         let user = self.get(id).await?;
 
-        // 1. Get all tenant_user IDs and delete their role assignments
-        let tenant_user_ids = self.repo.list_tenant_user_ids(id).await?;
-        for tu_id in tenant_user_ids {
-            self.rbac_repo
-                .delete_user_roles_by_tenant_user(tu_id)
-                .await?;
+        if let Some(ref pool) = self.pool {
+            // Transactional path: wrap all DB cascade operations in a single transaction
+            let mut tx = pool.begin().await.map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to begin transaction: {}", e))
+            })?;
+            let id_str = id.to_string();
+
+            // 1. Delete user_tenant_roles via tenant_user IDs
+            sqlx::query(
+                "DELETE utr FROM user_tenant_roles utr \
+                 INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id \
+                 WHERE tu.user_id = ?",
+            )
+            .bind(&id_str)
+            .execute(tx.as_mut())
+            .await
+            .map_err(|e| AppError::Database(e))?;
+
+            // 2. Delete tenant memberships
+            sqlx::query("DELETE FROM tenant_users WHERE user_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 3. Delete sessions
+            sqlx::query("DELETE FROM sessions WHERE user_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 4. Delete password reset tokens
+            sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 5. Delete linked identities
+            sqlx::query("DELETE FROM linked_identities WHERE user_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 6. Nullify user_id in login_events
+            sqlx::query("UPDATE login_events SET user_id = NULL WHERE user_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 7. Nullify user_id in security_alerts
+            sqlx::query("UPDATE security_alerts SET user_id = NULL WHERE user_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 8. Nullify actor_id in audit_logs
+            sqlx::query("UPDATE audit_logs SET actor_id = NULL WHERE actor_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 9. Delete user record
+            sqlx::query("DELETE FROM users WHERE id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            tx.commit().await.map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to commit transaction: {}", e))
+            })?;
+        } else {
+            // Non-transactional path (tests with mock repositories)
+            // 1. Get all tenant_user IDs and delete their role assignments
+            let tenant_user_ids = self.repo.list_tenant_user_ids(id).await?;
+            for tu_id in tenant_user_ids {
+                self.rbac_repo
+                    .delete_user_roles_by_tenant_user(tu_id)
+                    .await?;
+            }
+
+            // 2. Delete tenant memberships
+            self.repo.delete_all_tenant_memberships(id).await?;
+
+            // 3. Delete sessions
+            self.session_repo.delete_by_user(id).await?;
+
+            // 4. Delete password reset tokens
+            self.password_reset_repo.delete_by_user(id).await?;
+
+            // 5. Delete linked identities
+            self.linked_identity_repo.delete_by_user(id).await?;
+
+            // 6. Nullify user_id in login_events (preserve audit trail)
+            self.login_event_repo.nullify_user_id(id).await?;
+
+            // 7. Nullify user_id in security_alerts (preserve audit trail)
+            self.security_alert_repo.nullify_user_id(id).await?;
+
+            // 8. Nullify actor_id in audit_logs (preserve audit trail)
+            self.audit_repo.nullify_actor_id(id).await?;
+
+            // 9. Delete user record
+            self.repo.delete(id).await?;
         }
 
-        // 2. Delete tenant memberships
-        self.repo.delete_all_tenant_memberships(id).await?;
-
-        // 3. Delete sessions
-        self.session_repo.delete_by_user(id).await?;
-
-        // 4. Delete password reset tokens
-        self.password_reset_repo.delete_by_user(id).await?;
-
-        // 5. Delete linked identities
-        self.linked_identity_repo.delete_by_user(id).await?;
-
-        // 6. Nullify user_id in login_events (preserve audit trail)
-        self.login_event_repo.nullify_user_id(id).await?;
-
-        // 7. Nullify user_id in security_alerts (preserve audit trail)
-        self.security_alert_repo.nullify_user_id(id).await?;
-
-        // 8. Nullify actor_id in audit_logs (preserve audit trail)
-        self.audit_repo.nullify_actor_id(id).await?;
-
-        // 9. Delete from Keycloak (tolerant of NotFound - user may not exist in KC)
+        // 10. Delete from Keycloak AFTER transaction commit
+        // (external operation cannot be rolled back, so run after DB is consistent)
         if let Some(ref keycloak) = self.keycloak {
             match keycloak.delete_user(&user.keycloak_id).await {
                 Ok(_) => {}
@@ -271,9 +372,6 @@ impl<
                 Err(e) => return Err(e),
             }
         }
-
-        // 10. Delete user record
-        self.repo.delete(id).await?;
 
         // 11. Trigger user.deleted webhook event
         if let Some(publisher) = &self.webhook_publisher {

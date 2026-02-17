@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Input } from "~/components/ui/input";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { LockClosedIcon } from "@radix-ui/react-icons";
-import { commitSession } from "~/services/session.server";
+import { commitSession, serializeOAuthState } from "~/services/session.server";
 import { enterpriseSsoApi } from "~/services/api";
 
 export const meta: MetaFunction = () => {
@@ -86,7 +86,10 @@ export async function action({ request }: ActionFunctionArgs) {
     const auth = buildAuthorizeParams(url);
     try {
       const result = await enterpriseSsoApi.discover({ email }, auth);
-      return redirect(result.data.authorize_url);
+      const oauthCookie = await serializeOAuthState(auth.state);
+      return redirect(result.data.authorize_url, {
+        headers: { "Set-Cookie": oauthCookie },
+      });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Enterprise SSO discovery failed";
       return { error: message };

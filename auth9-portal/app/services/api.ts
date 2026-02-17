@@ -42,9 +42,10 @@ export interface Tenant {
   id: string;
   name: string;
   slug: string;
+  domain?: string;
   logo_url?: string;
   settings: Record<string, unknown>;
-  status: "active" | "inactive" | "suspended";
+  status: "active" | "inactive" | "suspended" | "pending";
   created_at: string;
   updated_at: string;
 }
@@ -191,6 +192,13 @@ export const userApi = {
     }
   },
 
+  getMyTenants: async (accessToken?: string): Promise<{ data: TenantUserWithTenant[] }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/tenants`, {
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
+
   getMe: async (accessToken?: string): Promise<{ data: User }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/me`, {
       headers: getHeaders(accessToken),
@@ -219,6 +227,42 @@ export const userApi = {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}/mfa`, {
       method: "DELETE",
       headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
+};
+
+// Tenant user with tenant details (for org switcher)
+export interface TenantUserWithTenant {
+  id: string;
+  tenant_id: string;
+  user_id: string;
+  role_in_tenant: string;
+  joined_at: string;
+  tenant: {
+    id: string;
+    name: string;
+    slug: string;
+    domain?: string;
+    logo_url?: string;
+    status: string;
+  };
+}
+
+// Organization self-service API
+export interface CreateOrganizationInput {
+  name: string;
+  slug: string;
+  domain: string;
+  logo_url?: string;
+}
+
+export const organizationApi = {
+  create: async (data: CreateOrganizationInput, token: string): Promise<{ data: { organization: Tenant } }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/organizations`, {
+      method: "POST",
+      headers: getHeaders(token),
+      body: JSON.stringify(data),
     });
     return handleResponse(response);
   },
