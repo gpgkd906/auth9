@@ -147,9 +147,15 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 ### 验证方法
 ```bash
-# 执行登录操作
+# 触发包含敏感字段的认证相关请求
+curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"test@example.com"}'
+
+# 触发 token 相关请求
 curl -X POST http://localhost:8080/api/v1/auth/token \
-  -d "username=test@example.com&password=MySecret123!"
+  -H "Content-Type: application/json" \
+  -d '{"grant_type":"client_credentials","client_id":"test-client","client_secret":"TopSecretValue"}'
 
 # 检查日志
 docker logs auth9-core 2>&1 | grep -i "password\|secret\|token"

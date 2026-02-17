@@ -18,6 +18,11 @@ Auth9 采用 Headless Keycloak 架构，密码相关的用户交互页面均由 
 - 忘记密码 / 重置密码 / 密码强度提示页面 → Keycloak 托管（auth9-keycloak-theme 定制外观）
 - 已登录用户的「设置 → 安全 → 修改密码」→ Auth9 Portal 页面
 
+**测试原则**：
+- 默认从 Auth9 Portal 登录入口触发密码相关流程
+- 不要求必须手工直接访问 Keycloak 登录页面 URL
+- 如需排障可直接访问 Keycloak 托管页面进行补充验证
+
 ---
 
 ## 场景 1：忘记密码 - 发送重置邮件

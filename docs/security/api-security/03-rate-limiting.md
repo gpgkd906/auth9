@@ -47,17 +47,19 @@ Auth9 需要保护的端点：
 
 ### 验证方法
 ```bash
+# 说明：Auth9 的 /api/v1/auth/token 不支持 grant_type=password。
+# 这里以 OIDC 授权入口作为“登录前入口”进行限流验证。
+
 # 快速请求测试
 for i in {1..50}; do
   curl -s -o /dev/null -w "%{http_code}\n" \
-    -X POST http://localhost:8080/api/v1/auth/token \
-    -d "grant_type=password&username=test&password=wrong$i"
+    "http://localhost:8080/api/v1/auth/authorize?client_id=auth9-portal&redirect_uri=http://localhost:3000/callback&response_type=code&scope=openid&state=rl-$i"
 done
-# 预期: 前 N 次 401, 之后 429
+# 预期: 前 N 次 302/307, 之后 429
 
 # 检查响应头
-curl -i -X POST http://localhost:8080/api/v1/auth/token \
-  -d "grant_type=password&username=test&password=wrong"
+curl -i \
+  "http://localhost:8080/api/v1/auth/authorize?client_id=auth9-portal&redirect_uri=http://localhost:3000/callback&response_type=code&scope=openid&state=rl-head"
 # 检查 X-RateLimit-Limit, X-RateLimit-Remaining, Retry-After
 
 # 不同 IP 测试 (使用代理)

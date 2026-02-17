@@ -38,11 +38,7 @@ const tenantId = execSync(
   .toString()
   .trim();
 
-const serviceId = execSync(
-  'mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM services LIMIT 1;"'
-)
-  .toString()
-  .trim();
+const serviceId = "auth9-portal";
 
 const userId = execSync(
   'mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM users WHERE email = \'admin@auth9.local\' LIMIT 1;"'

@@ -39,18 +39,16 @@ Auth9 技术栈注入风险点：
 
 ### 验证方法
 ```bash
-# 登录注入测试
-curl -X POST http://localhost:8080/api/v1/auth/token \
-  -d "grant_type=password" \
-  -d "client_id=auth9-portal" \
-  -d "username=admin'--" \
-  -d "password=anything"
-# 预期: 401 Invalid credentials (不是 SQL 错误)
+# 认证相关入口注入测试（Headless 架构下不使用 /api/v1/auth/token + password grant）
+curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin''--@example.com"}'
+# 预期: 400 或通用成功响应（不是 SQL 错误）
 
-curl -X POST http://localhost:8080/api/v1/auth/token \
-  -d "username=' OR '1'='1" \
-  -d "password=' OR '1'='1"
-# 预期: 401 (不应登录成功)
+curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
+  -d '{"email":"%27%20OR%20%271%27%3D%271@example.com"}'
+# 预期: 400 或通用成功响应（不应触发 SQL 语义）
 
 # 使用 sqlmap 自动化测试
 sqlmap -u "http://localhost:8080/api/v1/users?search=test" \

@@ -14,6 +14,13 @@ Auth9 密码管理由 Keycloak 处理：
 - 密码重置: 通过邮件链接
 - 密码策略: 可配置强度要求
 
+### 架构对齐说明（Headless Keycloak）
+
+- Auth9 采用 Headless Keycloak 架构，Keycloak 作为 OIDC/认证引擎使用
+- 本文档不要求必须通过 Keycloak 托管登录页进行测试
+- 密码安全测试以接口、事件、数据库和管理 API 验证为主
+- 如需做页面回归，仅作为补充验证（例如主题/交互），不作为安全结论前置条件
+
 ---
 
 ## 场景 1：密码暴力破解防护
@@ -37,7 +44,8 @@ Auth9 密码管理由 Keycloak 处理：
 
 ### 验证方法
 ```bash
-# 自动化登录测试
+# 方法 A（推荐）：直接对 OIDC token endpoint 发起错误密码请求
+# 说明：仅当测试客户端开启 Direct Access Grants 时可用
 for i in {1..50}; do
   curl -X POST http://localhost:8081/realms/auth9/protocol/openid-connect/token \
     -d "grant_type=password" \
@@ -47,8 +55,11 @@ for i in {1..50}; do
   echo "Attempt: $i"
 done
 
-# 检查响应变化
-# 预期: 第 N 次后返回 "Account locked" 或增加延迟
+# 预期: 第 N 次后返回 user_disabled / account locked 或出现显著延迟
+
+# 方法 B（无 Direct Access Grants 场景）：
+# 通过自动化脚本驱动标准 OIDC 授权流程提交错误口令，
+# 或通过 Keycloak 事件链路验证 LOGIN_ERROR 累积与锁定状态。
 ```
 
 ### 修复建议
@@ -88,20 +99,27 @@ done
 
 ### 验证方法
 ```bash
-# 请求密码重置
+# 通过 Auth9 对外认证入口请求重置（示例端点，按实际部署调整）
 curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
   -H "Content-Type: application/json" \
   -d '{"email":"user@test.com"}'
 
 # 检查返回响应 (应与不存在邮箱相同)
 curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
+  -H "Content-Type: application/json" \
   -d '{"email":"nonexistent@test.com"}'
 # 预期: 相同的成功响应
 
-# 测试 Token 重用
+# 测试 Token 重用（示例端点，按实际部署调整）
 curl -X POST http://localhost:8080/api/v1/auth/reset-password \
+  -H "Content-Type: application/json" \
   -d '{"token":"used_token","new_password":"NewPass123!"}'
 # 预期: 400 "Token invalid or expired"
+
+# 如果系统未暴露上述 API，而是完全委托 Keycloak 托管流程：
+# 1) 触发 Keycloak reset credentials 流程
+# 2) 验证不存在邮箱时返回语义一致
+# 3) 验证重置链接一次性与过期策略
 ```
 
 ### 修复建议
@@ -167,18 +185,19 @@ SELECT credential_data FROM credential WHERE user_id = 'xxx';
 3. 检查密码历史检查
 
 ### 预期安全行为
-- 更改密码需要当前密码
+- 更改密码需强身份校验（当前密码、有效会话或等效再认证机制）
 - 禁止使用最近 N 个密码
 - 更改后注销其他会话
 - 发送通知邮件
 
 ### 验证方法
 ```bash
-# 不提供当前密码
+# 通过 Auth9 用户密码更新入口验证（示例端点，按实际部署调整）
+# 不提供当前密码/再认证信息
 curl -X PUT http://localhost:8080/api/v1/users/me/password \
   -H "Authorization: Bearer $TOKEN" \
   -d '{"new_password":"NewPass123!"}'
-# 预期: 400 "Current password required"
+# 预期: 400/401（缺少必要校验）
 
 # 使用旧密码
 curl -X PUT http://localhost:8080/api/v1/users/me/password \
@@ -188,6 +207,11 @@ curl -X PUT http://localhost:8080/api/v1/users/me/password \
 
 # 检查其他会话是否被注销
 # 用旧 session 访问应失败
+
+# 如果密码修改完全在 Keycloak 侧执行：
+# 通过 Keycloak Admin API 或用户动作策略验证
+# - requiredActions / re-authentication 约束
+# - session invalidation 是否生效
 ```
 
 ### 修复建议
