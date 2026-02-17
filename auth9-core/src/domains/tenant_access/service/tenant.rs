@@ -1,13 +1,16 @@
 //! Tenant business logic
 
 use crate::cache::CacheManager;
-use crate::domain::{CreateTenantInput, StringUuid, Tenant, TenantStatus, UpdateTenantInput};
+use crate::domain::{
+    CreateOrganizationInput, CreateTenantInput, StringUuid, Tenant, TenantStatus, UpdateTenantInput,
+};
 use crate::error::{AppError, Result};
 use crate::repository::{
     ActionRepository, InvitationRepository, LoginEventRepository, RbacRepository,
     SecurityAlertRepository, ServiceRepository, TenantRepository, UserRepository,
     WebhookRepository,
 };
+use sqlx::MySqlPool;
 use std::sync::Arc;
 use tracing::warn;
 use uuid::Uuid;
@@ -94,6 +97,9 @@ pub struct TenantService<
     security_alert_repo: Arc<SAR>,
     action_repo: Arc<AR>,
     cache_manager: Option<CacheManager>,
+    /// Database pool for transactional cascade deletes.
+    /// When available, delete operations are wrapped in a transaction.
+    pool: Option<MySqlPool>,
 }
 
 impl<
@@ -124,7 +130,14 @@ impl<
             security_alert_repo: repos.security_alert,
             action_repo: repos.action,
             cache_manager,
+            pool: None,
         }
+    }
+
+    /// Set the database pool for transactional cascade deletes
+    pub fn with_pool(mut self, pool: MySqlPool) -> Self {
+        self.pool = Some(pool);
+        self
     }
 
     pub async fn create(&self, input: CreateTenantInput) -> Result<Tenant> {
@@ -145,6 +158,64 @@ impl<
                 .set_tenant_config(Uuid::from(tenant.id), &tenant)
                 .await;
         }
+        Ok(tenant)
+    }
+
+    /// Self-service organization creation for B2B onboarding.
+    /// Returns the created tenant and whether it's active or pending.
+    pub async fn create_organization(
+        &self,
+        input: CreateOrganizationInput,
+        creator_email: &str,
+    ) -> Result<Tenant> {
+        input.validate()?;
+
+        // Check for duplicate slug
+        if self.repo.find_by_slug(&input.slug).await?.is_some() {
+            return Err(AppError::Conflict(format!(
+                "Organization with slug '{}' already exists",
+                input.slug
+            )));
+        }
+
+        // Determine status based on email domain match
+        let email_domain = creator_email
+            .rsplit_once('@')
+            .map(|(_, d)| d.to_lowercase())
+            .unwrap_or_default();
+        let status = if email_domain == input.domain.to_lowercase() {
+            TenantStatus::Active
+        } else {
+            TenantStatus::Pending
+        };
+
+        let create_input = CreateTenantInput {
+            name: input.name,
+            slug: input.slug,
+            domain: Some(input.domain),
+            logo_url: input.logo_url,
+            settings: None,
+        };
+
+        let mut tenant = self.repo.create(&create_input).await?;
+
+        // If status should be Pending, update it (repo.create defaults to Active)
+        if status == TenantStatus::Pending {
+            let update = UpdateTenantInput {
+                name: None,
+                logo_url: None,
+                settings: None,
+                status: Some(TenantStatus::Pending),
+            };
+            tenant = self.repo.update(tenant.id, &update).await?;
+        }
+
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache
+                .set_tenant_config(Uuid::from(tenant.id), &tenant)
+                .await;
+        }
+
         Ok(tenant)
     }
 
@@ -213,110 +284,235 @@ impl<
         Ok(tenant)
     }
 
+    /// Delete a tenant with cascade delete of all related data.
+    ///
+    /// When a database pool is available, all cascade operations run within a single
+    /// transaction. Cache invalidation happens after commit.
     pub async fn delete(&self, id: StringUuid) -> Result<()> {
         // Verify tenant exists
         let _ = self.get(id).await?;
 
-        // CASCADE DELETE:
-        // 1. Get all services for this tenant and delete them (includes RBAC cascade)
+        // Collect service IDs for cache invalidation after commit
         let services = self.service_repo.list_by_tenant(Uuid::from(id)).await?;
-        for service in services {
-            // Delete all clients for this service
-            let deleted_clients = self
-                .service_repo
-                .delete_clients_by_service(service.id.0)
-                .await?;
-            warn!(
-                service_id = %service.id,
-                deleted_clients = deleted_clients,
-                "Deleted clients for service"
-            );
+        let service_ids: Vec<Uuid> = services.iter().map(|s| s.id.0).collect();
 
-            // Clear parent_role_id references before deleting roles
-            let cleared_refs = self
-                .rbac_repo
-                .clear_parent_role_references(service.id)
-                .await?;
-            warn!(
-                service_id = %service.id,
-                cleared_refs = cleared_refs,
-                "Cleared parent role references"
-            );
+        if let Some(ref pool) = self.pool {
+            // Transactional path: wrap all DB cascade operations in a single transaction
+            let mut tx = pool.begin().await.map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to begin transaction: {}", e))
+            })?;
+            let id_str = id.to_string();
 
-            // Delete role_permissions, user_tenant_roles, and roles for this service
-            let deleted_roles = self.rbac_repo.delete_roles_by_service(service.id).await?;
-            warn!(
-                service_id = %service.id,
-                deleted_roles = deleted_roles,
-                "Deleted roles for service"
-            );
+            // 1. Delete service-related data for each service in this tenant
+            for service in &services {
+                let svc_id_str = service.id.to_string();
 
-            // Delete permissions for this service
-            let deleted_perms = self
-                .rbac_repo
-                .delete_permissions_by_service(service.id)
-                .await?;
-            warn!(
-                service_id = %service.id,
-                deleted_perms = deleted_perms,
-                "Deleted permissions for service"
-            );
+                // Delete clients for this service
+                sqlx::query("DELETE FROM clients WHERE service_id = ?")
+                    .bind(&svc_id_str)
+                    .execute(tx.as_mut())
+                    .await
+                    .map_err(|e| AppError::Database(e))?;
 
-            // Delete the service itself
-            self.service_repo.delete(service.id.0).await?;
+                // Clear parent_role_id references before deleting roles
+                sqlx::query("UPDATE roles SET parent_role_id = NULL WHERE service_id = ? AND parent_role_id IS NOT NULL")
+                    .bind(&svc_id_str)
+                    .execute(tx.as_mut())
+                    .await
+                    .map_err(|e| AppError::Database(e))?;
 
-            // Invalidate service cache
-            if let Some(cache) = &self.cache_manager {
-                let _ = cache.invalidate_service_config(service.id.0).await;
+                // Delete role_permissions for roles in this service
+                sqlx::query(
+                    "DELETE rp FROM role_permissions rp \
+                     INNER JOIN roles r ON rp.role_id = r.id \
+                     WHERE r.service_id = ?",
+                )
+                .bind(&svc_id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+                // Delete user_tenant_roles for roles in this service
+                sqlx::query(
+                    "DELETE utr FROM user_tenant_roles utr \
+                     INNER JOIN roles r ON utr.role_id = r.id \
+                     WHERE r.service_id = ?",
+                )
+                .bind(&svc_id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+                // Delete roles for this service
+                sqlx::query("DELETE FROM roles WHERE service_id = ?")
+                    .bind(&svc_id_str)
+                    .execute(tx.as_mut())
+                    .await
+                    .map_err(|e| AppError::Database(e))?;
+
+                // Delete permissions for this service
+                sqlx::query("DELETE FROM permissions WHERE service_id = ?")
+                    .bind(&svc_id_str)
+                    .execute(tx.as_mut())
+                    .await
+                    .map_err(|e| AppError::Database(e))?;
+
+                // Delete the service itself
+                sqlx::query("DELETE FROM services WHERE id = ?")
+                    .bind(&svc_id_str)
+                    .execute(tx.as_mut())
+                    .await
+                    .map_err(|e| AppError::Database(e))?;
             }
-        }
 
-        // 2. Delete webhooks
-        let deleted_webhooks = self.webhook_repo.delete_by_tenant(id).await?;
-        warn!(tenant_id = %id, deleted_webhooks = deleted_webhooks, "Deleted webhooks");
+            // 2. Delete webhooks
+            sqlx::query("DELETE FROM webhooks WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
 
-        // 3. Delete invitations
-        let deleted_invitations = self.invitation_repo.delete_by_tenant(id).await?;
-        warn!(tenant_id = %id, deleted_invitations = deleted_invitations, "Deleted invitations");
+            // 3. Delete invitations
+            sqlx::query("DELETE FROM invitations WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
 
-        // 4. Get all tenant_users and delete their user_tenant_roles
-        let tenant_user_ids = self.user_repo.list_tenant_user_ids_by_tenant(id).await?;
-        for tenant_user_id in &tenant_user_ids {
-            let deleted_roles = self
-                .rbac_repo
-                .delete_user_roles_by_tenant_user(*tenant_user_id)
+            // 4. Delete user_tenant_roles via tenant_users
+            sqlx::query(
+                "DELETE utr FROM user_tenant_roles utr \
+                 INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id \
+                 WHERE tu.tenant_id = ?",
+            )
+            .bind(&id_str)
+            .execute(tx.as_mut())
+            .await
+            .map_err(|e| AppError::Database(e))?;
+
+            // 5. Delete tenant_users
+            sqlx::query("DELETE FROM tenant_users WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 6. Delete login_events
+            sqlx::query("DELETE FROM login_events WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 7. Delete security_alerts
+            sqlx::query("DELETE FROM security_alerts WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 8. Delete actions
+            sqlx::query("DELETE FROM actions WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            // 9. Delete the tenant itself
+            sqlx::query("DELETE FROM tenants WHERE id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(|e| AppError::Database(e))?;
+
+            tx.commit().await.map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to commit transaction: {}", e))
+            })?;
+        } else {
+            // Non-transactional path (tests with mock repositories)
+            for service in &services {
+                let deleted_clients = self
+                    .service_repo
+                    .delete_clients_by_service(service.id.0)
+                    .await?;
+                warn!(
+                    service_id = %service.id,
+                    deleted_clients = deleted_clients,
+                    "Deleted clients for service"
+                );
+
+                let cleared_refs = self
+                    .rbac_repo
+                    .clear_parent_role_references(service.id)
+                    .await?;
+                warn!(
+                    service_id = %service.id,
+                    cleared_refs = cleared_refs,
+                    "Cleared parent role references"
+                );
+
+                let deleted_roles = self.rbac_repo.delete_roles_by_service(service.id).await?;
+                warn!(
+                    service_id = %service.id,
+                    deleted_roles = deleted_roles,
+                    "Deleted roles for service"
+                );
+
+                let deleted_perms = self
+                    .rbac_repo
+                    .delete_permissions_by_service(service.id)
+                    .await?;
+                warn!(
+                    service_id = %service.id,
+                    deleted_perms = deleted_perms,
+                    "Deleted permissions for service"
+                );
+
+                self.service_repo.delete(service.id.0).await?;
+            }
+
+            let deleted_webhooks = self.webhook_repo.delete_by_tenant(id).await?;
+            warn!(tenant_id = %id, deleted_webhooks = deleted_webhooks, "Deleted webhooks");
+
+            let deleted_invitations = self.invitation_repo.delete_by_tenant(id).await?;
+            warn!(tenant_id = %id, deleted_invitations = deleted_invitations, "Deleted invitations");
+
+            let tenant_user_ids = self.user_repo.list_tenant_user_ids_by_tenant(id).await?;
+            for tenant_user_id in &tenant_user_ids {
+                let deleted_roles = self
+                    .rbac_repo
+                    .delete_user_roles_by_tenant_user(*tenant_user_id)
+                    .await?;
+                warn!(
+                    tenant_user_id = %tenant_user_id,
+                    deleted_roles = deleted_roles,
+                    "Deleted user tenant roles"
+                );
+            }
+
+            let deleted_memberships = self
+                .user_repo
+                .delete_tenant_memberships_by_tenant(id)
                 .await?;
-            warn!(
-                tenant_user_id = %tenant_user_id,
-                deleted_roles = deleted_roles,
-                "Deleted user tenant roles"
-            );
+            warn!(tenant_id = %id, deleted_memberships = deleted_memberships, "Deleted tenant memberships");
+
+            let deleted_login_events = self.login_event_repo.delete_by_tenant(id).await?;
+            warn!(tenant_id = %id, deleted_login_events = deleted_login_events, "Deleted login events");
+
+            let deleted_alerts = self.security_alert_repo.delete_by_tenant(id).await?;
+            warn!(tenant_id = %id, deleted_alerts = deleted_alerts, "Deleted security alerts");
+
+            let deleted_actions = self.action_repo.delete_by_tenant(id).await?;
+            warn!(tenant_id = %id, deleted_actions = deleted_actions, "Deleted actions");
+
+            self.repo.delete(id).await?;
         }
 
-        // 5. Delete tenant_users (membership records, not the users themselves)
-        let deleted_memberships = self
-            .user_repo
-            .delete_tenant_memberships_by_tenant(id)
-            .await?;
-        warn!(tenant_id = %id, deleted_memberships = deleted_memberships, "Deleted tenant memberships");
-
-        // 6. Delete login_events for this tenant
-        let deleted_login_events = self.login_event_repo.delete_by_tenant(id).await?;
-        warn!(tenant_id = %id, deleted_login_events = deleted_login_events, "Deleted login events");
-
-        // 7. Delete security_alerts for this tenant
-        let deleted_alerts = self.security_alert_repo.delete_by_tenant(id).await?;
-        warn!(tenant_id = %id, deleted_alerts = deleted_alerts, "Deleted security alerts");
-
-        // 8. Delete actions for this tenant
-        let deleted_actions = self.action_repo.delete_by_tenant(id).await?;
-        warn!(tenant_id = %id, deleted_actions = deleted_actions, "Deleted actions");
-
-        // 9. Delete the tenant itself
-        self.repo.delete(id).await?;
-
-        // 10. Clear cache
+        // Clear caches AFTER transaction commit
         if let Some(cache) = &self.cache_manager {
+            for svc_id in &service_ids {
+                let _ = cache.invalidate_service_config(*svc_id).await;
+            }
             let _ = cache.invalidate_tenant_config(Uuid::from(id)).await;
         }
 
@@ -439,6 +635,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "Test Tenant".to_string(),
             slug: "test-tenant".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -479,6 +676,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "Custom Tenant".to_string(),
             slug: "custom-tenant".to_string(),
+            domain: None,
             logo_url: Some("https://example.com/logo.png".to_string()),
             settings: Some(settings),
         };
@@ -500,6 +698,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "New Tenant".to_string(),
             slug: "existing-tenant".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -516,6 +715,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "Test".to_string(),
             slug: "Invalid Slug".to_string(), // Invalid format
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -532,6 +732,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "".to_string(),
             slug: "valid-slug".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };

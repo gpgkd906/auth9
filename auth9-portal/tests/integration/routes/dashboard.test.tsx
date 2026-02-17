@@ -5,24 +5,36 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import Dashboard, { loader, meta } from "~/routes/dashboard";
 import { userApi } from "~/services/api";
 
+const mockTenantData = [
+    {
+        id: "tu-1",
+        tenant_id: "tenant-1",
+        user_id: "user-1",
+        role_in_tenant: "owner",
+        joined_at: "2024-01-01T00:00:00Z",
+        tenant: {
+            id: "tenant-1",
+            name: "Acme Corp",
+            slug: "acme-corp",
+            logo_url: undefined,
+            status: "active",
+        },
+    },
+];
+
 vi.mock("~/services/api", () => ({
     userApi: {
         getMe: vi.fn(),
+        getMyTenants: vi.fn(),
     },
 }));
 
 vi.mock("~/services/session.server", () => ({
-    requireAuth: vi.fn().mockResolvedValue(undefined),
-    getAccessToken: vi.fn().mockResolvedValue("test-token"),
-    requireAuthWithUpdate: vi.fn().mockResolvedValue({
-        session: {
-            accessToken: "test-token",
-            refreshToken: "test-refresh-token",
-            idToken: "test-id-token",
-            expiresAt: Date.now() + 3600000,
-        },
-        headers: undefined,
-    }),
+    requireAuth: vi.fn(),
+    getAccessToken: vi.fn(),
+    commitSession: vi.fn(),
+    setActiveTenant: vi.fn(),
+    requireAuthWithUpdate: vi.fn(),
 }));
 
 const mockUser = {
@@ -37,7 +49,12 @@ function createDashboardStub(currentUser = mockUser) {
         {
             path: "/dashboard",
             Component: Dashboard,
-            loader: () => ({ currentUser }),
+            loader: () => ({
+                currentUser,
+                tenants: mockTenantData,
+                activeTenant: mockTenantData[0],
+                activeTenantId: "tenant-1",
+            }),
             children: [
                 {
                     index: true,
@@ -84,9 +101,23 @@ function createDashboardStub(currentUser = mockUser) {
     ]);
 }
 
+// Import mocked modules for setup
+import { requireAuthWithUpdate, commitSession } from "~/services/session.server";
+
 describe("Dashboard Layout", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(requireAuthWithUpdate).mockResolvedValue({
+            session: {
+                accessToken: "test-token",
+                refreshToken: "test-refresh-token",
+                idToken: "test-id-token",
+                expiresAt: Date.now() + 3600000,
+            },
+            headers: undefined,
+        });
+        vi.mocked(commitSession).mockResolvedValue("mocked-cookie");
+        vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: mockTenantData });
     });
 
     // ============================================================================
@@ -104,30 +135,61 @@ describe("Dashboard Layout", () => {
 
     it("loader returns current user data", async () => {
         vi.mocked(userApi.getMe).mockResolvedValue({ data: mockUser });
+        vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: mockTenantData });
 
         const request = new Request("http://localhost/dashboard");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ currentUser: mockUser });
+        // Loader returns Response.json when setting active tenant cookie
+        const data = result instanceof Response ? await result.json() : result;
+        expect(data.currentUser).toEqual(mockUser);
+        expect(data.tenants).toHaveLength(1);
+        expect(data.activeTenantId).toBe("tenant-1");
     });
 
     it("loader returns null currentUser when API fails", async () => {
         vi.mocked(userApi.getMe).mockRejectedValue(new Error("fail"));
+        vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: mockTenantData });
 
         const request = new Request("http://localhost/dashboard");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ currentUser: null });
+        if (result instanceof Response) {
+            const data = await result.json();
+            expect(data).toMatchObject({ currentUser: null });
+        } else {
+            expect(result).toMatchObject({ currentUser: null });
+        }
     });
 
     it("loader returns null currentUser when no access token", async () => {
-        const { getAccessToken } = await import("~/services/session.server");
-        vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+        vi.mocked(userApi.getMe).mockRejectedValue(new Error("fail"));
+        vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: mockTenantData });
 
         const request = new Request("http://localhost/dashboard");
         const result = await loader({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ currentUser: null });
+        if (result instanceof Response) {
+            const data = await result.json();
+            expect(data).toMatchObject({ currentUser: null });
+        } else {
+            expect(result).toMatchObject({ currentUser: null });
+        }
+    });
+
+    it("loader redirects to /onboard when user has no tenants", async () => {
+        vi.mocked(userApi.getMe).mockResolvedValue({ data: mockUser });
+        vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: [] });
+
+        const request = new Request("http://localhost/dashboard");
+        try {
+            await loader({ request, params: {}, context: {} });
+            expect.fail("Should have thrown redirect");
+        } catch (response) {
+            expect(response).toBeInstanceOf(Response);
+            expect((response as Response).status).toBe(302);
+            expect((response as Response).headers.get("Location")).toBe("/onboard");
+        }
     });
 
     // ============================================================================

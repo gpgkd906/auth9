@@ -26,6 +26,14 @@ where
 {
     Router::new()
         .route(
+            "/api/v1/organizations",
+            post(tenant_access_api::organization::create_organization::<S>),
+        )
+        .route(
+            "/api/v1/users/me/tenants",
+            get(tenant_access_api::organization::get_my_tenants::<S>),
+        )
+        .route(
             "/api/v1/tenants",
             get(tenant_access_api::tenant::list::<S>).post(tenant_access_api::tenant::create::<S>),
         )

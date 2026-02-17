@@ -57,6 +57,25 @@ jobs:
         working-directory: auth9-core
         run: cargo test --test '*' --verbose
 
+  # ==================== Security Audit ====================
+  security-audit:
+    name: Security Audit (cargo audit)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-action@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit
+
+      - name: Run cargo audit
+        working-directory: auth9-core
+        run: cargo audit
+
   # ==================== auth9-portal Tests ====================
   test-portal:
     name: Test auth9-portal

@@ -25,7 +25,7 @@ Auth9 是一个自托管的身份认证服务，设计用于替代昂贵的 Auth
 ```mermaid
 flowchart TB
     subgraph clients [Client Layer]
-        Portal[auth9-portal<br/>Remix SSR]
+        Portal[auth9-portal<br/>React Router 7 SSR]
         BizServices[Business Services]
         SDK[auth9-sdk]
     end
@@ -79,17 +79,17 @@ flowchart TB
 | 配置 | **config-rs** | 多环境配置管理 |
 | 日志 | **tracing** | 结构化日志 + 分布式追踪 |
 | 异步运行时 | **tokio** | Rust 标准异步运行时 |
-| 测试 | **tokio-test + mockall + testcontainers-rs** | 完整测试框架 |
+| 测试 | **tokio-test + mockall + wiremock** | 完整测试框架（无外部依赖） |
 
-### 3.2 前端 (auth9-portal) - Remix
+### 3.2 前端 (auth9-portal) - React Router 7
 
 | 领域 | 技术选择 | 理由 |
 |------|----------|------|
-| 框架 | **Remix + TypeScript** | 全栈 Web 框架，SSR/SSG 支持 |
+| 框架 | **React Router 7 + TypeScript** | 全栈 Web 框架，SSR/SSG 支持 |
 | 构建工具 | **Vite** | 快速开发体验 |
 | 测试框架 | **Vitest** | Vite 原生测试框架 |
 | UI 组件 | **Radix UI + Tailwind CSS** | 无样式组件 + 原子化CSS |
-| 状态管理 | **Remix loader/action + Zustand** | 服务端优先 |
+| 状态管理 | **React Router loader/action + Zustand** | 服务端优先 |
 | 表单验证 | **Zod + Conform** | 类型安全的表单处理 |
 | E2E 测试 | **Playwright** | 端到端测试 |
 
@@ -155,7 +155,7 @@ auth9-portal/
 │   ├── root.tsx
 │   ├── entry.client.tsx
 │   ├── entry.server.tsx
-│   ├── routes/           # Remix 路由 (文件系统路由)
+│   ├── routes/           # React Router 7 路由 (文件系统路由)
 │   │   ├── _index.tsx
 │   │   ├── _auth.login.tsx
 │   │   ├── dashboard.tsx
@@ -387,7 +387,7 @@ flowchart TB
 - `cache/` - 缓存序列化/反序列化
 
 **集成测试** (`tests/`):
-- 使用 testcontainers-rs 启动 MySQL + Redis 容器
+- 使用 mockall + wiremock，无需 Docker 或外部服务
 - `tests/api/` - REST API 端到端测试
 - `tests/grpc/` - gRPC 服务测试
 

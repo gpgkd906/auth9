@@ -143,6 +143,7 @@ impl TenantRepository for TestTenantRepository {
             id: StringUuid::new_v4(),
             name: input.name.clone(),
             slug: input.slug.clone(),
+            domain: input.domain.clone(),
             logo_url: input.logo_url.clone(),
             settings: input.settings.clone().unwrap_or_default(),
             status: TenantStatus::Active,
@@ -2823,6 +2824,7 @@ pub fn create_test_tenant(id: Option<Uuid>) -> Tenant {
         id: StringUuid::from(id.unwrap_or_else(Uuid::new_v4)),
         name: "Test Tenant".to_string(),
         slug: "test-tenant".to_string(),
+        domain: None,
         logo_url: None,
         settings: TenantSettings::default(),
         status: TenantStatus::Active,
@@ -3031,6 +3033,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "Test".to_string(),
             slug: "test".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };

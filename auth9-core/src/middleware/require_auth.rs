@@ -128,14 +128,28 @@ pub async fn require_auth_middleware(
     }
 
     // Check token blacklist (e.g., after logout)
+    // Fail-Closed: if Redis is unavailable, reject the request with 503 to prevent
+    // revoked tokens from being used during cache outages.
     if let (Some(ref cache), Some(ref sid)) = (&auth_state.cache, &session_id) {
         match cache.is_token_blacklisted(sid).await {
             Ok(true) => {
                 return unauthorized_response("Token has been revoked");
             }
             Ok(false) => {}
-            Err(e) => {
-                tracing::warn!(error = %e, "Failed to check token blacklist, allowing request");
+            Err(_) => {
+                // One quick retry before failing
+                match cache.is_token_blacklisted(sid).await {
+                    Ok(true) => {
+                        return unauthorized_response("Token has been revoked");
+                    }
+                    Ok(false) => {}
+                    Err(e) => {
+                        tracing::error!(error = %e, "Token blacklist check failed after retry, rejecting request (fail-closed)");
+                        return service_unavailable_response(
+                            "Authentication service temporarily unavailable",
+                        );
+                    }
+                }
             }
         }
     }
@@ -151,6 +165,21 @@ fn unauthorized_response(message: &str) -> Response {
         Json(json!({
             "error": message,
             "code": "UNAUTHORIZED"
+        })),
+    )
+        .into_response()
+}
+
+/// Generate a 503 Service Unavailable response
+///
+/// Used when a critical backing service (e.g. Redis for token blacklist) is down.
+/// Returns 503 instead of 401 so clients don't discard their (potentially valid) tokens.
+fn service_unavailable_response(message: &str) -> Response {
+    (
+        StatusCode::SERVICE_UNAVAILABLE,
+        Json(json!({
+            "error": message,
+            "code": "SERVICE_UNAVAILABLE"
         })),
     )
         .into_response()
@@ -282,5 +311,151 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_blacklist_redis_error_returns_503_fail_closed() {
+        use crate::cache::MockCacheOperations;
+
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let session_id = uuid::Uuid::parse_str("660e8400-e29b-41d4-a716-446655440001").unwrap();
+        let valid_token = jwt_manager
+            .create_identity_token_with_session(
+                user_id,
+                "test@example.com",
+                Some("Test User"),
+                Some(session_id),
+            )
+            .unwrap();
+
+        let mut mock_cache = MockCacheOperations::new();
+        // Both the initial check and the retry return errors
+        mock_cache
+            .expect_is_token_blacklisted()
+            .times(2)
+            .returning(|_| Err(anyhow::anyhow!("Redis connection refused").into()));
+
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false)
+            .with_cache(Arc::new(mock_cache));
+
+        let app = Router::new()
+            .route("/protected", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/protected")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        // Fail-closed: should return 503, NOT 200
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    }
+
+    #[tokio::test]
+    async fn test_blacklist_redis_error_retry_succeeds() {
+        use crate::cache::MockCacheOperations;
+        use std::sync::atomic::{AtomicU32, Ordering};
+
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let session_id = uuid::Uuid::parse_str("660e8400-e29b-41d4-a716-446655440001").unwrap();
+        let valid_token = jwt_manager
+            .create_identity_token_with_session(
+                user_id,
+                "test@example.com",
+                Some("Test User"),
+                Some(session_id),
+            )
+            .unwrap();
+
+        let call_count = Arc::new(AtomicU32::new(0));
+        let call_count_clone = call_count.clone();
+
+        let mut mock_cache = MockCacheOperations::new();
+        // First call fails, second call (retry) succeeds
+        mock_cache
+            .expect_is_token_blacklisted()
+            .times(2)
+            .returning(move |_| {
+                let count = call_count_clone.fetch_add(1, Ordering::SeqCst);
+                if count == 0 {
+                    Err(anyhow::anyhow!("Redis connection refused").into())
+                } else {
+                    Ok(false)
+                }
+            });
+
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false)
+            .with_cache(Arc::new(mock_cache));
+
+        let app = Router::new()
+            .route("/protected", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/protected")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        // Retry succeeded, so request should pass through
+        assert_eq!(response.status(), StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn test_blacklisted_token_returns_401() {
+        use crate::cache::MockCacheOperations;
+
+        let jwt_manager = create_test_jwt_manager();
+
+        let user_id = uuid::Uuid::parse_str("550e8400-e29b-41d4-a716-446655440000").unwrap();
+        let session_id = uuid::Uuid::parse_str("660e8400-e29b-41d4-a716-446655440001").unwrap();
+        let valid_token = jwt_manager
+            .create_identity_token_with_session(
+                user_id,
+                "test@example.com",
+                Some("Test User"),
+                Some(session_id),
+            )
+            .unwrap();
+
+        let mut mock_cache = MockCacheOperations::new();
+        mock_cache
+            .expect_is_token_blacklisted()
+            .returning(|_| Ok(true));
+
+        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false)
+            .with_cache(Arc::new(mock_cache));
+
+        let app = Router::new()
+            .route("/protected", get(protected_handler))
+            .layer(axum::middleware::from_fn_with_state(
+                auth_state,
+                require_auth_middleware,
+            ));
+
+        let request = Request::builder()
+            .uri("/protected")
+            .header("Authorization", format!("Bearer {}", valid_token))
+            .body(Body::empty())
+            .unwrap();
+
+        let response = app.oneshot(request).await.unwrap();
+
+        assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
     }
 }

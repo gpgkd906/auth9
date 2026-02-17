@@ -1,8 +1,6 @@
 //! Tenant repository
 
-use crate::domain::{
-    CreateTenantInput, PasswordPolicy, StringUuid, Tenant, TenantStatus, UpdateTenantInput,
-};
+use crate::domain::{CreateTenantInput, PasswordPolicy, StringUuid, Tenant, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
 use sqlx::MySqlPool;
@@ -46,13 +44,14 @@ impl TenantRepository for TenantRepositoryImpl {
 
         sqlx::query(
             r#"
-            INSERT INTO tenants (id, name, slug, logo_url, settings, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'active', NOW(), NOW())
+            INSERT INTO tenants (id, name, slug, domain, logo_url, settings, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, 'active', NOW(), NOW())
             "#,
         )
         .bind(id)
         .bind(&input.name)
         .bind(&input.slug)
+        .bind(&input.domain)
         .bind(&input.logo_url)
         .bind(&settings_json)
         .execute(&self.pool)
@@ -66,7 +65,7 @@ impl TenantRepository for TenantRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Tenant>> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
+            SELECT id, name, slug, domain, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             WHERE id = ?
             "#,
@@ -81,7 +80,7 @@ impl TenantRepository for TenantRepositoryImpl {
     async fn find_by_slug(&self, slug: &str) -> Result<Option<Tenant>> {
         let tenant = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
+            SELECT id, name, slug, domain, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             WHERE slug = ?
             "#,
@@ -96,7 +95,7 @@ impl TenantRepository for TenantRepositoryImpl {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<Tenant>> {
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
+            SELECT id, name, slug, domain, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -121,7 +120,7 @@ impl TenantRepository for TenantRepositoryImpl {
         let search_pattern = format!("%{}%", query);
         let tenants = sqlx::query_as::<_, Tenant>(
             r#"
-            SELECT id, name, slug, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
+            SELECT id, name, slug, domain, logo_url, settings, status, COALESCE(password_policy, CAST('null' AS JSON)) as password_policy, created_at, updated_at
             FROM tenants
             WHERE name LIKE ? OR slug LIKE ?
             ORDER BY created_at DESC
@@ -163,11 +162,7 @@ impl TenantRepository for TenantRepositoryImpl {
         let settings_json =
             serde_json::to_string(&settings).map_err(|e| AppError::Internal(e.into()))?;
 
-        let status_str = match status {
-            TenantStatus::Active => "active",
-            TenantStatus::Inactive => "inactive",
-            TenantStatus::Suspended => "suspended",
-        };
+        let status_str = status.to_string();
 
         sqlx::query(
             r#"
