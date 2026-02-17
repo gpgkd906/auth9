@@ -263,7 +263,7 @@ async fn test_list_audit_logs_with_actor_filter() {
 // ============================================================================
 
 fn build_audit_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::audit;
+    use auth9_core::domains::security_observability::api::audit;
     use axum::routing::get;
 
     axum::Router::new()

@@ -9,7 +9,7 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::repository::ActionRepository;
-use crate::service::ActionEngine;
+use crate::domains::integration::service::ActionEngine;
 use metrics::{counter, histogram};
 use std::sync::Arc;
 use std::time::Instant;

@@ -13,7 +13,7 @@ use crate::error::{AppError, Result};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{ActionRepository, ServiceRepository, UserRepository};
-use crate::service::ActionEngine;
+use crate::domains::integration::service::ActionEngine;
 use async_trait::async_trait;
 use base64::Engine;
 use chrono::Utc;

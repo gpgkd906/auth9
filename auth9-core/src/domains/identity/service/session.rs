@@ -6,7 +6,7 @@ use crate::domain::{
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::{SessionRepository, UserRepository};
-use crate::service::WebhookEventPublisher;
+use crate::domains::integration::service::WebhookEventPublisher;
 use chrono::Utc;
 use std::sync::Arc;
 

@@ -164,7 +164,7 @@ async fn test_delete_passkey_invalid_token() {
 // ============================================================================
 
 fn build_passkey_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::webauthn;
+    use auth9_core::domains::identity::api::webauthn;
     use axum::routing::{delete, get};
 
     axum::Router::new()

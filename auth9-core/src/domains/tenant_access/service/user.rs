@@ -10,7 +10,7 @@ use crate::repository::{
     AuditRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
     RbacRepository, SecurityAlertRepository, SessionRepository, UserRepository,
 };
-use crate::service::WebhookEventPublisher;
+use crate::domains::integration::service::WebhookEventPublisher;
 use chrono::Utc;
 use sqlx::MySqlPool;
 use std::sync::Arc;

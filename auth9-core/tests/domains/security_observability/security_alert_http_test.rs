@@ -4,7 +4,7 @@
 
 use crate::support::http::{get_json_with_auth, MockKeycloakServer, TestAppState};
 use crate::support::{create_test_jwt_manager, create_test_user};
-use auth9_core::api::security_alert::UnresolvedCountResponse;
+use auth9_core::domains::security_observability::api::security_alert::UnresolvedCountResponse;
 use auth9_core::api::{PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{AlertSeverity, SecurityAlert, SecurityAlertType, StringUuid};
 use axum::body::Body;
@@ -427,7 +427,7 @@ async fn post_json_with_auth<T: serde::Serialize, R: serde::de::DeserializeOwned
 // ============================================================================
 
 fn build_security_alert_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::security_alert;
+    use auth9_core::domains::security_observability::api::security_alert;
     use axum::routing::{get, post};
 
     axum::Router::new()

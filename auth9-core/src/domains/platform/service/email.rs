@@ -8,7 +8,7 @@ use crate::email::{
 };
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
-use crate::service::SystemSettingsService;
+use crate::domains::platform::service::SystemSettingsService;
 use async_trait::async_trait;
 use std::sync::Arc;
 

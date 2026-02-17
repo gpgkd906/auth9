@@ -464,7 +464,7 @@ async fn add_test_login_events_for_tenant(
 // ============================================================================
 
 fn build_analytics_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::analytics;
+    use auth9_core::domains::security_observability::api::analytics;
     use axum::routing::get;
 
     axum::Router::new()
