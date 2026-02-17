@@ -37,7 +37,10 @@ Portal 路由：
 验证新用户首次登录被引导到组织创建页面
 
 ### 测试操作流程
-1. 访问 `/login`，点击 SSO 登录或使用 Passkey 登录
+1. 访问 `/login`，使用以下任一方式登录：
+   - 点击「**Sign in with password**」→ 在 Keycloak 页面输入用户名密码
+   - 点击「**Continue with Enterprise SSO**」→ 输入企业邮箱完成 SSO 认证
+   - 点击「**Sign in with passkey**」→ 使用设备 Passkey 认证
 2. 完成认证后，观察页面跳转
 3. 确认到达 `/onboard` 页面
 
