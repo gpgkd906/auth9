@@ -104,8 +104,7 @@ pub fn validate_url_no_ssrf(url: &str) -> Result<(), ValidationError> {
 
     // Block cloud metadata endpoints for ALL schemes
     let is_cloud_metadata = host == "169.254.169.254" || host == "metadata.google.internal";
-    let is_loopback =
-        host == "127.0.0.1" || host == "::1" || host == "[::1]" || host == "0.0.0.0";
+    let is_loopback = host == "127.0.0.1" || host == "::1" || host == "[::1]" || host == "0.0.0.0";
     let is_private = host.starts_with("192.168.")
         || host.starts_with("10.")
         || (host.starts_with("172.")

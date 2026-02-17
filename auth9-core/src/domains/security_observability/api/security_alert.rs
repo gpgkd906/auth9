@@ -158,10 +158,8 @@ mod tests {
 
     #[test]
     fn test_alerts_query_with_filters() {
-        let query: AlertsQuery = serde_json::from_str(
-            r#"{"severity": "high", "alert_type": "brute_force"}"#,
-        )
-        .unwrap();
+        let query: AlertsQuery =
+            serde_json::from_str(r#"{"severity": "high", "alert_type": "brute_force"}"#).unwrap();
         assert_eq!(query.severity, Some(AlertSeverity::High));
         assert_eq!(query.alert_type, Some(SecurityAlertType::BruteForce));
     }

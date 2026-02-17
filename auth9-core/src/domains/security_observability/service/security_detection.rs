@@ -375,7 +375,13 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         let offset = (page - 1) * per_page;
         let alerts = self
             .security_alert_repo
-            .list_filtered(offset, per_page, unresolved_only, severity.clone(), alert_type.clone())
+            .list_filtered(
+                offset,
+                per_page,
+                unresolved_only,
+                severity.clone(),
+                alert_type.clone(),
+            )
             .await?;
         let total = self
             .security_alert_repo

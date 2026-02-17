@@ -22,8 +22,8 @@ use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
 
-// Re-export test repositories from api module
-pub use crate::api::{TestRbacRepository, TestServiceRepository, TestUserRepository};
+// Re-export test repositories from support module
+pub use crate::support::{TestRbacRepository, TestServiceRepository, TestUserRepository};
 
 // ============================================================================
 // Test Configuration

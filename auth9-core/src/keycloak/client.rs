@@ -755,9 +755,7 @@ impl KeycloakClient {
         }
 
         // 3. Set the password (using the existing method)
-        let result = self
-            .reset_user_password(user_id, password, temporary)
-            .await;
+        let result = self.reset_user_password(user_id, password, temporary).await;
 
         // 4. Always restore the password policy, even if password set failed
         if let Some(ref policy) = original_policy {

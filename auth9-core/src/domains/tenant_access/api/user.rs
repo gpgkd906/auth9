@@ -684,7 +684,6 @@ pub struct UpdateRoleInTenantRequest {
     pub role_in_tenant: String,
 }
 
-
 /// Update user's role in a tenant
 /// Requires the caller to be an owner of the target tenant.
 /// Setting role to "owner" (ownership transfer) always requires the caller

@@ -61,8 +61,10 @@ describe("Security Alerts Page", () => {
       alerts: [mockAlertCritical, mockAlertResolved],
       pagination: mockPagination,
       unresolvedOnly: false,
+      severity: null,
+      alertType: null,
     });
-    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, false, undefined);
+    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, false, undefined, undefined, undefined);
   });
 
   it("loader respects unresolved filter", async () => {
@@ -75,7 +77,7 @@ describe("Security Alerts Page", () => {
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response.unresolvedOnly).toBe(true);
-    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, true, undefined);
+    expect(securityAlertApi.list).toHaveBeenCalledWith(1, 50, true, undefined, undefined, undefined);
   });
 
   it("loader returns error on API failure", async () => {
@@ -88,6 +90,8 @@ describe("Security Alerts Page", () => {
       alerts: [],
       pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
       unresolvedOnly: false,
+      severity: null,
+      alertType: null,
       error: "Failed to load security alerts",
     });
   });
@@ -126,6 +130,8 @@ describe("Security Alerts Page", () => {
           alerts: [mockAlertCritical],
           pagination: mockPagination,
           unresolvedOnly: false,
+          severity: undefined,
+          alertType: undefined,
         }),
       },
     ]);
@@ -133,9 +139,14 @@ describe("Security Alerts Page", () => {
     render(<RoutesStub initialEntries={["/dashboard/security/alerts"]} />);
 
     await waitFor(() => {
-      expect(screen.getByText("All")).toBeInTheDocument();
+      // Multiple "All" links exist (status, severity, type filters)
+      expect(screen.getAllByText("All").length).toBeGreaterThanOrEqual(1);
     });
     expect(screen.getByText(/unresolved/i)).toBeInTheDocument();
+    // Severity filter options
+    expect(screen.getByText("Severity:")).toBeInTheDocument();
+    // Alert type filter options
+    expect(screen.getByText("Type:")).toBeInTheDocument();
   });
 
   it("renders alert list with correct severity styling", async () => {
@@ -364,7 +375,8 @@ describe("Security Alerts Page", () => {
 
     await waitFor(() => {
       expect(screen.getByText("HIGH")).toBeInTheDocument();
-      expect(screen.getByText("Impossible Travel")).toBeInTheDocument();
+      // "Impossible Travel" appears in both alert card and type filter
+      expect(screen.getAllByText("Impossible Travel").length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -387,6 +399,8 @@ describe("Security Alerts Page", () => {
           alerts: [lowAlert],
           pagination: mockPagination,
           unresolvedOnly: false,
+          severity: undefined,
+          alertType: undefined,
         }),
       },
     ]);
@@ -395,7 +409,8 @@ describe("Security Alerts Page", () => {
 
     await waitFor(() => {
       expect(screen.getByText("LOW")).toBeInTheDocument();
-      expect(screen.getByText("Suspicious IP")).toBeInTheDocument();
+      // "Suspicious IP" appears both in alert card and type filter; check both exist
+      expect(screen.getAllByText("Suspicious IP").length).toBeGreaterThanOrEqual(1);
     });
   });
 
@@ -553,6 +568,6 @@ describe("Security Alerts Page", () => {
     const request = new Request("http://localhost/dashboard/security/alerts?page=3");
     await loader({ request, params: {}, context: {} });
 
-    expect(securityAlertApi.list).toHaveBeenCalledWith(3, 50, false, undefined);
+    expect(securityAlertApi.list).toHaveBeenCalledWith(3, 50, false, undefined, undefined, undefined);
   });
 });
