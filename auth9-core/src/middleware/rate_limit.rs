@@ -579,7 +579,10 @@ pub async fn rate_limit_middleware(
                 .unwrap_or(&rate_limit.config.default);
             let max_requests = rule.requests;
 
-            if rate_limit.fallback.check(&redis_key, max_requests, rule.window_secs) {
+            if rate_limit
+                .fallback
+                .check(&redis_key, max_requests, rule.window_secs)
+            {
                 metrics::counter!(
                     "auth9_rate_limit_unavailable_total",
                     "endpoint" => endpoint.clone(),

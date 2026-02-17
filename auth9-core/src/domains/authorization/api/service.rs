@@ -219,7 +219,14 @@ pub async fn list<S: HasServices>(
     let tenant_filter = match auth.token_type {
         TokenType::Identity => {
             if !state.config().is_platform_admin_email(&auth.email) {
-                let _ = log_access_denied(&state, &headers, &auth, "service.list", "Platform admin required").await;
+                let _ = log_access_denied(
+                    &state,
+                    &headers,
+                    &auth,
+                    "service.list",
+                    "Platform admin required",
+                )
+                .await;
                 return Err(AppError::Forbidden(
                     "Platform admin required to list services without tenant scope".to_string(),
                 ));
@@ -234,7 +241,14 @@ pub async fn list<S: HasServices>(
             // If they specified a different tenant, deny
             if let Some(requested) = query.tenant_id {
                 if requested != token_tenant {
-                    let _ = log_access_denied(&state, &headers, &auth, "service.list", "Cannot list services in another tenant").await;
+                    let _ = log_access_denied(
+                        &state,
+                        &headers,
+                        &auth,
+                        "service.list",
+                        "Cannot list services in another tenant",
+                    )
+                    .await;
                     return Err(AppError::Forbidden(
                         "Cannot list services in another tenant".to_string(),
                     ));

@@ -125,7 +125,7 @@ function buildFilterUrl(params: Record<string, string | null>) {
 }
 
 export default function SecurityAlertsPage() {
-  const { alerts, pagination, unresolvedOnly, severity, alertType, error } = useLoaderData<typeof loader>();
+  const { alerts, pagination, unresolvedOnly, error } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();

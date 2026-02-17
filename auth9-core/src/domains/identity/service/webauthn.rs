@@ -551,6 +551,284 @@ mod tests {
             .contains("Keycloak not configured"));
     }
 
+    #[tokio::test]
+    async fn test_start_registration_with_existing_credentials() {
+        let mut mock_repo = MockWebAuthnRepository::new();
+        // Return existing credentials that will be in the exclude list
+        mock_repo.expect_list_by_user().returning(|_| {
+            Ok(vec![StoredPasskey {
+                id: "pk-existing".to_string(),
+                user_id: "user-1".to_string(),
+                credential_id: "existing-cred-id".to_string(),
+                credential_data: serde_json::json!({}), // Not a valid Passkey, so it will be filtered out
+                user_label: Some("Existing Key".to_string()),
+                aaguid: None,
+                created_at: chrono::Utc::now(),
+                last_used_at: None,
+            }])
+        });
+
+        let service = create_test_service(mock_repo);
+
+        let user_id = uuid::Uuid::new_v4().to_string();
+        // Should still succeed - the invalid credential_data will be filtered from exclude list
+        let result = service
+            .start_registration(&user_id, "test@example.com", None)
+            .await;
+
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_list_credentials_with_keycloak() {
+        use crate::config::KeycloakConfig;
+        use wiremock::matchers::{method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        // Mock admin token
+        Mock::given(method("POST"))
+            .and(path("/realms/master/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "mock-admin-token",
+                "expires_in": 300,
+                "token_type": "bearer"
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Mock list credentials endpoint
+        Mock::given(method("GET"))
+            .and(path_regex("/admin/realms/.*/users/.*/credentials"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!([
+                {
+                    "id": "cred-1",
+                    "type": "webauthn",
+                    "userLabel": "YubiKey",
+                    "createdDate": 1705000000000_i64
+                },
+                {
+                    "id": "cred-2",
+                    "type": "webauthn-passwordless",
+                    "userLabel": "TouchID",
+                    "createdDate": 1705100000000_i64
+                },
+                {
+                    "id": "cred-3",
+                    "type": "password",
+                    "userLabel": null
+                }
+            ])))
+            .mount(&mock_server)
+            .await;
+
+        let mut mock_repo = MockWebAuthnRepository::new();
+        mock_repo.expect_list_by_user().returning(|_| {
+            Ok(vec![StoredPasskey {
+                id: "pk-native".to_string(),
+                user_id: "user-1".to_string(),
+                credential_id: "native-cred".to_string(),
+                credential_data: serde_json::json!({}),
+                user_label: Some("Native Key".to_string()),
+                aaguid: None,
+                created_at: chrono::Utc::now(),
+                last_used_at: None,
+            }])
+        });
+
+        let keycloak_client = KeycloakClient::new(KeycloakConfig {
+            url: mock_server.uri(),
+            public_url: mock_server.uri(),
+            realm: "auth9".to_string(),
+            admin_client_id: "admin-cli".to_string(),
+            admin_client_secret: "secret".to_string(),
+            ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: None,
+        });
+
+        let service = WebAuthnService::new(
+            create_test_webauthn(),
+            Arc::new(mock_repo),
+            Arc::new(NoOpCacheManager::new()),
+            Some(Arc::new(keycloak_client)),
+            300,
+        );
+
+        let result = service
+            .list_credentials("user-1", Some("kc-user-1"))
+            .await
+            .unwrap();
+
+        // 1 native + 2 keycloak webauthn credentials (password excluded)
+        assert_eq!(result.len(), 3);
+        // Native credential first
+        assert_eq!(result[0].id, "pk-native");
+        // Keycloak credentials prefixed with kc_
+        assert!(result[1].id.starts_with("kc_"));
+        assert!(result[2].id.starts_with("kc_"));
+    }
+
+    #[tokio::test]
+    async fn test_list_credentials_keycloak_error_ignored() {
+        use crate::config::KeycloakConfig;
+        use wiremock::matchers::{method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        // Mock admin token
+        Mock::given(method("POST"))
+            .and(path("/realms/master/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "mock-admin-token",
+                "expires_in": 300
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Mock list credentials returning 500
+        Mock::given(method("GET"))
+            .and(path_regex("/admin/realms/.*/users/.*/credentials"))
+            .respond_with(ResponseTemplate::new(500))
+            .mount(&mock_server)
+            .await;
+
+        let mut mock_repo = MockWebAuthnRepository::new();
+        mock_repo.expect_list_by_user().returning(|_| {
+            Ok(vec![StoredPasskey {
+                id: "pk-1".to_string(),
+                user_id: "user-1".to_string(),
+                credential_id: "cred-1".to_string(),
+                credential_data: serde_json::json!({}),
+                user_label: None,
+                aaguid: None,
+                created_at: chrono::Utc::now(),
+                last_used_at: None,
+            }])
+        });
+
+        let keycloak_client = KeycloakClient::new(KeycloakConfig {
+            url: mock_server.uri(),
+            public_url: mock_server.uri(),
+            realm: "auth9".to_string(),
+            admin_client_id: "admin-cli".to_string(),
+            admin_client_secret: "secret".to_string(),
+            ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: None,
+        });
+
+        let service = WebAuthnService::new(
+            create_test_webauthn(),
+            Arc::new(mock_repo),
+            Arc::new(NoOpCacheManager::new()),
+            Some(Arc::new(keycloak_client)),
+            300,
+        );
+
+        // Should succeed with just native credentials (Keycloak error ignored)
+        let result = service
+            .list_credentials("user-1", Some("kc-user-1"))
+            .await
+            .unwrap();
+        assert_eq!(result.len(), 1);
+        assert_eq!(result[0].id, "pk-1");
+    }
+
+    #[tokio::test]
+    async fn test_delete_keycloak_credential_with_client() {
+        use crate::config::KeycloakConfig;
+        use wiremock::matchers::{method, path, path_regex};
+        use wiremock::{Mock, MockServer, ResponseTemplate};
+
+        let mock_server = MockServer::start().await;
+
+        // Mock admin token
+        Mock::given(method("POST"))
+            .and(path("/realms/master/protocol/openid-connect/token"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "access_token": "mock-admin-token",
+                "expires_in": 300
+            })))
+            .mount(&mock_server)
+            .await;
+
+        // Mock delete credential
+        Mock::given(method("DELETE"))
+            .and(path_regex("/admin/realms/.*/users/.*/credentials/.*"))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        let mock_repo = MockWebAuthnRepository::new();
+
+        let keycloak_client = KeycloakClient::new(KeycloakConfig {
+            url: mock_server.uri(),
+            public_url: mock_server.uri(),
+            realm: "auth9".to_string(),
+            admin_client_id: "admin-cli".to_string(),
+            admin_client_secret: "secret".to_string(),
+            ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: None,
+        });
+
+        let service = WebAuthnService::new(
+            create_test_webauthn(),
+            Arc::new(mock_repo),
+            Arc::new(NoOpCacheManager::new()),
+            Some(Arc::new(keycloak_client)),
+            300,
+        );
+
+        let result = service
+            .delete_credential("user-1", "kc_some-kc-cred-id", Some("kc-user-1"))
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_delete_keycloak_credential_no_keycloak_user_id() {
+        use crate::config::KeycloakConfig;
+
+        let mock_repo = MockWebAuthnRepository::new();
+
+        let keycloak_client = KeycloakClient::new(KeycloakConfig {
+            url: "http://localhost:8081".to_string(),
+            public_url: "http://localhost:8081".to_string(),
+            realm: "auth9".to_string(),
+            admin_client_id: "admin-cli".to_string(),
+            admin_client_secret: "".to_string(),
+            ssl_required: "none".to_string(),
+            core_public_url: None,
+            portal_url: None,
+            webhook_secret: None,
+        });
+
+        let service = WebAuthnService::new(
+            create_test_webauthn(),
+            Arc::new(mock_repo),
+            Arc::new(NoOpCacheManager::new()),
+            Some(Arc::new(keycloak_client)),
+            300,
+        );
+
+        // kc_ prefix but no keycloak_user_id passed
+        let result = service
+            .delete_credential("user-1", "kc_some-cred", None)
+            .await;
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Keycloak not configured"));
+    }
+
     #[test]
     fn test_passkey_auth_result() {
         let result = PasskeyAuthResult {
