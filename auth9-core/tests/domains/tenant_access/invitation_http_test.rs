@@ -1264,7 +1264,7 @@ async fn test_create_invitation_role_from_different_tenant() {
 // ============================================================================
 
 fn build_invitation_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::invitation;
+    use auth9_core::domains::tenant_access::api::invitation;
     use axum::routing::{get, post};
 
     axum::Router::new()

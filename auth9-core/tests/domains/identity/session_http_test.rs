@@ -7,7 +7,7 @@ use crate::support::http::{
     delete_json_with_auth, get_json, get_json_with_auth, post_json, post_json_with_auth,
     MockKeycloakServer, TestAppState,
 };
-use auth9_core::api::session::RevokeSessionsResponse;
+use auth9_core::domains::identity::api::session::RevokeSessionsResponse;
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{Session, SessionInfo, StringUuid};
 use auth9_core::repository::SessionRepository;
@@ -680,7 +680,7 @@ async fn test_revoke_other_sessions_no_other_sessions() {
 // ============================================================================
 
 fn build_session_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::session;
+    use auth9_core::domains::identity::api::session;
     use axum::routing::{get, post};
 
     axum::Router::new()
@@ -696,7 +696,7 @@ fn build_session_test_router(state: TestAppState) -> axum::Router {
 }
 
 fn build_my_session_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::session;
+    use auth9_core::domains::identity::api::session;
     use axum::routing::{delete, get, post};
 
     axum::Router::new()

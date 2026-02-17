@@ -552,7 +552,7 @@ async fn test_change_password_validation_error_empty_current() {
 // ============================================================================
 
 fn build_password_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::password;
+    use auth9_core::domains::identity::api::password;
     use axum::routing::{get, post};
 
     axum::Router::new()

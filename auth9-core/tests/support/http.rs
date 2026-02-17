@@ -24,12 +24,20 @@ use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::middleware::RateLimitState;
 use auth9_core::server::build_full_router;
-use auth9_core::service::{
-    tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ActionService, AnalyticsService,
-    BrandingService, ClientService, EmailService, EmailTemplateService, IdentityProviderService,
-    InvitationService, KeycloakSyncService, PasswordService, RbacService, SecurityDetectionService,
-    SessionService, SystemSettingsService, TenantService, UserService, WebAuthnService,
-    WebhookService,
+use auth9_core::domains::authorization::service::{ClientService, RbacService};
+use auth9_core::domains::identity::service::{
+    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
+};
+use auth9_core::domains::integration::service::{ActionService, WebhookService};
+use auth9_core::domains::platform::service::{
+    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService,
+    SystemSettingsService,
+};
+use auth9_core::domains::security_observability::service::{
+    AnalyticsService, SecurityDetectionService,
+};
+use auth9_core::domains::tenant_access::service::{
+    InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
 };
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -276,7 +284,7 @@ impl TestAppState {
         let db_pool = sqlx::MySqlPool::connect_lazy(&config.database.url).unwrap();
 
         // Create Keycloak sync service for tests
-        let keycloak_updater: Arc<dyn auth9_core::service::keycloak_sync::KeycloakRealmUpdater> =
+        let keycloak_updater: Arc<dyn auth9_core::domains::platform::service::keycloak_sync::KeycloakRealmUpdater> =
             Arc::new(KeycloakClient::new(config.keycloak.clone()));
         let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
 
@@ -649,7 +657,7 @@ pub fn build_test_router(state: TestAppState) -> Router {
 /// This creates a minimal router that includes the email template handlers,
 /// allowing us to test them without implementing all traits required by build_full_router.
 pub fn build_email_template_test_router(state: TestAppState) -> Router {
-    use auth9_core::api::email_template;
+    use auth9_core::domains::platform::api::email_template;
     use axum::routing::{get, post};
 
     Router::new()
@@ -674,7 +682,7 @@ pub fn build_email_template_test_router(state: TestAppState) -> Router {
 ///
 /// This creates a minimal router that includes the system settings handlers.
 pub fn build_system_settings_test_router(state: TestAppState) -> Router {
-    use auth9_core::api::system_settings;
+    use auth9_core::domains::platform::api::system_settings;
     use axum::routing::{get, post};
 
     Router::new()
@@ -698,7 +706,7 @@ pub fn build_system_settings_test_router(state: TestAppState) -> Router {
 ///
 /// This creates a minimal router that includes the branding handlers.
 pub fn build_branding_test_router(state: TestAppState) -> Router {
-    use auth9_core::api::branding;
+    use auth9_core::domains::platform::api::branding;
     use axum::routing::get;
 
     Router::new()

@@ -492,7 +492,7 @@ async fn test_delete_provider_not_found() {
 // ============================================================================
 
 fn build_idp_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::identity_provider;
+    use auth9_core::domains::identity::api::identity_provider;
     use axum::routing::{delete, get};
 
     axum::Router::new()

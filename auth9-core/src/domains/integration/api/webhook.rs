@@ -5,7 +5,7 @@ use crate::domain::{CreateWebhookInput, StringUuid, UpdateWebhookInput, Webhook}
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
-use crate::service::WebhookTestResult;
+use crate::domains::integration::service::WebhookTestResult;
 use crate::state::{HasServices, HasWebhooks};
 use axum::{
     extract::{Path, State},

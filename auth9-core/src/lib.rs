@@ -19,7 +19,6 @@ pub mod migration;
 pub mod policy;
 pub mod repository;
 pub mod server;
-pub mod service;
 pub mod state;
 pub mod telemetry;
 

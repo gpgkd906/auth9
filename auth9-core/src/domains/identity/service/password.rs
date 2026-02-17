@@ -10,7 +10,8 @@ use crate::repository::{
     ActionRepository, PasswordResetRepository, SystemSettingsRepository, TenantRepository,
     UserRepository,
 };
-use crate::service::{ActionEngine, EmailService, KeycloakSyncService};
+use crate::domains::integration::service::ActionEngine;
+use crate::domains::platform::service::{EmailService, KeycloakSyncService};
 use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
@@ -406,7 +407,7 @@ mod tests {
     use crate::repository::password_reset::MockPasswordResetRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use crate::repository::user::MockUserRepository;
-    use crate::service::SystemSettingsService;
+    use crate::domains::platform::service::SystemSettingsService;
     use mockall::predicate::*;
 
     #[test]
