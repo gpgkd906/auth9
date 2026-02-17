@@ -2,6 +2,7 @@ import express from "express";
 import session from "express-session";
 import path from "path";
 import { fileURLToPath } from "url";
+import crypto from "node:crypto";
 import { Auth9 } from "@auth9/node";
 import { Auth9Error, Auth9HttpClient } from "@auth9/core";
 import * as jose from "jose";
@@ -25,6 +26,7 @@ const config = {
     auth9Audience: process.env.AUTH9_AUDIENCE || "demo-service",
     auth9AdminToken: process.env.AUTH9_ADMIN_TOKEN || "",
     clientId: process.env.AUTH9_CLIENT_ID || "auth9-demo",
+    defaultTenantId: process.env.AUTH9_DEFAULT_TENANT_ID || "demo",
 };
 
 // ─── SDK Initialization ─────────────────────────────────────────────────────
@@ -58,6 +60,7 @@ app.set("views", path.join(__dirname, "../src/views"));
 
 app.use(express.static("public"));
 app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 
 // Session middleware
 app.use(
@@ -84,6 +87,11 @@ app.get("/", (req, res) => {
     res.render("index", { user: req.session.user, config });
 });
 
+// 1.1 Health check
+app.get("/health", (_req, res) => {
+    res.json({ status: "ok", service: "auth9-demo" });
+});
+
 // 2. Login - Redirect to Auth9 Core Authorize Endpoint
 app.get("/login", (req, res) => {
     const authUrl = new URL(`${config.auth9PublicUrl}/api/v1/auth/authorize`);
@@ -98,6 +106,58 @@ app.get("/login", (req, res) => {
     authUrl.searchParams.append("nonce", "random-nonce-string");
 
     res.redirect(authUrl.toString());
+});
+
+// 2.1 Enterprise SSO Login (domain discovery -> redirect)
+app.post("/enterprise/login", async (req, res) => {
+    const email = String(req.body.email || "").trim().toLowerCase();
+    if (!email) {
+        return res.status(400).send("Email is required");
+    }
+
+    const state = crypto.randomUUID();
+    const nonce = crypto.randomUUID();
+    // Use internal core URL for server-to-server discovery call.
+    const discoveryUrl = new URL(
+        `${config.auth9Domain}/api/v1/enterprise-sso/discovery`
+    );
+    discoveryUrl.searchParams.set("response_type", "code");
+    discoveryUrl.searchParams.set("client_id", config.clientId);
+    discoveryUrl.searchParams.set(
+        "redirect_uri",
+        `http://localhost:${config.port}/auth/callback`
+    );
+    discoveryUrl.searchParams.set("scope", "openid profile email");
+    discoveryUrl.searchParams.set("state", state);
+    discoveryUrl.searchParams.set("nonce", nonce);
+
+    try {
+        const response = await fetch(discoveryUrl.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+        });
+
+        if (!response.ok) {
+            const text = await response.text();
+            return res.status(response.status).send(text);
+        }
+
+        const payload = (await response.json()) as {
+            data?: { authorize_url?: string };
+        };
+        const authorizeUrl = payload?.data?.authorize_url;
+        if (!authorizeUrl) {
+            return res
+                .status(502)
+                .send("Discovery succeeded but authorize_url is missing");
+        }
+
+        return res.redirect(authorizeUrl);
+    } catch (err: any) {
+        console.error("Enterprise discovery error:", err);
+        return res.status(500).send(`Enterprise discovery failed: ${err.message}`);
+    }
 });
 
 // 3. Callback - Exchange Code for Token
@@ -167,6 +227,7 @@ app.get("/dashboard", (req, res) => {
     res.render("dashboard", {
         user: req.session.user,
         identityToken: req.session.identityToken,
+        config,
     });
 });
 
@@ -228,6 +289,41 @@ const demoRouter = express.Router();
 
 // Parse JSON for these routes
 demoRouter.use(express.json());
+
+function resolveAdminToken(req: express.Request, res: express.Response): string | null {
+    if (config.auth9AdminToken) {
+        return config.auth9AdminToken;
+    }
+
+    const authHeader = req.headers.authorization;
+    if (authHeader?.startsWith("Bearer ")) {
+        return authHeader.slice("Bearer ".length);
+    }
+
+    const rawHeaderToken = req.headers["x-admin-token"];
+    const headerToken = Array.isArray(rawHeaderToken)
+        ? rawHeaderToken[0]
+        : rawHeaderToken;
+    if (headerToken?.trim()) {
+        return headerToken.trim();
+    }
+
+    const bodyToken = String(req.body?.adminToken || "").trim();
+    if (bodyToken) {
+        return bodyToken;
+    }
+
+    const queryToken = String(req.query.adminToken || "").trim();
+    if (queryToken) {
+        return queryToken;
+    }
+
+    res.status(400).json({
+        error: "missing_admin_token",
+        message: "Provide AUTH9_ADMIN_TOKEN or pass admin token via Authorization/x-admin-token",
+    });
+    return null;
+}
 
 // Token Exchange: Identity Token -> Tenant Access Token
 demoRouter.post("/exchange-token", async (req, res) => {
@@ -342,6 +438,170 @@ demoRouter.get("/users", async (req, res) => {
             return;
         }
         res.status(500).json({ error: "list_users_failed", message: err.message });
+    }
+});
+
+// Enterprise SSO: Domain discovery (for QA scripts)
+demoRouter.post("/enterprise/discovery", async (req, res) => {
+    const email = String(req.body?.email || "").trim().toLowerCase();
+    if (!email) {
+        return res
+            .status(400)
+            .json({ error: "missing_email", message: "email is required" });
+    }
+
+    const state = crypto.randomUUID();
+    const nonce = crypto.randomUUID();
+    const discoveryUrl = new URL(
+        `${config.auth9Domain}/api/v1/enterprise-sso/discovery`
+    );
+    discoveryUrl.searchParams.set("response_type", "code");
+    discoveryUrl.searchParams.set("client_id", config.clientId);
+    discoveryUrl.searchParams.set(
+        "redirect_uri",
+        `http://localhost:${config.port}/auth/callback`
+    );
+    discoveryUrl.searchParams.set("scope", "openid profile email");
+    discoveryUrl.searchParams.set("state", state);
+    discoveryUrl.searchParams.set("nonce", nonce);
+
+    try {
+        const response = await fetch(discoveryUrl.toString(), {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ email }),
+        });
+        const text = await response.text();
+        res.status(response.status).type("application/json").send(text);
+    } catch (err: any) {
+        res.status(500).json({
+            error: "enterprise_discovery_failed",
+            message: err.message,
+        });
+    }
+});
+
+// Enterprise SSO: List tenant connectors
+demoRouter.get("/enterprise/connectors", async (req, res) => {
+    const tenantId = String(req.query.tenantId || config.defaultTenantId);
+    const adminToken = resolveAdminToken(req, res);
+    if (!adminToken) return;
+
+    try {
+        const response = await fetch(
+            `${config.auth9Domain}/api/v1/tenants/${tenantId}/sso/connectors`,
+            {
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+        const text = await response.text();
+        res.status(response.status).type("application/json").send(text);
+    } catch (err: any) {
+        res.status(500).json({ error: "list_connectors_failed", message: err.message });
+    }
+});
+
+// Enterprise SSO: Create connector
+demoRouter.post("/enterprise/connectors", async (req, res) => {
+    const tenantId = String(req.body?.tenantId || config.defaultTenantId);
+    const adminToken = resolveAdminToken(req, res);
+    if (!adminToken) return;
+
+    try {
+        const response = await fetch(
+            `${config.auth9Domain}/api/v1/tenants/${tenantId}/sso/connectors`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(req.body),
+            }
+        );
+        const text = await response.text();
+        res.status(response.status).type("application/json").send(text);
+    } catch (err: any) {
+        res.status(500).json({ error: "create_connector_failed", message: err.message });
+    }
+});
+
+// Enterprise SSO: Update connector
+demoRouter.put("/enterprise/connectors/:connectorId", async (req, res) => {
+    const tenantId = String(req.body?.tenantId || req.query.tenantId || config.defaultTenantId);
+    const connectorId = String(req.params.connectorId);
+    const adminToken = resolveAdminToken(req, res);
+    if (!adminToken) return;
+
+    try {
+        const response = await fetch(
+            `${config.auth9Domain}/api/v1/tenants/${tenantId}/sso/connectors/${connectorId}`,
+            {
+                method: "PUT",
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(req.body),
+            }
+        );
+        const text = await response.text();
+        res.status(response.status).type("application/json").send(text);
+    } catch (err: any) {
+        res.status(500).json({ error: "update_connector_failed", message: err.message });
+    }
+});
+
+// Enterprise SSO: Delete connector
+demoRouter.delete("/enterprise/connectors/:connectorId", async (req, res) => {
+    const tenantId = String(req.query.tenantId || config.defaultTenantId);
+    const connectorId = String(req.params.connectorId);
+    const adminToken = resolveAdminToken(req, res);
+    if (!adminToken) return;
+
+    try {
+        const response = await fetch(
+            `${config.auth9Domain}/api/v1/tenants/${tenantId}/sso/connectors/${connectorId}`,
+            {
+                method: "DELETE",
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+        const text = await response.text();
+        res.status(response.status).type("application/json").send(text);
+    } catch (err: any) {
+        res.status(500).json({ error: "delete_connector_failed", message: err.message });
+    }
+});
+
+// Enterprise SSO: Test connector
+demoRouter.post("/enterprise/connectors/:connectorId/test", async (req, res) => {
+    const tenantId = String(req.body?.tenantId || req.query.tenantId || config.defaultTenantId);
+    const connectorId = String(req.params.connectorId);
+    const adminToken = resolveAdminToken(req, res);
+    if (!adminToken) return;
+
+    try {
+        const response = await fetch(
+            `${config.auth9Domain}/api/v1/tenants/${tenantId}/sso/connectors/${connectorId}/test`,
+            {
+                method: "POST",
+                headers: {
+                    Authorization: `Bearer ${adminToken}`,
+                    "Content-Type": "application/json",
+                },
+            }
+        );
+        const text = await response.text();
+        res.status(response.status).type("application/json").send(text);
+    } catch (err: any) {
+        res.status(500).json({ error: "test_connector_failed", message: err.message });
     }
 });
 

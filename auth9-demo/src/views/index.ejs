@@ -190,6 +190,42 @@
     a:hover {
       text-decoration: underline;
     }
+
+    .form-inline {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: center;
+      margin-top: 10px;
+    }
+
+    .input {
+      background: #0d1117;
+      color: #e1e4e8;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 10px;
+      min-width: 260px;
+      font-size: 0.95rem;
+    }
+
+    .btn {
+      display: inline-block;
+      border: 1px solid #30363d;
+      border-radius: 6px;
+      padding: 8px 16px;
+      font-weight: 600;
+      text-decoration: none;
+      cursor: pointer;
+      background: #1f6feb;
+      color: #fff;
+    }
+
+    .btn.secondary {
+      background: #21262d;
+      color: #f0f6fc;
+    }
   </style>
 </head>
 
@@ -216,6 +252,11 @@
           style="display: inline-block; background: #238636; color: white; padding: 8px 20px; border-radius: 6px; text-decoration: none; font-weight: 600; font-size: 1.1rem;">
           Login with Auth9
         </a>
+        <form method="POST" action="/enterprise/login" class="form-inline">
+          <input class="input" type="email" name="email" placeholder="qa-user@corp.example.com" required>
+          <button class="btn secondary" type="submit">Login with Enterprise SSO</button>
+        </form>
+        <p class="hint">企业邮箱登录将先调用域名发现，再重定向到企业 IdP。</p>
         <% } %>
   </div>
 
@@ -257,11 +298,11 @@
 
   <div class="card">
     <span class="method post">POST</span>
-    <span class="endpoint">/api/exchange-token</span>
+    <span class="endpoint">/demo/exchange-token</span>
     <span class="tag grpc-tag">gRPC</span>
     <span class="tag protected">Token Required</span>
     <p class="hint">Exchange Identity Token → Tenant Access Token with roles/permissions</p>
-    <pre>curl -X POST http://localhost:3002/api/exchange-token \
+    <pre>curl -X POST http://localhost:3002/demo/exchange-token \
   -H "Authorization: Bearer &lt;identity-token&gt;" \
   -H "Content-Type: application/json" \
   -d '{"tenantId": "&lt;tenant-id&gt;", "serviceId": "&lt;service-id&gt;"}'</pre>
@@ -269,11 +310,11 @@
 
   <div class="card">
     <span class="method post">POST</span>
-    <span class="endpoint">/api/introspect</span>
+    <span class="endpoint">/demo/introspect</span>
     <span class="tag grpc-tag">gRPC</span>
     <span class="tag protected">Token Required</span>
     <p class="hint">Introspect a token to see its full claims (sub, email, roles, permissions, etc.)</p>
-    <pre>curl -X POST http://localhost:3002/api/introspect \
+    <pre>curl -X POST http://localhost:3002/demo/introspect \
   -H "Authorization: Bearer &lt;token&gt;"</pre>
   </div>
 
@@ -281,7 +322,7 @@
 
   <div class="card">
     <span class="method get">GET</span>
-    <span class="endpoint">/api/tenants</span>
+    <span class="endpoint">/demo/tenants</span>
     <span class="tag mgmt">Management</span>
     <span class="tag protected">Token Required</span>
     <p class="hint">List all tenants via Auth9 Core REST API</p>
@@ -289,10 +330,40 @@
 
   <div class="card">
     <span class="method get">GET</span>
-    <span class="endpoint">/api/users</span>
+    <span class="endpoint">/demo/users</span>
     <span class="tag mgmt">Management</span>
     <span class="tag protected">Token Required</span>
     <p class="hint">List all users via Auth9 Core REST API</p>
+  </div>
+
+  <h3>Enterprise SSO Test Endpoints</h3>
+
+  <div class="card">
+    <span class="method post">POST</span>
+    <span class="endpoint">/enterprise/login</span>
+    <span class="tag public">Public</span>
+    <p class="hint">输入企业邮箱触发 discovery 并跳转到企业 IdP。</p>
+  </div>
+
+  <div class="card">
+    <span class="method post">POST</span>
+    <span class="endpoint">/demo/enterprise/discovery</span>
+    <span class="tag public">Public</span>
+    <p class="hint">用于 QA 脚本验证域名路由，返回 Core discovery 响应。</p>
+  </div>
+
+  <div class="card">
+    <span class="method get">GET</span>
+    <span class="endpoint">/demo/enterprise/connectors?tenantId=&lt;tenant-id&gt;</span>
+    <span class="tag mgmt">Management</span>
+    <p class="hint">查询租户企业连接器（需配置 <code>AUTH9_ADMIN_TOKEN</code>）。</p>
+  </div>
+
+  <div class="card">
+    <span class="method post">POST</span>
+    <span class="endpoint">/demo/enterprise/connectors</span>
+    <span class="tag mgmt">Management</span>
+    <p class="hint">创建连接器；更新、删除、测试见 Dashboard 的 QA 面板。</p>
   </div>
 
   <h2>Auth Flow</h2>
@@ -311,17 +382,17 @@
 TOKEN="your-auth9-token"
 
 # Check your identity
-curl -H "Authorization: Bearer $TOKEN" http://localhost:3001/api/me
+curl -H "Authorization: Bearer $TOKEN" http://localhost:3002/api/me
 
 # Exchange for a tenant-scoped token
-curl -X POST http://localhost:3001/api/exchange-token \
+curl -X POST http://localhost:3002/demo/exchange-token \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tenantId": "your-tenant-id", "serviceId": "your-service-id"}'
 
 # Use the tenant access token for RBAC-protected endpoints
-curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/admin
-curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/resources</pre>
+curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3002/api/admin
+curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3002/api/resources</pre>
 
   <h2>Configuration</h2>
   <table class="config-table">
@@ -332,9 +403,9 @@ curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/resource
       </td>
     </tr>
     <tr>
-      <td>AUTH9_PUBLIC_URL</td>
+      <td>AUTH9_GRPC_API_KEY</td>
       <td>
-        <%= config.auth9PublicUrl %>
+        <%= config.auth9GrpcApiKey %>
       </td>
     </tr>
     <tr>
@@ -359,6 +430,12 @@ curl -H "Authorization: Bearer $TENANT_TOKEN" http://localhost:3001/api/resource
       <td>PORT</td>
       <td>
         <%= config.port %>
+      </td>
+    </tr>
+    <tr>
+      <td>AUTH9_DEFAULT_TENANT_ID</td>
+      <td>
+        <%= config.defaultTenantId %>
       </td>
     </tr>
   </table>

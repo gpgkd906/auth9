@@ -61,7 +61,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (6 个文档, 28 个场景)
+### 认证流程 (7 个文档, 33 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程 | 5 |
@@ -70,6 +70,7 @@
 | [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点 | 5 |
 | [auth/05-boundary.md](./auth/05-boundary.md) | 边界测试 | 3 |
 | [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（OAuth 登录、Token Exchange、登出） | 5 |
+| [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与 `kc_idp_hint` 登录路由 | 5 |
 
 ### 系统设置 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -78,11 +79,12 @@
 | [settings/02-email-provider.md](./settings/02-email-provider.md) | 邮件服务商配置 | 5 |
 | [settings/03-email-templates.md](./settings/03-email-templates.md) | 邮件模板管理 | 5 |
 
-### 身份提供商 (2 个文档, 10 个场景)
+### 身份提供商 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [identity-provider/01-crud.md](./identity-provider/01-crud.md) | 创建、更新、删除身份提供商 | 5 |
 | [identity-provider/02-toggle-validation.md](./identity-provider/02-toggle-validation.md) | 启用/禁用、验证、登录集成 | 5 |
+| [identity-provider/03-tenant-enterprise-sso-connectors.md](./identity-provider/03-tenant-enterprise-sso-connectors.md) | 租户级企业 SSO 连接器管理（SAML/OIDC） | 5 |
 
 ### Passkeys (3 个文档, 15 个场景) 🆕
 | 文档 | 描述 | 场景数 |
@@ -145,16 +147,16 @@
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 5 | 25 |
 | Webhook | 4 | 17 |
-| 认证流程 | 6 | 28 |
+| 认证流程 | 7 | 33 |
 | 系统设置 | 3 | 15 |
-| 身份提供商 | 2 | 10 |
+| 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
 | 分析与统计 | 2 | 10 |
 | 审计日志 | 1 | 5 |
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
 | 集成测试 | 6 | 30 |
-| **总计** | **64** | **315** |
+| **总计** | **66** | **325** |
 
 ---
 
@@ -298,6 +300,8 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-17 | 4.1.1 | 对齐企业 SSO 测试执行路径：`auth/09-enterprise-sso-discovery.md`、`identity-provider/03-tenant-enterprise-sso-connectors.md` 新增 `auth9-demo`（`/enterprise/login` 与 `/demo/enterprise/*`）操作步骤；文档总数与场景数不变（66/325） |
+| 2026-02-17 | 4.1.0 | 新增企业 SSO 测试文档：`auth/09-enterprise-sso-discovery.md` 与 `identity-provider/03-tenant-enterprise-sso-connectors.md`，覆盖域名发现、`kc_idp_hint` 路由、租户级连接器 CRUD 与冲突校验；共 66 个文档 325 个场景 |
 | 2026-02-14 | 4.0.0 | 新增 Service Integration Info（API 端点 + Portal Integration 标签页），共 64 个文档 315 个场景 |
 | 2026-02-14 | 3.9.0 | 新增 Auth9 Demo 完整认证流程回归测试（OAuth 登录、public client token exchange、gRPC tenant slug 支持、登出），共 62 个文档 305 个场景 |
 | 2026-02-13 | 3.8.0 | 新增 Action 模块（CRUD、执行、日志、安全沙箱、API/SDK 集成、Async/Await fetch 支持），共 61 个文档 300 个场景 |

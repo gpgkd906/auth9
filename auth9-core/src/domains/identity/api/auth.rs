@@ -1,9 +1,13 @@
 //! Authentication API handlers
 
+use crate::api::SuccessResponse;
 use crate::cache::CacheOperations;
-use crate::domain::{ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser};
-use crate::service::analytics::LoginEventMetadata;
+use crate::domain::{
+    ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
+    EnterpriseSsoDiscoveryInput, EnterpriseSsoDiscoveryResult, StringUuid,
+};
 use crate::error::{AppError, Result};
+use crate::service::analytics::LoginEventMetadata;
 use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Query, State},
@@ -19,7 +23,9 @@ use rsa::pkcs8::DecodePublicKey;
 use rsa::traits::PublicKeyParts;
 use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
+use sqlx::Row;
 use url::Url;
+use validator::Validate;
 
 /// OIDC Authorization request
 #[derive(Debug, Deserialize)]
@@ -31,6 +37,7 @@ pub struct AuthorizeRequest {
     /// State parameter is required for CSRF protection
     pub state: String,
     pub nonce: Option<String>,
+    pub connector_alias: Option<String>,
 }
 
 /// Allowed OIDC scopes whitelist
@@ -108,9 +115,76 @@ pub async fn authorize<S: HasServices + HasCache>(
         scope: &filtered_scope,
         encoded_state: &state_nonce,
         nonce: params.nonce.as_deref(),
+        connector_alias: params.connector_alias.as_deref(),
     })?;
 
     Ok(Redirect::temporary(&auth_url).into_response())
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct EnterpriseSsoDiscoveryResponse {
+    pub tenant_id: StringUuid,
+    pub tenant_slug: String,
+    pub connector_alias: String,
+    pub authorize_url: String,
+}
+
+/// Enterprise SSO discovery endpoint.
+/// Accepts user email, finds a tenant connector by domain, and returns redirect URL.
+pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::HasDbPool>(
+    State(state): State<S>,
+    Query(params): Query<AuthorizeRequest>,
+    Json(input): Json<EnterpriseSsoDiscoveryInput>,
+) -> Result<Json<SuccessResponse<EnterpriseSsoDiscoveryResponse>>> {
+    input.validate()?;
+    let (_, domain) = input
+        .email
+        .rsplit_once('@')
+        .ok_or_else(|| AppError::Validation("Invalid email".to_string()))?;
+
+    let discovery = discover_connector_by_domain(state.db_pool(), domain).await?;
+
+    let callback_url = build_callback_url(
+        state
+            .config()
+            .keycloak
+            .core_public_url
+            .as_deref()
+            .unwrap_or(&state.config().jwt.issuer),
+    );
+    let filtered_scope = filter_scopes(&params.scope)?;
+
+    let state_payload = CallbackState {
+        redirect_uri: params.redirect_uri,
+        client_id: params.client_id,
+        original_state: Some(params.state),
+    };
+    let state_nonce = uuid::Uuid::new_v4().to_string();
+    let state_payload_json =
+        serde_json::to_string(&state_payload).map_err(|e| AppError::Internal(e.into()))?;
+    state
+        .cache()
+        .store_oidc_state(&state_nonce, &state_payload_json, OIDC_STATE_TTL_SECS)
+        .await?;
+
+    let authorize_url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+        keycloak_public_url: &state.config().keycloak.public_url,
+        realm: &state.config().keycloak.realm,
+        response_type: &params.response_type,
+        client_id: &state_payload.client_id,
+        callback_url: &callback_url,
+        scope: &filtered_scope,
+        encoded_state: &state_nonce,
+        nonce: params.nonce.as_deref(),
+        connector_alias: Some(&discovery.keycloak_alias),
+    })?;
+
+    Ok(Json(SuccessResponse::new(EnterpriseSsoDiscoveryResponse {
+        tenant_id: discovery.tenant_id,
+        tenant_slug: discovery.tenant_slug,
+        connector_alias: discovery.connector_alias,
+        authorize_url,
+    })))
 }
 
 /// OIDC callback handler
@@ -255,8 +329,8 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
 
             // Record login event
             {
-                let mut metadata = LoginEventMetadata::new(user.id, &userinfo.email)
-                    .with_session_id(session.id);
+                let mut metadata =
+                    LoginEventMetadata::new(user.id, &userinfo.email).with_session_id(session.id);
                 if let Some(ref ip) = ip_address {
                     metadata = metadata.with_ip_address(ip.clone());
                 }
@@ -747,6 +821,7 @@ pub struct KeycloakAuthUrlParams<'a> {
     pub scope: &'a str,
     pub encoded_state: &'a str,
     pub nonce: Option<&'a str>,
+    pub connector_alias: Option<&'a str>,
 }
 
 /// Build Keycloak authorization URL
@@ -767,9 +842,47 @@ pub fn build_keycloak_auth_url(params: &KeycloakAuthUrlParams) -> Result<String>
         if let Some(n) = params.nonce {
             pairs.append_pair("nonce", n);
         }
+        if let Some(alias) = params.connector_alias {
+            pairs.append_pair("kc_idp_hint", alias);
+        }
     }
 
     Ok(auth_url.to_string())
+}
+
+async fn discover_connector_by_domain(
+    pool: &sqlx::MySqlPool,
+    domain: &str,
+) -> Result<EnterpriseSsoDiscoveryResult> {
+    let row = sqlx::query(
+        r#"
+        SELECT c.tenant_id, t.slug as tenant_slug, c.alias as connector_alias,
+               c.keycloak_alias, c.provider_type
+        FROM enterprise_sso_domains d
+        INNER JOIN enterprise_sso_connectors c ON c.id = d.connector_id
+        INNER JOIN tenants t ON t.id = c.tenant_id
+        WHERE d.domain = ? AND c.enabled = TRUE
+        LIMIT 1
+        "#,
+    )
+    .bind(domain.to_lowercase())
+    .fetch_optional(pool)
+    .await?;
+
+    let row = row.ok_or_else(|| {
+        AppError::NotFound(format!(
+            "No enterprise SSO connector configured for domain '{}'",
+            domain
+        ))
+    })?;
+
+    Ok(EnterpriseSsoDiscoveryResult {
+        tenant_id: row.try_get("tenant_id")?,
+        tenant_slug: row.try_get("tenant_slug")?,
+        connector_alias: row.try_get("connector_alias")?,
+        keycloak_alias: row.try_get("keycloak_alias")?,
+        provider_type: row.try_get("provider_type")?,
+    })
 }
 
 /// Build Keycloak logout URL
@@ -1585,6 +1698,7 @@ mod tests {
             scope: "openid profile",
             encoded_state: "encoded-state",
             nonce: None,
+            connector_alias: None,
         })
         .unwrap();
 
@@ -1606,6 +1720,7 @@ mod tests {
             scope: "openid",
             encoded_state: "state",
             nonce: Some("my-nonce"),
+            connector_alias: None,
         })
         .unwrap();
 
@@ -1723,6 +1838,7 @@ mod tests {
             scope: "openid profile email",
             encoded_state: "state123",
             nonce: Some("nonce with spaces"),
+            connector_alias: None,
         })
         .unwrap();
 
