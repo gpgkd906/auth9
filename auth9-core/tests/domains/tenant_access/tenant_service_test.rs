@@ -187,6 +187,7 @@ async fn test_create_tenant_success() {
     let input = CreateTenantInput {
         name: "Acme Corporation".to_string(),
         slug: "acme-corp".to_string(),
+        domain: None,
         logo_url: Some("https://example.com/logo.png".to_string()),
         settings: None,
     };
@@ -215,6 +216,7 @@ async fn test_create_tenant_with_settings() {
     let input = CreateTenantInput {
         name: "Enterprise Corp".to_string(),
         slug: "enterprise".to_string(),
+        domain: None,
         logo_url: None,
         settings: Some(settings),
     };
@@ -241,6 +243,7 @@ async fn test_create_tenant_duplicate_slug() {
     let input = CreateTenantInput {
         name: "New Tenant".to_string(),
         slug: "existing-slug".to_string(),
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -257,6 +260,7 @@ async fn test_create_tenant_invalid_slug_with_spaces() {
     let input = CreateTenantInput {
         name: "Test".to_string(),
         slug: "invalid slug".to_string(), // Contains space
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -273,6 +277,7 @@ async fn test_create_tenant_invalid_slug_uppercase() {
     let input = CreateTenantInput {
         name: "Test".to_string(),
         slug: "UPPERCASE".to_string(), // Uppercase
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -289,6 +294,7 @@ async fn test_create_tenant_empty_name() {
     let input = CreateTenantInput {
         name: "".to_string(),
         slug: "valid-slug".to_string(),
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -305,6 +311,7 @@ async fn test_create_tenant_empty_slug() {
     let input = CreateTenantInput {
         name: "Valid Name".to_string(),
         slug: "".to_string(),
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -539,6 +546,7 @@ async fn test_create_tenant_with_unicode_name() {
     let input = CreateTenantInput {
         name: "日本企業株式会社".to_string(),
         slug: "japan-corp".to_string(),
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -556,6 +564,7 @@ async fn test_create_tenant_with_special_chars_name() {
     let input = CreateTenantInput {
         name: "Acme & Co. (Inc.)".to_string(),
         slug: "acme-co".to_string(),
+        domain: None,
         logo_url: None,
         settings: None,
     };
@@ -573,6 +582,7 @@ async fn test_create_tenant_slug_with_numbers() {
     let input = CreateTenantInput {
         name: "Company 123".to_string(),
         slug: "company-123".to_string(),
+        domain: None,
         logo_url: None,
         settings: None,
     };

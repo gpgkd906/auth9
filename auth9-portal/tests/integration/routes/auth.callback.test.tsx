@@ -3,19 +3,13 @@ import { loader } from "~/routes/auth.callback";
 
 // Mock session.server
 vi.mock("~/services/session.server", () => ({
-  commitSession: vi.fn().mockResolvedValue("mocked-cookie"),
-    requireAuthWithUpdate: vi.fn().mockResolvedValue({
-        session: {
-            accessToken: "test-token",
-            refreshToken: "test-refresh-token",
-            idToken: "test-id-token",
-            expiresAt: Date.now() + 3600000,
-        },
-        headers: undefined,
-    }),
+  commitSession: vi.fn(),
+  getOAuthState: vi.fn(),
+  clearOAuthStateCookie: vi.fn(),
+  requireAuthWithUpdate: vi.fn(),
 }));
 
-import { commitSession } from "~/services/session.server";
+import { commitSession, getOAuthState, clearOAuthStateCookie } from "~/services/session.server";
 
 // Mock fetch globally
 const mockFetch = vi.fn();
@@ -25,6 +19,9 @@ describe("Auth Callback", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetch.mockClear();
+    vi.mocked(commitSession).mockResolvedValue("mocked-cookie");
+    vi.mocked(getOAuthState).mockResolvedValue("test-state");
+    vi.mocked(clearOAuthStateCookie).mockResolvedValue("oauth_state=; Max-Age=0");
   });
 
   afterEach(() => {
@@ -88,7 +85,7 @@ describe("Auth Callback", () => {
       });
 
       const request = new Request(
-        "http://localhost/auth/callback?code=auth-code-123"
+        "http://localhost/auth/callback?code=auth-code-123&state=test-state"
       );
 
       const response = await loader({ request, params: {}, context: {} });
@@ -117,7 +114,7 @@ describe("Auth Callback", () => {
       });
 
       const request = new Request(
-        "http://localhost/auth/callback?code=bad-code"
+        "http://localhost/auth/callback?code=bad-code&state=test-state"
       );
 
       const response = await loader({ request, params: {}, context: {} });
@@ -132,7 +129,7 @@ describe("Auth Callback", () => {
       mockFetch.mockRejectedValue(new Error("Network error"));
 
       const request = new Request(
-        "http://localhost/auth/callback?code=auth-code"
+        "http://localhost/auth/callback?code=auth-code&state=test-state"
       );
 
       const response = await loader({ request, params: {}, context: {} });

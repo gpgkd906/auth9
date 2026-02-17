@@ -15,6 +15,7 @@ pub enum TenantStatus {
     Active,
     Inactive,
     Suspended,
+    Pending,
 }
 
 impl std::str::FromStr for TenantStatus {
@@ -25,6 +26,7 @@ impl std::str::FromStr for TenantStatus {
             "active" => Ok(TenantStatus::Active),
             "inactive" => Ok(TenantStatus::Inactive),
             "suspended" => Ok(TenantStatus::Suspended),
+            "pending" => Ok(TenantStatus::Pending),
             _ => Err(format!("Unknown tenant status: {}", s)),
         }
     }
@@ -36,6 +38,7 @@ impl std::fmt::Display for TenantStatus {
             TenantStatus::Active => write!(f, "active"),
             TenantStatus::Inactive => write!(f, "inactive"),
             TenantStatus::Suspended => write!(f, "suspended"),
+            TenantStatus::Pending => write!(f, "pending"),
         }
     }
 }
@@ -68,6 +71,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for TenantStatus {
             TenantStatus::Active => "active",
             TenantStatus::Inactive => "inactive",
             TenantStatus::Suspended => "suspended",
+            TenantStatus::Pending => "pending",
         };
         <&str as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&s, buf)
     }
@@ -132,6 +136,7 @@ pub struct Tenant {
     pub id: StringUuid,
     pub name: String,
     pub slug: String,
+    pub domain: Option<String>,
     pub logo_url: Option<String>,
     #[sqlx(json)]
     pub settings: TenantSettings,
@@ -149,6 +154,7 @@ impl Default for Tenant {
             id: StringUuid::new_v4(),
             name: String::new(),
             slug: String::new(),
+            domain: None,
             logo_url: None,
             settings: TenantSettings::default(),
             status: TenantStatus::default(),
@@ -166,10 +172,25 @@ pub struct CreateTenantInput {
     pub name: String,
     #[validate(length(min = 1, max = 63), custom(function = "validate_slug"))]
     pub slug: String,
+    #[validate(custom(function = "validate_domain_format"))]
+    pub domain: Option<String>,
     #[validate(custom(function = "validate_url_no_ssrf_strict"))]
     pub logo_url: Option<String>,
     #[validate(nested)]
     pub settings: Option<TenantSettings>,
+}
+
+/// Input for self-service organization creation (B2B onboarding)
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct CreateOrganizationInput {
+    #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
+    pub name: String,
+    #[validate(length(min = 1, max = 63), custom(function = "validate_slug"))]
+    pub slug: String,
+    #[validate(length(min = 1, max = 255), custom(function = "validate_domain_format"))]
+    pub domain: String,
+    #[validate(custom(function = "validate_url_no_ssrf_strict"))]
+    pub logo_url: Option<String>,
 }
 
 /// Validate slug format (lowercase alphanumeric with hyphens)
@@ -179,6 +200,21 @@ fn validate_slug(slug: &str) -> Result<(), validator::ValidationError> {
     } else {
         Err(validator::ValidationError::new("invalid_slug"))
     }
+}
+
+/// Validate domain format (e.g. "acme.com")
+fn validate_domain_format(domain: &str) -> Result<(), validator::ValidationError> {
+    if domain.is_empty() {
+        return Ok(());
+    }
+    // Domain must have at least one dot, only lowercase alphanumeric + hyphens + dots
+    let domain_regex = regex::Regex::new(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$").unwrap();
+    if !domain_regex.is_match(domain) {
+        let mut err = validator::ValidationError::new("invalid_domain");
+        err.message = Some("Invalid domain format (e.g. 'example.com')".into());
+        return Err(err);
+    }
+    Ok(())
 }
 
 /// Validate that a string does not contain HTML tags (prevent stored XSS)
@@ -349,6 +385,10 @@ mod tests {
             "suspended".parse::<TenantStatus>().unwrap(),
             TenantStatus::Suspended
         );
+        assert_eq!(
+            "pending".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Pending
+        );
 
         // Case insensitive
         assert_eq!(
@@ -358,6 +398,10 @@ mod tests {
         assert_eq!(
             "Active".parse::<TenantStatus>().unwrap(),
             TenantStatus::Active
+        );
+        assert_eq!(
+            "PENDING".parse::<TenantStatus>().unwrap(),
+            TenantStatus::Pending
         );
     }
 
@@ -373,6 +417,7 @@ mod tests {
         assert_eq!(format!("{}", TenantStatus::Active), "active");
         assert_eq!(format!("{}", TenantStatus::Inactive), "inactive");
         assert_eq!(format!("{}", TenantStatus::Suspended), "suspended");
+        assert_eq!(format!("{}", TenantStatus::Pending), "pending");
     }
 
     #[test]
@@ -395,6 +440,10 @@ mod tests {
             serde_json::to_string(&TenantStatus::Suspended).unwrap(),
             "\"suspended\""
         );
+        assert_eq!(
+            serde_json::to_string(&TenantStatus::Pending).unwrap(),
+            "\"pending\""
+        );
     }
 
     #[test]
@@ -402,10 +451,12 @@ mod tests {
         let active: TenantStatus = serde_json::from_str("\"active\"").unwrap();
         let inactive: TenantStatus = serde_json::from_str("\"inactive\"").unwrap();
         let suspended: TenantStatus = serde_json::from_str("\"suspended\"").unwrap();
+        let pending: TenantStatus = serde_json::from_str("\"pending\"").unwrap();
 
         assert_eq!(active, TenantStatus::Active);
         assert_eq!(inactive, TenantStatus::Inactive);
         assert_eq!(suspended, TenantStatus::Suspended);
+        assert_eq!(pending, TenantStatus::Pending);
     }
 
     #[test]
@@ -413,6 +464,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "My Tenant".to_string(),
             slug: "my-tenant".to_string(),
+            domain: Some("example.com".to_string()),
             logo_url: Some("https://example.com/logo.png".to_string()),
             settings: Some(TenantSettings::default()),
         };
@@ -425,6 +477,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "T".to_string(),
             slug: "t".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -437,6 +490,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "".to_string(),
             slug: "valid-slug".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -449,6 +503,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "Valid Name".to_string(),
             slug: "".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -461,6 +516,7 @@ mod tests {
         let input = CreateTenantInput {
             name: "Valid Name".to_string(),
             slug: "Invalid Slug".to_string(),
+            domain: None,
             logo_url: None,
             settings: None,
         };
@@ -546,6 +602,7 @@ mod tests {
             TenantStatus::Active,
             TenantStatus::Inactive,
             TenantStatus::Suspended,
+            TenantStatus::Pending,
         ] {
             let mut buf = Vec::new();
             let result = sqlx::Encode::<sqlx::MySql>::encode_by_ref(&status, &mut buf);

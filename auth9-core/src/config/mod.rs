@@ -476,6 +476,20 @@ impl Config {
                     "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"
                 );
             }
+            if self.keycloak.webhook_secret.is_none() {
+                anyhow::bail!(
+                    "Keycloak webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET) in production; \
+                     without it, anyone can send spoofed events to POST /api/v1/keycloak/events"
+                );
+            }
+        } else {
+            // Non-production: warn if webhook secret is missing
+            if self.keycloak.webhook_secret.is_none() {
+                tracing::warn!(
+                    "Keycloak webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET); \
+                     webhook signature verification is disabled"
+                );
+            }
         }
         Ok(())
     }
@@ -1648,6 +1662,7 @@ mod tests {
         config.grpc_security.tls_key_path = Some("/path/to/key.pem".to_string());
         config.grpc_security.tls_ca_cert_path = Some("/path/to/ca.pem".to_string());
         config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+        config.keycloak.webhook_secret = Some("test-secret".to_string());
 
         let result = config.validate_security();
         assert!(result.is_ok());
@@ -1663,6 +1678,44 @@ mod tests {
         config.grpc_security.tls_ca_cert_path = None;
 
         // Should not fail validation in development
+        let result = config.validate_security();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_security_production_requires_webhook_secret() {
+        let mut config = test_config();
+        config.environment = ENV_PRODUCTION.to_string();
+        config.grpc_security.auth_mode = "api_key".to_string();
+        config.grpc_security.api_keys = vec!["key1".to_string()];
+        config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+        config.keycloak.webhook_secret = None; // Missing in production
+
+        let result = config.validate_security();
+        assert!(result.is_err());
+        let err_msg = format!("{}", result.unwrap_err());
+        assert!(err_msg.contains("KEYCLOAK_WEBHOOK_SECRET"));
+    }
+
+    #[test]
+    fn test_validate_security_production_with_webhook_secret() {
+        let mut config = test_config();
+        config.environment = ENV_PRODUCTION.to_string();
+        config.grpc_security.auth_mode = "api_key".to_string();
+        config.grpc_security.api_keys = vec!["key1".to_string()];
+        config.jwt_tenant_access_allowed_audiences = vec!["test".to_string()];
+        config.keycloak.webhook_secret = Some("my-secret".to_string());
+
+        let result = config.validate_security();
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_validate_security_dev_allows_missing_webhook_secret() {
+        let mut config = test_config();
+        config.environment = ENV_DEVELOPMENT.to_string();
+        config.keycloak.webhook_secret = None;
+
         let result = config.validate_security();
         assert!(result.is_ok());
     }
