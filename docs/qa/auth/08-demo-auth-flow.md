@@ -36,6 +36,8 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
 - gRPC exchangeToken 的 `tenantId` 支持 UUID 和 slug 两种格式
 - Demo 使用 Auth9-signed `access_token`（非 Keycloak 的 `id_token`）进行 gRPC 调用
 
+> **与 Portal 登录流程的区别**：auth9-demo 是独立的第三方示例应用，其「Login with Auth9」按钮直接调用 `/api/v1/auth/authorize`（不带 `connector_alias`），跳转到 Keycloak 密码登录页。这等价于 Auth9 Portal `/login` 页面上的「**Sign in with password**」路径。Demo 应用不涉及 Enterprise SSO 或 Passkey。
+
 ---
 
 ## 场景 1：Demo 首页加载 & 未登录状态

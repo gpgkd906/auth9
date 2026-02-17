@@ -14,12 +14,15 @@ Auth9 采用 Headless Keycloak 架构，密码相关的用户交互页面均由 
 2. **密码强度验证** → 由 Keycloak 根据 realm 密码策略执行，Auth9 通过 KeycloakSyncService 将租户密码策略同步到 Keycloak
 3. **修改密码（已登录用户）** → 在 Auth9 Portal 的设置页面发起，后端通过 Keycloak Admin API 完成密码更新
 
-**页面归属**：
-- 忘记密码 / 重置密码 / 密码强度提示页面 → Keycloak 托管（auth9-keycloak-theme 定制外观）
+**进入密码相关页面的路径**：
+- Portal `/login` → 点击「**Sign in with password**」→ 跳转到 Keycloak 品牌化登录页
+- 在 Keycloak 登录页上可以看到「忘记密码」链接，点击后进入密码重置流程
 - 已登录用户的「设置 → 安全 → 修改密码」→ Auth9 Portal 页面
 
+> **注意**：「忘记密码」链接位于 Keycloak 品牌化登录页上（非 Portal `/login` 页面）。QA 需要先点击「Sign in with password」进入 Keycloak 页面才能看到该链接。
+
 **测试原则**：
-- 默认从 Auth9 Portal 登录入口触发密码相关流程
+- 默认从 Auth9 Portal 登录入口点击「**Sign in with password**」触发密码相关流程
 - 不要求必须手工直接访问 Keycloak 登录页面 URL
 - 如需排障可直接访问 Keycloak 托管页面进行补充验证
 
@@ -35,7 +38,8 @@ Auth9 采用 Headless Keycloak 架构，密码相关的用户交互页面均由 
 验证忘记密码功能
 
 ### 测试操作流程
-1. 点击「忘记密码」
+1. 在 Portal `/login` 页面点击「**Sign in with password**」进入 Keycloak 品牌化登录页
+2. 点击「忘记密码」链接
 2. 输入注册邮箱：`user@example.com`
 3. 点击「发送重置链接」
 
