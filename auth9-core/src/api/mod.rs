@@ -1,27 +1,6 @@
-//! REST API handlers
+//! REST API shared utilities (response types, pagination, audit helpers)
 
-pub mod action;
-pub mod analytics;
-pub mod audit;
-pub mod auth;
-pub mod branding;
-pub mod email_template;
-pub mod health;
-pub mod identity_provider;
-pub mod invitation;
-pub mod keycloak_event;
 pub mod metrics;
-pub mod password;
-pub mod role;
-pub mod security_alert;
-pub mod service;
-pub mod session;
-pub mod system_settings;
-pub mod tenant;
-pub mod tenant_service;
-pub mod user;
-pub mod webauthn;
-pub mod webhook;
 
 use crate::domain::StringUuid;
 use crate::error::{AppError, Result};

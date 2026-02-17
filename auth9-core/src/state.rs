@@ -15,12 +15,16 @@ use crate::repository::{
     SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
     WebhookRepository,
 };
-use crate::service::{
-    ActionService, AnalyticsService, BrandingService, ClientService, EmailService,
-    EmailTemplateService, IdentityProviderService, InvitationService, PasswordService, RbacService,
-    SecurityDetectionService, SessionService, SystemSettingsService, TenantService, UserService,
-    WebAuthnService, WebhookService,
+use crate::domains::authorization::service::{ClientService, RbacService};
+use crate::domains::identity::service::{
+    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
 };
+use crate::domains::integration::service::{ActionService, WebhookService};
+use crate::domains::platform::service::{
+    BrandingService, EmailService, EmailTemplateService, SystemSettingsService,
+};
+use crate::domains::security_observability::service::{AnalyticsService, SecurityDetectionService};
+use crate::domains::tenant_access::service::{InvitationService, TenantService, UserService};
 
 // ============================================================
 // Generic Service Type Aliases for Trait Bounds

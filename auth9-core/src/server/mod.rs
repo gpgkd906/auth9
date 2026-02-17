@@ -20,12 +20,20 @@ use crate::repository::{
     session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
     tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
-use crate::service::{
-    security_detection::SecurityDetectionConfig, tenant::TenantRepositoryBundle,
-    user::UserRepositoryBundle, ActionEngine, ActionService, AnalyticsService, BrandingService,
-    ClientService, EmailService, EmailTemplateService, IdentityProviderService, InvitationService,
-    KeycloakSyncService, PasswordService, RbacService, SecurityDetectionService, SessionService,
-    SystemSettingsService, TenantService, UserService, WebAuthnService, WebhookService,
+use crate::domains::authorization::service::{ClientService, RbacService};
+use crate::domains::identity::service::{
+    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
+};
+use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
+use crate::domains::platform::service::{
+    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService,
+    SystemSettingsService,
+};
+use crate::domains::security_observability::service::{
+    AnalyticsService, SecurityDetectionConfig, SecurityDetectionService,
+};
+use crate::domains::tenant_access::service::{
+    InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -488,7 +496,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     }
 
     // Create Keycloak sync service (shared between branding and system settings)
-    let keycloak_updater: Arc<dyn crate::service::keycloak_sync::KeycloakRealmUpdater> =
+    let keycloak_updater: Arc<dyn crate::domains::platform::service::keycloak_sync::KeycloakRealmUpdater> =
         keycloak_arc.clone();
     let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
 

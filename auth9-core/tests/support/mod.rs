@@ -35,9 +35,9 @@ pub use auth9_core::repository::{
     SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
     WebAuthnRepository, WebhookRepository,
 };
-pub use auth9_core::service::{
-    tenant::TenantRepositoryBundle, user::UserRepositoryBundle, ClientService, RbacService,
-    TenantService, UserService,
+pub use auth9_core::domains::authorization::service::{ClientService, RbacService};
+pub use auth9_core::domains::tenant_access::service::{
+    TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;

@@ -7,7 +7,7 @@ use crate::support::http::{
     build_test_router, get_json, get_json_with_auth, get_raw, post_json, MockKeycloakServer,
     TestAppState,
 };
-use auth9_core::api::auth::{OpenIdConfiguration, TokenResponse};
+use auth9_core::domains::identity::api::auth::{OpenIdConfiguration, TokenResponse};
 use auth9_core::domain::{Client, StringUuid};
 use axum::http::StatusCode;
 use base64::Engine;
@@ -1960,7 +1960,7 @@ async fn test_openid_configuration_rsa_algorithm() {
 
     let (status, body): (
         StatusCode,
-        Option<auth9_core::api::auth::OpenIdConfiguration>,
+        Option<auth9_core::domains::identity::api::auth::OpenIdConfiguration>,
     ) = get_json(&app, "/.well-known/openid-configuration").await;
 
     assert_eq!(status, StatusCode::OK);

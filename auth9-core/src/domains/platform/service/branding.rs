@@ -3,7 +3,7 @@
 use crate::domain::{BrandingConfig, SettingCategory, SystemSettingRow, UpsertSystemSettingInput};
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
-use crate::service::KeycloakSyncService;
+use crate::domains::platform::service::KeycloakSyncService;
 use std::sync::Arc;
 use validator::Validate;
 

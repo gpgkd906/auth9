@@ -7,7 +7,7 @@ use crate::domain::{
     EnterpriseSsoDiscoveryInput, EnterpriseSsoDiscoveryResult, StringUuid,
 };
 use crate::error::{AppError, Result};
-use crate::service::analytics::LoginEventMetadata;
+use crate::domains::security_observability::service::analytics::LoginEventMetadata;
 use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Query, State},

@@ -10,7 +10,7 @@ use crate::support::{create_test_identity_token, create_test_tenant};
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{StringUuid, Webhook};
 use auth9_core::repository::WebhookRepository;
-use auth9_core::service::WebhookTestResult;
+use auth9_core::domains::integration::service::WebhookTestResult;
 use axum::http::StatusCode;
 use chrono::Utc;
 use serde::{de::DeserializeOwned, Serialize};
@@ -799,7 +799,7 @@ async fn test_webhook_test_wrong_tenant() {
 // ============================================================================
 
 fn build_webhook_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::api::webhook;
+    use auth9_core::domains::integration::api::webhook;
     use axum::routing::{get, post};
 
     axum::Router::new()

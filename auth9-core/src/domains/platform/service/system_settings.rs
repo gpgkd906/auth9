@@ -7,7 +7,7 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
-use crate::service::KeycloakSyncService;
+use crate::domains::platform::service::KeycloakSyncService;
 use std::sync::Arc;
 
 /// Service for managing system-wide settings
