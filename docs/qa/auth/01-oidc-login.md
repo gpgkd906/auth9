@@ -9,7 +9,7 @@
 ## 架构说明
 
 Auth9 采用 Headless Keycloak 架构：
-1. **Keycloak** 仅作为底层 OIDC/MFA 认证引擎，不直接暴露给终端用户
+1. **Keycloak** 仅作为底层 OIDC/MFA 认证引擎，终端用户通过 Auth9 登录入口触发 OIDC 流程（非直接使用 Keycloak 原生入口）
 2. **auth9-keycloak-theme** 对 Keycloak 的登录/注册页面进行完全自定义（基于 Keycloakify），用户看到的是 Auth9 品牌风格的登录界面，而非 Keycloak 原生 UI
 3. **Auth9 Core** 处理所有业务逻辑（用户管理、多租户、RBAC 等）
 4. **Token Exchange** 将 Keycloak 签发的 Identity Token 转换为包含角色/权限的 Tenant Access Token
@@ -32,7 +32,7 @@ Auth9 采用 Headless Keycloak 架构：
 ### 测试操作流程
 1. 访问 Auth9 Portal
 2. 点击「登录」
-3. 重定向到 Keycloak 登录页面
+3. 跳转到 Auth9 品牌化登录页（底层由 Keycloak 托管）
 4. 输入用户名和密码
 5. Keycloak 验证成功
 6. 重定向回 Auth9
@@ -64,7 +64,7 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 验证首次登录时用户自动同步
 
 ### 测试操作流程
-1. 用户通过 Keycloak 登录（首次）
+1. 用户通过 Auth9 登录入口完成首次登录
 2. Auth9 处理 callback
 
 ### 预期结果

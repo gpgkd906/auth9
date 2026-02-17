@@ -128,7 +128,7 @@ FROM tenants WHERE slug = 'test-tenant';
 ### 测试操作流程
 1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
 2. 验证 Keycloak realm 密码策略包含 `forceExpiredPasswordChange(90)`
-3. 用户通过 Keycloak OIDC 登录页面尝试登录
+3. 用户通过 Auth9 登录入口触发 OIDC 流程尝试登录（底层由 Keycloak 执行）
 4. Keycloak 应显示 "UPDATE_PASSWORD" required action 页面
 5. 用户修改密码后成功登录
 
@@ -189,7 +189,7 @@ ORDER BY created_at DESC LIMIT 1;
 ### 测试操作流程
 1. 通过 Auth9 API 设置密码策略（`PUT /api/v1/tenants/{id}/password-policy`）
 2. 验证 Keycloak realm 的 brute force 配置正确
-3. 通过 Keycloak OIDC 登录页面使用错误密码尝试 5 次
+3. 通过 Auth9 登录入口触发 OIDC 流程，使用错误密码尝试 5 次
 4. 第 6 次使用正确密码尝试登录
 5. 检查 Keycloak webhook 事件是否传递到 auth9
 
@@ -254,7 +254,7 @@ GROUP BY event_type;
 ### 测试操作流程
 1. 管理员通过 Auth9 API 为新用户设置临时密码 `Temp123!`（`temporary: true`）
 2. 验证 Keycloak 用户的 `requiredActions` 包含 `UPDATE_PASSWORD`
-3. 用户通过 Keycloak OIDC 登录页面使用临时密码登录
+3. 用户通过 Auth9 登录入口触发 OIDC 流程，使用临时密码登录
 4. Keycloak 强制显示密码修改页面
 5. 用户修改为符合策略的密码 `MyNewPassword456!`
 
