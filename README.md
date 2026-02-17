@@ -146,6 +146,7 @@ ghcr.io/gpgkd906/auth9-portal:latest
 
 ## Documentation
 
+- **[Project Investigation Report](docs/investigation-report.md)** - 📊 **Comprehensive project analysis** (Score: 92.1/100 A+)
 - **[Wiki 主页](wiki/Home.md)** - 完整的中文文档
 - **[用户操作指南](userguide/USER_GUIDE.md)** - 详细的操作手册
 - **[Architecture](docs/architecture.md)** - System design and architecture overview
@@ -154,7 +155,7 @@ ghcr.io/gpgkd906/auth9-portal:latest
 - **[SDK Integration](wiki/SDK集成指南.md)** - TypeScript SDK 使用指南
 - **[QA Test Cases](docs/qa/README.md)** - Functional testing scenarios (185 scenarios)
 - **[UI/UX Test Cases](docs/uiux/README.md)** - UI/UX testing scenarios (27 scenarios)
-- **[Security Test Cases](docs/security/README.md)** - Security testing scenarios (177 scenarios)
+- **[Security Test Cases](docs/security/README.md)** - Security testing scenarios (187 scenarios)
 - **[Keycloak Theme](docs/keycloak-theme.md)** - Customizing Keycloak login pages
 
 ## Development
