@@ -2,10 +2,17 @@ import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import Login, { loader, action, meta } from "~/routes/login";
+import { enterpriseSsoApi } from "~/services/api";
 
 // Mock commitSession
 vi.mock("~/services/session.server", () => ({
     commitSession: vi.fn().mockResolvedValue("mock-session-cookie"),
+}));
+
+vi.mock("~/services/api", () => ({
+    enterpriseSsoApi: {
+        discover: vi.fn(),
+    },
 }));
 
 describe("Login Page", () => {
@@ -18,15 +25,14 @@ describe("Login Page", () => {
     // Loader Tests
     // ============================================================================
 
-    it("loader redirects to authorize endpoint when no error", async () => {
+    it("loader returns default login model when no error", async () => {
         const request = new Request("http://localhost:3000/login");
-        const response = await loader({ request, params: {}, context: {} });
-
-        expect(response.status).toBe(302);
-        const location = response.headers.get("Location");
-        expect(location).toContain("/api/v1/auth/authorize");
-        expect(location).toContain("response_type=code");
-        expect(location).toContain("scope=openid+email+profile");
+        const result = await loader({ request, params: {}, context: {} });
+        expect(result).toEqual({
+            error: null,
+            showPasskey: false,
+            apiBaseUrl: "http://localhost:8080",
+        });
     });
 
     it("loader returns error data when error param present", async () => {
@@ -55,20 +61,41 @@ describe("Login Page", () => {
     // Action Tests
     // ============================================================================
 
-    it("action redirects to authorize endpoint for SSO login", async () => {
+    it("action redirects to discovered enterprise SSO URL", async () => {
         const formData = new FormData();
+        formData.append("intent", "sso-login");
+        formData.append("email", "user@acme.com");
         const request = new Request("http://localhost:3000/login", {
             method: "POST",
             body: formData,
+        });
+
+        vi.mocked(enterpriseSsoApi.discover).mockResolvedValueOnce({
+            data: {
+                tenant_id: "11111111-1111-1111-1111-111111111111",
+                tenant_slug: "acme",
+                connector_alias: "acme-saml",
+                authorize_url: "https://keycloak.example.com/auth?kc_idp_hint=acme--acme-saml",
+            },
         });
 
         const response = await action({ request, params: {}, context: {} });
 
         expect(response.status).toBe(302);
         const location = response.headers.get("Location");
-        expect(location).toContain("/api/v1/auth/authorize");
-        expect(location).toContain("response_type=code");
-        expect(location).toContain("scope=openid+email+profile");
+        expect(location).toContain("kc_idp_hint=acme--acme-saml");
+    });
+
+    it("action returns validation error when SSO email is missing", async () => {
+        const formData = new FormData();
+        formData.append("intent", "sso-login");
+        const request = new Request("http://localhost:3000/login", {
+            method: "POST",
+            body: formData,
+        });
+
+        const response = await action({ request, params: {}, context: {} });
+        expect(response).toEqual({ error: "Email is required for enterprise SSO discovery" });
     });
 
     // ============================================================================
@@ -163,7 +190,7 @@ describe("Login Page", () => {
 
         expect(await screen.findByText("Sign In Failed")).toBeInTheDocument();
         expect(screen.getByText(/Access was denied/)).toBeInTheDocument();
-        expect(screen.getByRole("button", { name: /sign in with sso/i })).toBeInTheDocument();
+        expect(screen.getByRole("button", { name: /continue with enterprise sso/i })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /sign in with passkey/i })).toBeInTheDocument();
     });
 
@@ -215,11 +242,9 @@ describe("Login Page", () => {
         });
     });
 
-    it("loader does not show passkey by default", async () => {
+    it("loader keeps passkey mode off by default", async () => {
         const request = new Request("http://localhost:3000/login");
-        const response = await loader({ request, params: {}, context: {} });
-
-        // Should redirect to authorize, not return data with showPasskey
-        expect(response.status).toBe(302);
+        const result = await loader({ request, params: {}, context: {} });
+        expect(result.showPasskey).toBe(false);
     });
 });

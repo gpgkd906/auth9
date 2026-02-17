@@ -36,6 +36,20 @@ where
                 .delete(tenant_access_api::tenant::delete::<S>),
         )
         .route(
+            "/api/v1/tenants/{tenant_id}/sso/connectors",
+            get(tenant_access_api::tenant_sso::list_connectors::<S>)
+                .post(tenant_access_api::tenant_sso::create_connector::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}",
+            axum::routing::put(tenant_access_api::tenant_sso::update_connector::<S>)
+                .delete(tenant_access_api::tenant_sso::delete_connector::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/test",
+            post(tenant_access_api::tenant_sso::test_connector::<S>),
+        )
+        .route(
             "/api/v1/users/me",
             get(tenant_access_api::user::get_me::<S>).put(tenant_access_api::user::update_me::<S>),
         )

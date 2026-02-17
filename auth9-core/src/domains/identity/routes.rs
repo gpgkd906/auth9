@@ -23,6 +23,10 @@ where
             "/api/v1/auth/callback",
             get(identity_api::auth::callback::<S>),
         )
+        .route(
+            "/api/v1/enterprise-sso/discovery",
+            post(identity_api::auth::enterprise_sso_discovery::<S>),
+        )
         .route("/api/v1/auth/token", post(identity_api::auth::token::<S>))
         .route(
             "/api/v1/auth/logout",
@@ -101,6 +105,10 @@ where
             "/api/v1/identity-providers",
             get(identity_api::identity_provider::list_providers::<S>)
                 .post(identity_api::identity_provider::create_provider::<S>),
+        )
+        .route(
+            "/api/v1/identity-providers/templates",
+            get(identity_api::identity_provider::get_templates::<S>),
         )
         .route(
             "/api/v1/identity-providers/{alias}",

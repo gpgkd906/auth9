@@ -57,7 +57,7 @@ const PROVIDER_TEMPLATES = [
     name: "SAML 2.0",
     icon: "SAML",
     color: "bg-orange-600",
-    requiredFields: ["entityId", "ssoUrl", "certificate"],
+    requiredFields: ["entityId", "singleSignOnServiceUrl", "signingCertificate"],
   },
 ];
 
@@ -508,6 +508,60 @@ export default function IdentityProvidersPage() {
                         }))
                       }
                       placeholder="https://provider.com/oauth/token"
+                    />
+                  </div>
+                )}
+
+                {template?.requiredFields.includes("entityId") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="entityId">Entity ID <span className="text-[var(--accent-red)]">*</span></Label>
+                    <Input
+                      id="entityId"
+                      required
+                      value={formData.config.entityId || ""}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          config: { ...prev.config, entityId: e.target.value },
+                        }))
+                      }
+                      placeholder="https://idp.example.com/entity"
+                    />
+                  </div>
+                )}
+
+                {template?.requiredFields.includes("singleSignOnServiceUrl") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="singleSignOnServiceUrl">Single Sign-On Service URL <span className="text-[var(--accent-red)]">*</span></Label>
+                    <Input
+                      id="singleSignOnServiceUrl"
+                      required
+                      value={formData.config.singleSignOnServiceUrl || ""}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          config: { ...prev.config, singleSignOnServiceUrl: e.target.value },
+                        }))
+                      }
+                      placeholder="https://idp.example.com/sso"
+                    />
+                  </div>
+                )}
+
+                {template?.requiredFields.includes("signingCertificate") && (
+                  <div className="space-y-2">
+                    <Label htmlFor="signingCertificate">Signing Certificate <span className="text-[var(--accent-red)]">*</span></Label>
+                    <Input
+                      id="signingCertificate"
+                      required
+                      value={formData.config.signingCertificate || ""}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          config: { ...prev.config, signingCertificate: e.target.value },
+                        }))
+                      }
+                      placeholder="-----BEGIN CERTIFICATE-----..."
                     />
                   </div>
                 )}
