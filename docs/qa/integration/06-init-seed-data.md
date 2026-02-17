@@ -15,7 +15,7 @@
 - **2 个租户**: "Auth9 Platform"（slug: `auth9-platform`）和 "Demo Organization"（slug: `demo`）
 - **1 个管理员用户**: 从 Keycloak 获取 `keycloak_id` 和 `email`，display_name 为 "Admin User"
 - **2 条 tenant_users**: 管理员关联到两个租户，角色为 `admin`
-- **2 条 tenant_services**: 两个租户均启用 "Auth9 Admin Portal" 服务
+- **4 条 tenant_services**: 两个租户均启用 "Auth9 Admin Portal" 服务，demo 租户额外启用 "Auth9 Demo Service" 和 "Auth9 M2M Test Service"
 
 管理员邮箱可通过 `AUTH9_ADMIN_EMAIL` 环境变量配置，默认为 `admin@auth9.local`。
 
@@ -112,16 +112,18 @@ ORDER BY t.slug;
 -- | auth9-platform | admin |
 -- | demo           | admin |
 
--- 验证租户服务关联（2 行）
+-- 验证租户服务关联（4 行）
 SELECT t.slug, s.name, ts.enabled
 FROM tenant_services ts
 JOIN tenants t ON t.id = ts.tenant_id
 JOIN services s ON s.id = ts.service_id
 WHERE t.slug IN ('auth9-platform', 'demo')
-ORDER BY t.slug;
+ORDER BY t.slug, s.name;
 -- 预期:
--- | auth9-platform | Auth9 Admin Portal | 1 |
--- | demo           | Auth9 Admin Portal | 1 |
+-- | auth9-platform | Auth9 Admin Portal     | 1 |
+-- | demo           | Auth9 Admin Portal     | 1 |
+-- | demo           | Auth9 Demo Service     | 1 |
+-- | demo           | Auth9 M2M Test Service | 1 |
 ```
 
 ---
@@ -169,12 +171,12 @@ JOIN users u ON u.id = tu.user_id
 WHERE u.display_name = 'Admin User';
 -- 预期: 2
 
--- 验证 tenant_services 仍然只有 2 行
+-- 验证 tenant_services 仍然只有 4 行
 SELECT COUNT(*)
 FROM tenant_services ts
 JOIN tenants t ON t.id = ts.tenant_id
 WHERE t.slug IN ('auth9-platform', 'demo');
--- 预期: 2
+-- 预期: 4
 ```
 
 ---

@@ -119,7 +119,7 @@ impl<R: SystemSettingsRepository> EmailService<R> {
         provider
             .send(message)
             .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Email send failed: {}", e)))
+            .map_err(|e| AppError::BadRequest(format!("Email send failed: {}", e)))
     }
 
     /// Send an email using a specific from address override
@@ -730,7 +730,7 @@ mod tests {
             "<p>World</p>",
         );
         let result = email_service.send(&message, None).await;
-        assert!(matches!(result, Err(AppError::Internal(_))));
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
     }
 
     #[tokio::test]

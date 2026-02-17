@@ -1,28 +1,49 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, Link, useSearchParams } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
-import { securityAlertApi, type SecurityAlert, type AlertSeverity } from "~/services/api";
+import { securityAlertApi, type SecurityAlert, type AlertSeverity, type SecurityAlertType } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import {
   ExclamationTriangleIcon,
   CheckCircledIcon,
 } from "@radix-ui/react-icons";
 
+const SEVERITY_OPTIONS: { value: AlertSeverity; label: string }[] = [
+  { value: "critical", label: "Critical" },
+  { value: "high", label: "High" },
+  { value: "medium", label: "Medium" },
+  { value: "low", label: "Low" },
+];
+
+const ALERT_TYPE_OPTIONS: { value: SecurityAlertType; label: string }[] = [
+  { value: "brute_force", label: "Brute Force" },
+  { value: "new_device", label: "New Device" },
+  { value: "impossible_travel", label: "Impossible Travel" },
+  { value: "suspicious_ip", label: "Suspicious IP" },
+];
+
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const unresolvedOnly = url.searchParams.get("unresolved") === "true";
+  const severity = url.searchParams.get("severity") as AlertSeverity | null;
+  const alertType = url.searchParams.get("alert_type") as SecurityAlertType | null;
   const accessToken = await getAccessToken(request);
 
   try {
-    const response = await securityAlertApi.list(page, 50, unresolvedOnly, accessToken || undefined);
-    return { alerts: response.data, pagination: response.pagination, unresolvedOnly };
+    const response = await securityAlertApi.list(
+      page, 50, unresolvedOnly, accessToken || undefined,
+      severity || undefined, alertType || undefined,
+    );
+    return { alerts: response.data, pagination: response.pagination, unresolvedOnly, severity, alertType };
   } catch {
     return {
       alerts: [],
       pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
       unresolvedOnly,
+      severity,
+      alertType,
       error: "Failed to load security alerts",
     };
   }
@@ -94,14 +115,37 @@ function formatDate(dateString: string) {
   return date.toLocaleString();
 }
 
+function buildFilterUrl(params: Record<string, string | null>) {
+  const search = new URLSearchParams();
+  for (const [key, value] of Object.entries(params)) {
+    if (value) search.set(key, value);
+  }
+  const qs = search.toString();
+  return qs ? `?${qs}` : "?";
+}
+
 export default function SecurityAlertsPage() {
-  const { alerts, pagination, unresolvedOnly, error } = useLoaderData<typeof loader>();
+  const { alerts, pagination, unresolvedOnly, severity, alertType, error } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const [searchParams] = useSearchParams();
 
   const isSubmitting = navigation.state === "submitting";
 
   const unresolvedCount = alerts.filter((a: SecurityAlert) => !a.resolved_at).length;
+
+  const currentSeverity = searchParams.get("severity");
+  const currentAlertType = searchParams.get("alert_type");
+
+  // Build base params preserving existing filters
+  function filterUrl(overrides: Record<string, string | null>) {
+    const base: Record<string, string | null> = {
+      unresolved: unresolvedOnly ? "true" : null,
+      severity: currentSeverity,
+      alert_type: currentAlertType,
+    };
+    return buildFilterUrl({ ...base, ...overrides, page: null });
+  }
 
   return (
     <div className="space-y-6">
@@ -115,7 +159,7 @@ export default function SecurityAlertsPage() {
         </div>
         <div className="flex gap-2">
           <Link
-            to="?unresolved=false"
+            to={filterUrl({ unresolved: null })}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               !unresolvedOnly
                 ? "bg-blue-600 text-white"
@@ -125,7 +169,7 @@ export default function SecurityAlertsPage() {
             All
           </Link>
           <Link
-            to="?unresolved=true"
+            to={filterUrl({ unresolved: "true" })}
             className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
               unresolvedOnly
                 ? "bg-blue-600 text-white"
@@ -134,6 +178,69 @@ export default function SecurityAlertsPage() {
           >
             Unresolved ({unresolvedCount})
           </Link>
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex gap-4 flex-wrap">
+        {/* Severity Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--text-secondary)]">Severity:</span>
+          <div className="flex gap-1">
+            <Link
+              to={filterUrl({ severity: null })}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                !currentSeverity
+                  ? "bg-blue-600 text-white"
+                  : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
+              }`}
+            >
+              All
+            </Link>
+            {SEVERITY_OPTIONS.map((opt) => (
+              <Link
+                key={opt.value}
+                to={filterUrl({ severity: currentSeverity === opt.value ? null : opt.value })}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  currentSeverity === opt.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
+                }`}
+              >
+                {opt.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
+        {/* Alert Type Filter */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-[var(--text-secondary)]">Type:</span>
+          <div className="flex gap-1">
+            <Link
+              to={filterUrl({ alert_type: null })}
+              className={`px-2 py-1 text-xs rounded transition-colors ${
+                !currentAlertType
+                  ? "bg-blue-600 text-white"
+                  : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
+              }`}
+            >
+              All
+            </Link>
+            {ALERT_TYPE_OPTIONS.map((opt) => (
+              <Link
+                key={opt.value}
+                to={filterUrl({ alert_type: currentAlertType === opt.value ? null : opt.value })}
+                className={`px-2 py-1 text-xs rounded transition-colors ${
+                  currentAlertType === opt.value
+                    ? "bg-blue-600 text-white"
+                    : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
+                }`}
+              >
+                {opt.label}
+              </Link>
+            ))}
+          </div>
         </div>
       </div>
 
@@ -251,9 +358,7 @@ export default function SecurityAlertsPage() {
               <div className="flex gap-2">
                 {pagination.page > 1 && (
                   <Link
-                    to={`?page=${pagination.page - 1}${
-                      unresolvedOnly ? "&unresolved=true" : ""
-                    }`}
+                    to={filterUrl({ page: String(pagination.page - 1) })}
                   >
                     <Button variant="outline" size="sm">
                       Previous
@@ -262,9 +367,7 @@ export default function SecurityAlertsPage() {
                 )}
                 {pagination.page < pagination.total_pages && (
                   <Link
-                    to={`?page=${pagination.page + 1}${
-                      unresolvedOnly ? "&unresolved=true" : ""
-                    }`}
+                    to={filterUrl({ page: String(pagination.page + 1) })}
                   >
                     <Button variant="outline" size="sm">
                       Next

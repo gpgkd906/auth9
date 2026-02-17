@@ -730,6 +730,54 @@ impl KeycloakClient {
         Ok(())
     }
 
+    /// Reset a user's password bypassing Keycloak realm password policy.
+    ///
+    /// Used for admin-set passwords (especially temporary ones) that may not
+    /// meet the realm's password policy requirements. Temporarily clears the
+    /// realm password policy, sets the password, then restores the policy.
+    pub async fn admin_reset_user_password(
+        &self,
+        user_id: &str,
+        password: &str,
+        temporary: bool,
+    ) -> Result<()> {
+        // 1. Get current realm to save the password policy
+        let realm = self.get_realm().await?;
+        let original_policy = realm.password_policy.clone();
+
+        // 2. Temporarily clear password policy
+        if original_policy.is_some() {
+            self.update_realm(&RealmUpdate {
+                password_policy: Some(String::new()),
+                ..Default::default()
+            })
+            .await?;
+        }
+
+        // 3. Set the password (using the existing method)
+        let result = self
+            .reset_user_password(user_id, password, temporary)
+            .await;
+
+        // 4. Always restore the password policy, even if password set failed
+        if let Some(ref policy) = original_policy {
+            if let Err(e) = self
+                .update_realm(&RealmUpdate {
+                    password_policy: Some(policy.clone()),
+                    ..Default::default()
+                })
+                .await
+            {
+                tracing::error!(
+                    "CRITICAL: Failed to restore Keycloak password policy after admin password reset: {}",
+                    e
+                );
+            }
+        }
+
+        result
+    }
+
     /// Validate a user's password by attempting to get a token
     pub async fn validate_user_password(&self, user_id: &str, password: &str) -> Result<bool> {
         // Get the user to get their username

@@ -1,8 +1,8 @@
 //! Service/Client API handlers
 
 use crate::api::{
-    deserialize_page, deserialize_per_page, write_audit_log_generic, MessageResponse,
-    PaginatedResponse, SuccessResponse,
+    deserialize_page, deserialize_per_page, extract_actor_id_generic, extract_ip,
+    write_audit_log_generic, MessageResponse, PaginatedResponse, SuccessResponse,
 };
 use crate::config::Config;
 use crate::domain::{
@@ -11,6 +11,8 @@ use crate::domain::{
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakOidcClient;
 use crate::middleware::auth::{AuthUser, TokenType};
+use crate::repository::audit::CreateAuditLogInput;
+use crate::repository::AuditRepository;
 use crate::state::HasServices;
 use axum::{
     extract::{Path, Query, State},
@@ -211,11 +213,13 @@ fn default_per_page() -> i64 {
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
+    headers: HeaderMap,
     Query(query): Query<ListServicesQuery>,
 ) -> Result<impl IntoResponse> {
     let tenant_filter = match auth.token_type {
         TokenType::Identity => {
             if !state.config().is_platform_admin_email(&auth.email) {
+                let _ = log_access_denied(&state, &headers, &auth, "service.list", "Platform admin required").await;
                 return Err(AppError::Forbidden(
                     "Platform admin required to list services without tenant scope".to_string(),
                 ));
@@ -230,6 +234,7 @@ pub async fn list<S: HasServices>(
             // If they specified a different tenant, deny
             if let Some(requested) = query.tenant_id {
                 if requested != token_tenant {
+                    let _ = log_access_denied(&state, &headers, &auth, "service.list", "Cannot list services in another tenant").await;
                     return Err(AppError::Forbidden(
                         "Cannot list services in another tenant".to_string(),
                     ));
@@ -877,6 +882,34 @@ pub async fn regenerate_client_secret<S: HasServices>(
         "client_id": client_id,
         "client_secret": new_secret
     }))))
+}
+
+/// Log an access_denied event to the audit log
+async fn log_access_denied<S: HasServices>(
+    state: &S,
+    headers: &HeaderMap,
+    auth: &AuthUser,
+    action: &str,
+    reason: &str,
+) {
+    let actor_id = extract_actor_id_generic(state, headers);
+    let ip_address = extract_ip(headers);
+    let _ = state
+        .audit_repo()
+        .create(&CreateAuditLogInput {
+            actor_id,
+            action: "access_denied".to_string(),
+            resource_type: action.to_string(),
+            resource_id: None,
+            old_value: None,
+            new_value: serde_json::to_value(serde_json::json!({
+                "reason": reason,
+                "actor_email": &auth.email,
+            }))
+            .ok(),
+            ip_address,
+        })
+        .await;
 }
 
 #[cfg(test)]

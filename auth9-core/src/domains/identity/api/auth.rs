@@ -2,8 +2,9 @@
 
 use crate::cache::CacheOperations;
 use crate::domain::{ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser};
+use crate::service::analytics::LoginEventMetadata;
 use crate::error::{AppError, Result};
-use crate::state::{HasCache, HasServices, HasSessionManagement};
+use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Query, State},
     http::{HeaderMap, StatusCode},
@@ -64,6 +65,13 @@ pub async fn authorize<S: HasServices + HasCache>(
         .await?;
 
     validate_redirect_uri(&service.redirect_uris, &params.redirect_uri)?;
+
+    // Validate state parameter is non-empty for CSRF protection
+    if params.state.trim().is_empty() {
+        return Err(AppError::BadRequest(
+            "State parameter is required and cannot be empty".to_string(),
+        ));
+    }
 
     // Validate and filter scope against whitelist
     let filtered_scope = filter_scopes(&params.scope)?;
@@ -174,7 +182,7 @@ pub struct TokenRequest {
     pub refresh_token: Option<String>,
 }
 
-pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
+pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalytics>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(params): Json<TokenRequest>,
@@ -245,15 +253,55 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache>(
                 .create_session(user.id, None, ip_address.clone(), user_agent.clone())
                 .await?;
 
+            // Record login event
+            {
+                let mut metadata = LoginEventMetadata::new(user.id, &userinfo.email)
+                    .with_session_id(session.id);
+                if let Some(ref ip) = ip_address {
+                    metadata = metadata.with_ip_address(ip.clone());
+                }
+                if let Some(ref ua) = user_agent {
+                    metadata = metadata.with_user_agent(ua.clone());
+                }
+                if let Err(e) = state
+                    .analytics_service()
+                    .record_successful_login(metadata)
+                    .await
+                {
+                    tracing::warn!(
+                        user_id = %user.id,
+                        "Failed to record login event: {}",
+                        e
+                    );
+                }
+            }
+
             // Execute post-login Actions (if any are configured for this tenant)
             let custom_claims = {
                 // Look up tenant from client_id
-                let tenant_id = state
+                let tenant_id = match state
                     .client_service()
                     .get_by_client_id(&state_payload.client_id)
                     .await
-                    .ok()
-                    .and_then(|svc| svc.tenant_id);
+                {
+                    Ok(svc) => {
+                        if svc.tenant_id.is_none() {
+                            tracing::warn!(
+                                "Service for client_id '{}' has no tenant_id, skipping post-login actions",
+                                state_payload.client_id
+                            );
+                        }
+                        svc.tenant_id
+                    }
+                    Err(e) => {
+                        tracing::warn!(
+                            "Failed to look up service for client_id '{}': {}, skipping post-login actions",
+                            state_payload.client_id,
+                            e
+                        );
+                        None
+                    }
+                };
 
                 if let Some(tenant_id) = tenant_id {
                     let action_context = ActionContext {

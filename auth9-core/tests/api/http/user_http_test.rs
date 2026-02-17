@@ -564,10 +564,7 @@ async fn test_enable_mfa() {
     let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa";
     let admin_id = Uuid::new_v4();
-    let admin_kc_id = admin_id.to_string();
     mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
-    mock_kc.mock_get_user_success(&admin_kc_id).await;
-    mock_kc.mock_validate_password_valid().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_admin_token_for_user(admin_id);
@@ -583,7 +580,7 @@ async fn test_enable_mfa() {
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) = post_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", user_id),
-        &json!({"current_password": "Admin123!"}),
+        &json!({}),
         &token,
     )
     .await;
@@ -595,43 +592,11 @@ async fn test_enable_mfa() {
 }
 
 #[tokio::test]
-async fn test_enable_mfa_requires_password() {
-    let mock_kc = MockKeycloakServer::new().await;
-    let keycloak_user_id = "kc-user-mfa-nopass";
-    mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
-
-    let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
-
-    let user_id = Uuid::new_v4();
-    let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
-    user.mfa_enabled = false;
-    state.user_repo.add_user(user).await;
-
-    let app = build_test_router(state);
-
-    // No password provided - should return 400
-    let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
-        &app,
-        &format!("/api/v1/users/{}/mfa", user_id),
-        &json!({}),
-        &token,
-    )
-    .await;
-
-    assert_eq!(status, StatusCode::BAD_REQUEST);
-}
-
-#[tokio::test]
 async fn test_disable_mfa() {
     let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa-disable";
     let admin_id = Uuid::new_v4();
-    let admin_kc_id = admin_id.to_string();
     mock_kc.setup_for_mfa_disable(keycloak_user_id).await;
-    mock_kc.mock_get_user_success(&admin_kc_id).await;
-    mock_kc.mock_validate_password_valid().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_admin_token_for_user(admin_id);
@@ -644,10 +609,9 @@ async fn test_disable_mfa() {
 
     let app = build_test_router(state);
 
-    let (status, body): (StatusCode, Option<SuccessResponse<User>>) = delete_json_body_with_auth(
+    let (status, body): (StatusCode, Option<SuccessResponse<User>>) = delete_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", user_id),
-        &json!({"current_password": "Admin123!"}),
         &token,
     )
     .await;

@@ -363,6 +363,27 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         Ok((alerts, total))
     }
 
+    /// List security alerts with optional filters
+    pub async fn list_filtered(
+        &self,
+        page: i64,
+        per_page: i64,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<(Vec<SecurityAlert>, i64)> {
+        let offset = (page - 1) * per_page;
+        let alerts = self
+            .security_alert_repo
+            .list_filtered(offset, per_page, unresolved_only, severity.clone(), alert_type.clone())
+            .await?;
+        let total = self
+            .security_alert_repo
+            .count_filtered(unresolved_only, severity, alert_type)
+            .await?;
+        Ok((alerts, total))
+    }
+
     /// Resolve a security alert
     pub async fn resolve(
         &self,

@@ -231,6 +231,7 @@ impl KeycloakSeeder {
             ssl_required: Some(self.config.ssl_required.clone()),
             // Use auth9 custom login theme
             login_theme: Some("auth9".to_string()),
+            password_policy: None,
         };
 
         let response = self
@@ -401,7 +402,7 @@ impl KeycloakSeeder {
             obj.insert(
                 "passwordPolicy".to_string(),
                 serde_json::json!(
-                    "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername() and passwordHistory(5) and hashIterations(100000)"
+                    "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername() and passwordHistory(5) and hashAlgorithm(pbkdf2-sha512) and hashIterations(210000)"
                 ),
             );
         }

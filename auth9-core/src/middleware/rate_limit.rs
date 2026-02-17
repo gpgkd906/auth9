@@ -17,7 +17,7 @@ use redis::{aio::ConnectionManager, Script};
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
-    sync::Arc,
+    sync::{Arc, Mutex},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -107,6 +107,55 @@ impl RateLimitKey {
     }
 }
 
+/// In-memory fallback rate limiter used when Redis is unavailable.
+///
+/// Uses a simple sliding window counter per key. Not as precise as the
+/// Redis-backed implementation but prevents unbounded request flooding
+/// during Redis outages.
+#[derive(Clone)]
+struct InMemoryRateLimiter {
+    /// Map of key -> list of request timestamps (epoch seconds)
+    buckets: Arc<Mutex<HashMap<String, Vec<u64>>>>,
+}
+
+impl InMemoryRateLimiter {
+    fn new() -> Self {
+        Self {
+            buckets: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Check and record a request. Returns `true` if allowed, `false` if rate-limited.
+    fn check(&self, key: &str, max_requests: u64, window_secs: u64) -> bool {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let cutoff = now.saturating_sub(window_secs);
+
+        let mut buckets = self.buckets.lock().unwrap();
+        let timestamps = buckets.entry(key.to_string()).or_default();
+
+        // Evict expired entries
+        timestamps.retain(|&ts| ts > cutoff);
+
+        if timestamps.len() as u64 >= max_requests {
+            return false;
+        }
+        timestamps.push(now);
+
+        // Periodic cleanup: cap total entries to avoid unbounded growth
+        if buckets.len() > 10_000 {
+            buckets.retain(|_, v| {
+                v.retain(|&ts| ts > cutoff);
+                !v.is_empty()
+            });
+        }
+
+        true
+    }
+}
+
 /// Rate limit state shared across requests
 #[derive(Clone)]
 pub struct RateLimitState {
@@ -115,6 +164,7 @@ pub struct RateLimitState {
     jwt_manager: Option<JwtManager>,
     allowed_audiences: Arc<Vec<String>>,
     is_production: bool,
+    fallback: InMemoryRateLimiter,
 }
 
 impl RateLimitState {
@@ -132,6 +182,7 @@ impl RateLimitState {
             jwt_manager: Some(jwt_manager),
             allowed_audiences: Arc::new(allowed_audiences),
             is_production,
+            fallback: InMemoryRateLimiter::new(),
         }
     }
 
@@ -146,6 +197,7 @@ impl RateLimitState {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         }
     }
 
@@ -500,6 +552,7 @@ pub async fn rate_limit_middleware(
         }
         Err(_) => {
             if is_sensitive_endpoint(&endpoint) {
+                // Sensitive endpoints: fail-closed (reject immediately)
                 metrics::counter!(
                     "auth9_rate_limit_unavailable_total",
                     "endpoint" => endpoint.clone(),
@@ -516,7 +569,38 @@ pub async fn rate_limit_middleware(
                     .insert("Content-Type", "application/json".parse().unwrap());
                 return response;
             }
-            next.run(request).await
+
+            // Non-sensitive endpoints: use in-memory fallback rate limiter
+            let redis_key = key.to_redis_key(&endpoint);
+            let rule = rate_limit
+                .config
+                .endpoints
+                .get(&endpoint)
+                .unwrap_or(&rate_limit.config.default);
+            let max_requests = rule.requests;
+
+            if rate_limit.fallback.check(&redis_key, max_requests, rule.window_secs) {
+                metrics::counter!(
+                    "auth9_rate_limit_unavailable_total",
+                    "endpoint" => endpoint.clone(),
+                    "mode" => "fallback_allow"
+                )
+                .increment(1);
+                next.run(request).await
+            } else {
+                metrics::counter!(
+                    "auth9_rate_limit_unavailable_total",
+                    "endpoint" => endpoint.clone(),
+                    "mode" => "fallback_throttle"
+                )
+                .increment(1);
+                RateLimitExceededResponse {
+                    error: "Rate limit exceeded".to_string(),
+                    code: "RATE_LIMITED".to_string(),
+                    retry_after: rule.window_secs,
+                }
+                .into_response()
+            }
         }
     }
 }
@@ -607,6 +691,7 @@ mod tests {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         };
 
         let _rule = state.get_rule("POST", "/api/v1/auth/token");
@@ -638,6 +723,7 @@ mod tests {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         };
 
         assert_eq!(state.get_tenant_multiplier("premium-tenant"), 2.0);
@@ -725,6 +811,7 @@ mod tests {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         };
         assert!(!state.is_enabled());
     }
@@ -741,6 +828,7 @@ mod tests {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         };
         // enabled=true but no redis => still disabled
         assert!(!state.is_enabled());
@@ -763,6 +851,7 @@ mod tests {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         };
         // Non-matching endpoint should fall back to default
         let rule = state.get_rule("GET", "/api/v1/unknown");
@@ -792,6 +881,7 @@ mod tests {
             jwt_manager: None,
             allowed_audiences: Arc::new(Vec::new()),
             is_production: true,
+            fallback: InMemoryRateLimiter::new(),
         };
         let rule = state.get_rule("POST", "/api/v1/auth/login");
         assert_eq!(rule.requests, 5);
@@ -1031,5 +1121,39 @@ mod tests {
         assert!(json.contains("Rate limit exceeded"));
         assert!(json.contains("RATE_LIMITED"));
         assert!(json.contains("60"));
+    }
+
+    // ========================================================================
+    // In-memory fallback rate limiter tests
+    // ========================================================================
+
+    #[test]
+    fn test_inmemory_rate_limiter_allows_under_limit() {
+        let limiter = InMemoryRateLimiter::new();
+        for _ in 0..5 {
+            assert!(limiter.check("test:key", 10, 60));
+        }
+    }
+
+    #[test]
+    fn test_inmemory_rate_limiter_blocks_at_limit() {
+        let limiter = InMemoryRateLimiter::new();
+        for _ in 0..10 {
+            assert!(limiter.check("test:key", 10, 60));
+        }
+        // 11th request should be blocked
+        assert!(!limiter.check("test:key", 10, 60));
+    }
+
+    #[test]
+    fn test_inmemory_rate_limiter_separate_keys() {
+        let limiter = InMemoryRateLimiter::new();
+        for _ in 0..10 {
+            assert!(limiter.check("key-a", 10, 60));
+        }
+        // key-a is exhausted
+        assert!(!limiter.check("key-a", 10, 60));
+        // key-b should still be allowed
+        assert!(limiter.check("key-b", 10, 60));
     }
 }

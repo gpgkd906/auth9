@@ -18,7 +18,7 @@ use auth9_core::domain::{
     Action, AddUserToTenantInput, AlertSeverity, AssignRolesInput, Client, CreateActionInput,
     CreateInvitationInput, CreateLinkedIdentityInput, CreateLoginEventInput, CreatePasskeyInput,
     CreatePasswordResetTokenInput, CreatePermissionInput, CreateRoleInput,
-    CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput,
+    CreateSecurityAlertInput, CreateServiceInput, CreateSessionInput, CreateTenantInput, SecurityAlertType,
     CreateUserInput, CreateWebhookInput, Invitation, InvitationStatus, LinkedIdentity, LoginEvent,
     LoginEventType, LoginStats, PasswordResetToken, Permission, Role, SecurityAlert, Service,
     ServiceStatus, Session, StoredPasskey, StringUuid, SystemSettingRow, Tenant, TenantSettings,
@@ -2637,6 +2637,41 @@ impl SecurityAlertRepository for TestSecurityAlertRepository {
             .take(limit as usize)
             .cloned()
             .collect())
+    }
+
+    async fn list_filtered(
+        &self,
+        offset: i64,
+        limit: i64,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<Vec<SecurityAlert>> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts
+            .iter()
+            .filter(|a| !unresolved_only || a.resolved_at.is_none())
+            .filter(|a| severity.as_ref().map_or(true, |s| a.severity == *s))
+            .filter(|a| alert_type.as_ref().map_or(true, |t| a.alert_type == *t))
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn count_filtered(
+        &self,
+        unresolved_only: bool,
+        severity: Option<AlertSeverity>,
+        alert_type: Option<SecurityAlertType>,
+    ) -> Result<i64> {
+        let alerts = self.alerts.read().await;
+        Ok(alerts
+            .iter()
+            .filter(|a| !unresolved_only || a.resolved_at.is_none())
+            .filter(|a| severity.as_ref().map_or(true, |s| a.severity == *s))
+            .filter(|a| alert_type.as_ref().map_or(true, |t| a.alert_type == *t))
+            .count() as i64)
     }
 
     async fn count(&self) -> Result<i64> {

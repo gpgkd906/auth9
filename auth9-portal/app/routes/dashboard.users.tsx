@@ -340,8 +340,8 @@ export default function UsersPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
+          <h1 className="mb-1 text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
+          <p className="mt-1 text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
         </div>
         <Button onClick={() => setCreatingUser(true)} className="w-full min-h-11 sm:w-auto sm:min-h-10">+ Create User</Button>
       </div>
