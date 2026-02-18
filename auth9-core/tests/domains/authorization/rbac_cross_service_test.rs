@@ -4,7 +4,7 @@
 
 use crate::support::http::{build_test_router, post_json_with_auth, TestAppState};
 use crate::support::mock_keycloak::MockKeycloakServer;
-use crate::support::{create_test_identity_token, create_test_permission, create_test_role};
+use crate::support::{create_test_permission, create_test_role, create_test_tenant_access_token};
 use auth9_core::api::MessageResponse;
 use axum::http::StatusCode;
 use serde_json::json;
@@ -14,7 +14,7 @@ use uuid::Uuid;
 async fn test_assign_permission_different_service_fails() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin
+    let token = create_test_tenant_access_token(); // Platform admin
 
     let service1_id = Uuid::new_v4();
     let service2_id = Uuid::new_v4();

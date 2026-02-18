@@ -54,16 +54,15 @@ async fn check_tenant_access<S: HasServices>(
 }
 
 fn check_tenant_access_inner(config: &Config, auth: &AuthUser, tenant_id: Uuid) -> Result<()> {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
     match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Tenant-scoped token required (exchange identity token first)".to_string(),
-                ))
-            }
-        }
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Tenant-scoped token required (exchange identity token first)".to_string(),
+        )),
         TokenType::TenantAccess => {
             // Tenant access tokens must match the tenant_id
             if auth.tenant_id == Some(tenant_id) {
@@ -110,7 +109,7 @@ fn default_per_page() -> i64 {
 }
 
 /// List tenants
-/// - Platform admin (Identity token with config email or platform tenant admin): can list all tenants
+/// - Platform admin (any token type with platform admin email or platform tenant admin): can list all tenants
 /// - Non-admin Identity token: can see tenants they belong to
 /// - Tenant user (TenantAccess token): can only see their own tenant
 pub async fn list<S: HasServices>(
@@ -118,45 +117,46 @@ pub async fn list<S: HasServices>(
     auth: AuthUser,
     Query(query): Query<TenantListQuery>,
 ) -> Result<impl IntoResponse> {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    let is_platform_admin = is_platform_admin_with_db(&state, &auth).await;
+
+    if is_platform_admin {
+        // Platform admin: can list all tenants
+        let (tenants, total) = if let Some(ref search) = query.search {
+            state
+                .tenant_service()
+                .search(search, query.page, query.per_page)
+                .await?
+        } else {
+            state
+                .tenant_service()
+                .list(query.page, query.per_page)
+                .await?
+        };
+
+        return Ok(Json(PaginatedResponse::new(
+            tenants,
+            query.page,
+            query.per_page,
+            total,
+        )));
+    }
+
     match auth.token_type {
         TokenType::Identity => {
-            let is_platform_admin = is_platform_admin_with_db(&state, &auth).await;
-
-            if is_platform_admin {
-                // Platform admin: can list all tenants
-                let (tenants, total) = if let Some(ref search) = query.search {
-                    state
-                        .tenant_service()
-                        .search(search, query.page, query.per_page)
-                        .await?
-                } else {
-                    state
-                        .tenant_service()
-                        .list(query.page, query.per_page)
-                        .await?
-                };
-
-                Ok(Json(PaginatedResponse::new(
-                    tenants,
-                    query.page,
-                    query.per_page,
-                    total,
-                )))
-            } else {
-                // Non-admin Identity token: show tenants they belong to
-                let user_tenants = state
-                    .user_service()
-                    .get_user_tenants(StringUuid::from(auth.user_id))
-                    .await?;
-                let mut tenants = Vec::new();
-                for tu in &user_tenants {
-                    if let Ok(tenant) = state.tenant_service().get(tu.tenant_id).await {
-                        tenants.push(tenant);
-                    }
+            // Non-admin Identity token: show tenants they belong to
+            let user_tenants = state
+                .user_service()
+                .get_user_tenants(StringUuid::from(auth.user_id))
+                .await?;
+            let mut tenants = Vec::new();
+            for tu in &user_tenants {
+                if let Ok(tenant) = state.tenant_service().get(tu.tenant_id).await {
+                    tenants.push(tenant);
                 }
-                let total = tenants.len() as i64;
-                Ok(Json(PaginatedResponse::new(tenants, 1, total, total)))
             }
+            let total = tenants.len() as i64;
+            Ok(Json(PaginatedResponse::new(tenants, 1, total, total)))
         }
         TokenType::TenantAccess | TokenType::ServiceClient => {
             // Tenant user / service client: can only see their own tenant

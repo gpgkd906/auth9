@@ -11,8 +11,8 @@ use crate::support::http::{
     put_json_with_auth, TestAppState,
 };
 use crate::support::{
-    create_test_identity_token, create_test_identity_token_for_user, create_test_jwt_manager,
-    create_test_tenant, MockKeycloakServer,
+    create_test_identity_token_for_user, create_test_jwt_manager, create_test_tenant,
+    create_test_tenant_access_token, MockKeycloakServer,
 };
 use axum::http::StatusCode;
 use serde_json::{json, Value};
@@ -374,8 +374,8 @@ async fn test_platform_admin_can_access_any_tenant_sso() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let tenant_id = Uuid::new_v4();
 
-    // Platform admin identity token (uses admin@auth9.local)
-    let token = create_test_identity_token();
+    // Platform admin tenant access token (uses admin@auth9.local)
+    let token = create_test_tenant_access_token();
 
     let app = build_test_router(state);
 

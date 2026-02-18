@@ -28,16 +28,17 @@ fn require_rbac_read_access<S: HasServices>(
     auth: &AuthUser,
     service_tenant_id: Option<Uuid>,
 ) -> Result<()> {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient
+        && state.config().is_platform_admin_email(&auth.email)
+    {
+        return Ok(());
+    }
+
     match auth.token_type {
-        TokenType::Identity => {
-            if state.config().is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Tenant-scoped token required for RBAC access".to_string(),
-                ))
-            }
-        }
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Tenant-scoped token required for RBAC access".to_string(),
+        )),
         TokenType::TenantAccess | TokenType::ServiceClient => {
             let token_tenant = auth
                 .tenant_id
@@ -55,16 +56,15 @@ fn require_rbac_read_access<S: HasServices>(
 /// Check if user can manage RBAC within a tenant
 /// Platform admin can always manage, tenant owner can manage their tenant
 fn require_rbac_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
     match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Tenant-scoped token required for RBAC management".to_string(),
-                ))
-            }
-        }
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Tenant-scoped token required for RBAC management".to_string(),
+        )),
         TokenType::TenantAccess => {
             // Only platform admin or tenant owner/admin with role management permissions
             let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
@@ -369,7 +369,7 @@ pub async fn assign_roles<S: HasServices>(
 
     // Prevent self-assignment for non-platform-admin users
     if auth.user_id == input.user_id {
-        let is_platform_admin = auth.token_type == TokenType::Identity
+        let is_platform_admin = auth.token_type != TokenType::ServiceClient
             && state.config().is_platform_admin_email(&auth.email);
         if !is_platform_admin {
             return Err(AppError::Forbidden(
@@ -379,8 +379,11 @@ pub async fn assign_roles<S: HasServices>(
     }
 
     // Additional check: for tenant access tokens, ensure user can only assign within their tenant
+    // (platform admins are exempt from this check)
     if let TokenType::TenantAccess = auth.token_type {
-        if auth.tenant_id != Some(input.tenant_id) {
+        if auth.tenant_id != Some(input.tenant_id)
+            && !state.config().is_platform_admin_email(&auth.email)
+        {
             return Err(AppError::Forbidden(
                 "Cannot assign roles in a different tenant".to_string(),
             ));
@@ -428,7 +431,8 @@ pub async fn get_user_roles<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     require_rbac_management_permission(state.config(), &auth)?;
     if let TokenType::TenantAccess = auth.token_type {
-        if auth.tenant_id != Some(tenant_id) {
+        if auth.tenant_id != Some(tenant_id) && !state.config().is_platform_admin_email(&auth.email)
+        {
             return Err(AppError::Forbidden(
                 "Cannot access user roles in a different tenant".to_string(),
             ));
@@ -452,7 +456,8 @@ pub async fn get_user_assigned_roles<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     require_rbac_management_permission(state.config(), &auth)?;
     if let TokenType::TenantAccess = auth.token_type {
-        if auth.tenant_id != Some(tenant_id) {
+        if auth.tenant_id != Some(tenant_id) && !state.config().is_platform_admin_email(&auth.email)
+        {
             return Err(AppError::Forbidden(
                 "Cannot access user roles in a different tenant".to_string(),
             ));
@@ -480,8 +485,10 @@ pub async fn unassign_role<S: HasServices>(
     require_rbac_management_permission(state.config(), &auth)?;
 
     // Additional check: for tenant access tokens, ensure user can only unassign within their tenant
+    // (platform admins are exempt from this check)
     if let TokenType::TenantAccess = auth.token_type {
-        if auth.tenant_id != Some(tenant_id) {
+        if auth.tenant_id != Some(tenant_id) && !state.config().is_platform_admin_email(&auth.email)
+        {
             return Err(AppError::Forbidden(
                 "Cannot unassign roles in a different tenant".to_string(),
             ));
