@@ -4,7 +4,10 @@
 **测试范围**: 安全检测系统有效性、规避技术、告警响应
 **场景数**: 4
 **风险等级**: 🟠 高
-**OWASP ASVS**: V7.2, V11.1
+**ASVS 5.0 矩阵ID**: M-ADV-03
+**OWASP ASVS 5.0**: V16.1,V16.2,V16.3,V2.5
+**回归任务映射**: Backlog #12, #19
+
 
 ---
 
@@ -335,3 +338,32 @@ send_login_success "123.123.123.124" "travel@test.com"
 - [CWE-307: Improper Restriction of Excessive Authentication Attempts](https://cwe.mitre.org/data/definitions/307.html)
 - [MITRE ATT&CK T1110: Brute Force](https://attack.mitre.org/techniques/T1110/)
 - [MITRE ATT&CK T1078: Valid Accounts](https://attack.mitre.org/techniques/T1078/)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-ADV-03  
+**适用控制**: V16.1,V16.2,V16.3,V2.5  
+**关联任务**: Backlog #12, #19  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 4
+
+### 执行清单
+- [ ] M-ADV-03-C01 | 控制: V16.1 | 任务: #12, #19 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-03-C02 | 控制: V16.2 | 任务: #12, #19 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-03-C03 | 控制: V16.3 | 任务: #12, #19 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-03-C04 | 控制: V2.5 | 任务: #12, #19 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

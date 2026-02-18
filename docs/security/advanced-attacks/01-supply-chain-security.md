@@ -4,6 +4,10 @@
 **测试范围**: 依赖漏洞、供应链攻击、构建安全
 **场景数**: 5
 **风险等级**: 🔴 极高
+**ASVS 5.0 矩阵ID**: M-ADV-01
+**OWASP ASVS 5.0**: V13.1,V13.2,V15.1,V15.2
+**回归任务映射**: Backlog #14, #20
+
 
 ---
 
@@ -392,3 +396,32 @@ echo "\n=== Security Check Complete ==="
 - [Cargo Security Best Practices](https://doc.rust-lang.org/cargo/reference/security.html)
 - [npm Security Best Practices](https://docs.npmjs.com/security-best-practices)
 - [CIS Docker Benchmark](https://www.cisecurity.org/benchmark/docker)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-ADV-01  
+**适用控制**: V13.1,V13.2,V15.1,V15.2  
+**关联任务**: Backlog #14, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 5
+
+### 执行清单
+- [ ] M-ADV-01-C01 | 控制: V13.1 | 任务: #14, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-01-C02 | 控制: V13.2 | 任务: #14, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-01-C03 | 控制: V15.1 | 任务: #14, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-01-C04 | 控制: V15.2 | 任务: #14, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

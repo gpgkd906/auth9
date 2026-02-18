@@ -4,7 +4,10 @@
 **测试范围**: Identity Provider 安全、账户关联、邮件注入
 **场景数**: 4
 **风险等级**: 🟠 高
-**OWASP ASVS**: V2.7, V2.10, V5.3
+**ASVS 5.0 矩阵ID**: M-AUTH-05
+**OWASP ASVS 5.0**: V10.5,V10.6,V6.4
+**回归任务映射**: Backlog #4, #20
+
 
 ---
 
@@ -293,3 +296,31 @@ curl -X PUT -H "Authorization: Bearer $TOKEN" \
 - [CWE-1336: Server-Side Template Injection](https://cwe.mitre.org/data/definitions/1336.html)
 - [OWASP Email Header Injection](https://owasp.org/www-community/attacks/Email_Header_Injection)
 - [Account Linking Attacks](https://www.ietf.org/archive/id/draft-ietf-oauth-security-topics-25.html#section-4.11)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-AUTH-05  
+**适用控制**: V10.5,V10.6,V6.4  
+**关联任务**: Backlog #4, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 4
+
+### 执行清单
+- [ ] M-AUTH-05-C01 | 控制: V10.5 | 任务: #4, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-AUTH-05-C02 | 控制: V10.6 | 任务: #4, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-AUTH-05-C03 | 控制: V6.4 | 任务: #4, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

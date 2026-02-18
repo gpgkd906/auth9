@@ -11,7 +11,10 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 
 ## 测试用例索引
 
-### 认证安全 (5 个文档, 24 个场景)
+### ASVS 5.0 主矩阵入口（优先使用）
+- [asvs5-matrix.md](./asvs5-matrix.md) - 单文件矩阵（覆盖目标、控制映射、Backlog 分解、回归记录模板）
+
+### 认证安全 (5 个文档, 21 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [authentication/01-oidc-security.md](./authentication/01-oidc-security.md) | OIDC 流程安全测试 | 5 | 高 |
@@ -20,7 +23,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [authentication/04-password-security.md](./authentication/04-password-security.md) | 密码安全测试 | 5 | 高 |
 | [authentication/05-idp-security.md](./authentication/05-idp-security.md) | 身份提供商与邮件安全测试 | 4 | 高 | 🆕
 
-### 授权安全 (4 个文档, 20 个场景)
+### 授权安全 (5 个文档, 27 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [authorization/01-tenant-isolation.md](./authorization/01-tenant-isolation.md) | 租户隔离测试 | 5 | 极高 |
@@ -38,7 +41,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [input-validation/05-ssrf.md](./input-validation/05-ssrf.md) | 服务器端请求伪造 (SSRF) 测试 | 5 | 极高 | 🆕
 | [input-validation/06-deserialization.md](./input-validation/06-deserialization.md) | 反序列化安全测试 | 3 | 高 | 🆕
 
-### API 安全 (5 个文档, 24 个场景)
+### API 安全 (6 个文档, 26 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [api-security/01-rest-api.md](./api-security/01-rest-api.md) | REST API 安全测试 | 5 | 高 |
@@ -46,6 +49,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [api-security/03-rate-limiting.md](./api-security/03-rate-limiting.md) | 限流与 DoS 防护测试 | 5 | 高 |
 | [api-security/04-cors-headers.md](./api-security/04-cors-headers.md) | CORS 与安全头测试 | 4 | 中 |
 | [api-security/05-rate-limit-bypass-hardening.md](./api-security/05-rate-limit-bypass-hardening.md) | 限流绕过与 DoS 放大专项测试 | 5 | 极高 | 🆕
+| [api-security/06-api-boundary-pagination.md](./api-security/06-api-boundary-pagination.md) | 批量与分页边界安全测试 | 3 | 高 | 🆕
 
 ### 数据安全 (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -55,7 +59,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [data-security/03-secrets-management.md](./data-security/03-secrets-management.md) | 密钥管理安全测试 | 4 | 极高 |
 | [data-security/04-encryption-impl.md](./data-security/04-encryption-impl.md) | 加密实现安全测试 (AES-GCM) | 3 | 高 | 🆕
 
-### 会话管理 (3 个文档, 14 个场景)
+### 会话管理 (3 个文档, 13 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [session-management/01-session-security.md](./session-management/01-session-security.md) | 会话安全测试 | 5 | 高 |
@@ -76,17 +80,19 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [business-logic/02-race-conditions.md](./business-logic/02-race-conditions.md) | 竞态条件测试 | 4 | 极高 | 🆕
 | [business-logic/03-admin-operational-endpoint-abuse.md](./business-logic/03-admin-operational-endpoint-abuse.md) | 管理运营端点越权滥用测试 | 5 | 极高 | 🆕
 
-### 日志与监控安全 (1 个文档, 5 个场景) 🆕
+### 日志与监控安全 (2 个文档, 8 个场景) 🆕
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [logging-monitoring/01-log-security.md](./logging-monitoring/01-log-security.md) | 日志安全与检测系统测试 | 5 | 高 | 🆕
+| [logging-monitoring/02-error-response-leakage.md](./logging-monitoring/02-error-response-leakage.md) | 错误响应信息泄露与归一化测试 | 3 | 高 | 🆕
 
-### 文件安全 (1 个文档, 4 个场景) 🆕
+### 文件安全 (2 个文档, 6 个场景) 🆕
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [file-security/01-file-upload.md](./file-security/01-file-upload.md) | 文件上传安全测试 | 4 | 高 | 🆕
+| [file-security/02-theme-resource-url-security.md](./file-security/02-theme-resource-url-security.md) | Theme 外链资源 URL 安全测试 | 3 | 高 | 🆕
 
-### 高级攻击 (6 个文档, 24 个场景)
+### 高级攻击 (7 个文档, 24 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [advanced-attacks/01-supply-chain-security.md](./advanced-attacks/01-supply-chain-security.md) | 供应链与依赖安全测试 | 5 | 极高 |
@@ -95,6 +101,12 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [advanced-attacks/04-oidc-advanced.md](./advanced-attacks/04-oidc-advanced.md) | OIDC 高级攻击测试 | 3 | 高 | 🆕
 | [advanced-attacks/05-webhook-forgery.md](./advanced-attacks/05-webhook-forgery.md) | Webhook 伪造测试 | 3 | 高 | 🆕
 | [advanced-attacks/06-http-smuggling.md](./advanced-attacks/06-http-smuggling.md) | HTTP 请求走私测试 | 2 | 高 | 🆕
+| [advanced-attacks/07-theme-css-injection.md](./advanced-attacks/07-theme-css-injection.md) | Theme CSS 注入与登录界面欺骗测试 | 3 | 极高 | 🆕
+
+### ASVS 5.0 治理与补完 (1 个文档)
+| 文档 | 描述 | 类型 |
+|------|------|------|
+| [asvs5-matrix.md](./asvs5-matrix.md) | 单文件矩阵：覆盖目标 + 文档级映射 + Backlog 分解 + 回归模板 | 矩阵文档 |
 
 ---
 
@@ -102,22 +114,27 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 
 | 模块 | 文档数 | 场景数 |
 |------|--------|--------|
-| 认证安全 | 5 | 24 |
-| 授权安全 | 4 | 20 |
+| 认证安全 | 5 | 21 |
+| 授权安全 | 5 | 27 |
 | 输入验证 | 6 | 27 |
-| API 安全 | 5 | 24 |
+| API 安全 | 6 | 26 |
 | 数据安全 | 4 | 17 |
-| 会话管理 | 3 | 14 |
+| 会话管理 | 3 | 13 |
 | 基础设施安全 | 3 | 14 |
 | 业务逻辑安全 | 3 | 14 |
-| 日志与监控安全 | 1 | 5 |
-| 文件安全 | 1 | 4 |
-| 高级攻击 | 6 | 24 |
-| **总计** | **41** | **187** |
+| 日志与监控安全 | 2 | 8 |
+| 文件安全 | 2 | 6 |
+| 高级攻击 | 7 | 24 |
+| ASVS 5.0 治理与补完 | 1 | - |
+| **总计** | **47** | **197** |
 
 ---
 
 ## OWASP ASVS 覆盖矩阵
+
+> 注意：下表为历史矩阵（ASVS 4.x 风格分组）用于回溯参考。  
+> ASVS 5.0 的正式差距分析、任务分解与矩阵映射请查看：
+> - [asvs5-matrix.md](./asvs5-matrix.md)
 
 说明：`当前覆盖率` 表示已落地现状，`目标覆盖率` 为项目统一要求（最低 `>=90%`）。
 
@@ -287,7 +304,7 @@ cd auth9-portal && npm run dev
 - [OWASP Top 10 2021](https://owasp.org/Top10/)
 - [OWASP API Security Top 10](https://owasp.org/www-project-api-security/)
 - [OWASP Testing Guide](https://owasp.org/www-project-web-security-testing-guide/)
-- [OWASP ASVS 4.0](https://owasp.org/www-project-application-security-verification-standard/)
+- [OWASP ASVS 5.0](https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release)
 - [CWE Top 25](https://cwe.mitre.org/top25/archive/2023/2023_top25_list.html)
 
 ### 认证相关标准
@@ -330,6 +347,11 @@ cargo run --bin seed-data -- --dataset=security-vulnerable --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-18 | 2.6.0 | 将 `docs/security/asvs-5.0/` 的 5 份治理文件折叠为 `README + 单文件矩阵` 模式；统一入口为 `asvs5-matrix.md`，降低安全测试 Agent 的文档分叉与执行混乱 |
+| 2026-02-18 | 2.5.0 | 新增 4 份矩阵测试文档补齐 Backlog 空缺任务（#7/#15/#16/#18）；任务分解实现 #1~#20 全覆盖，支持按矩阵文档持续回归 |
+| 2026-02-18 | 2.4.0 | 新增“标准化回归 Checklist（ASVS 5.0）”到安全测试文档；每份文档统一包含矩阵ID、控制映射、Backlog 任务映射、回归记录表与退出准则 |
+| 2026-02-18 | 2.3.0 | 完成 `docs/security` 全量 ASVS 5.0 矩阵升级：新增全量矩阵文档，42 份测试文档统一补充矩阵ID/ASVS 5.0 控制映射/回归任务映射，并将 Backlog 任务分解到对应测试文档 |
+| 2026-02-18 | 2.2.0 | 新增 ASVS 5.0 治理补完文档：差距分析/覆盖率目标、可执行补测任务清单；补充 `auth9-portal`、`auth9-keycloak-theme`、`auth9-keycloak-events` 纳入统一安全测试范围 |
 | 2026-02-11 | 2.1.0 | 新增两类高优先专项安全测试：管理员运营端点越权滥用、限流绕过与 DoS 放大（trusted header、高基数 key、Redis 故障窗口），共 41 个文档 187 个场景 |
 | 2026-02-11 | 2.0.1 | 统一测试覆盖率要求：新增 ASVS 矩阵“目标覆盖率”列，项目最低要求调整为 >=90%，并保留当前覆盖率现状值 |
 | 2026-02-07 | 2.0.0 | 基于 OWASP ASVS 差距分析，新增 12 个文档 47 个场景：SSRF、业务逻辑、竞态条件、日志安全、文件上传、反序列化、加密实现、检测规避、OIDC 高级攻击、Webhook 伪造、HTTP 走私、IdP 安全；共 39 个文档 177 个场景 |
