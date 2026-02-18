@@ -4,7 +4,6 @@ use crate::config::TelemetryConfig;
 use opentelemetry::trace::TracerProvider;
 use opentelemetry::KeyValue;
 use opentelemetry_otlp::WithExportConfig;
-use opentelemetry_sdk::runtime::Tokio;
 use tracing_opentelemetry::OpenTelemetryLayer;
 
 /// Create an OpenTelemetry tracing layer if tracing is enabled.
@@ -40,13 +39,15 @@ where
         }
     };
 
-    let resource = opentelemetry_sdk::Resource::new(vec![KeyValue::new(
-        "service.name",
-        config.service_name.clone(),
-    )]);
+    let resource = opentelemetry_sdk::Resource::builder()
+        .with_attributes(vec![KeyValue::new(
+            "service.name",
+            config.service_name.clone(),
+        )])
+        .build();
 
-    let provider = opentelemetry_sdk::trace::TracerProvider::builder()
-        .with_batch_exporter(exporter, Tokio)
+    let provider = opentelemetry_sdk::trace::SdkTracerProvider::builder()
+        .with_batch_exporter(exporter)
         .with_resource(resource)
         .build();
 

@@ -349,37 +349,6 @@ SDK 类型完全匹配后端 Rust 类型：
 | `i32`, `i64` | `number` | ✅ |
 | `bool` | `boolean` | ✅ |
 
-## 已知限制
-
-### Test Endpoint 限制
-
-测试端点目前受 axum/tonic 版本冲突限制（参见技术负债 #001），返回说明性响应而非实际执行结果。
-
-**SDK 已实现对应类型和方法**，待后端依赖冲突解决后即可正常使用：
-
-```typescript
-// SDK 已支持，但后端暂时返回限制说明
-const { data: result } = await client.post<{ data: TestActionResponse }>(
-  `/api/v1/tenants/${tenantId}/actions/${actionId}/test`,
-  { context: testContext }
-);
-
-// 当前返回:
-// {
-//   success: false,
-//   errorMessage: "Test endpoint temporarily unavailable...",
-//   ...
-// }
-
-// 未来返回 (依赖冲突解决后):
-// {
-//   success: true,
-//   durationMs: 15,
-//   modifiedContext: { ... },
-//   consoleLogs: [...]
-// }
-```
-
 ## 下一步
 
 ### Phase 6 完成度
