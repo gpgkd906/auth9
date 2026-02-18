@@ -1,13 +1,13 @@
 //! Authentication API handlers
 
-use crate::api::SuccessResponse;
+use crate::api::{write_audit_log_generic, SuccessResponse};
 use crate::cache::CacheOperations;
 use crate::domain::{
     ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
     EnterpriseSsoDiscoveryInput, EnterpriseSsoDiscoveryResult, StringUuid,
 };
-use crate::error::{AppError, Result};
 use crate::domains::security_observability::service::analytics::LoginEventMetadata;
+use crate::error::{AppError, Result};
 use crate::jwt::IdentityClaims;
 use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
 use axum::{
@@ -369,6 +369,13 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                 };
 
                 if let Some(tenant_id) = tenant_id {
+                    // Resolve tenant slug/name for ActionContext
+                    let (tenant_slug, tenant_name) =
+                        match state.tenant_service().get(tenant_id).await {
+                            Ok(t) => (t.slug, t.name),
+                            Err(_) => (String::new(), String::new()),
+                        };
+
                     let action_context = ActionContext {
                         user: ActionContextUser {
                             id: user.id.to_string(),
@@ -378,8 +385,8 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                         },
                         tenant: ActionContextTenant {
                             id: tenant_id.to_string(),
-                            slug: String::new(),
-                            name: String::new(),
+                            slug: tenant_slug,
+                            name: tenant_name,
                         },
                         request: ActionContextRequest {
                             ip: ip_address,
@@ -613,6 +620,22 @@ pub async fn tenant_token<S: HasServices>(
         user_roles.permissions,
     )?;
     let refresh_token = jwt_manager.create_refresh_token(*user_id, *tenant_id, service_id)?;
+
+    // Write audit log for tenant token exchange
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "token_exchange.rest.succeeded",
+        "token_exchange",
+        Some(*tenant_id),
+        None,
+        Some(serde_json::json!({
+            "user_id": user_id.to_string(),
+            "tenant_id": tenant_id.to_string(),
+            "service_id": service_id,
+        })),
+    )
+    .await;
 
     Ok(Json(TokenResponse {
         access_token,
@@ -981,9 +1004,9 @@ fn extract_identity_claims_from_headers<S: HasServices>(
     let auth_str = auth_header
         .to_str()
         .map_err(|_| AppError::Unauthorized("Invalid authorization header".to_string()))?;
-    let token = auth_str
-        .strip_prefix("Bearer ")
-        .ok_or_else(|| AppError::Unauthorized("Authorization must use Bearer scheme".to_string()))?;
+    let token = auth_str.strip_prefix("Bearer ").ok_or_else(|| {
+        AppError::Unauthorized("Authorization must use Bearer scheme".to_string())
+    })?;
 
     state
         .jwt_manager()

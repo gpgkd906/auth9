@@ -163,6 +163,15 @@ pub struct UpdateActionInput {
     pub timeout_ms: Option<i32>,
 }
 
+/// Lightweight request metadata for cross-layer IP/UA propagation.
+/// Extracted at the API/gRPC boundary and passed down to service layer
+/// for use in ActionContext construction and audit logging.
+#[derive(Debug, Clone, Default)]
+pub struct RequestContext {
+    pub ip: Option<String>,
+    pub user_agent: Option<String>,
+}
+
 /// Context passed to action scripts
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActionContext {
