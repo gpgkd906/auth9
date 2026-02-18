@@ -190,6 +190,7 @@ where
         action: &str,
         resource_id: Option<Uuid>,
         details: serde_json::Value,
+        ip_address: Option<String>,
     ) {
         if let Some(audit_repo) = &self.audit_repo {
             let _ = audit_repo
@@ -200,7 +201,7 @@ where
                     resource_id,
                     old_value: None,
                     new_value: Some(details),
-                    ip_address: None,
+                    ip_address,
                 })
                 .await;
         }
@@ -220,6 +221,22 @@ where
         request: Request<ExchangeTokenRequest>,
     ) -> Result<Response<ExchangeTokenResponse>, Status> {
         let start = std::time::Instant::now();
+
+        // Extract client IP from gRPC metadata before consuming the request
+        let ip_address = request
+            .metadata()
+            .get("x-forwarded-for")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.split(',').next())
+            .map(|s| s.trim().to_string())
+            .or_else(|| {
+                request
+                    .metadata()
+                    .get("x-real-ip")
+                    .and_then(|v| v.to_str().ok())
+                    .map(|s| s.trim().to_string())
+            });
+
         let req = request.into_inner();
         let requested_tenant = req.tenant_id.clone();
         let requested_service = req.service_id.clone();
@@ -237,6 +254,7 @@ where
                         "service_id": requested_service,
                         "reason": "invalid_identity_token"
                     }),
+                    ip_address.clone(),
                 )
                 .await;
                 return Err(Status::unauthenticated(format!(
@@ -302,6 +320,7 @@ where
                         "service_id": req.service_id,
                         "reason": "not_tenant_member"
                     }),
+                    ip_address.clone(),
                 )
                 .await;
                 return Err(Status::permission_denied(
@@ -343,6 +362,7 @@ where
                         "service_id": req.service_id,
                         "reason": "service_tenant_mismatch"
                     }),
+                    ip_address.clone(),
                 )
                 .await;
                 return Err(Status::permission_denied(
@@ -390,6 +410,7 @@ where
                         "service_id": req.service_id,
                         "reason": "membership_revoked_during_exchange"
                     }),
+                    ip_address.clone(),
                 )
                 .await;
                 return Err(Status::permission_denied(
@@ -439,6 +460,7 @@ where
                 "tenant_id": Uuid::from(tenant_id),
                 "service_id": req.service_id
             }),
+            ip_address,
         )
         .await;
 
