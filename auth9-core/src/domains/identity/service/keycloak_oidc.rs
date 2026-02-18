@@ -7,13 +7,14 @@
 use crate::config::KeycloakConfig;
 use crate::domain::{
     ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser, CreateUserInput,
-    StringUuid,
+    RequestContext, StringUuid,
 };
+use crate::domains::integration::service::ActionEngine;
 use crate::error::{AppError, Result};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
+use crate::repository::TenantRepository;
 use crate::repository::{ActionRepository, ServiceRepository, UserRepository};
-use crate::domains::integration::service::ActionEngine;
 use async_trait::async_trait;
 use base64::Engine;
 use chrono::Utc;
@@ -171,12 +172,14 @@ pub struct KeycloakOidcService<U: UserRepository, S: ServiceRepository, A: Actio
     issuer: String,
     http_client: Arc<dyn OidcHttpClient>,
     action_engine: Option<Arc<ActionEngine<A>>>,
+    tenant_repo: Option<Arc<dyn TenantRepository>>,
 }
 
 impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
     KeycloakOidcService<U, S, A>
 {
     /// Create a new KeycloakOidcService
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         keycloak: Arc<dyn KeycloakOidcAdminApi>,
         jwt_manager: Arc<JwtManager>,
@@ -185,6 +188,7 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
         config: KeycloakConfig,
         issuer: String,
         action_engine: Option<Arc<ActionEngine<A>>>,
+        tenant_repo: Option<Arc<dyn TenantRepository>>,
     ) -> Self {
         let http_client = reqwest::Client::builder()
             .timeout(std::time::Duration::from_secs(30))
@@ -202,6 +206,7 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                 client: http_client,
             }),
             action_engine,
+            tenant_repo,
         }
     }
 
@@ -215,6 +220,7 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
         issuer: String,
         http_client: Arc<dyn OidcHttpClient>,
         action_engine: Option<Arc<ActionEngine<A>>>,
+        tenant_repo: Option<Arc<dyn TenantRepository>>,
     ) -> Self {
         Self {
             keycloak,
@@ -225,6 +231,7 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
             issuer,
             http_client,
             action_engine,
+            tenant_repo,
         }
     }
 
@@ -279,7 +286,12 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
     }
 
     /// Handle the OIDC callback after Keycloak authentication
-    pub async fn handle_callback(&self, code: &str, state: Option<&str>) -> Result<CallbackResult> {
+    pub async fn handle_callback(
+        &self,
+        code: &str,
+        state: Option<&str>,
+        request_context: &RequestContext,
+    ) -> Result<CallbackResult> {
         // Decode state
         let state_payload = decode_state(state)?;
 
@@ -302,6 +314,16 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
             .tenant_id
             .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Service has no tenant_id")))?;
 
+        // Resolve tenant slug/name for ActionContext
+        let (tenant_slug, tenant_name) = if let Some(ref repo) = self.tenant_repo {
+            match repo.find_by_id(tenant_id).await {
+                Ok(Some(t)) => (t.slug, t.name),
+                _ => ("unknown".to_string(), "Unknown Tenant".to_string()),
+            }
+        } else {
+            ("unknown".to_string(), "Unknown Tenant".to_string())
+        };
+
         // Find or create user
         let user = match self.user_repo.find_by_keycloak_id(&userinfo.sub).await? {
             Some(existing) => existing,
@@ -323,12 +345,12 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                         },
                         tenant: ActionContextTenant {
                             id: tenant_id.to_string(),
-                            slug: "unknown".to_string(), // TODO: Fetch tenant details if needed
-                            name: "Unknown Tenant".to_string(),
+                            slug: tenant_slug.clone(),
+                            name: tenant_name.clone(),
                         },
                         request: ActionContextRequest {
-                            ip: None, // TODO: Extract from request context
-                            user_agent: None,
+                            ip: request_context.ip.clone(),
+                            user_agent: request_context.user_agent.clone(),
                             timestamp: Utc::now(),
                         },
                         claims: None,
@@ -371,12 +393,12 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                         },
                         tenant: ActionContextTenant {
                             id: tenant_id.to_string(),
-                            slug: "unknown".to_string(),
-                            name: "Unknown Tenant".to_string(),
+                            slug: tenant_slug.clone(),
+                            name: tenant_name.clone(),
                         },
                         request: ActionContextRequest {
-                            ip: None,
-                            user_agent: None,
+                            ip: request_context.ip.clone(),
+                            user_agent: request_context.user_agent.clone(),
                             timestamp: Utc::now(),
                         },
                         claims: None,
@@ -417,12 +439,12 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                 },
                 tenant: ActionContextTenant {
                     id: tenant_id.to_string(),
-                    slug: "unknown".to_string(), // TODO: Fetch tenant details if needed
-                    name: "Unknown Tenant".to_string(),
+                    slug: tenant_slug.clone(),
+                    name: tenant_name.clone(),
                 },
                 request: ActionContextRequest {
-                    ip: None, // TODO: Extract from request context
-                    user_agent: None,
+                    ip: request_context.ip.clone(),
+                    user_agent: request_context.user_agent.clone(),
                     timestamp: Utc::now(),
                 },
                 claims: None,
@@ -573,6 +595,16 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
             }
         };
 
+        // Resolve tenant slug/name for ActionContext
+        let (tenant_slug, tenant_name) = if let Some(ref repo) = self.tenant_repo {
+            match repo.find_by_id(tenant_id).await {
+                Ok(Some(t)) => (t.slug, t.name),
+                _ => ("unknown".to_string(), "Unknown Tenant".to_string()),
+            }
+        } else {
+            ("unknown".to_string(), "Unknown Tenant".to_string())
+        };
+
         // Execute PreTokenRefresh action (before creating new identity token)
         let custom_claims = if let Some(ref action_engine) = self.action_engine {
             let pre_refresh_context = ActionContext {
@@ -584,8 +616,8 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
                 },
                 tenant: ActionContextTenant {
                     id: tenant_id.to_string(),
-                    slug: "unknown".to_string(),
-                    name: "Unknown Tenant".to_string(),
+                    slug: tenant_slug,
+                    name: tenant_name,
                 },
                 request: ActionContextRequest {
                     ip: None,
@@ -902,6 +934,7 @@ mod tests {
             "https://auth9.example.com".to_string(),
             http,
             None, // No ActionEngine
+            None, // No TenantRepository
         )
     }
 
@@ -923,6 +956,7 @@ mod tests {
             "https://auth9.example.com".to_string(),
             http,
             Some(action_engine),
+            None, // No TenantRepository
         )
     }
 
@@ -1049,7 +1083,9 @@ mod tests {
             config,
         );
 
-        let result = service.handle_callback("auth-code", None).await;
+        let result = service
+            .handle_callback("auth-code", None, &RequestContext::default())
+            .await;
         assert!(matches!(result, Err(AppError::BadRequest(_))));
     }
 
@@ -1151,7 +1187,11 @@ mod tests {
         let encoded_state = encode_state(&state_payload).unwrap();
 
         let result = service
-            .handle_callback("auth-code-123", Some(&encoded_state))
+            .handle_callback(
+                "auth-code-123",
+                Some(&encoded_state),
+                &RequestContext::default(),
+            )
             .await
             .unwrap();
 
@@ -1415,7 +1455,7 @@ mod tests {
         let encoded = encode_state(&state_payload).unwrap();
 
         let result = service
-            .handle_callback("auth-code", Some(&encoded))
+            .handle_callback("auth-code", Some(&encoded), &RequestContext::default())
             .await
             .unwrap();
 
@@ -1457,7 +1497,9 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service.handle_callback("code", Some(&encoded)).await;
+        let result = service
+            .handle_callback("code", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1492,7 +1534,9 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service.handle_callback("code", Some(&encoded)).await;
+        let result = service
+            .handle_callback("code", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1542,7 +1586,9 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service.handle_callback("code", Some(&encoded)).await;
+        let result = service
+            .handle_callback("code", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1592,7 +1638,9 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service.handle_callback("code", Some(&encoded)).await;
+        let result = service
+            .handle_callback("code", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -1959,7 +2007,9 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service.handle_callback("code", Some(&encoded)).await;
+        let result = service
+            .handle_callback("code", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(matches!(result, Err(AppError::Keycloak(_))));
     }
 
@@ -2094,7 +2144,9 @@ mod tests {
         let encoded = encode_state(&state).unwrap();
 
         // PreUserRegistration should block registration
-        let result = service.handle_callback("authcode", Some(&encoded)).await;
+        let result = service
+            .handle_callback("authcode", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(result.is_err());
         // Verify it's an action error
         match result {
@@ -2235,7 +2287,9 @@ mod tests {
         let encoded = encode_state(&state).unwrap();
 
         // Should succeed and trigger PostUserRegistration
-        let result = service.handle_callback("authcode", Some(&encoded)).await;
+        let result = service
+            .handle_callback("authcode", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(result.is_ok());
     }
 
@@ -2344,7 +2398,9 @@ mod tests {
         };
         let encoded = encode_state(&state).unwrap();
 
-        let result = service.handle_callback("authcode", Some(&encoded)).await;
+        let result = service
+            .handle_callback("authcode", Some(&encoded), &RequestContext::default())
+            .await;
         assert!(result.is_ok());
 
         // Decode the identity token to verify custom claims
