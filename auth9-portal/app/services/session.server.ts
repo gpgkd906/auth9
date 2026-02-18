@@ -154,7 +154,9 @@ async function exchangeTenantToken(
       tenantAccessToken: data.access_token,
       tenantExpiresAt: Date.now() + (data.expires_in * 1000),
     };
-  } catch {
+  } catch (error) {
+    console.error("[exchangeTenantToken] Failed for tenant", tenantId, ":",
+      error instanceof Error ? error.message : error);
     return null;
   }
 }
@@ -303,4 +305,16 @@ export async function setActiveTenant(
     });
   }
   return commitSession(exchanged);
+}
+
+export async function trySetActiveTenant(
+  request: Request,
+  tenantId: string
+): Promise<{ cookie: string } | { error: string }> {
+  const { session } = await requireIdentityAuthWithUpdate(request);
+  const exchanged = await exchangeTenantToken(session, tenantId);
+  if (!exchanged) {
+    return { error: "tenant_exchange_failed" };
+  }
+  return { cookie: await commitSession(exchanged) };
 }

@@ -14,7 +14,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const identityToken = session.identityAccessToken || session.accessToken;
   if (!identityToken) throw redirect("/login");
 
-  const tenantsRes = await userApi.getMyTenants(identityToken);
+  const serviceId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+  const tenantsRes = await userApi.getMyTenants(identityToken, serviceId);
   const tenants = tenantsRes.data || [];
 
   if (tenants.length === 0) {
@@ -90,7 +91,11 @@ export default function TenantSelectPage() {
               </label>
             ))}
             {(error || actionData?.error) && (
-              <p className="text-sm text-[var(--accent-red)]">{String(error || actionData?.error)}</p>
+              <p className="text-sm text-[var(--accent-red)]">
+                {error === "tenant_exchange_failed"
+                  ? "Failed to access this tenant. Please try again or contact support."
+                  : String(error || actionData?.error)}
+              </p>
             )}
             <Button type="submit" className="w-full" disabled={isSubmitting}>
               {isSubmitting ? "Switching..." : "Continue"}
