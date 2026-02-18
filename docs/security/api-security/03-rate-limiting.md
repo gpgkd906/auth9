@@ -3,6 +3,10 @@
 **模块**: API 安全
 **测试范围**: 速率限制、资源耗尽防护
 **场景数**: 4
+**风险等级**: 🟠 高
+**ASVS 5.0 矩阵ID**: M-API-03
+**OWASP ASVS 5.0**: V4.4,V13.3,V2.5
+**回归任务映射**: Backlog #20
 
 ---
 
@@ -288,3 +292,31 @@ locust -f loadtest.py --host=http://localhost:8080
 - [Cloudflare Rate Limiting](https://developers.cloudflare.com/waf/rate-limiting-rules/)
 - [CWE-770: Resource Allocation Without Limits](https://cwe.mitre.org/data/definitions/770.html)
 - [Slowloris Attack](https://en.wikipedia.org/wiki/Slowloris_(computer_security))
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-API-03  
+**适用控制**: V4.4,V13.3,V2.5  
+**关联任务**: Backlog #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 4
+
+### 执行清单
+- [ ] M-API-03-C01 | 控制: V4.4 | 任务: #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-API-03-C02 | 控制: V13.3 | 任务: #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-API-03-C03 | 控制: V2.5 | 任务: #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

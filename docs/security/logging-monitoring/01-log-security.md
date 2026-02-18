@@ -4,7 +4,10 @@
 **测试范围**: 日志注入、审计完整性、检测系统有效性
 **场景数**: 5
 **风险等级**: 🟠 高
-**OWASP ASVS**: V7.1, V7.2, V7.3, V7.4
+**ASVS 5.0 矩阵ID**: M-LOG-01
+**OWASP ASVS 5.0**: V16.1,V16.2,V16.3,V16.4
+**回归任务映射**: Backlog #5, #12, #19, #20
+
 
 ---
 
@@ -379,3 +382,32 @@ done
 - [CWE-532: Insertion of Sensitive Information into Log File](https://cwe.mitre.org/data/definitions/532.html)
 - [CWE-209: Generation of Error Message Containing Sensitive Information](https://cwe.mitre.org/data/definitions/209.html)
 - [OWASP Error Handling](https://owasp.org/www-community/Improper_Error_Handling)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-LOG-01  
+**适用控制**: V16.1,V16.2,V16.3,V16.4  
+**关联任务**: Backlog #5, #12, #19, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 5
+
+### 执行清单
+- [ ] M-LOG-01-C01 | 控制: V16.1 | 任务: #5, #12, #19, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-LOG-01-C02 | 控制: V16.2 | 任务: #5, #12, #19, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-LOG-01-C03 | 控制: V16.3 | 任务: #5, #12, #19, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-LOG-01-C04 | 控制: V16.4 | 任务: #5, #12, #19, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

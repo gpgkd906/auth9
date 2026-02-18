@@ -4,6 +4,10 @@
 **测试范围**: MFA 实现安全性 (TOTP, WebAuthn)
 **场景数**: 5
 **风险等级**: 🟠 高
+**ASVS 5.0 矩阵ID**: M-AUTH-03
+**OWASP ASVS 5.0**: V6.7,V6.8,V7.3
+**回归任务映射**: Backlog #20
+
 
 ---
 
@@ -247,3 +251,31 @@ curl -X DELETE http://localhost:8080/api/v1/users/{other_user_id}/mfa \
 - [WebAuthn Specification](https://www.w3.org/TR/webauthn/)
 - [OWASP MFA Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Multifactor_Authentication_Cheat_Sheet.html)
 - [CWE-308: Use of Single-factor Authentication](https://cwe.mitre.org/data/definitions/308.html)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-AUTH-03  
+**适用控制**: V6.7,V6.8,V7.3  
+**关联任务**: Backlog #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 5
+
+### 执行清单
+- [ ] M-AUTH-03-C01 | 控制: V6.7 | 任务: #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-AUTH-03-C02 | 控制: V6.8 | 任务: #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-AUTH-03-C03 | 控制: V7.3 | 任务: #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

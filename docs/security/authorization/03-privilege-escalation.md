@@ -4,6 +4,10 @@
 **测试范围**: 水平/垂直权限提升
 **场景数**: 5
 **风险等级**: 🔴 极高
+**ASVS 5.0 矩阵ID**: M-AUTHZ-03
+**OWASP ASVS 5.0**: V8.2,V8.3,V8.4
+**回归任务映射**: Backlog #2, #9, #20
+
 
 ---
 
@@ -288,3 +292,31 @@ curl -H "X-API-Key: $API_KEY" \
 - [OWASP Privilege Escalation](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/05-Authorization_Testing/03-Testing_for_Privilege_Escalation)
 - [CWE-269: Improper Privilege Management](https://cwe.mitre.org/data/definitions/269.html)
 - [CWE-250: Execution with Unnecessary Privileges](https://cwe.mitre.org/data/definitions/250.html)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-AUTHZ-03  
+**适用控制**: V8.2,V8.3,V8.4  
+**关联任务**: Backlog #2, #9, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 5
+
+### 执行清单
+- [ ] M-AUTHZ-03-C01 | 控制: V8.2 | 任务: #2, #9, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-AUTHZ-03-C02 | 控制: V8.3 | 任务: #2, #9, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-AUTHZ-03-C03 | 控制: V8.4 | 任务: #2, #9, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

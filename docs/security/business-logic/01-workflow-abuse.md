@@ -4,7 +4,10 @@
 **测试范围**: 多步骤业务流程安全
 **场景数**: 5
 **风险等级**: 🔴 极高
-**OWASP ASVS**: V11.1
+**ASVS 5.0 矩阵ID**: M-BIZ-01
+**OWASP ASVS 5.0**: V2.1,V2.2,V2.5,V8.2
+**回归任务映射**: Backlog #1, #10, #20
+
 
 ---
 
@@ -354,3 +357,32 @@ curl -H "Authorization: Bearer $TOKEN" \
 - [CWE-840: Business Logic Errors](https://cwe.mitre.org/data/definitions/840.html)
 - [CWE-841: Improper Enforcement of Behavioral Workflow](https://cwe.mitre.org/data/definitions/841.html)
 - [OWASP Testing Guide - Business Logic Testing](https://owasp.org/www-project-web-security-testing-guide/latest/4-Web_Application_Security_Testing/10-Business_Logic_Testing/)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-BIZ-01  
+**适用控制**: V2.1,V2.2,V2.5,V8.2  
+**关联任务**: Backlog #1, #10, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 5
+
+### 执行清单
+- [ ] M-BIZ-01-C01 | 控制: V2.1 | 任务: #1, #10, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-BIZ-01-C02 | 控制: V2.2 | 任务: #1, #10, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-BIZ-01-C03 | 控制: V2.5 | 任务: #1, #10, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-BIZ-01-C04 | 控制: V8.2 | 任务: #1, #10, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

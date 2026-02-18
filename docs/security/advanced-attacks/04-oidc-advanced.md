@@ -4,7 +4,10 @@
 **测试范围**: Token 混淆、IdP 混淆、Client 凭证泄露利用
 **场景数**: 3
 **风险等级**: 🟠 高
-**OWASP ASVS**: V2.2, V3.5, V3.6
+**ASVS 5.0 矩阵ID**: M-ADV-04
+**OWASP ASVS 5.0**: V10.1,V10.2,V10.4,V9.1
+**回归任务映射**: Backlog #1, #4
+
 
 ---
 
@@ -235,3 +238,32 @@ curl -s -o /dev/null -w "%{http_code}" \
 - [OAuth 2.0 Mix-Up Attacks](https://datatracker.ietf.org/doc/html/draft-ietf-oauth-mix-up-mitigation)
 - [CWE-287: Improper Authentication](https://cwe.mitre.org/data/definitions/287.html)
 - [OWASP OAuth Security](https://cheatsheetseries.owasp.org/cheatsheets/OAuth2_Cheat_Sheet.html)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-ADV-04  
+**适用控制**: V10.1,V10.2,V10.4,V9.1  
+**关联任务**: Backlog #1, #4  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 3
+
+### 执行清单
+- [ ] M-ADV-04-C01 | 控制: V10.1 | 任务: #1, #4 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-04-C02 | 控制: V10.2 | 任务: #1, #4 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-04-C03 | 控制: V10.4 | 任务: #1, #4 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-04-C04 | 控制: V9.1 | 任务: #1, #4 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。
