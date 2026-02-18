@@ -7,8 +7,8 @@ use crate::support::http::{
     build_test_router, get_json, get_json_with_auth, get_raw, post_json, MockKeycloakServer,
     TestAppState,
 };
-use auth9_core::domains::identity::api::auth::{OpenIdConfiguration, TokenResponse};
 use auth9_core::domain::{Client, StringUuid};
+use auth9_core::domains::identity::api::auth::{OpenIdConfiguration, TokenResponse};
 use axum::http::StatusCode;
 use base64::Engine;
 use chrono::Utc;

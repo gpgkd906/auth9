@@ -5,10 +5,11 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
+use utoipa::ToSchema;
 use validator::{Validate, ValidationError};
 
 /// Login event types
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum LoginEventType {
     Success,
@@ -73,7 +74,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for LoginEventType {
 }
 
 /// Login event entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct LoginEvent {
     pub id: i64,
     pub user_id: Option<StringUuid>,
@@ -105,7 +106,7 @@ pub struct CreateLoginEventInput {
 }
 
 /// Security alert types
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SecurityAlertType {
     BruteForce,
@@ -167,7 +168,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for SecurityAlertType {
 }
 
 /// Security alert severity levels
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum AlertSeverity {
     Low,
@@ -229,7 +230,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for AlertSeverity {
 }
 
 /// Security alert entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct SecurityAlert {
     pub id: StringUuid,
     pub user_id: Option<StringUuid>,
@@ -270,7 +271,7 @@ pub struct CreateSecurityAlertInput {
 }
 
 /// Webhook entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Webhook {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -316,7 +317,7 @@ fn validate_webhook_url_option(url: &str) -> Result<(), ValidationError> {
 }
 
 /// Input for creating a webhook
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateWebhookInput {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
@@ -334,7 +335,7 @@ fn default_true() -> bool {
 }
 
 /// Input for updating a webhook
-#[derive(Debug, Clone, Default, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Deserialize, Validate, ToSchema)]
 pub struct UpdateWebhookInput {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
@@ -360,7 +361,7 @@ pub const WEBHOOK_EVENTS: &[&str] = &[
 ];
 
 /// Webhook event payload sent to webhook endpoints
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WebhookEvent {
     pub event_type: String,
     pub timestamp: DateTime<Utc>,
@@ -368,7 +369,7 @@ pub struct WebhookEvent {
 }
 
 /// Login statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LoginStats {
     pub total_logins: i64,
     pub successful_logins: i64,
@@ -381,7 +382,7 @@ pub struct LoginStats {
 }
 
 /// A single day's login statistics for trend visualization
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct DailyTrendPoint {
     pub date: String,
     pub total: i64,

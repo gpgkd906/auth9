@@ -4,10 +4,11 @@ use super::common::StringUuid;
 use chrono::{DateTime, Duration, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Invitation status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum InvitationStatus {
     #[default]
@@ -70,7 +71,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for InvitationStatus {
 }
 
 /// Invitation entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Invitation {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -119,7 +120,7 @@ impl Default for Invitation {
 }
 
 /// Input for creating a new invitation
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateInvitationInput {
     /// Email address to invite
     #[validate(email)]
@@ -135,7 +136,7 @@ pub struct CreateInvitationInput {
 }
 
 /// API response for invitation list (without sensitive token_hash)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct InvitationResponse {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -165,7 +166,7 @@ impl From<Invitation> for InvitationResponse {
 }
 
 /// Input for accepting an invitation
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct AcceptInvitationInput {
     /// The invitation token received via email
     #[validate(length(min = 1))]

@@ -2,6 +2,7 @@
 
 use super::common::validate_url_no_ssrf_strict_option;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Default primary color
@@ -30,7 +31,7 @@ fn validate_hex_color(color: &str) -> Result<(), validator::ValidationError> {
 }
 
 /// Branding configuration for login pages
-#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq, ToSchema)]
 pub struct BrandingConfig {
     /// Logo URL (with SSRF protection)
     #[validate(custom(function = "validate_url_no_ssrf_strict_option"))]
@@ -98,7 +99,7 @@ impl BrandingConfig {
 }
 
 /// Request body for updating branding settings
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct UpdateBrandingRequest {
     #[validate(nested)]
     pub config: BrandingConfig,

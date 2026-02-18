@@ -4,13 +4,14 @@ use crate::keycloak::SmtpServerConfig;
 use hmac::{Hmac, Mac};
 use serde::{Deserialize, Serialize};
 use sha2::Sha256;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Version byte for SES SMTP password calculation
 const SES_SMTP_PASSWORD_VERSION: u8 = 0x04;
 
 /// Email provider configuration - supports multiple provider types
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Default, ToSchema)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum EmailProviderConfig {
     /// No email provider configured
@@ -151,7 +152,7 @@ pub fn compute_ses_smtp_password(secret_access_key: &str, region: &str) -> Strin
 }
 
 /// SMTP configuration for email sending
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate, ToSchema)]
 pub struct SmtpConfig {
     /// SMTP server host
     #[validate(length(min = 1, max = 255))]
@@ -180,7 +181,7 @@ pub struct SmtpConfig {
 }
 
 /// AWS SES configuration
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate, ToSchema)]
 pub struct SesConfig {
     /// AWS region (e.g., "us-east-1")
     #[validate(length(min = 1, max = 50))]
@@ -204,7 +205,7 @@ pub struct SesConfig {
 }
 
 /// Oracle Email Delivery configuration (uses SMTP protocol)
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Validate, ToSchema)]
 pub struct OracleEmailConfig {
     /// SMTP endpoint (e.g., "smtp.us-ashburn-1.oraclecloud.com")
     #[validate(length(min = 1, max = 255))]
@@ -238,7 +239,7 @@ fn default_smtp_port() -> u16 {
 }
 
 /// Tenant-level email settings override
-#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, ToSchema)]
 pub struct TenantEmailSettings {
     /// Override email provider for this tenant
     /// If None, uses system default

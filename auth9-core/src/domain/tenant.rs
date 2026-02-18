@@ -5,10 +5,11 @@ use super::password::PasswordPolicy;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Tenant status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum TenantStatus {
     #[default]
@@ -78,7 +79,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for TenantStatus {
 }
 
 /// Tenant settings stored as JSON
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct TenantSettings {
     /// Whether MFA is required for all users
     #[serde(default)]
@@ -115,7 +116,7 @@ impl Default for TenantSettings {
     }
 }
 
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
 pub struct TenantBranding {
     pub primary_color: Option<String>,
     #[validate(custom(function = "validate_branding_logo_url"))]
@@ -131,7 +132,7 @@ fn validate_branding_logo_url(url: &str) -> Result<(), validator::ValidationErro
 }
 
 /// Tenant entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Tenant {
     pub id: StringUuid,
     pub name: String,
@@ -166,7 +167,7 @@ impl Default for Tenant {
 }
 
 /// Input for creating a new tenant
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateTenantInput {
     #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
     pub name: String,
@@ -181,13 +182,16 @@ pub struct CreateTenantInput {
 }
 
 /// Input for self-service organization creation (B2B onboarding)
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateOrganizationInput {
     #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
     pub name: String,
     #[validate(length(min = 1, max = 63), custom(function = "validate_slug"))]
     pub slug: String,
-    #[validate(length(min = 1, max = 255), custom(function = "validate_domain_format"))]
+    #[validate(
+        length(min = 1, max = 255),
+        custom(function = "validate_domain_format")
+    )]
     pub domain: String,
     #[validate(custom(function = "validate_url_no_ssrf_strict"))]
     pub logo_url: Option<String>,
@@ -208,7 +212,9 @@ fn validate_domain_format(domain: &str) -> Result<(), validator::ValidationError
         return Ok(());
     }
     // Domain must have at least one dot, only lowercase alphanumeric + hyphens + dots
-    let domain_regex = regex::Regex::new(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$").unwrap();
+    let domain_regex =
+        regex::Regex::new(r"^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$")
+            .unwrap();
     if !domain_regex.is_match(domain) {
         let mut err = validator::ValidationError::new("invalid_domain");
         err.message = Some("Invalid domain format (e.g. 'example.com')".into());
@@ -229,7 +235,7 @@ fn validate_no_html(value: &str) -> Result<(), validator::ValidationError> {
 }
 
 /// Input for updating a tenant
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct UpdateTenantInput {
     #[validate(length(min = 1, max = 255), custom(function = "validate_no_html"))]
     pub name: Option<String>,
@@ -247,7 +253,7 @@ lazy_static::lazy_static! {
 
 /// Tenant-Service association entity
 /// Represents which services are enabled for a tenant
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct TenantServiceAssoc {
     pub tenant_id: StringUuid,
     pub service_id: StringUuid,
@@ -257,7 +263,7 @@ pub struct TenantServiceAssoc {
 }
 
 /// Service with enabled status for a tenant
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct ServiceWithStatus {
     pub id: StringUuid,
     pub name: String,
@@ -267,7 +273,7 @@ pub struct ServiceWithStatus {
 }
 
 /// Input for toggling service for a tenant
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct ToggleServiceInput {
     pub service_id: uuid::Uuid,
     pub enabled: bool,

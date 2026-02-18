@@ -24,6 +24,7 @@ use axum::{
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -206,6 +207,14 @@ fn default_per_page() -> i64 {
     20
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "List of services")
+    )
+)]
 /// List services
 /// - Platform admin (Identity token): can list all services or filter by tenant
 /// - Tenant user (TenantAccess token): can only list services in their tenant
@@ -275,6 +284,14 @@ pub async fn list<S: HasServices>(
     )))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Service details")
+    )
+)]
 /// Get service by ID
 pub async fn get<S: HasServices>(
     State(state): State<S>,
@@ -290,6 +307,14 @@ pub async fn get<S: HasServices>(
     Ok(Json(SuccessResponse::new(service)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/services",
+    tag = "Authorization",
+    responses(
+        (status = 201, description = "Service created")
+    )
+)]
 /// Create service
 pub async fn create<S: HasServices>(
     State(state): State<S>,
@@ -332,6 +357,14 @@ pub async fn create<S: HasServices>(
     ))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/services/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Service updated")
+    )
+)]
 /// Update service
 pub async fn update<S: HasServices>(
     State(state): State<S>,
@@ -379,6 +412,14 @@ pub async fn update<S: HasServices>(
     Ok(Json(SuccessResponse::new(service)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{id}/clients",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "List of clients")
+    )
+)]
 /// List clients of a service
 pub async fn list_clients<S: HasServices>(
     State(state): State<S>,
@@ -395,6 +436,14 @@ pub async fn list_clients<S: HasServices>(
     Ok(Json(SuccessResponse::new(clients)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/services/{id}/clients",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Client created")
+    )
+)]
 /// Create a new client for a service
 pub async fn create_client<S: HasServices>(
     State(state): State<S>,
@@ -480,6 +529,14 @@ pub async fn create_client<S: HasServices>(
     Ok(Json(SuccessResponse::new(client_with_secret)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/services/{service_id}/clients/{client_id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Client deleted")
+    )
+)]
 /// Delete a client from a service
 pub async fn delete_client<S: HasServices>(
     State(state): State<S>,
@@ -523,6 +580,14 @@ pub async fn delete_client<S: HasServices>(
     Ok(Json(MessageResponse::new("Client deleted successfully")))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/services/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Service deleted")
+    )
+)]
 /// Delete service
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
@@ -569,7 +634,7 @@ pub async fn delete<S: HasServices>(
 // Integration Info Types & Handler
 // ============================================================================
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ServiceIntegrationInfo {
     pub service: ServiceBasicInfo,
     pub clients: Vec<ClientIntegrationInfo>,
@@ -578,7 +643,7 @@ pub struct ServiceIntegrationInfo {
     pub environment_variables: Vec<EnvVar>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ServiceBasicInfo {
     pub id: String,
     pub name: String,
@@ -587,7 +652,7 @@ pub struct ServiceBasicInfo {
     pub logout_uris: Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ClientIntegrationInfo {
     pub client_id: String,
     pub name: Option<String>,
@@ -596,7 +661,7 @@ pub struct ClientIntegrationInfo {
     pub created_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct EndpointInfo {
     pub auth9_domain: String,
     pub auth9_public_url: String,
@@ -609,13 +674,13 @@ pub struct EndpointInfo {
     pub jwks: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct GrpcInfo {
     pub address: String,
     pub auth_mode: String,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct EnvVar {
     pub key: String,
     pub value: String,
@@ -703,6 +768,14 @@ fn build_env_vars(
     vars
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{id}/integration",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Service integration info")
+    )
+)]
 /// Get integration info for a service
 pub async fn integration_info<S: HasServices>(
     State(state): State<S>,
@@ -822,6 +895,14 @@ pub async fn integration_info<S: HasServices>(
     Ok(Json(SuccessResponse::new(info)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/services/{service_id}/clients/{client_id}/regenerate-secret",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Client secret regenerated")
+    )
+)]
 /// Regenerate client secret
 pub async fn regenerate_client_secret<S: HasServices>(
     State(state): State<S>,

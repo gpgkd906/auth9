@@ -14,6 +14,14 @@ use axum::{
 };
 
 /// List audit logs with actor information (email, display_name)
+#[utoipa::path(
+    get,
+    path = "/api/v1/audit-logs",
+    tag = "Security & Observability",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,

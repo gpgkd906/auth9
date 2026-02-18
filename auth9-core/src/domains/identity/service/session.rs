@@ -3,10 +3,10 @@
 use crate::domain::{
     parse_user_agent, CreateSessionInput, Session, SessionInfo, StringUuid, WebhookEvent,
 };
+use crate::domains::integration::service::WebhookEventPublisher;
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::{SessionRepository, UserRepository};
-use crate::domains::integration::service::WebhookEventPublisher;
 use chrono::Utc;
 use std::sync::Arc;
 

@@ -10,6 +10,20 @@ use crate::grpc::TokenExchangeService;
 
 /// File descriptor set for gRPC reflection
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth9_descriptor");
+use crate::domains::authorization::service::{ClientService, RbacService};
+use crate::domains::identity::service::{
+    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
+};
+use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
+use crate::domains::platform::service::{
+    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
+};
+use crate::domains::security_observability::service::{
+    AnalyticsService, SecurityDetectionConfig, SecurityDetectionService,
+};
+use crate::domains::tenant_access::service::{
+    InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
+};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
@@ -19,21 +33,6 @@ use crate::repository::{
     security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
     session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
     tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
-};
-use crate::domains::authorization::service::{ClientService, RbacService};
-use crate::domains::identity::service::{
-    IdentityProviderService, PasswordService, SessionService, WebAuthnService,
-};
-use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
-use crate::domains::platform::service::{
-    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService,
-    SystemSettingsService,
-};
-use crate::domains::security_observability::service::{
-    AnalyticsService, SecurityDetectionConfig, SecurityDetectionService,
-};
-use crate::domains::tenant_access::service::{
-    InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -51,6 +50,8 @@ use tonic::transport::Server as TonicServer;
 use tower::ServiceBuilder;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
 use tracing::info;
+use utoipa_redoc::{Redoc, Servable};
+use utoipa_swagger_ui::SwaggerUi;
 
 use crate::config::CorsConfig;
 
@@ -456,8 +457,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         action_repo.clone(),
     );
     let tenant_service = Arc::new(
-        TenantService::new(tenant_repos, Some(cache_manager.clone()))
-            .with_pool(db_pool.clone()),
+        TenantService::new(tenant_repos, Some(cache_manager.clone())).with_pool(db_pool.clone()),
     );
 
     // Create UserService with repository bundle
@@ -496,8 +496,9 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     }
 
     // Create Keycloak sync service (shared between branding and system settings)
-    let keycloak_updater: Arc<dyn crate::domains::platform::service::keycloak_sync::KeycloakRealmUpdater> =
-        keycloak_arc.clone();
+    let keycloak_updater: Arc<
+        dyn crate::domains::platform::service::keycloak_sync::KeycloakRealmUpdater,
+    > = keycloak_arc.clone();
     let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
 
     // Create system settings service with Keycloak sync
@@ -1112,6 +1113,9 @@ pub fn build_full_router<S>(
 where
     S: domains::DomainRouterState + HasServices + HasCache,
 {
+    // Capture production flag before state is moved
+    let is_production = state.config().is_production();
+
     // Get CORS configuration from state
     let cors_config = state.config().cors.clone();
     let cors = build_cors_layer(&cors_config);
@@ -1247,4 +1251,22 @@ where
         .with_state(state)
         // Nest the metrics route outside .with_state() since it uses its own state
         .merge(metrics_route)
+        // Mount OpenAPI documentation endpoints (non-production only)
+        .merge(build_openapi_routes(is_production))
+}
+
+/// Build OpenAPI documentation routes (Swagger UI + ReDoc).
+/// Only enabled in non-production environments.
+fn build_openapi_routes(is_production: bool) -> Router {
+    if is_production {
+        return Router::new();
+    }
+
+    let openapi = crate::openapi::ApiDoc::build();
+
+    info!("OpenAPI docs enabled: /swagger-ui, /redoc");
+
+    Router::new()
+        .merge(SwaggerUi::new("/swagger-ui").url("/api-docs/openapi.json", openapi.clone()))
+        .merge(Redoc::with_url("/redoc", openapi))
 }

@@ -6,9 +6,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 /// WebAuthn credential info from Keycloak
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct WebAuthnCredential {
     pub id: String,
     pub credential_type: String,
@@ -52,7 +53,7 @@ impl From<StoredPasskey> for WebAuthnCredential {
 }
 
 /// Keycloak credential representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KeycloakCredential {
     pub id: String,

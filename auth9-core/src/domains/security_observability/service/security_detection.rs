@@ -4,10 +4,10 @@ use crate::domain::{
     AlertSeverity, CreateSecurityAlertInput, LoginEvent, LoginEventType, SecurityAlert,
     SecurityAlertType, StringUuid, WebhookEvent,
 };
+use crate::domains::integration::service::{WebhookEventPublisher, WebhookService};
 use crate::error::Result;
 use crate::repository::WebhookRepository;
 use crate::repository::{LoginEventRepository, SecurityAlertRepository};
-use crate::domains::integration::service::{WebhookEventPublisher, WebhookService};
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;

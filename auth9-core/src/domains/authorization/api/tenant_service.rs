@@ -13,6 +13,14 @@ use axum::{
 };
 use uuid::Uuid;
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/services",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "List of services with status")
+    )
+)]
 /// List all global services with their enabled status for a tenant
 pub async fn list_services<S: HasServices + HasDbPool>(
     State(state): State<S>,
@@ -57,6 +65,14 @@ pub async fn list_services<S: HasServices + HasDbPool>(
     Ok(Json(SuccessResponse::new(services)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/services",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Service toggled")
+    )
+)]
 /// Toggle a service for a tenant (enable/disable)
 pub async fn toggle_service<S: HasServices + HasDbPool>(
     State(state): State<S>,
@@ -132,6 +148,14 @@ pub async fn toggle_service<S: HasServices + HasDbPool>(
     Ok(Json(SuccessResponse::new(services)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/services/enabled",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Enabled services for tenant")
+    )
+)]
 /// Get enabled services for a tenant (used by invitation)
 pub async fn get_enabled_services<S: HasServices + HasDbPool>(
     State(state): State<S>,

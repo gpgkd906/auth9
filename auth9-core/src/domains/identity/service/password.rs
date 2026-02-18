@@ -4,14 +4,14 @@ use crate::domain::{
     ChangePasswordInput, CreatePasswordResetTokenInput, ForgotPasswordInput, PasswordPolicy,
     ResetPasswordInput, StringUuid, UpdatePasswordPolicyInput,
 };
+use crate::domains::integration::service::ActionEngine;
+use crate::domains::platform::service::{EmailService, KeycloakSyncService};
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
     ActionRepository, PasswordResetRepository, SystemSettingsRepository, TenantRepository,
     UserRepository,
 };
-use crate::domains::integration::service::ActionEngine;
-use crate::domains::platform::service::{EmailService, KeycloakSyncService};
 use argon2::{
     password_hash::{PasswordHash, PasswordVerifier},
     Argon2,
@@ -404,10 +404,10 @@ fn verify_token(token: &str, hash: &str) -> Result<bool> {
 mod tests {
     use super::*;
     use crate::domain::PasswordResetToken;
+    use crate::domains::platform::service::SystemSettingsService;
     use crate::repository::password_reset::MockPasswordResetRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use crate::repository::user::MockUserRepository;
-    use crate::domains::platform::service::SystemSettingsService;
     use mockall::predicate::*;
 
     #[test]

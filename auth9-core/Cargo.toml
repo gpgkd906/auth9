@@ -56,6 +56,11 @@ reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-feature
 # CLI
 clap = { version = "4", features = ["derive"] }
 
+# OpenAPI Documentation
+utoipa = { version = "5", features = ["axum_extras", "uuid", "chrono"] }
+utoipa-swagger-ui = { version = "9", features = ["axum"] }
+utoipa-redoc = { version = "6", features = ["axum"] }
+
 # Utilities
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }

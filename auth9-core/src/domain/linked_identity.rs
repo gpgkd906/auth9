@@ -4,9 +4,10 @@ use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 /// Linked identity entity (tracks external IdP connections)
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct LinkedIdentity {
     pub id: StringUuid,
     pub user_id: StringUuid,
@@ -42,7 +43,7 @@ pub struct CreateLinkedIdentityInput {
 }
 
 /// Keycloak federated identity representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KeycloakFederatedIdentity {
     pub identity_provider: String,
@@ -51,7 +52,7 @@ pub struct KeycloakFederatedIdentity {
 }
 
 /// Linked identity info returned to clients
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct LinkedIdentityInfo {
     pub id: String,
     pub provider_type: String,

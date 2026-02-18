@@ -19,10 +19,11 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Request body for accepting an invitation
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct AcceptInvitationRequest {
     pub token: String,
     pub email: Option<String>,
@@ -54,6 +55,14 @@ fn default_per_page() -> i64 {
 }
 
 /// List invitations for a tenant
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/invitations",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list<S: HasInvitations>(
     State(state): State<S>,
     auth: AuthUser,
@@ -104,6 +113,14 @@ pub async fn list<S: HasInvitations>(
 }
 
 /// Create a new invitation
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/invitations",
+    tag = "Tenant Access",
+    responses(
+        (status = 201, description = "Created")
+    )
+)]
 pub async fn create<S: HasInvitations>(
     State(state): State<S>,
     auth: AuthUser,
@@ -214,6 +231,14 @@ pub async fn create<S: HasInvitations>(
 }
 
 /// Get invitation by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/invitations/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get<S: HasInvitations>(
     State(state): State<S>,
     Path(id): Path<Uuid>,
@@ -227,6 +252,14 @@ pub async fn get<S: HasInvitations>(
 }
 
 /// Revoke an invitation
+#[utoipa::path(
+    post,
+    path = "/api/v1/invitations/{id}/revoke",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn revoke<S: HasInvitations>(
     State(state): State<S>,
     Path(id): Path<Uuid>,
@@ -240,6 +273,14 @@ pub async fn revoke<S: HasInvitations>(
 }
 
 /// Delete an invitation
+#[utoipa::path(
+    delete,
+    path = "/api/v1/invitations/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Deleted")
+    )
+)]
 pub async fn delete<S: HasInvitations>(
     State(state): State<S>,
     Path(id): Path<Uuid>,
@@ -252,6 +293,14 @@ pub async fn delete<S: HasInvitations>(
 }
 
 /// Resend invitation email
+#[utoipa::path(
+    post,
+    path = "/api/v1/invitations/{id}/resend",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn resend<S: HasInvitations>(
     State(state): State<S>,
     _headers: HeaderMap,
@@ -269,6 +318,14 @@ pub async fn resend<S: HasInvitations>(
 }
 
 /// Accept an invitation (public endpoint)
+#[utoipa::path(
+    post,
+    path = "/api/v1/invitations/accept",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn accept<S: HasInvitations>(
     State(state): State<S>,
     Json(request): Json<AcceptInvitationRequest>,

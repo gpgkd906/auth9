@@ -13,6 +13,14 @@ use axum::{
     Json,
 };
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/identity-providers",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "List of identity providers")
+    )
+)]
 /// List all identity providers
 pub async fn list_providers<S: HasIdentityProviders>(
     State(state): State<S>,
@@ -21,6 +29,14 @@ pub async fn list_providers<S: HasIdentityProviders>(
     Ok(Json(SuccessResponse::new(providers)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/identity-providers/{alias}",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Identity provider details")
+    )
+)]
 /// Get an identity provider by alias
 pub async fn get_provider<S: HasIdentityProviders>(
     State(state): State<S>,
@@ -33,6 +49,14 @@ pub async fn get_provider<S: HasIdentityProviders>(
     Ok(Json(SuccessResponse::new(provider)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/identity-providers",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Identity provider created")
+    )
+)]
 /// Create a new identity provider
 pub async fn create_provider<S: HasIdentityProviders>(
     State(state): State<S>,
@@ -45,6 +69,14 @@ pub async fn create_provider<S: HasIdentityProviders>(
     Ok(Json(SuccessResponse::new(provider)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/identity-providers/{alias}",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Identity provider updated")
+    )
+)]
 /// Update an identity provider
 pub async fn update_provider<S: HasIdentityProviders>(
     State(state): State<S>,
@@ -58,6 +90,14 @@ pub async fn update_provider<S: HasIdentityProviders>(
     Ok(Json(SuccessResponse::new(provider)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/identity-providers/{alias}",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Identity provider deleted")
+    )
+)]
 /// Delete an identity provider
 pub async fn delete_provider<S: HasIdentityProviders>(
     State(state): State<S>,
@@ -72,6 +112,14 @@ pub async fn delete_provider<S: HasIdentityProviders>(
     )))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/identity-providers/templates",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Available templates")
+    )
+)]
 /// Get available identity provider templates
 pub async fn get_templates<S: HasIdentityProviders>(
     State(state): State<S>,
@@ -80,6 +128,14 @@ pub async fn get_templates<S: HasIdentityProviders>(
     Ok(Json(SuccessResponse::new(templates)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me/linked-identities",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "List of linked identities")
+    )
+)]
 /// Get linked identities for the current user
 pub async fn list_my_linked_identities<S: HasIdentityProviders + HasServices>(
     State(state): State<S>,
@@ -95,6 +151,14 @@ pub async fn list_my_linked_identities<S: HasIdentityProviders + HasServices>(
     Ok(Json(SuccessResponse::new(identities)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/me/linked-identities/{id}",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Identity unlinked")
+    )
+)]
 /// Unlink an identity from the current user
 pub async fn unlink_identity<S: HasIdentityProviders + HasServices>(
     State(state): State<S>,

@@ -89,8 +89,7 @@ pub async fn require_auth_middleware(
     // Validate the token (service client, identity, then tenant access token)
     // Also extract session ID for blacklist check.
     let mut session_id: Option<String> = None;
-    let token_kind = if let Ok(claims) = auth_state.jwt_manager.verify_service_client_token(token)
-    {
+    let token_kind = if let Ok(claims) = auth_state.jwt_manager.verify_service_client_token(token) {
         session_id = Some(claims.sub.clone());
         Some("service_client")
     } else if let Ok(claims) = auth_state.jwt_manager.verify_identity_token(token) {
@@ -125,7 +124,9 @@ pub async fn require_auth_middleware(
     };
 
     if token_kind == "identity" && !is_identity_token_path_allowed(&request_path) {
-        return forbidden_response("Identity token is only allowed for tenant selection and exchange");
+        return forbidden_response(
+            "Identity token is only allowed for tenant selection and exchange",
+        );
     }
 
     // Check token blacklist (e.g., after logout)
@@ -358,8 +359,8 @@ mod tests {
             .times(2)
             .returning(|_| Err(anyhow::anyhow!("Redis connection refused").into()));
 
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false)
-            .with_cache(Arc::new(mock_cache));
+        let auth_state =
+            AuthMiddlewareState::new(jwt_manager, vec![], false).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -415,8 +416,8 @@ mod tests {
                 }
             });
 
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false)
-            .with_cache(Arc::new(mock_cache));
+        let auth_state =
+            AuthMiddlewareState::new(jwt_manager, vec![], false).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -459,8 +460,8 @@ mod tests {
             .expect_is_token_blacklisted()
             .returning(|_| Ok(true));
 
-        let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false)
-            .with_cache(Arc::new(mock_cache));
+        let auth_state =
+            AuthMiddlewareState::new(jwt_manager, vec![], false).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))

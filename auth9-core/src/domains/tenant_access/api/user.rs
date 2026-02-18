@@ -17,6 +17,7 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -186,6 +187,14 @@ fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Resul
 /// - Platform admin (any token type with platform admin email): can list all users
 /// - Tenant user (TenantAccess token): can only list users in their tenant
 /// - Supports optional `search` query parameter to filter by email or display_name
+#[utoipa::path(
+    get,
+    path = "/api/v1/users",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -271,6 +280,14 @@ pub async fn list<S: HasServices>(
 
 /// Get user by ID
 /// Users can only read their own profile, or admins with user:read permission can read any user
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -338,7 +355,7 @@ pub async fn get<S: HasServices>(
 }
 
 /// Create user input (includes optional password for Keycloak)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateUserRequest {
     #[serde(flatten)]
     pub user: CreateUserInput,
@@ -351,6 +368,14 @@ pub struct CreateUserRequest {
 /// This endpoint supports two modes:
 /// 1. Authenticated (with valid JWT): Admin can always create users
 /// 2. Unauthenticated (public registration): Only allowed if branding.allow_registration is true
+#[utoipa::path(
+    post,
+    path = "/api/v1/users",
+    tag = "Tenant Access",
+    responses(
+        (status = 201, description = "Created")
+    )
+)]
 pub async fn create<S: HasServices + HasBranding>(
     State(state): State<S>,
     headers: HeaderMap,
@@ -483,6 +508,14 @@ pub async fn create<S: HasServices + HasBranding>(
 }
 
 /// Get current user's own profile
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_me<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -493,6 +526,14 @@ pub async fn get_me<S: HasServices>(
 }
 
 /// Update current user's own profile (display_name, avatar_url)
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/me",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_me<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -536,6 +577,14 @@ pub async fn update_me<S: HasServices>(
 /// Update user
 /// Self-update: users can update their own profile without admin permissions
 /// Admin update: requires platform admin or tenant admin to update other users
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -586,6 +635,14 @@ pub async fn update<S: HasServices>(
 
 /// Delete user
 /// Requires platform admin or tenant admin to delete users
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Deleted")
+    )
+)]
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -637,7 +694,7 @@ fn validate_role_in_tenant(role: &str) -> Result<()> {
 }
 
 /// Add user to tenant
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AddToTenantRequest {
     pub tenant_id: Uuid,
     pub role_in_tenant: String,
@@ -645,6 +702,14 @@ pub struct AddToTenantRequest {
 
 /// Add user to tenant
 /// Requires the caller to be an owner of the target tenant
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/{id}/tenants",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn add_to_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -680,7 +745,7 @@ pub async fn add_to_tenant<S: HasServices>(
 }
 
 /// Update user's role in a tenant
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct UpdateRoleInTenantRequest {
     pub role_in_tenant: String,
 }
@@ -689,6 +754,14 @@ pub struct UpdateRoleInTenantRequest {
 /// Requires the caller to be an owner of the target tenant.
 /// Setting role to "owner" (ownership transfer) always requires the caller
 /// to be the current tenant owner — platform admin bypass is not sufficient.
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/{user_id}/tenants/{tenant_id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_role_in_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -729,6 +802,14 @@ pub async fn update_role_in_tenant<S: HasServices>(
 
 /// Remove user from tenant
 /// Requires the caller to be an owner of the target tenant
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{user_id}/tenants/{tenant_id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn remove_from_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -758,6 +839,14 @@ pub async fn remove_from_tenant<S: HasServices>(
 }
 
 /// Get user's tenants (with tenant data for display)
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{id}/tenants",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_tenants<S: HasServices>(
     State(state): State<S>,
     Path(user_id): Path<Uuid>,
@@ -773,6 +862,14 @@ pub async fn get_tenants<S: HasServices>(
 
 /// Enable MFA for a user
 /// Requires platform admin or tenant admin
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/{id}/mfa",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn enable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -812,7 +909,7 @@ pub async fn enable_mfa<S: HasServices>(
 }
 
 /// Input for disabling MFA - requires admin password confirmation
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct DisableMfaInput {
     /// Admin's own password for secondary verification
     #[validate(length(min = 1, max = 128))]
@@ -821,6 +918,14 @@ pub struct DisableMfaInput {
 
 /// Disable MFA for a user
 /// Requires platform admin or tenant admin + password confirmation
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{id}/mfa",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn disable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -886,6 +991,14 @@ pub async fn disable_mfa<S: HasServices>(
 
 /// List users in a tenant
 /// Requires tenant access: platform admin, matching TenantAccess token, or matching ServiceClient token
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/users",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_by_tenant<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,

@@ -6,15 +6,6 @@
 
 use crate::cache::CacheOperations;
 use crate::config::Config;
-use crate::jwt::JwtManager;
-use crate::keycloak::KeycloakClient;
-use crate::repository::audit::AuditRepository;
-use crate::repository::{
-    ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
-    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
-    SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
-    WebhookRepository,
-};
 use crate::domains::authorization::service::{ClientService, RbacService};
 use crate::domains::identity::service::{
     IdentityProviderService, PasswordService, SessionService, WebAuthnService,
@@ -25,6 +16,15 @@ use crate::domains::platform::service::{
 };
 use crate::domains::security_observability::service::{AnalyticsService, SecurityDetectionService};
 use crate::domains::tenant_access::service::{InvitationService, TenantService, UserService};
+use crate::jwt::JwtManager;
+use crate::keycloak::KeycloakClient;
+use crate::repository::audit::AuditRepository;
+use crate::repository::{
+    ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
+    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
+    SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
+    WebhookRepository,
+};
 
 // ============================================================
 // Generic Service Type Aliases for Trait Bounds

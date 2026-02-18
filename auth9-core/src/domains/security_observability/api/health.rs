@@ -3,14 +3,23 @@
 use crate::state::HasServices;
 use axum::{extract::State, http::StatusCode, response::IntoResponse, Json};
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, ToSchema)]
 pub struct HealthResponse {
     pub status: String,
     pub version: String,
 }
 
 /// Health check endpoint
+#[utoipa::path(
+    get,
+    path = "/health",
+    tag = "System",
+    responses(
+        (status = 200, description = "Success", body = HealthResponse)
+    )
+)]
 pub async fn health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "healthy".to_string(),
@@ -19,6 +28,15 @@ pub async fn health() -> impl IntoResponse {
 }
 
 /// Readiness check endpoint
+#[utoipa::path(
+    get,
+    path = "/ready",
+    tag = "System",
+    responses(
+        (status = 200, description = "Ready"),
+        (status = 503, description = "Not ready")
+    )
+)]
 pub async fn ready<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
     let (db_ok, cache_ok) = state.check_ready().await;
 
