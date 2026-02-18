@@ -38,6 +38,7 @@ export interface Auth9Config {
  * // Use gRPC for token exchange
  * const grpc = auth9.grpc({ address: "localhost:50051" });
  * const result = await grpc.exchangeToken({ identityToken, tenantId, serviceId });
+ * // Use result.accessToken for tenant-scoped RBAC requests
  * ```
  */
 export class Auth9 {

@@ -61,6 +61,7 @@ pub async fn require_auth_middleware(
     request: Request<Body>,
     next: Next,
 ) -> Response {
+    let request_path = request.uri().path().to_string();
     // Extract the Authorization header
     let auth_header = match request.headers().get(AUTHORIZATION) {
         Some(header) => header,
@@ -86,45 +87,45 @@ pub async fn require_auth_middleware(
     };
 
     // Validate the token (service client, identity, then tenant access token)
-    // Also extract session ID for blacklist check
+    // Also extract session ID for blacklist check.
     let mut session_id: Option<String> = None;
-
-    let is_valid = if let Ok(claims) = auth_state.jwt_manager.verify_service_client_token(token) {
+    let token_kind = if let Ok(claims) = auth_state.jwt_manager.verify_service_client_token(token)
+    {
         session_id = Some(claims.sub.clone());
-        true
+        Some("service_client")
     } else if let Ok(claims) = auth_state.jwt_manager.verify_identity_token(token) {
         session_id = claims.sid.clone();
-        true
+        Some("identity")
     } else if !auth_state.tenant_access_allowed_audiences.is_empty() {
         if let Ok(claims) = auth_state
             .jwt_manager
             .verify_tenant_access_token_strict(token, &auth_state.tenant_access_allowed_audiences)
         {
             session_id = Some(claims.sub.clone());
-            true
+            Some("tenant_access")
         } else {
-            false
+            None
         }
+    } else if auth_state.is_production {
+        None
+    } else if let Ok(claims) = {
+        #[allow(deprecated)]
+        auth_state
+            .jwt_manager
+            .verify_tenant_access_token(token, None)
+    } {
+        session_id = Some(claims.sub.clone());
+        Some("tenant_access")
     } else {
-        // Legacy behavior: in non-production, allow tenant access tokens without `aud` validation
-        // when allowlist is not configured yet.
-        if auth_state.is_production {
-            false
-        } else if let Ok(claims) = {
-            #[allow(deprecated)]
-            auth_state
-                .jwt_manager
-                .verify_tenant_access_token(token, None)
-        } {
-            session_id = Some(claims.sub.clone());
-            true
-        } else {
-            false
-        }
+        None
     };
 
-    if !is_valid {
+    let Some(token_kind) = token_kind else {
         return unauthorized_response("Invalid or expired token");
+    };
+
+    if token_kind == "identity" && !is_identity_token_path_allowed(&request_path) {
+        return forbidden_response("Identity token is only allowed for tenant selection and exchange");
     }
 
     // Check token blacklist (e.g., after logout)
@@ -168,6 +169,26 @@ fn unauthorized_response(message: &str) -> Response {
         })),
     )
         .into_response()
+}
+
+fn forbidden_response(message: &str) -> Response {
+    (
+        StatusCode::FORBIDDEN,
+        Json(json!({
+            "error": message,
+            "code": "FORBIDDEN"
+        })),
+    )
+        .into_response()
+}
+
+fn is_identity_token_path_allowed(path: &str) -> bool {
+    path.starts_with("/api/v1/auth/")
+        || path == "/api/v1/users/me/tenants"
+        || path == "/api/v1/organizations"
+        || path == "/api/v1/users/me"
+        || path.starts_with("/api/v1/users/me/sessions")
+        || path.starts_with("/api/v1/users/me/passkeys")
 }
 
 /// Generate a 503 Service Unavailable response
@@ -221,14 +242,14 @@ mod tests {
         let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .body(Body::empty())
             .unwrap();
 
@@ -243,14 +264,14 @@ mod tests {
         let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .header("Authorization", "Basic dXNlcjpwYXNz")
             .body(Body::empty())
             .unwrap();
@@ -266,14 +287,14 @@ mod tests {
         let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .header("Authorization", "Bearer invalid.token.here")
             .body(Body::empty())
             .unwrap();
@@ -296,14 +317,14 @@ mod tests {
         let auth_state = AuthMiddlewareState::new(jwt_manager, vec![], false);
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .header("Authorization", format!("Bearer {}", valid_token))
             .body(Body::empty())
             .unwrap();
@@ -341,14 +362,14 @@ mod tests {
             .with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .header("Authorization", format!("Bearer {}", valid_token))
             .body(Body::empty())
             .unwrap();
@@ -398,14 +419,14 @@ mod tests {
             .with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .header("Authorization", format!("Bearer {}", valid_token))
             .body(Body::empty())
             .unwrap();
@@ -442,14 +463,14 @@ mod tests {
             .with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
-            .route("/protected", get(protected_handler))
+            .route("/api/v1/auth/userinfo", get(protected_handler))
             .layer(axum::middleware::from_fn_with_state(
                 auth_state,
                 require_auth_middleware,
             ));
 
         let request = Request::builder()
-            .uri("/protected")
+            .uri("/api/v1/auth/userinfo")
             .header("Authorization", format!("Bearer {}", valid_token))
             .body(Body::empty())
             .unwrap();

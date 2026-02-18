@@ -91,7 +91,7 @@ describe("Auth Callback", () => {
       const response = await loader({ request, params: {}, context: {} });
       expect(response).toBeInstanceOf(Response);
       expect((response as Response).status).toBe(302);
-      expect((response as Response).headers.get("Location")).toBe("/dashboard");
+      expect((response as Response).headers.get("Location")).toBe("/tenant/select");
       expect(commitSession).toHaveBeenCalledWith(
         expect.objectContaining({ accessToken: "new-access-token" })
       );

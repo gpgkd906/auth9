@@ -123,7 +123,7 @@ describe("Login Page", () => {
         const response = await action({ request, params: {}, context: {} });
 
         expect(response.status).toBe(302);
-        expect(response.headers.get("Location")).toBe("/dashboard");
+        expect(response.headers.get("Location")).toBe("/tenant/select");
         // Session cookie is set via commitSession - verified by redirect
     });
 
@@ -175,7 +175,7 @@ describe("Login Page", () => {
         const response = await action({ request, params: {}, context: {} });
 
         expect(response.status).toBe(302);
-        expect(response.headers.get("Location")).toBe("/dashboard");
+        expect(response.headers.get("Location")).toBe("/tenant/select");
     });
 
     // ============================================================================

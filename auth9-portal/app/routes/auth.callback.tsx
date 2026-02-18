@@ -70,9 +70,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
         // Store tokens in session cookie
         const session = {
             accessToken: data.access_token,
+            identityAccessToken: data.access_token,
             refreshToken: data.refresh_token,
             idToken: data.id_token,
             expiresAt: Date.now() + (data.expires_in * 1000),
+            identityExpiresAt: Date.now() + (data.expires_in * 1000),
         };
 
         // Check if there's a pending invitation to accept
@@ -85,7 +87,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
             }
         }
 
-        return redirect("/dashboard", {
+        return redirect("/tenant/select", {
             headers: [
                 ["Set-Cookie", await commitSession(session)],
                 ["Set-Cookie", await clearOAuthStateCookie()],
