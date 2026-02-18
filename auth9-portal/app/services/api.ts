@@ -214,8 +214,12 @@ export const userApi = {
     }
   },
 
-  getMyTenants: async (accessToken?: string): Promise<{ data: TenantUserWithTenant[] }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/users/me/tenants`, {
+  getMyTenants: async (accessToken?: string, serviceId?: string): Promise<{ data: TenantUserWithTenant[] }> => {
+    let url = `${API_BASE_URL}/api/v1/users/me/tenants`;
+    if (serviceId) {
+      url += `?service_id=${encodeURIComponent(serviceId)}`;
+    }
+    const response = await fetch(url, {
       headers: getHeaders(accessToken),
     });
     return handleResponse(response);
