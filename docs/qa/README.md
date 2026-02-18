@@ -46,7 +46,7 @@
 | [invitation/02-accept.md](./invitation/02-accept.md) | 接受邀请流程 | 5 |
 | [invitation/03-manage.md](./invitation/03-manage.md) | 撤销、删除、过滤 | 5 |
 
-### 会话与安全 (7 个文档, 34 个场景)
+### 会话与安全 (8 个文档, 39 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [session/01-session.md](./session/01-session.md) | 会话管理、撤销 | 5 |
@@ -56,6 +56,7 @@
 | [session/05-auth-security-regression.md](./session/05-auth-security-regression.md) | 鉴权与令牌安全回归（越权强退、refresh 撤销一致性、callback token 泄露、限流绕过） | 5 |
 | [session/06-token-blacklist-failsafe.md](./session/06-token-blacklist-failsafe.md) | Token 黑名单 Fail-Closed 策略（Redis 故障 503、重试机制、向后兼容） | 4 |
 | [session/07-oauth-state-csrf.md](./session/07-oauth-state-csrf.md) | OAuth State CSRF 校验（cookie 存储、回调校验、过期、安全属性） | 5 |
+| [session/08-identity-token-whitelist-tenant-token-enforcement.md](./session/08-identity-token-whitelist-tenant-token-enforcement.md) | Identity Token 白名单、Tenant Token 强制校验、切租户 token 边界 | 5 |
 
 ### Webhook (4 个文档, 17 个场景)
 | 文档 | 描述 | 场景数 |
@@ -65,7 +66,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (8 个文档, 38 个场景)
+### 认证流程 (9 个文档, 43 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 5 |
@@ -76,6 +77,7 @@
 | [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（等价 **Sign in with password** 路径） | 5 |
 | [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与登录路由（**Continue with Enterprise SSO** 路径） | 5 |
 | [auth/10-b2b-onboarding-flow.md](./auth/10-b2b-onboarding-flow.md) | B2B 首次入驻流程（三种登录方式均可触发） | 5 |
+| [auth/11-tenant-selection-token-exchange.md](./auth/11-tenant-selection-token-exchange.md) | 登录后 tenant 选择、tenant token exchange、identity token 权限收敛、gRPC tenant token 使用 | 5 |
 
 ### 系统设置 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -151,9 +153,9 @@
 | RBAC 角色权限 | 4 | 17 |
 | 服务与客户端 | 5 | 25 |
 | 邀请管理 | 3 | 15 |
-| 会话与安全 | 7 | 34 |
+| 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
-| 认证流程 | 8 | 38 |
+| 认证流程 | 9 | 43 |
 | 系统设置 | 3 | 15 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
@@ -162,7 +164,7 @@
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
 | 集成测试 | 7 | 35 |
-| **总计** | **72** | **354** |
+| **总计** | **74** | **364** |
 
 ---
 
@@ -306,6 +308,9 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-18 | 4.4.2 | 补充多 tenant 登录后 `/tenant/select` 分流说明，统一 6 份既有文档执行步骤（`auth/01`、`session/07`、`integration/06`、`passkeys/02`、`user/06`、`service/05`），避免 QA 对登录后页面路径理解不一致；文档总数与场景数不变（74/364） |
+| 2026-02-18 | 4.4.1 | 新增会话与安全文档 `session/08`：覆盖 Identity Token 最小白名单、tenant 接口强制 Tenant Token、tenant/service 不匹配拒绝、切租户后旧 token 隔离；共 74 个文档 364 个场景 |
+| 2026-02-18 | 4.4.0 | 新增 tenant 选择与 token exchange 测试文档（`auth/11`），并更新 B2B 入驻路由说明（`auth/10`）：覆盖登录后 `/tenant/select` 分流、切换 tenant 强制 exchange、identity token 最小白名单、gRPC 使用 tenant token；共 73 个文档 359 个场景 |
 | 2026-02-18 | 4.3.0 | 新增 B2B 入驻流程与 OAuth State CSRF 修复测试：OAuth State CSRF 校验（`session/07`）、B2B 组织自助创建 API（`tenant/04`）、B2B 首次入驻与租户路由（`auth/10`），覆盖 state cookie 生命周期、域名验证、Pending 状态、Onboarding 向导、组织切换器；共 72 个文档 354 个场景 |
 | 2026-02-18 | 4.2.0 | 新增安全加固第二轮测试：Token 黑名单 Fail-Closed 策略（`session/06`）、事务性级联删除原子性 & Webhook Secret 生产强制校验（`integration/10`），覆盖 P0-1/P0-2/P0-3 安全改进；共 68 个文档 334 个场景 |
 | 2026-02-17 | 4.1.1 | 对齐企业 SSO 测试执行路径：`auth/09-enterprise-sso-discovery.md`、`identity-provider/03-tenant-enterprise-sso-connectors.md` 新增 `auth9-demo`（`/enterprise/login` 与 `/demo/enterprise/*`）操作步骤；文档总数与场景数不变（66/325） |

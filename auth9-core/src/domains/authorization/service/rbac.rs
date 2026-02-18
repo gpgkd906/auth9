@@ -323,6 +323,31 @@ impl<R: RbacRepository> RbacService<R> {
             .await
     }
 
+    pub async fn get_user_roles_for_service(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+    ) -> Result<UserRolesInTenant> {
+        self.repo
+            .find_user_roles_in_tenant_for_service(user_id, tenant_id, service_id)
+            .await
+    }
+
+    pub async fn ensure_tenant_membership(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<()> {
+        let membership = self.repo.find_tenant_user_id(user_id, tenant_id).await?;
+        if membership.is_none() {
+            return Err(AppError::Forbidden(
+                "User is not a member of this tenant".to_string(),
+            ));
+        }
+        Ok(())
+    }
+
     pub async fn get_user_role_records(
         &self,
         user_id: StringUuid,

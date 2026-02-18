@@ -11,15 +11,16 @@
 
 B2B 模式下，用户首次 OAuth 登录后不再自动加入 demo 租户。改为：
 
-1. OAuth 登录成功 → 重定向到 `/dashboard`
-2. Dashboard loader 获取用户的租户列表：
+1. OAuth 登录成功 → 重定向到 `/tenant/select`
+2. `tenant/select` 路由根据租户数量分流：
    - **0 个租户** → 重定向到 `/onboard`（创建组织向导）
-   - **1 个租户** → 设为 `activeTenantId`，渲染 Dashboard
-   - **N 个租户** → 使用 session 中的 `activeTenantId` 或第一个，渲染 Dashboard + 组织切换器
+   - **1 个租户** → 自动完成 token exchange 后进入 `/dashboard`
+   - **N 个租户** → 用户手动选择 tenant，并在 token exchange 成功后进入 `/dashboard`
 3. `/onboard` 页面引导用户创建组织
 4. 创建成功（Active）→ 进入 Dashboard；创建成功（Pending）→ `/onboard/pending` 等待审批
 
 Portal 路由：
+- `/tenant/select` — 登录后 tenant 选择与 token exchange
 - `/onboard` — 创建组织向导
 - `/onboard/pending` — 等待审批页
 - `/dashboard` — 主控制台（含组织切换器）
@@ -45,8 +46,8 @@ Portal 路由：
 3. 确认到达 `/onboard` 页面
 
 ### 预期结果
-- 认证成功后首先跳转到 `/dashboard`
-- Dashboard loader 检测到 0 个租户，自动重定向到 `/onboard`
+- 认证成功后首先进入 `/tenant/select`
+- `tenant/select` 检测到 0 个租户后自动重定向到 `/onboard`
 - `/onboard` 页面显示：
   - 标题「Create your organization」
   - 表单字段：Organization name、Slug（自动生成）、Domain（从邮箱自动提取）
@@ -145,7 +146,7 @@ SELECT name, slug, domain, status FROM tenants WHERE slug = 'my-startup';
 - 用户已登录
 
 ### 目的
-验证 Dashboard 组织切换器正确显示并能切换活跃租户
+验证 Dashboard 组织切换器正确显示并能切换活跃租户，并触发 token exchange
 
 ### 测试操作流程
 1. 访问 `/dashboard`
@@ -161,6 +162,7 @@ SELECT name, slug, domain, status FROM tenants WHERE slug = 'my-startup';
 - 点击其他组织后：
   - 组织切换器更新为新选中的组织名称
   - Session 中的 `activeTenantId` 更新
+  - 调用 `POST /api/v1/auth/tenant-token` 完成 tenant token 交换
   - 下拉菜单底部显示「Create new organization」链接
 - 刷新页面后，切换保持（`activeTenantId` 持久化在 session 中）
 

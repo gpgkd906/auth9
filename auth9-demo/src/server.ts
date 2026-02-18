@@ -77,6 +77,8 @@ declare module "express-session" {
     interface SessionData {
         user?: any;
         identityToken?: string;
+        tenantAccessToken?: string;
+        activeTenantId?: string;
     }
 }
 
@@ -210,6 +212,8 @@ app.get("/auth/callback", async (req, res) => {
             name: claims.name || claims.preferred_username,
         };
         req.session.identityToken = identityToken;
+        req.session.tenantAccessToken = undefined;
+        req.session.activeTenantId = undefined;
 
         res.redirect("/dashboard");
     } catch (err: any) {
@@ -227,6 +231,8 @@ app.get("/dashboard", (req, res) => {
     res.render("dashboard", {
         user: req.session.user,
         identityToken: req.session.identityToken,
+        tenantAccessToken: req.session.tenantAccessToken,
+        activeTenantId: req.session.activeTenantId,
         config,
     });
 });
@@ -327,12 +333,11 @@ function resolveAdminToken(req: express.Request, res: express.Response): string 
 
 // Token Exchange: Identity Token -> Tenant Access Token
 demoRouter.post("/exchange-token", async (req, res) => {
-    const authHeader = req.headers.authorization;
-    if (!authHeader?.startsWith("Bearer ")) {
-        res.status(401).json({ error: "Missing Bearer token" });
+    const identityToken = req.session.identityToken;
+    if (!identityToken) {
+        res.status(401).json({ error: "Missing identity token in session" });
         return;
     }
-    const identityToken = authHeader.split(" ")[1];
     const { tenantId } = req.body;
 
     if (!tenantId) {
@@ -356,6 +361,8 @@ demoRouter.post("/exchange-token", async (req, res) => {
         });
 
         grpc.close();
+        req.session.tenantAccessToken = result.accessToken;
+        req.session.activeTenantId = tenantId;
         res.json(result);
     } catch (err: any) {
         console.error("[Demo] Token exchange error:", err);

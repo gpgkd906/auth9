@@ -27,7 +27,7 @@ Auth9 采用 Headless Keycloak 架构：
 **登录流程中的页面归属**：
 - Portal `/login` 页面 → 认证方式选择入口（Auth9 Portal 提供）
 - 用户名密码/注册/MFA 页面 → 由 Keycloak 托管，使用 auth9-keycloak-theme 自定义外观
-- Dashboard/管理页面 → 由 Auth9 Portal（React Router 7）提供
+- Tenant 选择页面 `/tenant/select` 与 Dashboard/管理页面 → 由 Auth9 Portal（React Router 7）提供
 
 ---
 
@@ -46,10 +46,13 @@ Auth9 采用 Headless Keycloak 架构：
 3. 跳转到 Auth9 品牌化登录页（底层由 Keycloak 托管，使用 auth9-keycloak-theme）
 4. 输入用户名和密码
 5. Keycloak 验证成功
-6. 重定向回 Auth9 Portal → `/dashboard`
+6. 重定向回 Auth9 Portal → `/tenant/select`
+7. 选择 tenant 并完成 token exchange（单 tenant 账号可自动跳过）
+8. 进入 `/dashboard`
 
 ### 预期结果
 - 用户成功登录
+- 多 tenant 账号先到 `/tenant/select` 明确选择后再进入 Dashboard；单 tenant 账号可自动进入 Dashboard
 - 界面显示用户信息
 - 浏览器存储了 session
 

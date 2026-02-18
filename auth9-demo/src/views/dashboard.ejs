@@ -201,6 +201,18 @@
                     <pre><%= JSON.stringify(user, null, 2) %></pre>
                 </div>
             </div>
+
+            <div class="token-box" style="margin-top:16px;">
+                <div class="label" style="margin-bottom:8px;"><strong>Tenant Access Token (Session)</strong></div>
+                <details>
+                    <summary>View current tenant token</summary>
+                    <div class="value">
+                        <%= tenantAccessToken || 'Not exchanged yet' %>
+                    </div>
+                </details>
+                <div class="label" style="margin-top:8px;">Active Tenant:</div>
+                <div class="value"><%= activeTenantId || 'N/A' %></div>
+            </div>
         </div>
 
         <div class="card">
@@ -300,8 +312,7 @@
                 const response = await fetch('/demo/exchange-token', {
                     method: 'POST',
                     headers: {
-                        'Content-Type': 'application/json',
-                        'Authorization': 'Bearer <%= identityToken %>'
+                        'Content-Type': 'application/json'
                     },
                     body: JSON.stringify({
                         tenantId

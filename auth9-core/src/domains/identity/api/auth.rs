@@ -8,6 +8,7 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::domains::security_observability::service::analytics::LoginEventMetadata;
+use crate::jwt::IdentityClaims;
 use crate::state::{HasAnalytics, HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Query, State},
@@ -254,6 +255,12 @@ pub struct TokenRequest {
     pub code: Option<String>,
     pub redirect_uri: Option<String>,
     pub refresh_token: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TenantTokenExchangeRequest {
+    pub tenant_id: String,
+    pub service_id: String,
 }
 
 pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalytics>(
@@ -550,6 +557,71 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
             params.grant_type
         ))),
     }
+}
+
+pub async fn tenant_token<S: HasServices>(
+    State(state): State<S>,
+    headers: HeaderMap,
+    Json(params): Json<TenantTokenExchangeRequest>,
+) -> Result<Response> {
+    let tenant_ref = params.tenant_id.trim();
+    let service_id = params.service_id.trim();
+    if tenant_ref.is_empty() {
+        return Err(AppError::BadRequest("Missing tenant_id".to_string()));
+    }
+    if service_id.is_empty() {
+        return Err(AppError::BadRequest("Missing service_id".to_string()));
+    }
+
+    let identity_claims = extract_identity_claims_from_headers(&state, &headers)?;
+    let user_id = identity_claims
+        .sub
+        .parse::<StringUuid>()
+        .map_err(|_| AppError::Unauthorized("Invalid user ID in identity token".to_string()))?;
+
+    let tenant_id = match tenant_ref.parse::<StringUuid>() {
+        Ok(id) => id,
+        Err(_) => state.tenant_service().get_by_slug(tenant_ref).await?.id,
+    };
+
+    state
+        .rbac_service()
+        .ensure_tenant_membership(user_id, tenant_id)
+        .await?;
+
+    let service = state.client_service().get_by_client_id(service_id).await?;
+    if let Some(service_tenant_id) = service.tenant_id {
+        if service_tenant_id != tenant_id {
+            return Err(AppError::Forbidden(
+                "Service does not belong to the requested tenant".to_string(),
+            ));
+        }
+    }
+
+    let user_roles = state
+        .rbac_service()
+        .get_user_roles_for_service(user_id, tenant_id, service.id)
+        .await?;
+
+    let jwt_manager = state.jwt_manager();
+    let access_token = jwt_manager.create_tenant_access_token(
+        *user_id,
+        &identity_claims.email,
+        *tenant_id,
+        service_id,
+        user_roles.roles,
+        user_roles.permissions,
+    )?;
+    let refresh_token = jwt_manager.create_refresh_token(*user_id, *tenant_id, service_id)?;
+
+    Ok(Json(TokenResponse {
+        access_token,
+        token_type: "Bearer".to_string(),
+        expires_in: jwt_manager.access_token_ttl(),
+        refresh_token: Some(refresh_token),
+        id_token: None,
+    })
+    .into_response())
 }
 
 /// Logout endpoint
@@ -897,6 +969,26 @@ pub fn build_keycloak_logout_url(
     }
 
     Ok(logout_url.to_string())
+}
+
+fn extract_identity_claims_from_headers<S: HasServices>(
+    state: &S,
+    headers: &HeaderMap,
+) -> Result<IdentityClaims> {
+    let auth_header = headers
+        .get(axum::http::header::AUTHORIZATION)
+        .ok_or_else(|| AppError::Unauthorized("Missing authorization token".to_string()))?;
+    let auth_str = auth_header
+        .to_str()
+        .map_err(|_| AppError::Unauthorized("Invalid authorization header".to_string()))?;
+    let token = auth_str
+        .strip_prefix("Bearer ")
+        .ok_or_else(|| AppError::Unauthorized("Authorization must use Bearer scheme".to_string()))?;
+
+    state
+        .jwt_manager()
+        .verify_identity_token(token)
+        .map_err(|e| AppError::Unauthorized(format!("Invalid identity token: {}", e)))
 }
 
 // ============================================================================

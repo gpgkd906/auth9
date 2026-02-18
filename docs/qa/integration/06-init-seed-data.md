@@ -285,12 +285,13 @@ WHERE u.display_name = 'Admin User';
 1. 打开浏览器访问 Portal：http://localhost:3000
 2. 点击「登录」按钮，页面跳转至 Keycloak 登录页
 3. 输入管理员凭据（用户名: `admin`，密码: Init 时生成或通过 `AUTH9_ADMIN_PASSWORD` 设置的密码）
-4. 登录成功后，验证 Dashboard 页面
-5. 查看租户列表
+4. 登录成功后，若进入 `/tenant/select`，先选择任一 tenant 完成 token exchange
+5. 验证 Dashboard 页面
+6. 查看租户列表
 
 ### 预期结果
 - 登录流程正常完成，无错误
-- Dashboard 页面正常加载
+- 多 tenant 账号先进入 `/tenant/select`；完成选择后 Dashboard 页面正常加载
 - 租户列表中显示 "Auth9 Platform" 和 "Demo Organization" 两个租户
 - 管理员在两个租户中均为 `admin` 角色
 - 切换租户功能正常

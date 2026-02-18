@@ -45,7 +45,7 @@ Auth9 Portal 的实现方式：
 ### 预期结果
 - 步骤 4：响应包含 `Set-Cookie: oauth_state=<encrypted_value>; Path=/; HttpOnly; SameSite=Lax`
 - 步骤 5：Keycloak 授权 URL 包含 `state=<value>` 参数
-- 步骤 6：回调成功后重定向到 `/dashboard`
+- 步骤 6：回调成功后先进入 `/tenant/select`（单 tenant 可自动进入 `/dashboard`）
 - 回调响应包含两个 `Set-Cookie` 头：session cookie + `oauth_state=; Max-Age=0`（清除）
 - 登录后浏览器中不再有 `oauth_state` cookie
 

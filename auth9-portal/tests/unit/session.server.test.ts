@@ -66,7 +66,8 @@ describe("session.server", () => {
       });
 
       const result = await getSession(request);
-      expect(result).toEqual(sessionData);
+      expect(result).toMatchObject(sessionData);
+      expect(result?.identityAccessToken).toBe("test-token");
       expect(mockParse).toHaveBeenCalled();
     });
 
@@ -101,7 +102,13 @@ describe("session.server", () => {
 
       const result = await commitSession(sessionData);
       expect(result).toBe("serialized-cookie");
-      expect(mockSerialize).toHaveBeenCalledWith(sessionData);
+      expect(mockSerialize).toHaveBeenCalledWith(
+        expect.objectContaining({
+          accessToken: "test-token",
+          identityAccessToken: "test-token",
+          refreshToken: "refresh-token",
+        })
+      );
     });
   });
 
@@ -266,7 +273,8 @@ describe("session.server", () => {
       });
 
       const result = await requireAuth(request);
-      expect(result).toEqual(sessionData);
+      expect(result).toMatchObject(sessionData);
+      expect(result.identityAccessToken).toBe("valid-token");
     });
 
     it("throws redirect when no session", async () => {
