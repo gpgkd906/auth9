@@ -38,6 +38,12 @@ async fn test_list_permissions() {
 
     let service_id = Uuid::new_v4();
 
+    // Add service so auth check can resolve tenant
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
+
     // Add some permissions for the service
     let perm1 = create_test_permission(None, service_id);
     let mut perm2 = create_test_permission(None, service_id);
@@ -68,10 +74,15 @@ async fn test_list_permissions() {
 async fn test_list_permissions_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let app = build_test_router(state);
-    let token = create_test_identity_token();
 
     let service_id = Uuid::new_v4();
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
+
+    let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Permission>>>) =
         get_json_with_auth(
@@ -205,6 +216,12 @@ async fn test_list_roles() {
 
     let service_id = Uuid::new_v4();
 
+    // Add service so auth check can resolve tenant
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
+
     // Add some roles for the service
     let role1 = create_test_role(None, service_id);
     let mut role2 = create_test_role(None, service_id);
@@ -233,10 +250,15 @@ async fn test_list_roles() {
 async fn test_list_roles_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let app = build_test_router(state);
-    let token = create_test_identity_token();
 
     let service_id = Uuid::new_v4();
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
+
+    let app = build_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Role>>>) = get_json_with_auth(
         &app,
@@ -257,6 +279,13 @@ async fn test_get_role() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let service_id = Uuid::new_v4();
+
+    // Add service so auth check can resolve tenant
+    state
+        .service_repo
+        .add_service(create_test_service(Some(service_id), None))
+        .await;
+
     let role_id = Uuid::new_v4();
     let mut role = create_test_role(Some(role_id), service_id);
     role.name = "admin".to_string();

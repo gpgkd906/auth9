@@ -26,14 +26,20 @@ describe("Login Page", () => {
     // Loader Tests
     // ============================================================================
 
-    it("loader returns default login model when no error", async () => {
+    it("loader redirects to SSO when no error or passkey params", async () => {
         const request = new Request("http://localhost:3000/login");
-        const result = await loader({ request, params: {}, context: {} });
-        expect(result).toEqual({
-            error: null,
-            showPasskey: false,
-            apiBaseUrl: "http://localhost:8080",
-        });
+        try {
+            await loader({ request, params: {}, context: {} });
+            throw new Error("Expected redirect");
+        } catch (response: unknown) {
+            expect(response).toBeInstanceOf(Response);
+            const res = response as Response;
+            expect(res.status).toBe(302);
+            const location = res.headers.get("Location");
+            expect(location).toContain("/api/v1/auth/authorize");
+            expect(location).toContain("response_type=code");
+            expect(location).toContain("scope=openid+email+profile");
+        }
     });
 
     it("loader returns error data when error param present", async () => {
@@ -243,9 +249,16 @@ describe("Login Page", () => {
         });
     });
 
-    it("loader keeps passkey mode off by default", async () => {
+    it("loader redirects to SSO by default (passkey mode off)", async () => {
         const request = new Request("http://localhost:3000/login");
-        const result = await loader({ request, params: {}, context: {} });
-        expect(result.showPasskey).toBe(false);
+        try {
+            await loader({ request, params: {}, context: {} });
+            throw new Error("Expected redirect");
+        } catch (response: unknown) {
+            expect(response).toBeInstanceOf(Response);
+            const res = response as Response;
+            expect(res.status).toBe(302);
+            expect(res.headers.get("Location")).toContain("/api/v1/auth/authorize");
+        }
     });
 });

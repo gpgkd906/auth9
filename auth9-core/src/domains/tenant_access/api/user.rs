@@ -810,16 +810,43 @@ pub async fn enable_mfa<S: HasServices>(
     Ok(Json(SuccessResponse::new(updated)))
 }
 
+/// Input for disabling MFA - requires admin password confirmation
+#[derive(Debug, Clone, Deserialize, Validate)]
+pub struct DisableMfaInput {
+    /// Admin's own password for secondary verification
+    #[validate(length(min = 1, max = 128))]
+    pub confirm_password: String,
+}
+
 /// Disable MFA for a user
-/// Requires platform admin or tenant admin
+/// Requires platform admin or tenant admin + password confirmation
 pub async fn disable_mfa<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    Json(input): Json<DisableMfaInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
+
+    input.validate().map_err(|e| AppError::Validation(e.to_string()))?;
+
+    // Verify admin's password as secondary confirmation
+    let admin_user = state
+        .user_service()
+        .get(StringUuid::from(auth.user_id))
+        .await?;
+    let password_valid = state
+        .keycloak_client()
+        .validate_user_password(&admin_user.keycloak_id, &input.confirm_password)
+        .await?;
+    if !password_valid {
+        return Err(AppError::Forbidden(
+            "Password confirmation failed. Please provide your correct password to disable MFA."
+                .to_string(),
+        ));
+    }
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -855,11 +882,34 @@ pub async fn disable_mfa<S: HasServices>(
 }
 
 /// List users in a tenant
+/// Requires tenant access: platform admin, matching TenantAccess token, or matching ServiceClient token
 pub async fn list_by_tenant<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(tenant_id): Path<Uuid>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
+    // Enforce tenant isolation: only allow access to the user's own tenant
+    match auth.token_type {
+        TokenType::Identity => {
+            if !state.config().is_platform_admin_email(&auth.email) {
+                return Err(AppError::Forbidden(
+                    "Platform admin required to list users across tenants".to_string(),
+                ));
+            }
+        }
+        TokenType::TenantAccess | TokenType::ServiceClient => {
+            let token_tenant = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+            if token_tenant != tenant_id {
+                return Err(AppError::Forbidden(
+                    "Access denied: you can only list users in your own tenant".to_string(),
+                ));
+            }
+        }
+    }
+
     let tenant_id = StringUuid::from(tenant_id);
     let users = state
         .user_service()

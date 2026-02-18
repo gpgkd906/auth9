@@ -134,7 +134,64 @@ impl IntoResponse for AppError {
 // Conversion from validation errors
 impl From<validator::ValidationErrors> for AppError {
     fn from(errors: validator::ValidationErrors) -> Self {
-        AppError::Validation(errors.to_string())
+        let messages: Vec<String> = errors
+            .field_errors()
+            .iter()
+            .map(|(field, errs)| {
+                let field_name = format_field_name(field);
+                let err_msg = errs
+                    .first()
+                    .map(|e| format_validation_error(e, &field_name))
+                    .unwrap_or_else(|| format!("{} is invalid", field_name));
+                err_msg
+            })
+            .collect();
+        AppError::Validation(messages.join("; "))
+    }
+}
+
+fn format_field_name(field: &str) -> String {
+    match field {
+        "current_password" => "Current password".to_string(),
+        "new_password" => "New password".to_string(),
+        "confirm_password" => "Confirm password".to_string(),
+        "email" => "Email".to_string(),
+        "name" => "Name".to_string(),
+        "display_name" => "Display name".to_string(),
+        s => s
+            .replace('_', " ")
+            .split_whitespace()
+            .map(|w| {
+                let mut chars = w.chars();
+                match chars.next() {
+                    None => String::new(),
+                    Some(f) => f.to_uppercase().collect::<String>() + chars.as_str(),
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+    }
+}
+
+fn format_validation_error(err: &validator::ValidationError, field_name: &str) -> String {
+    match err.code.as_ref() {
+        "length" => {
+            let min = err.params.get("min").and_then(|v| v.as_u64()).unwrap_or(0);
+            let max = err.params.get("max").and_then(|v| v.as_u64());
+            if let Some(max_val) = max {
+                format!(
+                    "{} must be between {} and {} characters",
+                    field_name, min, max_val
+                )
+            } else {
+                format!("{} must be at least {} characters", field_name, min)
+            }
+        }
+        "email" => format!("{} must be a valid email address", field_name),
+        "url" => format!("{} must be a valid URL", field_name),
+        "required" => format!("{} is required", field_name),
+        "must_match" => format!("{} does not match", field_name),
+        code => format!("{} is invalid: {}", field_name, code),
     }
 }
 

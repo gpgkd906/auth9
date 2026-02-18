@@ -1,7 +1,7 @@
 import { Auth9Client } from '@auth9/core';
 
 const TOKEN = process.env.AUTH9_API_KEY!;
-const TENANT_ID = '259e29f1-5d77-496c-999f-8f0374bae15f';
+const TENANT_ID = process.env.TENANT_ID || '2f7ef923-dbdc-457f-84a2-42efefb77095';
 
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',

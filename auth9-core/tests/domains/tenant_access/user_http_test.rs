@@ -3,8 +3,8 @@
 //! Tests for the user HTTP endpoints using mock repositories and wiremock Keycloak.
 
 use crate::support::http::{
-    build_test_router, delete_json_with_auth, get_json_with_auth, post_json, post_json_with_auth,
-    put_json_with_auth, TestAppState,
+    build_test_router, delete_json_body_with_auth, delete_json_with_auth, get_json_with_auth,
+    post_json, post_json_with_auth, put_json_with_auth, TestAppState,
 };
 use crate::support::mock_keycloak::MockKeycloakServer;
 use crate::support::{
@@ -596,10 +596,19 @@ async fn test_disable_mfa() {
     let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa-disable";
     let admin_id = Uuid::new_v4();
+    let admin_kc_id = admin_id.to_string();
     mock_kc.setup_for_mfa_disable(keycloak_user_id).await;
+    // Mock admin password verification
+    mock_kc.mock_get_user_success(&admin_kc_id).await;
+    mock_kc.mock_validate_password_valid().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_admin_token_for_user(admin_id);
+
+    // Add admin user to repo (needed for password verification lookup)
+    let mut admin_user = create_test_user(Some(admin_id));
+    admin_user.keycloak_id = admin_kc_id.clone();
+    state.user_repo.add_user(admin_user).await;
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -610,7 +619,13 @@ async fn test_disable_mfa() {
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) =
-        delete_json_with_auth(&app, &format!("/api/v1/users/{}/mfa", user_id), &token).await;
+        delete_json_body_with_auth(
+            &app,
+            &format!("/api/v1/users/{}/mfa", user_id),
+            &json!({"confirm_password": "Admin123!"}),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());

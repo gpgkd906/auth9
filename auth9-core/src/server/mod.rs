@@ -636,6 +636,14 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
                 window_secs: 60,
             },
         );
+        // Add rate limit for invitation endpoint (10 requests per minute per caller)
+        endpoints.insert(
+            "POST:/api/v1/tenants/{tenant_id}/invitations".to_string(),
+            RateLimitRule {
+                requests: 10,
+                window_secs: 60,
+            },
+        );
 
         let rate_limit_config = RateLimitMiddlewareConfig {
             enabled: true,

@@ -21,6 +21,37 @@ use axum::{
 use serde::Deserialize;
 use uuid::Uuid;
 
+/// Check if user can read RBAC resources within a service's tenant
+/// Platform admin can always read, tenant users can read their own tenant's data
+fn require_rbac_read_access<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    service_tenant_id: Option<Uuid>,
+) -> Result<()> {
+    match auth.token_type {
+        TokenType::Identity => {
+            if state.config().is_platform_admin_email(&auth.email) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Tenant-scoped token required for RBAC access".to_string(),
+                ))
+            }
+        }
+        TokenType::TenantAccess | TokenType::ServiceClient => {
+            let token_tenant = auth
+                .tenant_id
+                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+            match service_tenant_id {
+                Some(tid) if tid == token_tenant => Ok(()),
+                _ => Err(AppError::Forbidden(
+                    "Cannot access RBAC resources in another tenant".to_string(),
+                )),
+            }
+        }
+    }
+}
+
 /// Check if user can manage RBAC within a tenant
 /// Platform admin can always manage, tenant owner can manage their tenant
 fn require_rbac_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
@@ -61,8 +92,12 @@ fn require_rbac_management_permission(config: &Config, auth: &AuthUser) -> Resul
 /// List permissions for a service
 pub async fn list_permissions<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(service_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let service = state.client_service().get(service_id).await?;
+    require_rbac_read_access(&state, &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+
     let service_id = StringUuid::from(service_id);
     let permissions = state.rbac_service().list_permissions(service_id).await?;
     Ok(Json(SuccessResponse::new(permissions)))
@@ -136,8 +171,12 @@ pub async fn delete_permission<S: HasServices>(
 /// List roles for a service
 pub async fn list_roles<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(service_id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
+    let service = state.client_service().get(service_id).await?;
+    require_rbac_read_access(&state, &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+
     let service_id = StringUuid::from(service_id);
     let roles = state.rbac_service().list_roles(service_id).await?;
     Ok(Json(SuccessResponse::new(roles)))
@@ -146,10 +185,15 @@ pub async fn list_roles<S: HasServices>(
 /// Get role by ID
 pub async fn get_role<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
     let role = state.rbac_service().get_role_with_permissions(id).await?;
+
+    let service = state.client_service().get(*role.role.service_id).await?;
+    require_rbac_read_access(&state, &auth, service.tenant_id.as_ref().map(|t| t.0))?;
+
     Ok(Json(SuccessResponse::new(role)))
 }
 
@@ -323,11 +367,15 @@ pub async fn assign_roles<S: HasServices>(
     // Check authorization: require platform admin or tenant owner
     require_rbac_management_permission(state.config(), &auth)?;
 
-    // Prevent self-assignment: users cannot assign roles to themselves
+    // Prevent self-assignment for non-platform-admin users
     if auth.user_id == input.user_id {
-        return Err(AppError::Forbidden(
-            "Cannot assign roles to yourself".to_string(),
-        ));
+        let is_platform_admin = auth.token_type == TokenType::Identity
+            && state.config().is_platform_admin_email(&auth.email);
+        if !is_platform_admin {
+            return Err(AppError::Forbidden(
+                "Cannot assign roles to yourself".to_string(),
+            ));
+        }
     }
 
     // Additional check: for tenant access tokens, ensure user can only assign within their tenant
@@ -375,8 +423,18 @@ pub async fn assign_roles<S: HasServices>(
 /// Get user roles in tenant
 pub async fn get_user_roles<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    require_rbac_management_permission(state.config(), &auth)?;
+    if let TokenType::TenantAccess = auth.token_type {
+        if auth.tenant_id != Some(tenant_id) {
+            return Err(AppError::Forbidden(
+                "Cannot access user roles in a different tenant".to_string(),
+            ));
+        }
+    }
+
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     let roles = state
@@ -389,8 +447,18 @@ pub async fn get_user_roles<S: HasServices>(
 /// Get user assigned roles (raw records with IDs)
 pub async fn get_user_assigned_roles<S: HasServices>(
     State(state): State<S>,
+    auth: AuthUser,
     Path((user_id, tenant_id)): Path<(Uuid, Uuid)>,
 ) -> Result<impl IntoResponse> {
+    require_rbac_management_permission(state.config(), &auth)?;
+    if let TokenType::TenantAccess = auth.token_type {
+        if auth.tenant_id != Some(tenant_id) {
+            return Err(AppError::Forbidden(
+                "Cannot access user roles in a different tenant".to_string(),
+            ));
+        }
+    }
+
     let user_id = StringUuid::from(user_id);
     let tenant_id = StringUuid::from(tenant_id);
     let roles = state

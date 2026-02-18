@@ -188,4 +188,4 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/invitation/seed.sql
 | 3 | 邀请列表过滤 | FAIL | 2026-02-06 | Codex | 见 `docs/ticket/invitation_03-manage_scenario3_260206_200143.md` |
 | 4 | 多角色邀请 | BLOCKED | 2026-02-06 | Codex | 邀请可创建，接受步骤被 `/invite/accept` 404 阻塞 |
 | 5 | 邮箱格式验证 | PASS | 2026-02-06 | Codex | 浏览器校验拦截 invalid-email / user@ |
-| 6 | 认证状态检查 | NOT RUN |  |  |  |
+| 6 | 认证状态检查 | PASS | 2026-02-18 | Codex | 未登录访问dashboard自动重定向到/login，登录后可访问原页面 |
