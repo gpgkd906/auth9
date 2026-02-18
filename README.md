@@ -148,17 +148,28 @@ ghcr.io/gpgkd906/auth9-portal:latest
 
 ## Documentation
 
+### 🎯 Quick Start
+- 📊 [**Executive Summary**](./docs/EXECUTIVE_SUMMARY.md) - Project overview & analysis at a glance
+- 📈 [**Deep Analysis Report**](./docs/project-deep-analysis-2026-02-18.md) - Comprehensive evaluation (8.45/10 A-grade)
+
+### 📚 User Guides
 - **[Wiki 主页](wiki/Home.md)** - 完整的中文文档
 - **[用户操作指南](userguide/USER_GUIDE.md)** - 详细的操作手册
 - **[B2B 入驻与组织创建](wiki/B2B入驻与组织创建.md)** - 企业自助入驻流程
 - **[企业级 SSO 连接器](wiki/企业级SSO连接器.md)** - 租户级 OIDC/SAML 配置
+
+### 🏗️ Architecture & Design
 - **[Architecture](docs/architecture.md)** - System design and architecture overview
 - **[Design System](docs/design-system.md)** - Liquid Glass UI design language
 - **[Action Engine](wiki/操作引擎-Action-Engine.md)** - 自动化工作流系统
 - **[SDK Integration](wiki/SDK集成指南.md)** - TypeScript SDK 使用指南
-- **[QA Test Cases](docs/qa/README.md)** - Functional testing scenarios (185 scenarios)
+
+### 🧪 Testing Documentation
+- **[QA Test Cases](docs/qa/README.md)** - Functional testing scenarios (80+ documents)
 - **[UI/UX Test Cases](docs/uiux/README.md)** - UI/UX testing scenarios (27 scenarios)
-- **[Security Test Cases](docs/security/README.md)** - Security testing scenarios (177 scenarios)
+- **[Security Test Cases](docs/security/README.md)** - Security testing scenarios (48 docs, 208+ scenarios)
+
+### 🎨 Customization
 - **[Keycloak Theme](docs/keycloak-theme.md)** - Customizing Keycloak login pages
 
 ## Development
