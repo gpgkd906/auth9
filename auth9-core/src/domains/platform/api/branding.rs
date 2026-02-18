@@ -13,6 +13,14 @@ use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 /// It returns the full branding configuration without any masking.
 ///
 /// GET /api/v1/public/branding
+#[utoipa::path(
+    get,
+    path = "/api/v1/public/branding",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_public_branding<S: HasBranding>(
     State(state): State<S>,
 ) -> Result<impl IntoResponse> {
@@ -23,6 +31,14 @@ pub async fn get_public_branding<S: HasBranding>(
 /// Get branding configuration (authenticated endpoint)
 ///
 /// GET /api/v1/system/branding
+#[utoipa::path(
+    get,
+    path = "/api/v1/system/branding",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_branding<S: HasBranding + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -35,6 +51,14 @@ pub async fn get_branding<S: HasBranding + HasServices>(
 /// Update branding configuration
 ///
 /// PUT /api/v1/system/branding
+#[utoipa::path(
+    put,
+    path = "/api/v1/system/branding",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_branding<S: HasBranding + HasServices>(
     State(state): State<S>,
     auth: AuthUser,

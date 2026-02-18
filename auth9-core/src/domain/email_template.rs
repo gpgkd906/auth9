@@ -6,9 +6,10 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::str::FromStr;
+use utoipa::ToSchema;
 
 /// Available email template types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum EmailTemplateType {
     /// User invitation email
@@ -261,7 +262,7 @@ impl FromStr for EmailTemplateType {
 }
 
 /// Email template content
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct EmailTemplateContent {
     /// Email subject line (can contain variables)
     pub subject: String,
@@ -272,7 +273,7 @@ pub struct EmailTemplateContent {
 }
 
 /// Template variable information for UI display
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TemplateVariable {
     /// Variable name (without braces)
     pub name: String,
@@ -283,7 +284,7 @@ pub struct TemplateVariable {
 }
 
 /// Template metadata for API responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct EmailTemplateMetadata {
     /// Template type identifier
     pub template_type: EmailTemplateType,
@@ -308,7 +309,7 @@ impl EmailTemplateMetadata {
 }
 
 /// Complete template information with content
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct EmailTemplateWithContent {
     /// Template metadata
     pub metadata: EmailTemplateMetadata,
@@ -322,7 +323,7 @@ pub struct EmailTemplateWithContent {
 }
 
 /// Rendered email preview
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct RenderedEmailPreview {
     /// Rendered subject line
     pub subject: String,

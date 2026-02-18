@@ -323,6 +323,15 @@ fn verify_signature(secret: &str, body: &[u8], signature: &str) -> bool {
 /// This endpoint receives events from the Keycloak p2-inc/keycloak-events SPI plugin.
 /// It validates the HMAC signature (if configured), maps the event to our domain model,
 /// records it in the analytics system, and triggers security detection analysis.
+#[utoipa::path(
+    post,
+    path = "/api/v1/keycloak/events",
+    tag = "Integration",
+    request_body(content = String, content_type = "application/json"),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCache>(
     State(state): State<S>,
     headers: HeaderMap,

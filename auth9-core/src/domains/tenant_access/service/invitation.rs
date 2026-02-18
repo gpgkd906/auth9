@@ -3,10 +3,10 @@
 use crate::domain::{
     CreateInvitationInput, EmailAddress, Invitation, InvitationStatus, StringUuid,
 };
+use crate::domains::platform::service::EmailService;
 use crate::email::{EmailTemplate, TemplateEngine};
 use crate::error::{AppError, Result};
 use crate::repository::{InvitationRepository, SystemSettingsRepository, TenantRepository};
-use crate::domains::platform::service::EmailService;
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
     Argon2,
@@ -360,10 +360,10 @@ where
 mod tests {
     use super::*;
     use crate::domain::Tenant;
+    use crate::domains::platform::service::SystemSettingsService;
     use crate::repository::invitation::MockInvitationRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use crate::repository::tenant::MockTenantRepository;
-    use crate::domains::platform::service::SystemSettingsService;
     use mockall::predicate::*;
 
     fn create_test_service() -> InvitationService<

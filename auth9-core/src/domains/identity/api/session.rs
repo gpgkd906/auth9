@@ -12,7 +12,16 @@ use axum::{
     http::HeaderMap,
     Json,
 };
+use utoipa::ToSchema;
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me/sessions",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "List of active sessions")
+    )
+)]
 /// List current user's active sessions
 pub async fn list_my_sessions<S: HasSessionManagement>(
     State(state): State<S>,
@@ -28,6 +37,14 @@ pub async fn list_my_sessions<S: HasSessionManagement>(
     Ok(Json(SuccessResponse::new(sessions)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/me/sessions/{id}",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Session revoked")
+    )
+)]
 /// Revoke a specific session
 pub async fn revoke_session<S: HasSessionManagement>(
     State(state): State<S>,
@@ -50,6 +67,14 @@ pub async fn revoke_session<S: HasSessionManagement>(
     Ok(Json(MessageResponse::new("Session revoked successfully.")))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/me/sessions",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Other sessions revoked")
+    )
+)]
 /// Revoke all other sessions (except current)
 pub async fn revoke_other_sessions<S: HasSessionManagement>(
     State(state): State<S>,
@@ -67,6 +92,14 @@ pub async fn revoke_other_sessions<S: HasSessionManagement>(
     })))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/admin/users/{id}/logout",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "User force logged out")
+    )
+)]
 /// Admin: Force logout a user (revoke all sessions)
 pub async fn force_logout_user<S: HasSessionManagement + HasServices + HasCache>(
     State(state): State<S>,
@@ -125,6 +158,14 @@ pub async fn force_logout_user<S: HasSessionManagement + HasServices + HasCache>
     })))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/admin/users/{id}/sessions",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "List of user sessions")
+    )
+)]
 /// Admin: List sessions for a specific user
 pub async fn list_user_sessions<S: HasSessionManagement + HasServices>(
     State(state): State<S>,
@@ -149,7 +190,7 @@ pub async fn list_user_sessions<S: HasSessionManagement + HasServices>(
 }
 
 /// Response for session revocation
-#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, ToSchema)]
 pub struct RevokeSessionsResponse {
     pub revoked_count: u64,
 }

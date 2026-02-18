@@ -4,10 +4,11 @@ use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Password reset token stored in database
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct PasswordResetToken {
     pub id: StringUuid,
     pub user_id: StringUuid,
@@ -36,7 +37,7 @@ impl Default for PasswordResetToken {
 /// Defaults must match the Keycloak realm password policy configured in
 /// `seeder.rs::configure_realm_security` to avoid Keycloak rejecting
 /// passwords that pass auth9 validation.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, ToSchema)]
 pub struct PasswordPolicy {
     /// Minimum password length (default: 12, matches Keycloak realm `length(12)`)
     #[serde(default = "default_min_length")]
@@ -100,14 +101,14 @@ fn default_lockout_duration() -> u32 {
 }
 
 /// Input for requesting a password reset
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct ForgotPasswordInput {
     #[validate(email)]
     pub email: String,
 }
 
 /// Input for resetting password with token
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct ResetPasswordInput {
     #[validate(length(min = 1))]
     pub token: String,
@@ -116,7 +117,7 @@ pub struct ResetPasswordInput {
 }
 
 /// Input for changing password (authenticated user)
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct ChangePasswordInput {
     #[validate(length(min = 1))]
     pub current_password: String,
@@ -133,7 +134,7 @@ pub struct CreatePasswordResetTokenInput {
 }
 
 /// Input for updating password policy
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 #[serde(deny_unknown_fields)]
 pub struct UpdatePasswordPolicyInput {
     #[validate(range(min = 6, max = 128))]

@@ -5,10 +5,11 @@
 
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Identity Provider types
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum IdentityProviderType {
     Google,
@@ -37,7 +38,7 @@ impl std::fmt::Display for IdentityProviderType {
 }
 
 /// Identity Provider representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IdentityProvider {
     pub alias: String,
     pub display_name: Option<String>,
@@ -51,7 +52,7 @@ pub struct IdentityProvider {
 }
 
 /// Keycloak IdP representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KeycloakIdentityProvider {
     pub alias: String,
@@ -119,7 +120,7 @@ impl From<crate::keycloak::KeycloakIdentityProvider> for IdentityProvider {
 }
 
 /// Input for creating an IdP
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateIdentityProviderInput {
     #[validate(length(min = 1, max = 255))]
     pub alias: String,
@@ -143,7 +144,7 @@ fn default_true() -> bool {
 }
 
 /// Input for updating an IdP
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct UpdateIdentityProviderInput {
     pub display_name: Option<String>,
     pub enabled: Option<bool>,
@@ -154,7 +155,7 @@ pub struct UpdateIdentityProviderInput {
 }
 
 /// IdP configuration templates
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct IdentityProviderTemplate {
     pub provider_id: String,
     pub name: String,

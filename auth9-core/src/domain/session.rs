@@ -4,9 +4,10 @@ use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 /// User session entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Session {
     pub id: StringUuid,
     pub user_id: StringUuid,
@@ -53,7 +54,7 @@ pub struct CreateSessionInput {
 }
 
 /// Keycloak session representation
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "camelCase")]
 pub struct KeycloakSession {
     pub id: String,
@@ -67,7 +68,7 @@ pub struct KeycloakSession {
 }
 
 /// Session info returned to clients
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct SessionInfo {
     pub id: String,
     pub device_type: Option<String>,

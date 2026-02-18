@@ -112,6 +112,14 @@ fn default_per_page() -> i64 {
 /// - Platform admin (any token type with platform admin email or platform tenant admin): can list all tenants
 /// - Non-admin Identity token: can see tenants they belong to
 /// - Tenant user (TenantAccess token): can only see their own tenant
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -174,6 +182,15 @@ pub async fn list<S: HasServices>(
 
 /// Get tenant by ID
 /// Verifies the user has access to this tenant
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success"),
+        (status = 404, description = "Not found")
+    )
+)]
 pub async fn get<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -189,6 +206,15 @@ pub async fn get<S: HasServices>(
 
 /// Create tenant
 /// Only platform admins (Identity token holders) can create tenants
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants",
+    tag = "Tenant Access",
+    responses(
+        (status = 201, description = "Created"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn create<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -214,6 +240,15 @@ pub async fn create<S: HasServices>(
 
 /// Update tenant
 /// Verifies the user has access to this tenant
+#[utoipa::path(
+    put,
+    path = "/api/v1/tenants/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success"),
+        (status = 404, description = "Not found")
+    )
+)]
 pub async fn update<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -243,6 +278,15 @@ pub async fn update<S: HasServices>(
 /// Delete tenant
 /// Only platform admins can delete tenants
 /// Requires `X-Confirm-Destructive: true` header to prevent accidental deletion
+#[utoipa::path(
+    delete,
+    path = "/api/v1/tenants/{id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Deleted"),
+        (status = 403, description = "Forbidden")
+    )
+)]
 pub async fn delete<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,

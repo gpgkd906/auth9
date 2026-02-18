@@ -15,15 +15,16 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 
 /// Response for list templates
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ListTemplatesResponse {
     pub data: Vec<EmailTemplateWithContent>,
 }
 
 /// Request body for updating a template
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct UpdateTemplateRequest {
     pub subject: String,
     pub html_body: String,
@@ -41,7 +42,7 @@ impl From<UpdateTemplateRequest> for EmailTemplateContent {
 }
 
 /// Request body for previewing a template
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct PreviewTemplateRequest {
     pub subject: String,
     pub html_body: String,
@@ -59,7 +60,7 @@ impl From<PreviewTemplateRequest> for EmailTemplateContent {
 }
 
 /// Request body for sending a test email with a template
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct SendTestEmailRequest {
     pub to_email: String,
     pub subject: String,
@@ -70,7 +71,7 @@ pub struct SendTestEmailRequest {
 }
 
 /// Response for sending a test email
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SendTestEmailResponse {
     pub success: bool,
     pub message: String,
@@ -80,6 +81,14 @@ pub struct SendTestEmailResponse {
 /// List all email templates
 ///
 /// GET /api/v1/system/email-templates
+#[utoipa::path(
+    get,
+    path = "/api/v1/system/email-templates",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_templates<S: HasEmailTemplates + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -92,6 +101,17 @@ pub async fn list_templates<S: HasEmailTemplates + HasServices>(
 /// Get a specific email template
 ///
 /// GET /api/v1/system/email-templates/:type
+#[utoipa::path(
+    get,
+    path = "/api/v1/system/email-templates/{type}",
+    tag = "Platform",
+    params(
+        ("type" = String, Path, description = "Template type")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_template<S: HasEmailTemplates + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -109,6 +129,18 @@ pub async fn get_template<S: HasEmailTemplates + HasServices>(
 /// Update an email template
 ///
 /// PUT /api/v1/system/email-templates/:type
+#[utoipa::path(
+    put,
+    path = "/api/v1/system/email-templates/{type}",
+    tag = "Platform",
+    params(
+        ("type" = String, Path, description = "Template type")
+    ),
+    request_body = UpdateTemplateRequest,
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_template<S: HasEmailTemplates + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -141,6 +173,17 @@ pub async fn update_template<S: HasEmailTemplates + HasServices>(
 /// Reset a template to default
 ///
 /// DELETE /api/v1/system/email-templates/:type
+#[utoipa::path(
+    delete,
+    path = "/api/v1/system/email-templates/{type}",
+    tag = "Platform",
+    params(
+        ("type" = String, Path, description = "Template type")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn reset_template<S: HasEmailTemplates + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -158,6 +201,18 @@ pub async fn reset_template<S: HasEmailTemplates + HasServices>(
 /// Preview a template with sample data
 ///
 /// POST /api/v1/system/email-templates/:type/preview
+#[utoipa::path(
+    post,
+    path = "/api/v1/system/email-templates/{type}/preview",
+    tag = "Platform",
+    params(
+        ("type" = String, Path, description = "Template type")
+    ),
+    request_body = PreviewTemplateRequest,
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn preview_template<S: HasEmailTemplates + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -177,6 +232,18 @@ pub async fn preview_template<S: HasEmailTemplates + HasServices>(
 /// Send a test email using a template
 ///
 /// POST /api/v1/system/email-templates/:type/send-test
+#[utoipa::path(
+    post,
+    path = "/api/v1/system/email-templates/{type}/send-test",
+    tag = "Platform",
+    params(
+        ("type" = String, Path, description = "Template type")
+    ),
+    request_body = SendTestEmailRequest,
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn send_test_email<S: HasEmailTemplates + HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,

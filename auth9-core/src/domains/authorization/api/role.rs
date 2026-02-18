@@ -19,6 +19,7 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Check if user can read RBAC resources within a service's tenant
@@ -89,6 +90,14 @@ fn require_rbac_management_permission(config: &Config, auth: &AuthUser) -> Resul
 
 // ==================== Permissions ====================
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{service_id}/permissions",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "List of permissions")
+    )
+)]
 /// List permissions for a service
 pub async fn list_permissions<S: HasServices>(
     State(state): State<S>,
@@ -103,6 +112,14 @@ pub async fn list_permissions<S: HasServices>(
     Ok(Json(SuccessResponse::new(permissions)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/permissions",
+    tag = "Authorization",
+    responses(
+        (status = 201, description = "Permission created")
+    )
+)]
 /// Create permission
 /// Requires platform admin to create permissions
 pub async fn create_permission<S: HasServices>(
@@ -137,6 +154,14 @@ pub async fn create_permission<S: HasServices>(
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(permission))))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/permissions/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Permission deleted")
+    )
+)]
 /// Delete permission
 /// Requires platform admin to delete permissions
 pub async fn delete_permission<S: HasServices>(
@@ -168,6 +193,14 @@ pub async fn delete_permission<S: HasServices>(
 
 // ==================== Roles ====================
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{service_id}/roles",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "List of roles")
+    )
+)]
 /// List roles for a service
 pub async fn list_roles<S: HasServices>(
     State(state): State<S>,
@@ -182,6 +215,14 @@ pub async fn list_roles<S: HasServices>(
     Ok(Json(SuccessResponse::new(roles)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/roles/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Role details")
+    )
+)]
 /// Get role by ID
 pub async fn get_role<S: HasServices>(
     State(state): State<S>,
@@ -197,6 +238,14 @@ pub async fn get_role<S: HasServices>(
     Ok(Json(SuccessResponse::new(role)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/roles",
+    tag = "Authorization",
+    responses(
+        (status = 201, description = "Role created")
+    )
+)]
 /// Create role
 /// Requires platform admin to create roles
 pub async fn create_role<S: HasServices>(
@@ -231,6 +280,14 @@ pub async fn create_role<S: HasServices>(
     Ok((StatusCode::CREATED, Json(SuccessResponse::new(role))))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/roles/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Role updated")
+    )
+)]
 /// Update role
 /// Requires platform admin to update roles
 pub async fn update_role<S: HasServices>(
@@ -259,6 +316,14 @@ pub async fn update_role<S: HasServices>(
     Ok(Json(SuccessResponse::new(role)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/roles/{id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Role deleted")
+    )
+)]
 /// Delete role
 /// Requires platform admin to delete roles
 pub async fn delete_role<S: HasServices>(
@@ -288,11 +353,19 @@ pub async fn delete_role<S: HasServices>(
 
 // ==================== Role-Permission Assignment ====================
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AssignPermissionInput {
     pub permission_id: Uuid,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/roles/{role_id}/permissions",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Permission assigned to role")
+    )
+)]
 /// Assign permission to role
 /// Requires platform admin to assign permissions to roles
 pub async fn assign_permission<S: HasServices>(
@@ -324,6 +397,14 @@ pub async fn assign_permission<S: HasServices>(
     Ok(Json(MessageResponse::new("Permission assigned to role")))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/roles/{role_id}/permissions/{permission_id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Permission removed from role")
+    )
+)]
 /// Remove permission from role
 /// Requires platform admin to remove permissions from roles
 pub async fn remove_permission<S: HasServices>(
@@ -356,6 +437,14 @@ pub async fn remove_permission<S: HasServices>(
 
 // ==================== User-Role Assignment ====================
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/rbac/assign",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Roles assigned successfully")
+    )
+)]
 /// Assign roles to user in tenant
 /// Requires platform admin or tenant owner to assign roles
 pub async fn assign_roles<S: HasServices>(
@@ -423,6 +512,14 @@ pub async fn assign_roles<S: HasServices>(
     Ok(Json(MessageResponse::new("Roles assigned successfully")))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{user_id}/tenants/{tenant_id}/roles",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "User roles in tenant")
+    )
+)]
 /// Get user roles in tenant
 pub async fn get_user_roles<S: HasServices>(
     State(state): State<S>,
@@ -448,6 +545,14 @@ pub async fn get_user_roles<S: HasServices>(
     Ok(Json(SuccessResponse::new(roles)))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/{user_id}/tenants/{tenant_id}/assigned-roles",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "User assigned roles")
+    )
+)]
 /// Get user assigned roles (raw records with IDs)
 pub async fn get_user_assigned_roles<S: HasServices>(
     State(state): State<S>,
@@ -473,6 +578,14 @@ pub async fn get_user_assigned_roles<S: HasServices>(
     Ok(Json(SuccessResponse::new(roles)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}",
+    tag = "Authorization",
+    responses(
+        (status = 200, description = "Role unassigned")
+    )
+)]
 /// Unassign role from user in tenant
 /// Requires platform admin or tenant owner to unassign roles
 pub async fn unassign_role<S: HasServices>(

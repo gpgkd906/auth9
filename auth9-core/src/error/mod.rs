@@ -7,6 +7,7 @@ use axum::{
 };
 use serde::Serialize;
 use thiserror::Error;
+use utoipa::ToSchema;
 
 /// Application-wide result type
 pub type Result<T> = std::result::Result<T, AppError>;
@@ -52,8 +53,8 @@ pub enum AppError {
 }
 
 /// Error response body
-#[derive(Serialize)]
-struct ErrorResponse {
+#[derive(Serialize, ToSchema)]
+pub(crate) struct ErrorResponse {
     error: String,
     message: String,
     #[serde(skip_serializing_if = "Option::is_none")]

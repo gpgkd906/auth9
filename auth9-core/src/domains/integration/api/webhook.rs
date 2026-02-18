@@ -2,10 +2,10 @@
 
 use crate::api::{write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::domain::{CreateWebhookInput, StringUuid, UpdateWebhookInput, Webhook};
+use crate::domains::integration::service::WebhookTestResult;
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
 use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
-use crate::domains::integration::service::WebhookTestResult;
 use crate::state::{HasServices, HasWebhooks};
 use axum::{
     extract::{Path, State},
@@ -14,6 +14,17 @@ use axum::{
 };
 
 /// List webhooks for a tenant
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/webhooks",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_webhooks<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -33,6 +44,18 @@ pub async fn list_webhooks<S: HasWebhooks + HasServices>(
 }
 
 /// Get a webhook by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("webhook_id" = String, Path, description = "Webhook ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -58,6 +81,17 @@ pub async fn get_webhook<S: HasWebhooks + HasServices>(
 }
 
 /// Create a new webhook
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/webhooks",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn create_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -78,6 +112,18 @@ pub async fn create_webhook<S: HasWebhooks + HasServices>(
 }
 
 /// Update a webhook
+#[utoipa::path(
+    put,
+    path = "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("webhook_id" = String, Path, description = "Webhook ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -104,6 +150,18 @@ pub async fn update_webhook<S: HasWebhooks + HasServices>(
 }
 
 /// Delete a webhook
+#[utoipa::path(
+    delete,
+    path = "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("webhook_id" = String, Path, description = "Webhook ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn delete_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -129,6 +187,18 @@ pub async fn delete_webhook<S: HasWebhooks + HasServices>(
 }
 
 /// Regenerate a webhook's secret
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}/regenerate-secret",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("webhook_id" = String, Path, description = "Webhook ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn regenerate_webhook_secret<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -170,6 +240,18 @@ pub async fn regenerate_webhook_secret<S: HasWebhooks + HasServices>(
 }
 
 /// Test a webhook by sending a test event
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/webhooks/{webhook_id}/test",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("webhook_id" = String, Path, description = "Webhook ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn test_webhook<S: HasWebhooks + HasServices>(
     State(state): State<S>,
     auth: AuthUser,

@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use url::Url;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::ValidationError;
 
@@ -86,6 +87,27 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for StringUuid {
         buf: &mut Vec<u8>,
     ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
         <String as sqlx::Encode<sqlx::MySql>>::encode_by_ref(&self.0.to_string(), buf)
+    }
+}
+
+impl utoipa::PartialSchema for StringUuid {
+    fn schema() -> utoipa::openapi::RefOr<utoipa::openapi::schema::Schema> {
+        utoipa::openapi::ObjectBuilder::new()
+            .schema_type(utoipa::openapi::schema::SchemaType::new(
+                utoipa::openapi::schema::Type::String,
+            ))
+            .format(Some(utoipa::openapi::SchemaFormat::Custom(
+                "uuid".to_string(),
+            )))
+            .description(Some("UUID stored as CHAR(36)"))
+            .examples([serde_json::json!("550e8400-e29b-41d4-a716-446655440000")])
+            .into()
+    }
+}
+
+impl ToSchema for StringUuid {
+    fn name() -> std::borrow::Cow<'static, str> {
+        std::borrow::Cow::Borrowed("StringUuid")
     }
 }
 

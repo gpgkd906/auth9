@@ -7,8 +7,9 @@ use crate::middleware::auth::AuthUser;
 use crate::state::HasServices;
 use axum::{extract::State, response::IntoResponse, Json};
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct CreateOrganizationResponse {
     #[serde(flatten)]
     pub organization: Tenant,
@@ -17,6 +18,14 @@ pub struct CreateOrganizationResponse {
 /// POST /api/v1/organizations
 /// Self-service organization creation for authenticated users.
 /// Creates a new tenant and adds the creator as owner.
+#[utoipa::path(
+    post,
+    path = "/api/v1/organizations",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn create_organization<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -45,6 +54,14 @@ pub async fn create_organization<S: HasServices>(
 
 /// GET /api/v1/users/me/tenants
 /// Get the authenticated user's tenant memberships.
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me/tenants",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_my_tenants<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,

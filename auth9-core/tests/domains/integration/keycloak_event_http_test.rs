@@ -3,8 +3,8 @@
 //! Tests for the POST /api/v1/keycloak/events endpoint.
 
 use crate::support::http::TestAppState;
-use auth9_core::domains::integration::api::keycloak_event;
 use auth9_core::domain::LoginEventType;
+use auth9_core::domains::integration::api::keycloak_event;
 use auth9_core::repository::LoginEventRepository;
 use axum::{
     body::Body,

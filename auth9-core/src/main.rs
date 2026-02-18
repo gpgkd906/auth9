@@ -6,6 +6,7 @@
 //!   migrate - Run database migrations only
 //!   seed    - Seed Keycloak with default data only
 //!   reset   - Reset database (drop all tables)
+//!   openapi - Export OpenAPI spec to stdout (JSON)
 
 use anyhow::Result;
 use auth9_core::{config::Config, migration, server, telemetry};
@@ -32,6 +33,8 @@ enum Commands {
     Seed,
     /// Reset database (drop all tables)
     Reset,
+    /// Export OpenAPI spec to stdout (JSON)
+    Openapi,
 }
 
 #[tokio::main]
@@ -65,6 +68,13 @@ async fn main() -> Result<()> {
             info!("Seeding Keycloak with default data...");
             migration::seed_keycloak(&config).await?;
             info!("Seed completed successfully");
+        }
+        Some(Commands::Openapi) => {
+            let doc = auth9_core::openapi::ApiDoc::build();
+            let json =
+                serde_json::to_string_pretty(&doc).expect("Failed to serialize OpenAPI spec");
+            println!("{}", json);
+            return Ok(());
         }
         Some(Commands::Reset) => {
             info!("Resetting database (dropping all tables)...");
