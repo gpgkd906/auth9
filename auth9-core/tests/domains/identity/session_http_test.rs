@@ -7,9 +7,9 @@ use crate::support::http::{
     delete_json_with_auth, get_json, get_json_with_auth, post_json, post_json_with_auth,
     MockKeycloakServer, TestAppState,
 };
-use auth9_core::domains::identity::api::session::RevokeSessionsResponse;
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{Session, SessionInfo, StringUuid};
+use auth9_core::domains::identity::api::session::RevokeSessionsResponse;
 use auth9_core::repository::SessionRepository;
 use axum::http::StatusCode;
 use chrono::Utc;
@@ -542,9 +542,12 @@ async fn test_revoke_current_session_rejected() {
         message: String,
     }
 
-    let (status, body): (StatusCode, Option<ErrorResponse>) =
-        delete_json_with_auth(&app, &format!("/api/v1/me/sessions/{}", current_session_id), &token)
-            .await;
+    let (status, body): (StatusCode, Option<ErrorResponse>) = delete_json_with_auth(
+        &app,
+        &format!("/api/v1/me/sessions/{}", current_session_id),
+        &token,
+    )
+    .await;
 
     assert_eq!(status, StatusCode::BAD_REQUEST);
     assert!(body.is_some());

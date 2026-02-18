@@ -13,6 +13,14 @@ use axum::{
 use serde::Deserialize;
 
 /// List security alerts with pagination
+#[utoipa::path(
+    get,
+    path = "/api/v1/security/alerts",
+    tag = "Security & Observability",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_alerts<S: HasSecurityAlerts + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -78,6 +86,17 @@ pub async fn get_alert<S: HasSecurityAlerts + HasServices>(
 }
 
 /// Resolve a security alert
+#[utoipa::path(
+    post,
+    path = "/api/v1/security/alerts/{id}/resolve",
+    tag = "Security & Observability",
+    params(
+        ("id" = String, Path, description = "Alert ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn resolve_alert<S: HasSecurityAlerts + HasServices>(
     State(state): State<S>,
     auth: AuthUser,

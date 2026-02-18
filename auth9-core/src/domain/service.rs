@@ -5,6 +5,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use url::Url;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
@@ -47,7 +48,7 @@ fn validate_redirect_uris(uris: &[String]) -> Result<(), validator::ValidationEr
 }
 
 /// Service status
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default, ToSchema)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceStatus {
     #[default]
@@ -90,7 +91,7 @@ impl<'q> sqlx::Encode<'q, sqlx::MySql> for ServiceStatus {
 }
 
 /// Service entity (OIDC client container)
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Service {
     pub id: StringUuid,
     pub tenant_id: Option<StringUuid>,
@@ -123,7 +124,7 @@ impl Default for Service {
 }
 
 /// Client entity (OIDC credentials)
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Client {
     pub id: StringUuid,
     pub service_id: StringUuid,
@@ -136,7 +137,7 @@ pub struct Client {
 }
 
 /// Input for registering a new service
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateServiceInput {
     pub tenant_id: Option<Uuid>,
     #[validate(length(min = 1, max = 255))]
@@ -152,14 +153,14 @@ pub struct CreateServiceInput {
 }
 
 /// Input for creating a new client
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateClientInput {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
 }
 
 /// Input for updating a service
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct UpdateServiceInput {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
@@ -173,7 +174,7 @@ pub struct UpdateServiceInput {
 }
 
 /// Service response with initial client
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ServiceWithClient {
     #[serde(flatten)]
     pub service: Service,
@@ -181,7 +182,7 @@ pub struct ServiceWithClient {
 }
 
 /// Client response with generated secret
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct ClientWithSecret {
     #[serde(flatten)]
     pub client: Client,

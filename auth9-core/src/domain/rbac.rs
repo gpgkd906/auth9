@@ -4,11 +4,12 @@ use super::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
 /// Permission entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Permission {
     pub id: StringUuid,
     pub service_id: StringUuid,
@@ -31,7 +32,7 @@ impl Default for Permission {
 }
 
 /// Role entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Role {
     pub id: StringUuid,
     pub service_id: StringUuid,
@@ -59,14 +60,14 @@ impl Default for Role {
 }
 
 /// Role-Permission mapping
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct RolePermission {
     pub role_id: StringUuid,
     pub permission_id: StringUuid,
 }
 
 /// User-Tenant-Role assignment
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct UserTenantRole {
     pub id: StringUuid,
     pub tenant_user_id: StringUuid,
@@ -76,7 +77,7 @@ pub struct UserTenantRole {
 }
 
 /// Input for creating a permission
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreatePermissionInput {
     pub service_id: Uuid,
     #[validate(
@@ -99,7 +100,7 @@ fn validate_permission_code(code: &str) -> Result<(), validator::ValidationError
 }
 
 /// Input for creating a role
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateRoleInput {
     pub service_id: Uuid,
     #[validate(length(min = 1, max = 100))]
@@ -110,7 +111,7 @@ pub struct CreateRoleInput {
 }
 
 /// Input for updating a role
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct UpdateRoleInput {
     #[validate(length(min = 1, max = 100))]
     pub name: Option<String>,
@@ -124,7 +125,7 @@ pub struct UpdateRoleInput {
 }
 
 /// Input for assigning roles to a user in a tenant
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct AssignRolesInput {
     pub user_id: Uuid,
     pub tenant_id: Uuid,
@@ -132,7 +133,7 @@ pub struct AssignRolesInput {
 }
 
 /// Role with its permissions (for API responses)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct RoleWithPermissions {
     #[serde(flatten)]
     pub role: Role,
@@ -140,7 +141,7 @@ pub struct RoleWithPermissions {
 }
 
 /// User roles in a tenant (for token claims)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct UserRolesInTenant {
     pub user_id: Uuid,
     pub tenant_id: Uuid,

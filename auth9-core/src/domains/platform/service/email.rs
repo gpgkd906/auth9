@@ -3,12 +3,12 @@
 use crate::domain::{
     EmailAddress, EmailMessage, EmailProviderConfig, EmailSendResult, TenantEmailSettings,
 };
+use crate::domains::platform::service::SystemSettingsService;
 use crate::email::{
     EmailProvider, EmailProviderError, SesEmailProvider, SmtpEmailProvider, TemplateEngine,
 };
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
-use crate::domains::platform::service::SystemSettingsService;
 use async_trait::async_trait;
 use std::sync::Arc;
 

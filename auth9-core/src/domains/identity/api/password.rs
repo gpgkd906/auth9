@@ -15,6 +15,14 @@ use axum::{
 };
 use validator::Validate;
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/forgot-password",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Password reset email sent")
+    )
+)]
 /// Request password reset email
 pub async fn forgot_password<S: HasPasswordManagement>(
     State(state): State<S>,
@@ -28,6 +36,14 @@ pub async fn forgot_password<S: HasPasswordManagement>(
     )))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/reset-password",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Password reset successfully")
+    )
+)]
 /// Reset password using token
 pub async fn reset_password<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
@@ -51,6 +67,14 @@ pub async fn reset_password<S: HasPasswordManagement + HasServices>(
     )))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/me/password",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Password changed successfully")
+    )
+)]
 /// Change password for authenticated user
 pub async fn change_password<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
@@ -81,6 +105,14 @@ pub async fn change_password<S: HasPasswordManagement + HasServices>(
     )))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{id}/password-policy",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Password policy")
+    )
+)]
 /// Get password policy for a tenant
 pub async fn get_password_policy<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
@@ -100,6 +132,14 @@ pub async fn get_password_policy<S: HasPasswordManagement + HasServices>(
     Ok(Json(SuccessResponse::new(policy)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/tenants/{id}/password-policy",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Updated password policy")
+    )
+)]
 /// Update password policy for a tenant
 pub async fn update_password_policy<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,
@@ -139,6 +179,14 @@ pub async fn update_password_policy<S: HasPasswordManagement + HasServices>(
     Ok(Json(SuccessResponse::new(policy)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/users/{id}/password",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Password set successfully")
+    )
+)]
 /// Admin set password for a user (supports temporary passwords)
 pub async fn admin_set_password<S: HasPasswordManagement + HasServices>(
     State(state): State<S>,

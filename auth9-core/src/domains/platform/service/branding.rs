@@ -1,9 +1,9 @@
 //! Branding configuration service
 
 use crate::domain::{BrandingConfig, SettingCategory, SystemSettingRow, UpsertSystemSettingInput};
+use crate::domains::platform::service::KeycloakSyncService;
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
-use crate::domains::platform::service::KeycloakSyncService;
 use std::sync::Arc;
 use validator::Validate;
 

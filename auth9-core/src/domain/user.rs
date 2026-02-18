@@ -4,11 +4,12 @@ use super::common::{validate_url_no_ssrf_strict, StringUuid};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
 /// User entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: StringUuid,
     pub keycloak_id: String,
@@ -41,7 +42,7 @@ impl Default for User {
 }
 
 /// Input for admin setting a user's password
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct AdminSetPasswordInput {
     #[validate(length(min = 1, max = 128))]
     pub password: String,
@@ -51,7 +52,7 @@ pub struct AdminSetPasswordInput {
 }
 
 /// User-Tenant relationship
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct TenantUser {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -62,7 +63,7 @@ pub struct TenantUser {
 }
 
 /// Input for creating a new user
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct CreateUserInput {
     #[validate(email)]
     pub email: String,
@@ -93,7 +94,7 @@ fn validate_avatar_url(url: &str) -> Result<(), validator::ValidationError> {
 }
 
 /// Input for updating a user
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct UpdateUserInput {
     #[validate(length(max = 255), custom(function = "validate_no_html"))]
     pub display_name: Option<String>,
@@ -102,7 +103,7 @@ pub struct UpdateUserInput {
 }
 
 /// Input for adding user to tenant
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 pub struct AddUserToTenantInput {
     pub user_id: Uuid,
     pub tenant_id: Uuid,
@@ -111,14 +112,14 @@ pub struct AddUserToTenantInput {
 }
 
 /// User with tenant information (for API responses)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct UserWithTenants {
     #[serde(flatten)]
     pub user: User,
     pub tenants: Vec<UserTenantInfo>,
 }
 
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct UserTenantInfo {
     pub tenant_id: Uuid,
     pub tenant_name: String,
@@ -127,7 +128,7 @@ pub struct UserTenantInfo {
 }
 
 /// TenantUser with embedded Tenant data (for API responses)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TenantUserWithTenant {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -138,7 +139,7 @@ pub struct TenantUserWithTenant {
 }
 
 /// Lightweight Tenant info for embedding in responses
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TenantInfo {
     pub id: StringUuid,
     pub name: String,

@@ -20,18 +20,13 @@ use auth9_core::config::{
     Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig,
     RateLimitConfig, RedisConfig, ServerConfig,
 };
-use auth9_core::jwt::JwtManager;
-use auth9_core::keycloak::KeycloakClient;
-use auth9_core::middleware::RateLimitState;
-use auth9_core::server::build_full_router;
 use auth9_core::domains::authorization::service::{ClientService, RbacService};
 use auth9_core::domains::identity::service::{
     IdentityProviderService, PasswordService, SessionService, WebAuthnService,
 };
 use auth9_core::domains::integration::service::{ActionService, WebhookService};
 use auth9_core::domains::platform::service::{
-    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService,
-    SystemSettingsService,
+    BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
 };
 use auth9_core::domains::security_observability::service::{
     AnalyticsService, SecurityDetectionService,
@@ -39,6 +34,10 @@ use auth9_core::domains::security_observability::service::{
 use auth9_core::domains::tenant_access::service::{
     InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
 };
+use auth9_core::jwt::JwtManager;
+use auth9_core::keycloak::KeycloakClient;
+use auth9_core::middleware::RateLimitState;
+use auth9_core::server::build_full_router;
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
     HasInvitations, HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
@@ -284,8 +283,9 @@ impl TestAppState {
         let db_pool = sqlx::MySqlPool::connect_lazy(&config.database.url).unwrap();
 
         // Create Keycloak sync service for tests
-        let keycloak_updater: Arc<dyn auth9_core::domains::platform::service::keycloak_sync::KeycloakRealmUpdater> =
-            Arc::new(KeycloakClient::new(config.keycloak.clone()));
+        let keycloak_updater: Arc<
+            dyn auth9_core::domains::platform::service::keycloak_sync::KeycloakRealmUpdater,
+        > = Arc::new(KeycloakClient::new(config.keycloak.clone()));
         let keycloak_sync_service = Arc::new(KeycloakSyncService::new(keycloak_updater));
 
         // Create new services

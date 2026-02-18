@@ -3,9 +3,10 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
+use utoipa::ToSchema;
 
 /// System setting row from the database
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct SystemSettingRow {
     pub id: i32,
     pub category: String,
@@ -19,7 +20,7 @@ pub struct SystemSettingRow {
 }
 
 /// System setting categories
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub enum SettingCategory {
     /// Email configuration
@@ -81,7 +82,7 @@ impl SettingKey {
 }
 
 /// Input for creating/updating a system setting
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct UpsertSystemSettingInput {
     pub category: String,
     pub setting_key: String,
@@ -91,7 +92,7 @@ pub struct UpsertSystemSettingInput {
 }
 
 /// API response for system settings (with sensitive data masked)
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct SystemSettingResponse {
     pub category: String,
     pub setting_key: String,

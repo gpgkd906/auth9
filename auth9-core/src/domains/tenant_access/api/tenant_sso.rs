@@ -19,15 +19,24 @@ use axum::{
 use serde::Serialize;
 use sqlx::{MySqlPool, Row};
 use std::collections::{HashMap, HashSet};
+use utoipa::ToSchema;
 use uuid::Uuid;
 use validator::Validate;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ConnectorTestResult {
     pub ok: bool,
     pub message: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/sso/connectors",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_connectors<S: HasServices + HasDbPool>(
     State(state): State<S>,
     auth: AuthUser,
@@ -39,6 +48,14 @@ pub async fn list_connectors<S: HasServices + HasDbPool>(
     Ok(Json(SuccessResponse::new(connectors)))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/sso/connectors",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn create_connector<S: HasServices + HasDbPool>(
     State(state): State<S>,
     auth: AuthUser,
@@ -117,6 +134,14 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
     Ok(Json(SuccessResponse::new(created)))
 }
 
+#[utoipa::path(
+    put,
+    path = "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_connector<S: HasServices + HasDbPool>(
     State(state): State<S>,
     auth: AuthUser,
@@ -221,6 +246,14 @@ pub async fn update_connector<S: HasServices + HasDbPool>(
     Ok(Json(SuccessResponse::new(after)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Deleted")
+    )
+)]
 pub async fn delete_connector<S: HasServices + HasDbPool>(
     State(state): State<S>,
     auth: AuthUser,
@@ -264,6 +297,14 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
     )))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/test",
+    tag = "Tenant Access",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn test_connector<S: HasServices + HasDbPool>(
     State(state): State<S>,
     auth: AuthUser,

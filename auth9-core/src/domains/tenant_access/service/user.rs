@@ -4,13 +4,13 @@ use crate::domain::{
     AddUserToTenantInput, CreateUserInput, StringUuid, TenantUser, TenantUserWithTenant,
     UpdateUserInput, User, WebhookEvent,
 };
+use crate::domains::integration::service::WebhookEventPublisher;
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::{
     AuditRepository, LinkedIdentityRepository, LoginEventRepository, PasswordResetRepository,
     RbacRepository, SecurityAlertRepository, SessionRepository, UserRepository,
 };
-use crate::domains::integration::service::WebhookEventPublisher;
 use chrono::Utc;
 use sqlx::MySqlPool;
 use std::sync::Arc;

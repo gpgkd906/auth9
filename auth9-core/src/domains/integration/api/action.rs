@@ -17,8 +17,20 @@ use axum::{
     Json,
 };
 use serde::Deserialize;
+use utoipa::ToSchema;
 
 /// Create a new action
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/actions",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn create_action<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -41,6 +53,17 @@ pub async fn create_action<S: HasServices>(
 }
 
 /// List all actions for a tenant
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/actions",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_actions<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -70,6 +93,18 @@ pub async fn list_actions<S: HasServices>(
 }
 
 /// Get a single action by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/actions/{action_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("action_id" = String, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_action<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -96,6 +131,18 @@ pub async fn get_action<S: HasServices>(
 }
 
 /// Update an action
+#[utoipa::path(
+    patch,
+    path = "/api/v1/tenants/{tenant_id}/actions/{action_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("action_id" = String, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_action<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -124,6 +171,18 @@ pub async fn update_action<S: HasServices>(
 }
 
 /// Delete an action
+#[utoipa::path(
+    delete,
+    path = "/api/v1/tenants/{tenant_id}/actions/{action_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("action_id" = String, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn delete_action<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -151,6 +210,17 @@ pub async fn delete_action<S: HasServices>(
 }
 
 /// Batch upsert actions (AI Agent friendly)
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/actions/batch",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn batch_upsert_actions<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -173,6 +243,18 @@ pub async fn batch_upsert_actions<S: HasServices>(
 }
 
 /// Test an action with mock context
+#[utoipa::path(
+    post,
+    path = "/api/v1/tenants/{tenant_id}/actions/{action_id}/test",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("action_id" = String, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn test_action<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -197,6 +279,18 @@ pub async fn test_action<S: HasServices>(
 }
 
 /// Get a single execution log by ID
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/actions/logs/{log_id}",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("log_id" = String, Path, description = "Log ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_action_log<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -218,6 +312,17 @@ pub async fn get_action_log<S: HasServices>(
 }
 
 /// Query action execution logs
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/actions/logs",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn query_action_logs<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -272,6 +377,18 @@ pub async fn query_action_logs<S: HasServices>(
 }
 
 /// Get action statistics
+#[utoipa::path(
+    get,
+    path = "/api/v1/tenants/{tenant_id}/actions/{action_id}/stats",
+    tag = "Integration",
+    params(
+        ("tenant_id" = String, Path, description = "Tenant ID"),
+        ("action_id" = String, Path, description = "Action ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_action_stats<S: HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -299,6 +416,14 @@ pub async fn get_action_stats<S: HasServices>(
 }
 
 /// Get all available triggers
+#[utoipa::path(
+    get,
+    path = "/api/v1/actions/triggers",
+    tag = "Integration",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_triggers<S: HasServices>(
     State(_state): State<S>,
     _auth: AuthUser,
@@ -316,12 +441,12 @@ pub struct ListActionsQuery {
     pub trigger_id: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct BatchUpsertRequest {
     pub actions: Vec<UpsertActionInput>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TestActionRequest {
     pub context: ActionContext,
 }

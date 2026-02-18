@@ -10,9 +10,18 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 // ==================== Registration (requires auth) ====================
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/me/passkeys/register/start",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Registration challenge")
+    )
+)]
 /// Start passkey registration
 ///
 /// POST /api/v1/users/me/passkeys/register/start
@@ -48,6 +57,14 @@ pub async fn start_registration<S: HasWebAuthn + HasServices>(
     Ok(Json(json))
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/users/me/passkeys/register/complete",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Registration completed")
+    )
+)]
 /// Complete passkey registration
 ///
 /// POST /api/v1/users/me/passkeys/register/complete
@@ -67,14 +84,23 @@ pub async fn complete_registration<S: HasWebAuthn>(
 }
 
 /// Request body for completing registration
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CompleteRegistrationRequest {
+    #[schema(value_type = Object)]
     pub credential: webauthn_rs_proto::RegisterPublicKeyCredential,
     pub label: Option<String>,
 }
 
 // ==================== Authentication (public, no auth) ====================
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/webauthn/authenticate/start",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Authentication challenge")
+    )
+)]
 /// Start passkey authentication
 ///
 /// POST /api/v1/auth/webauthn/authenticate/start
@@ -93,12 +119,20 @@ pub async fn start_authentication<S: HasWebAuthn>(
 }
 
 /// Response for authentication start
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthenticationStartResponse {
     pub challenge_id: String,
     pub public_key: serde_json::Value,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/webauthn/authenticate/complete",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Authentication token")
+    )
+)]
 /// Complete passkey authentication
 ///
 /// POST /api/v1/auth/webauthn/authenticate/complete
@@ -147,14 +181,15 @@ pub async fn complete_authentication<S: HasWebAuthn + HasServices + HasSessionMa
 }
 
 /// Request body for completing authentication
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct CompleteAuthenticationRequest {
     pub challenge_id: String,
+    #[schema(value_type = Object)]
     pub credential: webauthn_rs_proto::PublicKeyCredential,
 }
 
 /// Token response for passkey authentication
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct AuthenticationTokenResponse {
     pub access_token: String,
     pub token_type: String,
@@ -163,6 +198,14 @@ pub struct AuthenticationTokenResponse {
 
 // ==================== Management (requires auth) ====================
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/users/me/passkeys",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "List of passkeys")
+    )
+)]
 /// List user's WebAuthn credentials (passkeys)
 pub async fn list_passkeys<S: HasWebAuthn + HasServices>(
     State(state): State<S>,
@@ -181,6 +224,14 @@ pub async fn list_passkeys<S: HasWebAuthn + HasServices>(
     Ok(Json(SuccessResponse::new(credentials)))
 }
 
+#[utoipa::path(
+    delete,
+    path = "/api/v1/users/me/passkeys/{id}",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Passkey deleted")
+    )
+)]
 /// Delete a WebAuthn credential
 pub async fn delete_passkey<S: HasWebAuthn + HasServices>(
     State(state): State<S>,

@@ -26,10 +26,11 @@ use rsa::RsaPublicKey;
 use serde::{Deserialize, Serialize};
 use sqlx::Row;
 use url::Url;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// OIDC Authorization request
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct AuthorizeRequest {
     pub response_type: String,
     pub client_id: String,
@@ -62,6 +63,14 @@ fn filter_scopes(requested_scope: &str) -> Result<String> {
     Ok(scopes.join(" "))
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/authorize",
+    tag = "Identity",
+    responses(
+        (status = 302, description = "Redirect to OIDC provider")
+    )
+)]
 /// Login redirect (initiates OIDC flow)
 pub async fn authorize<S: HasServices + HasCache>(
     State(state): State<S>,
@@ -122,7 +131,7 @@ pub async fn authorize<S: HasServices + HasCache>(
     Ok(Redirect::temporary(&auth_url).into_response())
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct EnterpriseSsoDiscoveryResponse {
     pub tenant_id: StringUuid,
     pub tenant_slug: String,
@@ -130,6 +139,14 @@ pub struct EnterpriseSsoDiscoveryResponse {
     pub authorize_url: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/enterprise-sso/discovery",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "SSO discovery result")
+    )
+)]
 /// Enterprise SSO discovery endpoint.
 /// Accepts user email, finds a tenant connector by domain, and returns redirect URL.
 pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::HasDbPool>(
@@ -195,7 +212,7 @@ pub struct CallbackRequest {
     pub state: Option<String>,
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct TokenResponse {
     pub access_token: String,
     pub token_type: String,
@@ -204,6 +221,14 @@ pub struct TokenResponse {
     pub id_token: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/callback",
+    tag = "Identity",
+    responses(
+        (status = 302, description = "Redirect with authorization code")
+    )
+)]
 pub async fn callback<S: HasServices + HasCache>(
     State(state): State<S>,
     Query(params): Query<CallbackRequest>,
@@ -247,7 +272,7 @@ pub async fn callback<S: HasServices + HasCache>(
 }
 
 /// Token endpoint (for client credentials, etc.)
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TokenRequest {
     pub grant_type: String,
     pub client_id: Option<String>,
@@ -257,12 +282,20 @@ pub struct TokenRequest {
     pub refresh_token: Option<String>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct TenantTokenExchangeRequest {
     pub tenant_id: String,
     pub service_id: String,
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/token",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Token response")
+    )
+)]
 pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalytics>(
     State(state): State<S>,
     headers: HeaderMap,
@@ -566,6 +599,14 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
     }
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/tenant-token",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "Tenant access token")
+    )
+)]
 pub async fn tenant_token<S: HasServices>(
     State(state): State<S>,
     headers: HeaderMap,
@@ -648,7 +689,7 @@ pub async fn tenant_token<S: HasServices>(
 }
 
 /// Logout endpoint
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, ToSchema)]
 pub struct LogoutRequest {
     pub client_id: Option<String>,
     pub id_token_hint: Option<String>,
@@ -656,6 +697,14 @@ pub struct LogoutRequest {
     pub state: Option<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/logout",
+    tag = "Identity",
+    responses(
+        (status = 302, description = "Redirect to logout")
+    )
+)]
 /// GET logout - redirect-only, no session revocation (CSRF-safe).
 /// Per OIDC spec, the end_session_endpoint supports GET for browser redirects.
 /// Session revocation requires POST with a bearer token.
@@ -690,6 +739,14 @@ pub async fn logout_redirect<S: HasServices>(
     Ok(Redirect::temporary(&logout_url).into_response())
 }
 
+#[utoipa::path(
+    post,
+    path = "/api/v1/auth/logout",
+    tag = "Identity",
+    responses(
+        (status = 302, description = "Logout and redirect")
+    )
+)]
 /// POST logout - revokes session and redirects to Keycloak.
 /// Requires bearer token for session revocation. CSRF-protected by requiring POST.
 pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
@@ -815,6 +872,14 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
     Ok(Redirect::temporary(&logout_url).into_response())
 }
 
+#[utoipa::path(
+    get,
+    path = "/api/v1/auth/userinfo",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "User info")
+    )
+)]
 /// UserInfo endpoint
 pub async fn userinfo<S: HasServices>(
     State(state): State<S>,
@@ -1191,7 +1256,7 @@ async fn fetch_userinfo<S: HasServices>(state: &S, access_token: &str) -> Result
 }
 
 /// OpenID Connect Discovery endpoint
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize, ToSchema)]
 pub struct OpenIdConfiguration {
     pub issuer: String,
     pub authorization_endpoint: String,
@@ -1208,6 +1273,14 @@ pub struct OpenIdConfiguration {
     pub claims_supported: Vec<String>,
 }
 
+#[utoipa::path(
+    get,
+    path = "/.well-known/openid-configuration",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "OpenID configuration")
+    )
+)]
 pub async fn openid_configuration<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
     let base_url = &state.config().jwt.issuer;
     // Always include jwks_uri - it returns empty keys array for HS256 mode
@@ -1274,6 +1347,14 @@ struct JwkKey {
     e: String,
 }
 
+#[utoipa::path(
+    get,
+    path = "/.well-known/jwks.json",
+    tag = "Identity",
+    responses(
+        (status = 200, description = "JSON Web Key Set")
+    )
+)]
 pub async fn jwks<S: HasServices>(State(state): State<S>) -> impl IntoResponse {
     let public_key_pem = match state.jwt_manager().public_key_pem() {
         Some(key) => key,

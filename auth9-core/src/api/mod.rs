@@ -11,6 +11,7 @@ use crate::server::AppState;
 use crate::state::HasServices;
 use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 use uuid::Uuid;
 
 /// Maximum allowed per_page value for pagination
@@ -57,7 +58,7 @@ pub(crate) async fn require_platform_admin_with_db<S: HasServices>(
 }
 
 /// Pagination query parameters
-#[derive(Debug, Clone, Deserialize, Serialize)]
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct PaginationQuery {
     #[serde(default = "default_page", deserialize_with = "deserialize_page")]
     pub page: i64,
@@ -102,7 +103,7 @@ pub struct PaginatedResponse<T> {
     pub pagination: PaginationMeta,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct PaginationMeta {
     pub page: i64,
     pub per_page: i64,
@@ -138,7 +139,7 @@ impl<T: Serialize> SuccessResponse<T> {
 }
 
 /// Message response (for delete, etc.)
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct MessageResponse {
     pub message: String,
 }

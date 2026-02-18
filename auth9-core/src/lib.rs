@@ -16,6 +16,7 @@ pub mod jwt;
 pub mod keycloak;
 pub mod middleware;
 pub mod migration;
+pub mod openapi;
 pub mod policy;
 pub mod repository;
 pub mod server;

@@ -4,9 +4,10 @@ use crate::domain::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use utoipa::ToSchema;
 use validator::Validate;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct EnterpriseSsoConnector {
     pub id: StringUuid,
@@ -23,7 +24,7 @@ pub struct EnterpriseSsoConnector {
     pub updated_at: DateTime<Utc>,
 }
 
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct CreateEnterpriseSsoConnectorInput {
     #[validate(length(min = 1, max = 100))]
@@ -41,7 +42,7 @@ pub struct CreateEnterpriseSsoConnectorInput {
     pub domains: Vec<String>,
 }
 
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct UpdateEnterpriseSsoConnectorInput {
     pub display_name: Option<String>,
@@ -51,14 +52,14 @@ pub struct UpdateEnterpriseSsoConnectorInput {
     pub domains: Option<Vec<String>>,
 }
 
-#[derive(Debug, Clone, Deserialize, Validate)]
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct EnterpriseSsoDiscoveryInput {
     #[validate(email)]
     pub email: String,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "snake_case")]
 pub struct EnterpriseSsoDiscoveryResult {
     pub tenant_id: StringUuid,
@@ -166,8 +167,7 @@ mod tests {
             "alias": "okta",
             "provider_type": "saml"
         });
-        let input: CreateEnterpriseSsoConnectorInput =
-            serde_json::from_value(json).unwrap();
+        let input: CreateEnterpriseSsoConnectorInput = serde_json::from_value(json).unwrap();
         assert!(input.enabled); // default_true
         assert_eq!(input.priority, 100); // default_priority
         assert!(input.config.is_empty());
@@ -185,13 +185,15 @@ mod tests {
             "config": {"entity_id": "https://okta.example.com"},
             "domains": ["example.com"]
         });
-        let input: CreateEnterpriseSsoConnectorInput =
-            serde_json::from_value(json).unwrap();
+        let input: CreateEnterpriseSsoConnectorInput = serde_json::from_value(json).unwrap();
         assert_eq!(input.alias, "okta");
         assert_eq!(input.display_name.as_deref(), Some("Okta SSO"));
         assert!(!input.enabled);
         assert_eq!(input.priority, 50);
-        assert_eq!(input.config.get("entity_id").unwrap(), "https://okta.example.com");
+        assert_eq!(
+            input.config.get("entity_id").unwrap(),
+            "https://okta.example.com"
+        );
         assert_eq!(input.domains, vec!["example.com"]);
     }
 
@@ -217,8 +219,7 @@ mod tests {
             "enabled": false,
             "priority": 200
         });
-        let input: UpdateEnterpriseSsoConnectorInput =
-            serde_json::from_value(json).unwrap();
+        let input: UpdateEnterpriseSsoConnectorInput = serde_json::from_value(json).unwrap();
         assert_eq!(input.enabled, Some(false));
         assert_eq!(input.priority, Some(200));
         assert!(input.display_name.is_none());
@@ -262,7 +263,10 @@ mod tests {
             enabled: true,
             priority: 100,
             keycloak_alias: "acme--okta-saml".to_string(),
-            config: HashMap::from([("entityId".to_string(), "https://okta.example.com".to_string())]),
+            config: HashMap::from([(
+                "entityId".to_string(),
+                "https://okta.example.com".to_string(),
+            )]),
             domains: vec!["example.com".to_string()],
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -276,8 +280,7 @@ mod tests {
         assert_eq!(json["priority"], 100);
         assert_eq!(json["keycloak_alias"], "acme--okta-saml");
 
-        let deserialized: EnterpriseSsoConnector =
-            serde_json::from_value(json).unwrap();
+        let deserialized: EnterpriseSsoConnector = serde_json::from_value(json).unwrap();
         assert_eq!(deserialized.alias, connector.alias);
         assert_eq!(deserialized.provider_type, connector.provider_type);
     }

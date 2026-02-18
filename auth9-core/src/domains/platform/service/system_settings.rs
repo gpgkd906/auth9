@@ -5,9 +5,9 @@ use crate::domain::{
     EmailProviderConfig, SettingCategory, SettingKey, SystemSettingResponse, SystemSettingRow,
     UpsertSystemSettingInput,
 };
+use crate::domains::platform::service::KeycloakSyncService;
 use crate::error::{AppError, Result};
 use crate::repository::SystemSettingsRepository;
-use crate::domains::platform::service::KeycloakSyncService;
 use std::sync::Arc;
 
 /// Service for managing system-wide settings

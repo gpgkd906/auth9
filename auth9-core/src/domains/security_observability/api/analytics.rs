@@ -15,6 +15,14 @@ use chrono::{DateTime, Utc};
 use serde::Deserialize;
 
 /// Get login statistics
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/login-stats",
+    tag = "Security & Observability",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_stats<S: HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<StatsQuery>,
@@ -80,6 +88,14 @@ pub struct ListEventsQuery {
 }
 
 /// List login events with pagination
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/login-events",
+    tag = "Security & Observability",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn list_events<S: HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<ListEventsQuery>,
@@ -159,6 +175,14 @@ pub struct DailyTrendQuery {
 }
 
 /// Get daily login trend data
+#[utoipa::path(
+    get,
+    path = "/api/v1/analytics/daily-trend",
+    tag = "Security & Observability",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_daily_trend<S: HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<DailyTrendQuery>,

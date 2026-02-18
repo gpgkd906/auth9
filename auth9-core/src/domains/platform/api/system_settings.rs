@@ -12,15 +12,16 @@ use axum::{
     Json,
 };
 use serde::{Deserialize, Serialize};
+use utoipa::ToSchema;
 
 /// Request body for updating email settings
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct UpdateEmailSettingsRequest {
     pub config: EmailProviderConfig,
 }
 
 /// Response for test email request
-#[derive(Debug, Clone, Serialize)]
+#[derive(Debug, Clone, Serialize, ToSchema)]
 pub struct TestEmailResponse {
     pub success: bool,
     pub message: String,
@@ -28,12 +29,20 @@ pub struct TestEmailResponse {
 }
 
 /// Request body for sending test email
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct SendTestEmailRequest {
     pub to_email: String,
 }
 
 /// Get email provider settings (with sensitive data masked)
+#[utoipa::path(
+    get,
+    path = "/api/v1/system/email",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn get_email_settings<S: HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -47,6 +56,15 @@ pub async fn get_email_settings<S: HasSystemSettings + HasServices>(
 }
 
 /// Update email provider settings
+#[utoipa::path(
+    put,
+    path = "/api/v1/system/email",
+    tag = "Platform",
+    request_body = UpdateEmailSettingsRequest,
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn update_email_settings<S: HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -87,6 +105,14 @@ pub async fn update_email_settings<S: HasSystemSettings + HasServices>(
 }
 
 /// Test email connection (verify credentials)
+#[utoipa::path(
+    post,
+    path = "/api/v1/system/email/test",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn test_email_connection<S: HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,
@@ -103,6 +129,15 @@ pub async fn test_email_connection<S: HasSystemSettings + HasServices>(
 }
 
 /// Send a test email
+#[utoipa::path(
+    post,
+    path = "/api/v1/system/email/send-test",
+    tag = "Platform",
+    request_body = SendTestEmailRequest,
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
 pub async fn send_test_email<S: HasSystemSettings + HasServices>(
     State(state): State<S>,
     auth: AuthUser,

@@ -7,10 +7,11 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::fmt;
+use utoipa::ToSchema;
 use validator::Validate;
 
 /// Action trigger types
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema)]
 #[serde(rename_all = "kebab-case")]
 pub enum ActionTrigger {
     /// Triggered after successful login
@@ -73,7 +74,7 @@ impl fmt::Display for ActionTrigger {
 }
 
 /// Action entity
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Action {
     pub id: StringUuid,
     pub tenant_id: StringUuid,
@@ -118,7 +119,7 @@ impl Default for Action {
 }
 
 /// Input for creating an action
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct CreateActionInput {
     #[validate(length(min = 1, max = 255))]
     pub name: String,
@@ -148,7 +149,7 @@ fn default_timeout() -> i32 {
 }
 
 /// Input for updating an action
-#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Default, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpdateActionInput {
     #[validate(length(min = 1, max = 255))]
     pub name: Option<String>,
@@ -173,7 +174,7 @@ pub struct RequestContext {
 }
 
 /// Context passed to action scripts
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ActionContext {
     pub user: ActionContextUser,
     pub tenant: ActionContextTenant,
@@ -183,7 +184,7 @@ pub struct ActionContext {
 }
 
 /// User information in action context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ActionContextUser {
     pub id: String,
     pub email: String,
@@ -192,7 +193,7 @@ pub struct ActionContextUser {
 }
 
 /// Tenant information in action context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ActionContextTenant {
     pub id: String,
     pub slug: String,
@@ -200,7 +201,7 @@ pub struct ActionContextTenant {
 }
 
 /// Request information in action context
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ActionContextRequest {
     pub ip: Option<String>,
     pub user_agent: Option<String>,
@@ -208,7 +209,7 @@ pub struct ActionContextRequest {
 }
 
 /// Action execution result
-#[derive(Debug, Clone, Serialize, Deserialize, FromRow)]
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct ActionExecution {
     pub id: StringUuid,
     pub action_id: StringUuid,
@@ -222,7 +223,7 @@ pub struct ActionExecution {
 }
 
 /// Input for batch upsert (create or update)
-#[derive(Debug, Clone, Serialize, Deserialize, Validate)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
 pub struct UpsertActionInput {
     pub id: Option<StringUuid>,
     #[validate(length(min = 1, max = 255))]
@@ -245,7 +246,7 @@ pub struct UpsertActionInput {
 }
 
 /// Batch upsert response
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct BatchUpsertResponse {
     pub created: Vec<Action>,
     pub updated: Vec<Action>,
@@ -253,7 +254,7 @@ pub struct BatchUpsertResponse {
 }
 
 /// Batch operation error
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct BatchError {
     pub input_index: usize,
     pub name: String,
@@ -261,7 +262,7 @@ pub struct BatchError {
 }
 
 /// Action test response
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct TestActionResponse {
     pub success: bool,
     pub duration_ms: i32,
@@ -271,7 +272,7 @@ pub struct TestActionResponse {
 }
 
 /// Log query filter
-#[derive(Debug, Clone, Default, Deserialize)]
+#[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 pub struct LogQueryFilter {
     pub action_id: Option<StringUuid>,
     pub user_id: Option<StringUuid>,
@@ -313,7 +314,7 @@ impl Default for AsyncActionConfig {
 }
 
 /// Action statistics
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
 pub struct ActionStats {
     pub execution_count: i64,
     pub error_count: i64,
