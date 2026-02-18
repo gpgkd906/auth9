@@ -284,6 +284,8 @@ erDiagram
 
 ### 5.2 表说明
 
+**核心表**（ER 图已展示）：
+
 | 表名 | 用途 |
 |------|------|
 | `tenants` | 租户信息，包含名称、slug、配置等 |
@@ -296,25 +298,96 @@ erDiagram
 | `user_tenant_roles` | 用户在租户中的角色分配 |
 | `audit_logs` | 审计日志 |
 
+**扩展表**（ER 图未展示，通过迁移文件管理）：
+
+| 表名 | 用途 |
+|------|------|
+| `sessions` | 会话追踪（设备信息、IP 地址） |
+| `password_reset_tokens` | 密码重置令牌（HMAC 签名） |
+| `invitations` | 租户邀请（Token、状态） |
+| `webhooks` | Webhook 配置（URL、事件类型、HMAC 密钥） |
+| `actions` | Action 脚本（触发器、脚本内容、执行统计） |
+| `action_execution_logs` | Action 执行日志 |
+| `login_events` | 登录事件分析 |
+| `security_alerts` | 安全告警（暴力破解、异地登录等） |
+| `linked_identities` | 外部身份链接（社交登录） |
+| `webauthn_credentials` | WebAuthn/Passkey 凭证 |
+| `system_settings` | 系统配置（AES-GCM 加密存储） |
+| `tenant_services` | 租户-服务启用关系 |
+| `enterprise_sso_connectors` | 企业 SSO 连接器（SAML/OIDC） |
+
 ## 6. API 设计
 
-### 6.1 REST API (auth9-portal 使用)
+### 6.1 REST API
 
-| 模块 | 端点 | 方法 | 描述 |
-|------|------|------|------|
-| Auth | `/api/v1/auth/login` | POST | OIDC 登录入口 |
-| Auth | `/api/v1/auth/callback` | GET | OIDC 回调 |
-| Auth | `/api/v1/auth/logout` | POST | 登出 |
-| Tenant | `/api/v1/tenants` | GET/POST | 租户列表/创建 |
-| Tenant | `/api/v1/tenants/{id}` | GET/PUT/DELETE | 租户详情/更新/禁用 |
-| User | `/api/v1/users` | GET/POST | 用户列表/创建 |
-| User | `/api/v1/users/{id}` | GET/PUT | 用户详情/更新 |
-| User | `/api/v1/users/{id}/tenants` | GET/POST | 用户租户关系 |
-| Service | `/api/v1/services` | GET/POST | 服务列表/注册 |
-| Service | `/api/v1/services/{id}` | GET/PUT/DELETE | 服务详情 |
-| Role | `/api/v1/services/{id}/roles` | GET/POST | 角色管理 |
-| RBAC | `/api/v1/rbac/assign` | POST | 分配角色 |
-| Audit | `/api/v1/audit-logs` | GET | 审计日志查询 |
+按 6 个领域组织，以下为主要端点（非完整列表）：
+
+#### Identity 域
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/auth/authorize` | GET | OIDC 授权入口 |
+| `/api/v1/auth/callback` | GET | OIDC 回调 |
+| `/api/v1/auth/token` | POST | Token 端点 |
+| `/api/v1/auth/logout` | GET/POST | 登出 |
+| `/api/v1/auth/tenant-token` | POST | Token Exchange (Identity → Tenant Access) |
+| `/api/v1/auth/userinfo` | GET | 用户信息 |
+| `/api/v1/auth/forgot-password` | POST | 忘记密码 |
+| `/api/v1/auth/reset-password` | POST | 重置密码 |
+| `/api/v1/auth/webauthn/authenticate/*` | POST | WebAuthn 认证 |
+| `/api/v1/users/me/passkeys` | GET/POST/DELETE | Passkey 管理 |
+| `/api/v1/users/me/sessions` | GET/DELETE | 会话管理 |
+| `/api/v1/identity-providers` | CRUD | 身份提供商管理 |
+
+#### Tenant Access 域
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/tenants` | GET/POST | 租户列表/创建 |
+| `/api/v1/tenants/{id}` | GET/PUT/DELETE | 租户详情/更新/删除 |
+| `/api/v1/users` | GET/POST | 用户列表/创建 |
+| `/api/v1/users/{id}` | GET/PUT/DELETE | 用户详情/更新/删除 |
+| `/api/v1/users/{id}/tenants` | GET/POST | 用户-租户关联 |
+| `/api/v1/tenants/{id}/invitations` | GET/POST | 邀请管理 |
+| `/api/v1/tenants/{id}/sso/connectors` | CRUD | 租户 SSO 连接器 |
+
+#### Authorization 域
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/services` | GET/POST | 服务列表/注册 |
+| `/api/v1/services/{id}` | GET/PUT/DELETE | 服务详情 |
+| `/api/v1/services/{id}/clients` | GET/POST | 客户端管理 |
+| `/api/v1/roles` | POST | 创建角色 |
+| `/api/v1/roles/{id}` | GET/PUT/DELETE | 角色管理 |
+| `/api/v1/permissions` | POST | 创建权限 |
+| `/api/v1/rbac/assign` | POST | 分配角色 |
+| `/api/v1/tenants/{id}/services` | GET/POST | 租户-服务关联 |
+
+#### Integration 域
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/tenants/{id}/webhooks` | CRUD | Webhook 管理 |
+| `/api/v1/tenants/{id}/actions` | CRUD | Action 管理 |
+| `/api/v1/tenants/{id}/actions/batch` | POST | Action 批量操作 |
+| `/api/v1/tenants/{id}/actions/{id}/test` | POST | 测试 Action 执行 |
+| `/api/v1/actions/triggers` | GET | 获取可用触发器 |
+
+#### Platform 域
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/system/email` | GET/PUT | 邮件配置 |
+| `/api/v1/system/email-templates` | GET | 邮件模板管理 |
+| `/api/v1/system/branding` | GET/PUT | 品牌配置 |
+| `/api/v1/public/branding` | GET | 公开品牌信息 |
+
+#### Security & Observability 域
+| 端点 | 方法 | 描述 |
+|------|------|------|
+| `/api/v1/audit-logs` | GET | 审计日志查询 |
+| `/api/v1/analytics/login-stats` | GET | 登录统计 |
+| `/api/v1/analytics/login-events` | GET | 登录事件 |
+| `/api/v1/analytics/daily-trend` | GET | 每日趋势 |
+| `/api/v1/security/alerts` | GET | 安全告警 |
+| `/health` | GET | 健康检查 |
+| `/ready` | GET | 就绪检查 |
 
 ### 6.2 gRPC API (服务间调用)
 
@@ -397,11 +470,14 @@ flowchart TB
 # 单元测试 (快速)
 cargo test --lib
 
-# 集成测试 (需要 Docker)
+# 集成测试 (零外部依赖，mockall + wiremock)
 cargo test --test '*'
 
-# 全部测试 + 覆盖率
-cargo llvm-cov --html
+# 全部测试
+cargo test
+
+# 覆盖率报告
+make coverage-html
 ```
 
 ## 9. 性能优化策略

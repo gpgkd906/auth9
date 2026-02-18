@@ -1,10 +1,11 @@
 # Auth9 Actions System - 实施状态报告
 
 生成时间: 2026-02-12
+**最后更新**: 2026-02-19
 
 ## Phase 4: 增强 REST API ✅ **已完成**
 
-### API Handlers (src/api/action.rs) - **100% 完成**
+### API Handlers - **100% 完成**
 
 #### 核心 CRUD API ✅
 | 端点 | 方法 | 状态 | 备注 |
@@ -19,10 +20,10 @@
 | 端点 | 方法 | 状态 | 备注 |
 |------|------|------|------|
 | `/api/v1/tenants/{tenant_id}/actions/batch` | POST | ✅ 已实现 | 批量创建/更新 |
-| `/api/v1/tenants/{tenant_id}/actions/{id}/test` | POST | ⚠️ 受限实现 | 受 axum/tonic 冲突限制 |
+| `/api/v1/tenants/{tenant_id}/actions/{id}/test` | POST | ✅ 已实现 | 测试 Action 脚本执行 |
 | `/api/v1/tenants/{tenant_id}/actions/logs` | GET | ✅ 已实现 | 全局日志查询 |
 | `/api/v1/tenants/{tenant_id}/actions/{id}/stats` | GET | ✅ 已实现 | Action 统计 |
-| `/api/v1/triggers` | GET | ✅ 已实现 | 获取所有可用触发器 |
+| `/api/v1/actions/triggers` | GET | ✅ 已实现 | 获取所有可用触发器 |
 
 #### 功能特性
 
@@ -42,14 +43,12 @@
 - 平均执行时间 (avg_duration_ms)
 - 最近24小时执行数 (last_24h_count)
 
-**测试端点** ⚠️
-- 基础设施已实现
-- 受 tonic 0.12 / axum 0.8 版本冲突限制
-- 参考：`docs/debt/001-action-test-endpoint-axum-tonic-conflict.md`
+**测试端点** ✅
+- 完整实现，支持 Action 脚本测试执行
+- 构造模拟上下文并在 V8 沙箱中执行
 
-### Service 层 (src/service/action.rs) - **100% 完成**
+### Service 层 - **100% 完成**
 
-#### 核心功能 ✅
 ```rust
 pub struct ActionService<R: ActionRepository> {
     action_repo: Arc<R>,
@@ -68,6 +67,7 @@ pub struct ActionService<R: ActionRepository> {
 - ✅ `test()` - 测试 Action（调用 ActionEngine）
 - ✅ `query_logs()` - 日志查询
 - ✅ `get_stats()` - 统计信息
+- ✅ `execute_trigger()` - 执行指定触发器的 Actions
 
 #### 验证机制 ✅
 - ✅ 输入验证 (Validate trait)
@@ -75,29 +75,6 @@ pub struct ActionService<R: ActionRepository> {
 - ✅ 脚本编译验证
 - ✅ 重复名称检查（同 tenant + trigger）
 - ✅ 租户所有权验证
-
-### 路由注册 (src/server/mod.rs) - **100% 完成**
-
-```rust
-// Line 1331-1357
-.route("/api/v1/tenants/:tenant_id/actions",
-    get(api::action::list_actions::<S>)
-    .post(api::action::create_action::<S>))
-.route("/api/v1/tenants/:tenant_id/actions/:action_id",
-    get(api::action::get_action::<S>)
-    .patch(api::action::update_action::<S>)
-    .delete(api::action::delete_action::<S>))
-.route("/api/v1/tenants/:tenant_id/actions/batch",
-    post(api::action::batch_upsert_actions::<S>))
-.route("/api/v1/tenants/:tenant_id/actions/:action_id/test",
-    post(api::action::test_action::<S>))
-.route("/api/v1/tenants/:tenant_id/actions/:action_id/stats",
-    get(api::action::get_action_stats::<S>))
-.route("/api/v1/tenants/:tenant_id/actions/logs",
-    get(api::action::query_action_logs::<S>))
-.route("/api/v1/triggers",
-    get(api::action::get_triggers::<S>))
-```
 
 ### Phase 4 总结
 
@@ -107,156 +84,92 @@ pub struct ActionService<R: ActionRepository> {
 | 批量操作 API | ✅ 完成 | 100% |
 | 日志查询 API | ✅ 完成 | 100% |
 | 统计 API | ✅ 完成 | 100% |
-| 测试端点 | ⚠️ 受限 | 50% (基础设施完成，受依赖冲突限制) |
+| 测试端点 | ✅ 完成 | 100% |
 | 路由注册 | ✅ 完成 | 100% |
 | Service 层 | ✅ 完成 | 100% |
-| **总体** | **✅ 基本完成** | **~95%** |
+| **总体** | **✅ 完成** | **100%** |
 
 ---
 
-## Phase 6: TypeScript SDK (@auth9/core) ❌ **未实现**
+## Phase 5: Portal UI ✅ **已完成**
 
-### 当前状态
+Portal 包含完整的 Actions 管理界面：
 
-SDK 项目存在但 **不包含 Actions 支持**：
+| 页面 | 路由文件 | 功能 |
+|------|---------|------|
+| Actions 列表 | `dashboard.tenants.$tenantId.actions._index.tsx` | 列表、筛选、启用/禁用、删除 |
+| 创建 Action | `dashboard.tenants.$tenantId.actions.new.tsx` | 新建 Action，脚本编辑器 |
+| Action 详情 | `dashboard.tenants.$tenantId.actions.$actionId._index.tsx` | 查看/编辑、执行统计、日志 |
 
-```
-sdk/
-├── packages/
-│   ├── core/          # @auth9/core - 基础 SDK
-│   │   ├── src/
-│   │   │   ├── types/
-│   │   │   │   ├── analytics.ts
-│   │   │   │   ├── claims.ts
-│   │   │   │   ├── invitation.ts
-│   │   │   │   ├── rbac.ts
-│   │   │   │   ├── service.ts
-│   │   │   │   ├── tenant.ts
-│   │   │   │   ├── user.ts
-│   │   │   │   ├── webhook.ts
-│   │   │   │   └── ❌ action.ts (不存在)
-│   │   │   ├── http-client.ts
-│   │   │   ├── errors.ts
-│   │   │   └── utils.ts
-│   └── node/          # @auth9/node - Node.js 专用
-│       └── (类似结构，无 Actions)
-```
+---
 
-### 需要实现的内容
+## Phase 6: TypeScript SDK ✅ **已完成**
 
-#### 1. 类型定义 (packages/core/src/types/action.ts)
+**实施时间**: 2026-02-12
+**实际工作量**: ~1.5 小时
 
-需要创建完整的 TypeScript 类型定义，包括：
-- `Action` - Action 实体
-- `CreateActionInput` / `UpdateActionInput` - CRUD 输入
-- `ActionContext` - 执行上下文
-- `TestActionResponse` - 测试响应
-- `ActionExecution` - 执行记录
-- `ActionStats` - 统计信息
-- `UpsertActionInput` / `BatchUpsertResponse` - 批量操作
-- `LogQueryFilter` - 日志查询过滤器
-- `ActionTrigger` - 触发器枚举
+### 已实现内容
 
-#### 2. HTTP 客户端资源类 (packages/core/src/resources/actions.ts)
+| 任务 | 状态 | 说明 |
+|------|------|------|
+| 类型定义 (`action.ts`) | ✅ 完成 | 15 个类型，134 行 |
+| HTTP 客户端 PATCH 方法 | ✅ 完成 | `http-client.ts` |
+| SDK 导出 | ✅ 完成 | `index.ts` 新增 18 行 |
+| 单元测试 | ✅ 完成 | 11 个测试，全部通过 |
+| 文档 (ACTIONS.md + README) | ✅ 完成 | 702 行文档 |
+| Portal 集成验证 | ✅ 完成 | Actions 列表页已迁移到 SDK |
+| **总体** | **✅ 完成** | **100%** |
 
-需要创建 `ActionsResource` 类，提供以下方法：
-- `create()` - 创建 Action
-- `list()` - 列表查询
-- `get()` - 获取单个 Action
-- `update()` - 更新 Action
-- `delete()` - 删除 Action
-- `batchUpsert()` - 批量创建/更新
-- `test()` - 测试 Action
-- `queryLogs()` - 查询执行日志
-- `getStats()` - 获取统计信息
-- `getTriggers()` - 获取所有可用触发器
-
-#### 3. 单元测试
-
-为所有 API 方法编写单元测试，使用 `vitest` + `fetch` mocking。
-
-#### 4. 文档和示例
-
-提供完整的使用示例和 API 文档。
-
-### Phase 6 实施工作量评估
-
-| 任务 | 预计时间 | 优先级 |
-|------|---------|--------|
-| 创建类型定义 (action.ts) | 1 小时 | P0 |
-| 实现 ActionsResource 类 | 2 小时 | P0 |
-| 编写单元测试 | 2 小时 | P1 |
-| 更新 SDK 导出 (index.ts) | 0.5 小时 | P0 |
-| 文档和示例代码 | 1 小时 | P1 |
-| **总计** | **~6.5 小时** | - |
-
-### Phase 6 总结
-
-| 项目 | 状态 | 完成度 |
-|------|------|--------|
-| 类型定义 | ❌ 未开始 | 0% |
-| ActionsResource 类 | ❌ 未开始 | 0% |
-| 单元测试 | ❌ 未开始 | 0% |
-| 文档 | ❌ 未开始 | 0% |
-| **总体** | **❌ 未实现** | **0%** |
+详见 [sdk-actions-implementation.md](./sdk-actions-implementation.md) 和 [sdk-portal-integration.md](./sdk-portal-integration.md)。
 
 ---
 
 ## 总体进度总结
 
-### 已完成的 Phases
+### 所有 Phases
 
 | Phase | 名称 | 完成度 | 状态 |
 |-------|------|--------|------|
 | Phase 1 | 数据模型与 Repository 层 | 100% | ✅ 完成 |
 | Phase 2 | ActionEngine 核心逻辑 | 100% | ✅ 完成 |
-| Phase 3 | 集成到认证流程 | 67% | ⚠️ 4/6 触发器已实现 |
-| **Phase 4** | **增强 REST API** | **~95%** | **✅ 基本完成** |
-| Phase 5 | 简化 Portal UI | 未知 | 🔍 需检查 |
-| **Phase 6** | **TypeScript SDK** | **0%** | **❌ 未实现** |
+| Phase 3 | 集成到认证流程 | 67% | ⚠️ 4/6 触发器已集成 |
+| Phase 4 | 增强 REST API | 100% | ✅ 完成 |
+| Phase 5 | Portal UI | 100% | ✅ 完成 |
+| Phase 6 | TypeScript SDK | 100% | ✅ 完成 |
 
-### 已实现的触发器 (Phase 3)
+### 已集成的触发器 (Phase 3)
 
-| 触发器 | 状态 | 测试 | 备注 |
-|--------|------|------|------|
-| PostLogin | ✅ 已实现 | ✅ 已测试 | 修改 JWT claims |
-| PreUserRegistration | ✅ 已实现 | ✅ 已测试 | 可阻止注册 |
-| PostUserRegistration | ✅ 已实现 | ✅ 已测试 | 注册后执行 |
-| PreTokenRefresh | ✅ 已实现 | ✅ 已测试 | 可阻止刷新 |
-| PostChangePassword | ⚠️ 基础设施已添加 | ❌ 未测试 | 待多租户上下文方案 |
-| PostEmailVerification | ❌ 未实现 | ❌ 未测试 | 依赖 Email 验证功能 |
+| 触发器 | 集成状态 | 调用位置 | 备注 |
+|--------|---------|---------|------|
+| PostLogin | ✅ 已集成 | `keycloak_oidc.rs`, `auth.rs` | 修改 JWT claims |
+| PreUserRegistration | ✅ 已集成 | `keycloak_oidc.rs` | 可阻止注册 |
+| PostUserRegistration | ✅ 已集成 | `keycloak_oidc.rs` | 注册后执行 |
+| PreTokenRefresh | ✅ 已集成 | `keycloak_oidc.rs` | 可阻止刷新 |
+| PostChangePassword | ⚠️ 基础设施已添加 | `password.rs` (字段已保留) | `action_engine` 字段存在但 `execute_trigger` 未调用 |
+| PostEmailVerification | ❌ 未集成 | — | 依赖 Email 验证功能实现 |
 
-### 关键发现
+### ActionEngine 功能矩阵
 
-1. **Phase 4 几乎完成** ✅
-   - 所有核心 API 已实现
-   - 批量操作、日志查询、统计功能全部可用
-   - 仅测试端点受 axum/tonic 冲突限制（已有技术负债文档）
-
-2. **Phase 6 完全未实现** ❌
-   - 现有 SDK 不包含任何 Actions 相关代码
-   - 需要从零开始实现
-   - 预计工作量 6-7 小时
-
-3. **技术负债**
-   - Test endpoint 受依赖版本冲突限制
-   - 详见：`docs/debt/001-action-test-endpoint-axum-tonic-conflict.md`
+| 功能 | 状态 | 说明 |
+|------|------|------|
+| V8 隔离沙箱 | ✅ | deno_core，每次执行独立 V8 上下文 |
+| Async/Await | ✅ | 完整异步支持 |
+| TypeScript 编译 | ✅ | 自动转译为 JavaScript |
+| 超时控制 | ✅ | 默认 3s，范围 1-30s |
+| 脚本 LRU 缓存 | ✅ | 256 条目缓存，避免重复编译 |
+| fetch() HTTP 请求 | ✅ | 受域名白名单限制 |
+| 私有 IP 阻断 | ✅ | SSRF 防护 |
+| 请求数限制 | ✅ | 默认 5 次/执行 |
+| V8 堆内存限制 | ✅ | 默认 64MB，near-heap-limit 回调终止 |
+| console.log 捕获 | ✅ | 执行日志记录 |
+| setTimeout | ✅ | 异步定时器支持 |
 
 ### 推荐下一步
 
-**Option 1: 完成 Phase 6 (TypeScript SDK)** ⭐ 推荐
-- 时间成本低（~6 小时）
-- 对 AI Agent 场景至关重要
-- 可以快速提供给用户使用
-- 完成后 AI Agents 可以通过 SDK 自动管理 Actions
-
-**Option 2: 完成 Phase 3 剩余触发器**
-- PostChangePassword (基础设施已添加，需明确多租户上下文处理方案)
-- PostEmailVerification (依赖 Email 验证功能，需先实现 Email 验证)
-
-**Option 3: 检查并实施 Phase 5 (Portal UI)**
-- 检查当前 Portal 实现状态
-- 补充缺失的 Actions 管理 UI 功能
+1. **完成 PostChangePassword 触发器集成** — PasswordService 中 `action_engine` 字段已保留，需添加 `execute_trigger` 调用
+2. **实现 PostEmailVerification 触发器** — 依赖邮件验证功能完成
+3. **发布 SDK 到 npm** — 版本 0.2.0
+4. **Portal 其余页面迁移到 SDK** — Actions 创建/编辑页
 
 ---
 
@@ -323,5 +236,5 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/stats 
 ---
 
 **报告生成时间**: 2026-02-12
-**最后更新**: 2026-02-12
-**状态**: 活跃开发中
+**最后更新**: 2026-02-19
+**状态**: Phase 3 触发器集成待完善，其余已完成

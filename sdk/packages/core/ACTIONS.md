@@ -489,4 +489,3 @@ try {
 
 - Read the [Actions System Plan](../../docs/plans/actions-system.md)
 - Check [API Documentation](../../docs/actions-implementation-status.md)
-- See [Technical Debt](../../docs/debt/001-action-test-endpoint-axum-tonic-conflict.md) for known limitations

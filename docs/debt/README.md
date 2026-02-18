@@ -6,7 +6,7 @@
 
 | ID | 标题 | 状态 | 优先级 | 创建日期 | 预计修复 |
 |----|------|------|--------|----------|----------|
-| [001](./001-action-test-endpoint-axum-tonic-conflict.md) | Action Test Endpoint - axum/tonic 版本冲突 | 🔴 Active | Medium | 2026-02-12 | 1-2 天（待上游更新） |
+| ~~001~~ | ~~Action Test Endpoint - axum/tonic 版本冲突~~ | 🟢 Resolved | — | 2026-02-12 | 已于 2026-02-19 解决（升级 OpenTelemetry 0.27→0.31） |
 
 ---
 

@@ -45,10 +45,10 @@ metrics = "0.24"
 metrics-exporter-prometheus = "0.16"
 
 # OpenTelemetry
-opentelemetry = { version = "0.27", features = ["trace"] }
-opentelemetry_sdk = { version = "0.27", features = ["rt-tokio"] }
-opentelemetry-otlp = { version = "0.27", features = ["tonic"] }
-tracing-opentelemetry = "0.28"
+opentelemetry = { version = "0.31", features = ["trace"] }
+opentelemetry_sdk = { version = "0.31", features = ["rt-tokio"] }
+opentelemetry-otlp = { version = "0.31", features = ["grpc-tonic"] }
+tracing-opentelemetry = "0.32"
 
 # HTTP Client (for Keycloak)
 reqwest = { version = "0.12", features = ["json", "rustls-tls"], default-features = false }

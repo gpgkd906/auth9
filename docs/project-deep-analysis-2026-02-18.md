@@ -1,7 +1,8 @@
 # Auth9 项目深度分析报告
 
-**生成日期**: 2026-02-18  
-**分析范围**: auth9-core (Rust 后端), auth9-portal (React Router 7 前端), SDK, 部署配置, 安全文档  
+**生成日期**: 2026-02-18
+**最后更新**: 2026-02-19
+**分析范围**: auth9-core (Rust 后端), auth9-portal (React Router 7 前端), SDK, 部署配置, 安全文档
 **代码规模**: 后端 ~93,700 行 Rust | 前端 ~17,400 行 TypeScript | 1,145 个测试用例 | 27 个数据库迁移 | 187 个安全测试场景
 
 ---
@@ -23,13 +24,13 @@
 | **Webhook 集成** | ✅ 完成 | 100% | 事件推送、HMAC 签名验证 |
 | **审计日志** | ✅ 完成 | 100% | 全操作审计、actor/resource 追踪 |
 | **分析与监控** | ✅ 完成 | 90% | 登录事件追踪、安全告警检测 |
-| **Action Engine** | ⚠️ 基本完成 | ~85% | V8 运行时脚本引擎，4/6 触发器已实现 |
+| **Action Engine** | ✅ 基本完成 | ~92% | V8 运行时、REST API、Portal UI、SDK 全部完成；4/6 触发器已集成到认证流程 |
 | **Enterprise SSO** | ⚠️ 新增 | 60% | SAML/OIDC IdP 联邦，数据模型已建立 |
 | **品牌定制** | ✅ 完成 | 100% | 租户级品牌设置、Keycloak 主题同步 |
 | **邮件系统** | ✅ 完成 | 100% | SMTP + AWS SES + Oracle，模板引擎 |
 | **身份提供商** | ✅ 完成 | 90% | 社交登录、账号链接 |
 | **系统设置** | ✅ 完成 | 100% | 加密存储、Keycloak 同步 |
-| **SDK** | ⚠️ 部分完成 | 70% | Core + Node 两个包，Actions 支持缺失 |
+| **SDK** | ⚠️ 部分完成 | 80% | Core + Node 两个包，Actions 类型和测试已完成；缺少其他资源的 Resource 类 |
 
 ### 1.2 Portal UI 页面覆盖
 
@@ -37,7 +38,7 @@
 |-----|------|------|
 | 登录/注册/忘记密码 | ✅ | 完整认证流程 |
 | Dashboard 总览 | ✅ | 统计看板 |
-| 租户管理（含详情/Actions/SSO/邀请/Webhooks） | ✅ | 47 个路由文件 |
+| 租户管理（含详情/Actions/SSO/邀请/Webhooks） | ✅ | 48 个路由文件 |
 | 用户管理 | ✅ | 用户列表、详情 |
 | 服务管理 | ✅ | 服务列表/详情 |
 | 角色管理 | ✅ | 角色 CRUD |
@@ -123,10 +124,12 @@ Service → Permission → RolePermission ← Role
 ### 2.5 Action Engine 流程 ✅ 创新
 
 使用 **deno_core (V8)** 运行时执行用户自定义脚本：
-- 6 个触发器点位（PostLogin, PreUserRegistration 等）
-- 脚本沙箱执行，可配置超时（默认 3000ms）
-- 限制 `fetch()` 的目标域名（ACTION_ALLOWED_DOMAINS）
+- 6 个触发器点位（PostLogin, PreUserRegistration 等），4/6 已集成到认证流程
+- 脚本沙箱执行，可配置超时（默认 3000ms，范围 1-30s）
+- V8 堆内存限制 64MB + near-heap-limit 回调终止
+- `fetch()` 受域名白名单 + 私有 IP 阻断 + 请求数限制（默认 5 次/执行）
 - 批量操作 API 对 AI Agent 友好
+- REST API 完整（10 个端点）、Portal UI 完整、SDK 类型完整
 
 ### 2.6 综合评分: **8.5/10**
 
@@ -337,7 +340,7 @@ Structured JSON Logging → Loki
 
 | 关注项 | 影响 | 建议 |
 |--------|------|------|
-| **Action Engine V8 启动开销** | 🟠 中 | 每次脚本执行需要 V8 isolate 初始化，考虑 LRU 缓存（已有 `lru` 依赖） |
+| **Action Engine V8 启动开销** | 🟡 低 | V8 runtime 已实现 thread-local 复用 + LRU 脚本缓存（256 条目），OOM/超时后丢弃重建 |
 | **Keycloak Admin API 延迟** | 🟠 中 | Keycloak 操作是同步 HTTP 调用，用户同步可能有延迟 |
 | **Redis 单点** | 🟠 中 | docker-compose 为单实例，生产需要 Cluster |
 | **无连接池预热** | 🟡 低 | 冷启动时首批请求可能较慢 |
@@ -366,10 +369,9 @@ auth9-portal: 2-6 副本
 
 | ID | 标题 | 状态 | 优先级 |
 |----|------|------|--------|
-| 001 | Action Test Endpoint - axum/tonic 版本冲突 | 🔴 Active | Medium |
+| ~~001~~ | ~~Action Test Endpoint - axum/tonic 版本冲突~~ | 🟢 Resolved | — |
 
-- tonic 0.13 与 axum 0.8 的集成冲突导致 Action 测试端点受限
-- 已有详细的技术负债文档和审查流程
+- 已通过升级 OpenTelemetry 0.27→0.31 解决（消除 opentelemetry-otlp 间接依赖的 tonic 0.12.3 → axum 0.7.9）
 
 ### 6.2 代码层面技术负债
 
@@ -379,7 +381,7 @@ auth9-portal: 2-6 副本
 | **服务类型爆炸** | `AppState` 包含 20+ 个 service 字段，`HasServices` trait 有 13 个关联类型，泛型签名极其复杂 | 🟠 中 |
 | **路由文件过长** | `server/mod.rs` 超过 1,235 行，包含所有路由和 AppState 定义 | 🟡 低 |
 | **前端路由命名混乱** | `dashboard.tenants.$tenantId.actions.$actionId._index.tsx` 等超长文件名 | 🟡 低 |
-| **SDK Actions 缺失** | Phase 6 (TypeScript SDK Actions 支持) 完全未实现 (0%) | 🟠 中 |
+| **SDK Resource 类缺失** | SDK 有类型定义和 HTTP 客户端，但缺少 Users/Tenants/Services 等 Resource 封装类 | 🟡 低 |
 | **Config 模块过大** | `config/mod.rs` 1,858 行，包含所有配置类型 | 🟡 低 |
 
 ### 6.3 架构层面技术负债
@@ -499,7 +501,7 @@ Auth9 拥有**完整的技术负债管理流程**：
 | 短板 | 竞品优势 | 建议 |
 |------|---------|------|
 | **无 Organization** | Auth0, Clerk, Zitadel 有完整 Org 管理 | P0 优先级开发 |
-| **SDK 生态弱** | Auth0 支持 30+ 语言 SDK | 优先完成 Actions SDK |
+| **SDK 生态弱** | Auth0 支持 30+ 语言 SDK | 扩展 SDK Resource 类，发布 npm |
 | **社区生态** | Keycloak, Zitadel 有活跃社区 | 建立 Discord/论坛 |
 | **无 SaaS 选项** | Clerk, Auth0 提供托管版 | 考虑 Cloud 版本 |
 | **文档国际化** | 仅中文文档 | 英文文档对国际化关键 |
@@ -527,10 +529,11 @@ Auth9 是一个**架构水平极高、安全意识领先**的自托管 IAM 解�
 
 **优先改进项**:
 1. 🔴 **Organization 层级管理** — 企业 B2B 场景的刚需
-2. 🔴 **完成 SDK Actions 支持** — 已有基础，工作量 ~6 小时
+2. 🟠 **完成 Action Engine 剩余触发器集成** — PostChangePassword（基础设施已就绪）、PostEmailVerification（依赖邮件验证功能）
 3. 🟠 **OpenAPI 文档生成** — 开发者体验的基石
 4. 🟠 **完成 Domain 重构** — 消除兼容层残留
 5. 🟡 **英文文档** — 国际化推广必要条件
+6. 🟡 **SDK Resource 类扩展** — 为 Users/Tenants/Services 等添加封装类并发布到 npm
 
 ---
 
