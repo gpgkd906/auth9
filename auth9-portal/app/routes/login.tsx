@@ -83,12 +83,14 @@ export async function action({ request }: ActionFunctionArgs) {
 
     const session = {
       accessToken,
+      identityAccessToken: accessToken,
       refreshToken: undefined,
       idToken: undefined,
       expiresAt: Date.now() + (expiresIn * 1000),
+      identityExpiresAt: Date.now() + (expiresIn * 1000),
     };
 
-    return redirect("/dashboard", {
+    return redirect("/tenant/select", {
       headers: {
         "Set-Cookie": await commitSession(session),
       },

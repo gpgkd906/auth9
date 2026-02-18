@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { ThemeToggle } from "~/components/ThemeToggle";
-import { requireAuthWithUpdate, commitSession } from "~/services/session.server";
+import { requireAuthWithUpdate, commitSession, setActiveTenant } from "~/services/session.server";
 import { organizationApi, userApi } from "~/services/api";
 
 export const meta: MetaFunction = () => {
@@ -41,6 +41,10 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
 export async function action({ request }: ActionFunctionArgs) {
   const { session } = await requireAuthWithUpdate(request);
+  const identityToken = session.identityAccessToken || session.accessToken;
+  if (!identityToken) {
+    throw redirect("/login");
+  }
   const formData = await request.formData();
 
   const name = (formData.get("name") as string || "").trim();
@@ -54,22 +58,22 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     const result = await organizationApi.create(
       { name, slug, domain },
-      session.accessToken
+      identityToken
     );
 
     const org = result.data.organization;
 
     // Update session with new active tenant
-    const updatedSession = { ...session, activeTenantId: org.id };
-
     if (org.status === "pending") {
+      const updatedSession = { ...session, activeTenantId: org.id };
       return redirect("/onboard/pending", {
         headers: { "Set-Cookie": await commitSession(updatedSession) },
       });
     }
 
+    const tenantCookie = await setActiveTenant(request, org.id);
     return redirect("/dashboard", {
-      headers: { "Set-Cookie": await commitSession(updatedSession) },
+      headers: { "Set-Cookie": tenantCookie },
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Failed to create organization";

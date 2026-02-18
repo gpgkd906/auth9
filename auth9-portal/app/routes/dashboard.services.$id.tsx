@@ -324,7 +324,7 @@ const grpc = new Auth9GrpcClient({
   apiKey: process.env.AUTH9_GRPC_API_KEY!,
 });
 
-// Exchange identity token for tenant access token
+// Exchange identity token first, then use tenant access token for downstream calls
 const { accessToken } = await grpc.exchangeToken({
   identityToken: userIdToken,
   tenantId: 'tenant-uuid',

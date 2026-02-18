@@ -1,12 +1,7 @@
 import { createCookie, redirect } from "react-router";
+import { authApi } from "~/services/api";
 
-// Helper to determine if we are in production
 const isProduction = process.env.NODE_ENV === "production";
-
-// Create the session cookie
-// Session lifetime in seconds (8 hours).
-// Using an explicit maxAge ensures the cookie expires even when browsers
-// restore session cookies across restarts ("continue where you left off").
 const SESSION_MAX_AGE = 8 * 60 * 60;
 
 export const NO_STORE_HEADERS: HeadersInit = {
@@ -25,21 +20,24 @@ export const sessionCookie = createCookie("auth9_session", {
 });
 
 export interface SessionData {
-  accessToken: string;
+  accessToken?: string;
+  identityAccessToken?: string;
+  tenantAccessToken?: string;
   refreshToken?: string;
   idToken?: string;
   expiresAt?: number;
+  identityExpiresAt?: number;
+  tenantExpiresAt?: number;
   activeTenantId?: string;
 }
 
-// OAuth state cookie for CSRF protection
 export const oauthStateCookie = createCookie("oauth_state", {
   secrets: [process.env.SESSION_SECRET || "default-secret-change-me"],
   path: "/",
   sameSite: "lax",
   httpOnly: true,
   secure: isProduction,
-  maxAge: 5 * 60, // 5 minutes
+  maxAge: 5 * 60,
 });
 
 export async function serializeOAuthState(state: string): Promise<string> {
@@ -56,50 +54,55 @@ export async function clearOAuthStateCookie(): Promise<string> {
   return oauthStateCookie.serialize("", { maxAge: 0 });
 }
 
+function normalizeSession(session: SessionData | null): SessionData | null {
+  if (!session) return null;
+  const identityAccessToken = session.identityAccessToken || session.accessToken;
+  const identityExpiresAt = session.identityExpiresAt || session.expiresAt;
+  return {
+    ...session,
+    identityAccessToken,
+    accessToken: identityAccessToken,
+    identityExpiresAt,
+    expiresAt: identityExpiresAt,
+  };
+}
+
 export async function getSession(request: Request): Promise<SessionData | null> {
   const cookieHeader = request.headers.get("Cookie");
-  return (await sessionCookie.parse(cookieHeader)) || null;
+  const raw = (await sessionCookie.parse(cookieHeader)) || null;
+  return normalizeSession(raw);
 }
 
 export async function commitSession(session: SessionData) {
-  return sessionCookie.serialize(session);
+  const normalized = normalizeSession(session) || session;
+  return sessionCookie.serialize(normalized);
 }
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-export async function destroySession(session: SessionData) {
+export async function destroySession(_session: SessionData) {
   return sessionCookie.serialize("", { maxAge: 0 });
 }
 
-// Check if token is expired or expiring soon (within 60 seconds)
-function isTokenExpired(session: SessionData): boolean {
-  if (!session.expiresAt) return true;
-  return Date.now() > (session.expiresAt - 60000);
+function isTokenExpired(expiresAt?: number): boolean {
+  if (!expiresAt) return true;
+  return Date.now() > expiresAt - 60000;
 }
 
-// In-memory refresh lock to prevent concurrent refresh requests (per Node.js instance)
 const refreshLocks = new Map<string, Promise<SessionData | null>>();
 
-async function refreshAccessToken(session: SessionData): Promise<SessionData | null> {
+async function refreshIdentityToken(session: SessionData): Promise<SessionData | null> {
   if (!session.refreshToken) return null;
+  const lockKey = session.refreshToken || session.identityAccessToken || session.accessToken || "";
 
-  const lockKey = session.refreshToken || session.accessToken;
-
-  // Check if refresh already in progress for this token
   if (refreshLocks.has(lockKey)) {
-    console.log("Refresh already in progress, awaiting...");
     return await refreshLocks.get(lockKey)!;
   }
 
   const refreshPromise = (async () => {
     try {
       const tokenUrl = `${process.env.AUTH9_CORE_URL || "http://localhost:8080"}/api/v1/auth/token`;
-
-      // Refresh Token Exchange
       const response = await fetch(tokenUrl, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           grant_type: "refresh_token",
           client_id: process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal",
@@ -107,22 +110,21 @@ async function refreshAccessToken(session: SessionData): Promise<SessionData | n
         }),
       });
 
-      if (!response.ok) {
-        console.error("Failed to refresh token:", response.status);
-        return null;
-      }
-
+      if (!response.ok) return null;
       const data = await response.json();
+      const identityAccessToken = data.access_token as string;
+      const identityExpiresAt = Date.now() + (data.expires_in * 1000);
 
-      // Return updated session
       return {
-        accessToken: data.access_token,
-        refreshToken: data.refresh_token || session.refreshToken, // Use new refresh token if provided, else keep old
+        ...session,
+        accessToken: identityAccessToken,
+        identityAccessToken,
+        identityExpiresAt,
+        expiresAt: identityExpiresAt,
+        refreshToken: data.refresh_token || session.refreshToken,
         idToken: data.id_token || session.idToken,
-        expiresAt: Date.now() + (data.expires_in * 1000),
       };
-    } catch (err) {
-      console.error("Refresh exception:", err);
+    } catch {
       return null;
     } finally {
       refreshLocks.delete(lockKey);
@@ -133,34 +135,70 @@ async function refreshAccessToken(session: SessionData): Promise<SessionData | n
   return await refreshPromise;
 }
 
-export async function getAccessToken(request: Request): Promise<string | null> {
-  const session = await getSession(request);
-  if (!session || !session.accessToken) return null;
+async function exchangeTenantToken(
+  session: SessionData,
+  tenantId: string
+): Promise<SessionData | null> {
+  const identityToken = session.identityAccessToken || session.accessToken;
+  if (!identityToken || !tenantId) return null;
 
-  // Check if token is expired and refresh if needed
-  if (isTokenExpired(session)) {
-    const newSession = await refreshAccessToken(session);
-    if (newSession) {
-      // Return the new token so the current request succeeds
-      // Note: This does NOT update the cookie in the browser. 
-      // The cookie will remain stale until a write occurs.
-      // Ideally, callers should handle session updates.
-      return newSession.accessToken;
-    } else {
-      // Refresh failed, token is invalid
-      return null;
-    }
+  const serviceId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+  try {
+    const data = await authApi.exchangeTenantToken(tenantId, serviceId, identityToken);
+    return {
+      ...session,
+      activeTenantId: tenantId,
+      tenantAccessToken: data.access_token,
+      tenantExpiresAt: Date.now() + (data.expires_in * 1000),
+    };
+  } catch {
+    return null;
   }
-
-  return session.accessToken;
 }
 
-/**
- * @deprecated Use requireAuthWithUpdate to properly handle token refresh.
- * This function refreshes tokens but does not update the cookie in the browser.
- */
+async function ensureIdentitySession(
+  session: SessionData
+): Promise<{ session: SessionData | null; updated: boolean }> {
+  const normalized = normalizeSession(session);
+  if (!normalized) return { session: null, updated: false };
+  if (!normalized.identityAccessToken) return { session: null, updated: false };
+  if (!isTokenExpired(normalized.identityExpiresAt)) {
+    return { session: normalized, updated: false };
+  }
+
+  const refreshed = await refreshIdentityToken(normalized);
+  return { session: refreshed, updated: !!refreshed };
+}
+
+async function ensureTenantSession(
+  session: SessionData
+): Promise<{ session: SessionData | null; updated: boolean }> {
+  if (!session.activeTenantId) {
+    return { session, updated: false };
+  }
+  if (session.tenantAccessToken && !isTokenExpired(session.tenantExpiresAt)) {
+    return { session, updated: false };
+  }
+  const exchanged = await exchangeTenantToken(session, session.activeTenantId);
+  return { session: exchanged, updated: !!exchanged };
+}
+
+export async function getAccessToken(request: Request): Promise<string | null> {
+  const session = await getSession(request);
+  if (!session) return null;
+
+  const identityResult = await ensureIdentitySession(session);
+  if (!identityResult.session) return null;
+  const tenantResult = await ensureTenantSession(identityResult.session);
+  const finalSession = tenantResult.session || identityResult.session;
+
+  if (finalSession.activeTenantId) {
+    return finalSession.tenantAccessToken || null;
+  }
+  return finalSession.identityAccessToken || null;
+}
+
 export async function requireAuth(request: Request) {
-  console.warn("requireAuth is deprecated, use requireAuthWithUpdate instead");
   const { session } = await requireAuthWithUpdate(request);
   return session;
 }
@@ -170,68 +208,96 @@ export interface SessionUpdateResult {
   headers?: HeadersInit;
 }
 
-/**
- * Get access token and return Set-Cookie header if refreshed.
- * Callers must apply returned headers to response.
- */
 export async function getAccessTokenWithUpdate(
   request: Request
 ): Promise<{ token: string | null; headers?: HeadersInit }> {
   const session = await getSession(request);
-  if (!session || !session.accessToken) {
-    return { token: null };
-  }
+  if (!session) return { token: null };
 
-  if (isTokenExpired(session)) {
-    const newSession = await refreshAccessToken(session);
-    if (newSession) {
-      return {
-        token: newSession.accessToken,
-        headers: {
-          "Set-Cookie": await commitSession(newSession),
-        },
-      };
-    } else {
-      return { token: null };
-    }
-  }
+  const identityResult = await ensureIdentitySession(session);
+  if (!identityResult.session) return { token: null };
 
-  return { token: session.accessToken };
-}
+  const tenantResult = await ensureTenantSession(identityResult.session);
+  const finalSession = tenantResult.session || identityResult.session;
+  const token = finalSession.activeTenantId
+    ? finalSession.tenantAccessToken || null
+    : finalSession.identityAccessToken || null;
 
-/**
- * Require authentication and return Set-Cookie header if refreshed.
- * Throws redirect to /login if session invalid.
- */
-export async function requireAuthWithUpdate(
-  request: Request
-): Promise<SessionUpdateResult> {
-  const session = await getSession(request);
-  if (!session || !session.accessToken) {
-    throw redirect("/login", { headers: NO_STORE_HEADERS });
-  }
-
-  if (isTokenExpired(session)) {
-    const newSession = await refreshAccessToken(session);
-    if (!newSession) {
-      throw redirect("/login", { headers: NO_STORE_HEADERS });
-    }
+  if (identityResult.updated || tenantResult.updated) {
     return {
-      session: newSession,
-      headers: {
-        "Set-Cookie": await commitSession(newSession),
-      },
+      token,
+      headers: { "Set-Cookie": await commitSession(finalSession) },
     };
   }
 
-  return { session };
+  return { token };
+}
+
+export async function requireIdentityAuthWithUpdate(
+  request: Request
+): Promise<SessionUpdateResult> {
+  const session = await getSession(request);
+  if (!session || !(session.identityAccessToken || session.accessToken)) {
+    throw redirect("/login", { headers: NO_STORE_HEADERS });
+  }
+
+  const identityResult = await ensureIdentitySession(session);
+  if (!identityResult.session) {
+    throw redirect("/login", { headers: NO_STORE_HEADERS });
+  }
+
+  if (identityResult.updated) {
+    return {
+      session: identityResult.session,
+      headers: { "Set-Cookie": await commitSession(identityResult.session) },
+    };
+  }
+
+  return { session: identityResult.session };
+}
+
+export async function requireTenantAuthWithUpdate(
+  request: Request
+): Promise<SessionUpdateResult> {
+  const identity = await requireIdentityAuthWithUpdate(request);
+  const session = identity.session;
+  if (!session.activeTenantId) {
+    throw redirect("/tenant/select", { headers: NO_STORE_HEADERS });
+  }
+
+  const tenantResult = await ensureTenantSession(session);
+  if (!tenantResult.session || !tenantResult.session.tenantAccessToken) {
+    throw redirect("/tenant/select?error=tenant_exchange_failed", {
+      headers: NO_STORE_HEADERS,
+    });
+  }
+
+  if (tenantResult.updated) {
+    return {
+      session: tenantResult.session,
+      headers: { "Set-Cookie": await commitSession(tenantResult.session) },
+    };
+  }
+
+  return identity;
+}
+
+export async function requireAuthWithUpdate(
+  request: Request
+): Promise<SessionUpdateResult> {
+  return requireIdentityAuthWithUpdate(request);
 }
 
 export async function setActiveTenant(
   request: Request,
   tenantId: string
 ): Promise<string> {
-  const session = await getSession(request);
-  if (!session) throw redirect("/login");
-  return commitSession({ ...session, activeTenantId: tenantId });
+  const { session } = await requireIdentityAuthWithUpdate(request);
+  const exchanged = await exchangeTenantToken(session, tenantId);
+  if (!exchanged) {
+    throw redirect("/tenant/select?error=tenant_exchange_failed", {
+      headers: NO_STORE_HEADERS,
+    });
+  }
+  return commitSession(exchanged);
 }

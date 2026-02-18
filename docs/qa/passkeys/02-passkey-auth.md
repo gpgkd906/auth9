@@ -17,7 +17,7 @@
 3. 用户选择 Passkey 并完成生物识别验证
 4. 前端调用 `POST /api/v1/auth/webauthn/authenticate/complete`
 5. 后端验证断言、创建 Session、签发 Identity Token
-6. 前端通过 Form POST 将 Token 存入 Session Cookie，重定向到 Dashboard
+6. 前端通过 Form POST 将 Token 存入 Session Cookie，重定向到 `/tenant/select`（单 tenant 账号可自动进入 Dashboard）
 
 签发的 Identity Token 与 Keycloak OIDC 登录签发的格式相同（含 `sub`, `email`, `name`, `sid`, `iss`, `aud` claims），后续 Token Exchange 和会话管理与 SSO 登录完全一致。
 
@@ -65,8 +65,8 @@
 
 ### 预期结果
 - 浏览器弹出系统级 Passkey 选择对话框
-- 验证成功后自动跳转到 `/dashboard`
-- Dashboard 页面正常加载，用户信息正确
+- 验证成功后跳转到 `/tenant/select` 或直接 `/dashboard`（取决于 tenant 数量）
+- 若进入 `/tenant/select`，选择 tenant 后进入 Dashboard，页面正常加载且用户信息正确
 - 用户的 Session 状态与 SSO 登录一致
 
 ### 预期数据状态
@@ -153,8 +153,9 @@ ORDER BY last_used_at DESC LIMIT 1;
 
 ### 测试操作流程
 1. 使用 Passkey 成功登录
-2. 进入 Dashboard，正常使用各功能（查看租户、用户、设置等）
-3. 检查 Token Exchange 是否正常工作
+2. 若进入 `/tenant/select`，先选择 tenant 并完成 token exchange
+3. 进入 Dashboard，正常使用各功能（查看租户、用户、设置等）
+4. 检查 Token Exchange 是否正常工作
 
 ### 预期结果
 - Passkey 登录获得的 Identity Token 可正常用于 Token Exchange
@@ -261,17 +262,26 @@ async (page) => {
   await page.waitForSelector('text=Sign in with passkey', { timeout: 5000 });
   await page.getByRole('button', { name: /Sign in with passkey/i }).click();
   // 虚拟认证器自动完成 discoverable authentication
-  await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+  await page.waitForURL(/\/(tenant\/select|dashboard)/, { timeout: 15000 });
+
+  // 多租户账号会先停在 tenant 选择页，选择后再进入 dashboard
+  if (page.url().includes('/tenant/select')) {
+    const firstTenantButton = page.locator('button').filter({ hasText: /continue|select|进入|选择/i }).first();
+    if (await firstTenantButton.count()) {
+      await firstTenantButton.click();
+      await page.waitForURL(/\/dashboard/, { timeout: 15000 });
+    }
+  }
 
   return {
     registered,
-    loginSuccess: page.url().includes('/dashboard'),
+    loginSuccess: page.url().includes('/dashboard') || page.url().includes('/tenant/select'),
     finalUrl: page.url(),
   };
 }
 ```
 
-调用完成后，调用 **`browser_snapshot`** 确认已到达 Dashboard 页面。
+调用完成后，调用 **`browser_snapshot`** 确认已到达 `/tenant/select` 或 Dashboard；若在 `/tenant/select`，执行选择后再确认 Dashboard。
 
 ### 场景 3（认证取消）— 不可自动化
 

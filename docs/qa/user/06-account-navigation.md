@@ -7,6 +7,12 @@
 
 ---
 
+## 执行说明（tenant 分流）
+
+若测试账号属于多个 tenant，登录后会先进入 `/tenant/select`。请先完成 tenant 选择与 token exchange，再执行下述 Dashboard 相关步骤。
+
+---
+
 ## 场景 1：侧边栏显示真实用户信息
 
 ### 初始状态
@@ -16,7 +22,7 @@
 验证 Dashboard 侧边栏底部显示当前登录用户的真实信息，而非硬编码数据
 
 ### 测试操作流程
-1. 登录后进入 Dashboard 任意页面
+1. 登录后若出现 `/tenant/select`，先选择 tenant；随后进入 Dashboard 任意页面
 2. 查看左侧边栏底部的用户卡片区域
 3. 确认显示内容
 

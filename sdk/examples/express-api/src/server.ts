@@ -161,6 +161,7 @@ app.post("/api/exchange-token", async (req, res, next) => {
     });
 
     grpc.close();
+    // Use result.accessToken (tenant token) for downstream RBAC-protected calls.
     res.json(result);
   } catch (err) {
     next(err);

@@ -56,6 +56,10 @@ where
 {
     Router::new()
         .route(
+            "/api/v1/auth/tenant-token",
+            post(identity_api::auth::tenant_token::<S>),
+        )
+        .route(
             "/api/v1/auth/userinfo",
             get(identity_api::auth::userinfo::<S>),
         )

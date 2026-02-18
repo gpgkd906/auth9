@@ -1,56 +1,52 @@
 ---
 name: qa-doc-gen
-description: "Generate QA test case documents from confirmed feature implementation plans. Use this skill AFTER a feature plan has been approved by the user (via plan mode or explicit confirmation). Converts the agreed feature behavior, acceptance criteria, and edge cases into structured QA test documents under docs/qa/. Triggers when (1) user says to generate QA docs after plan approval, (2) user asks to create test cases for a newly planned feature, (3) user asks to turn a feature plan into QA testing content."
+description: "Generate or update QA/security/UIUX test documentation after confirmed feature implementation plans or completed refactors. Use this skill AFTER plan approval or code completion to: (1) add new QA/security test docs for new behavior, and (2) run cross-doc impact analysis across docs/qa/, docs/security/, and docs/uiux/ to update stale steps, expectations, and security assertions. Triggers when users ask to create QA docs, update test docs after implementation, or sync QA/security/UIUX docs after behavior changes."
 ---
 
 # QA Doc Gen
 
-After a feature plan is confirmed, generate QA test case documents that capture the feature's expected behavior for manual testing.
+After a feature plan is confirmed or a refactor is completed, generate and synchronize test documentation so all QA/security/UIUX docs match real behavior.
 
 ## Workflow
 
 ```
-1. Extract feature details from the confirmed plan
-2. Determine module classification and file naming
-3. Generate QA test document(s) following project format
-4. Update docs/qa/README.md index
+1. Extract behavior changes from confirmed plan and implemented code
+2. Generate/update QA and security test documents for new behavior
+3. Run cross-doc impact scan on docs/qa, docs/security, docs/uiux
+4. Patch all impacted existing docs to remove stale steps/assertions
+5. Update README/index logs and report impact summary
 ```
 
-## Step 1: Extract from Confirmed Plan
+## Step 1: Extract Change Set
 
-From the confirmed plan, extract:
+From the confirmed plan and merged implementation, extract:
 
 - **Feature name**: What the feature is called
 - **Module**: Which Auth9 module it belongs to (tenant, user, rbac, service, invitation, session, webhook, auth, settings, identity-provider, passkeys, analytics, audit, integration)
 - **Behavior**: Normal flow, error cases, edge cases
+- **Behavior deltas**: What changed compared to old docs (redirects, auth rules, token types, permission boundaries, UI routes, API contracts)
 - **UI interactions**: Pages, buttons, forms involved
 - **API endpoints**: If applicable, include method, path, request/response
 - **Database changes**: New tables/columns, expected data states
 - **Acceptance criteria**: What constitutes correct behavior
 
-## Step 2: Determine File Naming
+## Step 2: Generate or Update New Docs
 
-### Module mapping
+If the change introduces a new behavior surface, create or extend the primary QA/security doc first.
 
-Place the QA doc under the matching `docs/qa/{module}/` directory. If the feature spans multiple modules, create separate documents per module.
+### QA file naming
 
-### File numbering
+Place QA docs under `docs/qa/{module}/` and follow numbering rules.
 
-Check existing files in the target directory:
+### Security doc update targets
 
-```
-Glob: docs/qa/{module}/*.md
-```
-
-Use the next available number: `{NN}-{descriptive-name}.md`
-
-Example: If `docs/qa/tenant/` has `01-crud.md`, `02-list-settings.md`, `03-status-lifecycle.md`, the next file is `04-{name}.md`.
+Update existing security suites under `docs/security/` when behavior affects threat model, abuse path, authz/authn boundary, token lifecycle, or transport/security controls.
 
 ### Scenario count rule
 
-Each document has **at most 5 numbered scenarios**. If a feature needs more than 5 scenarios, split into multiple documents.
+Each QA/security doc has **at most 5 numbered scenarios**. Split documents when needed.
 
-## Step 3: Generate QA Document
+## Step 3: Write New/Changed QA Docs
 
 Read `references/qa-doc-template.md` for the exact format template.
 
@@ -79,11 +75,42 @@ For each feature behavior in the plan, generate scenarios covering:
 
 Not every type is needed for every feature - select the relevant ones.
 
-## Step 4: Update README Index
+## Step 4: Run Cross-Doc Impact Analysis (Mandatory)
 
-After creating the QA document(s), update `docs/qa/README.md`:
+Always scan and classify potential impacts in:
 
-1. Add the new document to its module's index table
-2. Update the module's document count and scenario count
-3. Update the 统计概览 table totals
-4. Update the 更新日志 with today's date and a brief description
+- `docs/qa/**/*.md`
+- `docs/security/**/*.md`
+- `docs/uiux/**/*.md`
+
+Use search patterns based on behavior deltas, for example:
+
+- route changes (`/dashboard`, `/tenant/select`, `/auth/callback`)
+- token model changes (`id_token`, `tenant token`, `token exchange`)
+- permission/auth changes (`401`, `403`, `scope`, `audience`, `role`)
+- UI navigation text and expected redirect paths
+
+For each impacted document, do one of:
+
+1. **Patch required**: update steps/expected results/security assertions/UI flow
+2. **Note required**: add prerequisite note or branch-path note to avoid tester confusion
+3. **No change**: explicitly record why unaffected
+
+Never stop at creating only new docs when old docs are stale.
+
+## Step 5: Update Indexes and Changelog
+
+After edits, update affected indexes/changelogs:
+
+1. `docs/qa/README.md` (new docs and/or cross-doc alignment log)
+2. `docs/security/README.md` when security docs changed
+3. `docs/uiux/README.md` when UIUX docs changed
+
+## Output Requirements
+
+In the final response, always include:
+
+1. New docs created/updated for the feature itself
+2. Cross-doc impact list grouped by `qa/security/uiux`
+3. Updated files and rationale per file
+4. Remaining docs reviewed but unchanged (with reason)

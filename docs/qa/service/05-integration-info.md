@@ -29,6 +29,12 @@
 
 ---
 
+## 执行说明（tenant 分流）
+
+若测试账号属于多个 tenant，登录后会先进入 `/tenant/select`。请先完成 tenant 选择与 token exchange，再进入 Services 页面执行本测试。
+
+---
+
 ## 场景 1：API 返回 Confidential Client 的完整集成信息
 
 ### 初始状态
@@ -138,7 +144,7 @@ SELECT client_id, name FROM clients WHERE service_id = '{service_id}';
 验证 Portal Service 详情页的 Integration 标签页正确展示所有集成信息
 
 ### 测试操作流程
-1. 登录 Portal，进入 Dashboard → Services
+1. 登录 Portal；若出现 `/tenant/select`，先选择 tenant，然后进入 Dashboard → Services
 2. 点击任意 Service 进入详情页
 3. 观察页面顶部是否有「Configuration」和「Integration」两个标签
 4. 点击「Integration」标签
