@@ -14,7 +14,8 @@ interface OrgSwitcherProps {
 }
 
 export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
-  const fetcher = useFetcher();
+  const fetcher = useFetcher<{ error?: string }>();
+  const switchError = fetcher.data?.error;
 
   const activeTenant = tenants.find((t) => t.tenant_id === activeTenantId);
   const displayName = activeTenant?.tenant?.name || "Select organization";
@@ -77,6 +78,11 @@ export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
           </DropdownMenuItem>
         </DropdownMenuContent>
       </DropdownMenu>
+      {switchError && (
+        <p className="text-xs text-[var(--accent-red)] mt-1 px-2">
+          Failed to switch tenant. Please try again.
+        </p>
+      )}
     </div>
   );
 }

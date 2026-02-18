@@ -5,7 +5,7 @@ import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { OrgSwitcher } from "~/components/OrgSwitcher";
-import { requireAuthWithUpdate, commitSession, setActiveTenant } from "~/services/session.server";
+import { requireAuthWithUpdate, commitSession, trySetActiveTenant } from "~/services/session.server";
 import { userApi, type User, type TenantUserWithTenant } from "~/services/api";
 
 export const meta: MetaFunction = () => {
@@ -27,7 +27,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   // Get user's tenants for org switcher
   let tenants: TenantUserWithTenant[] = [];
   try {
-    const res = await userApi.getMyTenants(session.accessToken);
+    const serviceId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+    const res = await userApi.getMyTenants(session.accessToken, serviceId);
     tenants = res.data;
   } catch {
     // fallback to empty
@@ -75,9 +76,12 @@ export async function action({ request }: ActionFunctionArgs) {
   if (intent === "switch-tenant") {
     const tenantId = formData.get("tenantId") as string;
     if (tenantId) {
-      const cookie = await setActiveTenant(request, tenantId);
+      const result = await trySetActiveTenant(request, tenantId);
+      if ("error" in result) {
+        return { error: result.error };
+      }
       return redirect("/dashboard", {
-        headers: { "Set-Cookie": cookie },
+        headers: { "Set-Cookie": result.cookie },
       });
     }
   }
