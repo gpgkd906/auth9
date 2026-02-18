@@ -46,6 +46,24 @@ export async function loader({ request }: LoaderFunctionArgs) {
   if (error) {
     return { error, showPasskey: true, apiBaseUrl };
   }
+
+  // Default behavior: auto-redirect to SSO when no error/passkey params
+  if (!showPasskey) {
+    const auth = buildAuthorizeParams(url);
+    const authorizeUrl = new URL(`${auth.corePublicUrl}/api/v1/auth/authorize`);
+    authorizeUrl.searchParams.set("response_type", auth.response_type);
+    authorizeUrl.searchParams.set("client_id", auth.client_id);
+    authorizeUrl.searchParams.set("redirect_uri", auth.redirect_uri);
+    authorizeUrl.searchParams.set("scope", auth.scope);
+    authorizeUrl.searchParams.set("state", auth.state);
+    authorizeUrl.searchParams.set("nonce", auth.nonce);
+
+    const oauthCookie = await serializeOAuthState(auth.state);
+    throw redirect(authorizeUrl.toString(), {
+      headers: { "Set-Cookie": oauthCookie },
+    });
+  }
+
   return { error: null, showPasskey, apiBaseUrl };
 }
 

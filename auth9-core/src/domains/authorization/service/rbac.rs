@@ -78,6 +78,20 @@ impl<R: RbacRepository> RbacService<R> {
                 .await?;
         }
 
+        // Validate that all permission_ids belong to the same service as the role
+        if let Some(ref permission_ids) = input.permission_ids {
+            let role_service_id = StringUuid::from(input.service_id);
+            for perm_id in permission_ids {
+                let permission = self.get_permission(StringUuid::from(*perm_id)).await?;
+                if permission.service_id != role_service_id {
+                    return Err(AppError::BadRequest(format!(
+                        "Cannot assign permission from service {} to role in service {}",
+                        permission.service_id, role_service_id
+                    )));
+                }
+            }
+        }
+
         let role = self.repo.create_role(&input).await?;
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_all_user_roles().await;

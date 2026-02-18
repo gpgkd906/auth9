@@ -1,7 +1,7 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useRevalidator } from "react-router";
 import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, CheckIcon, GearIcon } from "@radix-ui/react-icons";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -187,6 +187,10 @@ export default function RolesPage() {
 
   const isSubmitting = navigation.state === "submitting";
 
+  // Use ref to access managingPermissionsRole in effect without dependency cycle
+  const managingPermissionsRoleRef = useRef(managingPermissionsRole);
+  managingPermissionsRoleRef.current = managingPermissionsRole;
+
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
       setCreateRoleServiceId(null);
@@ -194,10 +198,10 @@ export default function RolesPage() {
       setCreatePermissionServiceId(null);
 
       // If we got role permissions back, update the managing state
-      if ("role" in actionData && actionData.role && managingPermissionsRole) {
+      if ("role" in actionData && actionData.role && managingPermissionsRoleRef.current) {
         const roleData = actionData.role as RoleWithPermissions;
         setManagingPermissionsRole({
-          ...managingPermissionsRole,
+          ...managingPermissionsRoleRef.current,
           rolePermissions: roleData.permissions || [],
         });
       }
@@ -205,7 +209,8 @@ export default function RolesPage() {
       // Revalidate loader to refresh the permissions list
       revalidator.revalidate();
     }
-  }, [actionData, managingPermissionsRole, revalidator]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [actionData]);
 
   const openManagePermissions = async (role: EditableRole, servicePermissions: Permission[]) => {
     // Fetch current role permissions

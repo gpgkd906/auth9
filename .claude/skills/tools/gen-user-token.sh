@@ -33,6 +33,7 @@ const payload = {
   name: '$USER_NAME',
   iss: 'http://localhost:8080',
   aud: 'auth9',
+  token_type: 'identity',
   iat: now,
   exp: now + 3600
 };

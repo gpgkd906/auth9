@@ -7,6 +7,10 @@ settings:
 importers:
 
   .:
+    dependencies:
+      jose:
+        specifier: ^5.10.0
+        version: 5.10.0
     devDependencies:
       express:
         specifier: ^4.22.1

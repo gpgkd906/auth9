@@ -4,8 +4,7 @@
 SET NAMES utf8mb4 COLLATE utf8mb4_unicode_ci;
 
 SET @tenant_id = '11111111-1111-4111-8111-111111111111';
-SET @service_id = (SELECT id FROM services WHERE name = 'Auth9 Admin Portal' LIMIT 1);
-SET @service_id = IFNULL(@service_id, UUID());
+SET @service_id = '22222222-2222-4222-8222-222222222222';
 SET @role_admin_id = '33333333-3333-4333-8333-333333333333';
 SET @role_editor_id = '44444444-4444-4444-8444-444444444444';
 SET @role_viewer_id = '55555555-5555-4555-8555-555555555555';
@@ -27,10 +26,10 @@ INSERT INTO tenants (id, name, slug, settings, status)
 VALUES (@tenant_id, 'Invitation Test Tenant', 'invitation-test', '{}', 'active')
 ON DUPLICATE KEY UPDATE name = VALUES(name), settings = VALUES(settings), status = VALUES(status);
 
--- Ensure global service exists (for role assignment)
+-- Ensure test service exists for this tenant (use fixed ID to avoid collision with other tenants)
+DELETE FROM services WHERE id = @service_id;
 INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status)
-SELECT @service_id, NULL, 'Auth9 Admin Portal', 'http://localhost:3000', '[]', '[]', 'active'
-WHERE NOT EXISTS (SELECT 1 FROM services WHERE id = @service_id);
+VALUES (@service_id, @tenant_id, 'Auth9 Admin Portal', 'http://localhost:3000', '[]', '[]', 'active');
 
 -- Enable service for tenant
 INSERT INTO tenant_services (tenant_id, service_id, enabled)
