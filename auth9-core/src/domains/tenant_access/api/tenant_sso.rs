@@ -441,6 +441,11 @@ async fn ensure_tenant_access<S: HasServices>(
     auth: &AuthUser,
     tenant_id: Uuid,
 ) -> Result<()> {
+    // Platform admin bypass applies to both Identity and TenantAccess tokens
+    if is_platform_admin_with_db(state, auth).await {
+        return Ok(());
+    }
+
     match auth.token_type {
         TokenType::TenantAccess | TokenType::ServiceClient => {
             if auth.tenant_id == Some(tenant_id) {
@@ -451,15 +456,9 @@ async fn ensure_tenant_access<S: HasServices>(
                 ))
             }
         }
-        TokenType::Identity => {
-            if is_platform_admin_with_db(state, auth).await {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Tenant-scoped token required (exchange identity token first)".to_string(),
-                ))
-            }
-        }
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Tenant-scoped token required (exchange identity token first)".to_string(),
+        )),
     }
 }
 
@@ -608,9 +607,10 @@ mod tests {
 
     #[test]
     fn normalize_config_saml_renames_sso_url() {
-        let config = HashMap::from([
-            ("ssoUrl".to_string(), "https://idp.example.com/sso".to_string()),
-        ]);
+        let config = HashMap::from([(
+            "ssoUrl".to_string(),
+            "https://idp.example.com/sso".to_string(),
+        )]);
         let result = normalize_config("saml", config);
         assert_eq!(
             result.get("singleSignOnServiceUrl").unwrap(),
@@ -621,9 +621,7 @@ mod tests {
 
     #[test]
     fn normalize_config_saml_renames_certificate() {
-        let config = HashMap::from([
-            ("certificate".to_string(), "MIID...".to_string()),
-        ]);
+        let config = HashMap::from([("certificate".to_string(), "MIID...".to_string())]);
         let result = normalize_config("saml", config);
         assert_eq!(result.get("signingCertificate").unwrap(), "MIID...");
         assert!(!result.contains_key("certificate"));
@@ -633,7 +631,10 @@ mod tests {
     fn normalize_config_saml_does_not_overwrite_existing_keys() {
         let config = HashMap::from([
             ("ssoUrl".to_string(), "https://old.example.com".to_string()),
-            ("singleSignOnServiceUrl".to_string(), "https://existing.example.com".to_string()),
+            (
+                "singleSignOnServiceUrl".to_string(),
+                "https://existing.example.com".to_string(),
+            ),
         ]);
         let result = normalize_config("saml", config);
         // existing key should NOT be overwritten
@@ -659,7 +660,10 @@ mod tests {
     #[test]
     fn normalize_config_saml_both_renames() {
         let config = HashMap::from([
-            ("ssoUrl".to_string(), "https://idp.example.com/sso".to_string()),
+            (
+                "ssoUrl".to_string(),
+                "https://idp.example.com/sso".to_string(),
+            ),
             ("certificate".to_string(), "MIID...".to_string()),
             ("entityId".to_string(), "https://sp.example.com".to_string()),
         ]);
@@ -685,7 +689,10 @@ mod tests {
     fn validate_required_config_saml_all_present() {
         let config = HashMap::from([
             ("entityId".to_string(), "https://sp.example.com".to_string()),
-            ("singleSignOnServiceUrl".to_string(), "https://idp.example.com/sso".to_string()),
+            (
+                "singleSignOnServiceUrl".to_string(),
+                "https://idp.example.com/sso".to_string(),
+            ),
             ("signingCertificate".to_string(), "MIID...".to_string()),
         ]);
         assert!(validate_required_config("saml", &config).is_ok());
@@ -694,7 +701,10 @@ mod tests {
     #[test]
     fn validate_required_config_saml_missing_entity_id() {
         let config = HashMap::from([
-            ("singleSignOnServiceUrl".to_string(), "https://idp.example.com/sso".to_string()),
+            (
+                "singleSignOnServiceUrl".to_string(),
+                "https://idp.example.com/sso".to_string(),
+            ),
             ("signingCertificate".to_string(), "MIID...".to_string()),
         ]);
         let err = validate_required_config("saml", &config).unwrap_err();
@@ -749,17 +759,21 @@ mod tests {
         let config = HashMap::from([
             ("clientId".to_string(), "my-client".to_string()),
             ("clientSecret".to_string(), "secret".to_string()),
-            ("authorizationUrl".to_string(), "https://idp.example.com/auth".to_string()),
-            ("tokenUrl".to_string(), "https://idp.example.com/token".to_string()),
+            (
+                "authorizationUrl".to_string(),
+                "https://idp.example.com/auth".to_string(),
+            ),
+            (
+                "tokenUrl".to_string(),
+                "https://idp.example.com/token".to_string(),
+            ),
         ]);
         assert!(validate_required_config("oidc", &config).is_ok());
     }
 
     #[test]
     fn validate_required_config_oidc_missing_fields() {
-        let config = HashMap::from([
-            ("clientId".to_string(), "my-client".to_string()),
-        ]);
+        let config = HashMap::from([("clientId".to_string(), "my-client".to_string())]);
         let err = validate_required_config("oidc", &config).unwrap_err();
         match err {
             AppError::Validation(msg) => {
@@ -788,11 +802,8 @@ mod tests {
 
     #[test]
     fn normalize_domains_valid_multiple() {
-        let result = normalize_domains(vec![
-            "example.com".to_string(),
-            "acme.org".to_string(),
-        ])
-        .unwrap();
+        let result =
+            normalize_domains(vec!["example.com".to_string(), "acme.org".to_string()]).unwrap();
         assert_eq!(result, vec!["example.com", "acme.org"]);
     }
 

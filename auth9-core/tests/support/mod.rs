@@ -24,6 +24,10 @@ pub use auth9_core::domain::{
     UpdateRoleInput, UpdateServiceInput, UpdateTenantInput, UpdateUserInput, UpdateWebhookInput,
     UpsertSystemSettingInput, User, UserRolesInTenant, Webhook,
 };
+pub use auth9_core::domains::authorization::service::{ClientService, RbacService};
+pub use auth9_core::domains::tenant_access::service::{
+    TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
+};
 pub use auth9_core::error::{AppError, Result};
 pub use auth9_core::jwt::JwtManager;
 use auth9_core::repository::audit::{
@@ -34,10 +38,6 @@ pub use auth9_core::repository::{
     PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
     SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
     WebAuthnRepository, WebhookRepository,
-};
-pub use auth9_core::domains::authorization::service::{ClientService, RbacService};
-pub use auth9_core::domains::tenant_access::service::{
-    TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -92,6 +92,70 @@ pub fn create_test_admin_token_for_user(user_id: Uuid) -> String {
     jwt_manager
         .create_identity_token(user_id, "admin@auth9.local", Some("Platform Admin"))
         .expect("Failed to create test identity token")
+}
+
+/// Create a tenant access token for API testing (platform admin)
+///
+/// Uses "admin@auth9.local" email with admin role, suitable for testing
+/// endpoints that require tenant-scoped authentication after the refactor
+/// that restricts identity tokens to auth/profile paths only.
+pub fn create_test_tenant_access_token() -> String {
+    let jwt_manager = create_test_jwt_manager();
+    let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
+    jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "admin@auth9.local",
+            tenant_id,
+            "auth9-test-service",
+            vec!["admin".to_string()],
+            vec![
+                "rbac:*".to_string(),
+                "user:*".to_string(),
+                "service:*".to_string(),
+            ],
+        )
+        .expect("Failed to create test tenant access token")
+}
+
+/// Create a tenant access token for a specific tenant (platform admin)
+pub fn create_test_tenant_access_token_for_tenant(tenant_id: Uuid) -> String {
+    let jwt_manager = create_test_jwt_manager();
+    let user_id = Uuid::new_v4();
+    jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "admin@auth9.local",
+            tenant_id,
+            "auth9-test-service",
+            vec!["admin".to_string()],
+            vec![
+                "rbac:*".to_string(),
+                "user:*".to_string(),
+                "service:*".to_string(),
+            ],
+        )
+        .expect("Failed to create test tenant access token")
+}
+
+/// Create a tenant access token for a specific user and tenant
+pub fn create_test_tenant_access_token_for_user(user_id: Uuid, tenant_id: Uuid) -> String {
+    let jwt_manager = create_test_jwt_manager();
+    jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "admin@auth9.local",
+            tenant_id,
+            "auth9-test-service",
+            vec!["admin".to_string()],
+            vec![
+                "rbac:*".to_string(),
+                "user:*".to_string(),
+                "service:*".to_string(),
+            ],
+        )
+        .expect("Failed to create test tenant access token")
 }
 
 #[allow(dead_code)]

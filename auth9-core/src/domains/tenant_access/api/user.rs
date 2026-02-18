@@ -75,6 +75,11 @@ async fn require_tenant_owner<S: HasServices>(
         ));
     }
 
+    // Platform admin check (works for both Identity and TenantAccess tokens)
+    if state.config().is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
     // For TenantAccess tokens, check if the token is for this tenant with owner role
     if auth.token_type == TokenType::TenantAccess {
         if auth.tenant_id == Some(target_tenant_id) && auth.roles.iter().any(|r| r == "owner") {
@@ -83,11 +88,6 @@ async fn require_tenant_owner<S: HasServices>(
         return Err(AppError::Forbidden(
             "Owner access required: you must be an owner of this tenant".to_string(),
         ));
-    }
-
-    // For Identity tokens, check if user is a platform admin first
-    if state.config().is_platform_admin_email(&auth.email) {
-        return Ok(());
     }
 
     // Otherwise check the database if user is owner of target tenant
@@ -151,16 +151,15 @@ async fn require_actual_tenant_owner<S: HasServices>(
 /// Check if user can manage users within a tenant
 /// Platform admin can always manage, tenant admin with appropriate role can manage their tenant
 fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
     match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Platform admin required for identity-token user management".to_string(),
-                ))
-            }
-        }
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Platform admin required for identity-token user management".to_string(),
+        )),
         TokenType::TenantAccess => {
             // Check if user has admin/owner role or user:write/user:delete permissions
             let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
@@ -184,7 +183,7 @@ fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Resul
 }
 
 /// List users
-/// - Platform admin (Identity token): can list all users
+/// - Platform admin (any token type with platform admin email): can list all users
 /// - Tenant user (TenantAccess token): can only list users in their tenant
 /// - Supports optional `search` query parameter to filter by email or display_name
 pub async fn list<S: HasServices>(
@@ -192,54 +191,56 @@ pub async fn list<S: HasServices>(
     auth: AuthUser,
     Query(query): Query<UserListQuery>,
 ) -> Result<impl IntoResponse> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if !state.config().is_platform_admin_email(&auth.email) {
-                return Err(AppError::Forbidden(
-                    "Platform admin required to list all users".to_string(),
-                ));
-            }
-            // Platform admin: if tenant_id is specified, scope to that tenant
-            if let Some(tenant_id) = query.tenant_id {
-                let users = state
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if state.config().is_platform_admin_email(&auth.email)
+        && auth.token_type != TokenType::ServiceClient
+    {
+        // Platform admin: if tenant_id is specified, scope to that tenant
+        if let Some(tenant_id) = query.tenant_id {
+            let users = state
+                .user_service()
+                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+                .await?;
+            let total = users.len() as i64;
+            return Ok(Json(PaginatedResponse::new(
+                with_tenant_context(users, Some(tenant_id)),
+                query.page,
+                query.per_page,
+                total,
+            )));
+        }
+        // Platform admin: can list all users (with optional search)
+        let (users, total) = if let Some(ref search) = query.search {
+            if !search.is_empty() {
+                state
                     .user_service()
-                    .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                    .await?;
-                let total = users.len() as i64;
-                return Ok(Json(PaginatedResponse::new(
-                    with_tenant_context(users, Some(tenant_id)),
-                    query.page,
-                    query.per_page,
-                    total,
-                )));
-            }
-            // Platform admin: can list all users (with optional search)
-            let (users, total) = if let Some(ref search) = query.search {
-                if !search.is_empty() {
-                    state
-                        .user_service()
-                        .search(search, query.page, query.per_page)
-                        .await?
-                } else {
-                    state
-                        .user_service()
-                        .list(query.page, query.per_page)
-                        .await?
-                }
+                    .search(search, query.page, query.per_page)
+                    .await?
             } else {
                 state
                     .user_service()
                     .list(query.page, query.per_page)
                     .await?
-            };
+            }
+        } else {
+            state
+                .user_service()
+                .list(query.page, query.per_page)
+                .await?
+        };
 
-            Ok(Json(PaginatedResponse::new(
-                with_tenant_context(users, None),
-                query.page,
-                query.per_page,
-                total,
-            )))
-        }
+        return Ok(Json(PaginatedResponse::new(
+            with_tenant_context(users, None),
+            query.page,
+            query.per_page,
+            total,
+        )));
+    }
+
+    match auth.token_type {
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Platform admin required to list all users".to_string(),
+        )),
         TokenType::ServiceClient => {
             // Service client tokens cannot list users — user management is not
             // part of the M2M service scope (least-privilege principle).
@@ -830,7 +831,9 @@ pub async fn disable_mfa<S: HasServices>(
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
 
-    input.validate().map_err(|e| AppError::Validation(e.to_string()))?;
+    input
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
 
     // Verify admin's password as secondary confirmation
     let admin_user = state
@@ -889,23 +892,27 @@ pub async fn list_by_tenant<S: HasServices>(
     Path(tenant_id): Path<Uuid>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
-    // Enforce tenant isolation: only allow access to the user's own tenant
-    match auth.token_type {
-        TokenType::Identity => {
-            if !state.config().is_platform_admin_email(&auth.email) {
+    // Platform admin bypass applies to both Identity and TenantAccess tokens
+    let is_admin = auth.token_type != TokenType::ServiceClient
+        && state.config().is_platform_admin_email(&auth.email);
+
+    if !is_admin {
+        // Enforce tenant isolation: only allow access to the user's own tenant
+        match auth.token_type {
+            TokenType::Identity => {
                 return Err(AppError::Forbidden(
                     "Platform admin required to list users across tenants".to_string(),
                 ));
             }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => {
-            let token_tenant = auth
-                .tenant_id
-                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-            if token_tenant != tenant_id {
-                return Err(AppError::Forbidden(
-                    "Access denied: you can only list users in your own tenant".to_string(),
-                ));
+            TokenType::TenantAccess | TokenType::ServiceClient => {
+                let token_tenant = auth
+                    .tenant_id
+                    .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+                if token_tenant != tenant_id {
+                    return Err(AppError::Forbidden(
+                        "Access denied: you can only list users in your own tenant".to_string(),
+                    ));
+                }
             }
         }
     }

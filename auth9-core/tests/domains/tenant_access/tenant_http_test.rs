@@ -6,7 +6,7 @@ use crate::support::http::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
 };
-use crate::support::{create_test_identity_token, create_test_tenant, MockKeycloakServer};
+use crate::support::{create_test_tenant, create_test_tenant_access_token, MockKeycloakServer};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Tenant, TenantStatus};
 use axum::body::Body;
@@ -23,7 +23,7 @@ use uuid::Uuid;
 async fn test_list_tenants_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin token
+    let token = create_test_tenant_access_token(); // Platform admin token
 
     // Add some test tenants
     for i in 1..=3 {
@@ -50,7 +50,7 @@ async fn test_list_tenants_returns_200() {
 async fn test_list_tenants_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     // Add 25 tenants
     for i in 1..=25 {
@@ -80,7 +80,7 @@ async fn test_list_tenants_pagination() {
 async fn test_list_tenants_empty() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let (status, body): (StatusCode, Option<PaginatedResponse<Tenant>>) =
@@ -101,7 +101,7 @@ async fn test_list_tenants_empty() {
 async fn test_get_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
     let mut tenant = create_test_tenant(Some(tenant_id));
@@ -125,7 +125,7 @@ async fn test_get_tenant_returns_200() {
 async fn test_get_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
@@ -143,7 +143,7 @@ async fn test_get_tenant_returns_404() {
 async fn test_create_tenant_returns_201() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin only
+    let token = create_test_tenant_access_token(); // Platform admin only
     let app = build_test_router(state);
 
     let input = json!({
@@ -171,7 +171,7 @@ async fn test_create_tenant_returns_201() {
 async fn test_create_tenant_duplicate_slug() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     // Add existing tenant with slug "existing-tenant"
     let mut existing = create_test_tenant(None);
@@ -196,7 +196,7 @@ async fn test_create_tenant_duplicate_slug() {
 async fn test_create_tenant_validation_error_empty_name() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -215,7 +215,7 @@ async fn test_create_tenant_validation_error_empty_name() {
 async fn test_create_tenant_validation_error_empty_slug() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -233,7 +233,7 @@ async fn test_create_tenant_validation_error_empty_slug() {
 async fn test_create_tenant_with_settings() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let input = serde_json::json!({
@@ -264,7 +264,7 @@ async fn test_create_tenant_with_settings() {
 async fn test_update_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
     let mut tenant = create_test_tenant(Some(tenant_id));
@@ -295,7 +295,7 @@ async fn test_update_tenant_returns_200() {
 async fn test_update_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
@@ -318,7 +318,7 @@ async fn test_update_tenant_returns_404() {
 async fn test_update_tenant_status() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -348,7 +348,7 @@ async fn test_update_tenant_status() {
 async fn test_update_tenant_logo_url() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -385,7 +385,7 @@ async fn test_update_tenant_logo_url() {
 async fn test_delete_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token(); // Platform admin only
+    let token = create_test_tenant_access_token(); // Platform admin only
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -426,7 +426,7 @@ async fn test_delete_tenant_returns_200() {
 async fn test_delete_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let nonexistent_id = Uuid::new_v4();
@@ -449,7 +449,7 @@ async fn test_delete_tenant_returns_404() {
 async fn test_delete_tenant_requires_confirmation_header() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
     let tenant = create_test_tenant(Some(tenant_id));
@@ -472,7 +472,7 @@ async fn test_delete_tenant_requires_confirmation_header() {
 async fn test_tenant_with_unicode_name() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -493,7 +493,7 @@ async fn test_tenant_with_unicode_name() {
 async fn test_tenant_with_special_chars_in_name() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
     let app = build_test_router(state);
 
     let input = json!({
@@ -514,7 +514,7 @@ async fn test_tenant_with_special_chars_in_name() {
 async fn test_list_tenants_default_pagination() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     // Add 5 tenants
     for i in 1..=5 {

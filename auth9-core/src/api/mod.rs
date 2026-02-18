@@ -20,11 +20,12 @@ pub(crate) const MAX_PER_PAGE: i64 = 100;
 /// First checks the `PLATFORM_ADMIN_EMAILS` config (fast path), then falls back
 /// to checking if the user is an admin of the `auth9-platform` tenant in the DB.
 pub(crate) async fn is_platform_admin_with_db<S: HasServices>(state: &S, auth: &AuthUser) -> bool {
-    if auth.token_type != TokenType::Identity {
+    // Service client tokens are never platform admins
+    if auth.token_type == TokenType::ServiceClient {
         return false;
     }
 
-    // Fast path: config-based check
+    // Fast path: config-based email check (works for both Identity and TenantAccess tokens)
     if state.config().is_platform_admin_email(&auth.email) {
         return true;
     }
