@@ -7,7 +7,6 @@ use crate::error::{AppError, Result};
 use crate::middleware::auth::{AuthUser, TokenType};
 use crate::repository::audit::CreateAuditLogInput;
 use crate::repository::AuditRepository;
-use crate::server::AppState;
 use crate::state::HasServices;
 use axum::http::HeaderMap;
 use serde::{Deserialize, Serialize};
@@ -152,32 +151,7 @@ impl MessageResponse {
     }
 }
 
-pub async fn write_audit_log(
-    state: &AppState,
-    headers: &HeaderMap,
-    action: &str,
-    resource_type: &str,
-    resource_id: Option<Uuid>,
-    old_value: Option<serde_json::Value>,
-    new_value: Option<serde_json::Value>,
-) -> Result<()> {
-    let actor_id = extract_actor_id(state, headers);
-    let ip_address = extract_ip(headers);
-    state
-        .audit_repo
-        .create(&CreateAuditLogInput {
-            actor_id,
-            action: action.to_string(),
-            resource_type: resource_type.to_string(),
-            resource_id,
-            old_value,
-            new_value,
-            ip_address,
-        })
-        .await
-}
-
-/// Generic version of write_audit_log that works with any HasServices implementation
+/// Write an audit log entry using the HasServices trait
 pub async fn write_audit_log_generic<S: HasServices>(
     state: &S,
     headers: &HeaderMap,
@@ -203,70 +177,7 @@ pub async fn write_audit_log_generic<S: HasServices>(
         .await
 }
 
-/// Enforce policy and log access_denied audit event on Forbidden errors.
-///
-/// This wraps `policy::enforce()` and automatically records an audit log entry
-/// when access is denied (Forbidden), capturing the actor, IP, and denied action.
-pub async fn enforce_with_audit<S: HasServices>(
-    state: &S,
-    headers: &HeaderMap,
-    auth: &AuthUser,
-    input: &crate::policy::PolicyInput,
-) -> Result<()> {
-    let result = crate::policy::enforce(state.config(), auth, input);
-    if let Err(AppError::Forbidden(ref reason)) = result {
-        let actor_id = extract_actor_id_generic(state, headers);
-        let ip_address = extract_ip(headers);
-        let _ = state
-            .audit_repo()
-            .create(&CreateAuditLogInput {
-                actor_id,
-                action: "access_denied".to_string(),
-                resource_type: format!("{:?}", input.action),
-                resource_id: None,
-                old_value: None,
-                new_value: serde_json::to_value(serde_json::json!({
-                    "reason": reason,
-                    "scope": format!("{:?}", input.scope),
-                    "actor_email": &auth.email,
-                }))
-                .ok(),
-                ip_address,
-            })
-            .await;
-    }
-    result
-}
-
-pub(crate) fn extract_actor_id(state: &AppState, headers: &HeaderMap) -> Option<Uuid> {
-    let auth_header = headers.get(axum::http::header::AUTHORIZATION)?;
-    let auth_str = auth_header.to_str().ok()?;
-    let token = auth_str.strip_prefix("Bearer ")?;
-
-    if let Ok(claims) = state.jwt_manager.verify_identity_token(token) {
-        return Uuid::parse_str(&claims.sub).ok();
-    }
-
-    if !state.config.jwt_tenant_access_allowed_audiences.is_empty() {
-        if let Ok(claims) = state.jwt_manager.verify_tenant_access_token_strict(
-            token,
-            &state.config.jwt_tenant_access_allowed_audiences,
-        ) {
-            return Uuid::parse_str(&claims.sub).ok();
-        }
-    } else if !state.config.is_production() {
-        if let Ok(claims) = {
-            #[allow(deprecated)]
-            state.jwt_manager.verify_tenant_access_token(token, None)
-        } {
-            return Uuid::parse_str(&claims.sub).ok();
-        }
-    }
-
-    None
-}
-
-/// Generic version of extract_actor_id that works with any HasServices implementation
+/// Extract actor ID from the Authorization header using the HasServices trait
 pub(crate) fn extract_actor_id_generic<S: HasServices>(
     state: &S,
     headers: &HeaderMap,
