@@ -102,13 +102,13 @@ describe("session.server", () => {
 
       const result = await commitSession(sessionData);
       expect(result).toBe("serialized-cookie");
-      expect(mockSerialize).toHaveBeenCalledWith(
-        expect.objectContaining({
-          accessToken: "test-token",
-          identityAccessToken: "test-token",
-          refreshToken: "refresh-token",
-        })
-      );
+      // commitSession strips redundant `accessToken` and `expiresAt` aliases
+      // to keep cookie size under browser 4096-byte limit.
+      expect(mockSerialize).toHaveBeenCalledWith({
+        identityAccessToken: "test-token",
+        identityExpiresAt: undefined,
+        refreshToken: "refresh-token",
+      });
     });
   });
 
