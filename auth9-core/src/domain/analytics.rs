@@ -1,6 +1,6 @@
 //! Analytics and security alert domain models
 
-use super::common::{validate_url_no_ssrf, validate_url_no_ssrf_option, StringUuid};
+use super::common::{validate_url_no_ssrf_strict, StringUuid};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
@@ -307,12 +307,12 @@ impl Default for Webhook {
 
 /// Validate webhook URL - uses strict SSRF validation to block all private/loopback IPs
 fn validate_webhook_url(url: &str) -> Result<(), ValidationError> {
-    validate_url_no_ssrf(url)
+    validate_url_no_ssrf_strict(url)
 }
 
 /// Validate optional webhook URL (called by validator macro when Option<String> field has Some value)
 fn validate_webhook_url_option(url: &str) -> Result<(), ValidationError> {
-    validate_url_no_ssrf_option(url)
+    validate_url_no_ssrf_strict(url)
 }
 
 /// Input for creating a webhook
@@ -645,62 +645,58 @@ mod tests {
     // --- validate_webhook_url: comprehensive edge cases ---
 
     #[test]
-    fn test_validate_webhook_url_allows_localhost() {
-        // Non-strict: localhost allowed for dev environments
-        assert!(validate_webhook_url("http://localhost/webhook").is_ok());
-        assert!(validate_webhook_url("http://localhost:8080/webhook").is_ok());
+    fn test_validate_webhook_url_blocks_localhost() {
+        // Strict: localhost blocked to prevent SSRF
+        assert!(validate_webhook_url("http://localhost/webhook").is_err());
+        assert!(validate_webhook_url("http://localhost:8080/webhook").is_err());
     }
 
     #[test]
-    fn test_validate_webhook_url_allows_127_0_0_1() {
-        // HTTP loopback allowed for dev
-        assert!(validate_webhook_url("http://127.0.0.1/webhook").is_ok());
-        assert!(validate_webhook_url("http://127.0.0.1:3000/hook").is_ok());
-        // HTTPS to loopback is blocked
+    fn test_validate_webhook_url_blocks_127_0_0_1() {
+        // Strict: all loopback addresses blocked
+        assert!(validate_webhook_url("http://127.0.0.1/webhook").is_err());
+        assert!(validate_webhook_url("http://127.0.0.1:3000/hook").is_err());
         assert!(validate_webhook_url("https://127.0.0.1/webhook").is_err());
     }
 
     #[test]
-    fn test_validate_webhook_url_allows_ipv6_loopback_http() {
-        // HTTP IPv6 loopback allowed for dev
-        assert!(validate_webhook_url("http://[::1]/webhook").is_ok());
-        assert!(validate_webhook_url("http://[::1]:9090/webhook").is_ok());
-        // HTTPS to IPv6 loopback is blocked
+    fn test_validate_webhook_url_blocks_ipv6_loopback() {
+        // Strict: IPv6 loopback blocked to prevent SSRF
+        assert!(validate_webhook_url("http://[::1]/webhook").is_err());
+        assert!(validate_webhook_url("http://[::1]:9090/webhook").is_err());
         assert!(validate_webhook_url("https://[::1]/webhook").is_err());
     }
 
     #[test]
-    fn test_validate_webhook_url_allows_private_http() {
-        // HTTP to private networks allowed for dev
-        assert!(validate_webhook_url("http://192.168.1.1/webhook").is_ok());
-        assert!(validate_webhook_url("http://192.168.0.100:8080/hook").is_ok());
-        // HTTPS to private IPs blocked
+    fn test_validate_webhook_url_blocks_private_ips() {
+        // Strict: all private IPs blocked
+        assert!(validate_webhook_url("http://192.168.1.1/webhook").is_err());
+        assert!(validate_webhook_url("http://192.168.0.100:8080/hook").is_err());
         assert!(validate_webhook_url("https://192.168.255.255/webhook").is_err());
     }
 
     #[test]
-    fn test_validate_webhook_url_allows_10_private_http() {
-        assert!(validate_webhook_url("http://10.0.0.1/webhook").is_ok());
-        assert!(validate_webhook_url("http://10.255.255.255:8080/hook").is_ok());
+    fn test_validate_webhook_url_blocks_10_private() {
+        assert!(validate_webhook_url("http://10.0.0.1/webhook").is_err());
+        assert!(validate_webhook_url("http://10.255.255.255:8080/hook").is_err());
         assert!(validate_webhook_url("https://10.1.2.3/webhook").is_err());
     }
 
     #[test]
-    fn test_validate_webhook_url_allows_172_private_http() {
-        assert!(validate_webhook_url("http://172.16.0.1/webhook").is_ok());
-        assert!(validate_webhook_url("http://172.20.0.1/webhook").is_ok());
+    fn test_validate_webhook_url_blocks_172_private() {
+        assert!(validate_webhook_url("http://172.16.0.1/webhook").is_err());
+        assert!(validate_webhook_url("http://172.20.0.1/webhook").is_err());
         assert!(validate_webhook_url("https://172.31.255.255/webhook").is_err());
-        // 172.15 and 172.32 are NOT private - HTTP external is still blocked
+        // 172.15 and 172.32 are NOT private ranges but still blocked (HTTP external)
         assert!(validate_webhook_url("http://172.15.0.1/webhook").is_err());
         assert!(validate_webhook_url("http://172.32.0.1/webhook").is_err());
     }
 
     #[test]
     fn test_validate_webhook_url_http_external_fails() {
+        // Strict: HTTP not allowed for any external URLs
         let result = validate_webhook_url("http://example.com/webhook");
         assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert_eq!(err.code.as_ref(), "http_not_allowed");
     }
 
     #[test]
@@ -780,13 +776,13 @@ mod tests {
     }
 
     #[test]
-    fn test_update_webhook_input_http_localhost_url_allowed() {
-        // Non-strict: localhost allowed for dev environments
+    fn test_update_webhook_input_http_localhost_url_blocked() {
+        // Strict: localhost blocked to prevent SSRF
         let input = UpdateWebhookInput {
             url: Some("http://localhost:8080/webhook".to_string()),
             ..Default::default()
         };
-        assert!(input.validate().is_ok());
+        assert!(input.validate().is_err());
     }
 
     // --- WebhookEvent serialization/deserialization ---

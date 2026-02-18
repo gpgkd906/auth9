@@ -467,18 +467,15 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
             )?
         };
 
-        // Build redirect URL with tokens
+        // Build redirect URL with state only (tokens returned in response body for secure handling)
+        // NOTE: Never put access_token in URL query params - it can leak via browser history,
+        // referrer headers, server logs, etc. Tokens should only be transmitted via secure channels
+        // like HttpOnly cookies or response bodies.
         let mut redirect_url = Url::parse(&state_payload.redirect_uri)
             .map_err(|e| AppError::BadRequest(format!("Invalid redirect_uri: {}", e)))?;
 
         {
             let mut pairs = redirect_url.query_pairs_mut();
-            pairs.append_pair("access_token", &identity_token);
-            pairs.append_pair("token_type", "Bearer");
-            pairs.append_pair(
-                "expires_in",
-                &self.jwt_manager.access_token_ttl().to_string(),
-            );
             if let Some(original_state) = state_payload.original_state {
                 pairs.append_pair("state", &original_state);
             }
@@ -1159,7 +1156,9 @@ mod tests {
             .unwrap();
 
         assert!(!result.identity_token.is_empty());
-        assert!(result.redirect_url.contains("access_token="));
+        // Security: access_token should NOT be in redirect URL (could leak via browser history, etc.)
+        assert!(!result.redirect_url.contains("access_token="));
+        assert!(!result.redirect_url.contains("token_type="));
         assert!(result.redirect_url.contains("state=original-user-state"));
         assert_eq!(result.expires_in, 3600);
     }

@@ -34,7 +34,13 @@ pub async fn revoke_session<S: HasSessionManagement>(
     headers: HeaderMap,
     Path(session_id): Path<StringUuid>,
 ) -> Result<Json<MessageResponse>, AppError> {
-    let (user_id, _) = extract_session_info(&state, &headers)?;
+    let (user_id, current_session_id) = extract_session_info(&state, &headers)?;
+
+    if session_id == current_session_id {
+        return Err(AppError::BadRequest(
+            "Cannot revoke your current session. Use logout instead.".to_string(),
+        ));
+    }
 
     state
         .session_service()

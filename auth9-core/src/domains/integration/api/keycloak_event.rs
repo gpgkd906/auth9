@@ -17,9 +17,40 @@ use chrono::Utc;
 use hmac::{Hmac, Mac};
 use serde::Deserialize;
 use sha2::Sha256;
+use std::collections::HashMap;
+use std::sync::{LazyLock, Mutex};
 use tracing::{debug, error, info, warn};
 
 type HmacSha256 = Hmac<Sha256>;
+
+/// In-memory dedup cache as fallback when Redis is unavailable.
+/// Maps dedup_key → expiry timestamp (seconds since epoch).
+static IN_MEMORY_DEDUP: LazyLock<Mutex<HashMap<String, i64>>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+/// Check if event is duplicate using in-memory cache. Returns true if duplicate.
+/// Also evicts expired entries periodically.
+fn check_in_memory_dedup(key: &str, ttl_secs: i64) -> bool {
+    let now = Utc::now().timestamp();
+    let mut cache = match IN_MEMORY_DEDUP.lock() {
+        Ok(c) => c,
+        Err(_) => return false, // Poisoned mutex, allow event through
+    };
+
+    // Evict expired entries (only when cache grows large to avoid overhead)
+    if cache.len() > 1000 {
+        cache.retain(|_, expiry| *expiry > now);
+    }
+
+    if let Some(expiry) = cache.get(key) {
+        if *expiry > now {
+            return true; // Duplicate
+        }
+    }
+
+    cache.insert(key.to_string(), now + ttl_secs);
+    false // New event
+}
 
 /// Keycloak event payload from p2-inc/keycloak-events plugin
 ///
@@ -381,8 +412,18 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         }
         Ok(false) => {} // New event, proceed
         Err(e) => {
-            // Cache failure should not block event processing
-            warn!("Webhook dedup cache check failed, proceeding: {}", e);
+            // Redis unavailable: fall back to in-memory dedup
+            warn!(
+                "Webhook dedup cache check failed, using in-memory fallback: {}",
+                e
+            );
+            if check_in_memory_dedup(&dedup_key, 3600) {
+                debug!(
+                    "Duplicate webhook event detected (in-memory fallback), skipping: {}",
+                    dedup_key
+                );
+                return Ok(StatusCode::NO_CONTENT);
+            }
         }
     }
 

@@ -218,8 +218,8 @@ SELECT id FROM tenants WHERE slug = 'to-delete-sdk';
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | GET 响应 camelCase 转换 | ✅ | 2026-02-14 | opencode | 通过：camelCase转换正确，logo_url→logoUrl，created_at→createdAt，分页字段per_page→perPage，total_pages→totalPages |
-| 2 | POST 请求体 snake_case 转换 | ✅ | 2026-02-14 | opencode | 通过：camelCase自动转为snake_case发送到后端，logoUrl→logo_url |
-| 3 | HTTP 错误映射 | ✅ | 2026-02-14 | opencode | 通过：404→NotFoundError，401→UnauthorizedError，409→ConflictError，所有异常包含正确statusCode和message |
-| 4 | 异步 Token Provider | ✅ | 2026-02-14 | opencode | 通过：每次请求都调用token函数，支持Promise<string>，正确注入Authorization header |
-| 5 | DELETE 与 204 处理 | ✅ | 2026-02-14 | opencode | 通过：正确处理204 No Content，返回undefined，删除后资源不可访问 |
+| 1 | GET 响应 camelCase 转换 | ✅ | 2026-02-18 | opencode | 通过：16个单元测试全部通过，验证snake_case→camelCase转换，Authorization header注入 |
+| 2 | POST 请求体 snake_case 转换 | ✅ | 2026-02-18 | opencode | 通过：camelCase自动转为snake_case发送到后端，支持嵌套对象转换 |
+| 3 | HTTP 错误映射 | ✅ | 2026-02-18 | opencode | 通过：404→NotFoundError，401→UnauthorizedError，409→ConflictError |
+| 4 | 异步 Token Provider | ✅ | 2026-02-18 | opencode | 通过：每次请求调用token函数，支持Promise&lt;string&gt;形式 |
+| 5 | DELETE 与 204 处理 | ✅ | 2026-02-18 | opencode | 通过：正确处理204 No Content，返回undefined |

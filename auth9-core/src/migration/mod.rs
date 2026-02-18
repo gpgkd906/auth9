@@ -1035,28 +1035,43 @@ async fn sync_smtp_to_keycloak(config: &Config, smtp_host: &str) -> Result<()> {
         .as_str()
         .context("Missing access_token in Keycloak response")?;
 
-    // Update realm with SMTP settings
+    // Update realm with SMTP settings using GET-merge-PUT pattern
+    // to avoid resetting other realm settings (brute force, events, etc.)
     let realm_url = format!(
         "{}/admin/realms/{}",
         config.keycloak.url, config.keycloak.realm
     );
 
-    let smtp_update = serde_json::json!({
-        "smtpServer": {
-            "host": smtp_host,
-            "port": "1025",
-            "from": "noreply@auth9.local",
-            "fromDisplayName": "Auth9",
-            "auth": "false",
-            "ssl": "false",
-            "starttls": "false"
-        }
-    });
+    let current: serde_json::Value = http_client
+        .get(&realm_url)
+        .bearer_auth(token)
+        .send()
+        .await
+        .context("Failed to get realm for SMTP update")?
+        .json()
+        .await
+        .context("Failed to parse realm JSON for SMTP update")?;
+
+    let mut updated = current;
+    if let Some(obj) = updated.as_object_mut() {
+        obj.insert(
+            "smtpServer".to_string(),
+            serde_json::json!({
+                "host": smtp_host,
+                "port": "1025",
+                "from": "noreply@auth9.local",
+                "fromDisplayName": "Auth9",
+                "auth": "false",
+                "ssl": "false",
+                "starttls": "false"
+            }),
+        );
+    }
 
     let response = http_client
         .put(&realm_url)
         .bearer_auth(token)
-        .json(&smtp_update)
+        .json(&updated)
         .send()
         .await
         .context("Failed to update Keycloak realm SMTP settings")?;
