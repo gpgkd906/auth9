@@ -129,23 +129,22 @@ pub fn build_keycloak_client_for_update(
 // ============================================================================
 
 /// Check if the authenticated user can manage a service.
-/// - Identity tokens (platform admin): can manage any service
+/// - Platform admin (any token type with platform admin email): can manage any service
 /// - TenantAccess tokens: can only manage services in their own tenant
 fn require_service_access(
     config: &Config,
     auth: &AuthUser,
     service_tenant_id: Option<Uuid>,
 ) -> Result<()> {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
     match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Platform admin required: identity token is not a platform admin".to_string(),
-                ))
-            }
-        }
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Platform admin required: identity token is not a platform admin".to_string(),
+        )),
         TokenType::TenantAccess => {
             let token_tenant = auth
                 .tenant_id
@@ -216,9 +215,15 @@ pub async fn list<S: HasServices>(
     headers: HeaderMap,
     Query(query): Query<ListServicesQuery>,
 ) -> Result<impl IntoResponse> {
-    let tenant_filter = match auth.token_type {
-        TokenType::Identity => {
-            if !state.config().is_platform_admin_email(&auth.email) {
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    let is_platform_admin = auth.token_type != TokenType::ServiceClient
+        && state.config().is_platform_admin_email(&auth.email);
+
+    let tenant_filter = if is_platform_admin {
+        query.tenant_id // Platform admin: optional filter
+    } else {
+        match auth.token_type {
+            TokenType::Identity => {
                 let _ = log_access_denied(
                     &state,
                     &headers,
@@ -231,30 +236,29 @@ pub async fn list<S: HasServices>(
                     "Platform admin required to list services without tenant scope".to_string(),
                 ));
             }
-            query.tenant_id // Platform admin: optional filter
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => {
-            // Tenant user / service client: must scope to their tenant
-            let token_tenant = auth
-                .tenant_id
-                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-            // If they specified a different tenant, deny
-            if let Some(requested) = query.tenant_id {
-                if requested != token_tenant {
-                    let _ = log_access_denied(
-                        &state,
-                        &headers,
-                        &auth,
-                        "service.list",
-                        "Cannot list services in another tenant",
-                    )
-                    .await;
-                    return Err(AppError::Forbidden(
-                        "Cannot list services in another tenant".to_string(),
-                    ));
+            TokenType::TenantAccess | TokenType::ServiceClient => {
+                // Tenant user / service client: must scope to their tenant
+                let token_tenant = auth
+                    .tenant_id
+                    .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+                // If they specified a different tenant, deny
+                if let Some(requested) = query.tenant_id {
+                    if requested != token_tenant {
+                        let _ = log_access_denied(
+                            &state,
+                            &headers,
+                            &auth,
+                            "service.list",
+                            "Cannot list services in another tenant",
+                        )
+                        .await;
+                        return Err(AppError::Forbidden(
+                            "Cannot list services in another tenant".to_string(),
+                        ));
+                    }
                 }
+                Some(token_tenant)
             }
-            Some(token_tenant)
         }
     };
 

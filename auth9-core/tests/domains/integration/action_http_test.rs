@@ -7,7 +7,7 @@ use crate::support::http::{
     post_json_with_auth, TestAppState,
 };
 use crate::support::{
-    create_test_action, create_test_identity_token, create_test_tenant, MockKeycloakServer,
+    create_test_action, create_test_tenant, create_test_tenant_access_token, MockKeycloakServer,
 };
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{
@@ -956,7 +956,7 @@ async fn test_get_stats_returns_404() {
 async fn test_get_triggers_returns_list() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<ActionTrigger>>>) =
@@ -981,7 +981,7 @@ async fn test_platform_admin_can_create_action() {
     let tenant = create_test_tenant(Some(tenant_id));
     state.tenant_repo.add_tenant(tenant).await;
 
-    let token = create_test_identity_token(); // Platform admin token
+    let token = create_test_tenant_access_token(); // Platform admin token
 
     let input = CreateActionInput {
         name: "Test Action".to_string(),
@@ -1019,7 +1019,7 @@ async fn test_platform_admin_can_read_action() {
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
-    let token = create_test_identity_token();
+    let token = create_test_tenant_access_token();
 
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(

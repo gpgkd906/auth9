@@ -38,29 +38,26 @@ pub struct PolicyInput {
 }
 
 pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyResult<()> {
+    // Platform admin bypass: applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+
     match input.action {
         PolicyAction::AuditRead
         | PolicyAction::SessionForceLogout
         | PolicyAction::SecurityAlertRead
-        | PolicyAction::SecurityAlertResolve => require_platform_admin(config, auth),
+        | PolicyAction::SecurityAlertResolve
+        | PolicyAction::UserWrite => require_platform_admin(config, auth),
         PolicyAction::WebhookRead => {
-            if auth.token_type == TokenType::Identity {
-                return require_platform_admin(config, auth);
-            }
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["webhook:read", "webhook:*"])
         }
         PolicyAction::WebhookWrite => {
-            if auth.token_type == TokenType::Identity {
-                return require_platform_admin(config, auth);
-            }
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["webhook:write", "webhook:*"])
         }
         PolicyAction::TenantServiceRead => {
-            if auth.token_type == TokenType::Identity {
-                return require_platform_admin(config, auth);
-            }
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(
                 auth,
@@ -73,9 +70,6 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
             )
         }
         PolicyAction::TenantServiceWrite => {
-            if auth.token_type == TokenType::Identity {
-                return require_platform_admin(config, auth);
-            }
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(
                 auth,
@@ -92,20 +86,13 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
             require_system_config_write(config, auth, tenant_id)
         }
         PolicyAction::ActionRead => {
-            if auth.token_type == TokenType::Identity {
-                return require_platform_admin(config, auth);
-            }
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["action:read", "action:*"])
         }
         PolicyAction::ActionWrite => {
-            if auth.token_type == TokenType::Identity {
-                return require_platform_admin(config, auth);
-            }
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["action:write", "action:*"])
         }
-        PolicyAction::UserWrite => require_platform_admin(config, auth),
     }
 }
 
@@ -119,18 +106,11 @@ fn require_tenant_scope(scope: &ResourceScope) -> PolicyResult<StringUuid> {
 }
 
 fn require_platform_admin(config: &Config, auth: &AuthUser) -> PolicyResult<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            if config.is_platform_admin_email(&auth.email) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden("Platform admin required".to_string()))
-            }
-        }
-        TokenType::TenantAccess | TokenType::ServiceClient => {
-            Err(AppError::Forbidden("Platform admin required".to_string()))
-        }
+    // Platform admin check applies to both Identity and TenantAccess tokens
+    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
+        return Ok(());
     }
+    Err(AppError::Forbidden("Platform admin required".to_string()))
 }
 
 fn require_tenant_admin_or_permission(
