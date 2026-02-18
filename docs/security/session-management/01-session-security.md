@@ -4,6 +4,10 @@
 **测试范围**: Session 生成、存储和保护
 **场景数**: 4
 **风险等级**: 🟠 高
+**ASVS 5.0 矩阵ID**: M-SESS-01
+**OWASP ASVS 5.0**: V7.1,V7.2,V7.3
+**回归任务映射**: Backlog #8, #20
+
 
 ---
 
@@ -241,3 +245,31 @@ curl -b "session_2.txt" http://localhost:3000/dashboard
 - [OWASP Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
 - [CWE-384: Session Fixation](https://cwe.mitre.org/data/definitions/384.html)
 - [CWE-613: Insufficient Session Expiration](https://cwe.mitre.org/data/definitions/613.html)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-SESS-01  
+**适用控制**: V7.1,V7.2,V7.3  
+**关联任务**: Backlog #8, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 4
+
+### 执行清单
+- [ ] M-SESS-01-C01 | 控制: V7.1 | 任务: #8, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-SESS-01-C02 | 控制: V7.2 | 任务: #8, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-SESS-01-C03 | 控制: V7.3 | 任务: #8, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

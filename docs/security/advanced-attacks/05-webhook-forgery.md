@@ -4,7 +4,10 @@
 **测试范围**: Webhook 签名验证、重放攻击、内容篡改
 **场景数**: 2
 **风险等级**: 🟠 高
-**OWASP ASVS**: V2.10, V13.2
+**ASVS 5.0 矩阵ID**: M-ADV-05
+**OWASP ASVS 5.0**: V10.5,V13.2,V16.2
+**回归任务映射**: Backlog #5, #20
+
 
 ---
 
@@ -198,3 +201,31 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 - [CWE-345: Insufficient Verification of Data Authenticity](https://cwe.mitre.org/data/definitions/345.html)
 - [CWE-294: Authentication Bypass by Capture-replay](https://cwe.mitre.org/data/definitions/294.html)
 - [GitHub Webhook Signatures](https://docs.github.com/en/webhooks/using-webhooks/validating-webhook-deliveries)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-ADV-05  
+**适用控制**: V10.5,V13.2,V16.2  
+**关联任务**: Backlog #5, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 2
+
+### 执行清单
+- [ ] M-ADV-05-C01 | 控制: V10.5 | 任务: #5, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-05-C02 | 控制: V13.2 | 任务: #5, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-ADV-05-C03 | 控制: V16.2 | 任务: #5, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

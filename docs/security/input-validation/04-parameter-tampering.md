@@ -4,6 +4,10 @@
 **测试范围**: 请求参数操纵
 **场景数**: 4
 **风险等级**: 🟡 中
+**ASVS 5.0 矩阵ID**: M-INPUT-04
+**OWASP ASVS 5.0**: V2.1,V4.2,V8.2
+**回归任务映射**: Backlog #2, #20
+
 
 ---
 
@@ -264,3 +268,31 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 - [OWASP Input Validation](https://cheatsheetseries.owasp.org/cheatsheets/Input_Validation_Cheat_Sheet.html)
 - [CWE-20: Improper Input Validation](https://cwe.mitre.org/data/definitions/20.html)
 - [API Security Best Practices](https://owasp.org/www-project-api-security/)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-INPUT-04  
+**适用控制**: V2.1,V4.2,V8.2  
+**关联任务**: Backlog #2, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 4
+
+### 执行清单
+- [ ] M-INPUT-04-C01 | 控制: V2.1 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-INPUT-04-C02 | 控制: V4.2 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-INPUT-04-C03 | 控制: V8.2 | 任务: #2, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。

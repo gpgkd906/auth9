@@ -4,7 +4,10 @@
 **测试范围**: SSRF 攻击防护
 **场景数**: 5
 **风险等级**: 🔴 极高
-**OWASP ASVS**: V12.6, V5.2
+**ASVS 5.0 矩阵ID**: M-INPUT-05
+**OWASP ASVS 5.0**: V5.4,V12.3,V13.2
+**回归任务映射**: Backlog #6, #20
+
 
 ---
 
@@ -331,3 +334,31 @@ done
 - [CWE-918: Server-Side Request Forgery](https://cwe.mitre.org/data/definitions/918.html)
 - [PortSwigger SSRF](https://portswigger.net/web-security/ssrf)
 - [DNS Rebinding Attack](https://en.wikipedia.org/wiki/DNS_rebinding)
+
+---
+
+
+---
+
+## 标准化回归 Checklist（ASVS 5.0）
+
+**矩阵ID**: M-INPUT-05  
+**适用控制**: V5.4,V12.3,V13.2  
+**关联任务**: Backlog #6, #20  
+**建议回归频率**: 每次发布前 + 缺陷修复后必跑  
+**场景总数**: 5
+
+### 执行清单
+- [ ] M-INPUT-05-C01 | 控制: V5.4 | 任务: #6, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-INPUT-05-C02 | 控制: V12.3 | 任务: #6, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+- [ ] M-INPUT-05-C03 | 控制: V13.2 | 任务: #6, #20 | 动作: 执行文档内相关攻击步骤并记录证据
+
+### 回归记录表
+| 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
+|---|---|---|---|---|
+|  |  |  |  |  |
+
+### 退出准则
+1. 所有检查项执行完成，且高风险项无 `fail`。
+2. 如存在 `fail`，必须附带漏洞单号、修复计划和复测结论。
+3. 回归报告需同时记录矩阵ID与 Backlog 任务号，便于跨版本追溯。
