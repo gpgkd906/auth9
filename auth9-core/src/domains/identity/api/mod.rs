@@ -1,7 +1,4 @@
-//! Identity domain API facade.
-//!
-//! During incremental refactor this module re-exports legacy handlers.
-//! Route modules should depend on this facade instead of `crate::api::*` directly.
+//! Identity domain API handlers.
 
 pub mod auth;
 pub mod identity_provider;

@@ -1,7 +1,4 @@
-//! Domain-oriented route assembly modules.
-//!
-//! This is an incremental refactor layer: business logic remains in existing
-//! service/repository modules while HTTP route wiring is grouped by domain.
+//! Domain-oriented modules grouping API, service, and route layers by bounded context.
 
 pub mod authorization;
 pub mod identity;
