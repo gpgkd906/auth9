@@ -75,7 +75,10 @@ export async function getSession(request: Request): Promise<SessionData | null> 
 
 export async function commitSession(session: SessionData) {
   const normalized = normalizeSession(session) || session;
-  return sessionCookie.serialize(normalized);
+  // Strip redundant alias fields to keep cookie under browser 4096-byte limit.
+  // normalizeSession() reconstructs these from identityAccessToken / identityExpiresAt on read.
+  const { accessToken, expiresAt, ...compact } = normalized;
+  return sessionCookie.serialize(compact);
 }
 
 export async function destroySession(_session: SessionData) {
