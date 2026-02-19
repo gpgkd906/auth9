@@ -37,7 +37,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         input.validate()?;
 
         // Validate trigger_id
-        ActionTrigger::from_str(&input.trigger_id)?;
+        input.trigger_id.parse::<ActionTrigger>()?;
 
         // Validate script by attempting to compile it
         self.validate_script(&input.script)?;
@@ -107,7 +107,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         trigger_id: &str,
     ) -> Result<Vec<Action>> {
         // Validate trigger_id
-        ActionTrigger::from_str(trigger_id)?;
+        trigger_id.parse::<ActionTrigger>()?;
 
         self.action_repo
             .list_by_trigger(tenant_id, trigger_id, false)
@@ -190,7 +190,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
             }
 
             // Validate trigger_id
-            if let Err(e) = ActionTrigger::from_str(&input.trigger_id) {
+            if let Err(e) = input.trigger_id.parse::<ActionTrigger>() {
                 errors.push(BatchError {
                     input_index: index,
                     name: input.name.clone(),

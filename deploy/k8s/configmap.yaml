@@ -23,7 +23,7 @@ data:
   # IMPORTANT: JWT_ISSUER must be the Core API public URL (not portal URL)
   # This is used to build the OAuth callback URL: {JWT_ISSUER}/api/v1/auth/callback
   JWT_ISSUER: "https://api-auth9.gitski.work"
-  JWT_ACCESS_TOKEN_TTL_SECS: "3600"
+  JWT_ACCESS_TOKEN_TTL_SECS: "900"
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"
 
   # Password Reset configuration

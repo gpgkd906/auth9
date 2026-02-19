@@ -1,6 +1,6 @@
 import { Auth9Client, NotFoundError, ValidationError, AuthenticationError } from '@auth9/core';
 
-const TENANT_ID = '4db48d60-cd25-431d-902a-366a4b9bba10';
+const TENANT_ID = process.env.TENANT_ID || 'c4221bfa-f2fb-4060-b4cb-3551ebc8e901';
 
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',

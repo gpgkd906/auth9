@@ -49,6 +49,7 @@ where
     A: AuditRepository,
     Rbac: RbacRepository,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         user: Arc<R>,
         session: Arc<S>,
@@ -262,63 +263,63 @@ impl<
             .bind(&id_str)
             .execute(tx.as_mut())
             .await
-            .map_err(|e| AppError::Database(e))?;
+            .map_err(AppError::Database)?;
 
             // 2. Delete tenant memberships
             sqlx::query("DELETE FROM tenant_users WHERE user_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 3. Delete sessions
             sqlx::query("DELETE FROM sessions WHERE user_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 4. Delete password reset tokens
             sqlx::query("DELETE FROM password_reset_tokens WHERE user_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 5. Delete linked identities
             sqlx::query("DELETE FROM linked_identities WHERE user_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 6. Nullify user_id in login_events
             sqlx::query("UPDATE login_events SET user_id = NULL WHERE user_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 7. Nullify user_id in security_alerts
             sqlx::query("UPDATE security_alerts SET user_id = NULL WHERE user_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 8. Nullify actor_id in audit_logs
             sqlx::query("UPDATE audit_logs SET actor_id = NULL WHERE actor_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 9. Delete user record
             sqlx::query("DELETE FROM users WHERE id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             tx.commit().await.map_err(|e| {
                 AppError::Internal(anyhow::anyhow!("Failed to commit transaction: {}", e))

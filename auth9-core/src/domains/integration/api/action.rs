@@ -227,6 +227,14 @@ pub async fn batch_upsert_actions<S: HasServices>(
     Path(tenant_id): Path<StringUuid>,
     Json(req): Json<BatchUpsertRequest>,
 ) -> Result<Json<SuccessResponse<BatchUpsertResponse>>, AppError> {
+    if req.actions.len() > MAX_BATCH_SIZE {
+        return Err(AppError::BadRequest(format!(
+            "Batch size {} exceeds maximum of {}",
+            req.actions.len(),
+            MAX_BATCH_SIZE
+        )));
+    }
+
     enforce(
         state.config(),
         &auth,
@@ -440,6 +448,9 @@ pub async fn get_triggers<S: HasServices>(
 pub struct ListActionsQuery {
     pub trigger_id: Option<String>,
 }
+
+/// Maximum number of actions allowed in a single batch request
+const MAX_BATCH_SIZE: usize = 100;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct BatchUpsertRequest {

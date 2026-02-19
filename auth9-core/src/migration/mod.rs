@@ -707,13 +707,8 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
             .context("Failed to query portal service")?;
 
     if let Some((service_id,)) = portal_service {
-        // Assign Portal service to Auth9 Platform tenant (the primary tenant for Portal)
-        sqlx::query("UPDATE services SET tenant_id = ? WHERE id = ? AND tenant_id IS NULL")
-            .bind(&actual_platform_id)
-            .bind(&service_id)
-            .execute(&pool)
-            .await
-            .context("Failed to assign portal service to platform tenant")?;
+        // Portal service is a public service (tenant_id remains NULL)
+        // Assign to both tenants via tenant_services
         sqlx::query(
             r#"INSERT INTO tenant_services (tenant_id, service_id, enabled, created_at, updated_at)
             VALUES (?, ?, TRUE, NOW(), NOW())
@@ -736,7 +731,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed demo tenant_service")?;
 
-        info!("Seeded tenant_services for both tenants → Auth9 Admin Portal");
+        info!("Seeded tenant_services for both tenants → Auth9 Admin Portal (public service)");
 
         // 7. Seed RBAC: default roles, permissions, and assignments for admin user
         seed_rbac_for_service(

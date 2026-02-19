@@ -5,36 +5,46 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Button } from "~/components/ui/button";
 import { webauthnApi, type WebAuthnCredential } from "~/services/api";
 import { LockClosedIcon, TrashIcon, PlusIcon } from "@radix-ui/react-icons";
-import { getAccessToken } from "~/services/session.server";
+import { requireIdentityAuthWithUpdate } from "~/services/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   try {
-    const accessToken = await getAccessToken(request);
-    const response = await webauthnApi.listPasskeys(accessToken || "");
-    return { passkeys: response.data, accessToken: accessToken || "", apiBaseUrl };
+    const { session, headers } = await requireIdentityAuthWithUpdate(request);
+    const accessToken = session.identityAccessToken || "";
+    const response = await webauthnApi.listPasskeys(accessToken);
+    const data = { passkeys: response.data, accessToken, apiBaseUrl, error: null as string | null };
+    if (headers) {
+      return Response.json(data, { headers });
+    }
+    return data;
   } catch {
-    return { passkeys: [], accessToken: "", apiBaseUrl, error: "Failed to load passkeys" };
+    return { passkeys: [] as WebAuthnCredential[], accessToken: "", apiBaseUrl, error: "Failed to load passkeys" };
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const accessToken = await getAccessToken(request) || "";
+  const { session, headers } = await requireIdentityAuthWithUpdate(request);
+  const accessToken = session.identityAccessToken || "";
 
   try {
     if (intent === "delete") {
       const credentialId = formData.get("credentialId") as string;
-      await webauthnApi.deletePasskey(credentialId, accessToken);
-      return { success: true, message: "Passkey deleted" };
+      await webauthnApi.deletePasskey(credentialId, accessToken || "");
+      const data = { success: true as const, message: "Passkey deleted", error: undefined as string | undefined };
+      if (headers) {
+        return Response.json(data, { headers });
+      }
+      return data;
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Operation failed";
-    return { error: message };
+    return { success: undefined as true | undefined, message: undefined as string | undefined, error: message };
   }
 
-  return { error: "Invalid action" };
+  return { success: undefined as true | undefined, message: undefined as string | undefined, error: "Invalid action" };
 }
 
 function formatDate(dateString: string) {

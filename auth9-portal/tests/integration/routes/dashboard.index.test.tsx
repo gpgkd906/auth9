@@ -1,4 +1,4 @@
-import { createRoutesStub } from "react-router";
+import { createRoutesStub, Outlet } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import DashboardIndex, { loader } from "~/routes/dashboard._index";
@@ -54,20 +54,40 @@ describe("Dashboard Index Page", () => {
             },
         ],
     };
+    const mockOutletContext = {
+        activeTenant: {
+            tenant: {
+                id: "tenant-1",
+                name: "Acme Corp",
+            },
+        },
+        tenants: [],
+        currentUser: null,
+    };
 
-    it("renders dashboard with stats cards", async () => {
+    function renderDashboardWithContext(loaderData = mockLoaderData) {
         const RoutesStub = createRoutesStub([
             {
                 path: "/dashboard",
-                Component: DashboardIndex,
-                loader: () => mockLoaderData,
+                Component: () => <Outlet context={mockOutletContext} />,
+                children: [
+                    {
+                        index: true,
+                        Component: DashboardIndex,
+                        loader: () => loaderData,
+                    },
+                ],
             },
         ]);
 
         render(<RoutesStub initialEntries={["/dashboard"]} />);
+    }
+
+    it("renders dashboard with stats cards", async () => {
+        renderDashboardWithContext();
 
         await waitFor(() => {
-            expect(screen.getByText("Dashboard")).toBeInTheDocument();
+            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
             expect(screen.getByText("Total Tenants")).toBeInTheDocument();
             expect(screen.getByText("Active Users")).toBeInTheDocument();
             expect(screen.getByText("Services")).toBeInTheDocument();
@@ -75,15 +95,7 @@ describe("Dashboard Index Page", () => {
     });
 
     it("displays stats values from loader data", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/dashboard",
-                Component: DashboardIndex,
-                loader: () => mockLoaderData,
-            },
-        ]);
-
-        render(<RoutesStub initialEntries={["/dashboard"]} />);
+        renderDashboardWithContext();
 
         await waitFor(() => {
             expect(screen.getByText("5")).toBeInTheDocument(); // tenants
@@ -93,15 +105,7 @@ describe("Dashboard Index Page", () => {
     });
 
     it("renders recent activity list", async () => {
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/dashboard",
-                Component: DashboardIndex,
-                loader: () => mockLoaderData,
-            },
-        ]);
-
-        render(<RoutesStub initialEntries={["/dashboard"]} />);
+        renderDashboardWithContext();
 
         await waitFor(() => {
             expect(screen.getByText("Recent Activity")).toBeInTheDocument();
@@ -176,15 +180,7 @@ describe("Dashboard Index Page", () => {
             audits: [],
         };
 
-        const RoutesStub = createRoutesStub([
-            {
-                path: "/dashboard",
-                Component: DashboardIndex,
-                loader: () => emptyLoaderData,
-            },
-        ]);
-
-        render(<RoutesStub initialEntries={["/dashboard"]} />);
+        renderDashboardWithContext(emptyLoaderData);
 
         await waitFor(() => {
             expect(screen.getByText("No recent activity")).toBeInTheDocument();

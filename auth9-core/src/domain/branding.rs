@@ -5,6 +5,36 @@ use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 use validator::Validate;
 
+lazy_static::lazy_static! {
+    /// Patterns that are dangerous in custom CSS and must be rejected.
+    /// Matches: @import, url(), expression(), -moz-binding, behavior, javascript:,
+    /// content property, ::before/::after pseudo-elements, and element-hiding tricks.
+    static ref DANGEROUS_CSS_PATTERNS: Vec<regex::Regex> = vec![
+        // @import - external stylesheet loading
+        regex::Regex::new(r"(?i)@import\b").unwrap(),
+        // url() - external resource references (images, fonts, etc.)
+        regex::Regex::new(r"(?i)\burl\s*\(").unwrap(),
+        // expression() - IE CSS expressions (JavaScript execution)
+        regex::Regex::new(r"(?i)\bexpression\s*\(").unwrap(),
+        // -moz-binding - Firefox XBL binding (JavaScript execution)
+        regex::Regex::new(r"(?i)-moz-binding\s*:").unwrap(),
+        // behavior - IE behavior (JavaScript execution)
+        regex::Regex::new(r"(?i)\bbehavior\s*:").unwrap(),
+        // javascript: protocol in any value
+        regex::Regex::new(r"(?i)javascript\s*:").unwrap(),
+        // content property - used with ::before/::after to inject fake text/UI
+        regex::Regex::new(r"(?i)\bcontent\s*:").unwrap(),
+        // ::before / ::after pseudo-elements - primary vector for content injection
+        regex::Regex::new(r"(?i)::?\s*(before|after)\b").unwrap(),
+        // display: none - used to hide security-critical form elements
+        regex::Regex::new(r"(?i)\bdisplay\s*:\s*none\b").unwrap(),
+        // visibility: hidden - used to hide elements while preserving layout
+        regex::Regex::new(r"(?i)\bvisibility\s*:\s*hidden\b").unwrap(),
+        // opacity: 0 - used to make elements invisible
+        regex::Regex::new(r"(?i)\bopacity\s*:\s*0([^.]|$)").unwrap(),
+    ];
+}
+
 /// Default primary color
 pub const DEFAULT_PRIMARY_COLOR: &str = "#007AFF";
 /// Default secondary color
@@ -30,6 +60,30 @@ fn validate_hex_color(color: &str) -> Result<(), validator::ValidationError> {
     }
 }
 
+/// Validate custom CSS for dangerous patterns.
+///
+/// Blocks: @import, url(), expression(), -moz-binding, behavior, javascript:,
+/// content (pseudo-element text injection), ::before/::after, display:none,
+/// visibility:hidden, opacity:0 (element hiding/spoofing attacks).
+fn validate_custom_css(css: &str) -> Result<(), validator::ValidationError> {
+    for pattern in DANGEROUS_CSS_PATTERNS.iter() {
+        if pattern.is_match(css) {
+            let mut err = validator::ValidationError::new("dangerous_css_pattern");
+            err.message = Some(
+                "Custom CSS contains forbidden patterns (content injection, element hiding, or resource loading are not allowed)"
+                    .into(),
+            );
+            return Err(err);
+        }
+    }
+    Ok(())
+}
+
+/// Wrapper for Option<String> custom CSS validation (called by validator derive on inner &String)
+fn validate_custom_css_option(css: &str) -> Result<(), validator::ValidationError> {
+    validate_custom_css(css)
+}
+
 /// Branding configuration for login pages
 #[derive(Debug, Clone, Serialize, Deserialize, Validate, PartialEq, ToSchema)]
 pub struct BrandingConfig {
@@ -53,8 +107,9 @@ pub struct BrandingConfig {
     #[validate(custom(function = "validate_hex_color"))]
     pub text_color: String,
 
-    /// Custom CSS (max 50KB)
+    /// Custom CSS (max 50KB, no external resource loading)
     #[validate(length(max = 51200, message = "Custom CSS exceeds maximum size of 50KB"))]
+    #[validate(custom(function = "validate_custom_css_option"))]
     pub custom_css: Option<String>,
 
     /// Company name displayed on login page
@@ -290,6 +345,165 @@ mod tests {
     fn test_hex_color_lowercase() {
         let config = BrandingConfig {
             primary_color: "#aabbcc".to_string(),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_import() {
+        let config = BrandingConfig {
+            custom_css: Some("@import url(https://attacker.example/x.css);".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_import_case_insensitive() {
+        let config = BrandingConfig {
+            custom_css: Some("@IMPORT url('https://evil.com/x.css');".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_url() {
+        let config = BrandingConfig {
+            custom_css: Some("body { background: url(https://evil.com/track.gif); }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_expression() {
+        let config = BrandingConfig {
+            custom_css: Some("div { width: expression(alert(1)); }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_javascript() {
+        let config = BrandingConfig {
+            custom_css: Some("div { background: javascript:alert(1); }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_moz_binding() {
+        let config = BrandingConfig {
+            custom_css: Some("div { -moz-binding: url('xbl'); }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_behavior() {
+        let config = BrandingConfig {
+            custom_css: Some("div { behavior: url(xss.htc); }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_content_property() {
+        let config = BrandingConfig {
+            custom_css: Some(
+                r#"#password::after { content: "YOUR PASSWORD HAS BEEN COMPROMISED!"; }"#
+                    .to_string(),
+            ),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_before_pseudo_element() {
+        let config = BrandingConfig {
+            custom_css: Some(".login-title::before { content: 'SECURE BANK LOGIN'; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_after_pseudo_element() {
+        let config = BrandingConfig {
+            custom_css: Some(".header::after { color: red; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_display_none() {
+        let config = BrandingConfig {
+            custom_css: Some("#password { display: none !important; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_visibility_hidden() {
+        let config = BrandingConfig {
+            custom_css: Some("#password { visibility: hidden; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_opacity_zero() {
+        let config = BrandingConfig {
+            custom_css: Some("#password { opacity: 0; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_allows_nonzero_opacity() {
+        let config = BrandingConfig {
+            custom_css: Some(".card { opacity: 0.8; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_custom_css_blocks_display_none_case_insensitive() {
+        let config = BrandingConfig {
+            custom_css: Some("#password { DISPLAY: NONE; }".to_string()),
+            ..Default::default()
+        };
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_custom_css_allows_safe_css() {
+        let config = BrandingConfig {
+            custom_css: Some(
+                ".login-form { border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); color: #333; font-size: 14px; }"
+                    .to_string(),
+            ),
+            ..Default::default()
+        };
+        assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_custom_css_allows_none() {
+        let config = BrandingConfig {
+            custom_css: None,
             ..Default::default()
         };
         assert!(config.validate().is_ok());

@@ -69,8 +69,23 @@ impl<R: RbacRepository> RbacService<R> {
 
     // ==================== Roles ====================
 
+    /// System-reserved role names that cannot be used for custom RBAC roles.
+    const RESERVED_ROLE_NAMES: &[&str] = &["platform_admin", "owner", "admin", "member"];
+
+    fn check_reserved_role_name(name: &str) -> Result<()> {
+        let normalized = name.trim().to_lowercase();
+        if Self::RESERVED_ROLE_NAMES.contains(&normalized.as_str()) {
+            return Err(AppError::BadRequest(format!(
+                "Reserved role name: '{}' is reserved for system use",
+                name
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn create_role(&self, input: CreateRoleInput) -> Result<Role> {
         input.validate()?;
+        Self::check_reserved_role_name(&input.name)?;
 
         // Check inheritance depth if a parent role is specified
         if let Some(parent_id) = input.parent_role_id {
@@ -118,6 +133,9 @@ impl<R: RbacRepository> RbacService<R> {
 
     pub async fn update_role(&self, id: StringUuid, input: UpdateRoleInput) -> Result<Role> {
         input.validate()?;
+        if let Some(ref name) = input.name {
+            Self::check_reserved_role_name(name)?;
+        }
         let _ = self.get_role(id).await?;
 
         // Check for circular inheritance if parent_role_id is being updated
@@ -555,15 +573,15 @@ mod tests {
 
         let input = CreateRoleInput {
             service_id,
-            name: "Admin".to_string(),
-            description: Some("Administrator role".to_string()),
+            name: "Editor".to_string(),
+            description: Some("Editor role".to_string()),
             parent_role_id: None,
             permission_ids: None,
         };
 
         let result = service.create_role(input).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().name, "Admin");
+        assert_eq!(result.unwrap().name, "Editor");
     }
 
     #[tokio::test]
@@ -973,6 +991,104 @@ mod tests {
 
         let result = service.unassign_role(user_id, tenant_id, role_id).await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
+    }
+
+    // ==================== Reserved Role Name Tests ====================
+
+    #[tokio::test]
+    async fn test_create_role_reserved_name_platform_admin() {
+        let mock = MockRbacRepository::new();
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let input = CreateRoleInput {
+            service_id: Uuid::new_v4(),
+            name: "platform_admin".to_string(),
+            description: Some("test".to_string()),
+            parent_role_id: None,
+            permission_ids: None,
+        };
+
+        let result = service.create_role(input).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+        if let Err(AppError::BadRequest(msg)) = result {
+            assert!(msg.contains("Reserved role name"));
+        }
+    }
+
+    #[tokio::test]
+    async fn test_create_role_reserved_name_case_insensitive() {
+        let mock = MockRbacRepository::new();
+        let service = RbacService::new(Arc::new(mock), None);
+
+        for name in ["Owner", "ADMIN", "Member", "Platform_Admin"] {
+            let input = CreateRoleInput {
+                service_id: Uuid::new_v4(),
+                name: name.to_string(),
+                description: None,
+                parent_role_id: None,
+                permission_ids: None,
+            };
+
+            let result = service.create_role(input).await;
+            assert!(
+                matches!(result, Err(AppError::BadRequest(_))),
+                "Expected reserved name rejection for '{}'",
+                name
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn test_update_role_reserved_name_rejected() {
+        let mut mock = MockRbacRepository::new();
+        let role = Role {
+            name: "Editor".to_string(),
+            ..Default::default()
+        };
+        let role_clone = role.clone();
+        let id = role.id;
+
+        mock.expect_find_role_by_id()
+            .with(eq(id))
+            .returning(move |_| Ok(Some(role_clone.clone())));
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let input = UpdateRoleInput {
+            name: Some("platform_admin".to_string()),
+            description: None,
+            parent_role_id: None,
+        };
+
+        let result = service.update_role(id, input).await;
+        assert!(matches!(result, Err(AppError::BadRequest(_))));
+    }
+
+    #[tokio::test]
+    async fn test_create_role_non_reserved_name_allowed() {
+        let mut mock = MockRbacRepository::new();
+        let service_id = Uuid::new_v4();
+
+        mock.expect_create_role().returning(|input| {
+            Ok(Role {
+                service_id: StringUuid::from(input.service_id),
+                name: input.name.clone(),
+                ..Default::default()
+            })
+        });
+
+        let service = RbacService::new(Arc::new(mock), None);
+
+        let input = CreateRoleInput {
+            service_id,
+            name: "custom_editor".to_string(),
+            description: None,
+            parent_role_id: None,
+            permission_ids: None,
+        };
+
+        let result = service.create_role(input).await;
+        assert!(result.is_ok());
     }
 
     // ==================== Circular Inheritance Tests ====================

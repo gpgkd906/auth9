@@ -77,11 +77,14 @@ export async function commitSession(session: SessionData) {
   const normalized = normalizeSession(session) || session;
   // Strip redundant alias fields to keep cookie under browser 4096-byte limit.
   // normalizeSession() reconstructs these from identityAccessToken / identityExpiresAt on read.
-  const { accessToken, expiresAt, ...compact } = normalized;
+  const compact = { ...normalized };
+  delete compact.accessToken;
+  delete compact.expiresAt;
   return sessionCookie.serialize(compact);
 }
 
-export async function destroySession(_session: SessionData) {
+export async function destroySession(session: SessionData) {
+  void session;
   return sessionCookie.serialize("", { maxAge: 0 });
 }
 

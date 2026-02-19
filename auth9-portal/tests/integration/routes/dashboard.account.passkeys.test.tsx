@@ -14,13 +14,12 @@ vi.mock("~/services/api", () => ({
 }));
 
 vi.mock("~/services/session.server", () => ({
-    getAccessToken: vi.fn().mockResolvedValue("test-token"),
-    requireAuthWithUpdate: vi.fn().mockResolvedValue({
+    requireIdentityAuthWithUpdate: vi.fn().mockResolvedValue({
         session: {
-            accessToken: "test-token",
+            identityAccessToken: "test-token",
             refreshToken: "test-refresh-token",
             idToken: "test-id-token",
-            expiresAt: Date.now() + 3600000,
+            identityExpiresAt: Date.now() + 3600000,
         },
         headers: undefined,
     }),
@@ -77,6 +76,7 @@ describe("Account Passkeys Page", () => {
             passkeys: mockPasskeys,
             accessToken: "test-token",
             apiBaseUrl: "http://localhost:8080",
+            error: null,
         });
     });
 
@@ -104,7 +104,7 @@ describe("Account Passkeys Page", () => {
         const request = createFormRequest({ intent: "delete", credentialId: "pk-1" });
         const result = await action({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ success: true, message: "Passkey deleted" });
+        expect(result).toEqual({ success: true, message: "Passkey deleted", error: undefined });
         expect(webauthnApi.deletePasskey).toHaveBeenCalledWith("pk-1", "test-token");
     });
 
@@ -112,7 +112,7 @@ describe("Account Passkeys Page", () => {
         const request = createFormRequest({ intent: "register" });
         const result = await action({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ error: "Invalid action" });
+        expect(result).toEqual({ success: undefined, message: undefined, error: "Invalid action" });
     });
 
     it("action returns error on delete failure", async () => {
@@ -121,7 +121,7 @@ describe("Account Passkeys Page", () => {
         const request = createFormRequest({ intent: "delete", credentialId: "bad" });
         const result = await action({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ error: "Not found" });
+        expect(result).toEqual({ success: undefined, message: undefined, error: "Not found" });
     });
 
     it("action returns generic error for non-Error throw", async () => {
@@ -130,14 +130,14 @@ describe("Account Passkeys Page", () => {
         const request = createFormRequest({ intent: "delete", credentialId: "pk-1" });
         const result = await action({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ error: "Operation failed" });
+        expect(result).toEqual({ success: undefined, message: undefined, error: "Operation failed" });
     });
 
     it("action returns error for invalid intent", async () => {
         const request = createFormRequest({ intent: "invalid" });
         const result = await action({ request, params: {}, context: {} });
 
-        expect(result).toEqual({ error: "Invalid action" });
+        expect(result).toEqual({ success: undefined, message: undefined, error: "Invalid action" });
     });
 
     // ============================================================================

@@ -221,7 +221,7 @@ pub async fn create<S: HasInvitations>(
         "invitation",
         Some(*invitation.id),
         None,
-        serde_json::to_value(&InvitationResponse::from(invitation.clone())).ok(),
+        serde_json::to_value(InvitationResponse::from(invitation.clone())).ok(),
     )
     .await;
 

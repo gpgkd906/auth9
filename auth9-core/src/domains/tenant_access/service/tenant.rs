@@ -51,6 +51,7 @@ where
     SAR: SecurityAlertRepository,
     AR: ActionRepository,
 {
+    #[allow(clippy::too_many_arguments)]
     pub fn new(
         tenant: Arc<R>,
         service: Arc<SR>,
@@ -312,14 +313,14 @@ impl<
                     .bind(&svc_id_str)
                     .execute(tx.as_mut())
                     .await
-                    .map_err(|e| AppError::Database(e))?;
+                    .map_err(AppError::Database)?;
 
                 // Clear parent_role_id references before deleting roles
                 sqlx::query("UPDATE roles SET parent_role_id = NULL WHERE service_id = ? AND parent_role_id IS NOT NULL")
                     .bind(&svc_id_str)
                     .execute(tx.as_mut())
                     .await
-                    .map_err(|e| AppError::Database(e))?;
+                    .map_err(AppError::Database)?;
 
                 // Delete role_permissions for roles in this service
                 sqlx::query(
@@ -330,7 +331,7 @@ impl<
                 .bind(&svc_id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
                 // Delete user_tenant_roles for roles in this service
                 sqlx::query(
@@ -341,28 +342,28 @@ impl<
                 .bind(&svc_id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
                 // Delete roles for this service
                 sqlx::query("DELETE FROM roles WHERE service_id = ?")
                     .bind(&svc_id_str)
                     .execute(tx.as_mut())
                     .await
-                    .map_err(|e| AppError::Database(e))?;
+                    .map_err(AppError::Database)?;
 
                 // Delete permissions for this service
                 sqlx::query("DELETE FROM permissions WHERE service_id = ?")
                     .bind(&svc_id_str)
                     .execute(tx.as_mut())
                     .await
-                    .map_err(|e| AppError::Database(e))?;
+                    .map_err(AppError::Database)?;
 
                 // Delete the service itself
                 sqlx::query("DELETE FROM services WHERE id = ?")
                     .bind(&svc_id_str)
                     .execute(tx.as_mut())
                     .await
-                    .map_err(|e| AppError::Database(e))?;
+                    .map_err(AppError::Database)?;
             }
 
             // 2. Delete webhooks
@@ -370,14 +371,14 @@ impl<
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 3. Delete invitations
             sqlx::query("DELETE FROM invitations WHERE tenant_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 4. Delete user_tenant_roles via tenant_users
             sqlx::query(
@@ -388,42 +389,42 @@ impl<
             .bind(&id_str)
             .execute(tx.as_mut())
             .await
-            .map_err(|e| AppError::Database(e))?;
+            .map_err(AppError::Database)?;
 
             // 5. Delete tenant_users
             sqlx::query("DELETE FROM tenant_users WHERE tenant_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 6. Delete login_events
             sqlx::query("DELETE FROM login_events WHERE tenant_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 7. Delete security_alerts
             sqlx::query("DELETE FROM security_alerts WHERE tenant_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 8. Delete actions
             sqlx::query("DELETE FROM actions WHERE tenant_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             // 9. Delete the tenant itself
             sqlx::query("DELETE FROM tenants WHERE id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())
                 .await
-                .map_err(|e| AppError::Database(e))?;
+                .map_err(AppError::Database)?;
 
             tx.commit().await.map_err(|e| {
                 AppError::Internal(anyhow::anyhow!("Failed to commit transaction: {}", e))

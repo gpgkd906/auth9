@@ -26,6 +26,9 @@ type Pages = {
   "/invite/accept": {
     params: {};
   };
+  "/tenant/select": {
+    params: {};
+  };
   "/dashboard": {
     params: {};
   };
@@ -169,7 +172,7 @@ type Pages = {
 type RouteFiles = {
   "root.tsx": {
     id: "root";
-    page: "/" | "/forgot-password" | "/reset-password" | "/auth/callback" | "/invite/accept" | "/dashboard" | "/dashboard/security/alerts" | "/dashboard/services" | "/dashboard/services/:id" | "/dashboard/audit-logs" | "/dashboard/analytics" | "/dashboard/analytics/events" | "/dashboard/settings" | "/dashboard/settings/email-templates" | "/dashboard/settings/email-templates/:type" | "/dashboard/settings/identity-providers" | "/dashboard/settings/branding" | "/dashboard/settings/passkeys" | "/dashboard/settings/security" | "/dashboard/settings/sessions" | "/dashboard/settings/email" | "/dashboard/account" | "/dashboard/account/identities" | "/dashboard/account/passkeys" | "/dashboard/account/security" | "/dashboard/account/sessions" | "/dashboard/tenants" | "/dashboard/tenants/:tenantId/actions/:actionId" | "/dashboard/tenants/:tenantId/actions/:actionId/edit" | "/dashboard/tenants/:tenantId/actions" | "/dashboard/tenants/:tenantId/actions/new" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/services" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/tenants/:tenantId" | "/dashboard/tenants/:tenantId/sso" | "/dashboard/roles" | "/dashboard/users" | "/register" | "/onboard" | "/onboard/pending" | "/logout" | "/login";
+    page: "/" | "/forgot-password" | "/reset-password" | "/auth/callback" | "/invite/accept" | "/tenant/select" | "/dashboard" | "/dashboard/security/alerts" | "/dashboard/services" | "/dashboard/services/:id" | "/dashboard/audit-logs" | "/dashboard/analytics" | "/dashboard/analytics/events" | "/dashboard/settings" | "/dashboard/settings/email-templates" | "/dashboard/settings/email-templates/:type" | "/dashboard/settings/identity-providers" | "/dashboard/settings/branding" | "/dashboard/settings/passkeys" | "/dashboard/settings/security" | "/dashboard/settings/sessions" | "/dashboard/settings/email" | "/dashboard/account" | "/dashboard/account/identities" | "/dashboard/account/passkeys" | "/dashboard/account/security" | "/dashboard/account/sessions" | "/dashboard/tenants" | "/dashboard/tenants/:tenantId/actions/:actionId" | "/dashboard/tenants/:tenantId/actions/:actionId/edit" | "/dashboard/tenants/:tenantId/actions" | "/dashboard/tenants/:tenantId/actions/new" | "/dashboard/tenants/:tenantId/invitations" | "/dashboard/tenants/:tenantId/services" | "/dashboard/tenants/:tenantId/webhooks" | "/dashboard/tenants/:tenantId" | "/dashboard/tenants/:tenantId/sso" | "/dashboard/roles" | "/dashboard/users" | "/register" | "/onboard" | "/onboard/pending" | "/logout" | "/login";
   };
   "routes/forgot-password.tsx": {
     id: "routes/forgot-password";
@@ -186,6 +189,10 @@ type RouteFiles = {
   "routes/invite.accept.tsx": {
     id: "routes/invite.accept";
     page: "/invite/accept";
+  };
+  "routes/tenant.select.tsx": {
+    id: "routes/tenant.select";
+    page: "/tenant/select";
   };
   "routes/dashboard.tsx": {
     id: "routes/dashboard";
@@ -367,6 +374,7 @@ type RouteModules = {
   "routes/reset-password": typeof import("./app/routes/reset-password.tsx");
   "routes/auth.callback": typeof import("./app/routes/auth.callback.tsx");
   "routes/invite.accept": typeof import("./app/routes/invite.accept.tsx");
+  "routes/tenant.select": typeof import("./app/routes/tenant.select.tsx");
   "routes/dashboard": typeof import("./app/routes/dashboard.tsx");
   "routes/dashboard.security.alerts": typeof import("./app/routes/dashboard.security.alerts.tsx");
   "routes/dashboard.services._index": typeof import("./app/routes/dashboard.services._index.tsx");

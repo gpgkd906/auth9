@@ -231,7 +231,7 @@ pub async fn regenerate_webhook_secret<S: HasWebhooks + HasServices>(
         "webhook.regenerate_secret",
         "webhook",
         Some(*webhook_id),
-        serde_json::to_value(&existing.id.to_string()).ok(),
+        serde_json::to_value(existing.id.to_string()).ok(),
         None,
     )
     .await;
