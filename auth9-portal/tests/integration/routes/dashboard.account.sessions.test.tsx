@@ -13,13 +13,12 @@ vi.mock("~/services/api", () => ({
 }));
 
 vi.mock("~/services/session.server", () => ({
-    getAccessToken: vi.fn().mockResolvedValue("test-token"),
-    requireAuthWithUpdate: vi.fn().mockResolvedValue({
+    requireIdentityAuthWithUpdate: vi.fn().mockResolvedValue({
         session: {
-            accessToken: "test-token",
+            identityAccessToken: "test-token",
             refreshToken: "test-refresh-token",
             idToken: "test-id-token",
-            expiresAt: Date.now() + 3600000,
+            identityExpiresAt: Date.now() + 3600000,
         },
         headers: undefined,
     }),
@@ -101,8 +100,9 @@ describe("Account Sessions Page", () => {
     });
 
     it("loader redirects when no access token", async () => {
-        const { getAccessToken } = await import("~/services/session.server");
-        vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+        const { requireIdentityAuthWithUpdate } = await import("~/services/session.server");
+        const redirectResponse = new Response(null, { status: 302, headers: { Location: "/login" } });
+        vi.mocked(requireIdentityAuthWithUpdate).mockRejectedValueOnce(redirectResponse);
 
         const request = new Request("http://localhost/dashboard/account/sessions");
         try {
@@ -149,14 +149,19 @@ describe("Account Sessions Page", () => {
         expect(sessionApi.revokeOtherSessions).toHaveBeenCalledWith("test-token");
     });
 
-    it("action returns error when not authenticated", async () => {
-        const { getAccessToken } = await import("~/services/session.server");
-        vi.mocked(getAccessToken).mockResolvedValueOnce(null);
+    it("action redirects when not authenticated", async () => {
+        const { requireIdentityAuthWithUpdate } = await import("~/services/session.server");
+        const redirectResponse = new Response(null, { status: 302, headers: { Location: "/login" } });
+        vi.mocked(requireIdentityAuthWithUpdate).mockRejectedValueOnce(redirectResponse);
 
         const request = createFormRequest({ intent: "revoke", sessionId: "s2" });
-        const result = await action({ request, params: {}, context: {} });
-
-        expect(result).toEqual({ error: "Not authenticated" });
+        try {
+            await action({ request, params: {}, context: {} });
+            expect.fail("Expected redirect");
+        } catch (response) {
+            expect((response as Response).status).toBe(302);
+            expect((response as Response).headers.get("Location")).toBe("/login");
+        }
     });
 
     it("action returns error on revoke failure", async () => {

@@ -6,7 +6,10 @@ use crate::support::http::{
     build_test_router, delete_json_with_auth, get_json_with_auth, post_json_with_auth,
     put_json_with_auth, TestAppState,
 };
-use crate::support::{create_test_tenant, create_test_tenant_access_token, MockKeycloakServer};
+use crate::support::{
+    create_test_tenant, create_test_tenant_access_token,
+    create_test_tenant_access_token_for_tenant, MockKeycloakServer,
+};
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
 use auth9_core::domain::{Tenant, TenantStatus};
 use axum::body::Body;
@@ -101,9 +104,9 @@ async fn test_list_tenants_empty() {
 async fn test_get_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
     let mut tenant = create_test_tenant(Some(tenant_id));
     tenant.name = "Acme Corp".to_string();
     tenant.slug = "acme-corp".to_string();
@@ -125,10 +128,10 @@ async fn test_get_tenant_returns_200() {
 async fn test_get_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_tenant_access_token();
+    let nonexistent_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(nonexistent_id);
     let app = build_test_router(state);
 
-    let nonexistent_id = Uuid::new_v4();
     let (status, _body): (StatusCode, Option<serde_json::Value>) =
         get_json_with_auth(&app, &format!("/api/v1/tenants/{}", nonexistent_id), &token).await;
 
@@ -264,9 +267,9 @@ async fn test_create_tenant_with_settings() {
 async fn test_update_tenant_returns_200() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
     let mut tenant = create_test_tenant(Some(tenant_id));
     tenant.name = "Old Name".to_string();
     state.tenant_repo.add_tenant(tenant).await;
@@ -295,10 +298,10 @@ async fn test_update_tenant_returns_200() {
 async fn test_update_tenant_returns_404() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_tenant_access_token();
+    let nonexistent_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(nonexistent_id);
     let app = build_test_router(state);
 
-    let nonexistent_id = Uuid::new_v4();
     let input = json!({
         "name": "New Name"
     });
@@ -318,9 +321,9 @@ async fn test_update_tenant_returns_404() {
 async fn test_update_tenant_status() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
     let tenant = create_test_tenant(Some(tenant_id));
     state.tenant_repo.add_tenant(tenant).await;
 
@@ -348,9 +351,9 @@ async fn test_update_tenant_status() {
 async fn test_update_tenant_logo_url() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let token = create_test_tenant_access_token();
 
     let tenant_id = Uuid::new_v4();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
     let tenant = create_test_tenant(Some(tenant_id));
     state.tenant_repo.add_tenant(tenant).await;
 

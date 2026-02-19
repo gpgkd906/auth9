@@ -1218,6 +1218,7 @@ mod tests {
             security_headers: crate::config::SecurityHeadersConfig::default(),
             portal_client_id: None,
             async_action: crate::domain::action::AsyncActionConfig::default(),
+            branding_allowed_domains: vec![],
         }
     }
 

@@ -241,18 +241,29 @@ export const userApi = {
     return handleResponse(response);
   },
 
-  enableMfa: async (id: string, accessToken?: string): Promise<{ data: User }> => {
+  enableMfa: async (id: string, confirmPassword: string, accessToken?: string): Promise<{ data: User }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}/mfa`, {
       method: "POST",
       headers: getHeaders(accessToken),
+      body: JSON.stringify({ confirm_password: confirmPassword }),
     });
     return handleResponse(response);
   },
 
-  disableMfa: async (id: string, accessToken?: string): Promise<{ data: User }> => {
+  disableMfa: async (id: string, confirmPassword: string, accessToken?: string): Promise<{ data: User }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/users/${id}/mfa`, {
       method: "DELETE",
       headers: getHeaders(accessToken),
+      body: JSON.stringify({ confirm_password: confirmPassword }),
+    });
+    return handleResponse(response);
+  },
+
+  updateRoleInTenant: async (userId: string, tenantId: string, roleInTenant: string, accessToken?: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/users/${userId}/tenants/${tenantId}`, {
+      method: "PUT",
+      headers: getHeaders(accessToken),
+      body: JSON.stringify({ role_in_tenant: roleInTenant }),
     });
     return handleResponse(response);
   },

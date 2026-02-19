@@ -54,17 +54,19 @@ async fn check_tenant_access<S: HasServices>(
 }
 
 fn check_tenant_access_inner(config: &Config, auth: &AuthUser, tenant_id: Uuid) -> Result<()> {
-    // Platform admin check applies to both Identity and TenantAccess tokens
-    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
-        return Ok(());
-    }
-
     match auth.token_type {
-        TokenType::Identity => Err(AppError::Forbidden(
-            "Tenant-scoped token required (exchange identity token first)".to_string(),
-        )),
+        TokenType::Identity => {
+            // Platform admins with Identity tokens can access any tenant
+            if config.is_platform_admin_email(&auth.email) {
+                return Ok(());
+            }
+            Err(AppError::Forbidden(
+                "Tenant-scoped token required (exchange identity token first)".to_string(),
+            ))
+        }
         TokenType::TenantAccess => {
-            // Tenant access tokens must match the tenant_id
+            // Tenant access tokens must always match the tenant_id, even for platform admins.
+            // The token is scoped to a specific tenant by design.
             if auth.tenant_id == Some(tenant_id) {
                 Ok(())
             } else {

@@ -26,10 +26,12 @@ INSERT INTO tenants (id, name, slug, settings, status)
 VALUES (@tenant_id, 'Invitation Test Tenant', 'invitation-test', '{}', 'active')
 ON DUPLICATE KEY UPDATE name = VALUES(name), settings = VALUES(settings), status = VALUES(status);
 
--- Ensure test service exists for this tenant (use fixed ID to avoid collision with other tenants)
+-- Ensure test service exists as a global/public service (tenant_id = NULL)
+-- The get_enabled_services API only returns services where s.tenant_id IS NULL,
+-- linked to tenants via the tenant_services join table.
 DELETE FROM services WHERE id = @service_id;
 INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status)
-VALUES (@service_id, @tenant_id, 'Auth9 Admin Portal', 'http://localhost:3000', '[]', '[]', 'active');
+VALUES (@service_id, NULL, 'Invitation Test Service', 'http://localhost:3000', '[]', '[]', 'active');
 
 -- Enable service for tenant
 INSERT INTO tenant_services (tenant_id, service_id, enabled)

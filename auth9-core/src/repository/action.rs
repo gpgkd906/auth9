@@ -9,6 +9,7 @@ use sqlx::MySqlPool;
 
 #[cfg_attr(test, mockall::automock)]
 #[async_trait]
+#[allow(clippy::too_many_arguments)]
 pub trait ActionRepository: Send + Sync {
     async fn create(&self, tenant_id: StringUuid, input: &CreateActionInput) -> Result<Action>;
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Action>>;

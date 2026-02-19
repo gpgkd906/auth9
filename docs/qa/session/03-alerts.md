@@ -40,10 +40,11 @@ echo "Target user Keycloak ID: $KC_USER_ID"
 ```
 
 说明：
-- `seed.sql` 会创建管理员与目标用户的会话数据
+- `seed.sql` 会创建目标用户的会话数据和历史登录记录（用于安全告警检测）
 - 管理员：`admin@auth9.local`
 - 目标用户：`target@example.com`（密码：`Target123!`）
 - Step 2 确保用户同时存在于 Keycloak 和数据库中，并同步 keycloak_id
+- seed.sql 预置的登录记录使 new_device 和 impossible_travel 检测能在本地环境触发
 
 ---
 
@@ -91,14 +92,20 @@ WHERE user_id = '{user_id}' AND alert_type = 'brute_force' ORDER BY created_at D
 ## 场景 2：新设备登录告警
 
 ### 初始状态
-- 用户从未在某设备登录过
+- 用户已有至少一条成功登录记录（seed.sql 已预置）
+- 用户从未在当前设备/浏览器登录过
 
 ### 目的
 验证新设备登录检测
 
+### 前置条件说明
+新设备检测要求用户已有登录历史（`!known_fingerprints.is_empty()`），首次注册用户不会触发此告警。
+seed.sql 已预置一条来自不同设备（IP: 203.0.113.10）的历史登录记录。
+
 ### 测试操作流程
-1. 从新设备/新浏览器登录
-2. 登录成功
+1. 确认 seed.sql 已执行（包含历史登录记录）
+2. 从新设备/新浏览器登录 target@example.com
+3. 登录成功
 
 ### 预期结果
 - 登录成功
@@ -116,15 +123,21 @@ WHERE user_id = '{user_id}' AND alert_type = 'new_device' ORDER BY created_at DE
 ## 场景 3：异地登录告警
 
 ### 初始状态
-- 用户刚在北京登录
-- 短时间内又从纽约登录
+- 用户最近 10 分钟内有一条来自 IP:203.0.113.10 的成功登录（seed.sql 已预置）
+- 用户即将从不同 IP/位置登录
 
 ### 目的
-验证异地登录检测
+验证异地登录（Impossible Travel）检测
+
+### 前置条件说明
+异地登录检测要求：(1) 上一次登录有 location 数据，(2) 当前登录有不同的 location，(3) 两次登录间隔 < 1 小时。
+seed.sql 预置了一条 10 分钟前来自公网 IP (203.0.113.10) 的登录记录（location = "IP:203.0.113.10"）。
+本地 Docker 环境中 Keycloak 事件的 IP 为私网地址（如 192.168.65.1），映射为 "Local Network"，
+与预置的 "IP:203.0.113.10" 不同，因此会触发 impossible_travel 告警。
 
 ### 测试操作流程
-1. 从位置 A 登录
-2. 使用 VPN 模拟从位置 B 登录
+1. 确认 seed.sql 已执行（包含 10 分钟前的登录记录）
+2. 在本地浏览器中登录 target@example.com
 
 ### 预期结果
 - 触发 impossible_travel 告警

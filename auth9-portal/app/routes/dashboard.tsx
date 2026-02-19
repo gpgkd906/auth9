@@ -8,8 +8,9 @@ import { OrgSwitcher } from "~/components/OrgSwitcher";
 import { requireAuthWithUpdate, commitSession, trySetActiveTenant } from "~/services/session.server";
 import { userApi, type User, type TenantUserWithTenant } from "~/services/api";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Dashboard - Auth9" }];
+export const meta: MetaFunction<typeof loader> = ({ data }) => {
+  const tenantName = data?.activeTenant?.tenant?.name || "Dashboard";
+  return [{ title: `${tenantName} - Auth9` }];
 };
 
 // Protect all dashboard routes - redirects to /login if not authenticated
@@ -103,7 +104,7 @@ const navigation = [
 
 export default function Dashboard() {
   const location = useLocation();
-  const { currentUser, tenants, activeTenantId } = useLoaderData<typeof loader>() as {
+  const { currentUser, tenants, activeTenant, activeTenantId } = useLoaderData<typeof loader>() as {
     currentUser: User | null;
     tenants: TenantUserWithTenant[];
     activeTenant: TenantUserWithTenant | undefined;
@@ -287,7 +288,7 @@ export default function Dashboard() {
       {/* Main content */}
       <main id="main-content" className="main-content pt-20 lg:pt-0" tabIndex={-1}>
         <div className="content-wrapper">
-          <Outlet />
+          <Outlet context={{ activeTenant, tenants, currentUser }} />
         </div>
       </main>
       <footer role="contentinfo" className="sr-only">

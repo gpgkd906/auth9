@@ -166,22 +166,32 @@ export async function action({ request }: ActionFunctionArgs) {
 
     if (intent === "enable_mfa") {
       const id = formData.get("id") as string;
-      await userApi.enableMfa(id, accessToken || undefined);
+      const confirm_password = formData.get("confirm_password") as string;
+      await userApi.enableMfa(id, confirm_password, accessToken || undefined);
       return { success: true, intent };
     }
 
     if (intent === "disable_mfa") {
       const id = formData.get("id") as string;
-      await userApi.disableMfa(id, accessToken || undefined);
+      const confirm_password = formData.get("confirm_password") as string;
+      await userApi.disableMfa(id, confirm_password, accessToken || undefined);
+      return { success: true, intent };
+    }
+
+    if (intent === "update_role_in_tenant") {
+      const user_id = formData.get("user_id") as string;
+      const tenant_id = formData.get("tenant_id") as string;
+      const role_in_tenant = formData.get("role_in_tenant") as string;
+      await userApi.updateRoleInTenant(user_id, tenant_id, role_in_tenant, accessToken || undefined);
       return { success: true, intent };
     }
 
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return Response.json({ error: message, intent }, { status: 400 });
+    return { error: message, intent };
   }
 
-  return Response.json({ error: "Invalid intent", intent }, { status: 400 });
+  return { error: "Invalid intent", intent };
 }
 
 export default function UsersPage() {
@@ -217,6 +227,11 @@ export default function UsersPage() {
     return true;
   };
 
+  // State for MFA password confirmation dialog
+  const [mfaAction, setMfaAction] = useState<{ user: User; action: "enable" | "disable" } | null>(null);
+  const [mfaPassword, setMfaPassword] = useState("");
+  const [mfaError, setMfaError] = useState<string | null>(null);
+
   // State for Manage Roles
   const [selectedServiceId, setSelectedServiceId] = useState<string>("");
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
@@ -231,6 +246,18 @@ export default function UsersPage() {
       if (actionData.intent === "update_user") setEditingUser(null);
       if (actionData.intent === "create_user") setCreatingUser(false);
       if (actionData.intent === "assign_roles") setManagingRoles(null);
+      if (actionData.intent === "enable_mfa" || actionData.intent === "disable_mfa") {
+        setMfaAction(null);
+        setMfaPassword("");
+        setMfaError(null);
+      }
+      // Refresh tenant list after role update
+      if (actionData.intent === "update_role_in_tenant" && managingTenantsUser) {
+        const formData = new FormData();
+        formData.append("intent", "get_user_tenants");
+        formData.append("user_id", managingTenantsUser.id);
+        submit(formData, { method: "post" });
+      }
       // Refresh assigned roles after unassign via server-side action
       if (actionData.intent === "unassign_role" && managingRoles) {
         const formData = new FormData();
@@ -248,6 +275,10 @@ export default function UsersPage() {
       if (actionData.intent === "get_service_roles" && actionData.data) {
         setAvailableRoles(actionData.data as Role[]);
       }
+    }
+    // Show MFA errors in the confirmation dialog
+    if (actionData && "error" in actionData && (actionData.intent === "enable_mfa" || actionData.intent === "disable_mfa")) {
+      setMfaError(formatErrorMessage(String(actionData.error)));
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData]);
@@ -457,30 +488,20 @@ export default function UsersPage() {
                           </DropdownMenuItem>
                           {user.mfa_enabled ? (
                             <DropdownMenuItem
-                              onClick={async () => {
-                                const ok = await confirm({
-                                  title: "Disable MFA",
-                                  description: "Are you sure you want to disable MFA for this user?",
-                                  confirmLabel: "Disable MFA",
-                                });
-                                if (ok) {
-                                  submit({ intent: "disable_mfa", id: user.id }, { method: "post" });
-                                }
+                              onClick={() => {
+                                setMfaAction({ user, action: "disable" });
+                                setMfaPassword("");
+                                setMfaError(null);
                               }}
                             >
                               Disable MFA
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
-                              onClick={async () => {
-                                const ok = await confirm({
-                                  title: "Enable MFA",
-                                  description: "Are you sure you want to enable MFA for this user?",
-                                  confirmLabel: "Enable MFA",
-                                });
-                                if (ok) {
-                                  submit({ intent: "enable_mfa", id: user.id }, { method: "post" });
-                                }
+                              onClick={() => {
+                                setMfaAction({ user, action: "enable" });
+                                setMfaPassword("");
+                                setMfaError(null);
                               }}
                             >
                               Enable MFA
@@ -697,7 +718,30 @@ export default function UsersPage() {
                     <div className="flex items-center gap-2">
                       {ut.tenant?.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
                       <span className="font-medium text-[var(--text-primary)]">{ut.tenant?.name ?? "Unknown Tenant"}</span>
-                      <span className="text-[var(--text-tertiary)]">({ut.role_in_tenant})</span>
+                      <Select
+                        defaultValue={ut.role_in_tenant}
+                        onValueChange={(value) => {
+                          if (value !== ut.role_in_tenant && managingTenantsUser) {
+                            submit(
+                              {
+                                intent: "update_role_in_tenant",
+                                user_id: managingTenantsUser.id,
+                                tenant_id: ut.tenant_id,
+                                role_in_tenant: value,
+                              },
+                              { method: "post" }
+                            );
+                          }
+                        }}
+                      >
+                        <SelectTrigger className="h-7 w-24 text-xs">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="member">Member</SelectItem>
+                          <SelectItem value="admin">Admin</SelectItem>
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => managingTenantsUser && ut.tenant && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })} disabled={!ut.tenant}>
@@ -755,6 +799,57 @@ export default function UsersPage() {
               </Form>
             </div>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* MFA Password Confirmation Dialog */}
+      <Dialog open={!!mfaAction} onOpenChange={(open) => {
+        if (!open) {
+          setMfaAction(null);
+          setMfaPassword("");
+          setMfaError(null);
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{mfaAction?.action === "enable" ? "Enable" : "Disable"} MFA</DialogTitle>
+            <DialogDescription>
+              Enter your password to confirm {mfaAction?.action === "enable" ? "enabling" : "disabling"} MFA for {mfaAction?.user.email}.
+            </DialogDescription>
+          </DialogHeader>
+          <Form method="post" className="space-y-4" onSubmit={() => {
+            setMfaError(null);
+          }}>
+            <input type="hidden" name="intent" value={mfaAction?.action === "enable" ? "enable_mfa" : "disable_mfa"} />
+            <input type="hidden" name="id" value={mfaAction?.user.id || ""} />
+            <div className="space-y-1.5">
+              <Label htmlFor="mfa-confirm-password">Your Password</Label>
+              <Input
+                id="mfa-confirm-password"
+                name="confirm_password"
+                type="password"
+                required
+                placeholder="Enter your password to confirm"
+                value={mfaPassword}
+                onChange={(e) => setMfaPassword(e.target.value)}
+              />
+            </div>
+            {mfaError && (
+              <p className="text-sm text-[var(--accent-red)]">{mfaError}</p>
+            )}
+            <DialogFooter>
+              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => {
+                setMfaAction(null);
+                setMfaPassword("");
+                setMfaError(null);
+              }}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isSubmitting || !mfaPassword}>
+                {mfaAction?.action === "enable" ? "Enable MFA" : "Disable MFA"}
+              </Button>
+            </DialogFooter>
+          </Form>
         </DialogContent>
       </Dialog>
 

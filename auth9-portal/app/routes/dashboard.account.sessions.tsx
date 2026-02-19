@@ -1,7 +1,6 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { getAccessToken } from "~/services/session.server";
-import { redirect } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
+import { requireIdentityAuthWithUpdate } from "~/services/session.server";
+import { redirect, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { sessionApi, type SessionInfo } from "~/services/api";
@@ -14,24 +13,26 @@ import {
 } from "@radix-ui/react-icons";
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const accessToken = await getAccessToken(request);
-  if (!accessToken) {
-    throw redirect("/login");
-  }
+  // Session API requires the identity token (with 'sid' claim), not the tenant access token
+  const { session, headers } = await requireIdentityAuthWithUpdate(request);
+  const identityToken = session.identityAccessToken || "";
 
   try {
-    const response = await sessionApi.listMySessions(accessToken);
-    return { sessions: response.data };
+    const response = await sessionApi.listMySessions(identityToken);
+    const data = { sessions: response.data, error: undefined as string | undefined };
+    if (headers) {
+      return Response.json(data, { headers });
+    }
+    return data;
   } catch {
     return { sessions: [], error: "Failed to load sessions" };
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
-  const accessToken = await getAccessToken(request);
-  if (!accessToken) {
-    return { error: "Not authenticated" };
-  }
+  // Session API requires the identity token (with 'sid' claim), not the tenant access token
+  const { session } = await requireIdentityAuthWithUpdate(request);
+  const accessToken = session.identityAccessToken || "";
 
   const formData = await request.formData();
   const intent = formData.get("intent");

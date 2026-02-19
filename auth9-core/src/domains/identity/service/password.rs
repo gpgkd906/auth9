@@ -93,6 +93,7 @@ impl<
         }
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn with_action_engine<AR: ActionRepository + 'static>(
         password_reset_repo: Arc<P>,
         user_repo: Arc<U>,
@@ -1414,7 +1415,7 @@ mod tests {
 
     #[tokio::test]
     async fn test_resolve_user_password_policy_with_tenant() {
-        use crate::domain::{Tenant, TenantUser, User};
+        use crate::domain::{Tenant, TenantUser};
         use crate::repository::tenant::MockTenantRepository;
 
         let password_reset_mock = MockPasswordResetRepository::new();

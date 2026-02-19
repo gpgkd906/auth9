@@ -1,6 +1,6 @@
 import { redirect } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
-import { getAccessToken, getSession, destroySession } from "~/services/session.server";
+import { getSession, destroySession } from "~/services/session.server";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const AUTH9_CORE_URL = process.env.AUTH9_CORE_URL || "http://localhost:8080";
@@ -8,17 +8,19 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const PORTAL_URL = process.env.AUTH9_PORTAL_URL || "http://localhost:3000";
   const CLIENT_ID = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
 
-  // Get the access token to send with logout request
-  const accessToken = await getAccessToken(request);
+  // Get the identity token (not tenant token) to send with logout request
+  // The logout endpoint validates against aud:"auth9" which is the identity token audience
+  const session = await getSession(request);
+  const identityToken = session?.identityAccessToken || session?.accessToken;
 
-  // Call backend logout API with token to revoke session in database
+  // Call backend logout API with identity token to revoke session in database
   // Use internal URL for server-to-server communication
-  if (accessToken) {
+  if (identityToken) {
     try {
       const response = await fetch(`${AUTH9_CORE_URL}/api/v1/auth/logout?post_logout_redirect_uri=${encodeURIComponent(PORTAL_URL)}&client_id=${encodeURIComponent(CLIENT_ID)}`, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${accessToken}`,
+          "Authorization": `Bearer ${identityToken}`,
         },
         redirect: "manual", // Don't follow redirects, we'll handle it ourselves
       });
@@ -33,7 +35,6 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   // Destroy the portal session cookie so the user can't access dashboard after logout
-  const session = await getSession(request);
   const headers = new Headers();
   headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
   headers.set("Pragma", "no-cache");

@@ -21,32 +21,35 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   if (!tenantId) throw new Error("Tenant ID is required");
   const accessToken = await getAccessToken(request);
 
+  // Fetch tenant details first - redirect if tenant not found
+  let tenantRes;
   try {
-    // Fetch tenant details and related counts in parallel
-    const [tenantRes, servicesRes, invitationsRes, webhooksRes, tenantServicesRes, tenantUsersRes] = await Promise.all([
-      tenantApi.get(tenantId, accessToken || undefined),
-      serviceApi.list(tenantId, 1, 1, accessToken || undefined), // Just get count
-      invitationApi.list(tenantId, 1, 1, "pending", accessToken || undefined), // Pending invitations count
-      webhookApi.list(tenantId, accessToken || undefined),
-      tenantServiceApi.listServices(tenantId, accessToken || undefined), // Get global services with enabled status
-      tenantUserApi.list(tenantId, accessToken || undefined),
-    ]);
-
-    const enabledServicesCount = tenantServicesRes.data.filter(s => s.enabled).length;
-    const totalGlobalServicesCount = tenantServicesRes.data.length;
-
-    return {
-      tenant: tenantRes.data,
-      usersCount: tenantUsersRes.data.length,
-      servicesCount: servicesRes.pagination.total,
-      pendingInvitationsCount: invitationsRes.pagination.total,
-      webhooksCount: webhooksRes.data.length,
-      enabledServicesCount,
-      totalGlobalServicesCount,
-    };
+    tenantRes = await tenantApi.get(tenantId, accessToken || undefined);
   } catch {
     throw redirect("/dashboard/tenants");
   }
+
+  // Fetch related counts in parallel - tolerate individual failures
+  const [servicesRes, invitationsRes, webhooksRes, tenantServicesRes, tenantUsersRes] = await Promise.all([
+    serviceApi.list(tenantId, 1, 1, accessToken || undefined).catch(() => ({ pagination: { total: 0 } })),
+    invitationApi.list(tenantId, 1, 1, "pending", accessToken || undefined).catch(() => ({ pagination: { total: 0 } })),
+    webhookApi.list(tenantId, accessToken || undefined).catch(() => ({ data: [] })),
+    tenantServiceApi.listServices(tenantId, accessToken || undefined).catch(() => ({ data: [] })),
+    tenantUserApi.list(tenantId, accessToken || undefined).catch(() => ({ data: [] })),
+  ]);
+
+  const enabledServicesCount = tenantServicesRes.data.filter((s: { enabled: boolean }) => s.enabled).length;
+  const totalGlobalServicesCount = tenantServicesRes.data.length;
+
+  return {
+    tenant: tenantRes.data,
+    usersCount: tenantUsersRes.data.length,
+    servicesCount: servicesRes.pagination.total,
+    pendingInvitationsCount: invitationsRes.pagination.total,
+    webhooksCount: webhooksRes.data.length,
+    enabledServicesCount,
+    totalGlobalServicesCount,
+  };
 }
 
 export async function action({ request, params }: ActionFunctionArgs) {

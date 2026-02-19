@@ -398,40 +398,29 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
     }
 
     // 2c. Deduplicate webhook events using Redis SETNX
-    // Use event ID if available, otherwise compose key from event attributes
-    let dedup_key = if let Some(ref id) = event.id {
-        id.clone()
-    } else {
-        format!(
-            "{}:{}:{}:{}",
-            event.event_type.as_deref().unwrap_or("admin"),
-            event.user_id.as_deref().unwrap_or("none"),
-            event.session_id.as_deref().unwrap_or("none"),
-            event.time,
-        )
-    };
-    match state
-        .cache()
-        .check_and_mark_webhook_event(&dedup_key, 3600)
-        .await
-    {
-        Ok(true) => {
-            debug!("Duplicate webhook event detected, skipping: {}", dedup_key);
-            return Ok(StatusCode::NO_CONTENT);
-        }
-        Ok(false) => {} // New event, proceed
-        Err(e) => {
-            // Redis unavailable: fall back to in-memory dedup
-            warn!(
-                "Webhook dedup cache check failed, using in-memory fallback: {}",
-                e
-            );
-            if check_in_memory_dedup(&dedup_key, 3600) {
-                debug!(
-                    "Duplicate webhook event detected (in-memory fallback), skipping: {}",
-                    dedup_key
-                );
+    // Only deduplicate when Keycloak provides an explicit event ID (indicating a
+    // redelivery). Without an ID, each event is treated as distinct — this is
+    // critical for security monitoring where multiple rapid login failures from the
+    // same user must all be recorded to trigger brute-force alerts.
+    if let Some(ref id) = event.id {
+        match state.cache().check_and_mark_webhook_event(id, 3600).await {
+            Ok(true) => {
+                debug!("Duplicate webhook event detected, skipping: {}", id);
                 return Ok(StatusCode::NO_CONTENT);
+            }
+            Ok(false) => {} // New event, proceed
+            Err(e) => {
+                warn!(
+                    "Webhook dedup cache check failed, using in-memory fallback: {}",
+                    e
+                );
+                if check_in_memory_dedup(id, 3600) {
+                    debug!(
+                        "Duplicate webhook event detected (in-memory fallback), skipping: {}",
+                        id
+                    );
+                    return Ok(StatusCode::NO_CONTENT);
+                }
             }
         }
     }

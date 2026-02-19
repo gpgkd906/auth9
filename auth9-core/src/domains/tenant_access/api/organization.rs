@@ -5,7 +5,11 @@ use crate::domain::{AddUserToTenantInput, CreateOrganizationInput, Tenant};
 use crate::error::Result;
 use crate::middleware::auth::AuthUser;
 use crate::state::HasServices;
-use axum::{extract::{Query, State}, response::IntoResponse, Json};
+use axum::{
+    extract::{Query, State},
+    response::IntoResponse,
+    Json,
+};
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
 
@@ -41,7 +45,7 @@ pub async fn create_organization<S: HasServices>(
 
     // Add the creator as owner of the new organization
     let add_input = AddUserToTenantInput {
-        user_id: auth.user_id.into(),
+        user_id: auth.user_id,
         tenant_id: tenant.id.into(),
         role_in_tenant: "owner".to_string(),
     };
@@ -83,7 +87,11 @@ pub async fn get_my_tenants<S: HasServices>(
         .await?;
 
     if let Some(service_client_id) = &query.service_id {
-        if let Ok(service) = state.client_service().get_by_client_id(service_client_id).await {
+        if let Ok(service) = state
+            .client_service()
+            .get_by_client_id(service_client_id)
+            .await
+        {
             if let Some(service_tenant_id) = service.tenant_id {
                 tenants.retain(|t| t.tenant_id == service_tenant_id);
             }

@@ -17,8 +17,16 @@ use std::sync::Arc;
 pub struct SecurityDetectionConfig {
     /// Number of failed login attempts before triggering brute force alert
     pub brute_force_threshold: i32,
-    /// Time window in minutes for brute force detection
+    /// Time window in minutes for brute force detection (acute)
     pub brute_force_window_mins: i64,
+    /// Threshold for medium-term slow brute force (1 hour window)
+    pub slow_brute_force_medium_threshold: i32,
+    /// Time window in minutes for medium-term detection
+    pub slow_brute_force_medium_window_mins: i64,
+    /// Threshold for long-term slow brute force (24 hour window)
+    pub slow_brute_force_long_threshold: i32,
+    /// Time window in minutes for long-term detection
+    pub slow_brute_force_long_window_mins: i64,
     /// Number of different accounts from same IP before password spray alert
     pub password_spray_threshold: i32,
     /// Time window in minutes for password spray detection
@@ -32,6 +40,10 @@ impl Default for SecurityDetectionConfig {
         Self {
             brute_force_threshold: 5,
             brute_force_window_mins: 10,
+            slow_brute_force_medium_threshold: 15,
+            slow_brute_force_medium_window_mins: 60,
+            slow_brute_force_long_threshold: 50,
+            slow_brute_force_long_window_mins: 1440,
             password_spray_threshold: 5,
             password_spray_window_mins: 10,
             impossible_travel_distance_km: 500.0,
@@ -94,6 +106,37 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
                 .await?
             {
                 alerts.push(alert);
+            }
+        }
+
+        // Check for slow brute force (multi-window: 1h and 24h)
+        // Only check if acute window didn't already trigger (avoid duplicate alerts)
+        if let Some(ip) = &event.ip_address {
+            let has_acute_alert = alerts
+                .iter()
+                .any(|a| a.alert_type == SecurityAlertType::BruteForce);
+            if !has_acute_alert {
+                if let Some(alert) = self.check_slow_brute_force_ip(ip, event.user_id).await? {
+                    alerts.push(alert);
+                }
+            }
+        }
+        if let Some(email) = &event.email {
+            let has_distributed_alert = alerts.iter().any(|a| {
+                a.alert_type == SecurityAlertType::BruteForce
+                    && a.details
+                        .as_ref()
+                        .and_then(|d| d.get("detection_reason"))
+                        .and_then(|v| v.as_str())
+                        == Some("distributed_brute_force")
+            });
+            if !has_distributed_alert {
+                if let Some(alert) = self
+                    .check_slow_brute_force_account(email, event.user_id)
+                    .await?
+                {
+                    alerts.push(alert);
+                }
             }
         }
 
@@ -226,6 +269,128 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
 
             let alert = self.security_alert_repo.create(&input).await?;
             metrics::counter!("auth9_security_alerts_total", "type" => "brute_force", "severity" => "high").increment(1);
+            return Ok(Some(alert));
+        }
+
+        Ok(None)
+    }
+
+    /// Check for slow brute force from a single IP (medium and long windows)
+    async fn check_slow_brute_force_ip(
+        &self,
+        ip_address: &str,
+        user_id: Option<StringUuid>,
+    ) -> Result<Option<SecurityAlert>> {
+        // Check long window first (lower severity but broader pattern)
+        let long_since =
+            Utc::now() - Duration::minutes(self.config.slow_brute_force_long_window_mins);
+        let long_attempts = self
+            .login_event_repo
+            .count_failed_by_ip(ip_address, long_since)
+            .await?;
+
+        if long_attempts >= self.config.slow_brute_force_long_threshold as i64 {
+            let input = CreateSecurityAlertInput {
+                user_id,
+                tenant_id: None,
+                alert_type: SecurityAlertType::SlowBruteForce,
+                severity: AlertSeverity::Medium,
+                details: Some(serde_json::json!({
+                    "ip_address": ip_address,
+                    "failed_attempts": long_attempts,
+                    "window_minutes": self.config.slow_brute_force_long_window_mins,
+                    "detection_reason": "slow_brute_force_long",
+                })),
+            };
+            let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "slow_brute_force", "severity" => "medium").increment(1);
+            return Ok(Some(alert));
+        }
+
+        // Check medium window (higher severity, tighter pattern)
+        let medium_since =
+            Utc::now() - Duration::minutes(self.config.slow_brute_force_medium_window_mins);
+        let medium_attempts = self
+            .login_event_repo
+            .count_failed_by_ip(ip_address, medium_since)
+            .await?;
+
+        if medium_attempts >= self.config.slow_brute_force_medium_threshold as i64 {
+            let input = CreateSecurityAlertInput {
+                user_id,
+                tenant_id: None,
+                alert_type: SecurityAlertType::SlowBruteForce,
+                severity: AlertSeverity::Medium,
+                details: Some(serde_json::json!({
+                    "ip_address": ip_address,
+                    "failed_attempts": medium_attempts,
+                    "window_minutes": self.config.slow_brute_force_medium_window_mins,
+                    "detection_reason": "slow_brute_force_medium",
+                })),
+            };
+            let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "slow_brute_force", "severity" => "medium").increment(1);
+            return Ok(Some(alert));
+        }
+
+        Ok(None)
+    }
+
+    /// Check for slow brute force on an account (medium and long windows)
+    async fn check_slow_brute_force_account(
+        &self,
+        email: &str,
+        user_id: Option<StringUuid>,
+    ) -> Result<Option<SecurityAlert>> {
+        // Check long window first
+        let long_since =
+            Utc::now() - Duration::minutes(self.config.slow_brute_force_long_window_mins);
+        let long_attempts = self
+            .login_event_repo
+            .count_failed_by_user(email, long_since)
+            .await?;
+
+        if long_attempts >= self.config.slow_brute_force_long_threshold as i64 {
+            let input = CreateSecurityAlertInput {
+                user_id,
+                tenant_id: None,
+                alert_type: SecurityAlertType::SlowBruteForce,
+                severity: AlertSeverity::Medium,
+                details: Some(serde_json::json!({
+                    "email": email,
+                    "failed_attempts": long_attempts,
+                    "window_minutes": self.config.slow_brute_force_long_window_mins,
+                    "detection_reason": "slow_brute_force_account_long",
+                })),
+            };
+            let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "slow_brute_force", "severity" => "medium").increment(1);
+            return Ok(Some(alert));
+        }
+
+        // Check medium window
+        let medium_since =
+            Utc::now() - Duration::minutes(self.config.slow_brute_force_medium_window_mins);
+        let medium_attempts = self
+            .login_event_repo
+            .count_failed_by_user(email, medium_since)
+            .await?;
+
+        if medium_attempts >= self.config.slow_brute_force_medium_threshold as i64 {
+            let input = CreateSecurityAlertInput {
+                user_id,
+                tenant_id: None,
+                alert_type: SecurityAlertType::SlowBruteForce,
+                severity: AlertSeverity::Medium,
+                details: Some(serde_json::json!({
+                    "email": email,
+                    "failed_attempts": medium_attempts,
+                    "window_minutes": self.config.slow_brute_force_medium_window_mins,
+                    "detection_reason": "slow_brute_force_account_medium",
+                })),
+            };
+            let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "slow_brute_force", "severity" => "medium").increment(1);
             return Ok(Some(alert));
         }
 
@@ -430,6 +595,10 @@ mod tests {
         let config = SecurityDetectionConfig::default();
         assert_eq!(config.brute_force_threshold, 5);
         assert_eq!(config.brute_force_window_mins, 10);
+        assert_eq!(config.slow_brute_force_medium_threshold, 15);
+        assert_eq!(config.slow_brute_force_medium_window_mins, 60);
+        assert_eq!(config.slow_brute_force_long_threshold, 50);
+        assert_eq!(config.slow_brute_force_long_window_mins, 1440);
         assert_eq!(config.password_spray_threshold, 5);
         assert_eq!(config.impossible_travel_distance_km, 500.0);
     }
@@ -1112,13 +1281,168 @@ mod tests {
         let config = SecurityDetectionConfig {
             brute_force_threshold: 10,
             brute_force_window_mins: 5,
+            slow_brute_force_medium_threshold: 20,
+            slow_brute_force_medium_window_mins: 30,
+            slow_brute_force_long_threshold: 100,
+            slow_brute_force_long_window_mins: 720,
             password_spray_threshold: 3,
             password_spray_window_mins: 15,
             impossible_travel_distance_km: 1000.0,
         };
 
         assert_eq!(config.brute_force_threshold, 10);
+        assert_eq!(config.slow_brute_force_medium_threshold, 20);
+        assert_eq!(config.slow_brute_force_long_threshold, 100);
         assert_eq!(config.password_spray_threshold, 3);
         assert_eq!(config.impossible_travel_distance_km, 1000.0);
+    }
+
+    #[tokio::test]
+    async fn test_slow_brute_force_medium_window_detected() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+
+        // Below acute threshold (10-min window)
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(3));
+
+        // No password spray
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(1));
+
+        // Below acute threshold for account-level too
+        login_mock
+            .expect_count_failed_by_user()
+            .returning(|_, _| Ok(3));
+
+        // Expect slow brute force alert creation
+        alert_mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                user_id: input.user_id,
+                tenant_id: input.tenant_id,
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                details: input.details.clone(),
+                ..Default::default()
+            })
+        });
+
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+
+        // Use custom config with low medium threshold for testing
+        let config = SecurityDetectionConfig {
+            slow_brute_force_medium_threshold: 3,
+            ..SecurityDetectionConfig::default()
+        };
+
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            config,
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: Some(StringUuid::new_v4()),
+            email: Some("target@test.com".to_string()),
+            tenant_id: None,
+            event_type: LoginEventType::FailedPassword,
+            ip_address: Some("192.168.1.100".to_string()),
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: Some("invalid_password".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        // Should have slow brute force alerts (IP-level and/or account-level)
+        assert!(!alerts.is_empty());
+        assert!(alerts
+            .iter()
+            .any(|a| a.alert_type == SecurityAlertType::SlowBruteForce));
+        assert!(alerts
+            .iter()
+            .filter(|a| a.alert_type == SecurityAlertType::SlowBruteForce)
+            .all(|a| a.severity == AlertSeverity::Medium));
+    }
+
+    #[tokio::test]
+    async fn test_slow_brute_force_skipped_when_acute_triggered() {
+        let mut login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+
+        // Above acute threshold - triggers BruteForce alert
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(10));
+
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(1));
+
+        // Account-level also above threshold
+        login_mock
+            .expect_count_failed_by_user()
+            .returning(|_, _| Ok(10));
+
+        alert_mock.expect_create().returning(|input| {
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                user_id: input.user_id,
+                tenant_id: input.tenant_id,
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                details: input.details.clone(),
+                ..Default::default()
+            })
+        });
+
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: Some(StringUuid::new_v4()),
+            email: Some("target@test.com".to_string()),
+            tenant_id: None,
+            event_type: LoginEventType::FailedPassword,
+            ip_address: Some("192.168.1.100".to_string()),
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: Some("invalid_password".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        // Should have BruteForce but NOT SlowBruteForce (skipped due to acute trigger)
+        assert!(alerts
+            .iter()
+            .any(|a| a.alert_type == SecurityAlertType::BruteForce));
+        assert!(!alerts
+            .iter()
+            .any(|a| a.alert_type == SecurityAlertType::SlowBruteForce));
     }
 }

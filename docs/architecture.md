@@ -240,6 +240,21 @@ erDiagram
         timestamp created_at
     }
 
+    ### 5.3 私有服务与公共服务
+
+    服务（Service）通过 `tenant_id` 字段区分类型：
+
+    | 类型 | tenant_id | 说明 |
+    |------|-----------|------|
+    | 私有服务 | 有值（非 NULL） | 专属某个租户的服务，如租户自己的业务 API |
+    | 公共服务 | NULL | 不属于任何特定租户，所有租户可通过 `tenant_services` 关联使用 |
+
+    **设计原则**：
+    - **公共服务**：如 Auth9 Admin Portal，提供给所有租户使用，不专属于任何租户
+    - **私有服务**：如租户自己注册的业务服务，仅该租户可用
+
+    通过 `tenant_services` 表实现多租户对公共服务的关联使用。
+
     permissions {
         uuid id PK
         uuid service_id FK

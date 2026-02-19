@@ -14,6 +14,8 @@ export function Logo({ logoUrl, companyName, fallbackText }: LogoProps) {
         src={logoUrl}
         alt={companyName || "Logo"}
         className="login-logo-image"
+        referrerPolicy="no-referrer"
+        crossOrigin="anonymous"
       />
     );
   }

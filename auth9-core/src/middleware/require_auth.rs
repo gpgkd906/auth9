@@ -190,6 +190,8 @@ fn is_identity_token_path_allowed(path: &str) -> bool {
         || path == "/api/v1/users/me"
         || path.starts_with("/api/v1/users/me/sessions")
         || path.starts_with("/api/v1/users/me/passkeys")
+        // Platform admin endpoints use identity tokens (admin email check in handler)
+        || path.starts_with("/api/v1/system/")
 }
 
 /// Generate a 503 Service Unavailable response
@@ -479,5 +481,36 @@ mod tests {
         let response = app.oneshot(request).await.unwrap();
 
         assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    }
+
+    #[test]
+    fn test_identity_token_path_denied_tenants() {
+        // Tenant management paths should NOT be allowed for identity tokens
+        // (require tenant access token obtained via token exchange)
+        assert!(!is_identity_token_path_allowed("/api/v1/tenants"));
+        assert!(!is_identity_token_path_allowed("/api/v1/tenants/some-uuid"));
+        assert!(!is_identity_token_path_allowed(
+            "/api/v1/tenants/some-uuid/sso/connectors"
+        ));
+        assert!(!is_identity_token_path_allowed(
+            "/api/v1/tenants/some-uuid/users"
+        ));
+        assert!(!is_identity_token_path_allowed(
+            "/api/v1/tenants/some-uuid/invitations"
+        ));
+    }
+
+    #[test]
+    fn test_identity_token_path_allowed_existing() {
+        assert!(is_identity_token_path_allowed("/api/v1/auth/token"));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me/tenants"));
+        assert!(is_identity_token_path_allowed("/api/v1/organizations"));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me"));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me/sessions"));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me/passkeys"));
+
+        // Non-allowed paths
+        assert!(!is_identity_token_path_allowed("/api/v1/users"));
+        assert!(!is_identity_token_path_allowed("/api/v1/roles"));
     }
 }
