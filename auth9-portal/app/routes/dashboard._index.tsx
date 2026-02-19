@@ -1,4 +1,4 @@
-import { useLoaderData, redirect, Link } from "react-router";
+import { useLoaderData, redirect, Link, useOutletContext } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { ArrowRightIcon, PlusIcon } from "@radix-ui/react-icons";
 import { getAccessToken } from "~/services/session.server";
@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { FormattedDate } from "~/components/ui/formatted-date";
 import { auditApi, serviceApi, tenantApi, userApi } from "~/services/api";
+import type { TenantUserWithTenant, User } from "~/services/api";
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -42,14 +43,23 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 }
 
+type OutletContext = {
+  activeTenant?: TenantUserWithTenant;
+  tenants: TenantUserWithTenant[];
+  currentUser?: User | null;
+};
+
 export default function DashboardIndex() {
   const data = useLoaderData<typeof loader>();
+  const { activeTenant } = useOutletContext<OutletContext>();
+  const tenantName = activeTenant?.tenant?.name || "Dashboard";
+
   return (
     <div className="space-y-6">
       <div className="animate-fade-in-up">
-        <h1 className="mb-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">Dashboard</h1>
+        <h1 className="mb-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{tenantName}</h1>
         <p className="mb-6 text-[15px] text-[var(--text-secondary)]">
-          Welcome to Auth9. Here&apos;s an overview of your identity service.
+          Welcome to {tenantName}. Here&apos;s an overview of your identity service.
         </p>
       </div>
 

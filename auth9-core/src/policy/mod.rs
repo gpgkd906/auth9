@@ -278,6 +278,7 @@ mod tests {
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
+            branding_allowed_domains: vec![],
             password_reset: PasswordResetConfig {
                 hmac_key: "test-key".to_string(),
                 token_ttl_secs: 3600,

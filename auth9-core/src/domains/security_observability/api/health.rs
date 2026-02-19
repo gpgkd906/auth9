@@ -8,7 +8,6 @@ use utoipa::ToSchema;
 #[derive(Serialize, Deserialize, ToSchema)]
 pub struct HealthResponse {
     pub status: String,
-    pub version: String,
 }
 
 /// Health check endpoint
@@ -23,7 +22,6 @@ pub struct HealthResponse {
 pub async fn health() -> impl IntoResponse {
     Json(HealthResponse {
         status: "healthy".to_string(),
-        version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
 
@@ -55,50 +53,40 @@ mod tests {
     fn test_health_response_structure() {
         let response = HealthResponse {
             status: "healthy".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
         };
 
         assert_eq!(response.status, "healthy");
-        assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
     fn test_health_response_serialization() {
         let response = HealthResponse {
             status: "healthy".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
         };
 
         let json = serde_json::to_string(&response).unwrap();
         assert!(json.contains("healthy"));
-        assert!(json.contains("version"));
-        assert!(json.contains(env!("CARGO_PKG_VERSION")));
+        assert!(!json.contains("version"));
     }
 
     #[test]
     fn test_health_response_deserialization() {
-        let json = format!(
-            r#"{{"status": "healthy", "version": "{}"}}"#,
-            env!("CARGO_PKG_VERSION")
-        );
-        let response: HealthResponse = serde_json::from_str(&json).unwrap();
+        let json = r#"{"status": "healthy"}"#;
+        let response: HealthResponse = serde_json::from_str(json).unwrap();
 
         assert_eq!(response.status, "healthy");
-        assert_eq!(response.version, env!("CARGO_PKG_VERSION"));
     }
 
     #[test]
     fn test_health_response_json_roundtrip() {
         let original = HealthResponse {
             status: "healthy".to_string(),
-            version: env!("CARGO_PKG_VERSION").to_string(),
         };
 
         let json = serde_json::to_string(&original).unwrap();
         let parsed: HealthResponse = serde_json::from_str(&json).unwrap();
 
         assert_eq!(original.status, parsed.status);
-        assert_eq!(original.version, parsed.version);
     }
 
     #[tokio::test]

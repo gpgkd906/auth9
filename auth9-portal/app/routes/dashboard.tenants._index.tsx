@@ -26,7 +26,7 @@ import {
   DropdownMenuTrigger,
 } from "~/components/ui/dropdown-menu";
 import { tenantApi, type Tenant } from "~/services/api";
-import { requireAuthWithUpdate } from "~/services/session.server";
+import { getAccessTokenWithUpdate } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 
 export const meta: MetaFunction = () => {
@@ -34,12 +34,12 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
-  const { session, headers } = await requireAuthWithUpdate(request);
+  const { token: accessToken, headers } = await getAccessTokenWithUpdate(request);
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
   const search = url.searchParams.get("search") || undefined;
-  const tenants = await tenantApi.list(page, perPage, search, session.accessToken);
+  const tenants = await tenantApi.list(page, perPage, search, accessToken || undefined);
   const data = { ...tenants, search: search || "" };
 
   if (headers) {
@@ -51,8 +51,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent");
-  const { session, headers } = await requireAuthWithUpdate(request);
-  const accessToken = session.accessToken;
+  const { token: accessToken, headers } = await getAccessTokenWithUpdate(request);
 
   const returnSuccess = () => {
     if (headers) {
@@ -75,7 +74,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const slug = formData.get("slug") as string;
       const logo_url = formData.get("logo_url") as string;
 
-      await tenantApi.create({ name, slug, logo_url: logo_url || undefined }, accessToken);
+      await tenantApi.create({ name, slug, logo_url: logo_url || undefined }, accessToken || undefined);
       return returnSuccess();
     }
 
@@ -85,13 +84,13 @@ export async function action({ request }: ActionFunctionArgs) {
       const slug = formData.get("slug") as string;
       const logo_url = formData.get("logo_url") as string;
 
-      await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined }, accessToken);
+      await tenantApi.update(id, { name, slug, logo_url: logo_url || undefined }, accessToken || undefined);
       return returnSuccess();
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
-      await tenantApi.delete(id, accessToken);
+      await tenantApi.delete(id, accessToken || undefined);
       return returnSuccess();
     }
   } catch (error) {

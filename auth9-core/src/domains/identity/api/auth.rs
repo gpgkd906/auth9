@@ -637,7 +637,16 @@ pub async fn tenant_token<S: HasServices>(
         .ensure_tenant_membership(user_id, tenant_id)
         .await?;
 
-    let service = state.client_service().get_by_client_id(service_id).await?;
+    let service = state
+        .client_service()
+        .get_by_client_id(service_id)
+        .await
+        .map_err(|e| match e {
+            AppError::NotFound(_) => {
+                AppError::Forbidden("Service does not belong to the requested tenant".to_string())
+            }
+            other => other,
+        })?;
     if let Some(service_tenant_id) = service.tenant_id {
         if service_tenant_id != tenant_id {
             return Err(AppError::Forbidden(

@@ -84,6 +84,9 @@
   "engines": {
     "node": ">=20.0.0"
   },
+  "overrides": {
+    "minimatch": "^10.2.1"
+  },
   "browserslist": [
     "last 2 versions",
     "not dead",

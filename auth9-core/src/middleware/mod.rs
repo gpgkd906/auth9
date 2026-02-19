@@ -13,6 +13,7 @@ pub mod path_guard;
 pub mod rate_limit;
 pub mod require_auth;
 pub mod security_headers;
+pub mod trace;
 
 pub use auth::{AuthUser, OptionalAuth, RequireAuth};
 pub use error_response::normalize_error_response;

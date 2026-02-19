@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use std::collections::HashMap;
 use std::fmt;
+use std::str::FromStr;
 use utoipa::ToSchema;
 use validator::Validate;
 
@@ -52,9 +53,12 @@ impl ActionTrigger {
             ActionTrigger::PreTokenRefresh => "pre-token-refresh",
         }
     }
+}
 
-    /// Parse from string ID
-    pub fn from_str(s: &str) -> Result<Self> {
+impl FromStr for ActionTrigger {
+    type Err = AppError;
+
+    fn from_str(s: &str) -> Result<Self> {
         match s {
             "post-login" => Ok(ActionTrigger::PostLogin),
             "pre-user-registration" => Ok(ActionTrigger::PreUserRegistration),
@@ -363,38 +367,38 @@ mod tests {
         assert_eq!(ActionTrigger::PreTokenRefresh.as_str(), "pre-token-refresh");
     }
 
-    // 3. ActionTrigger::from_str() valid + invalid
+    // 3. ActionTrigger parsing valid + invalid
     #[test]
     fn test_action_trigger_from_str_valid() {
         assert_eq!(
-            ActionTrigger::from_str("post-login").unwrap(),
+            "post-login".parse::<ActionTrigger>().unwrap(),
             ActionTrigger::PostLogin
         );
         assert_eq!(
-            ActionTrigger::from_str("pre-user-registration").unwrap(),
+            "pre-user-registration".parse::<ActionTrigger>().unwrap(),
             ActionTrigger::PreUserRegistration
         );
         assert_eq!(
-            ActionTrigger::from_str("post-user-registration").unwrap(),
+            "post-user-registration".parse::<ActionTrigger>().unwrap(),
             ActionTrigger::PostUserRegistration
         );
         assert_eq!(
-            ActionTrigger::from_str("post-change-password").unwrap(),
+            "post-change-password".parse::<ActionTrigger>().unwrap(),
             ActionTrigger::PostChangePassword
         );
         assert_eq!(
-            ActionTrigger::from_str("post-email-verification").unwrap(),
+            "post-email-verification".parse::<ActionTrigger>().unwrap(),
             ActionTrigger::PostEmailVerification
         );
         assert_eq!(
-            ActionTrigger::from_str("pre-token-refresh").unwrap(),
+            "pre-token-refresh".parse::<ActionTrigger>().unwrap(),
             ActionTrigger::PreTokenRefresh
         );
     }
 
     #[test]
     fn test_action_trigger_from_str_invalid() {
-        let result = ActionTrigger::from_str("invalid-trigger");
+        let result = "invalid-trigger".parse::<ActionTrigger>();
         assert!(result.is_err());
     }
 

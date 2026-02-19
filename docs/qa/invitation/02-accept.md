@@ -174,4 +174,4 @@ SELECT status FROM invitations WHERE id = '{invitation_id}';
 | 3 | 使用过期邀请 | PASS | 2026-02-06 | Codex | expired2@example.com |
 | 4 | 使用已撤销邀请 | PASS | 2026-02-06 | Codex | revoked2@example.com |
 | 5 | 使用已接受邀请 | PASS | 2026-02-06 | Codex | existing2@example.com（二次访问） |
-| 6 | 认证状态检查 | NOT RUN |  |  |  |
+| 6 | 认证状态检查 | PASS | 2026-02-19 | Codex | 验证session过期后重定向至登录页 |

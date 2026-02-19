@@ -515,10 +515,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let email_template_service = Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
 
     // Create branding service with Keycloak sync
-    let branding_service = Arc::new(BrandingService::with_sync_service(
-        system_settings_repo.clone(),
-        keycloak_sync_service.clone(),
-    ));
+    let branding_service = Arc::new(
+        BrandingService::with_sync_service(
+            system_settings_repo.clone(),
+            keycloak_sync_service.clone(),
+        )
+        .with_allowed_domains(config.branding_allowed_domains.clone()),
+    );
 
     // Get app base URL for invitation links
     let app_base_url =
@@ -1219,8 +1222,10 @@ where
             security_headers_config,
             security_headers_middleware,
         ))
-        // 4. Tracing - for request logging
-        .layer(TraceLayer::new_for_http())
+        // 4. Tracing - for request logging (with sensitive query param sanitization)
+        .layer(
+            TraceLayer::new_for_http().make_span_with(crate::middleware::trace::SanitizedMakeSpan),
+        )
         // 5. Request ID + HTTP Metrics - record request count/duration/in-flight
         .layer(crate::middleware::metrics::ObservabilityLayer)
         // 6. Request timeout - return 408 if handler exceeds limit (prevents slow-loris)

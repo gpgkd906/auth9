@@ -228,7 +228,7 @@ pub async fn update_connector<S: HasServices + HasDbPool>(
         .await
         .map_err(map_conflict_if_duplicate)?;
     }
-    tx.commit().await?;
+    tx.commit().await.map_err(map_conflict_if_duplicate)?;
 
     let after =
         get_connector_by_id(state.db_pool(), tenant_id, StringUuid::from(connector_id)).await?;
@@ -472,7 +472,7 @@ async fn insert_connector(
         .map_err(map_conflict_if_duplicate)?;
     }
 
-    tx.commit().await?;
+    tx.commit().await.map_err(map_conflict_if_duplicate)?;
     Ok(())
 }
 

@@ -110,6 +110,7 @@ pub struct CreateLoginEventInput {
 #[serde(rename_all = "snake_case")]
 pub enum SecurityAlertType {
     BruteForce,
+    SlowBruteForce,
     NewDevice,
     ImpossibleTravel,
     SuspiciousIp,
@@ -121,6 +122,7 @@ impl std::str::FromStr for SecurityAlertType {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "brute_force" => Ok(SecurityAlertType::BruteForce),
+            "slow_brute_force" => Ok(SecurityAlertType::SlowBruteForce),
             "new_device" => Ok(SecurityAlertType::NewDevice),
             "impossible_travel" => Ok(SecurityAlertType::ImpossibleTravel),
             "suspicious_ip" => Ok(SecurityAlertType::SuspiciousIp),
@@ -133,6 +135,7 @@ impl std::fmt::Display for SecurityAlertType {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SecurityAlertType::BruteForce => write!(f, "brute_force"),
+            SecurityAlertType::SlowBruteForce => write!(f, "slow_brute_force"),
             SecurityAlertType::NewDevice => write!(f, "new_device"),
             SecurityAlertType::ImpossibleTravel => write!(f, "impossible_travel"),
             SecurityAlertType::SuspiciousIp => write!(f, "suspicious_ip"),

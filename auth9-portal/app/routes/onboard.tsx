@@ -16,10 +16,14 @@ export const meta: MetaFunction = () => {
 export async function loader({ request }: LoaderFunctionArgs) {
   const { session } = await requireAuthWithUpdate(request);
 
-  // If user already has tenants, redirect to dashboard
+  // If user already has active tenants, redirect to dashboard
+  // (pending-only tenants should stay on the onboard flow)
   try {
     const res = await userApi.getMyTenants(session.accessToken);
-    if (res.data && res.data.length > 0) {
+    const hasActiveTenant = res.data?.some(
+      (t) => t.tenant?.status === "active"
+    );
+    if (hasActiveTenant) {
       throw redirect("/dashboard");
     }
   } catch (e) {

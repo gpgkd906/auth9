@@ -15,7 +15,9 @@
 - **2 个租户**: "Auth9 Platform"（slug: `auth9-platform`）和 "Demo Organization"（slug: `demo`）
 - **1 个管理员用户**: 从 Keycloak 获取 `keycloak_id` 和 `email`，display_name 为 "Admin User"
 - **2 条 tenant_users**: 管理员关联到两个租户，角色为 `admin`
-- **4 条 tenant_services**: 两个租户均启用 "Auth9 Admin Portal" 服务，demo 租户额外启用 "Auth9 Demo Service" 和 "Auth9 M2M Test Service"
+- **4 条 tenant_services**: 两个租户均启用 "Auth9 Admin Portal" 服务（公共服务），demo 租户额外启用 "Auth9 Demo Service"（私有服务）和 "Auth9 M2M Test Service"（私有服务）
+
+> **服务类型说明**：私有服务的 `tenant_id` 有值（专属某租户），公共服务的 `tenant_id` 为 NULL（不专属任何租户，所有租户可通过 tenant_services 关联使用）
 
 管理员邮箱可通过 `AUTH9_ADMIN_EMAIL` 环境变量配置，默认为 `admin@auth9.local`。
 

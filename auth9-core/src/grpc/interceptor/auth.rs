@@ -72,6 +72,7 @@ pub trait GrpcAuthenticator: Send + Sync {
     /// Authenticate a gRPC request using its metadata
     ///
     /// Returns an `AuthContext` on success, or a `Status` error on failure.
+    #[allow(clippy::result_large_err)]
     fn authenticate(&self, metadata: &tonic::metadata::MetadataMap) -> Result<AuthContext, Status>;
 
     /// Get the name of this authenticator
@@ -110,6 +111,7 @@ pub enum AuthenticatorMode {
 
 impl AuthenticatorMode {
     /// Authenticate a request
+    #[allow(clippy::result_large_err)]
     pub fn authenticate(
         &self,
         metadata: &tonic::metadata::MetadataMap,

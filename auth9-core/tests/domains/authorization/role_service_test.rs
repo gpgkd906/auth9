@@ -188,8 +188,8 @@ async fn test_create_role_success() {
 
     let input = CreateRoleInput {
         service_id,
-        name: "admin".to_string(),
-        description: Some("Administrator role".to_string()),
+        name: "moderator".to_string(),
+        description: Some("Moderator role".to_string()),
         parent_role_id: None,
         permission_ids: None,
     };
@@ -198,8 +198,8 @@ async fn test_create_role_success() {
     assert!(result.is_ok());
 
     let role = result.unwrap();
-    assert_eq!(role.name, "admin");
-    assert_eq!(role.description, Some("Administrator role".to_string()));
+    assert_eq!(role.name, "moderator");
+    assert_eq!(role.description, Some("Moderator role".to_string()));
 }
 
 #[tokio::test]
@@ -585,11 +585,11 @@ async fn test_role_hierarchy() {
 
     let service = builder.build_rbac_service();
 
-    // Create admin role (root)
+    // Create manager role (root)
     let admin_input = CreateRoleInput {
         service_id,
-        name: "admin".to_string(),
-        description: Some("Administrator".to_string()),
+        name: "manager".to_string(),
+        description: Some("Manager".to_string()),
         parent_role_id: None,
         permission_ids: None,
     };

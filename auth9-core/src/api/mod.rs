@@ -77,22 +77,32 @@ pub(crate) fn default_per_page() -> i64 {
     20
 }
 
-/// Clamp page to minimum 1
+/// Reject page values less than 1
 pub(crate) fn deserialize_page<'de, D>(deserializer: D) -> std::result::Result<i64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let value = i64::deserialize(deserializer)?;
-    Ok(value.max(1))
+    if value < 1 {
+        return Err(serde::de::Error::custom(
+            "page must be a positive integer (>= 1)",
+        ));
+    }
+    Ok(value)
 }
 
-/// Clamp per_page to [1, MAX_PER_PAGE]
+/// Reject per_page values less than 1, clamp to MAX_PER_PAGE
 pub(crate) fn deserialize_per_page<'de, D>(deserializer: D) -> std::result::Result<i64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
     let value = i64::deserialize(deserializer)?;
-    Ok(value.clamp(1, MAX_PER_PAGE))
+    if value < 1 {
+        return Err(serde::de::Error::custom(
+            "per_page must be a positive integer (>= 1)",
+        ));
+    }
+    Ok(value.min(MAX_PER_PAGE))
 }
 
 /// Paginated response wrapper
@@ -261,17 +271,27 @@ mod tests {
     }
 
     #[test]
-    fn test_pagination_query_per_page_clamped_to_min() {
-        let query: PaginationQuery =
-            serde_json::from_str(r#"{"page": 1, "per_page": -5}"#).unwrap();
-        assert_eq!(query.per_page, 1);
+    fn test_pagination_query_per_page_negative_rejected() {
+        let result = serde_json::from_str::<PaginationQuery>(r#"{"page": 1, "per_page": -5}"#);
+        assert!(result.is_err());
     }
 
     #[test]
-    fn test_pagination_query_page_clamped_to_min() {
-        let query: PaginationQuery =
-            serde_json::from_str(r#"{"page": 0, "per_page": 20}"#).unwrap();
-        assert_eq!(query.page, 1);
+    fn test_pagination_query_per_page_zero_rejected() {
+        let result = serde_json::from_str::<PaginationQuery>(r#"{"page": 1, "per_page": 0}"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pagination_query_page_zero_rejected() {
+        let result = serde_json::from_str::<PaginationQuery>(r#"{"page": 0, "per_page": 20}"#);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_pagination_query_page_negative_rejected() {
+        let result = serde_json::from_str::<PaginationQuery>(r#"{"page": -1, "per_page": 20}"#);
+        assert!(result.is_err());
     }
 
     #[test]

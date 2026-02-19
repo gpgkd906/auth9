@@ -816,8 +816,7 @@ describe("Invitations Page", () => {
       }));
 
       await waitFor(() => {
-        // Text is split across elements, so use regex matcher
-        expect(screen.getByText(/45/)).toBeInTheDocument();
+        expect(screen.getByText(/45 invitations/)).toBeInTheDocument();
         expect(screen.getByText(/Page 1 of 3/)).toBeInTheDocument();
       });
 

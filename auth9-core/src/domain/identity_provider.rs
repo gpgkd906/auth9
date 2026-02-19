@@ -253,11 +253,7 @@ impl IdentityProviderTemplate {
         let missing: Vec<String> = self
             .required_config
             .iter()
-            .filter(|key| {
-                config
-                    .get(key.as_str())
-                    .map_or(true, |v| v.trim().is_empty())
-            })
+            .filter(|key| config.get(key.as_str()).is_none_or(|v| v.trim().is_empty()))
             .cloned()
             .collect();
 

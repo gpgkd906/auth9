@@ -14,6 +14,9 @@ const BRANDING_CONFIG_KEY: &str = "config";
 pub struct BrandingService<R: SystemSettingsRepository> {
     repo: Arc<R>,
     sync_service: Option<Arc<KeycloakSyncService>>,
+    /// Allowed domains for branding resource URLs (logo, favicon).
+    /// When non-empty, only URLs from these domains are accepted.
+    allowed_domains: Vec<String>,
 }
 
 impl<R: SystemSettingsRepository> BrandingService<R> {
@@ -22,6 +25,7 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         Self {
             repo,
             sync_service: None,
+            allowed_domains: vec![],
         }
     }
 
@@ -30,7 +34,14 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         Self {
             repo,
             sync_service: Some(sync_service),
+            allowed_domains: vec![],
         }
+    }
+
+    /// Set allowed domains for branding resource URLs
+    pub fn with_allowed_domains(mut self, domains: Vec<String>) -> Self {
+        self.allowed_domains = domains;
+        self
     }
 
     /// Get branding configuration
@@ -83,7 +94,40 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
     pub fn validate_branding(&self, config: &BrandingConfig) -> Result<()> {
         config
             .validate()
-            .map_err(|e| AppError::Validation(e.to_string()))
+            .map_err(|e| AppError::Validation(e.to_string()))?;
+
+        // Validate URL domains against whitelist (if configured)
+        if !self.allowed_domains.is_empty() {
+            if let Some(url) = &config.logo_url {
+                self.validate_url_domain(url, "logo_url")?;
+            }
+            if let Some(url) = &config.favicon_url {
+                self.validate_url_domain(url, "favicon_url")?;
+            }
+        }
+
+        Ok(())
+    }
+
+    /// Validate that a URL's domain is in the allowed domains list
+    fn validate_url_domain(&self, url: &str, field_name: &str) -> Result<()> {
+        let parsed = url::Url::parse(url)
+            .map_err(|_| AppError::Validation(format!("{field_name}: invalid URL")))?;
+        let host = parsed.host_str().unwrap_or("");
+
+        let domain_allowed = self.allowed_domains.iter().any(|allowed| {
+            // Exact match or subdomain match (e.g., "cdn.example.com" matches "example.com")
+            host == allowed.as_str() || host.ends_with(&format!(".{}", allowed))
+        });
+
+        if !domain_allowed {
+            return Err(AppError::Validation(format!(
+                "{field_name}: domain '{}' is not in the allowed domains list",
+                host
+            )));
+        }
+
+        Ok(())
     }
 
     /// Parse branding config from database row
@@ -240,6 +284,70 @@ mod tests {
         };
 
         assert!(service.validate_branding(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_branding_domain_whitelist_blocks_unknown_domain() {
+        let mock = MockSystemSettingsRepository::new();
+        let service = BrandingService::new(Arc::new(mock))
+            .with_allowed_domains(vec!["cdn.example.com".to_string()]);
+
+        let config = BrandingConfig {
+            logo_url: Some("https://evil.com/logo.png".to_string()),
+            ..Default::default()
+        };
+        assert!(service.validate_branding(&config).is_err());
+    }
+
+    #[test]
+    fn test_validate_branding_domain_whitelist_allows_matching_domain() {
+        let mock = MockSystemSettingsRepository::new();
+        let service = BrandingService::new(Arc::new(mock))
+            .with_allowed_domains(vec!["cdn.example.com".to_string()]);
+
+        let config = BrandingConfig {
+            logo_url: Some("https://cdn.example.com/logo.png".to_string()),
+            ..Default::default()
+        };
+        assert!(service.validate_branding(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_branding_domain_whitelist_allows_subdomain() {
+        let mock = MockSystemSettingsRepository::new();
+        let service = BrandingService::new(Arc::new(mock))
+            .with_allowed_domains(vec!["example.com".to_string()]);
+
+        let config = BrandingConfig {
+            logo_url: Some("https://cdn.example.com/logo.png".to_string()),
+            ..Default::default()
+        };
+        assert!(service.validate_branding(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_branding_domain_whitelist_empty_allows_all() {
+        let mock = MockSystemSettingsRepository::new();
+        let service = BrandingService::new(Arc::new(mock)).with_allowed_domains(vec![]);
+
+        let config = BrandingConfig {
+            logo_url: Some("https://any-domain.com/logo.png".to_string()),
+            ..Default::default()
+        };
+        assert!(service.validate_branding(&config).is_ok());
+    }
+
+    #[test]
+    fn test_validate_branding_domain_whitelist_checks_favicon_too() {
+        let mock = MockSystemSettingsRepository::new();
+        let service = BrandingService::new(Arc::new(mock))
+            .with_allowed_domains(vec!["cdn.example.com".to_string()]);
+
+        let config = BrandingConfig {
+            favicon_url: Some("https://evil.com/favicon.ico".to_string()),
+            ..Default::default()
+        };
+        assert!(service.validate_branding(&config).is_err());
     }
 
     #[tokio::test]

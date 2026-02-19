@@ -126,7 +126,10 @@ describe("Logout Page", () => {
 
   it("logs error when backend returns non-redirect status", async () => {
     vi.mocked(getAccessToken).mockResolvedValue("valid-token");
-    vi.mocked(getSession).mockResolvedValue(null);
+    vi.mocked(getSession).mockResolvedValue({
+      accessToken: "valid-token",
+      refreshToken: "refresh",
+    });
     mockFetch.mockResolvedValue({ ok: false, status: 500 });
     const consoleSpy = vi.spyOn(console, "error").mockImplementation(() => {});
 

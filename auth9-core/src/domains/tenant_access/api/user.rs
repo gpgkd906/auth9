@@ -875,9 +875,30 @@ pub async fn enable_mfa<S: HasServices>(
     auth: AuthUser,
     headers: HeaderMap,
     Path(id): Path<Uuid>,
+    Json(input): Json<EnableMfaInput>,
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
+
+    input
+        .validate()
+        .map_err(|e| AppError::Validation(e.to_string()))?;
+
+    // Verify admin's password as secondary confirmation
+    let admin_user = state
+        .user_service()
+        .get(StringUuid::from(auth.user_id))
+        .await?;
+    let password_valid = state
+        .keycloak_client()
+        .validate_user_password(&admin_user.keycloak_id, &input.confirm_password)
+        .await?;
+    if !password_valid {
+        return Err(AppError::Forbidden(
+            "Password confirmation failed. Please provide your correct password to enable MFA."
+                .to_string(),
+        ));
+    }
 
     let id = StringUuid::from(id);
     let user = state.user_service().get(id).await?;
@@ -906,6 +927,14 @@ pub async fn enable_mfa<S: HasServices>(
     )
     .await;
     Ok(Json(SuccessResponse::new(updated)))
+}
+
+/// Input for enabling MFA - requires admin password confirmation
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
+pub struct EnableMfaInput {
+    /// Admin's own password for secondary verification
+    #[validate(length(min = 1, max = 128))]
+    pub confirm_password: String,
 }
 
 /// Input for disabling MFA - requires admin password confirmation

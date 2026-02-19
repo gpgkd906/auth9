@@ -374,7 +374,8 @@ describe("Users Page", () => {
 
         await waitFor(() => {
             expect(screen.getByText("Tenant 1")).toBeInTheDocument();
-            expect(screen.getByText("(admin)")).toBeInTheDocument();
+            // Role is shown via a Select dropdown; verify the select trigger displays the role
+            expect(screen.getAllByText("Admin").length).toBeGreaterThanOrEqual(1);
         });
     });
 
@@ -1535,19 +1536,14 @@ describe("Users Page", () => {
             });
 
             const response = await action({ request, params: {}, context: {} });
-            expect(response).toBeInstanceOf(Response);
-            const data = await (response as Response).json();
-            expect(data.error).toBe("User not found");
-            expect(data.intent).toBe("update_user");
+            expect(response).toEqual({ error: "User not found", intent: "update_user" });
         });
 
         it("returns error for invalid intent", async () => {
             const request = createFormRequest({ intent: "invalid" });
 
             const response = await action({ request, params: {}, context: {} });
-            expect(response).toBeInstanceOf(Response);
-            const data = await (response as Response).json();
-            expect(data.error).toBe("Invalid intent");
+            expect(response).toEqual({ error: "Invalid intent", intent: "invalid" });
         });
     });
 });

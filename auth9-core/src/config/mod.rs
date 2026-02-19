@@ -150,6 +150,11 @@ pub struct Config {
 
     /// Async action execution configuration (fetch allowlist, limits)
     pub async_action: AsyncActionConfig,
+
+    /// Allowed domains for branding resource URLs (logo, favicon).
+    /// When non-empty, only URLs from these domains are accepted.
+    /// When empty, any external HTTPS domain is allowed (SSRF checks still apply).
+    pub branding_allowed_domains: Vec<String>,
 }
 
 impl fmt::Debug for Config {
@@ -185,6 +190,7 @@ impl fmt::Debug for Config {
                 &format!("[{} emails]", self.platform_admin_emails.len()),
             )
             .field("async_action", &self.async_action)
+            .field("branding_allowed_domains", &self.branding_allowed_domains)
             .finish()
     }
 }
@@ -456,15 +462,14 @@ impl Config {
                     "gRPC auth_mode is api_key but no keys configured (GRPC_API_KEYS) in production"
                 );
             }
-            if self.grpc_security.auth_mode == "mtls" {
-                if self.grpc_security.tls_cert_path.is_none()
+            if self.grpc_security.auth_mode == "mtls"
+                && (self.grpc_security.tls_cert_path.is_none()
                     || self.grpc_security.tls_key_path.is_none()
-                    || self.grpc_security.tls_ca_cert_path.is_none()
-                {
-                    anyhow::bail!(
-                        "mTLS mode requires GRPC_TLS_CERT_PATH, GRPC_TLS_KEY_PATH, and GRPC_TLS_CA_CERT_PATH"
-                    );
-                }
+                    || self.grpc_security.tls_ca_cert_path.is_none())
+            {
+                anyhow::bail!(
+                    "mTLS mode requires GRPC_TLS_CERT_PATH, GRPC_TLS_KEY_PATH, and GRPC_TLS_CA_CERT_PATH"
+                );
             }
             if self.grpc_security.enable_reflection {
                 anyhow::bail!(
@@ -573,9 +578,9 @@ impl Config {
                 issuer: env::var("JWT_ISSUER")
                     .unwrap_or_else(|_| "https://auth9.example.com".to_string()),
                 access_token_ttl_secs: env::var("JWT_ACCESS_TOKEN_TTL_SECS")
-                    .unwrap_or_else(|_| "3600".to_string())
+                    .unwrap_or_else(|_| "900".to_string())
                     .parse()
-                    .unwrap_or(3600),
+                    .unwrap_or(900),
                 refresh_token_ttl_secs: env::var("JWT_REFRESH_TOKEN_TTL_SECS")
                     .unwrap_or_else(|_| "604800".to_string())
                     .parse()
@@ -738,6 +743,7 @@ impl Config {
                 allow_private_ips: parse_bool_env("ACTION_ALLOW_PRIVATE_IPS", false),
                 max_heap_mb: parse_u64_env("ACTION_MAX_HEAP_MB", 64) as usize,
             },
+            branding_allowed_domains: parse_csv_env("BRANDING_ALLOWED_DOMAINS", vec![]),
         })
     }
 
@@ -853,6 +859,7 @@ mod tests {
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
+            branding_allowed_domains: vec![],
         }
     }
 
@@ -1127,6 +1134,7 @@ mod tests {
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
+            branding_allowed_domains: vec![],
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
@@ -1790,6 +1798,7 @@ mod tests {
             security_headers: SecurityHeadersConfig::default(),
             portal_client_id: Some("auth9-portal".to_string()),
             async_action: AsyncActionConfig::default(),
+            branding_allowed_domains: vec![],
         };
 
         let debug_str = format!("{:?}", config);

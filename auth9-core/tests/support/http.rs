@@ -114,6 +114,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             token_ttl_secs: 3600,
         },
         async_action: auth9_core::domain::AsyncActionConfig::default(),
+        branding_allowed_domains: vec![],
     }
 }
 
