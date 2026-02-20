@@ -396,6 +396,7 @@ fn endpoint_key(request: &Request<Body>) -> String {
     format!("{}:{}", method, path)
 }
 
+#[cfg(test)]
 fn is_sensitive_endpoint(endpoint: &str) -> bool {
     matches!(
         endpoint,
@@ -550,27 +551,14 @@ pub async fn rate_limit_middleware(
             }
             .into_response()
         }
-        Err(_) => {
-            if is_sensitive_endpoint(&endpoint) {
-                // Sensitive endpoints: fail-closed (reject immediately)
-                metrics::counter!(
-                    "auth9_rate_limit_unavailable_total",
-                    "endpoint" => endpoint.clone(),
-                    "mode" => "fail_close"
-                )
-                .increment(1);
-                let mut response = Response::new(
-                    r#"{"error":"Rate limit backend unavailable","code":"RATE_LIMIT_UNAVAILABLE"}"#
-                        .into(),
-                );
-                *response.status_mut() = StatusCode::SERVICE_UNAVAILABLE;
-                response
-                    .headers_mut()
-                    .insert("Content-Type", "application/json".parse().unwrap());
-                return response;
-            }
+        Err(e) => {
+            tracing::warn!(
+                endpoint = %endpoint,
+                error = ?e,
+                "Redis unavailable for rate limiting, using in-memory fallback"
+            );
 
-            // Non-sensitive endpoints: use in-memory fallback rate limiter
+            // Fail-open: use in-memory fallback rate limiter for all endpoints
             let redis_key = key.to_redis_key(&endpoint);
             let rule = rate_limit
                 .config

@@ -1,7 +1,7 @@
 # Auth9 Actions System - 实施状态报告
 
 生成时间: 2026-02-12
-**最后更新**: 2026-02-19
+**最后更新**: 2026-02-21
 
 ## Phase 4: 增强 REST API ✅ **已完成**
 
@@ -132,21 +132,23 @@ Portal 包含完整的 Actions 管理界面：
 |-------|------|--------|------|
 | Phase 1 | 数据模型与 Repository 层 | 100% | ✅ 完成 |
 | Phase 2 | ActionEngine 核心逻辑 | 100% | ✅ 完成 |
-| Phase 3 | 集成到认证流程 | 67% | ⚠️ 4/6 触发器已集成 |
+| Phase 3 | 集成到认证流程 | 83% | ⚠️ 5/6 触发器已集成（生产主链路） |
 | Phase 4 | 增强 REST API | 100% | ✅ 完成 |
 | Phase 5 | Portal UI | 100% | ✅ 完成 |
 | Phase 6 | TypeScript SDK | 100% | ✅ 完成 |
 
 ### 已集成的触发器 (Phase 3)
 
-| 触发器 | 集成状态 | 调用位置 | 备注 |
-|--------|---------|---------|------|
-| PostLogin | ✅ 已集成 | `keycloak_oidc.rs`, `auth.rs` | 修改 JWT claims |
-| PreUserRegistration | ✅ 已集成 | `keycloak_oidc.rs` | 可阻止注册 |
-| PostUserRegistration | ✅ 已集成 | `keycloak_oidc.rs` | 注册后执行 |
-| PreTokenRefresh | ✅ 已集成 | `keycloak_oidc.rs` | 可阻止刷新 |
-| PostChangePassword | ⚠️ 基础设施已添加 | `password.rs` (字段已保留) | `action_engine` 字段存在但 `execute_trigger` 未调用 |
-| PostEmailVerification | ❌ 未集成 | — | 依赖 Email 验证功能实现 |
+以下触发器均已接入**生产 HTTP 主链路**（`identity/api/auth.rs` 与 `identity/service/password.rs`），通过 `ActionService.execute_trigger()` 统一调度。
+
+| 触发器 | 集成状态 | 生产调用位置 | 失败语义 | 备注 |
+|--------|---------|-------------|---------|------|
+| PostLogin | ✅ 已集成 | `auth.rs` authorization_code 分支 | 非阻断（warn 并继续） | 可修改 JWT claims |
+| PreUserRegistration | ✅ 已集成 | `auth.rs` authorization_code 分支（新用户路径） | 阻断（`await?`） | 失败拒绝注册 |
+| PostUserRegistration | ✅ 已集成 | `auth.rs` authorization_code 分支（新用户路径） | 非阻断（warn 并继续） | 用户已创建，不回滚 |
+| PreTokenRefresh | ✅ 已集成 | `auth.rs` refresh_token 分支 | 阻断（`await?`） | 失败拒绝刷新，支持 claims 修改 |
+| PostChangePassword | ✅ 已集成 | `password.rs` reset/change/admin_set 三处 | 非阻断（warn 并继续） | `PasswordService` 通过 `with_action_engine()` 装配 |
+| PostEmailVerification | ❌ 未集成 | — | — | 依赖邮件验证闭环事件源；预留接入点：Keycloak `VERIFY_EMAIL` 事件（当前映射为 None） |
 
 ### ActionEngine 功能矩阵
 
@@ -166,10 +168,9 @@ Portal 包含完整的 Actions 管理界面：
 
 ### 推荐下一步
 
-1. **完成 PostChangePassword 触发器集成** — PasswordService 中 `action_engine` 字段已保留，需添加 `execute_trigger` 调用
-2. **实现 PostEmailVerification 触发器** — 依赖邮件验证功能完成
-3. **发布 SDK 到 npm** — 版本 0.2.0
-4. **Portal 其余页面迁移到 SDK** — Actions 创建/编辑页
+1. **实现 PostEmailVerification 触发器** — 依赖邮件验证闭环事件源（Keycloak `VERIFY_EMAIL` 事件接入）
+2. **发布 SDK 到 npm** — 版本 0.2.0
+3. **Portal 其余页面迁移到 SDK** — Actions 创建/编辑页
 
 ---
 
@@ -236,5 +237,5 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/stats 
 ---
 
 **报告生成时间**: 2026-02-12
-**最后更新**: 2026-02-19
-**状态**: Phase 3 触发器集成待完善，其余已完成
+**最后更新**: 2026-02-21
+**状态**: Phase 3 触发器集成 5/6 已接入生产主链路，PostEmailVerification 待邮件验证功能落地

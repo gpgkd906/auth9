@@ -138,7 +138,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
 
         // Trigger session.revoked webhook event
         if let Some(publisher) = &self.webhook_publisher {
-            let _ = publisher
+            if let Err(e) = publisher
                 .trigger_event(WebhookEvent {
                     event_type: "session.revoked".to_string(),
                     timestamp: Utc::now(),
@@ -149,7 +149,10 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
                         "device_name": session.device_name,
                     }),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!("Failed to trigger session.revoked webhook event: {}", e);
+            }
         }
 
         Ok(())

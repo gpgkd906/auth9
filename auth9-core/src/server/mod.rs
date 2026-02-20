@@ -540,12 +540,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     ));
 
     // Create new services for 5 features
-    let password_service = Arc::new(PasswordService::with_tenant_repo(
+    let password_service = Arc::new(PasswordService::with_action_engine(
         password_reset_repo.clone(),
         user_repo.clone(),
         email_service.clone(),
         keycloak_arc.clone(),
         tenant_repo.clone(),
+        action_engine.clone(),
         keycloak_sync_service.clone(),
         config.password_reset.hmac_key.clone(),
     ));

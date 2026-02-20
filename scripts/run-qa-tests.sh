@@ -263,7 +263,7 @@ run_agent() {
             run_cmd "${t[@]}" opencode run "读取文档：${rel_path}，执行QA测试" -m "opencode/kimi-k2.5-free"
             ;;
         minimax)
-            run_cmd "${t[@]}" opencode run "读取文档：${rel_path}，执行QA测试" -m "minimax-coding-plan/MiniMax-M2.5"
+            run_cmd "${t[@]}" opencode run "读取文档：${rel_path}，执行QA测试" -m "minimax-coding-plan/MiniMax-M2.5-highspeed"
             ;;
         free-minimax)
             run_cmd "${t[@]}" opencode run "读取文档：${rel_path}，执行QA测试" -m "opencode/minimax-m2.5-free"

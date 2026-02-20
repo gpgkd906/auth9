@@ -283,6 +283,12 @@ impl<W: WebhookRepository + 'static> WebhookEventPublisher for WebhookService<W>
             .list_enabled_for_event(&event.event_type)
             .await?;
 
+        tracing::info!(
+            event_type = %event.event_type,
+            webhook_count = webhooks.len(),
+            "Triggering webhook event"
+        );
+
         for webhook in webhooks {
             let http_client = self.http_client.clone();
             let webhook_repo = self.webhook_repo.clone();

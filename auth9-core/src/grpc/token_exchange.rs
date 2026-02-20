@@ -427,6 +427,17 @@ where
             .await
             .map_err(|e| Status::internal(format!("Failed to re-fetch user roles: {}", e)))?;
 
+        // Include tenant-level role (owner/admin/member) from tenant_users
+        // so that policy checks can see the user's membership role.
+        let mut roles = user_roles.roles;
+        if let Ok(Some(role_in_tenant)) =
+            self.rbac_repo.find_role_in_tenant(user_id, tenant_id).await
+        {
+            if !roles.iter().any(|r| r == &role_in_tenant) {
+                roles.insert(0, role_in_tenant);
+            }
+        }
+
         // Create tenant access token
         let access_token = self
             .jwt_manager
@@ -435,7 +446,7 @@ where
                 &claims.email,
                 Uuid::from(tenant_id),
                 &client.client_id,
-                user_roles.roles,
+                roles,
                 user_roles.permissions,
             )
             .map_err(|e| Status::internal(format!("Failed to create access token: {}", e)))?;
