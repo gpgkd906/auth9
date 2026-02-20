@@ -585,6 +585,8 @@ fn action_supports_db_platform_admin(action: PolicyAction) -> bool {
             | PolicyAction::UserWrite
             | PolicyAction::SystemConfigRead
             | PolicyAction::SystemConfigWrite
+            | PolicyAction::TenantRead
+            | PolicyAction::TenantWrite
             | PolicyAction::InvitationRead
             | PolicyAction::InvitationWrite
             | PolicyAction::UserManage

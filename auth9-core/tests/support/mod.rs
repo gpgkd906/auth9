@@ -1077,6 +1077,14 @@ impl RbacRepository for TestRbacRepository {
         Ok(Some(StringUuid::new_v4()))
     }
 
+    async fn find_role_in_tenant(
+        &self,
+        _user_id: StringUuid,
+        _tenant_id: StringUuid,
+    ) -> Result<Option<String>> {
+        Ok(Some("member".to_string()))
+    }
+
     async fn find_user_roles_in_tenant(
         &self,
         user_id: StringUuid,
@@ -2211,9 +2219,7 @@ impl InvitationRepository for TestInvitationRepository {
         let invitations = self.invitations.read().await;
         let mut filtered: Vec<_> = invitations
             .values()
-            .filter(|i| {
-                i.tenant_id == tenant_id && status.as_ref().is_none_or(|s| &i.status == s)
-            })
+            .filter(|i| i.tenant_id == tenant_id && status.as_ref().is_none_or(|s| &i.status == s))
             .cloned()
             .collect();
         filtered.sort_by(|a, b| b.created_at.cmp(&a.created_at));
@@ -2232,9 +2238,7 @@ impl InvitationRepository for TestInvitationRepository {
         let invitations = self.invitations.read().await;
         Ok(invitations
             .values()
-            .filter(|i| {
-                i.tenant_id == tenant_id && status.as_ref().is_none_or(|s| &i.status == s)
-            })
+            .filter(|i| i.tenant_id == tenant_id && status.as_ref().is_none_or(|s| &i.status == s))
             .count() as i64)
     }
 

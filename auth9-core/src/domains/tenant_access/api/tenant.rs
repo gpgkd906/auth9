@@ -5,7 +5,7 @@ use crate::api::{
     require_platform_admin_with_db, write_audit_log_generic, MessageResponse, PaginatedResponse,
     SuccessResponse,
 };
-use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
+use crate::domain::{AddUserToTenantInput, CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::{AppError, Result};
 use crate::middleware::auth::AuthUser;
 use crate::policy::{self, PolicyAction, PolicyInput, ResourceScope, TenantListMode};
@@ -186,6 +186,15 @@ pub async fn create<S: HasServices>(
     require_platform_admin_with_db(&state, &auth).await?;
 
     let tenant = state.tenant_service().create(input).await?;
+
+    // Add the creator as owner of the new tenant
+    let add_input = AddUserToTenantInput {
+        user_id: auth.user_id,
+        tenant_id: tenant.id.into(),
+        role_in_tenant: "owner".to_string(),
+    };
+    state.user_service().add_to_tenant(add_input).await?;
+
     let _ = write_audit_log_generic(
         &state,
         &headers,

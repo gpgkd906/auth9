@@ -1,6 +1,7 @@
 //! Password management business logic
 
 use crate::domain::{
+    ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
     ChangePasswordInput, CreatePasswordResetTokenInput, ForgotPasswordInput, PasswordPolicy,
     ResetPasswordInput, StringUuid, UpdatePasswordPolicyInput,
 };
@@ -202,6 +203,8 @@ impl<
             .send_password_changed(&user.email, user.display_name.as_deref())
             .await;
 
+        self.execute_post_change_password_actions(&user).await;
+
         Ok(())
     }
 
@@ -253,6 +256,8 @@ impl<
             .send_password_changed(&user.email, user.display_name.as_deref())
             .await;
 
+        self.execute_post_change_password_actions(&user).await;
+
         Ok(())
     }
 
@@ -276,6 +281,8 @@ impl<
 
         // Track password change timestamp
         let _ = self.user_repo.update_password_changed_at(user_id).await;
+
+        self.execute_post_change_password_actions(&user).await;
 
         Ok(())
     }
@@ -366,6 +373,79 @@ impl<
         PasswordPolicy::default()
     }
 
+    /// Execute post-change-password actions (best-effort, non-blocking).
+    async fn execute_post_change_password_actions(&self, user: &crate::domain::User) {
+        let Some(action_engine) = &self.action_engine else {
+            return;
+        };
+        let Some(tenant_repo) = &self.tenant_repo else {
+            return;
+        };
+
+        let tenant_id = match self.user_repo.find_user_tenants(user.id).await {
+            Ok(tenant_users) => tenant_users.first().map(|tu| tu.tenant_id),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to resolve user tenant for PostChangePassword action (user_id={}): {}",
+                    user.id,
+                    e
+                );
+                None
+            }
+        };
+        let Some(tenant_id) = tenant_id else {
+            tracing::debug!(
+                "User {} has no tenant membership, skipping PostChangePassword action",
+                user.id
+            );
+            return;
+        };
+
+        let (tenant_slug, tenant_name) = match tenant_repo.find_by_id(tenant_id).await {
+            Ok(Some(tenant)) => (tenant.slug, tenant.name),
+            Ok(None) => (String::new(), String::new()),
+            Err(e) => {
+                tracing::warn!(
+                    "Failed to load tenant for PostChangePassword action (tenant_id={}): {}",
+                    tenant_id,
+                    e
+                );
+                (String::new(), String::new())
+            }
+        };
+
+        let context = ActionContext {
+            user: ActionContextUser {
+                id: user.id.to_string(),
+                email: user.email.clone(),
+                display_name: user.display_name.clone(),
+                mfa_enabled: user.mfa_enabled,
+            },
+            tenant: ActionContextTenant {
+                id: tenant_id.to_string(),
+                slug: tenant_slug,
+                name: tenant_name,
+            },
+            request: ActionContextRequest {
+                ip: None,
+                user_agent: None,
+                timestamp: Utc::now(),
+            },
+            claims: None,
+        };
+
+        if let Err(e) = action_engine
+            .execute_trigger(tenant_id, "post-change-password", context)
+            .await
+        {
+            tracing::warn!(
+                "PostChangePassword action failed for user {}: {}",
+                user.id,
+                e
+            );
+        }
+    }
+
     /// Clean up expired tokens
     pub async fn cleanup_expired_tokens(&self) -> Result<u64> {
         self.password_reset_repo.delete_expired().await
@@ -406,8 +486,10 @@ mod tests {
     use super::*;
     use crate::domain::PasswordResetToken;
     use crate::domains::platform::service::SystemSettingsService;
+    use crate::repository::action::MockActionRepository;
     use crate::repository::password_reset::MockPasswordResetRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
+    use crate::repository::tenant::MockTenantRepository;
     use crate::repository::user::MockUserRepository;
     use mockall::predicate::*;
 

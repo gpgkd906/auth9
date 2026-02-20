@@ -307,7 +307,8 @@ async fn test_exchange_token_with_multiple_permissions() {
             Some("test-client"),
         )
         .unwrap();
-    assert_eq!(claims.roles.len(), 3);
+    // 3 RBAC roles + "member" from role_in_tenant
+    assert_eq!(claims.roles.len(), 4);
     assert_eq!(claims.permissions.len(), 5);
 }
 
@@ -538,6 +539,7 @@ async fn test_exchange_token_cache_hit() {
             Some("test-client"),
         )
         .unwrap();
-    assert_eq!(claims.roles, vec!["db-admin"]);
+    // "member" from role_in_tenant is prepended to RBAC roles
+    assert_eq!(claims.roles, vec!["member", "db-admin"]);
     assert_eq!(claims.permissions, vec!["db:read"]);
 }

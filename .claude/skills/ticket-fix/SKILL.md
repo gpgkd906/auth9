@@ -29,9 +29,26 @@ Resolve QA tickets end-to-end: read the ticket, confirm the issue, fix or dismis
    - Follow the ticket’s steps and SQL validation.
    - Capture evidence (log snippets, DB results).
 
-6. **Close ticket**
-   - If verified, delete the ticket file from `docs/ticket/`.
-   - Summarize fix + verification in response.
+6. **Analyze false positive (误报分析)**
+   - After reproducing (or failing to reproduce), determine whether the ticket is a **false positive** caused by flawed test procedures rather than a code bug.
+   - Common false-positive patterns:
+     - Test commands missing required authentication/signatures (e.g., HMAC headers).
+     - Prerequisites incomplete or ambiguous (e.g., "webhook must exist" without creation steps).
+     - Environment assumptions wrong (e.g., assuming signature verification is disabled when Docker default enables it).
+     - Test data referencing non-existent entities without fallback handling.
+   - If confirmed as false positive:
+     1. Identify the **root cause in the QA document** (not the code).
+     2. Update the referenced QA doc (`docs/qa/`) to prevent recurrence:
+        - Make implicit requirements explicit and prominent (bold, moved to prerequisites).
+        - Ensure example commands are **copy-paste-ready** for the default Docker environment.
+        - Add a **troubleshooting table** for common failure modes with symptoms, causes, and fixes.
+     3. Still proceed with environment reset and re-test to confirm the flow works correctly.
+
+7. **Close ticket**
+   - If verified (whether by code fix or by confirming false positive + doc update), delete the ticket file from `docs/ticket/`.
+   - Summarize outcome in response:
+     - For code fixes: describe the fix + verification evidence.
+     - For false positives: list the misreport causes + QA doc changes made.
 
 ## Rules
 
@@ -39,8 +56,10 @@ Resolve QA tickets end-to-end: read the ticket, confirm the issue, fix or dismis
 - Do not delete ticket unless QA re-test passes.
 - If issue cannot be reproduced, explain why and still re-test.
 - If re-test fails, keep the ticket and report remaining issue.
+- **False positive handling**: When a ticket is a misreport, fixing the QA doc is as important as fixing code — prevent the same false positive from being filed again.
 
 ## Notes
 
 - Use `docs/qa/` for any referenced test cases.
 - Use Docker logs and DB queries from the ticket for evidence.
+- When updating QA docs for false positives, focus on the **specific scenario** that caused the misreport — do not over-generalize or rewrite unrelated sections.

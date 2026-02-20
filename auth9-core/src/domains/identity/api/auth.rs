@@ -323,10 +323,46 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
 
             let token_response = exchange_code_for_tokens(&state, &state_payload, &code).await?;
             let userinfo = fetch_userinfo(&state, &token_response.access_token).await?;
+            let ip_address = extract_client_ip(&headers);
+            let user_agent = headers
+                .get(axum::http::header::USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            let service_tenant_id =
+                resolve_service_tenant_id_for_actions(&state, &state_payload.client_id).await;
 
             let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
                 Ok(existing) => existing,
                 Err(AppError::NotFound(_)) => {
+                    if let Some(tenant_id) = service_tenant_id {
+                        let (tenant_slug, tenant_name) =
+                            resolve_action_tenant_profile(&state, tenant_id).await;
+                        let pre_reg_context = ActionContext {
+                            user: ActionContextUser {
+                                id: StringUuid::new_v4().to_string(),
+                                email: userinfo.email.clone(),
+                                display_name: userinfo.name.clone(),
+                                mfa_enabled: false,
+                            },
+                            tenant: ActionContextTenant {
+                                id: tenant_id.to_string(),
+                                slug: tenant_slug.clone(),
+                                name: tenant_name.clone(),
+                            },
+                            request: ActionContextRequest {
+                                ip: ip_address.clone(),
+                                user_agent: user_agent.clone(),
+                                timestamp: Utc::now(),
+                            },
+                            claims: None,
+                        };
+                        // Pre* trigger errors are blocking.
+                        state
+                            .action_service()
+                            .execute_trigger(tenant_id, "pre-user-registration", pre_reg_context)
+                            .await?;
+                    }
+
                     let input = crate::domain::CreateUserInput {
                         email: userinfo.email.clone(),
                         display_name: userinfo.name.clone(),
@@ -334,18 +370,48 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                     };
                     let new_user = state.user_service().create(&userinfo.sub, input).await?;
 
+                    if let Some(tenant_id) = service_tenant_id {
+                        let (tenant_slug, tenant_name) =
+                            resolve_action_tenant_profile(&state, tenant_id).await;
+                        let post_reg_context = ActionContext {
+                            user: ActionContextUser {
+                                id: new_user.id.to_string(),
+                                email: new_user.email.clone(),
+                                display_name: new_user.display_name.clone(),
+                                mfa_enabled: false,
+                            },
+                            tenant: ActionContextTenant {
+                                id: tenant_id.to_string(),
+                                slug: tenant_slug,
+                                name: tenant_name,
+                            },
+                            request: ActionContextRequest {
+                                ip: ip_address.clone(),
+                                user_agent: user_agent.clone(),
+                                timestamp: Utc::now(),
+                            },
+                            claims: None,
+                        };
+                        // Post* trigger errors are non-blocking.
+                        if let Err(e) = state
+                            .action_service()
+                            .execute_trigger(tenant_id, "post-user-registration", post_reg_context)
+                            .await
+                        {
+                            tracing::warn!(
+                                user_id = %new_user.id,
+                                "PostUserRegistration action failed: {}",
+                                e
+                            );
+                        }
+                    }
+
                     new_user
                 }
                 Err(e) => return Err(e),
             };
 
             // Create session record for authorization_code flow
-            let ip_address = extract_client_ip(&headers);
-            let user_agent = headers
-                .get(axum::http::header::USER_AGENT)
-                .and_then(|v| v.to_str().ok())
-                .map(String::from);
-
             let session = state
                 .session_service()
                 .create_session(user.id, None, ip_address.clone(), user_agent.clone())
@@ -376,57 +442,18 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
 
             // Execute post-login Actions (if any are configured for this tenant)
             let custom_claims = {
-                // Look up tenant from client_id
-                let tenant_id = match state
-                    .client_service()
-                    .get_by_client_id(&state_payload.client_id)
-                    .await
-                {
-                    Ok(svc) => {
-                        if let Some(tid) = svc.tenant_id {
-                            Some(tid)
-                        } else {
-                            // Cross-tenant service (e.g. Portal): resolve tenant from user membership
-                            match state.user_service().get_user_tenants(user.id).await {
-                                Ok(tenants) => {
-                                    let active = tenants.into_iter().next();
-                                    if active.is_none() {
-                                        tracing::debug!(
-                                            "Service '{}' is cross-tenant and user {} has no tenant memberships, skipping post-login actions",
-                                            state_payload.client_id,
-                                            user.id
-                                        );
-                                    }
-                                    active.map(|tu| tu.tenant_id)
-                                }
-                                Err(e) => {
-                                    tracing::warn!(
-                                        "Failed to look up tenants for user {}: {}, skipping post-login actions",
-                                        user.id,
-                                        e
-                                    );
-                                    None
-                                }
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        tracing::warn!(
-                            "Failed to look up service for client_id '{}': {}, skipping post-login actions",
-                            state_payload.client_id,
-                            e
-                        );
-                        None
-                    }
-                };
+                let tenant_id = resolve_action_tenant_id(
+                    &state,
+                    &state_payload.client_id,
+                    user.id,
+                    service_tenant_id,
+                )
+                .await;
 
                 if let Some(tenant_id) = tenant_id {
                     // Resolve tenant slug/name for ActionContext
                     let (tenant_slug, tenant_name) =
-                        match state.tenant_service().get(tenant_id).await {
-                            Ok(t) => (t.slug, t.name),
-                            Err(_) => (String::new(), String::new()),
-                        };
+                        resolve_action_tenant_profile(&state, tenant_id).await;
 
                     let action_context = ActionContext {
                         user: ActionContextUser {
@@ -461,9 +488,8 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                             modified_context.claims
                         }
                         Err(e) => {
-                            tracing::error!("PostLogin action failed for user {}: {}", user.id, e);
-                            // Strict mode actions propagate error to block authentication
-                            return Err(e);
+                            tracing::warn!("PostLogin action failed for user {}: {}", user.id, e);
+                            None
                         }
                     }
                 } else {
@@ -552,6 +578,13 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
             let token_response =
                 exchange_refresh_token(&state, &state_payload, &refresh_token).await?;
             let userinfo = fetch_userinfo(&state, &token_response.access_token).await?;
+            let ip_address = extract_client_ip(&headers);
+            let user_agent = headers
+                .get(axum::http::header::USER_AGENT)
+                .and_then(|v| v.to_str().ok())
+                .map(String::from);
+            let service_tenant_id =
+                resolve_service_tenant_id_for_actions(&state, &state_payload.client_id).await;
 
             let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
                 Ok(existing) => existing,
@@ -577,12 +610,61 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                     )
                 })?;
 
-            let identity_token = jwt_manager.create_identity_token_with_session(
-                *user.id,
-                &userinfo.email,
-                userinfo.name.as_deref(),
-                Some(session_id),
-            )?;
+            // Execute pre-token-refresh Actions (blocking)
+            let custom_claims = if let Some(tenant_id) = resolve_action_tenant_id(
+                &state,
+                &state_payload.client_id,
+                user.id,
+                service_tenant_id,
+            )
+            .await
+            {
+                let (tenant_slug, tenant_name) =
+                    resolve_action_tenant_profile(&state, tenant_id).await;
+                let pre_refresh_context = ActionContext {
+                    user: ActionContextUser {
+                        id: user.id.to_string(),
+                        email: user.email.clone(),
+                        display_name: user.display_name.clone(),
+                        mfa_enabled: false,
+                    },
+                    tenant: ActionContextTenant {
+                        id: tenant_id.to_string(),
+                        slug: tenant_slug,
+                        name: tenant_name,
+                    },
+                    request: ActionContextRequest {
+                        ip: ip_address,
+                        user_agent,
+                        timestamp: Utc::now(),
+                    },
+                    claims: None,
+                };
+                let modified_context = state
+                    .action_service()
+                    .execute_trigger(tenant_id, "pre-token-refresh", pre_refresh_context)
+                    .await?;
+                modified_context.claims
+            } else {
+                None
+            };
+
+            let identity_token = if let Some(claims) = custom_claims {
+                jwt_manager.create_identity_token_with_session_and_claims(
+                    *user.id,
+                    &userinfo.email,
+                    userinfo.name.as_deref(),
+                    Some(session_id),
+                    claims,
+                )?
+            } else {
+                jwt_manager.create_identity_token_with_session(
+                    *user.id,
+                    &userinfo.email,
+                    userinfo.name.as_deref(),
+                    Some(session_id),
+                )?
+            };
 
             if let Some(new_refresh_token) = token_response.refresh_token.as_deref() {
                 let refresh_ttl = state.config().jwt.refresh_token_ttl_secs.max(1) as u64;
@@ -921,6 +1003,66 @@ pub async fn userinfo<S: HasServices>(
 // ============================================================================
 // Helper functions (testable without AppState)
 // ============================================================================
+
+async fn resolve_service_tenant_id_for_actions<S: HasServices>(
+    state: &S,
+    client_id: &str,
+) -> Option<StringUuid> {
+    match state.client_service().get_by_client_id(client_id).await {
+        Ok(service) => service.tenant_id,
+        Err(e) => {
+            tracing::warn!(
+                "Failed to look up service for client_id '{}': {}, skipping actions",
+                client_id,
+                e
+            );
+            None
+        }
+    }
+}
+
+async fn resolve_action_tenant_id<S: HasServices>(
+    state: &S,
+    client_id: &str,
+    user_id: StringUuid,
+    service_tenant_id: Option<StringUuid>,
+) -> Option<StringUuid> {
+    if let Some(tid) = service_tenant_id {
+        return Some(tid);
+    }
+
+    match state.user_service().get_user_tenants(user_id).await {
+        Ok(tenants) => {
+            let active = tenants.into_iter().next();
+            if active.is_none() {
+                tracing::debug!(
+                    "Service '{}' is cross-tenant and user {} has no tenant memberships, skipping actions",
+                    client_id,
+                    user_id
+                );
+            }
+            active.map(|tu| tu.tenant_id)
+        }
+        Err(e) => {
+            tracing::warn!(
+                "Failed to look up tenants for user {}: {}, skipping actions",
+                user_id,
+                e
+            );
+            None
+        }
+    }
+}
+
+async fn resolve_action_tenant_profile<S: HasServices>(
+    state: &S,
+    tenant_id: StringUuid,
+) -> (String, String) {
+    match state.tenant_service().get(tenant_id).await {
+        Ok(tenant) => (tenant.slug, tenant.name),
+        Err(_) => (String::new(), String::new()),
+    }
+}
 
 /// Extract client IP address from request headers
 /// Checks X-Forwarded-For, X-Real-IP, then falls back to None

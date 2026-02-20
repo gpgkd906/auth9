@@ -7,6 +7,7 @@ use crate::middleware::auth::AuthUser;
 use crate::state::HasServices;
 use axum::{
     extract::{Query, State},
+    http::StatusCode,
     response::IntoResponse,
     Json,
 };
@@ -27,7 +28,7 @@ pub struct CreateOrganizationResponse {
     path = "/api/v1/organizations",
     tag = "Tenant Access",
     responses(
-        (status = 200, description = "Success")
+        (status = 201, description = "Created")
     )
 )]
 pub async fn create_organization<S: HasServices>(
@@ -51,9 +52,12 @@ pub async fn create_organization<S: HasServices>(
     };
     state.user_service().add_to_tenant(add_input).await?;
 
-    Ok(Json(SuccessResponse::new(CreateOrganizationResponse {
-        organization: tenant,
-    })))
+    Ok((
+        StatusCode::CREATED,
+        Json(SuccessResponse::new(CreateOrganizationResponse {
+            organization: tenant,
+        })),
+    ))
 }
 
 #[derive(Debug, Deserialize)]

@@ -36,55 +36,72 @@
 验证大 Payload 的处理
 
 ### 测试操作流程
-本项目目前**没有稳定、可配置**的“天然大 payload”业务事件（例如带大量列表字段的事件）。
+本项目目前**没有稳定、可配置**的”天然大 payload”业务事件（例如带大量列表字段的事件）。
 因此这里补充一个（依赖安全检测规则的）**可复现**方案：通过 Keycloak events webhook 写入超长 `user_agent`，触发 `security.alert` 的 `new_device` 告警事件（其 `data.details.user_agent` 会包含该超长字符串），从而构造大 payload。
 
 前置条件：
-- 存在启用的 webhook，订阅 `security.alert`，URL 指向可接收的端点（建议 `webhook.site`）。
 - Auth9 Core 已启动（默认 `http://localhost:8080`）。
+- **（重要）签名密钥已知**：Docker 环境默认配置 `KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret`，所有发往 `/api/v1/keycloak/events` 的请求**必须**携带 `X-Keycloak-Signature` 头（HMAC-SHA256, hex），否则会被 401 拒绝。
+- 存在启用的 webhook，订阅 `security.alert`，URL 指向可接收的端点（建议 `webhook.site`）。
+  - 创建方法：登录 Portal (`http://localhost:3000`, admin / SecurePass123!)，进入 Settings → Webhooks → 新建，URL 填 `https://webhook.site/<your-uuid>`，勾选 `security.alert` 事件。
 - 注意：`login_events.user_agent` 列类型为 `TEXT`，单条最大约 64KB；因此本场景建议把 `User-Agent` 控制在 `60000` 字符以内。
 
 步骤：
-1. （准备）创建一次“成功登录”事件，建立已知设备：
+1. （准备）创建一次”成功登录”事件，建立已知设备：
    - 发送一次 `type=LOGIN`，带一个正常长度的 `User-Agent`。
 2. （触发 new_device + 制造大 payload）再次发送 `type=LOGIN`，同一 `userId`，但 `User-Agent` 替换为 60KB 超长字符串。
 3. 检查接收端（如 `webhook.site`）收到的 `security.alert` webhook body 体积明显增大（包含 `data.details.user_agent`），并检查系统侧 `failure_count` 是否维持为 0。
 
 注意：
-- 该方案依赖 `new_device` 告警能够被触发；如果你发现始终没有产生 `security.alert(new_device)`，优先检查安全检测实现是否已修复“当前事件被当作已知设备”导致无法触发的逻辑问题。
+- 该方案依赖 `new_device` 告警能够被触发；如果你发现始终没有产生 `security.alert(new_device)`，优先检查安全检测实现是否已修复”当前事件被当作已知设备”导致无法触发的逻辑问题。
 
 示例命令（仅供 QA 复现，`userId` 使用任意 UUID 字符串即可）：
 ```bash
-# 生成约 60KB 的 User-Agent
-UA="$(python3 - <<'PY'
-print("A" * 60000)
-PY
-)"
+# === 签名辅助函数（Docker 默认密钥: dev-webhook-secret）===
+# 用法: sign_body <json_body>
+# 返回: HMAC-SHA256 hex 签名
+WEBHOOK_SECRET=”dev-webhook-secret”
+sign_body() {
+  echo -n “$1” | openssl dgst -sha256 -hmac “${WEBHOOK_SECRET}” | awk '{print $NF}'
+}
 
-# 1) 先写入一个"正常 UA"的成功登录事件（建立已知设备）
+# 生成约 60KB 的 User-Agent
+UA=”$(python3 -c 'print(“A” * 60000)')”
+
+# 1) 先写入一个”正常 UA”的成功登录事件（建立已知设备）
 #    注意：两次事件的 time 字段必须不同，否则会被事件去重逻辑视为重复事件跳过。
 #    这里使用当前时间戳（毫秒）。
-TIME1=$(python3 -c "import time; print(int(time.time()*1000))")
-BODY1="{\"type\":\"LOGIN\",\"time\":${TIME1},\"userId\":\"00000000-0000-0000-0000-000000000001\",\"ipAddress\":\"203.0.113.10\",\"details\":{\"email\":\"qa-big-payload@example.com\"}}"
-curl -sS -X POST "http://localhost:8080/api/v1/keycloak/events" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: qa-small-ua" \
-  -d "$BODY1" >/dev/null
+TIME1=$(python3 -c “import time; print(int(time.time()*1000))”)
+BODY1=”{\”type\”:\”LOGIN\”,\”time\”:${TIME1},\”userId\”:\”00000000-0000-0000-0000-000000000001\”,\”ipAddress\”:\”203.0.113.10\”,\”details\”:{\”email\”:\”qa-big-payload@example.com\”}}”
+SIG1=$(sign_body “$BODY1”)
+curl -sS -X POST “http://localhost:8080/api/v1/keycloak/events” \
+  -H “Content-Type: application/json” \
+  -H “X-Keycloak-Signature: ${SIG1}” \
+  -H “User-Agent: qa-small-ua” \
+  -d “$BODY1”
+# 期望: HTTP 204 No Content
 
 sleep 1
 
-# 2) 再写入一个"超长 UA"的成功登录事件，期望触发 security.alert(new_device)
-TIME2=$(python3 -c "import time; print(int(time.time()*1000))")
-BODY2="{\"type\":\"LOGIN\",\"time\":${TIME2},\"userId\":\"00000000-0000-0000-0000-000000000001\",\"ipAddress\":\"203.0.113.10\",\"details\":{\"email\":\"qa-big-payload@example.com\"}}"
-curl -sS -X POST "http://localhost:8080/api/v1/keycloak/events" \
-  -H "Content-Type: application/json" \
-  -H "User-Agent: ${UA}" \
-  -d "$BODY2" >/dev/null
+# 2) 再写入一个”超长 UA”的成功登录事件，期望触发 security.alert(new_device)
+TIME2=$(python3 -c “import time; print(int(time.time()*1000))”)
+BODY2=”{\”type\”:\”LOGIN\”,\”time\”:${TIME2},\”userId\”:\”00000000-0000-0000-0000-000000000001\”,\”ipAddress\”:\”203.0.113.10\”,\”details\”:{\”email\”:\”qa-big-payload@example.com\”}}”
+SIG2=$(sign_body “$BODY2”)
+curl -sS -X POST “http://localhost:8080/api/v1/keycloak/events” \
+  -H “Content-Type: application/json” \
+  -H “X-Keycloak-Signature: ${SIG2}” \
+  -H “User-Agent: ${UA}” \
+  -d “$BODY2”
+# 期望: HTTP 204 No Content
 ```
 
-说明：
-- 如果环境配置了 `keycloak.webhook_secret`，还需要携带 `x-keycloak-signature` / `x-webhook-signature`；否则本地 dev 默认会跳过签名校验。
-  - 签名算法见 `auth9-core/src/api/keycloak_event.rs`（HMAC-SHA256，hex）。
+**常见失败排查**：
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| HTTP 401 + 日志 “without signature header” | 缺少 `X-Keycloak-Signature` 头 | 使用上面的 `sign_body` 函数生成签名 |
+| HTTP 401 + 日志 “signature verification failed” | 签名密钥不匹配 | 检查 `docker-compose.yml` 中 `KEYCLOAK_WEBHOOK_SECRET` 的值 |
+| 无 `security.alert` 告警 | 只有一条登录记录（需要至少两条才能识别”新设备”） | 确保步骤 1 的请求返回 204 后再执行步骤 2 |
+| webhook.site 未收到请求 | 未创建/未启用订阅 `security.alert` 的 webhook | 在 Portal 中创建 webhook 并订阅该事件 |
 
 ### 预期结果
 需要明确“截断/简化”的规则和验收点，否则会变成不可测的主观判断。这里给出一套**当前实现现状**与**建议验收标准**：
