@@ -220,6 +220,10 @@ impl HasServices for AppState {
         let cache_ok = self.cache_manager.ping().await.is_ok();
         (db_ok, cache_ok)
     }
+
+    fn maybe_db_pool(&self) -> Option<&sqlx::MySqlPool> {
+        Some(&self.db_pool)
+    }
 }
 
 /// Implement HasSystemSettings trait for production AppState

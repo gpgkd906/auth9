@@ -211,6 +211,7 @@ impl<U: UserRepository, S: ServiceRepository, A: ActionRepository + 'static>
     }
 
     #[cfg(test)]
+    #[allow(clippy::too_many_arguments)]
     fn new_with_http(
         keycloak: Arc<dyn KeycloakOidcAdminApi>,
         jwt_manager: Arc<JwtManager>,

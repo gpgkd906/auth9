@@ -4,6 +4,7 @@ import {
   userApi,
   serviceApi,
   rbacApi,
+  abacApi,
   auditApi,
   systemApi,
   invitationApi,
@@ -555,6 +556,120 @@ describe('API Service', () => {
         expect.stringContaining('/api/v1/users/user-123/tenants/tenant-456/roles/role-789'),
         expect.objectContaining({ method: 'DELETE' })
       );
+    });
+  });
+
+  describe('abacApi', () => {
+    it('should list policies', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { policy_set: null, versions: [] } }),
+      });
+
+      await abacApi.listPolicies('tenant-123');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-123/abac/policies'),
+        expect.objectContaining({ headers: expect.any(Object) })
+      );
+    });
+
+    it('should create draft policy', async () => {
+      const input = {
+        change_note: 'first draft',
+        policy: { rules: [{ id: 'r1', effect: 'allow', actions: ['user_manage'], resource_types: ['tenant'], priority: 1 }] },
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { id: 'v1', policy_set_id: 'set-1', version_no: 1, status: 'draft' } }),
+      });
+
+      await abacApi.createDraft('tenant-123', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-123/abac/policies'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should update draft policy', async () => {
+      const input = {
+        change_note: 'update',
+        policy: { rules: [{ id: 'r1', effect: 'deny', actions: ['user_manage'], resource_types: ['tenant'], priority: 2 }] },
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ message: 'ABAC draft policy updated' }),
+      });
+
+      await abacApi.updateDraft('tenant-123', 'version-1', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-123/abac/policies/version-1'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should publish and rollback policy', async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'ABAC policy published' }),
+      });
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ message: 'ABAC policy rolled back' }),
+      });
+
+      await abacApi.publish('tenant-123', 'version-2', 'shadow');
+      await abacApi.rollback('tenant-123', 'version-1', 'enforce');
+
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        1,
+        expect.stringContaining('/api/v1/tenants/tenant-123/abac/policies/version-2/publish'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ mode: 'shadow' }),
+        })
+      );
+      expect(mockFetch).toHaveBeenNthCalledWith(
+        2,
+        expect.stringContaining('/api/v1/tenants/tenant-123/abac/policies/version-1/rollback'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify({ mode: 'enforce' }),
+        })
+      );
+    });
+
+    it('should simulate policy', async () => {
+      const input = {
+        simulation: {
+          action: 'user_manage',
+          resource_type: 'tenant',
+          subject: { roles: ['admin'] },
+        },
+      };
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { decision: 'allow', matched_allow_rule_ids: ['r1'], matched_deny_rule_ids: [] } }),
+      });
+
+      const result = await abacApi.simulate('tenant-123', input);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-123/abac/simulate'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+      expect(result.data.decision).toBe('allow');
     });
   });
 

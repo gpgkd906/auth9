@@ -392,8 +392,10 @@ impl TestAppState {
     /// Enable public registration by setting allow_registration to true in branding config
     pub async fn enable_public_registration(&self) {
         use auth9_core::domain::BrandingConfig;
-        let mut config = BrandingConfig::default();
-        config.allow_registration = true;
+        let config = BrandingConfig {
+            allow_registration: true,
+            ..Default::default()
+        };
         self.branding_service.update_branding(config).await.unwrap();
     }
 }
@@ -477,6 +479,10 @@ impl HasServices for TestAppState {
     async fn check_ready(&self) -> (bool, bool) {
         // In tests, always return ready
         (true, true)
+    }
+
+    fn maybe_db_pool(&self) -> Option<&sqlx::MySqlPool> {
+        Some(&self.db_pool)
     }
 }
 

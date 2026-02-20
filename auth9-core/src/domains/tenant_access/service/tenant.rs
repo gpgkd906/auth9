@@ -580,6 +580,7 @@ mod tests {
     }
 
     /// Helper function to create a TenantService with all mock repositories customizable
+    #[allow(clippy::too_many_arguments)]
     fn create_test_service_full(
         tenant_repo: MockTenantRepository,
         service_repo: MockServiceRepository,

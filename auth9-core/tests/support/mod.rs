@@ -1239,11 +1239,12 @@ impl AuditRepository for TestAuditRepository {
 
     async fn find(&self, query: &AuditLogQuery) -> Result<Vec<AuditLog>> {
         let logs = self.logs.read().await;
+        let actor_id_filter = query.actor_id.map(|id| id.to_string());
         let filtered: Vec<AuditLog> = logs
             .iter()
             .filter(|log| {
-                if let Some(actor_id) = query.actor_id {
-                    if log.actor_id.as_ref().map(|id| id.as_str()) != Some(&actor_id.to_string()) {
+                if let Some(ref actor_id) = actor_id_filter {
+                    if log.actor_id.as_deref() != Some(actor_id.as_str()) {
                         return false;
                     }
                 }
@@ -1269,11 +1270,12 @@ impl AuditRepository for TestAuditRepository {
     async fn count(&self, query: &AuditLogQuery) -> Result<i64> {
         // Count should return total matching records WITHOUT pagination (like the real impl)
         let logs = self.logs.read().await;
+        let actor_id_filter = query.actor_id.map(|id| id.to_string());
         let count = logs
             .iter()
             .filter(|log| {
-                if let Some(actor_id) = query.actor_id {
-                    if log.actor_id.as_ref().map(|id| id.as_str()) != Some(&actor_id.to_string()) {
+                if let Some(ref actor_id) = actor_id_filter {
+                    if log.actor_id.as_deref() != Some(actor_id.as_str()) {
                         return false;
                     }
                 }
@@ -2105,8 +2107,8 @@ impl ActionRepository for TestActionRepository {
         let actions = self.actions.read().await;
         if let Some(action) = actions.iter().find(|a| a.id == action_id) {
             Ok(Some((
-                action.execution_count as i64,
-                action.error_count as i64,
+                action.execution_count,
+                action.error_count,
                 0.0, // avg_duration_ms
                 0,   // last_24h_count
             )))
@@ -2210,7 +2212,7 @@ impl InvitationRepository for TestInvitationRepository {
         let mut filtered: Vec<_> = invitations
             .values()
             .filter(|i| {
-                i.tenant_id == tenant_id && status.as_ref().map_or(true, |s| &i.status == s)
+                i.tenant_id == tenant_id && status.as_ref().is_none_or(|s| &i.status == s)
             })
             .cloned()
             .collect();
@@ -2231,7 +2233,7 @@ impl InvitationRepository for TestInvitationRepository {
         Ok(invitations
             .values()
             .filter(|i| {
-                i.tenant_id == tenant_id && status.as_ref().map_or(true, |s| &i.status == s)
+                i.tenant_id == tenant_id && status.as_ref().is_none_or(|s| &i.status == s)
             })
             .count() as i64)
     }
@@ -2714,8 +2716,8 @@ impl SecurityAlertRepository for TestSecurityAlertRepository {
         Ok(alerts
             .iter()
             .filter(|a| !unresolved_only || a.resolved_at.is_none())
-            .filter(|a| severity.as_ref().map_or(true, |s| a.severity == *s))
-            .filter(|a| alert_type.as_ref().map_or(true, |t| a.alert_type == *t))
+            .filter(|a| severity.as_ref().is_none_or(|s| a.severity == *s))
+            .filter(|a| alert_type.as_ref().is_none_or(|t| a.alert_type == *t))
             .skip(offset as usize)
             .take(limit as usize)
             .cloned()
@@ -2732,8 +2734,8 @@ impl SecurityAlertRepository for TestSecurityAlertRepository {
         Ok(alerts
             .iter()
             .filter(|a| !unresolved_only || a.resolved_at.is_none())
-            .filter(|a| severity.as_ref().map_or(true, |s| a.severity == *s))
-            .filter(|a| alert_type.as_ref().map_or(true, |t| a.alert_type == *t))
+            .filter(|a| severity.as_ref().is_none_or(|s| a.severity == *s))
+            .filter(|a| alert_type.as_ref().is_none_or(|t| a.alert_type == *t))
             .count() as i64)
     }
 

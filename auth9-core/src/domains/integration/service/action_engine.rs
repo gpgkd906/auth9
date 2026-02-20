@@ -59,9 +59,21 @@ async fn op_fetch(
     #[serde] headers: HashMap<String, String>,
     #[string] body: String,
 ) -> std::result::Result<FetchResponse, ActionOpError> {
+    op_fetch_impl(state, url, method, headers, body).await
+}
+
+async fn op_fetch_impl(
+    state: Rc<RefCell<OpState>>,
+    url: String,
+    method: String,
+    headers: HashMap<String, String>,
+    body: String,
+) -> std::result::Result<FetchResponse, ActionOpError> {
     // Extract config and client from state
     let (client, config, request_count) = {
-        let state = state.borrow();
+        let state = state
+            .try_borrow()
+            .map_err(|_| ActionOpError("op state is busy (read borrow conflict)".into()))?;
         let client = state.borrow::<reqwest::Client>().clone();
         let config = state.borrow::<AsyncActionConfig>().clone();
         let count = state.borrow::<RequestCounter>().0;
@@ -112,7 +124,9 @@ async fn op_fetch(
 
     // Increment request counter
     {
-        let mut state = state.borrow_mut();
+        let mut state = state
+            .try_borrow_mut()
+            .map_err(|_| ActionOpError("op state is busy (write borrow conflict)".into()))?;
         state.borrow_mut::<RequestCounter>().0 += 1;
     }
 
@@ -1612,6 +1626,36 @@ mod tests {
             error.contains("allowlist"),
             "Error should mention allowlist: {}",
             error
+        );
+    }
+
+    #[tokio::test]
+    #[allow(clippy::await_holding_refcell_ref)]
+    async fn test_op_fetch_borrow_conflict_returns_error_instead_of_panic() {
+        let config = AsyncActionConfig::default();
+        let client = reqwest::Client::new();
+        let mut runtime = create_js_runtime(client, config).expect("runtime should be created");
+        let op_state = runtime.op_state();
+
+        // Simulate concurrent borrow conflict from another op/state access.
+        let _guard = op_state.borrow_mut();
+        let result = op_fetch_impl(
+            op_state.clone(),
+            "https://example.com".to_string(),
+            "GET".to_string(),
+            HashMap::new(),
+            String::new(),
+        )
+        .await;
+
+        assert!(
+            result.is_err(),
+            "borrow conflict should surface as op error"
+        );
+        let err = result.err().expect("expected borrow conflict error");
+        assert!(
+            err.to_string().contains("read borrow conflict"),
+            "error should clearly indicate state borrow conflict"
         );
     }
 

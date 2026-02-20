@@ -13,15 +13,17 @@
 
 ## 背景知识
 
-Auth9 RBAC 模型：
+Auth9 授权模型（RBAC + ABAC）：
 - **Permission**: 最小权限单位 (如 `user:read`, `user:write`)
 - **Role**: 权限集合，支持继承
 - **User-Tenant-Role**: 用户在特定租户下的角色
+- **ABAC Policy**: 在 RBAC 通过后执行的属性条件约束（`disabled/shadow/enforce`）
 
 权限检查流程：
 1. 解析 JWT Token
 2. 提取 roles/permissions
-3. 检查是否包含所需权限
+3. 检查是否包含所需权限（RBAC）
+4. 对启用 ABAC 的租户执行属性策略评估
 
 ---
 

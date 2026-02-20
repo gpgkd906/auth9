@@ -31,6 +31,7 @@
 - 存在角色 id=`{role_id}`
 - 存在权限 id=`{permission_id}`
 - 该权限尚未分配给该角色
+- 若租户已启用 ABAC（`mode=enforce`），需先确认策略允许当前操作，或先切换为 `shadow/disabled`
 
 ### 目的
 验证角色-权限分配功能

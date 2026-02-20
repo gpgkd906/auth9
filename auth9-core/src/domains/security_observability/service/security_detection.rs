@@ -733,7 +733,7 @@ mod tests {
 
         let alerts = service.analyze_login_event(&event).await.unwrap();
         // Both IP-level and account-level brute force alerts
-        assert!(alerts.len() >= 1);
+        assert!(!alerts.is_empty());
         assert!(alerts
             .iter()
             .any(|a| a.alert_type == SecurityAlertType::BruteForce));
