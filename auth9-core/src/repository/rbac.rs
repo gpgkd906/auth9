@@ -55,6 +55,12 @@ pub trait RbacRepository: Send + Sync {
         user_id: StringUuid,
         tenant_id: StringUuid,
     ) -> Result<Option<StringUuid>>;
+    /// Fetch the tenant-level role (owner/admin/member) from tenant_users
+    async fn find_role_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<Option<String>>;
     async fn find_user_roles_in_tenant(
         &self,
         user_id: StringUuid,
@@ -431,6 +437,21 @@ impl RbacRepository for RbacRepositoryImpl {
                 .fetch_optional(&self.pool)
                 .await?;
         Ok(result.map(|(id,)| id))
+    }
+
+    async fn find_role_in_tenant(
+        &self,
+        user_id: StringUuid,
+        tenant_id: StringUuid,
+    ) -> Result<Option<String>> {
+        let result: Option<(String,)> = sqlx::query_as(
+            "SELECT role_in_tenant FROM tenant_users WHERE user_id = ? AND tenant_id = ?",
+        )
+        .bind(user_id)
+        .bind(tenant_id)
+        .fetch_optional(&self.pool)
+        .await?;
+        Ok(result.map(|(role,)| role))
     }
 
     async fn find_user_roles_in_tenant(

@@ -151,7 +151,7 @@ impl<
 
         // Trigger user.created webhook event
         if let Some(publisher) = &self.webhook_publisher {
-            let _ = publisher
+            if let Err(e) = publisher
                 .trigger_event(WebhookEvent {
                     event_type: "user.created".to_string(),
                     timestamp: Utc::now(),
@@ -161,7 +161,10 @@ impl<
                         "display_name": user.display_name,
                     }),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!("Failed to trigger user.created webhook event: {}", e);
+            }
         }
 
         Ok(user)
@@ -209,7 +212,7 @@ impl<
 
         // Trigger user.updated webhook event
         if let Some(publisher) = &self.webhook_publisher {
-            let _ = publisher
+            if let Err(e) = publisher
                 .trigger_event(WebhookEvent {
                     event_type: "user.updated".to_string(),
                     timestamp: Utc::now(),
@@ -219,7 +222,10 @@ impl<
                         "display_name": user.display_name,
                     }),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!("Failed to trigger user.updated webhook event: {}", e);
+            }
         }
 
         Ok(user)
@@ -376,7 +382,7 @@ impl<
 
         // 11. Trigger user.deleted webhook event
         if let Some(publisher) = &self.webhook_publisher {
-            let _ = publisher
+            if let Err(e) = publisher
                 .trigger_event(WebhookEvent {
                     event_type: "user.deleted".to_string(),
                     timestamp: Utc::now(),
@@ -385,7 +391,10 @@ impl<
                         "email": user.email,
                     }),
                 })
-                .await;
+                .await
+            {
+                tracing::warn!("Failed to trigger user.deleted webhook event: {}", e);
+            }
         }
 
         Ok(())
