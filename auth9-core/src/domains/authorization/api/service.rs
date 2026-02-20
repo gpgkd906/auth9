@@ -6,11 +6,15 @@ use crate::api::{
 };
 use crate::config::Config;
 use crate::domain::{
-    CreateClientInput, CreateServiceInput, Service, ServiceStatus, UpdateServiceInput,
+    CreateClientInput, CreateServiceInput, Service, ServiceStatus, StringUuid, UpdateServiceInput,
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakOidcClient;
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{
+    enforce, enforce_with_state, is_platform_admin_with_db, PolicyAction, PolicyInput,
+    ResourceScope,
+};
 use crate::repository::audit::CreateAuditLogInput;
 use crate::repository::AuditRepository;
 use crate::state::HasServices;
@@ -137,48 +141,23 @@ fn require_service_access(
     auth: &AuthUser,
     service_tenant_id: Option<Uuid>,
 ) -> Result<()> {
-    // Platform admin check applies to both Identity and TenantAccess tokens
-    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
-        return Ok(());
-    }
-
-    match auth.token_type {
-        TokenType::Identity => Err(AppError::Forbidden(
-            "Platform admin required: identity token is not a platform admin".to_string(),
-        )),
-        TokenType::TenantAccess => {
-            let token_tenant = auth
-                .tenant_id
-                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-
-            match service_tenant_id {
-                Some(tid) if tid == token_tenant => {
-                    // Check if user has admin/owner role or service:write permissions
-                    let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
-                    let has_service_permission = auth
-                        .permissions
-                        .iter()
-                        .any(|p| p == "service:write" || p == "service:*");
-
-                    if has_admin_role || has_service_permission {
-                        Ok(())
-                    } else {
-                        Err(AppError::Forbidden(
-                            "Admin access required to manage services".to_string(),
-                        ))
-                    }
-                }
-                _ => Err(AppError::Forbidden(
-                    "Cannot access services in another tenant".to_string(),
-                )),
-            }
-        }
-        TokenType::ServiceClient => {
-            // Service client tokens cannot manage services
-            Err(AppError::Forbidden(
-                "Service client tokens cannot manage services".to_string(),
-            ))
-        }
+    match service_tenant_id {
+        Some(tid) => enforce(
+            config,
+            auth,
+            &PolicyInput {
+                action: PolicyAction::ServiceWrite,
+                scope: ResourceScope::Tenant(StringUuid::from(tid)),
+            },
+        ),
+        None => enforce(
+            config,
+            auth,
+            &PolicyInput {
+                action: PolicyAction::PlatformAdmin,
+                scope: ResourceScope::Global,
+            },
+        ),
     }
 }
 
@@ -224,51 +203,55 @@ pub async fn list<S: HasServices>(
     headers: HeaderMap,
     Query(query): Query<ListServicesQuery>,
 ) -> Result<impl IntoResponse> {
-    // Platform admin check applies to both Identity and TenantAccess tokens
-    let is_platform_admin = auth.token_type != TokenType::ServiceClient
-        && state.config().is_platform_admin_email(&auth.email);
-
-    let tenant_filter = if is_platform_admin {
-        query.tenant_id // Platform admin: optional filter
-    } else {
-        match auth.token_type {
-            TokenType::Identity => {
-                let _ = log_access_denied(
-                    &state,
-                    &headers,
-                    &auth,
-                    "service.list",
-                    "Platform admin required",
-                )
-                .await;
-                return Err(AppError::Forbidden(
-                    "Platform admin required to list services without tenant scope".to_string(),
-                ));
-            }
-            TokenType::TenantAccess | TokenType::ServiceClient => {
-                // Tenant user / service client: must scope to their tenant
-                let token_tenant = auth
-                    .tenant_id
-                    .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-                // If they specified a different tenant, deny
-                if let Some(requested) = query.tenant_id {
-                    if requested != token_tenant {
-                        let _ = log_access_denied(
-                            &state,
-                            &headers,
-                            &auth,
-                            "service.list",
-                            "Cannot list services in another tenant",
-                        )
-                        .await;
-                        return Err(AppError::Forbidden(
-                            "Cannot list services in another tenant".to_string(),
-                        ));
-                    }
-                }
-                Some(token_tenant)
-            }
+    let tenant_filter = if let Some(requested_tenant) = query.tenant_id {
+        let auth_result = enforce_with_state(
+            &state,
+            &auth,
+            &PolicyInput {
+                action: PolicyAction::ServiceList,
+                scope: ResourceScope::Tenant(StringUuid::from(requested_tenant)),
+            },
+        )
+        .await;
+        if auth_result.is_err() {
+            let _ = log_access_denied(
+                &state,
+                &headers,
+                &auth,
+                "service.list",
+                "Cannot list services in another tenant",
+            )
+            .await;
         }
+        auth_result?;
+        Some(requested_tenant)
+    } else if is_platform_admin_with_db(&state, &auth).await {
+        None
+    } else {
+        let token_tenant = auth
+            .tenant_id
+            .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+        let auth_result = enforce_with_state(
+            &state,
+            &auth,
+            &PolicyInput {
+                action: PolicyAction::ServiceList,
+                scope: ResourceScope::Tenant(StringUuid::from(token_tenant)),
+            },
+        )
+        .await;
+        if auth_result.is_err() {
+            let _ = log_access_denied(
+                &state,
+                &headers,
+                &auth,
+                "service.list",
+                "Platform admin or tenant-scoped token required",
+            )
+            .await;
+        }
+        auth_result?;
+        Some(token_tenant)
     };
 
     let (services, total) = state

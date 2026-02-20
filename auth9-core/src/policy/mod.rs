@@ -4,11 +4,20 @@ use crate::config::Config;
 use crate::domain::StringUuid;
 use crate::error::AppError;
 use crate::middleware::auth::{AuthUser, TokenType};
+use crate::state::HasServices;
 
 pub type PolicyResult<T> = std::result::Result<T, AppError>;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TenantListMode {
+    AllTenants,
+    UserMemberships,
+    TokenTenant(StringUuid),
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PolicyAction {
+    PlatformAdmin,
     AuditRead,
     SessionForceLogout,
     WebhookRead,
@@ -22,6 +31,23 @@ pub enum PolicyAction {
     ActionRead,
     ActionWrite,
     UserWrite,
+    TenantRead,
+    TenantWrite,
+    TenantSsoRead,
+    TenantSsoWrite,
+    ServiceRead,
+    ServiceWrite,
+    ServiceList,
+    RbacRead,
+    RbacWrite,
+    RbacAssignSelf,
+    InvitationRead,
+    InvitationWrite,
+    UserManage,
+    UserTenantRead,
+    UserReadOther,
+    TenantOwner,
+    TenantActualOwner,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,6 +70,7 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
     }
 
     match input.action {
+        PolicyAction::PlatformAdmin => require_platform_admin(config, auth),
         PolicyAction::AuditRead
         | PolicyAction::SessionForceLogout
         | PolicyAction::SecurityAlertRead
@@ -93,6 +120,300 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["action:write", "action:*"])
         }
+        PolicyAction::TenantRead | PolicyAction::TenantSsoRead => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_scope_match(auth, tenant_id, true)
+        }
+        PolicyAction::TenantWrite | PolicyAction::TenantSsoWrite => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_scope_match(auth, tenant_id, true)
+        }
+        PolicyAction::ServiceRead | PolicyAction::ServiceWrite => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(
+                auth,
+                tenant_id,
+                &["service:write", "service:*", "tenant_service:write"],
+            )
+        }
+        PolicyAction::ServiceList => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_scope_match(auth, tenant_id, true)
+        }
+        PolicyAction::RbacRead => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_scope_match(auth, tenant_id, true)
+        }
+        PolicyAction::RbacWrite => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(
+                auth,
+                tenant_id,
+                &["rbac:write", "rbac:*", "role:write"],
+            )
+        }
+        PolicyAction::InvitationRead => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_scope_match(auth, tenant_id, false)
+        }
+        PolicyAction::InvitationWrite => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(auth, tenant_id, &["user:write", "user:*"])
+        }
+        PolicyAction::UserManage => match auth.token_type {
+            TokenType::Identity => Err(AppError::Forbidden(
+                "Platform admin required for identity-token user management".to_string(),
+            )),
+            TokenType::TenantAccess => {
+                let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
+                let has_permission = auth.permissions.iter().any(|p| {
+                    p == "user:write"
+                        || p == "user:delete"
+                        || p == "user:*"
+                        || p == "rbac:write"
+                        || p == "rbac:*"
+                });
+                if has_admin_role || has_permission {
+                    Ok(())
+                } else {
+                    Err(AppError::Forbidden(
+                        "Admin access required to manage users".to_string(),
+                    ))
+                }
+            }
+            TokenType::ServiceClient => Err(AppError::Forbidden(
+                "Service client tokens cannot manage users".to_string(),
+            )),
+        },
+        PolicyAction::RbacAssignSelf
+        | PolicyAction::UserTenantRead
+        | PolicyAction::UserReadOther => Err(AppError::Internal(anyhow::anyhow!(
+            "User policy action requires state-aware enforcement"
+        ))),
+        PolicyAction::TenantOwner | PolicyAction::TenantActualOwner => Err(AppError::Internal(
+            anyhow::anyhow!("Tenant owner policy action requires state-aware enforcement"),
+        )),
+    }
+}
+
+pub async fn is_platform_admin_with_db<S: HasServices>(state: &S, auth: &AuthUser) -> bool {
+    if auth.token_type == TokenType::ServiceClient {
+        return false;
+    }
+    if state.config().is_platform_admin_email(&auth.email) {
+        return true;
+    }
+    if let Ok(user_tenants) = state
+        .user_service()
+        .get_user_tenants_with_tenant(StringUuid::from(auth.user_id))
+        .await
+    {
+        return user_tenants
+            .iter()
+            .any(|tu| tu.tenant.slug == "auth9-platform" && tu.role_in_tenant == "admin");
+    }
+    false
+}
+
+pub async fn require_platform_admin_with_db<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+) -> PolicyResult<()> {
+    if is_platform_admin_with_db(state, auth).await {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden("Platform admin required".to_string()))
+    }
+}
+
+pub async fn enforce_with_state<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    input: &PolicyInput,
+) -> PolicyResult<()> {
+    if input.action == PolicyAction::UserTenantRead {
+        let tenant_id = require_tenant_scope(&input.scope)?;
+        return require_user_tenant_read_with_state(state, auth, tenant_id).await;
+    }
+    if input.action == PolicyAction::RbacAssignSelf {
+        if is_platform_admin_with_db(state, auth).await {
+            return Ok(());
+        }
+        return Err(AppError::Forbidden(
+            "Cannot assign roles to yourself".to_string(),
+        ));
+    }
+    if input.action == PolicyAction::UserReadOther {
+        let target_user_id = require_user_scope(&input.scope)?;
+        return require_user_read_other_with_state(state, auth, target_user_id).await;
+    }
+    if matches!(
+        input.action,
+        PolicyAction::TenantOwner | PolicyAction::TenantActualOwner
+    ) {
+        let tenant_id = require_tenant_scope(&input.scope)?;
+        return require_tenant_owner_with_state(
+            state,
+            auth,
+            tenant_id,
+            matches!(input.action, PolicyAction::TenantOwner),
+        )
+        .await;
+    }
+
+    if action_supports_db_platform_admin(input.action)
+        && is_platform_admin_with_db(state, auth).await
+    {
+        return Ok(());
+    }
+    enforce(state.config(), auth, input)
+}
+
+pub async fn resolve_tenant_list_mode_with_state<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+) -> PolicyResult<TenantListMode> {
+    if is_platform_admin_with_db(state, auth).await {
+        return Ok(TenantListMode::AllTenants);
+    }
+    match auth.token_type {
+        TokenType::Identity => Ok(TenantListMode::UserMemberships),
+        TokenType::TenantAccess | TokenType::ServiceClient => auth
+            .tenant_id
+            .map(|tenant_id| TenantListMode::TokenTenant(StringUuid::from(tenant_id)))
+            .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string())),
+    }
+}
+
+fn require_user_scope(scope: &ResourceScope) -> PolicyResult<StringUuid> {
+    match scope {
+        ResourceScope::User(user_id) => Ok(*user_id),
+        _ => Err(AppError::Internal(anyhow::anyhow!(
+            "User-scoped policy action requires ResourceScope::User"
+        ))),
+    }
+}
+
+async fn require_user_tenant_read_with_state<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    tenant_id: StringUuid,
+) -> PolicyResult<()> {
+    if is_platform_admin_with_db(state, auth).await {
+        return Ok(());
+    }
+    match auth.token_type {
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Platform admin required to list users across tenants".to_string(),
+        )),
+        TokenType::ServiceClient => Err(AppError::Forbidden(
+            "Service client tokens cannot access user management endpoints".to_string(),
+        )),
+        TokenType::TenantAccess => {
+            if auth.tenant_id == Some(*tenant_id) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Access denied: you can only list users in your own tenant".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+async fn require_user_read_other_with_state<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    target_user_id: StringUuid,
+) -> PolicyResult<()> {
+    if is_platform_admin_with_db(state, auth).await {
+        return Ok(());
+    }
+    match auth.token_type {
+        TokenType::ServiceClient => Err(AppError::Forbidden(
+            "Service client tokens cannot access user profiles".to_string(),
+        )),
+        TokenType::TenantAccess => {
+            let has_admin_permission = auth.roles.iter().any(|r| r == "admin" || r == "owner")
+                || auth
+                    .permissions
+                    .iter()
+                    .any(|p| p == "user:read" || p == "user:*");
+            if has_admin_permission {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Access denied: you can only view your own profile".to_string(),
+                ))
+            }
+        }
+        TokenType::Identity => {
+            let auth_user_id = StringUuid::from(auth.user_id);
+            let auth_user_tenants = state.user_service().get_user_tenants(auth_user_id).await?;
+            let target_user_tenants = state
+                .user_service()
+                .get_user_tenants(target_user_id)
+                .await?;
+
+            let auth_user_admin_tenant_ids: std::collections::HashSet<_> = auth_user_tenants
+                .iter()
+                .filter(|tu| tu.role_in_tenant == "owner" || tu.role_in_tenant == "admin")
+                .map(|tu| tu.tenant_id)
+                .collect();
+            let target_user_tenant_ids: std::collections::HashSet<_> =
+                target_user_tenants.iter().map(|tu| tu.tenant_id).collect();
+
+            if auth_user_admin_tenant_ids
+                .intersection(&target_user_tenant_ids)
+                .next()
+                .is_some()
+            {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Access denied: you can only view your own profile".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+async fn require_tenant_owner_with_state<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    tenant_id: StringUuid,
+    allow_platform_admin_bypass: bool,
+) -> PolicyResult<()> {
+    if auth.token_type == TokenType::ServiceClient {
+        return Err(AppError::Forbidden(
+            "Service client tokens cannot perform tenant owner operations".to_string(),
+        ));
+    }
+
+    if allow_platform_admin_bypass && is_platform_admin_with_db(state, auth).await {
+        return Ok(());
+    }
+
+    if auth.token_type == TokenType::TenantAccess {
+        if auth.tenant_id == Some(*tenant_id) && auth.roles.iter().any(|r| r == "owner") {
+            return Ok(());
+        }
+        return Err(AppError::Forbidden(
+            "Owner access required: you must be an owner of this tenant".to_string(),
+        ));
+    }
+
+    let user_id = StringUuid::from(auth.user_id);
+    let tenant_users = state.user_service().get_user_tenants(user_id).await?;
+    if tenant_users
+        .iter()
+        .any(|tu| tu.tenant_id == tenant_id && tu.role_in_tenant == "owner")
+    {
+        Ok(())
+    } else {
+        Err(AppError::Forbidden(
+            "Only the current tenant owner can perform this operation".to_string(),
+        ))
     }
 }
 
@@ -150,6 +471,69 @@ fn require_tenant_admin_or_permission(
             "Service client tokens are not allowed for this operation".to_string(),
         )),
     }
+}
+
+fn require_tenant_scope_match(
+    auth: &AuthUser,
+    tenant_id: StringUuid,
+    allow_service_client: bool,
+) -> PolicyResult<()> {
+    match auth.token_type {
+        TokenType::Identity => Err(AppError::Forbidden(
+            "Tenant-scoped token required".to_string(),
+        )),
+        TokenType::TenantAccess => {
+            if auth.tenant_id == Some(*tenant_id) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Cannot access another tenant".to_string(),
+                ))
+            }
+        }
+        TokenType::ServiceClient => {
+            if !allow_service_client {
+                return Err(AppError::Forbidden(
+                    "Service client tokens are not allowed for this operation".to_string(),
+                ));
+            }
+            if auth.tenant_id == Some(*tenant_id) {
+                Ok(())
+            } else {
+                Err(AppError::Forbidden(
+                    "Cannot access another tenant".to_string(),
+                ))
+            }
+        }
+    }
+}
+
+fn action_supports_db_platform_admin(action: PolicyAction) -> bool {
+    matches!(
+        action,
+        PolicyAction::PlatformAdmin
+            | PolicyAction::AuditRead
+            | PolicyAction::SessionForceLogout
+            | PolicyAction::SecurityAlertRead
+            | PolicyAction::SecurityAlertResolve
+            | PolicyAction::UserWrite
+            | PolicyAction::SystemConfigRead
+            | PolicyAction::SystemConfigWrite
+            | PolicyAction::InvitationRead
+            | PolicyAction::InvitationWrite
+            | PolicyAction::UserManage
+            | PolicyAction::UserTenantRead
+            | PolicyAction::UserReadOther
+            | PolicyAction::ServiceRead
+            | PolicyAction::ServiceWrite
+            | PolicyAction::ServiceList
+            | PolicyAction::RbacRead
+            | PolicyAction::RbacWrite
+            | PolicyAction::RbacAssignSelf
+            | PolicyAction::TenantSsoRead
+            | PolicyAction::TenantSsoWrite
+            | PolicyAction::TenantOwner
+    )
 }
 
 fn require_system_config_read(

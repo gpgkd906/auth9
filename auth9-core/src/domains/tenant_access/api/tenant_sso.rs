@@ -1,15 +1,14 @@
 //! Tenant-scoped enterprise SSO connector APIs.
 
-use crate::api::{
-    is_platform_admin_with_db, write_audit_log_generic, MessageResponse, SuccessResponse,
-};
+use crate::api::{write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::domain::{
     CreateEnterpriseSsoConnectorInput, EnterpriseSsoConnector, StringUuid,
     UpdateEnterpriseSsoConnectorInput,
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakIdentityProvider;
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{self, PolicyAction, PolicyInput, ResourceScope};
 use crate::state::{HasDbPool, HasServices};
 use axum::{
     extract::{Path, State},
@@ -482,25 +481,15 @@ async fn ensure_tenant_access<S: HasServices>(
     auth: &AuthUser,
     tenant_id: Uuid,
 ) -> Result<()> {
-    // Platform admin bypass applies to both Identity and TenantAccess tokens
-    if is_platform_admin_with_db(state, auth).await {
-        return Ok(());
-    }
-
-    match auth.token_type {
-        TokenType::TenantAccess | TokenType::ServiceClient => {
-            if auth.tenant_id == Some(tenant_id) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Access denied: you don't have permission to access this tenant".to_string(),
-                ))
-            }
-        }
-        TokenType::Identity => Err(AppError::Forbidden(
-            "Tenant-scoped token required (exchange identity token first)".to_string(),
-        )),
-    }
+    policy::enforce_with_state(
+        state,
+        auth,
+        &PolicyInput {
+            action: PolicyAction::TenantSsoWrite,
+            scope: ResourceScope::Tenant(StringUuid::from(tenant_id)),
+        },
+    )
+    .await
 }
 
 fn normalize_provider_type(provider_type: &str) -> Result<String> {

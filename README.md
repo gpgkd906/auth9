@@ -185,6 +185,29 @@ npm run typecheck          # Type checking
   - Builds and pushes Docker images to GHCR
   - Generates deployment summary with image tags
 
+## Authorization Model
+
+Auth9 authorization is centralized in `auth9-core/src/policy/mod.rs`.
+
+- Primary entry points:
+  - `enforce(config, auth, input)` for stateless checks
+  - `enforce_with_state(state, auth, input)` for DB-aware checks (platform admin fallback, tenant owner checks, shared-tenant checks)
+- `PolicyInput` is composed of:
+  - `PolicyAction`: what operation is being attempted
+  - `ResourceScope`: what resource scope is being accessed (`Global`, `Tenant`, `User`)
+- Tenant listing uses `resolve_tenant_list_mode_with_state(...)` to resolve visibility mode (`all`, membership-based, token-tenant only).
+
+### Handler Rule
+
+For new HTTP endpoints:
+
+1. Map endpoint behavior to a `PolicyAction`.
+2. Construct the correct `ResourceScope`.
+3. Call `enforce(...)` or `enforce_with_state(...)` before business logic.
+4. Keep handler-level `TokenType` branching out of authorization code.
+
+Business constraints (for example password confirmation failure, disabled public registration) may still return domain errors in handlers, but token authorization must stay in Policy.
+
 ## License
 
 MIT

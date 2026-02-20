@@ -2,13 +2,13 @@
 
 use crate::api::{
     deserialize_page, deserialize_per_page, extract_actor_id_generic, extract_ip,
-    is_platform_admin_with_db, require_platform_admin_with_db, write_audit_log_generic,
-    MessageResponse, PaginatedResponse, SuccessResponse,
+    require_platform_admin_with_db, write_audit_log_generic, MessageResponse, PaginatedResponse,
+    SuccessResponse,
 };
-use crate::config::Config;
 use crate::domain::{CreateTenantInput, StringUuid, UpdateTenantInput};
 use crate::error::{AppError, Result};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{self, PolicyAction, PolicyInput, ResourceScope, TenantListMode};
 use crate::repository::audit::CreateAuditLogInput;
 use crate::repository::AuditRepository;
 use crate::state::HasServices;
@@ -29,7 +29,15 @@ async fn check_tenant_access<S: HasServices>(
     auth: &AuthUser,
     tenant_id: Uuid,
 ) -> Result<()> {
-    let result = check_tenant_access_inner(state.config(), auth, tenant_id);
+    let result = policy::enforce_with_state(
+        state,
+        auth,
+        &PolicyInput {
+            action: PolicyAction::TenantRead,
+            scope: ResourceScope::Tenant(StringUuid::from(tenant_id)),
+        },
+    )
+    .await;
     if let Err(AppError::Forbidden(ref reason)) = result {
         let actor_id = extract_actor_id_generic(state, headers);
         let ip_address = extract_ip(headers);
@@ -51,41 +59,6 @@ async fn check_tenant_access<S: HasServices>(
             .await;
     }
     result
-}
-
-fn check_tenant_access_inner(config: &Config, auth: &AuthUser, tenant_id: Uuid) -> Result<()> {
-    match auth.token_type {
-        TokenType::Identity => {
-            // Platform admins with Identity tokens can access any tenant
-            if config.is_platform_admin_email(&auth.email) {
-                return Ok(());
-            }
-            Err(AppError::Forbidden(
-                "Tenant-scoped token required (exchange identity token first)".to_string(),
-            ))
-        }
-        TokenType::TenantAccess => {
-            // Tenant access tokens must always match the tenant_id, even for platform admins.
-            // The token is scoped to a specific tenant by design.
-            if auth.tenant_id == Some(tenant_id) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Access denied: you don't have permission to access this tenant".to_string(),
-                ))
-            }
-        }
-        TokenType::ServiceClient => {
-            // Service client tokens can only access their own tenant
-            if auth.tenant_id == Some(tenant_id) {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Service client tokens can only access their own tenant".to_string(),
-                ))
-            }
-        }
-    }
 }
 
 /// Query parameters for tenant list endpoint with search
@@ -127,34 +100,27 @@ pub async fn list<S: HasServices>(
     auth: AuthUser,
     Query(query): Query<TenantListQuery>,
 ) -> Result<impl IntoResponse> {
-    // Platform admin check applies to both Identity and TenantAccess tokens
-    let is_platform_admin = is_platform_admin_with_db(&state, &auth).await;
-
-    if is_platform_admin {
-        // Platform admin: can list all tenants
-        let (tenants, total) = if let Some(ref search) = query.search {
-            state
-                .tenant_service()
-                .search(search, query.page, query.per_page)
-                .await?
-        } else {
-            state
-                .tenant_service()
-                .list(query.page, query.per_page)
-                .await?
-        };
-
-        return Ok(Json(PaginatedResponse::new(
-            tenants,
-            query.page,
-            query.per_page,
-            total,
-        )));
-    }
-
-    match auth.token_type {
-        TokenType::Identity => {
-            // Non-admin Identity token: show tenants they belong to
+    match policy::resolve_tenant_list_mode_with_state(&state, &auth).await? {
+        TenantListMode::AllTenants => {
+            let (tenants, total) = if let Some(ref search) = query.search {
+                state
+                    .tenant_service()
+                    .search(search, query.page, query.per_page)
+                    .await?
+            } else {
+                state
+                    .tenant_service()
+                    .list(query.page, query.per_page)
+                    .await?
+            };
+            Ok(Json(PaginatedResponse::new(
+                tenants,
+                query.page,
+                query.per_page,
+                total,
+            )))
+        }
+        TenantListMode::UserMemberships => {
             let user_tenants = state
                 .user_service()
                 .get_user_tenants(StringUuid::from(auth.user_id))
@@ -168,15 +134,8 @@ pub async fn list<S: HasServices>(
             let total = tenants.len() as i64;
             Ok(Json(PaginatedResponse::new(tenants, 1, total, total)))
         }
-        TokenType::TenantAccess | TokenType::ServiceClient => {
-            // Tenant user / service client: can only see their own tenant
-            let tenant_id = auth
-                .tenant_id
-                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-            let tenant = state
-                .tenant_service()
-                .get(StringUuid::from(tenant_id))
-                .await?;
+        TenantListMode::TokenTenant(tenant_id) => {
+            let tenant = state.tenant_service().get(tenant_id).await?;
             Ok(Json(PaginatedResponse::new(vec![tenant], 1, 1, 1)))
         }
     }
