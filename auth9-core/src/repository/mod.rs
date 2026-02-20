@@ -1,5 +1,6 @@
 //! Data access layer (Repository pattern)
 
+pub mod abac;
 pub mod action;
 pub mod audit;
 pub mod invitation;
@@ -17,6 +18,7 @@ pub mod user;
 pub mod webauthn;
 pub mod webhook;
 
+pub use abac::AbacRepository;
 pub use action::ActionRepository;
 pub use audit::AuditRepository;
 pub use invitation::InvitationRepository;

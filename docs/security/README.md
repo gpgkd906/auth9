@@ -23,13 +23,15 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | [authentication/04-password-security.md](./authentication/04-password-security.md) | 密码安全测试 | 5 | 高 |
 | [authentication/05-idp-security.md](./authentication/05-idp-security.md) | 身份提供商与邮件安全测试 | 4 | 高 | 🆕
 
-### 授权安全 (5 个文档, 27 个场景)
+### 授权安全 (6 个文档, 33 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
 |------|------|--------|----------|
 | [authorization/01-tenant-isolation.md](./authorization/01-tenant-isolation.md) | 租户隔离测试 | 5 | 极高 |
 | [authorization/02-rbac-bypass.md](./authorization/02-rbac-bypass.md) | RBAC 权限绕过测试 | 5 | 极高 |
 | [authorization/03-privilege-escalation.md](./authorization/03-privilege-escalation.md) | 权限提升测试 | 5 | 极高 |
 | [authorization/04-resource-access.md](./authorization/04-resource-access.md) | 资源访问控制测试 | 5 | 高 |
+| [authorization/05-system-config-authz.md](./authorization/05-system-config-authz.md) | System/Admin 配置接口授权校验 | 8 | 极高 |
+| [authorization/06-abac-policy-governance.md](./authorization/06-abac-policy-governance.md) | ABAC 策略治理与执行安全测试 | 5 | 极高 | 🆕
 
 ### 输入验证 (6 个文档, 27 个场景)
 | 文档 | 描述 | 场景数 | 风险等级 |
@@ -115,7 +117,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | 模块 | 文档数 | 场景数 |
 |------|--------|--------|
 | 认证安全 | 5 | 21 |
-| 授权安全 | 5 | 27 |
+| 授权安全 | 6 | 33 |
 | 输入验证 | 6 | 27 |
 | API 安全 | 6 | 26 |
 | 数据安全 | 4 | 17 |
@@ -126,7 +128,7 @@ Auth9 是一个自托管的身份认证服务，核心安全组件包括：
 | 文件安全 | 2 | 6 |
 | 高级攻击 | 7 | 24 |
 | ASVS 5.0 治理与补完 | 1 | - |
-| **总计** | **47** | **197** |
+| **总计** | **48** | **202** |
 
 ---
 

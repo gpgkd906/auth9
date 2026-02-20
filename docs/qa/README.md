@@ -22,13 +22,14 @@
 | [user/05-account-security.md](./user/05-account-security.md) | 修改密码、Passkeys、会话、关联身份 | 5 |
 | [user/06-account-navigation.md](./user/06-account-navigation.md) | Account 导航布局、侧边栏、Settings 清理 | 5 |
 
-### RBAC 角色权限 (4 个文档, 17 个场景)
+### RBAC 角色权限 (5 个文档, 22 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [rbac/01-permission.md](./rbac/01-permission.md) | 权限 CRUD | 4 |
 | [rbac/02-role.md](./rbac/02-role.md) | 角色 CRUD、继承 | 5 |
 | [rbac/03-assignment.md](./rbac/03-assignment.md) | 权限分配、用户角色 | 5 |
 | [rbac/04-advanced.md](./rbac/04-advanced.md) | 层次视图、循环检测 | 3 |
+| [rbac/05-abac-policy-management.md](./rbac/05-abac-policy-management.md) | ABAC 策略草稿、发布、回滚、模拟 | 5 |
 
 ### 服务与客户端 (5 个文档, 25 个场景)
 | 文档 | 描述 | 场景数 |
@@ -150,7 +151,7 @@
 |------|--------|--------|
 | 租户管理 | 4 | 20 |
 | 用户管理 | 6 | 28 |
-| RBAC 角色权限 | 4 | 17 |
+| RBAC 角色权限 | 5 | 22 |
 | 服务与客户端 | 5 | 25 |
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
@@ -164,7 +165,7 @@
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
 | 集成测试 | 7 | 35 |
-| **总计** | **74** | **364** |
+| **总计** | **75** | **369** |
 
 ---
 

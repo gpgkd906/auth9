@@ -79,6 +79,19 @@ use utoipa::OpenApi;
             crate::domain::UpdateRoleInput,
             crate::domain::AssignRolesInput,
             crate::domain::UserRolesInTenant,
+            crate::domain::AbacMode,
+            crate::domain::AbacEffect,
+            crate::domain::AbacRule,
+            crate::domain::AbacPolicyDocument,
+            crate::domain::AbacPolicySetSummary,
+            crate::domain::AbacPolicyVersionSummary,
+            crate::domain::AbacSimulationInput,
+            crate::domain::AbacSimulationResult,
+            crate::domains::authorization::api::abac::CreateAbacPolicyInput,
+            crate::domains::authorization::api::abac::UpdateAbacPolicyInput,
+            crate::domains::authorization::api::abac::PublishAbacPolicyInput,
+            crate::domains::authorization::api::abac::RollbackAbacPolicyInput,
+            crate::domains::authorization::api::abac::SimulateAbacPolicyInput,
 
             // ── Invitation domain ──────────────────────────────────────
             crate::domain::InvitationStatus,
@@ -288,6 +301,12 @@ use utoipa::OpenApi;
         crate::domains::authorization::api::tenant_service::list_services,
         crate::domains::authorization::api::tenant_service::toggle_service,
         crate::domains::authorization::api::tenant_service::get_enabled_services,
+        crate::domains::authorization::api::abac::list_policies,
+        crate::domains::authorization::api::abac::create_policy,
+        crate::domains::authorization::api::abac::update_policy,
+        crate::domains::authorization::api::abac::publish_policy,
+        crate::domains::authorization::api::abac::rollback_policy,
+        crate::domains::authorization::api::abac::simulate_policy,
 
         // ── Platform: System Settings ──────────────────────────────
         crate::domains::platform::api::system_settings::get_email_settings,

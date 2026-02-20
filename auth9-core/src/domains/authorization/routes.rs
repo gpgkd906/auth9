@@ -97,4 +97,25 @@ where
             "/api/v1/tenants/{tenant_id}/services/enabled",
             get(authorization_api::tenant_service::get_enabled_services::<S>),
         )
+        .route(
+            "/api/v1/tenants/{tenant_id}/abac/policies",
+            get(authorization_api::abac::list_policies::<S>)
+                .post(authorization_api::abac::create_policy::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/abac/policies/{version_id}",
+            axum::routing::put(authorization_api::abac::update_policy::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/abac/policies/{version_id}/publish",
+            post(authorization_api::abac::publish_policy::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/abac/policies/{version_id}/rollback",
+            post(authorization_api::abac::rollback_policy::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/abac/simulate",
+            post(authorization_api::abac::simulate_policy::<S>),
+        )
 }

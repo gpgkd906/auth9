@@ -118,6 +118,11 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     /// Check if the system is ready (database and cache are healthy)
     /// Returns (db_ok, cache_ok) tuple
     fn check_ready(&self) -> impl std::future::Future<Output = (bool, bool)> + Send;
+
+    /// Optional direct database pool access for cross-cutting policy logic.
+    fn maybe_db_pool(&self) -> Option<&sqlx::MySqlPool> {
+        None
+    }
 }
 
 /// Trait for states that provide system settings and email services

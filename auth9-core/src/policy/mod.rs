@@ -1,5 +1,7 @@
 //! Centralized authorization policy engine for HTTP handlers.
 
+pub(crate) mod abac;
+
 use crate::config::Config;
 use crate::domain::StringUuid;
 use crate::error::AppError;
@@ -48,6 +50,10 @@ pub enum PolicyAction {
     UserReadOther,
     TenantOwner,
     TenantActualOwner,
+    AbacRead,
+    AbacWrite,
+    AbacPublish,
+    AbacSimulate,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -160,6 +166,30 @@ pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyR
             let tenant_id = require_tenant_scope(&input.scope)?;
             require_tenant_admin_or_permission(auth, tenant_id, &["user:write", "user:*"])
         }
+        PolicyAction::AbacRead => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(
+                auth,
+                tenant_id,
+                &["abac:read", "abac:write", "abac:*", "rbac:write", "rbac:*"],
+            )
+        }
+        PolicyAction::AbacWrite | PolicyAction::AbacPublish => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(
+                auth,
+                tenant_id,
+                &["abac:write", "abac:*", "rbac:write", "rbac:*"],
+            )
+        }
+        PolicyAction::AbacSimulate => {
+            let tenant_id = require_tenant_scope(&input.scope)?;
+            require_tenant_admin_or_permission(
+                auth,
+                tenant_id,
+                &["abac:read", "abac:write", "abac:*", "rbac:write", "rbac:*"],
+            )
+        }
         PolicyAction::UserManage => match auth.token_type {
             TokenType::Identity => Err(AppError::Forbidden(
                 "Platform admin required for identity-token user management".to_string(),
@@ -266,7 +296,43 @@ pub async fn enforce_with_state<S: HasServices>(
     {
         return Ok(());
     }
-    enforce(state.config(), auth, input)
+
+    enforce(state.config(), auth, input)?;
+
+    let should_check_abac = matches!(
+        input.action,
+        PolicyAction::UserTenantRead
+            | PolicyAction::UserManage
+            | PolicyAction::InvitationRead
+            | PolicyAction::InvitationWrite
+            | PolicyAction::RbacWrite
+            | PolicyAction::RbacAssignSelf
+    );
+
+    if should_check_abac {
+        let abac_outcome = abac::evaluate_with_state(state, auth, input).await?;
+        if abac_outcome.denied {
+            match abac_outcome.mode {
+                abac::AbacDecisionMode::Disabled => {}
+                abac::AbacDecisionMode::Shadow => {
+                    tracing::warn!(
+                        action = ?input.action,
+                        mode = "shadow",
+                        deny_rules = ?abac_outcome.matched_deny_rule_ids,
+                        allow_rules = ?abac_outcome.matched_allow_rule_ids,
+                        "ABAC shadow deny matched"
+                    );
+                }
+                abac::AbacDecisionMode::Enforce => {
+                    return Err(AppError::Forbidden(
+                        "Access denied by ABAC policy".to_string(),
+                    ));
+                }
+            }
+        }
+    }
+
+    Ok(())
 }
 
 pub async fn resolve_tenant_list_mode_with_state<S: HasServices>(
@@ -533,6 +599,10 @@ fn action_supports_db_platform_admin(action: PolicyAction) -> bool {
             | PolicyAction::TenantSsoRead
             | PolicyAction::TenantSsoWrite
             | PolicyAction::TenantOwner
+            | PolicyAction::AbacRead
+            | PolicyAction::AbacWrite
+            | PolicyAction::AbacPublish
+            | PolicyAction::AbacSimulate
     )
 }
 
