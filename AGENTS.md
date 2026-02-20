@@ -57,3 +57,22 @@ Rust test locations:
 ## Security & Configuration Notes
 - `auth9-core` requires `DATABASE_URL` and `JWT_SECRET`. Use `.env.example` files as starting points.
 - Keycloak is optional but used for OIDC/MFA; ensure local Keycloak is running when testing those flows.
+
+## Authorization Model (Policy-First)
+- Central authorization lives in `auth9-core/src/policy/mod.rs`.
+- Use:
+  - `enforce(config, auth, input)` for stateless checks
+  - `enforce_with_state(state, auth, input)` for DB-aware checks
+- `PolicyInput` = `PolicyAction` + `ResourceScope`.
+- Tenant list visibility is resolved through `resolve_tenant_list_mode_with_state(...)`.
+
+### Mandatory Development Rules
+- New HTTP endpoints must define and use a `PolicyAction` before entering business logic.
+- Do not add handler-level `TokenType` branching for authorization decisions.
+- If a new permission rule is introduced, add/extend `PolicyAction` and update Policy tests.
+- Keep handler code focused on parsing/validation/response; authorization belongs to Policy.
+
+### Test Expectations
+- Authorization changes must be covered by:
+  - Policy unit tests (action + scope + token combinations)
+  - HTTP regression tests for allow/deny paths

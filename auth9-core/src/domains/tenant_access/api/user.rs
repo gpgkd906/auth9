@@ -7,7 +7,11 @@ use crate::config::Config;
 use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{
+    enforce, enforce_with_state, is_platform_admin_with_db, PolicyAction, PolicyInput,
+    ResourceScope,
+};
 use crate::state::{HasBranding, HasServices};
 use axum::{
     extract::{Path, Query, State},
@@ -69,43 +73,15 @@ async fn require_tenant_owner<S: HasServices>(
     auth: &AuthUser,
     target_tenant_id: Uuid,
 ) -> Result<()> {
-    // Service client tokens cannot perform tenant owner operations
-    if auth.token_type == TokenType::ServiceClient {
-        return Err(AppError::Forbidden(
-            "Service client tokens cannot perform tenant owner operations".to_string(),
-        ));
-    }
-
-    // Platform admin check (works for both Identity and TenantAccess tokens)
-    if state.config().is_platform_admin_email(&auth.email) {
-        return Ok(());
-    }
-
-    // For TenantAccess tokens, check if the token is for this tenant with owner role
-    if auth.token_type == TokenType::TenantAccess {
-        if auth.tenant_id == Some(target_tenant_id) && auth.roles.iter().any(|r| r == "owner") {
-            return Ok(());
-        }
-        return Err(AppError::Forbidden(
-            "Owner access required: you must be an owner of this tenant".to_string(),
-        ));
-    }
-
-    // Otherwise check the database if user is owner of target tenant
-    let user_id = StringUuid::from(auth.user_id);
-    let tenant_id = StringUuid::from(target_tenant_id);
-    let tenant_users = state.user_service().get_user_tenants(user_id).await?;
-
-    for tu in tenant_users {
-        if tu.tenant_id == tenant_id && tu.role_in_tenant == "owner" {
-            return Ok(());
-        }
-    }
-
-    Err(AppError::Forbidden(
-        "Owner access required: you must be an owner of this tenant to perform this action"
-            .to_string(),
-    ))
+    enforce_with_state(
+        state,
+        auth,
+        &PolicyInput {
+            action: PolicyAction::TenantOwner,
+            scope: ResourceScope::Tenant(StringUuid::from(target_tenant_id)),
+        },
+    )
+    .await
 }
 
 /// Check if user is actually an owner of the target tenant (no platform admin bypass).
@@ -115,72 +91,28 @@ async fn require_actual_tenant_owner<S: HasServices>(
     auth: &AuthUser,
     target_tenant_id: Uuid,
 ) -> Result<()> {
-    // Service client tokens cannot perform tenant owner operations
-    if auth.token_type == TokenType::ServiceClient {
-        return Err(AppError::Forbidden(
-            "Service client tokens cannot perform tenant owner operations".to_string(),
-        ));
-    }
-
-    // For TenantAccess tokens, check if the token is for this tenant with owner role
-    if auth.token_type == TokenType::TenantAccess {
-        if auth.tenant_id == Some(target_tenant_id) && auth.roles.iter().any(|r| r == "owner") {
-            return Ok(());
-        }
-        return Err(AppError::Forbidden(
-            "Only the current tenant owner can transfer ownership".to_string(),
-        ));
-    }
-
-    // For Identity tokens, always check the database for actual owner role
-    // (no platform admin bypass for ownership transfer)
-    let user_id = StringUuid::from(auth.user_id);
-    let tenant_id = StringUuid::from(target_tenant_id);
-    let tenant_users = state.user_service().get_user_tenants(user_id).await?;
-
-    for tu in tenant_users {
-        if tu.tenant_id == tenant_id && tu.role_in_tenant == "owner" {
-            return Ok(());
-        }
-    }
-
-    Err(AppError::Forbidden(
-        "Only the current tenant owner can transfer ownership".to_string(),
-    ))
+    enforce_with_state(
+        state,
+        auth,
+        &PolicyInput {
+            action: PolicyAction::TenantActualOwner,
+            scope: ResourceScope::Tenant(StringUuid::from(target_tenant_id)),
+        },
+    )
+    .await
 }
 
 /// Check if user can manage users within a tenant
 /// Platform admin can always manage, tenant admin with appropriate role can manage their tenant
 fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
-    // Platform admin check applies to both Identity and TenantAccess tokens
-    if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
-        return Ok(());
-    }
-
-    match auth.token_type {
-        TokenType::Identity => Err(AppError::Forbidden(
-            "Platform admin required for identity-token user management".to_string(),
-        )),
-        TokenType::TenantAccess => {
-            // Check if user has admin/owner role or user:write/user:delete permissions
-            let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
-            let has_user_write_permission = auth
-                .permissions
-                .iter()
-                .any(|p| p == "user:write" || p == "user:delete" || p == "user:*");
-
-            if has_admin_role || has_user_write_permission {
-                Ok(())
-            } else {
-                Err(AppError::Forbidden(
-                    "Admin access required: you need admin privileges to manage users".to_string(),
-                ))
-            }
-        }
-        TokenType::ServiceClient => Err(AppError::Forbidden(
-            "Service client tokens cannot manage users".to_string(),
-        )),
-    }
+    enforce(
+        config,
+        auth,
+        &PolicyInput {
+            action: PolicyAction::UserManage,
+            scope: ResourceScope::Global,
+        },
+    )
 }
 
 /// List users
@@ -201,9 +133,7 @@ pub async fn list<S: HasServices>(
     Query(query): Query<UserListQuery>,
 ) -> Result<impl IntoResponse> {
     // Platform admin check applies to both Identity and TenantAccess tokens
-    if state.config().is_platform_admin_email(&auth.email)
-        && auth.token_type != TokenType::ServiceClient
-    {
+    if is_platform_admin_with_db(&state, &auth).await {
         // Platform admin: if tenant_id is specified, scope to that tenant
         if let Some(tenant_id) = query.tenant_id {
             let users = state
@@ -246,36 +176,29 @@ pub async fn list<S: HasServices>(
         )));
     }
 
-    match auth.token_type {
-        TokenType::Identity => Err(AppError::Forbidden(
-            "Platform admin required to list all users".to_string(),
-        )),
-        TokenType::ServiceClient => {
-            // Service client tokens cannot list users — user management is not
-            // part of the M2M service scope (least-privilege principle).
-            Err(AppError::Forbidden(
-                "Service client tokens cannot access user management endpoints".to_string(),
-            ))
-        }
-        TokenType::TenantAccess => {
-            // Tenant user: can only list users in their tenant
-            let tenant_id = auth
-                .tenant_id
-                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-            let users = state
-                .user_service()
-                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                .await?;
-            // list_tenant_users returns Vec, wrap in PaginatedResponse
-            let total = users.len() as i64;
-            Ok(Json(PaginatedResponse::new(
-                with_tenant_context(users, Some(tenant_id)),
-                query.page,
-                query.per_page,
-                total,
-            )))
-        }
-    }
+    let tenant_id = auth
+        .tenant_id
+        .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
+    enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::UserTenantRead,
+            scope: ResourceScope::Tenant(StringUuid::from(tenant_id)),
+        },
+    )
+    .await?;
+    let users = state
+        .user_service()
+        .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+        .await?;
+    let total = users.len() as i64;
+    Ok(Json(PaginatedResponse::new(
+        with_tenant_context(users, Some(tenant_id)),
+        query.page,
+        query.per_page,
+        total,
+    )))
 }
 
 /// Get user by ID
@@ -296,57 +219,15 @@ pub async fn get<S: HasServices>(
     // Authorization check: users can only read their own profile
     // unless they have admin permissions
     if auth.user_id != id {
-        // Service client tokens cannot look up arbitrary users
-        if auth.token_type == TokenType::ServiceClient {
-            return Err(AppError::Forbidden(
-                "Service client tokens cannot access user profiles".to_string(),
-            ));
-        }
-        // Check if user has admin permissions via TenantAccess token
-        if auth.token_type == TokenType::TenantAccess {
-            let has_admin_permission = auth.roles.iter().any(|r| r == "admin" || r == "owner")
-                || auth
-                    .permissions
-                    .iter()
-                    .any(|p| p == "user:read" || p == "user:*");
-            if !has_admin_permission {
-                return Err(AppError::Forbidden(
-                    "Access denied: you can only view your own profile".to_string(),
-                ));
-            }
-        } else {
-            // Identity tokens: check if user is owner/admin of any tenant the target user belongs to
-            let target_user_id = StringUuid::from(id);
-            let auth_user_id = StringUuid::from(auth.user_id);
-
-            // Get tenants where auth user is owner/admin
-            let auth_user_tenants = state.user_service().get_user_tenants(auth_user_id).await?;
-            let target_user_tenants = state
-                .user_service()
-                .get_user_tenants(target_user_id)
-                .await?;
-
-            let auth_user_admin_tenant_ids: std::collections::HashSet<_> = auth_user_tenants
-                .iter()
-                .filter(|tu| tu.role_in_tenant == "owner" || tu.role_in_tenant == "admin")
-                .map(|tu| tu.tenant_id)
-                .collect();
-
-            let target_user_tenant_ids: std::collections::HashSet<_> =
-                target_user_tenants.iter().map(|tu| tu.tenant_id).collect();
-
-            // Auth user must be admin of at least one tenant the target user belongs to
-            let has_shared_admin_tenant = auth_user_admin_tenant_ids
-                .intersection(&target_user_tenant_ids)
-                .next()
-                .is_some();
-
-            if !has_shared_admin_tenant {
-                return Err(AppError::Forbidden(
-                    "Access denied: you can only view your own profile".to_string(),
-                ));
-            }
-        }
+        enforce_with_state(
+            &state,
+            &auth,
+            &PolicyInput {
+                action: PolicyAction::UserReadOther,
+                scope: ResourceScope::User(StringUuid::from(id)),
+            },
+        )
+        .await?;
     }
 
     let id = StringUuid::from(id);
@@ -415,18 +296,16 @@ pub async fn create<S: HasServices + HasBranding>(
     if let Some(ref auth) = auth_user {
         require_user_management_permission(state.config(), auth)?;
 
-        // Tenant-scoped creation must stay within the caller tenant.
-        if auth.token_type == TokenType::TenantAccess {
-            let token_tenant = auth
-                .tenant_id
-                .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-            if let Some(requested) = input.tenant_id {
-                if requested != token_tenant {
-                    return Err(AppError::Forbidden(
-                        "Cannot create user in another tenant".to_string(),
-                    ));
-                }
-            }
+        if let Some(requested) = input.tenant_id {
+            enforce_with_state(
+                &state,
+                auth,
+                &PolicyInput {
+                    action: PolicyAction::UserTenantRead,
+                    scope: ResourceScope::Tenant(StringUuid::from(requested)),
+                },
+            )
+            .await?;
         }
     } else {
         // If an Authorization header existed but we couldn't parse a supported token,
@@ -1034,30 +913,15 @@ pub async fn list_by_tenant<S: HasServices>(
     Path(tenant_id): Path<Uuid>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
-    // Platform admin bypass applies to both Identity and TenantAccess tokens
-    let is_admin = auth.token_type != TokenType::ServiceClient
-        && state.config().is_platform_admin_email(&auth.email);
-
-    if !is_admin {
-        // Enforce tenant isolation: only allow access to the user's own tenant
-        match auth.token_type {
-            TokenType::Identity => {
-                return Err(AppError::Forbidden(
-                    "Platform admin required to list users across tenants".to_string(),
-                ));
-            }
-            TokenType::TenantAccess | TokenType::ServiceClient => {
-                let token_tenant = auth
-                    .tenant_id
-                    .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-                if token_tenant != tenant_id {
-                    return Err(AppError::Forbidden(
-                        "Access denied: you can only list users in your own tenant".to_string(),
-                    ));
-                }
-            }
-        }
-    }
+    enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::TenantRead,
+            scope: ResourceScope::Tenant(StringUuid::from(tenant_id)),
+        },
+    )
+    .await?;
 
     let tenant_id = StringUuid::from(tenant_id);
     let users = state

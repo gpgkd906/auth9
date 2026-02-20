@@ -3,8 +3,7 @@
 //! Tests for invitation management endpoints.
 
 use crate::support::http::{
-    delete_json, get_json, get_json_with_auth, post_json, post_json_with_auth, MockKeycloakServer,
-    TestAppState,
+    get_json_with_auth, post_json, post_json_with_auth, MockKeycloakServer, TestAppState,
 };
 use crate::support::{
     create_test_identity_token, create_test_role, create_test_service, create_test_tenant,
@@ -254,9 +253,15 @@ async fn test_get_invitation_success() {
     state.invitation_repo.add_invitation(invitation).await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<SuccessResponse<InvitationResponse>>) =
-        get_json(&app, &format!("/api/v1/invitations/{}", invitation_id)).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/invitations/{}", invitation_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -270,10 +275,16 @@ async fn test_get_invitation_not_found() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = StringUuid::new_v4();
     let (status, _): (StatusCode, Option<SuccessResponse<InvitationResponse>>) =
-        get_json(&app, &format!("/api/v1/invitations/{}", nonexistent_id)).await;
+        get_json_with_auth(
+            &app,
+            &format!("/api/v1/invitations/{}", nonexistent_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -304,13 +315,16 @@ async fn test_revoke_invitation_success() {
     state.invitation_repo.add_invitation(invitation).await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, body): (StatusCode, Option<SuccessResponse<InvitationResponse>>) = post_json(
-        &app,
-        &format!("/api/v1/invitations/{}/revoke", invitation_id),
-        &serde_json::json!({}),
-    )
-    .await;
+    let (status, body): (StatusCode, Option<SuccessResponse<InvitationResponse>>) =
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/invitations/{}/revoke", invitation_id),
+            &serde_json::json!({}),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -324,14 +338,17 @@ async fn test_revoke_invitation_not_found() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = StringUuid::new_v4();
-    let (status, _): (StatusCode, Option<SuccessResponse<InvitationResponse>>) = post_json(
-        &app,
-        &format!("/api/v1/invitations/{}/revoke", nonexistent_id),
-        &serde_json::json!({}),
-    )
-    .await;
+    let (status, _): (StatusCode, Option<SuccessResponse<InvitationResponse>>) =
+        post_json_with_auth(
+            &app,
+            &format!("/api/v1/invitations/{}/revoke", nonexistent_id),
+            &serde_json::json!({}),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -362,9 +379,15 @@ async fn test_delete_invitation_success() {
     state.invitation_repo.add_invitation(invitation).await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let (status, body): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/invitations/{}", invitation_id)).await;
+        crate::support::http::delete_json_with_auth(
+            &app,
+            &format!("/api/v1/invitations/{}", invitation_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
@@ -377,10 +400,16 @@ async fn test_delete_invitation_not_found() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = StringUuid::new_v4();
     let (status, _): (StatusCode, Option<MessageResponse>) =
-        delete_json(&app, &format!("/api/v1/invitations/{}", nonexistent_id)).await;
+        crate::support::http::delete_json_with_auth(
+            &app,
+            &format!("/api/v1/invitations/{}", nonexistent_id),
+            &token,
+        )
+        .await;
 
     assert_eq!(status, StatusCode::NOT_FOUND);
 }
@@ -416,11 +445,13 @@ async fn test_resend_invitation_no_email_provider() {
     state.invitation_repo.add_invitation(invitation).await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json(
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!("/api/v1/invitations/{}/resend", invitation_id),
         &serde_json::json!({}),
+        &token,
     )
     .await;
 
@@ -434,12 +465,14 @@ async fn test_resend_invitation_not_found() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
     let nonexistent_id = StringUuid::new_v4();
-    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json(
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!("/api/v1/invitations/{}/resend", nonexistent_id),
         &serde_json::json!({}),
+        &token,
     )
     .await;
 
@@ -468,11 +501,13 @@ async fn test_resend_revoked_invitation_fails() {
     state.invitation_repo.add_invitation(invitation).await;
 
     let app = build_invitation_test_router(state);
+    let token = create_test_identity_token();
 
-    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json(
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!("/api/v1/invitations/{}/resend", invitation_id),
         &serde_json::json!({}),
+        &token,
     )
     .await;
 

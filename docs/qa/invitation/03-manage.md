@@ -183,9 +183,9 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/invitation/seed.sql
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 撤销邀请 | PASS | 2026-02-06 | Codex | pending@example.com 已变更为 revoked |
-| 2 | 删除邀请 | PASS | 2026-02-06 | Codex | revoked@example.com 已删除 |
-| 3 | 邀请列表过滤 | FAIL | 2026-02-06 | Codex | 见 `docs/ticket/invitation_03-manage_scenario3_260206_200143.md` |
-| 4 | 多角色邀请 | BLOCKED | 2026-02-06 | Codex | 邀请可创建，接受步骤被 `/invite/accept` 404 阻塞 |
-| 5 | 邮箱格式验证 | PASS | 2026-02-06 | Codex | 浏览器校验拦截 invalid-email / user@ |
-| 6 | 认证状态检查 | PASS | 2026-02-18 | Codex | 未登录访问dashboard自动重定向到/login，登录后可访问原页面 |
+| 1 | 撤销邀请 | PASS | 2026-02-20 | Codex | pending@example.com 已变更为 revoked |
+| 2 | 删除邀请 | PASS | 2026-02-20 | Codex | revoked@example.com 已删除 |
+| 3 | 邀请列表过滤 | FAIL | 2026-02-20 | Codex | "Pending" 过滤器显示0条，但数据库有pending状态记录（expired@example.com），过滤器使用数据库状态而非计算状态 |
+| 4 | 多角色邀请 | PARTIAL | 2026-02-20 | Codex | 接受页面 /invite/accept 现已修复(非404)，但创建邀请时报权限错误"Admin or owner role required" |
+| 5 | 邮箱格式验证 | PASS | 2026-02-20 | Codex | 浏览器校验拦截 invalid-email / user@ |
+| 6 | 认证状态检查 | PASS | 2026-02-20 | Codex | 已确认未登录自动重定向到/login |
