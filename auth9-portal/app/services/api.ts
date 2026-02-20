@@ -295,7 +295,7 @@ export interface CreateOrganizationInput {
 }
 
 export const organizationApi = {
-  create: async (data: CreateOrganizationInput, token: string): Promise<{ data: { organization: Tenant } }> => {
+  create: async (data: CreateOrganizationInput, token: string): Promise<{ data: Tenant }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/organizations`, {
       method: "POST",
       headers: getHeaders(token),

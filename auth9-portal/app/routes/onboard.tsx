@@ -65,7 +65,7 @@ export async function action({ request }: ActionFunctionArgs) {
       identityToken
     );
 
-    const org = result.data.organization;
+    const org = result.data;
 
     // Update session with new active tenant
     if (org.status === "pending") {

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { useFetcher, Link } from "react-router";
 import type { TenantUserWithTenant } from "~/services/api";
 import {
@@ -14,11 +15,34 @@ interface OrgSwitcherProps {
 }
 
 export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
-  const fetcher = useFetcher<{ error?: string }>();
+  const fetcher = useFetcher<{ ok?: boolean; error?: string }>();
   const switchError = fetcher.data?.error;
+  const pendingTenantRef = useRef<string | null>(null);
+
+  // When the fetcher action completes successfully, perform a hard navigation
+  // so the browser uses the newly-set session cookie for the page load.
+  // React Router's automatic revalidation after useFetcher fires before the
+  // browser cookie jar has applied the Set-Cookie from the action response,
+  // resulting in stale loader data. A full page navigation avoids this.
+  useEffect(() => {
+    if (
+      pendingTenantRef.current &&
+      fetcher.state === "idle" &&
+      fetcher.data &&
+      "ok" in fetcher.data
+    ) {
+      pendingTenantRef.current = null;
+      window.location.href = "/dashboard";
+    }
+  }, [fetcher.state, fetcher.data]);
 
   const activeTenant = tenants.find((t) => t.tenant_id === activeTenantId);
-  const displayName = activeTenant?.tenant?.name || "Select organization";
+  // Show the pending tenant name optimistically while switching
+  const pendingTenant = pendingTenantRef.current
+    ? tenants.find((t) => t.tenant_id === pendingTenantRef.current)
+    : null;
+  const displayTenant = pendingTenant || activeTenant;
+  const displayName = displayTenant?.tenant?.name || "Select organization";
 
   if (tenants.length <= 1 && activeTenant) {
     // Single tenant - just display, no switcher
@@ -55,6 +79,7 @@ export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
               className={t.tenant_id === activeTenantId ? "bg-[var(--surface-secondary)]" : ""}
               onSelect={() => {
                 if (t.tenant_id !== activeTenantId) {
+                  pendingTenantRef.current = t.tenant_id;
                   fetcher.submit(
                     { intent: "switch-tenant", tenantId: t.tenant_id },
                     { method: "post", action: "/dashboard" }
