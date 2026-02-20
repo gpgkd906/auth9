@@ -81,7 +81,11 @@ export async function action({ request }: ActionFunctionArgs) {
       if ("error" in result) {
         return { error: result.error };
       }
-      return redirect("/dashboard", {
+      // Return JSON (not redirect) so the Set-Cookie header is reliably
+      // delivered to the browser. The OrgSwitcher component detects this
+      // success response and performs a hard navigation (window.location)
+      // to ensure the loader reads the updated cookie.
+      return Response.json({ ok: true }, {
         headers: { "Set-Cookie": result.cookie },
       });
     }
