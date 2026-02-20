@@ -100,6 +100,7 @@ const navigation = [
   { name: "Users", href: "/dashboard/users", icon: UsersIcon },
   { name: "Services", href: "/dashboard/services", icon: ServerIcon },
   { name: "Roles", href: "/dashboard/roles", icon: ShieldIcon },
+  { name: "ABAC Policies", href: "/dashboard/abac", icon: SlidersIcon },
   { name: "Analytics", href: "/dashboard/analytics", icon: ChartIcon },
   { name: "Security", href: "/dashboard/security/alerts", icon: LockIcon },
   { name: "Audit Logs", href: "/dashboard/audit-logs", icon: ClipboardIcon },
@@ -214,7 +215,7 @@ export default function Dashboard() {
 
           <div className="nav-section">
             <div className="nav-section-title">Security</div>
-            {navigation.slice(4, 8).map((item) => {
+            {navigation.slice(4, 9).map((item) => {
               const isActive = location.pathname === item.href ||
                 (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
 
@@ -238,7 +239,7 @@ export default function Dashboard() {
 
           <div className="nav-section">
             <div className="nav-section-title">System</div>
-            {navigation.slice(8).map((item) => {
+            {navigation.slice(9).map((item) => {
               const isActive = location.pathname === item.href ||
                 (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
 
@@ -388,6 +389,14 @@ function LockIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+    </svg>
+  );
+}
+
+function SlidersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 6h8m4 0h4M10 6a2 2 0 11-4 0 2 2 0 014 0zm10 12h-8m-4 0H4m10 0a2 2 0 11-4 0 2 2 0 014 0zM4 12h4m4 0h8m-8 0a2 2 0 11-4 0 2 2 0 014 0z" />
     </svg>
   );
 }

@@ -463,9 +463,10 @@ describe("Users Page", () => {
         // Open dropdown menu
         await clickMenuItem(user, "Manage Tenants");
 
-        // Click Roles button for the tenant
-        await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
-        await user.click(screen.getByRole("button", { name: /Roles/i }));
+        // Click Roles button for the tenant from Manage Tenants dialog
+        const manageTenantsDialog = await screen.findByRole("dialog", { name: /Manage Tenants for/i });
+        const rolesButton = await within(manageTenantsDialog).findByRole("button", { name: /Roles/i });
+        await user.click(rolesButton);
 
         // Verify role assignment dialog opens
         await waitFor(() => {
@@ -507,8 +508,9 @@ describe("Users Page", () => {
 
         // Navigate to roles dialog
         await clickMenuItem(user, "Manage Tenants");
-        await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
-        await user.click(screen.getByRole("button", { name: /Roles/i }));
+        const manageTenantsDialog = await screen.findByRole("dialog", { name: /Manage Tenants for/i });
+        const rolesButton = await within(manageTenantsDialog).findByRole("button", { name: /Roles/i });
+        await user.click(rolesButton);
 
         // Verify Save Roles button is disabled without service selected
         await waitFor(() => {
@@ -553,8 +555,9 @@ describe("Users Page", () => {
 
         // Navigate to roles dialog
         await clickMenuItem(user, "Manage Tenants");
-        await waitFor(() => expect(screen.getByText("Tenant 1")).toBeInTheDocument());
-        await user.click(screen.getByRole("button", { name: /Roles/i }));
+        const manageTenantsDialog = await screen.findByRole("dialog", { name: /Manage Tenants for/i });
+        const rolesButton = await within(manageTenantsDialog).findByRole("button", { name: /Roles/i });
+        await user.click(rolesButton);
 
         // Verify rbacApi.getUserAssignedRoles was called (via server-side action with accessToken)
         await waitFor(() => {

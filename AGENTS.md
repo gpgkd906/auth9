@@ -71,6 +71,12 @@ Rust test locations:
 - Do not add handler-level `TokenType` branching for authorization decisions.
 - If a new permission rule is introduced, add/extend `PolicyAction` and update Policy tests.
 - Keep handler code focused on parsing/validation/response; authorization belongs to Policy.
+- New/changed HTTP endpoints must keep OpenAPI in sync:
+  - Add `#[utoipa::path(...)]` on handler functions.
+  - Register handlers in `auth9-core/src/openapi.rs` `paths(...)`.
+  - Ensure new request/response DTOs are `ToSchema` and registered in `components.schemas(...)` when needed.
+  - Validate with `cd auth9-core && cargo test openapi_spec -- --nocapture`.
+  - Manual check in non-production env: `/swagger-ui`, `/redoc`, `/api-docs/openapi.json`.
 
 ### Test Expectations
 - Authorization changes must be covered by:

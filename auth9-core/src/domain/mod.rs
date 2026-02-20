@@ -1,5 +1,6 @@
 //! Domain models for Auth9 Core
 
+pub mod abac;
 pub mod action;
 pub mod analytics;
 pub mod branding;
@@ -19,6 +20,7 @@ pub mod tenant;
 pub mod user;
 pub mod webauthn;
 
+pub use abac::*;
 pub use action::*;
 pub use analytics::*;
 pub use branding::*;

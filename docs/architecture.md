@@ -147,6 +147,27 @@ auth9-core/
 
 > 说明：`src/api/*` 与 `src/service/*` 在重构阶段保留为兼容 shim（`pub use crate::domains::...`），外部行为保持不变。
 
+### 4.1.1 OpenAPI 文档生成机制（auth9-core）
+
+`auth9-core` 的 OpenAPI 文档由 `utoipa` 在编译期基于注解生成，再由运行时路由暴露：
+
+- 聚合入口：`auth9-core/src/openapi.rs`
+  - `#[derive(OpenApi)]` + `#[openapi(...)]` 维护统一的 `components` 与 `paths` 注册清单。
+- 接口注解：各 handler 使用 `#[utoipa::path(...)]` 描述 method/path/params/request/response。
+- 文档访问（非生产环境）：
+  - `GET /swagger-ui`
+  - `GET /redoc`
+  - `GET /api-docs/openapi.json`
+  - 路由挂载点：`auth9-core/src/server/mod.rs` 的 `build_openapi_routes(...)`。
+- CLI 导出：`cd auth9-core && cargo run -- openapi`（输出 OpenAPI JSON 到 stdout）。
+
+为防止文档遗漏，新增 HTTP API 时必须同时完成：
+
+1. 在 handler 函数上添加 `#[utoipa::path(...)]`。
+2. 在 `auth9-core/src/openapi.rs` 的 `paths(...)` 注册该 handler。
+3. 若新增请求/响应模型，确保可生成 schema（`ToSchema`）并纳入 `components.schemas(...)`。
+4. 运行 `cd auth9-core && cargo test openapi_spec -- --nocapture` 验证文档构建。
+
 ### 4.2 auth9-portal 模块结构
 
 ```
