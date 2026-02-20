@@ -10,7 +10,8 @@ use crate::domain::{
 };
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy::{self, PolicyAction, PolicyInput, ResourceScope};
 use crate::state::HasInvitations;
 use axum::{
     extract::{Path, Query, State},
@@ -69,31 +70,15 @@ pub async fn list<S: HasInvitations>(
     Path(tenant_id): Path<Uuid>,
     Query(query): Query<InvitationListQuery>,
 ) -> Result<impl IntoResponse> {
-    // Service client tokens cannot manage invitations
-    if auth.token_type == TokenType::ServiceClient {
-        return Err(AppError::Forbidden(
-            "Service client tokens cannot manage invitations".to_string(),
-        ));
-    }
-    // Scope: TenantAccess tokens can only list their own tenant's invitations
-    if let TokenType::TenantAccess = auth.token_type {
-        let token_tenant = auth
-            .tenant_id
-            .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-        if token_tenant != tenant_id {
-            return Err(AppError::Forbidden(
-                "Cannot list invitations for another tenant".to_string(),
-            ));
-        }
-    }
-    // Identity tokens are only allowed for platform admins
-    if auth.token_type == TokenType::Identity
-        && !state.config().is_platform_admin_email(&auth.email)
-    {
-        return Err(AppError::Forbidden(
-            "Platform admin required to list invitations".to_string(),
-        ));
-    }
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::InvitationRead,
+            scope: ResourceScope::Tenant(StringUuid::from(tenant_id)),
+        },
+    )
+    .await?;
     let tenant_id = StringUuid::from(tenant_id);
 
     let (invitations, total) = state
@@ -130,38 +115,15 @@ pub async fn create<S: HasInvitations>(
 ) -> Result<impl IntoResponse> {
     let tenant_id = StringUuid::from(tenant_id);
 
-    // Service client tokens cannot create invitations
-    if auth.token_type == TokenType::ServiceClient {
-        return Err(AppError::Forbidden(
-            "Service client tokens cannot create invitations".to_string(),
-        ));
-    }
-    // Authorization: verify caller can manage the target tenant
-    if let TokenType::TenantAccess = auth.token_type {
-        // Tenant user: must be in this tenant with admin/owner role
-        let token_tenant = auth
-            .tenant_id
-            .ok_or_else(|| AppError::Forbidden("No tenant context in token".to_string()))?;
-        if StringUuid::from(token_tenant) != tenant_id {
-            return Err(AppError::Forbidden(
-                "Cannot create invitations for another tenant".to_string(),
-            ));
-        }
-        let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
-        if !has_admin_role {
-            return Err(AppError::Forbidden(
-                "Admin or owner role required to create invitations".to_string(),
-            ));
-        }
-    }
-    // Identity tokens are only allowed for platform admins
-    if auth.token_type == TokenType::Identity
-        && !state.config().is_platform_admin_email(&auth.email)
-    {
-        return Err(AppError::Forbidden(
-            "Platform admin required to create invitations".to_string(),
-        ));
-    }
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::InvitationWrite,
+            scope: ResourceScope::Tenant(tenant_id),
+        },
+    )
+    .await?;
 
     // Get the actor (inviter) from the JWT (prefer auth.user_id, fallback to header extraction)
     let invited_by = StringUuid::from(auth.user_id);
@@ -241,11 +203,21 @@ pub async fn create<S: HasInvitations>(
 )]
 pub async fn get<S: HasInvitations>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
 
     let invitation = state.invitation_service().get(id).await?;
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::InvitationRead,
+            scope: ResourceScope::Tenant(invitation.tenant_id),
+        },
+    )
+    .await?;
     let response: InvitationResponse = invitation.into();
 
     Ok(Json(SuccessResponse::new(response)))
@@ -262,9 +234,20 @@ pub async fn get<S: HasInvitations>(
 )]
 pub async fn revoke<S: HasInvitations>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
+    let invitation = state.invitation_service().get(id).await?;
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::InvitationWrite,
+            scope: ResourceScope::Tenant(invitation.tenant_id),
+        },
+    )
+    .await?;
 
     let invitation = state.invitation_service().revoke(id).await?;
     let response: InvitationResponse = invitation.into();
@@ -283,9 +266,20 @@ pub async fn revoke<S: HasInvitations>(
 )]
 pub async fn delete<S: HasInvitations>(
     State(state): State<S>,
+    auth: AuthUser,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
+    let invitation = state.invitation_service().get(id).await?;
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::InvitationWrite,
+            scope: ResourceScope::Tenant(invitation.tenant_id),
+        },
+    )
+    .await?;
 
     state.invitation_service().delete(id).await?;
 
@@ -303,10 +297,21 @@ pub async fn delete<S: HasInvitations>(
 )]
 pub async fn resend<S: HasInvitations>(
     State(state): State<S>,
+    auth: AuthUser,
     _headers: HeaderMap,
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     let id = StringUuid::from(id);
+    let invitation = state.invitation_service().get(id).await?;
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::InvitationWrite,
+            scope: ResourceScope::Tenant(invitation.tenant_id),
+        },
+    )
+    .await?;
 
     // TODO: Get inviter name from user service
     let inviter_name = "Admin";

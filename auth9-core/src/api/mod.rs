@@ -2,9 +2,9 @@
 
 pub mod metrics;
 
-use crate::domain::StringUuid;
 use crate::error::{AppError, Result};
-use crate::middleware::auth::{AuthUser, TokenType};
+use crate::middleware::auth::AuthUser;
+use crate::policy;
 use crate::repository::audit::CreateAuditLogInput;
 use crate::repository::AuditRepository;
 use crate::state::HasServices;
@@ -16,44 +16,17 @@ use uuid::Uuid;
 /// Maximum allowed per_page value for pagination
 pub(crate) const MAX_PER_PAGE: i64 = 100;
 
-/// Check if user is a platform admin.
-/// First checks the `PLATFORM_ADMIN_EMAILS` config (fast path), then falls back
-/// to checking if the user is an admin of the `auth9-platform` tenant in the DB.
-pub(crate) async fn is_platform_admin_with_db<S: HasServices>(state: &S, auth: &AuthUser) -> bool {
-    // Service client tokens are never platform admins
-    if auth.token_type == TokenType::ServiceClient {
-        return false;
-    }
-
-    // Fast path: config-based email check (works for both Identity and TenantAccess tokens)
-    if state.config().is_platform_admin_email(&auth.email) {
-        return true;
-    }
-
-    // Fallback: check if user is an admin of the platform tenant in the database
-    if let Ok(user_tenants) = state
-        .user_service()
-        .get_user_tenants_with_tenant(StringUuid::from(auth.user_id))
-        .await
-    {
-        return user_tenants
-            .iter()
-            .any(|tu| tu.tenant.slug == "auth9-platform" && tu.role_in_tenant == "admin");
-    }
-
-    false
-}
-
 /// Require platform admin access. Returns Forbidden if the user is not a platform admin.
 pub(crate) async fn require_platform_admin_with_db<S: HasServices>(
     state: &S,
     auth: &AuthUser,
 ) -> Result<()> {
-    if is_platform_admin_with_db(state, auth).await {
-        Ok(())
-    } else {
-        Err(AppError::Forbidden("Platform admin required".to_string()))
-    }
+    policy::require_platform_admin_with_db(state, auth)
+        .await
+        .map_err(|e| match e {
+            AppError::Forbidden(_) => AppError::Forbidden("Platform admin required".to_string()),
+            other => other,
+        })
 }
 
 /// Pagination query parameters

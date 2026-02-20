@@ -387,11 +387,7 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                             Some(tid)
                         } else {
                             // Cross-tenant service (e.g. Portal): resolve tenant from user membership
-                            match state
-                                .user_service()
-                                .get_user_tenants(user.id)
-                                .await
-                            {
+                            match state.user_service().get_user_tenants(user.id).await {
                                 Ok(tenants) => {
                                     let active = tenants.into_iter().next();
                                     if active.is_none() {

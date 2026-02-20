@@ -564,10 +564,17 @@ async fn test_enable_mfa() {
     let mock_kc = MockKeycloakServer::new().await;
     let keycloak_user_id = "kc-user-mfa";
     let admin_id = Uuid::new_v4();
+    let admin_kc_id = admin_id.to_string();
     mock_kc.setup_for_mfa_enable(keycloak_user_id).await;
+    mock_kc.mock_get_user_success(&admin_kc_id).await;
+    mock_kc.mock_validate_password_valid().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let token = create_test_tenant_access_token_for_user(admin_id, Uuid::new_v4());
+
+    let mut admin_user = create_test_user(Some(admin_id));
+    admin_user.keycloak_id = admin_kc_id;
+    state.user_repo.add_user(admin_user).await;
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
@@ -580,7 +587,7 @@ async fn test_enable_mfa() {
     let (status, body): (StatusCode, Option<SuccessResponse<User>>) = post_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", user_id),
-        &json!({}),
+        &json!({"confirm_password": "Admin123!"}),
         &token,
     )
     .await;
@@ -648,7 +655,7 @@ async fn test_enable_mfa_user_not_found() {
     let (status, _body): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!("/api/v1/users/{}/mfa", nonexistent_id),
-        &json!({"current_password": "Admin123!"}),
+        &json!({"confirm_password": "Admin123!"}),
         &token,
     )
     .await;
