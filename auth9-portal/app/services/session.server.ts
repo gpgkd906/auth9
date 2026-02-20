@@ -75,11 +75,16 @@ export async function getSession(request: Request): Promise<SessionData | null> 
 
 export async function commitSession(session: SessionData) {
   const normalized = normalizeSession(session) || session;
-  // Strip redundant alias fields to keep cookie under browser 4096-byte limit.
-  // normalizeSession() reconstructs these from identityAccessToken / identityExpiresAt on read.
+  // Strip redundant and re-derivable fields to keep cookie under browser 4096-byte limit.
+  // - accessToken / expiresAt are aliases for identityAccessToken / identityExpiresAt
+  //   (normalizeSession reconstructs them on read).
+  // - tenantAccessToken / tenantExpiresAt can be re-exchanged on the server from
+  //   identityAccessToken + activeTenantId via ensureTenantSession().
   const compact = { ...normalized };
   delete compact.accessToken;
   delete compact.expiresAt;
+  delete compact.tenantAccessToken;
+  delete compact.tenantExpiresAt;
   return sessionCookie.serialize(compact);
 }
 

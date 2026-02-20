@@ -383,13 +383,36 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                     .await
                 {
                     Ok(svc) => {
-                        if svc.tenant_id.is_none() {
-                            tracing::warn!(
-                                "Service for client_id '{}' has no tenant_id, skipping post-login actions",
-                                state_payload.client_id
-                            );
+                        if let Some(tid) = svc.tenant_id {
+                            Some(tid)
+                        } else {
+                            // Cross-tenant service (e.g. Portal): resolve tenant from user membership
+                            match state
+                                .user_service()
+                                .get_user_tenants(user.id)
+                                .await
+                            {
+                                Ok(tenants) => {
+                                    let active = tenants.into_iter().next();
+                                    if active.is_none() {
+                                        tracing::debug!(
+                                            "Service '{}' is cross-tenant and user {} has no tenant memberships, skipping post-login actions",
+                                            state_payload.client_id,
+                                            user.id
+                                        );
+                                    }
+                                    active.map(|tu| tu.tenant_id)
+                                }
+                                Err(e) => {
+                                    tracing::warn!(
+                                        "Failed to look up tenants for user {}: {}, skipping post-login actions",
+                                        user.id,
+                                        e
+                                    );
+                                    None
+                                }
+                            }
                         }
-                        svc.tenant_id
                     }
                     Err(e) => {
                         tracing::warn!(
