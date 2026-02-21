@@ -1,0 +1,731 @@
+version: qa-doc-gen-v1
+generated_at: 2026-02-21
+documents:
+  - id: action/01-crud
+    path: docs/qa/action/01-crud.md
+    module: action
+    scenarios: 4
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/02-execution
+    path: docs/qa/action/02-execution.md
+    module: action
+    scenarios: 4
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/03-logs
+    path: docs/qa/action/03-logs.md
+    module: action
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/04-security
+    path: docs/qa/action/04-security.md
+    module: action
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/05-api-sdk
+    path: docs/qa/action/05-api-sdk.md
+    module: action
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/06-async-fetch
+    path: docs/qa/action/06-async-fetch.md
+    module: action
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/07-crud-advanced
+    path: docs/qa/action/07-crud-advanced.md
+    module: action
+    scenarios: 4
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/08-execution-advanced
+    path: docs/qa/action/08-execution-advanced.md
+    module: action
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/09-logs-detail
+    path: docs/qa/action/09-logs-detail.md
+    module: action
+    scenarios: 1
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/10-security-boundary
+    path: docs/qa/action/10-security-boundary.md
+    module: action
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/11-security-attack-defense
+    path: docs/qa/action/11-security-attack-defense.md
+    module: action
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: action/12-api-sdk-advanced
+    path: docs/qa/action/12-api-sdk-advanced.md
+    module: action
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: analytics/01-overview
+    path: docs/qa/analytics/01-overview.md
+    module: analytics
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: analytics/02-events
+    path: docs/qa/analytics/02-events.md
+    module: analytics
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: audit/01-audit-logs
+    path: docs/qa/audit/01-audit-logs.md
+    module: audit
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/01-oidc-login
+    path: docs/qa/auth/01-oidc-login.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/02-token-exchange
+    path: docs/qa/auth/02-token-exchange.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/03-password
+    path: docs/qa/auth/03-password.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/04-social
+    path: docs/qa/auth/04-social.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/05-boundary
+    path: docs/qa/auth/05-boundary.md
+    module: auth
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/06-client-credentials
+    path: docs/qa/auth/06-client-credentials.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/07-public-endpoints
+    path: docs/qa/auth/07-public-endpoints.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/08-demo-auth-flow
+    path: docs/qa/auth/08-demo-auth-flow.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/09-enterprise-sso-discovery
+    path: docs/qa/auth/09-enterprise-sso-discovery.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/10-b2b-onboarding-flow
+    path: docs/qa/auth/10-b2b-onboarding-flow.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/11-tenant-selection-token-exchange
+    path: docs/qa/auth/11-tenant-selection-token-exchange.md
+    module: auth
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: auth/12-enterprise-sso-ui-regression
+    path: docs/qa/auth/12-enterprise-sso-ui-regression.md
+    module: auth
+    scenarios: 2
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: identity-provider/01-crud
+    path: docs/qa/identity-provider/01-crud.md
+    module: identity-provider
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: identity-provider/02-toggle-validation
+    path: docs/qa/identity-provider/02-toggle-validation.md
+    module: identity-provider
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: identity-provider/03-tenant-enterprise-sso-connectors
+    path: docs/qa/identity-provider/03-tenant-enterprise-sso-connectors.md
+    module: identity-provider
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/01-concurrent-operations
+    path: docs/qa/integration/01-concurrent-operations.md
+    module: integration
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/02-password-policy
+    path: docs/qa/integration/02-password-policy.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/03-rate-limiting
+    path: docs/qa/integration/03-rate-limiting.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/04-health-check
+    path: docs/qa/integration/04-health-check.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/05-keycloak-events
+    path: docs/qa/integration/05-keycloak-events.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/06-init-seed-data
+    path: docs/qa/integration/06-init-seed-data.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/07-observability-metrics
+    path: docs/qa/integration/07-observability-metrics.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/08-observability-stack
+    path: docs/qa/integration/08-observability-stack.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/09-security-hardening-config
+    path: docs/qa/integration/09-security-hardening-config.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/10-security-hardening-p2
+    path: docs/qa/integration/10-security-hardening-p2.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: integration/11-keycloak26-event-stream
+    path: docs/qa/integration/11-keycloak26-event-stream.md
+    module: integration
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: invitation/01-create-send
+    path: docs/qa/invitation/01-create-send.md
+    module: invitation
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: invitation/02-accept
+    path: docs/qa/invitation/02-accept.md
+    module: invitation
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: invitation/03-manage
+    path: docs/qa/invitation/03-manage.md
+    module: invitation
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: passkeys/01-passkeys
+    path: docs/qa/passkeys/01-passkeys.md
+    module: passkeys
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: passkeys/02-passkey-auth
+    path: docs/qa/passkeys/02-passkey-auth.md
+    module: passkeys
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: passkeys/03-passkey-api
+    path: docs/qa/passkeys/03-passkey-api.md
+    module: passkeys
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: provisioning/01-scim-token-management
+    path: docs/qa/provisioning/01-scim-token-management.md
+    module: provisioning
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: provisioning/02-scim-user-crud
+    path: docs/qa/provisioning/02-scim-user-crud.md
+    module: provisioning
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: rbac/01-permission
+    path: docs/qa/rbac/01-permission.md
+    module: rbac
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: rbac/02-role
+    path: docs/qa/rbac/02-role.md
+    module: rbac
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: rbac/03-assignment
+    path: docs/qa/rbac/03-assignment.md
+    module: rbac
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: rbac/04-advanced
+    path: docs/qa/rbac/04-advanced.md
+    module: rbac
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: rbac/05-abac-policy-management
+    path: docs/qa/rbac/05-abac-policy-management.md
+    module: rbac
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: sdk/01-core-types-utils
+    path: docs/qa/sdk/01-core-types-utils.md
+    module: sdk
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: sdk/02-http-client
+    path: docs/qa/sdk/02-http-client.md
+    module: sdk
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: sdk/03-token-verification
+    path: docs/qa/sdk/03-token-verification.md
+    module: sdk
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: sdk/04-grpc-client-credentials
+    path: docs/qa/sdk/04-grpc-client-credentials.md
+    module: sdk
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: sdk/05-express-middleware
+    path: docs/qa/sdk/05-express-middleware.md
+    module: sdk
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: sdk/06-middleware-testing
+    path: docs/qa/sdk/06-middleware-testing.md
+    module: sdk
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: service/01-service-crud
+    path: docs/qa/service/01-service-crud.md
+    module: service
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: service/02-client
+    path: docs/qa/service/02-client.md
+    module: service
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: service/03-oidc
+    path: docs/qa/service/03-oidc.md
+    module: service
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: service/04-tenant-service-toggle
+    path: docs/qa/service/04-tenant-service-toggle.md
+    module: service
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: service/05-integration-info
+    path: docs/qa/service/05-integration-info.md
+    module: service
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: service/06-service-branding
+    path: docs/qa/service/06-service-branding.md
+    module: service
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/01-session
+    path: docs/qa/session/01-session.md
+    module: session
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/02-login-events
+    path: docs/qa/session/02-login-events.md
+    module: session
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/03-alerts
+    path: docs/qa/session/03-alerts.md
+    module: session
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/04-boundary
+    path: docs/qa/session/04-boundary.md
+    module: session
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/05-auth-security-regression
+    path: docs/qa/session/05-auth-security-regression.md
+    module: session
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/06-token-blacklist-failsafe
+    path: docs/qa/session/06-token-blacklist-failsafe.md
+    module: session
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/07-oauth-state-csrf
+    path: docs/qa/session/07-oauth-state-csrf.md
+    module: session
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: session/08-identity-token-whitelist-tenant-token-enforcement
+    path: docs/qa/session/08-identity-token-whitelist-tenant-token-enforcement.md
+    module: session
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: settings/01-branding
+    path: docs/qa/settings/01-branding.md
+    module: settings
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: settings/02-email-provider
+    path: docs/qa/settings/02-email-provider.md
+    module: settings
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: settings/03-email-templates
+    path: docs/qa/settings/03-email-templates.md
+    module: settings
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: tenant/01-crud
+    path: docs/qa/tenant/01-crud.md
+    module: tenant
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: tenant/02-list-settings
+    path: docs/qa/tenant/02-list-settings.md
+    module: tenant
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: tenant/03-status-lifecycle
+    path: docs/qa/tenant/03-status-lifecycle.md
+    module: tenant
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: tenant/04-b2b-org-creation
+    path: docs/qa/tenant/04-b2b-org-creation.md
+    module: tenant
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: user/01-crud
+    path: docs/qa/user/01-crud.md
+    module: user
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: user/02-advanced
+    path: docs/qa/user/02-advanced.md
+    module: user
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: user/03-validation
+    path: docs/qa/user/03-validation.md
+    module: user
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: user/04-account-profile
+    path: docs/qa/user/04-account-profile.md
+    module: user
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: user/05-account-security
+    path: docs/qa/user/05-account-security.md
+    module: user
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: user/06-account-navigation
+    path: docs/qa/user/06-account-navigation.md
+    module: user
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: webhook/01-crud
+    path: docs/qa/webhook/01-crud.md
+    module: webhook
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: webhook/02-trigger
+    path: docs/qa/webhook/02-trigger.md
+    module: webhook
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: webhook/03-reliability
+    path: docs/qa/webhook/03-reliability.md
+    module: webhook
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21
+  - id: webhook/04-boundary
+    path: docs/qa/webhook/04-boundary.md
+    module: webhook
+    scenarios: 3
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-02-21

@@ -27,7 +27,7 @@ Portal 路由：
 
 ---
 
-## 场景 1：新用户首次登录 — 无租户重定向到 Onboard
+## 场景 1：B2B Onboard 入口可见性与首次登录重定向
 
 ### 初始状态
 - 用户通过 Keycloak OAuth 首次登录
