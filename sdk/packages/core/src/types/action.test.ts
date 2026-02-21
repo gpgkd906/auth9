@@ -26,13 +26,13 @@ describe("Action Types with HTTP Client", () => {
     accessToken: "test-token",
   });
 
-  const tenantId = "tenant-123";
+  const serviceId = "service-123";
 
   describe("CRUD Operations", () => {
     it("creates an action with POST", async () => {
       const mockAction: Action = {
         id: "action-1",
-        tenantId: tenantId,
+        serviceId: serviceId,
         name: "Add department claim",
         triggerId: ActionTrigger.PostLogin,
         script: 'context.claims.department = "engineering"; context;',
@@ -62,14 +62,14 @@ describe("Action Types with HTTP Client", () => {
       };
 
       const result = await client.post<{ data: Action }>(
-        `/api/v1/tenants/${tenantId}/actions`,
+        `/api/v1/services/${serviceId}/actions`,
         input
       );
 
       expect(result.data.id).toBe("action-1");
       expect(result.data.name).toBe("Add department claim");
       expect(mockFetch).toHaveBeenCalledWith(
-        `https://auth9.example.com/api/v1/tenants/${tenantId}/actions`,
+        `https://auth9.example.com/api/v1/services/${serviceId}/actions`,
         expect.objectContaining({
           method: "POST",
         })
@@ -84,11 +84,11 @@ describe("Action Types with HTTP Client", () => {
       });
 
       await client.get<{ data: Action[] }>(
-        `/api/v1/tenants/${tenantId}/actions`
+        `/api/v1/services/${serviceId}/actions`
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `https://auth9.example.com/api/v1/tenants/${tenantId}/actions`,
+        `https://auth9.example.com/api/v1/services/${serviceId}/actions`,
         expect.objectContaining({
           method: "GET",
         })
@@ -104,11 +104,11 @@ describe("Action Types with HTTP Client", () => {
       });
 
       await client.get<{ data: Action }>(
-        `/api/v1/tenants/${tenantId}/actions/${actionId}`
+        `/api/v1/services/${serviceId}/actions/${actionId}`
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `https://auth9.example.com/api/v1/tenants/${tenantId}/actions/${actionId}`,
+        `https://auth9.example.com/api/v1/services/${serviceId}/actions/${actionId}`,
         expect.objectContaining({
           method: "GET",
         })
@@ -129,12 +129,12 @@ describe("Action Types with HTTP Client", () => {
       };
 
       await client.patch<{ data: Action }>(
-        `/api/v1/tenants/${tenantId}/actions/${actionId}`,
+        `/api/v1/services/${serviceId}/actions/${actionId}`,
         input
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `https://auth9.example.com/api/v1/tenants/${tenantId}/actions/${actionId}`,
+        `https://auth9.example.com/api/v1/services/${serviceId}/actions/${actionId}`,
         expect.objectContaining({
           method: "PATCH",
         })
@@ -149,11 +149,11 @@ describe("Action Types with HTTP Client", () => {
       });
 
       await client.delete(
-        `/api/v1/tenants/${tenantId}/actions/${actionId}`
+        `/api/v1/services/${serviceId}/actions/${actionId}`
       );
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `https://auth9.example.com/api/v1/tenants/${tenantId}/actions/${actionId}`,
+        `https://auth9.example.com/api/v1/services/${serviceId}/actions/${actionId}`,
         expect.objectContaining({
           method: "DELETE",
         })
@@ -167,7 +167,7 @@ describe("Action Types with HTTP Client", () => {
         created: [
           {
             id: "action-1",
-            tenantId: tenantId,
+            serviceId: serviceId,
             name: "Action 1",
             triggerId: ActionTrigger.PostLogin,
             script: "context;",
@@ -204,7 +204,7 @@ describe("Action Types with HTTP Client", () => {
       ];
 
       const result = await client.post<{ data: BatchUpsertResponse }>(
-        `/api/v1/tenants/${tenantId}/actions/batch`,
+        `/api/v1/services/${serviceId}/actions/batch`,
         { actions: inputs }
       );
 
@@ -248,7 +248,7 @@ describe("Action Types with HTTP Client", () => {
       });
 
       const result = await client.post<{ data: TestActionResponse }>(
-        `/api/v1/tenants/${tenantId}/actions/${actionId}/test`,
+        `/api/v1/services/${serviceId}/actions/${actionId}/test`,
         {
           context: {
             user: {
@@ -292,7 +292,7 @@ describe("Action Types with HTTP Client", () => {
       });
 
       const result = await client.get<{ data: ActionStats }>(
-        `/api/v1/tenants/${tenantId}/actions/${actionId}/stats`
+        `/api/v1/services/${serviceId}/actions/${actionId}/stats`
       );
 
       expect(result.data.executionCount).toBe(100);
@@ -307,7 +307,7 @@ describe("Action Types with HTTP Client", () => {
         {
           id: "exec-1",
           actionId: "action-1",
-          tenantId: tenantId,
+          serviceId: serviceId,
           triggerId: ActionTrigger.PostLogin,
           userId: "user-1",
           success: true,
@@ -323,7 +323,7 @@ describe("Action Types with HTTP Client", () => {
       });
 
       const result = await client.get<{ data: ActionExecution[] }>(
-        `/api/v1/tenants/${tenantId}/actions/logs`,
+        `/api/v1/services/${serviceId}/actions/logs`,
         { success: "true", limit: "100" }
       );
 

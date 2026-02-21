@@ -9,7 +9,7 @@ export enum ActionTrigger {
 
 export interface Action {
   id: string;
-  tenantId: string;
+  serviceId: string;
   name: string;
   description?: string;
   triggerId: string;
@@ -84,7 +84,7 @@ export interface TestActionResponse {
 export interface ActionExecution {
   id: string;
   actionId: string;
-  tenantId: string;
+  serviceId: string;
   triggerId: string;
   userId?: string;
   success: boolean;

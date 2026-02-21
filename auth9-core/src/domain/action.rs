@@ -81,7 +81,8 @@ impl fmt::Display for ActionTrigger {
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct Action {
     pub id: StringUuid,
-    pub tenant_id: StringUuid,
+    pub tenant_id: Option<StringUuid>,
+    pub service_id: StringUuid,
     pub name: String,
     pub description: Option<String>,
     pub trigger_id: String,
@@ -103,7 +104,8 @@ impl Default for Action {
         let now = Utc::now();
         Self {
             id: StringUuid::new_v4(),
-            tenant_id: StringUuid::new_v4(),
+            tenant_id: None,
+            service_id: StringUuid::new_v4(),
             name: String::new(),
             description: None,
             trigger_id: String::new(),
@@ -182,9 +184,19 @@ pub struct RequestContext {
 pub struct ActionContext {
     pub user: ActionContextUser,
     pub tenant: ActionContextTenant,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub service: Option<ActionContextService>,
     pub request: ActionContextRequest,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub claims: Option<HashMap<String, serde_json::Value>>,
+}
+
+/// Service information in action context
+#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+pub struct ActionContextService {
+    pub id: String,
+    pub name: String,
+    pub client_id: Option<String>,
 }
 
 /// User information in action context
@@ -217,7 +229,8 @@ pub struct ActionContextRequest {
 pub struct ActionExecution {
     pub id: StringUuid,
     pub action_id: StringUuid,
-    pub tenant_id: StringUuid,
+    pub tenant_id: Option<StringUuid>,
+    pub service_id: StringUuid,
     pub trigger_id: String,
     pub user_id: Option<StringUuid>,
     pub success: bool,
@@ -515,6 +528,7 @@ mod tests {
                 slug: "my-tenant".to_string(),
                 name: "My Tenant".to_string(),
             },
+            service: None,
             request: ActionContextRequest {
                 ip: Some("127.0.0.1".to_string()),
                 user_agent: Some("TestAgent/1.0".to_string()),
@@ -554,6 +568,7 @@ mod tests {
                 slug: "s".to_string(),
                 name: "n".to_string(),
             },
+            service: None,
             request: ActionContextRequest {
                 ip: None,
                 user_agent: None,
@@ -586,6 +601,7 @@ mod tests {
                 slug: "s".to_string(),
                 name: "n".to_string(),
             },
+            service: None,
             request: ActionContextRequest {
                 ip: None,
                 user_agent: None,

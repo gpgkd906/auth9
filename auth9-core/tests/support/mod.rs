@@ -35,9 +35,9 @@ use auth9_core::repository::audit::{
 };
 pub use auth9_core::repository::{
     ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
-    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
-    SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
-    WebAuthnRepository, WebhookRepository,
+    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceBrandingRepository,
+    ServiceRepository, SessionRepository, SystemSettingsRepository, TenantRepository,
+    UserRepository, WebAuthnRepository, WebhookRepository,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -1953,11 +1953,12 @@ impl Default for TestActionRepository {
 
 #[async_trait]
 impl ActionRepository for TestActionRepository {
-    async fn create(&self, tenant_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
+    async fn create(&self, service_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
         let now = Utc::now();
         let action = Action {
             id: StringUuid::new_v4(),
-            tenant_id,
+            tenant_id: None,
+            service_id,
             name: input.name.clone(),
             description: input.description.clone(),
             trigger_id: input.trigger_id.clone(),
@@ -1982,16 +1983,34 @@ impl ActionRepository for TestActionRepository {
         Ok(actions.iter().find(|a| a.id == id).cloned())
     }
 
-    async fn list_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<Action>> {
+    async fn list_by_service(&self, service_id: StringUuid) -> Result<Vec<Action>> {
         let actions = self.actions.read().await;
         Ok(actions
             .iter()
-            .filter(|a| a.tenant_id == tenant_id)
+            .filter(|a| a.service_id == service_id)
             .cloned()
             .collect())
     }
 
     async fn list_by_trigger(
+        &self,
+        service_id: StringUuid,
+        trigger_id: &str,
+        enabled_only: bool,
+    ) -> Result<Vec<Action>> {
+        let actions = self.actions.read().await;
+        Ok(actions
+            .iter()
+            .filter(|a| {
+                a.service_id == service_id
+                    && a.trigger_id == trigger_id
+                    && (!enabled_only || a.enabled)
+            })
+            .cloned()
+            .collect())
+    }
+
+    async fn list_by_tenant_trigger(
         &self,
         tenant_id: StringUuid,
         trigger_id: &str,
@@ -2001,7 +2020,7 @@ impl ActionRepository for TestActionRepository {
         Ok(actions
             .iter()
             .filter(|a| {
-                a.tenant_id == tenant_id
+                a.tenant_id == Some(tenant_id)
                     && a.trigger_id == trigger_id
                     && (!enabled_only || a.enabled)
             })
@@ -2051,17 +2070,24 @@ impl ActionRepository for TestActionRepository {
         Ok(())
     }
 
+    async fn delete_by_service(&self, service_id: StringUuid) -> Result<u64> {
+        let mut actions = self.actions.write().await;
+        let before = actions.len();
+        actions.retain(|a| a.service_id != service_id);
+        Ok((before - actions.len()) as u64)
+    }
+
     async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
         let mut actions = self.actions.write().await;
         let before = actions.len();
-        actions.retain(|a| a.tenant_id != tenant_id);
+        actions.retain(|a| a.tenant_id != Some(tenant_id));
         Ok((before - actions.len()) as u64)
     }
 
     async fn record_execution(
         &self,
         _action_id: StringUuid,
-        _tenant_id: StringUuid,
+        _service_id: StringUuid,
         _trigger_id: String,
         _user_id: Option<StringUuid>,
         _success: bool,
@@ -2886,6 +2912,66 @@ impl WebAuthnRepository for TestWebAuthnRepository {
 }
 
 // ============================================================================
+// Test Service Branding Repository
+// ============================================================================
+
+pub struct TestServiceBrandingRepository {
+    brandings: RwLock<Vec<auth9_core::domain::ServiceBranding>>,
+}
+
+impl TestServiceBrandingRepository {
+    pub fn new() -> Self {
+        Self {
+            brandings: RwLock::new(vec![]),
+        }
+    }
+}
+
+impl Default for TestServiceBrandingRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ServiceBrandingRepository for TestServiceBrandingRepository {
+    async fn get_by_service_id(
+        &self,
+        service_id: StringUuid,
+    ) -> Result<Option<auth9_core::domain::ServiceBranding>> {
+        let brandings = self.brandings.read().await;
+        Ok(brandings
+            .iter()
+            .find(|b| b.service_id == service_id.to_string())
+            .cloned())
+    }
+
+    async fn upsert(
+        &self,
+        service_id: StringUuid,
+        config: &auth9_core::domain::BrandingConfig,
+    ) -> Result<auth9_core::domain::ServiceBranding> {
+        let mut brandings = self.brandings.write().await;
+        brandings.retain(|b| b.service_id != service_id.to_string());
+        let branding = auth9_core::domain::ServiceBranding {
+            id: StringUuid::new_v4().to_string(),
+            service_id: service_id.to_string(),
+            config: config.clone(),
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        };
+        brandings.push(branding.clone());
+        Ok(branding)
+    }
+
+    async fn delete_by_service_id(&self, service_id: StringUuid) -> Result<()> {
+        let mut brandings = self.brandings.write().await;
+        brandings.retain(|b| b.service_id != service_id.to_string());
+        Ok(())
+    }
+}
+
+// ============================================================================
 // Test Data Helpers
 // ============================================================================
 
@@ -2936,7 +3022,8 @@ pub fn create_test_service(id: Option<Uuid>, tenant_id: Option<Uuid>) -> Service
 pub fn create_test_action(tenant_id: Uuid, name: &str) -> Action {
     Action {
         id: StringUuid::new_v4(),
-        tenant_id: StringUuid::from(tenant_id),
+        tenant_id: Some(StringUuid::from(tenant_id)),
+        service_id: StringUuid::new_v4(),
         name: name.to_string(),
         description: Some("Test action description".to_string()),
         trigger_id: "post-login".to_string(),

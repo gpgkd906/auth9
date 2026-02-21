@@ -31,6 +31,7 @@ use crate::repository::{
     linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
     password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
     security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
+    service_branding::ServiceBrandingRepositoryImpl,
     session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
     tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
@@ -114,7 +115,7 @@ pub struct AppState {
             SystemSettingsRepositoryImpl,
         >,
     >,
-    pub branding_service: Arc<BrandingService<SystemSettingsRepositoryImpl>>,
+    pub branding_service: Arc<BrandingService<SystemSettingsRepositoryImpl, ServiceBrandingRepositoryImpl>>,
     // New services for 5 features
     pub password_service: Arc<
         PasswordService<
@@ -260,8 +261,9 @@ impl HasEmailTemplates for AppState {
 /// Implement HasBranding trait for production AppState
 impl HasBranding for AppState {
     type BrandingRepo = SystemSettingsRepositoryImpl;
+    type ServiceBrandingRepo = ServiceBrandingRepositoryImpl;
 
-    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo> {
+    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo, Self::ServiceBrandingRepo> {
         &self.branding_service
     }
 }
@@ -417,6 +419,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let webhook_repo = Arc::new(WebhookRepositoryImpl::new(db_pool.clone()));
     let security_alert_repo = Arc::new(SecurityAlertRepositoryImpl::new(db_pool.clone()));
     let action_repo = Arc::new(ActionRepositoryImpl::new(db_pool.clone()));
+    let service_branding_repo = Arc::new(ServiceBrandingRepositoryImpl::new(db_pool.clone()));
 
     // Create JWT manager
     let jwt_manager = JwtManager::new(config.jwt.clone());
@@ -483,11 +486,14 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         )
         .with_pool(db_pool.clone()),
     );
-    let client_service = Arc::new(ClientService::new(
-        service_repo.clone(),
-        rbac_repo.clone(),
-        Some(cache_manager.clone()),
-    ));
+    let client_service = Arc::new(
+        ClientService::new(
+            service_repo.clone(),
+            rbac_repo.clone(),
+            Some(cache_manager.clone()),
+        )
+        .with_cascade_repos(action_repo.clone(), service_branding_repo.clone()),
+    );
     let rbac_service = Arc::new(RbacService::new(
         rbac_repo.clone(),
         Some(cache_manager.clone()),
@@ -522,9 +528,11 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let branding_service = Arc::new(
         BrandingService::with_sync_service(
             system_settings_repo.clone(),
+            service_branding_repo.clone(),
             keycloak_sync_service.clone(),
         )
-        .with_allowed_domains(config.branding_allowed_domains.clone()),
+        .with_allowed_domains(config.branding_allowed_domains.clone())
+        .with_service_repo(service_repo.clone()),
     );
 
     // Get app base URL for invitation links

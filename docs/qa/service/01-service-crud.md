@@ -115,10 +115,10 @@ SELECT base_url, redirect_uris, updated_at FROM services WHERE id = '{service_id
 
 ### 初始状态
 - 存在服务 id=`{service_id}`
-- 该服务有：2 个客户端、3 个权限、2 个角色
+- 该服务有：2 个客户端、3 个权限、2 个角色、1 个 Action、1 个 Service Branding
 
 ### 目的
-验证服务删除的级联处理
+验证服务删除的级联处理（含 Actions 和 Service Branding）
 
 ### 测试操作流程
 1. 找到目标服务
@@ -142,6 +142,12 @@ SELECT COUNT(*) FROM permissions WHERE service_id = '{service_id}';
 
 SELECT COUNT(*) FROM roles WHERE service_id = '{service_id}';
 -- 预期: 0
+
+SELECT COUNT(*) FROM actions WHERE service_id = '{service_id}';
+-- 预期: 0
+
+SELECT COUNT(*) FROM service_brandings WHERE service_id = '{service_id}';
+-- 预期: 0
 ```
 
 ---
@@ -161,6 +167,8 @@ SELECT COUNT(*) FROM roles WHERE service_id = '{service_id}';
 - 显示服务基本信息
 - 显示 OIDC 配置
 - 显示关联的客户端列表
+- Tab 栏包含「Actions」标签页（显示该 Service 的 Action 列表）
+- Tab 栏包含「Branding」标签页（显示 Service 级品牌配置）
 
 ### 预期数据状态
 ```sql

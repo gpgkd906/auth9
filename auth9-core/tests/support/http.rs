@@ -12,8 +12,9 @@ pub use super::mock_keycloak::MockKeycloakServer;
 use crate::support::{
     create_test_jwt_manager, TestActionRepository, TestAuditRepository, TestInvitationRepository,
     TestLinkedIdentityRepository, TestLoginEventRepository, TestPasswordResetRepository,
-    TestRbacRepository, TestSecurityAlertRepository, TestServiceRepository, TestSessionRepository,
-    TestSystemSettingsRepository, TestTenantRepository, TestUserRepository, TestWebhookRepository,
+    TestRbacRepository, TestSecurityAlertRepository, TestServiceBrandingRepository,
+    TestServiceRepository, TestSessionRepository, TestSystemSettingsRepository,
+    TestTenantRepository, TestUserRepository, TestWebhookRepository,
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
@@ -157,7 +158,8 @@ pub struct TestAppState {
     pub system_settings_service: Arc<SystemSettingsService<TestSystemSettingsRepository>>,
     pub email_service: Arc<EmailService<TestSystemSettingsRepository>>,
     pub email_template_service: Arc<EmailTemplateService<TestSystemSettingsRepository>>,
-    pub branding_service: Arc<BrandingService<TestSystemSettingsRepository>>,
+    pub branding_service:
+        Arc<BrandingService<TestSystemSettingsRepository, TestServiceBrandingRepository>>,
     pub password_service: Arc<
         PasswordService<
             TestPasswordResetRepository,
@@ -229,6 +231,7 @@ impl TestAppState {
         let security_alert_repo = Arc::new(TestSecurityAlertRepository::new());
         let invitation_repo = Arc::new(TestInvitationRepository::new());
         let action_repo = Arc::new(TestActionRepository::new());
+        let service_branding_repo = Arc::new(TestServiceBrandingRepository::new());
 
         // Create webhook service first (needed for webhook event publishing)
         let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
@@ -276,7 +279,10 @@ impl TestAppState {
         let email_service = Arc::new(EmailService::new(system_settings_service.clone()));
         let email_template_service =
             Arc::new(EmailTemplateService::new(system_settings_repo.clone()));
-        let branding_service = Arc::new(BrandingService::new(system_settings_repo.clone()));
+        let branding_service = Arc::new(BrandingService::new(
+            system_settings_repo.clone(),
+            service_branding_repo.clone(),
+        ));
 
         let jwt_manager = create_test_jwt_manager();
         let keycloak_client = KeycloakClient::new(config.keycloak.clone());
@@ -509,8 +515,9 @@ impl HasEmailTemplates for TestAppState {
 /// Implement HasBranding trait for TestAppState
 impl HasBranding for TestAppState {
     type BrandingRepo = TestSystemSettingsRepository;
+    type ServiceBrandingRepo = TestServiceBrandingRepository;
 
-    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo> {
+    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo, Self::ServiceBrandingRepo> {
         &self.branding_service
     }
 }

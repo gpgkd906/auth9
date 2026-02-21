@@ -7,7 +7,9 @@ use crate::support::http::{
     post_json_with_auth, TestAppState,
 };
 use crate::support::{
-    create_test_action, create_test_tenant, create_test_tenant_access_token, MockKeycloakServer,
+    create_test_action, create_test_service, create_test_tenant,
+    create_test_tenant_access_token, create_test_tenant_access_token_for_tenant,
+    MockKeycloakServer,
 };
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{
@@ -42,6 +44,25 @@ fn create_tenant_access_token(
         .unwrap()
 }
 
+/// Helper: create a tenant and a service belonging to it, returning service_id
+async fn setup_tenant_and_service(state: &TestAppState, tenant_id: Uuid) -> Uuid {
+    let tenant = create_test_tenant(Some(tenant_id));
+    state.tenant_repo.add_tenant(tenant).await;
+
+    let service_id = Uuid::new_v4();
+    let service = create_test_service(Some(service_id), Some(tenant_id));
+    state.service_repo.add_service(service).await;
+
+    service_id
+}
+
+/// Helper: create a test action with its service_id set to the given service
+fn create_action_for_service(tenant_id: Uuid, service_id: Uuid, name: &str) -> Action {
+    let mut action = create_test_action(tenant_id, name);
+    action.service_id = StringUuid::from(service_id);
+    action
+}
+
 // ============================================================================
 // Create Action Tests
 // ============================================================================
@@ -53,8 +74,7 @@ async fn test_create_action_returns_200() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -78,7 +98,7 @@ async fn test_create_action_returns_200() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -98,8 +118,7 @@ async fn test_create_action_validates_input() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -124,7 +143,7 @@ async fn test_create_action_validates_input() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -140,11 +159,10 @@ async fn test_create_action_rejects_duplicate_name() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     // Create first action
-    let action = create_test_action(tenant_id, "Duplicate Action");
+    let action = create_action_for_service(tenant_id, service_id, "Duplicate Action");
     state.action_repo.add_action(action).await;
 
     let token = create_tenant_access_token(
@@ -169,7 +187,7 @@ async fn test_create_action_rejects_duplicate_name() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -185,8 +203,7 @@ async fn test_create_action_validates_trigger_id() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -211,7 +228,7 @@ async fn test_create_action_validates_trigger_id() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -235,12 +252,11 @@ async fn test_list_actions_returns_all() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     // Create 3 actions
     for i in 1..=3 {
-        let action = create_test_action(tenant_id, &format!("Action {}", i));
+        let action = create_action_for_service(tenant_id, service_id, &format!("Action {}", i));
         state.action_repo.add_action(action).await;
     }
 
@@ -255,7 +271,7 @@ async fn test_list_actions_returns_all() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &token,
     )
     .await;
@@ -273,18 +289,17 @@ async fn test_list_actions_filters_by_trigger() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     // Create 2 post-login actions
     for i in 1..=2 {
-        let mut action = create_test_action(tenant_id, &format!("Post Login {}", i));
+        let mut action = create_action_for_service(tenant_id, service_id, &format!("Post Login {}", i));
         action.trigger_id = "post-login".to_string();
         state.action_repo.add_action(action).await;
     }
 
     // Create 1 pre-registration action
-    let mut action = create_test_action(tenant_id, "Pre Reg");
+    let mut action = create_action_for_service(tenant_id, service_id, "Pre Reg");
     action.trigger_id = "pre-registration".to_string();
     state.action_repo.add_action(action).await;
 
@@ -300,8 +315,8 @@ async fn test_list_actions_filters_by_trigger() {
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
         &app,
         &format!(
-            "/api/v1/tenants/{}/actions?trigger_id=post-login",
-            tenant_id
+            "/api/v1/services/{}/actions?trigger_id=post-login",
+            service_id
         ),
         &token,
     )
@@ -321,8 +336,7 @@ async fn test_list_actions_empty() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -335,7 +349,7 @@ async fn test_list_actions_empty() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &token,
     )
     .await;
@@ -357,10 +371,9 @@ async fn test_get_action_returns_200() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -375,7 +388,7 @@ async fn test_get_action_returns_200() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
         &token,
     )
     .await;
@@ -394,8 +407,7 @@ async fn test_get_action_returns_404() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -409,7 +421,7 @@ async fn test_get_action_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, non_existent_id),
         &token,
     )
     .await;
@@ -424,10 +436,9 @@ async fn test_update_action_returns_200() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Original Name");
+    let action = create_action_for_service(tenant_id, service_id, "Original Name");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -452,7 +463,7 @@ async fn test_update_action_returns_200() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = patch_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
         &input,
         &token,
     )
@@ -472,10 +483,9 @@ async fn test_update_action_validates_input() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -501,7 +511,7 @@ async fn test_update_action_validates_input() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
         &input,
         &token,
     )
@@ -517,8 +527,7 @@ async fn test_update_action_returns_404() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -542,7 +551,7 @@ async fn test_update_action_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, non_existent_id),
         &input,
         &token,
     )
@@ -558,10 +567,9 @@ async fn test_delete_action_returns_200() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -576,7 +584,7 @@ async fn test_delete_action_returns_200() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
         &token,
     )
     .await;
@@ -592,8 +600,7 @@ async fn test_delete_action_returns_404() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -607,7 +614,7 @@ async fn test_delete_action_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, non_existent_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, non_existent_id),
         &token,
     )
     .await;
@@ -626,8 +633,7 @@ async fn test_batch_upsert_creates_new() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -658,7 +664,7 @@ async fn test_batch_upsert_creates_new() {
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
         post_json_with_auth(
             &app,
-            &format!("/api/v1/tenants/{}/actions/batch", tenant_id),
+            &format!("/api/v1/services/{}/actions/batch", service_id),
             &batch_request,
             &token,
         )
@@ -674,11 +680,10 @@ async fn test_batch_upsert_updates_existing() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     // Create existing action
-    let action = create_test_action(tenant_id, "Existing Action");
+    let action = create_action_for_service(tenant_id, service_id, "Existing Action");
     state.action_repo.add_action(action).await;
 
     let token = create_tenant_access_token(
@@ -704,7 +709,7 @@ async fn test_batch_upsert_updates_existing() {
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
         post_json_with_auth(
             &app,
-            &format!("/api/v1/tenants/{}/actions/batch", tenant_id),
+            &format!("/api/v1/services/{}/actions/batch", service_id),
             &batch_request,
             &token,
         )
@@ -720,8 +725,7 @@ async fn test_batch_upsert_handles_errors() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -746,7 +750,7 @@ async fn test_batch_upsert_handles_errors() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/batch", tenant_id),
+        &format!("/api/v1/services/{}/actions/batch", service_id),
         &batch_request,
         &token,
     )
@@ -764,8 +768,7 @@ async fn test_query_logs_returns_all() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -779,7 +782,7 @@ async fn test_query_logs_returns_all() {
     let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
         get_json_with_auth(
             &app,
-            &format!("/api/v1/tenants/{}/actions/logs", tenant_id),
+            &format!("/api/v1/services/{}/actions/logs", service_id),
             &token,
         )
         .await;
@@ -795,10 +798,9 @@ async fn test_query_logs_filters_by_action_id() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -814,8 +816,8 @@ async fn test_query_logs_filters_by_action_id() {
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = get_json_with_auth(
         &app,
         &format!(
-            "/api/v1/tenants/{}/actions/logs?action_id={}",
-            tenant_id, action_id
+            "/api/v1/services/{}/actions/logs?action_id={}",
+            service_id, action_id
         ),
         &token,
     )
@@ -831,8 +833,7 @@ async fn test_query_logs_filters_by_user_id() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -846,8 +847,8 @@ async fn test_query_logs_filters_by_user_id() {
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = get_json_with_auth(
         &app,
         &format!(
-            "/api/v1/tenants/{}/actions/logs?user_id={}",
-            tenant_id, user_id
+            "/api/v1/services/{}/actions/logs?user_id={}",
+            service_id, user_id
         ),
         &token,
     )
@@ -863,8 +864,7 @@ async fn test_query_logs_filters_by_success() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -877,7 +877,7 @@ async fn test_query_logs_filters_by_success() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<serde_json::Value>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/logs?success=true", tenant_id),
+        &format!("/api/v1/services/{}/actions/logs?success=true", service_id),
         &token,
     )
     .await;
@@ -892,10 +892,9 @@ async fn test_get_stats_returns_200() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -910,7 +909,7 @@ async fn test_get_stats_returns_200() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<ActionStats>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}/stats", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}/stats", service_id, action_id),
         &token,
     )
     .await;
@@ -926,8 +925,7 @@ async fn test_get_stats_returns_404() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -942,8 +940,8 @@ async fn test_get_stats_returns_404() {
     let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
         &app,
         &format!(
-            "/api/v1/tenants/{}/actions/{}/stats",
-            tenant_id, non_existent_id
+            "/api/v1/services/{}/actions/{}/stats",
+            service_id, non_existent_id
         ),
         &token,
     )
@@ -978,10 +976,9 @@ async fn test_platform_admin_can_create_action() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let tenant_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let token = create_test_tenant_access_token(); // Platform admin token
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
     let input = CreateActionInput {
         name: "Test Action".to_string(),
@@ -997,7 +994,7 @@ async fn test_platform_admin_can_create_action() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -1012,19 +1009,18 @@ async fn test_platform_admin_can_read_action() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     let tenant_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
-    let token = create_test_tenant_access_token();
+    let token = create_test_tenant_access_token_for_tenant(tenant_id);
 
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
         &token,
     )
     .await;
@@ -1039,8 +1035,7 @@ async fn test_tenant_admin_can_manage_actions() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1064,7 +1059,7 @@ async fn test_tenant_admin_can_manage_actions() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -1080,8 +1075,7 @@ async fn test_tenant_owner_can_manage_actions() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1105,7 +1099,7 @@ async fn test_tenant_owner_can_manage_actions() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -1121,10 +1115,9 @@ async fn test_action_read_permission_allows_read() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "Test Action");
+    let action = create_action_for_service(tenant_id, service_id, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -1139,7 +1132,7 @@ async fn test_action_read_permission_allows_read() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
         &token,
     )
     .await;
@@ -1154,8 +1147,7 @@ async fn test_action_write_permission_allows_write() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1179,7 +1171,7 @@ async fn test_action_write_permission_allows_write() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -1195,8 +1187,7 @@ async fn test_action_wildcard_permission_allows_all() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1220,7 +1211,7 @@ async fn test_action_wildcard_permission_allows_all() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -1236,8 +1227,7 @@ async fn test_missing_permission_returns_403() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1261,7 +1251,7 @@ async fn test_missing_permission_returns_403() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         &token,
     )
@@ -1274,7 +1264,7 @@ async fn test_missing_permission_returns_403() {
 async fn test_missing_token_returns_401() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let tenant_id = Uuid::new_v4();
+    let service_id = Uuid::new_v4();
 
     let input = CreateActionInput {
         name: "Test Action".to_string(),
@@ -1294,7 +1284,7 @@ async fn test_missing_token_returns_401() {
         .oneshot(
             axum::http::Request::builder()
                 .method("POST")
-                .uri(format!("/api/v1/tenants/{}/actions", tenant_id))
+                .uri(format!("/api/v1/services/{}/actions", service_id))
                 .header("content-type", "application/json")
                 .body(serde_json::to_string(&input).unwrap())
                 .unwrap(),
@@ -1309,7 +1299,7 @@ async fn test_missing_token_returns_401() {
 async fn test_invalid_token_returns_401() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
-    let tenant_id = Uuid::new_v4();
+    let service_id = Uuid::new_v4();
 
     let input = CreateActionInput {
         name: "Test Action".to_string(),
@@ -1325,7 +1315,7 @@ async fn test_invalid_token_returns_401() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = post_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id),
+        &format!("/api/v1/services/{}/actions", service_id),
         &input,
         "invalid-token",
     )
@@ -1346,17 +1336,15 @@ async fn test_get_action_from_different_tenant_returns_404() {
     let tenant_id_2 = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant1 = create_test_tenant(Some(tenant_id_1));
-    let tenant2 = create_test_tenant(Some(tenant_id_2));
-    state.tenant_repo.add_tenant(tenant1).await;
-    state.tenant_repo.add_tenant(tenant2).await;
+    let service_id_1 = setup_tenant_and_service(&state, tenant_id_1).await;
+    let service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
 
-    // Create action in tenant 1
-    let action = create_test_action(tenant_id_1, "Test Action");
+    // Create action in tenant 1 (belongs to service_id_1)
+    let action = create_action_for_service(tenant_id_1, service_id_1, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
-    // Try to access from tenant 2
+    // Try to access from tenant 2 (using service_id_2 which belongs to tenant 2)
     let token = create_tenant_access_token(
         &state.jwt_manager,
         tenant_id_2,
@@ -1368,7 +1356,7 @@ async fn test_get_action_from_different_tenant_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id_2, action_id),
         &token,
     )
     .await;
@@ -1384,13 +1372,11 @@ async fn test_update_action_from_different_tenant_returns_404() {
     let tenant_id_2 = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant1 = create_test_tenant(Some(tenant_id_1));
-    let tenant2 = create_test_tenant(Some(tenant_id_2));
-    state.tenant_repo.add_tenant(tenant1).await;
-    state.tenant_repo.add_tenant(tenant2).await;
+    let service_id_1 = setup_tenant_and_service(&state, tenant_id_1).await;
+    let service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
 
     // Create action in tenant 1
-    let action = create_test_action(tenant_id_1, "Test Action");
+    let action = create_action_for_service(tenant_id_1, service_id_1, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -1416,7 +1402,7 @@ async fn test_update_action_from_different_tenant_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id_2, action_id),
         &input,
         &token,
     )
@@ -1435,13 +1421,11 @@ async fn test_delete_action_from_different_tenant_returns_404() {
     let tenant_id_2 = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant1 = create_test_tenant(Some(tenant_id_1));
-    let tenant2 = create_test_tenant(Some(tenant_id_2));
-    state.tenant_repo.add_tenant(tenant1).await;
-    state.tenant_repo.add_tenant(tenant2).await;
+    let service_id_1 = setup_tenant_and_service(&state, tenant_id_1).await;
+    let service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
 
     // Create action in tenant 1
-    let action = create_test_action(tenant_id_1, "Test Action");
+    let action = create_action_for_service(tenant_id_1, service_id_1, "Test Action");
     let action_id = action.id;
     state.action_repo.add_action(action).await;
 
@@ -1457,7 +1441,7 @@ async fn test_delete_action_from_different_tenant_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/{}", tenant_id_2, action_id),
+        &format!("/api/v1/services/{}/actions/{}", service_id_2, action_id),
         &token,
     )
     .await;
@@ -1473,20 +1457,18 @@ async fn test_list_actions_only_returns_own_tenant() {
     let tenant_id_2 = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant1 = create_test_tenant(Some(tenant_id_1));
-    let tenant2 = create_test_tenant(Some(tenant_id_2));
-    state.tenant_repo.add_tenant(tenant1).await;
-    state.tenant_repo.add_tenant(tenant2).await;
+    let service_id_1 = setup_tenant_and_service(&state, tenant_id_1).await;
+    let service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
 
     // Create 2 actions in tenant 1
     for i in 1..=2 {
-        let action = create_test_action(tenant_id_1, &format!("T1 Action {}", i));
+        let action = create_action_for_service(tenant_id_1, service_id_1, &format!("T1 Action {}", i));
         state.action_repo.add_action(action).await;
     }
 
     // Create 3 actions in tenant 2
     for i in 1..=3 {
-        let action = create_test_action(tenant_id_2, &format!("T2 Action {}", i));
+        let action = create_action_for_service(tenant_id_2, service_id_2, &format!("T2 Action {}", i));
         state.action_repo.add_action(action).await;
     }
 
@@ -1501,7 +1483,7 @@ async fn test_list_actions_only_returns_own_tenant() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<Vec<Action>>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions", tenant_id_1),
+        &format!("/api/v1/services/{}/actions", service_id_1),
         &token,
     )
     .await;
@@ -1513,7 +1495,7 @@ async fn test_list_actions_only_returns_own_tenant() {
     assert!(response
         .data
         .iter()
-        .all(|a| a.tenant_id == StringUuid::from(tenant_id_1)));
+        .all(|a| a.tenant_id == Some(StringUuid::from(tenant_id_1))));
 }
 
 #[tokio::test]
@@ -1524,10 +1506,8 @@ async fn test_query_logs_only_returns_own_tenant() {
     let tenant_id_2 = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant1 = create_test_tenant(Some(tenant_id_1));
-    let tenant2 = create_test_tenant(Some(tenant_id_2));
-    state.tenant_repo.add_tenant(tenant1).await;
-    state.tenant_repo.add_tenant(tenant2).await;
+    let service_id_1 = setup_tenant_and_service(&state, tenant_id_1).await;
+    let service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1541,7 +1521,7 @@ async fn test_query_logs_only_returns_own_tenant() {
     let (status, body): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
         get_json_with_auth(
             &app,
-            &format!("/api/v1/tenants/{}/actions/logs", tenant_id_1),
+            &format!("/api/v1/services/{}/actions/logs", service_id_1),
             &token,
         )
         .await;
@@ -1562,10 +1542,9 @@ async fn test_test_action_returns_success() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
-    let action = create_test_action(tenant_id, "test-action-endpoint");
+    let action = create_action_for_service(tenant_id, service_id, "test-action-endpoint");
     let action_id = *action.id;
     state.action_repo.add_action(action).await;
 
@@ -1603,7 +1582,7 @@ async fn test_test_action_returns_success() {
     let (status, response): (StatusCode, Option<SuccessResponse<serde_json::Value>>) =
         post_json_with_auth(
             &app,
-            &format!("/api/v1/tenants/{}/actions/{}/test", tenant_id, action_id),
+            &format!("/api/v1/services/{}/actions/{}/test", service_id, action_id),
             &body,
             &token,
         )
@@ -1626,8 +1605,7 @@ async fn test_test_action_not_found() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1664,8 +1642,8 @@ async fn test_test_action_not_found() {
     let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
         &app,
         &format!(
-            "/api/v1/tenants/{}/actions/{}/test",
-            tenant_id, nonexistent_id
+            "/api/v1/services/{}/actions/{}/test",
+            service_id, nonexistent_id
         ),
         &body,
         &token,
@@ -1686,8 +1664,7 @@ async fn test_get_action_log_not_found() {
     let tenant_id = Uuid::new_v4();
     let user_id = Uuid::new_v4();
 
-    let tenant = create_test_tenant(Some(tenant_id));
-    state.tenant_repo.add_tenant(tenant).await;
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
@@ -1702,7 +1679,7 @@ async fn test_get_action_log_not_found() {
     let log_id = Uuid::new_v4();
     let (status, _): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/tenants/{}/actions/logs/{}", tenant_id, log_id),
+        &format!("/api/v1/services/{}/actions/logs/{}", service_id, log_id),
         &token,
     )
     .await;

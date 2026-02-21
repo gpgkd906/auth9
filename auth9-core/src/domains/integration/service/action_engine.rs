@@ -401,22 +401,61 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
     /// Execute all enabled actions for a specific trigger
     ///
     /// Actions are executed in order (by execution_order field).
-    /// If any action fails, the entire flow is aborted.
+    /// If any action fails in strict_mode, the entire flow is aborted.
     pub async fn execute_trigger(
         &self,
-        tenant_id: crate::domain::StringUuid,
+        service_id: crate::domain::StringUuid,
         trigger_id: &str,
         mut context: ActionContext,
     ) -> Result<ActionContext> {
         // Fetch all enabled actions for this trigger
         let actions = self
             .action_repo
-            .list_by_trigger(tenant_id, trigger_id, true)
+            .list_by_trigger(service_id, trigger_id, true)
             .await?;
 
         if actions.is_empty() {
             tracing::debug!(
-                "No enabled actions found for trigger '{}' in tenant {}",
+                "No enabled actions found for trigger '{}' in service {}",
+                trigger_id,
+                service_id
+            );
+            return Ok(context);
+        }
+
+        tracing::info!(
+            "Executing {} actions for trigger {} in service {}",
+            actions.len(),
+            trigger_id,
+            service_id
+        );
+
+        // Execute each action in order
+        for action in actions {
+            context = self.execute_single_action_with_record(&action, context, trigger_id).await?;
+        }
+
+        Ok(context)
+    }
+
+    /// Execute actions for a trigger across all services in a tenant (PostChangePassword fallback)
+    ///
+    /// Used when no specific service_id is available (e.g. password change flow).
+    /// Finds all actions matching the trigger across services belonging to the tenant.
+    pub async fn execute_trigger_by_tenant(
+        &self,
+        tenant_id: crate::domain::StringUuid,
+        trigger_id: &str,
+        mut context: ActionContext,
+    ) -> Result<ActionContext> {
+        let actions = self
+            .action_repo
+            .list_by_tenant_trigger(tenant_id, trigger_id, true)
+            .await?;
+
+        if actions.is_empty() {
+            tracing::debug!(
+                "No enabled actions found for trigger '{}' in tenant {} (fallback)",
                 trigger_id,
                 tenant_id
             );
@@ -424,111 +463,127 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
         }
 
         tracing::info!(
-            "Executing {} actions for trigger {} in tenant {}",
+            "Executing {} actions for trigger '{}' in tenant {} (tenant fallback)",
             actions.len(),
             trigger_id,
             tenant_id
         );
 
-        // Execute each action in order
         for action in actions {
-            let start = Instant::now();
-            let user_id = context.user.id.parse().ok();
-
-            match self.execute_action(&action, &context).await {
-                Ok(modified_context) => {
-                    let duration_ms = start.elapsed().as_millis() as i32;
-                    context = modified_context;
-
-                    // Record successful execution
-                    if let Err(e) = self
-                        .action_repo
-                        .record_execution(
-                            action.id,
-                            tenant_id,
-                            trigger_id.to_string(),
-                            user_id,
-                            true,
-                            duration_ms,
-                            None,
-                        )
-                        .await
-                    {
-                        tracing::warn!("Failed to record action execution: {}", e);
-                    }
-
-                    if let Err(e) = self
-                        .action_repo
-                        .update_execution_stats(action.id, true, None)
-                        .await
-                    {
-                        tracing::warn!("Failed to update action stats: {}", e);
-                    }
-
-                    tracing::info!(
-                        "Action {} executed successfully in {}ms",
-                        action.name,
-                        duration_ms
-                    );
-
-                    // Record success metrics
-                    counter!("auth9_action_executions_total", "trigger" => trigger_id.to_string(), "result" => "success").increment(1);
-                    histogram!("auth9_action_execution_duration_seconds", "trigger" => trigger_id.to_string()).record(duration_ms as f64 / 1000.0);
-                }
-                Err(e) => {
-                    let duration_ms = start.elapsed().as_millis() as i32;
-                    let error_msg = format!("Action '{}' failed: {}", action.name, e);
-
-                    // Record failed execution
-                    if let Err(record_err) = self
-                        .action_repo
-                        .record_execution(
-                            action.id,
-                            tenant_id,
-                            trigger_id.to_string(),
-                            user_id,
-                            false,
-                            duration_ms,
-                            Some(error_msg.clone()),
-                        )
-                        .await
-                    {
-                        tracing::warn!("Failed to record action execution: {}", record_err);
-                    }
-
-                    if let Err(stats_err) = self
-                        .action_repo
-                        .update_execution_stats(action.id, false, Some(error_msg.clone()))
-                        .await
-                    {
-                        tracing::warn!("Failed to update action stats: {}", stats_err);
-                    }
-
-                    tracing::error!(
-                        "Action {} failed in {}ms: {}",
-                        action.name,
-                        duration_ms,
-                        error_msg
-                    );
-
-                    // Record error metrics
-                    counter!("auth9_action_executions_total", "trigger" => trigger_id.to_string(), "result" => "error").increment(1);
-
-                    if action.strict_mode {
-                        // Strict mode: abort entire flow on first failure
-                        return Err(AppError::ActionExecutionFailed(error_msg));
-                    } else {
-                        // Non-strict mode: log error and continue
-                        tracing::warn!(
-                            "Action {} failed but strict_mode is off, continuing flow",
-                            action.name
-                        );
-                    }
-                }
-            }
+            context = self
+                .execute_single_action_with_record(&action, context, trigger_id)
+                .await?;
         }
 
         Ok(context)
+    }
+
+    /// Execute a single action with execution recording
+    ///
+    /// This method is also used by execute_trigger_by_tenant
+    /// for the PostChangePassword fallback path.
+    pub async fn execute_single_action_with_record(
+        &self,
+        action: &Action,
+        context: ActionContext,
+        trigger_id: &str,
+    ) -> Result<ActionContext> {
+        let start = Instant::now();
+        let user_id = context.user.id.parse().ok();
+
+        match self.execute_action(action, &context).await {
+            Ok(modified_context) => {
+                let duration_ms = start.elapsed().as_millis() as i32;
+
+                // Record successful execution
+                if let Err(e) = self
+                    .action_repo
+                    .record_execution(
+                        action.id,
+                        action.service_id,
+                        trigger_id.to_string(),
+                        user_id,
+                        true,
+                        duration_ms,
+                        None,
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to record action execution: {}", e);
+                }
+
+                if let Err(e) = self
+                    .action_repo
+                    .update_execution_stats(action.id, true, None)
+                    .await
+                {
+                    tracing::warn!("Failed to update action stats: {}", e);
+                }
+
+                tracing::info!(
+                    "Action {} executed successfully in {}ms",
+                    action.name,
+                    duration_ms
+                );
+
+                // Record success metrics
+                counter!("auth9_action_executions_total", "trigger" => trigger_id.to_string(), "result" => "success").increment(1);
+                histogram!("auth9_action_execution_duration_seconds", "trigger" => trigger_id.to_string()).record(duration_ms as f64 / 1000.0);
+
+                Ok(modified_context)
+            }
+            Err(e) => {
+                let duration_ms = start.elapsed().as_millis() as i32;
+                let error_msg = format!("Action '{}' failed: {}", action.name, e);
+
+                // Record failed execution
+                if let Err(record_err) = self
+                    .action_repo
+                    .record_execution(
+                        action.id,
+                        action.service_id,
+                        trigger_id.to_string(),
+                        user_id,
+                        false,
+                        duration_ms,
+                        Some(error_msg.clone()),
+                    )
+                    .await
+                {
+                    tracing::warn!("Failed to record action execution: {}", record_err);
+                }
+
+                if let Err(stats_err) = self
+                    .action_repo
+                    .update_execution_stats(action.id, false, Some(error_msg.clone()))
+                    .await
+                {
+                    tracing::warn!("Failed to update action stats: {}", stats_err);
+                }
+
+                tracing::error!(
+                    "Action {} failed in {}ms: {}",
+                    action.name,
+                    duration_ms,
+                    error_msg
+                );
+
+                // Record error metrics
+                counter!("auth9_action_executions_total", "trigger" => trigger_id.to_string(), "result" => "error").increment(1);
+
+                if action.strict_mode {
+                    // Strict mode: abort entire flow on first failure
+                    Err(AppError::ActionExecutionFailed(error_msg))
+                } else {
+                    // Non-strict mode: log error and continue
+                    tracing::warn!(
+                        "Action {} failed but strict_mode is off, continuing flow",
+                        action.name
+                    );
+                    Ok(context)
+                }
+            }
+        }
     }
 
     /// Execute a single action
@@ -887,7 +942,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
-                        action.tenant_id,
+                        action.service_id,
                         "test".to_string(),
                         user_id,
                         true,
@@ -911,7 +966,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
-                        action.tenant_id,
+                        action.service_id,
                         "test".to_string(),
                         user_id,
                         false,
@@ -949,6 +1004,7 @@ mod tests {
                 slug: "acme".to_string(),
                 name: "Acme Corp".to_string(),
             },
+            service: None,
             request: ActionContextRequest {
                 ip: Some("1.2.3.4".to_string()),
                 user_agent: Some("Mozilla/5.0".to_string()),
@@ -961,7 +1017,8 @@ mod tests {
     fn create_test_action(script: &str) -> Action {
         Action {
             id: StringUuid::new_v4(),
-            tenant_id: StringUuid::new_v4(),
+            tenant_id: Some(StringUuid::new_v4()),
+            service_id: StringUuid::new_v4(),
             name: "test-action".to_string(),
             description: None,
             trigger_id: "post-login".to_string(),
@@ -1410,7 +1467,7 @@ mod tests {
             context;
             "#,
         );
-        action1.tenant_id = StringUuid::new_v4();
+        action1.tenant_id = Some(StringUuid::new_v4());
 
         let mut action2 = create_test_action(
             r#"
@@ -1419,7 +1476,7 @@ mod tests {
             context;
             "#,
         );
-        action2.tenant_id = StringUuid::new_v4();
+        action2.tenant_id = Some(StringUuid::new_v4());
 
         let context1 = create_test_context();
         let result1 = engine.execute_action(&action1, &context1).await;

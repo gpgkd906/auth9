@@ -54,8 +54,11 @@ export default function KcPage(props: { kcContext: KcContext }) {
   // Get auth9 API URL from theme properties
   const apiUrl = kcContext.properties?.auth9ApiUrl || DEFAULT_API_URL;
 
+  // Extract client_id for service-level branding
+  const clientId = (kcContext as Record<string, unknown> & { client?: { clientId?: string } }).client?.clientId;
+
   return (
-    <BrandingProvider apiUrl={apiUrl}>
+    <BrandingProvider apiUrl={apiUrl} clientId={clientId}>
       <Suspense fallback={<LoadingFallback />}>
         {(() => {
           switch (kcContext.pageId) {

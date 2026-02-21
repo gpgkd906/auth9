@@ -41,7 +41,20 @@
 
 ---
 
-## 场景 5：网格布局切换时的按钮对齐与卡片高度
+## 场景 5：Service 详情页 Actions / Branding Tab 布局
+
+### 目的
+验证 Service 详情页新增的「Actions」和「Branding」标签页在不同尺寸下的布局表现。
+
+### 预期视觉效果
+- **Tab 栏**: 4 个标签（Configuration、Integration、Actions、Branding）在宽屏下水平排列，窄屏下可横向滚动，不折行
+- **Actions Tab**: Action 列表卡片与「New Action」按钮间距一致，空状态居中显示提示文字
+- **Branding Tab**: 颜色选择器排列整齐（2 列网格），表单字段间距与其他 Tab 一致
+- **「Reset to Default」按钮**: 使用 destructive 配色，与「Save Changes」按钮水平对齐
+
+---
+
+## 场景 6：网格布局切换时的按钮对齐与卡片高度
 
 ### 目的
 验证从 3 列切换到 1 列时，每个 Service 卡片内的操作按钮位置是否一致，且高度整齐。

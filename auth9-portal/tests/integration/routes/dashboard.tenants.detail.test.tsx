@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import TenantDetailPage, { loader, action } from "~/routes/dashboard.tenants.$tenantId._index";
-import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi, actionApi } from "~/services/api";
+import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi } from "~/services/api";
 
 // Mock the APIs
 vi.mock("~/services/api", () => ({
@@ -24,9 +24,6 @@ vi.mock("~/services/api", () => ({
     listServices: vi.fn(),
   },
   tenantUserApi: {
-    list: vi.fn(),
-  },
-  actionApi: {
     list: vi.fn(),
   },
 }));
@@ -88,10 +85,6 @@ describe("Tenant Detail Page", () => {
       vi.mocked(tenantUserApi.list).mockResolvedValue({
         data: [{ id: "u-1" }, { id: "u-2" }, { id: "u-3" }],
       });
-      vi.mocked(actionApi.list).mockResolvedValue({
-        data: [{ id: "act-1" }],
-      });
-
       const response = await loader({
         request: new Request("http://localhost/dashboard/tenants/tenant-1"),
         params: { tenantId: "tenant-1" },
@@ -104,7 +97,6 @@ describe("Tenant Detail Page", () => {
         servicesCount: 5,
         pendingInvitationsCount: 3,
         webhooksCount: 2,
-        actionsCount: 1,
         enabledServicesCount: 2,
         totalGlobalServicesCount: 3,
       });
@@ -134,7 +126,6 @@ describe("Tenant Detail Page", () => {
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
-      actionsCount: 2,
       enabledServicesCount: 2,
       totalGlobalServicesCount: 3,
     };
@@ -241,7 +232,6 @@ describe("Tenant Detail Page", () => {
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
-      actionsCount: 2,
       enabledServicesCount: 2,
       totalGlobalServicesCount: 3,
     };
@@ -375,7 +365,6 @@ describe("Tenant Detail Page", () => {
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
-      actionsCount: 2,
       enabledServicesCount: 2,
       totalGlobalServicesCount: 3,
     };
@@ -488,7 +477,6 @@ describe("Tenant Detail Page", () => {
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
-      actionsCount: 2,
       enabledServicesCount: 2,
       totalGlobalServicesCount: 3,
     };
@@ -736,8 +724,7 @@ describe("Tenant Detail Page", () => {
             servicesCount: 5,
             pendingInvitationsCount: 3,
             webhooksCount: 2,
-            actionsCount: 2,
-            enabledServicesCount: 2,
+                  enabledServicesCount: 2,
             totalGlobalServicesCount: 3,
           }),
           action: () => ({ success: true }),
@@ -770,8 +757,7 @@ describe("Tenant Detail Page", () => {
             servicesCount: 5,
             pendingInvitationsCount: 3,
             webhooksCount: 2,
-            actionsCount: 2,
-            enabledServicesCount: 2,
+                  enabledServicesCount: 2,
             totalGlobalServicesCount: 3,
           }),
         },
@@ -797,8 +783,7 @@ describe("Tenant Detail Page", () => {
             servicesCount: 5,
             pendingInvitationsCount: 3,
             webhooksCount: 2,
-            actionsCount: 2,
-            enabledServicesCount: 2,
+                  enabledServicesCount: 2,
             totalGlobalServicesCount: 3,
           }),
           action: () => ({ error: "Operation not allowed" }),
@@ -831,7 +816,6 @@ describe("Tenant Detail Page", () => {
       servicesCount: 5,
       pendingInvitationsCount: 3,
       webhooksCount: 2,
-      actionsCount: 2,
       enabledServicesCount: 2,
       totalGlobalServicesCount: 3,
     };

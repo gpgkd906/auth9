@@ -1,12 +1,14 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
-import { PlusIcon, TrashIcon, ArrowLeftIcon, CopyIcon, UpdateIcon, EyeOpenIcon, EyeClosedIcon } from "@radix-ui/react-icons";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { PlusIcon, TrashIcon, ArrowLeftIcon, CopyIcon, UpdateIcon, EyeOpenIcon, EyeClosedIcon, LightningBoltIcon, CheckCircledIcon, ResetIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
-import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Textarea } from "~/components/ui/textarea";
+import { Badge } from "~/components/ui/badge";
 import {
     Dialog,
     DialogContent,
@@ -17,8 +19,8 @@ import {
     DialogTrigger,
 } from "~/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
-import { serviceApi } from "~/services/api";
-import type { ServiceIntegrationInfo } from "~/services/api";
+import { serviceApi, actionApi, serviceBrandingApi } from "~/services/api";
+import type { ServiceIntegrationInfo, Action, BrandingConfig } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 
 export const meta: MetaFunction = () => {
@@ -30,17 +32,21 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     if (!id) throw new Error("Service ID is required");
     const accessToken = await getAccessToken(request);
 
-    // Fetch Service Details, Clients, and Integration in parallel
-    const [serviceRes, clientsRes, integrationRes] = await Promise.all([
+    // Fetch Service Details, Clients, Integration, Actions, and Branding in parallel
+    const [serviceRes, clientsRes, integrationRes, actionsRes, brandingRes] = await Promise.all([
         serviceApi.get(id, accessToken || undefined),
         serviceApi.listClients(id, accessToken || undefined),
         serviceApi.getIntegration(id, accessToken || undefined).catch(() => null),
+        actionApi.list(id, undefined, accessToken || undefined).catch(() => ({ data: [] as Action[] })),
+        serviceBrandingApi.get(id, accessToken || undefined).catch(() => null),
     ]);
 
     return {
         service: serviceRes.data,
         clients: clientsRes.data,
         integration: integrationRes?.data ?? null,
+        actions: actionsRes.data,
+        branding: brandingRes?.data ?? null,
     };
 }
 
@@ -84,6 +90,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
             const clientId = formData.get("client_id") as string;
             const res = await serviceApi.regenerateClientSecret(id, clientId, accessToken || undefined);
             return { success: true, intent, secret: res.data.client_secret, regeneratedClientId: clientId };
+        }
+
+        if (intent === "update_branding") {
+            const config: BrandingConfig = {
+                logo_url: (formData.get("logo_url") as string) || undefined,
+                primary_color: formData.get("primary_color") as string,
+                secondary_color: formData.get("secondary_color") as string,
+                background_color: formData.get("background_color") as string,
+                text_color: formData.get("text_color") as string,
+                custom_css: (formData.get("custom_css") as string) || undefined,
+                company_name: (formData.get("company_name") as string) || undefined,
+                favicon_url: (formData.get("favicon_url") as string) || undefined,
+                allow_registration: formData.get("allow_registration") === "true",
+            };
+            await serviceBrandingApi.update(id, config, accessToken || undefined);
+            return { success: true, intent };
+        }
+
+        if (intent === "delete_branding") {
+            await serviceBrandingApi.delete(id, accessToken || undefined);
+            return { success: true, intent };
         }
 
     } catch (error) {
@@ -336,8 +363,368 @@ const { accessToken } = await grpc.exchangeToken({
     );
 }
 
+// Default branding values
+const DEFAULT_BRANDING: BrandingConfig = {
+    primary_color: "#007AFF",
+    secondary_color: "#5856D6",
+    background_color: "#F5F5F7",
+    text_color: "#1D1D1F",
+    allow_registration: false,
+};
+
+// Color picker component for branding
+function ColorPicker({
+    id,
+    label,
+    value,
+    onChange,
+    defaultValue,
+}: {
+    id: string;
+    label: string;
+    value: string;
+    onChange: (value: string) => void;
+    defaultValue: string;
+}) {
+    return (
+        <div className="space-y-2">
+            <Label htmlFor={id}>{label}</Label>
+            <div className="flex items-center gap-2">
+                <label
+                    htmlFor={`${id}_picker`}
+                    className="w-10 h-10 rounded-md border border-gray-300 shadow-sm cursor-pointer block"
+                    style={{ backgroundColor: value }}
+                >
+                    <span className="sr-only">Choose {label}</span>
+                </label>
+                <input
+                    type="color"
+                    id={`${id}_picker`}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    className="sr-only"
+                />
+                <Input
+                    id={id}
+                    name={id}
+                    value={value}
+                    onChange={(e) => onChange(e.target.value)}
+                    placeholder={defaultValue}
+                    className="font-mono uppercase"
+                    maxLength={7}
+                />
+            </div>
+        </div>
+    );
+}
+
+// Actions Tab component
+function ActionsTab({ actions, serviceId }: { actions: Action[]; serviceId: string }) {
+    return (
+        <div className="space-y-4">
+            <div className="flex items-center justify-between">
+                <div>
+                    <h3 className="text-lg font-semibold">Actions</h3>
+                    <p className="text-sm text-[var(--text-secondary)]">
+                        {actions.length} action{actions.length !== 1 ? "s" : ""} configured
+                    </p>
+                </div>
+                <Button asChild>
+                    <Link to={`/dashboard/services/${serviceId}/actions/new`}>
+                        <PlusIcon className="mr-2 h-4 w-4" />
+                        New Action
+                    </Link>
+                </Button>
+            </div>
+
+            {actions.length === 0 ? (
+                <Card>
+                    <CardContent className="py-12">
+                        <div className="text-center">
+                            <LightningBoltIcon className="h-8 w-8 mx-auto mb-3 text-[var(--text-tertiary)]" />
+                            <h3 className="text-lg font-semibold mb-2">No actions yet</h3>
+                            <p className="text-[var(--text-secondary)] mb-4">
+                                Create actions to customize authentication flows with TypeScript
+                            </p>
+                            <Button asChild>
+                                <Link to={`/dashboard/services/${serviceId}/actions/new`}>
+                                    <PlusIcon className="mr-2 h-4 w-4" />
+                                    Create Action
+                                </Link>
+                            </Button>
+                        </div>
+                    </CardContent>
+                </Card>
+            ) : (
+                <div className="space-y-3">
+                    {actions.map((action) => (
+                        <Card key={action.id}>
+                            <div className="p-4">
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <Link
+                                            to={`/dashboard/services/${serviceId}/actions/${action.id}`}
+                                            className="font-medium hover:underline"
+                                        >
+                                            {action.name}
+                                        </Link>
+                                        <Badge variant={action.enabled ? "default" : "secondary"}>
+                                            {action.enabled ? "Enabled" : "Disabled"}
+                                        </Badge>
+                                        <Badge variant="outline">{action.trigger_id}</Badge>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Button asChild variant="outline" size="sm">
+                                            <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}>
+                                                View
+                                            </Link>
+                                        </Button>
+                                        <Button asChild variant="outline" size="sm">
+                                            <Link to={`/dashboard/services/${serviceId}/actions/${action.id}/edit`}>
+                                                Edit
+                                            </Link>
+                                        </Button>
+                                    </div>
+                                </div>
+                                {action.description && (
+                                    <p className="text-sm text-[var(--text-secondary)] mt-1">{action.description}</p>
+                                )}
+                            </div>
+                        </Card>
+                    ))}
+                    <div className="text-center pt-2">
+                        <Button asChild variant="outline">
+                            <Link to={`/dashboard/services/${serviceId}/actions`}>
+                                View All Actions
+                            </Link>
+                        </Button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// Branding Tab component
+function BrandingTab({ branding, serviceId }: { branding: BrandingConfig | null; serviceId: string }) {
+    const navigation = useNavigation();
+    const actionData = useActionData<typeof action>();
+    const [isCustomizing, setIsCustomizing] = useState(!!branding);
+
+    const config = branding || DEFAULT_BRANDING;
+    const [logoUrl, setLogoUrl] = useState(config.logo_url || "");
+    const [primaryColor, setPrimaryColor] = useState(config.primary_color);
+    const [secondaryColor, setSecondaryColor] = useState(config.secondary_color);
+    const [backgroundColor, setBackgroundColor] = useState(config.background_color);
+    const [textColor, setTextColor] = useState(config.text_color);
+    const [customCss, setCustomCss] = useState(config.custom_css || "");
+    const [companyName, setCompanyName] = useState(config.company_name || "");
+    const [faviconUrl, setFaviconUrl] = useState(config.favicon_url || "");
+    const [allowRegistration, setAllowRegistration] = useState(config.allow_registration ?? false);
+
+    const isSubmitting = navigation.state === "submitting";
+    const currentIntent = navigation.formData?.get("intent");
+
+    // Reset form after delete_branding
+    useEffect(() => {
+        if (actionData && "success" in actionData && actionData.success && actionData.intent === "delete_branding") {
+            setIsCustomizing(false);
+            setLogoUrl("");
+            setPrimaryColor(DEFAULT_BRANDING.primary_color);
+            setSecondaryColor(DEFAULT_BRANDING.secondary_color);
+            setBackgroundColor(DEFAULT_BRANDING.background_color);
+            setTextColor(DEFAULT_BRANDING.text_color);
+            setCustomCss("");
+            setCompanyName("");
+            setFaviconUrl("");
+            setAllowRegistration(false);
+        }
+    }, [actionData]);
+
+    if (!isCustomizing) {
+        return (
+            <Card>
+                <CardContent className="py-12">
+                    <div className="text-center">
+                        <h3 className="text-lg font-semibold mb-2">Using System Default Branding</h3>
+                        <p className="text-[var(--text-secondary)] mb-4">
+                            This service uses the system-wide branding configuration.
+                            Customize it to give this service its own look.
+                        </p>
+                        <Button onClick={() => setIsCustomizing(true)}>
+                            Customize Branding
+                        </Button>
+                    </div>
+                </CardContent>
+            </Card>
+        );
+    }
+
+    return (
+        <div className="space-y-4">
+            {actionData && "success" in actionData && actionData.success && actionData.intent === "update_branding" && (
+                <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)] flex items-center gap-2">
+                    <CheckCircledIcon className="h-4 w-4" />
+                    Service branding saved successfully
+                </div>
+            )}
+
+            <Card>
+                <CardHeader>
+                    <CardTitle>Service Branding</CardTitle>
+                    <CardDescription>
+                        Customize the login page appearance for this service. Overrides system defaults.
+                    </CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <Form method="post" className="space-y-6">
+                        <input type="hidden" name="intent" value="update_branding" />
+
+                        {/* Company Identity */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Company Identity</h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="company_name">Company Name</Label>
+                                    <Input
+                                        id="company_name"
+                                        name="company_name"
+                                        placeholder="Your Company Name"
+                                        value={companyName}
+                                        onChange={(e) => setCompanyName(e.target.value)}
+                                        maxLength={100}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="logo_url">Logo URL</Label>
+                                    <Input
+                                        id="logo_url"
+                                        name="logo_url"
+                                        type="url"
+                                        placeholder="https://example.com/logo.png"
+                                        value={logoUrl}
+                                        onChange={(e) => setLogoUrl(e.target.value)}
+                                    />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="favicon_url">Favicon URL</Label>
+                                    <Input
+                                        id="favicon_url"
+                                        name="favicon_url"
+                                        type="url"
+                                        placeholder="https://example.com/favicon.ico"
+                                        value={faviconUrl}
+                                        onChange={(e) => setFaviconUrl(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Login Options */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Login Options</h3>
+                            <div className="flex items-center justify-between">
+                                <div className="space-y-0.5">
+                                    <Label htmlFor="allow_registration">Allow Registration</Label>
+                                    <p className="text-xs text-[var(--text-secondary)]">
+                                        Show &quot;Create account&quot; link on the login page
+                                    </p>
+                                </div>
+                                <label htmlFor="allow_registration" className="relative inline-flex items-center cursor-pointer">
+                                    <span className="sr-only">Toggle allow registration</span>
+                                    <input
+                                        type="checkbox"
+                                        id="allow_registration"
+                                        name="allow_registration"
+                                        value="true"
+                                        checked={allowRegistration}
+                                        onChange={(e) => setAllowRegistration(e.target.checked)}
+                                        className="sr-only peer"
+                                    />
+                                    <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                </label>
+                            </div>
+                        </div>
+
+                        {/* Colors */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Colors</h3>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                                <ColorPicker
+                                    id="primary_color"
+                                    label="Primary Color"
+                                    value={primaryColor}
+                                    onChange={setPrimaryColor}
+                                    defaultValue={DEFAULT_BRANDING.primary_color}
+                                />
+                                <ColorPicker
+                                    id="secondary_color"
+                                    label="Secondary Color"
+                                    value={secondaryColor}
+                                    onChange={setSecondaryColor}
+                                    defaultValue={DEFAULT_BRANDING.secondary_color}
+                                />
+                                <ColorPicker
+                                    id="background_color"
+                                    label="Background Color"
+                                    value={backgroundColor}
+                                    onChange={setBackgroundColor}
+                                    defaultValue={DEFAULT_BRANDING.background_color}
+                                />
+                                <ColorPicker
+                                    id="text_color"
+                                    label="Text Color"
+                                    value={textColor}
+                                    onChange={setTextColor}
+                                    defaultValue={DEFAULT_BRANDING.text_color}
+                                />
+                            </div>
+                        </div>
+
+                        {/* Custom CSS */}
+                        <div className="space-y-4">
+                            <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">
+                                Custom CSS
+                                <span className="font-normal text-[var(--text-secondary)] ml-2">(Advanced)</span>
+                            </h3>
+                            <Textarea
+                                id="custom_css"
+                                name="custom_css"
+                                placeholder={`.login-form {\n  border-radius: 16px;\n}`}
+                                value={customCss}
+                                onChange={(e) => setCustomCss(e.target.value)}
+                                className="font-mono text-sm min-h-[120px]"
+                            />
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+                            <Button type="submit" name="intent" value="update_branding" disabled={isSubmitting && currentIntent === "update_branding"}>
+                                {isSubmitting && currentIntent === "update_branding" ? "Saving..." : "Save Branding"}
+                            </Button>
+
+                            {branding && (
+                                <Button
+                                    type="submit"
+                                    name="intent"
+                                    value="delete_branding"
+                                    variant="outline"
+                                    disabled={isSubmitting}
+                                >
+                                    <ResetIcon className="h-4 w-4 mr-2" />
+                                    Reset to Default
+                                </Button>
+                            )}
+                        </div>
+                    </Form>
+                </CardContent>
+            </Card>
+        </div>
+    );
+}
+
 export default function ServiceDetailPage() {
-    const { service, clients, integration } = useLoaderData<typeof loader>();
+    const { service, clients, integration, actions, branding } = useLoaderData<typeof loader>();
     const actionData = useActionData<typeof action>();
     const navigation = useNavigation();
     const submit = useSubmit();
@@ -389,6 +776,8 @@ export default function ServiceDetailPage() {
                 <TabsList>
                     <TabsTrigger value="configuration">Configuration</TabsTrigger>
                     <TabsTrigger value="integration">Integration</TabsTrigger>
+                    <TabsTrigger value="actions">Actions ({actions.length})</TabsTrigger>
+                    <TabsTrigger value="branding">Branding</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="configuration">
@@ -557,6 +946,14 @@ export default function ServiceDetailPage() {
                             </div>
                         </Card>
                     )}
+                </TabsContent>
+
+                <TabsContent value="actions">
+                    <ActionsTab actions={actions} serviceId={service.id} />
+                </TabsContent>
+
+                <TabsContent value="branding">
+                    <BrandingTab branding={branding} serviceId={service.id} />
                 </TabsContent>
             </Tabs>
 

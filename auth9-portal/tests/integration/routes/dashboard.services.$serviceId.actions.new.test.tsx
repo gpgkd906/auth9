@@ -2,7 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import NewActionPage, { loader, action } from "~/routes/dashboard.tenants.$tenantId.actions.new";
+import NewActionPage, { loader, action } from "~/routes/dashboard.services.$serviceId.actions.new";
 import { ActionTrigger } from "@auth9/core";
 
 // Mock the session module
@@ -15,7 +15,7 @@ vi.mock("~/lib/auth9-client", () => ({
   getAuth9Client: vi.fn(() => ({
     actions: mockActionsApi,
   })),
-  withTenant: vi.fn(() => ({
+  withService: vi.fn(() => ({
     actions: mockActionsApi,
   })),
   getTriggers: vi.fn(() => Promise.resolve({ data: Object.values(ActionTrigger) })),
@@ -38,25 +38,25 @@ describe("New Action Page", () => {
 
   it("loader fetches available triggers", async () => {
     const response = await loader({
-      request: new Request("http://localhost/dashboard/tenants/tenant-1/actions/new"),
-      params: { tenantId: "tenant-1" },
+      request: new Request("http://localhost/dashboard/services/service-1/actions/new"),
+      params: { serviceId: "service-1" },
       context: {},
     });
 
     expect(response).toEqual({
-      tenantId: "tenant-1",
+      serviceId: "service-1",
       triggers: Object.values(ActionTrigger),
     });
   });
 
-  it("loader throws when tenantId is missing", async () => {
+  it("loader throws when serviceId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/tenants//actions/new"),
+        request: new Request("http://localhost/dashboard/services//actions/new"),
         params: {},
         context: {},
       })
-    ).rejects.toThrow("Tenant ID is required");
+    ).rejects.toThrow("Service ID is required");
   });
 
   // ============================================================================
@@ -66,16 +66,16 @@ describe("New Action Page", () => {
   it("renders new action page header", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("New Action")).toBeInTheDocument();
@@ -86,16 +86,16 @@ describe("New Action Page", () => {
   it("renders empty form with default values", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const nameInput = screen.getByLabelText(/name/i) as HTMLInputElement;
@@ -121,17 +121,17 @@ describe("New Action Page", () => {
   it("renders trigger dropdown with all options", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
     const user = userEvent.setup();
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/select a trigger/i)).toBeInTheDocument();
@@ -154,16 +154,16 @@ describe("New Action Page", () => {
   it("renders script template selector", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Script Templates")).toBeInTheDocument();
@@ -174,16 +174,16 @@ describe("New Action Page", () => {
   it("renders default script placeholder", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const scriptTextarea = screen.getByLabelText(/typescript code/i) as HTMLTextAreaElement;
@@ -198,16 +198,16 @@ describe("New Action Page", () => {
   it("renders template selector", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Script Templates")).toBeInTheDocument();
@@ -223,16 +223,16 @@ describe("New Action Page", () => {
   it("requires name field", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const nameInput = screen.getByLabelText(/name/i);
@@ -243,16 +243,16 @@ describe("New Action Page", () => {
   it("requires trigger selection", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const comboboxes = screen.getAllByRole("combobox");
@@ -264,16 +264,16 @@ describe("New Action Page", () => {
   it("requires script field", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const scriptTextarea = screen.getByLabelText(/typescript code/i);
@@ -284,16 +284,16 @@ describe("New Action Page", () => {
   it("validates timeout range (100-30000ms)", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const timeoutInput = screen.getByLabelText(/timeout/i);
@@ -305,16 +305,16 @@ describe("New Action Page", () => {
   it("validates execution order is non-negative", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/new",
+        path: "/dashboard/services/:serviceId/actions/new",
         Component: NewActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/new"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/new"]} />);
 
     await waitFor(() => {
       const orderInput = screen.getByLabelText(/execution order/i);
@@ -336,7 +336,7 @@ describe("New Action Page", () => {
       for (const [key, value] of Object.entries(data)) {
         formData.append(key, value);
       }
-      return new Request("http://localhost/dashboard/tenants/tenant-1/actions/new", {
+      return new Request("http://localhost/dashboard/services/service-1/actions/new", {
         method: "POST",
         body: formData,
       });
@@ -357,7 +357,7 @@ describe("New Action Page", () => {
 
       const response = await action({
         request,
-        params: { tenantId: "tenant-1" },
+        params: { serviceId: "service-1" },
         context: {},
       });
 
@@ -376,7 +376,7 @@ describe("New Action Page", () => {
       expect(response).toBeInstanceOf(Response);
       expect((response as Response).status).toBe(302);
       expect((response as Response).headers.get("Location")).toBe(
-        "/dashboard/tenants/tenant-1/actions/new-action-id"
+        "/dashboard/services/service-1/actions/new-action-id"
       );
     });
 
@@ -394,7 +394,7 @@ describe("New Action Page", () => {
 
       await action({
         request,
-        params: { tenantId: "tenant-1" },
+        params: { serviceId: "service-1" },
         context: {},
       });
 
@@ -418,7 +418,7 @@ describe("New Action Page", () => {
 
       await action({
         request,
-        params: { tenantId: "tenant-1" },
+        params: { serviceId: "service-1" },
         context: {},
       });
 
@@ -427,7 +427,7 @@ describe("New Action Page", () => {
       );
     });
 
-    it("returns error when tenantId is missing", async () => {
+    it("returns error when serviceId is missing", async () => {
       const request = createFormRequest({
         name: "Test",
         trigger_id: ActionTrigger.PostLogin,
@@ -444,7 +444,7 @@ describe("New Action Page", () => {
 
       expect(response).toBeInstanceOf(Response);
       const json = await (response as Response).json();
-      expect(json).toEqual({ error: "Tenant ID required" });
+      expect(json).toEqual({ error: "Service ID required" });
     });
 
     it("returns error when API call fails", async () => {
@@ -461,7 +461,7 @@ describe("New Action Page", () => {
 
       const response = await action({
         request,
-        params: { tenantId: "tenant-1" },
+        params: { serviceId: "service-1" },
         context: {},
       });
 

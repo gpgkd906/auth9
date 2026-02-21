@@ -1079,8 +1079,10 @@ export interface BrandingConfig {
 
 // Public Branding API (no authentication required)
 export const publicBrandingApi = {
-  get: async (): Promise<{ data: BrandingConfig }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/public/branding`);
+  get: async (clientId?: string): Promise<{ data: BrandingConfig }> => {
+    let url = `${API_BASE_URL}/api/v1/public/branding`;
+    if (clientId) url += `?client_id=${encodeURIComponent(clientId)}`;
+    const response = await fetch(url);
     return handleResponse(response);
   },
 };
@@ -1938,7 +1940,7 @@ export type ActionTrigger =
 
 export interface Action {
   id: string;
-  tenant_id: string;
+  service_id: string;
   name: string;
   description?: string;
   trigger_id: ActionTrigger;
@@ -1976,7 +1978,7 @@ export interface UpdateActionInput {
 export interface ActionExecution {
   id: string;
   action_id: string;
-  tenant_id: string;
+  service_id: string;
   trigger_id: ActionTrigger;
   user_id?: string;
   success: boolean;
@@ -1996,11 +1998,11 @@ export interface ActionStats {
 
 export const actionApi = {
   list: async (
-    tenantId: string,
+    serviceId: string,
     trigger?: ActionTrigger,
     accessToken?: string
   ): Promise<{ data: Action[] }> => {
-    let url = `${API_BASE_URL}/api/v1/tenants/${tenantId}/actions`;
+    let url = `${API_BASE_URL}/api/v1/services/${serviceId}/actions`;
     if (trigger) url += `?trigger_id=${trigger}`;
     const response = await fetch(url, {
       headers: getHeaders(accessToken),
@@ -2008,19 +2010,19 @@ export const actionApi = {
     return handleResponse(response);
   },
 
-  get: async (tenantId: string, actionId: string, accessToken?: string): Promise<{ data: Action }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/actions/${actionId}`, {
+  get: async (serviceId: string, actionId: string, accessToken?: string): Promise<{ data: Action }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/actions/${actionId}`, {
       headers: getHeaders(accessToken),
     });
     return handleResponse(response);
   },
 
   create: async (
-    tenantId: string,
+    serviceId: string,
     input: CreateActionInput,
     accessToken?: string
   ): Promise<{ data: Action }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/actions`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/actions`, {
       method: "POST",
       headers: getHeaders(accessToken),
       body: JSON.stringify(input),
@@ -2029,12 +2031,12 @@ export const actionApi = {
   },
 
   update: async (
-    tenantId: string,
+    serviceId: string,
     actionId: string,
     input: UpdateActionInput,
     accessToken?: string
   ): Promise<{ data: Action }> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/actions/${actionId}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/actions/${actionId}`, {
       method: "PATCH",
       headers: getHeaders(accessToken),
       body: JSON.stringify(input),
@@ -2042,8 +2044,8 @@ export const actionApi = {
     return handleResponse(response);
   },
 
-  delete: async (tenantId: string, actionId: string, accessToken?: string): Promise<void> => {
-    const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${tenantId}/actions/${actionId}`, {
+  delete: async (serviceId: string, actionId: string, accessToken?: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/actions/${actionId}`, {
       method: "DELETE",
       headers: getHeaders(accessToken),
     });
@@ -2054,13 +2056,13 @@ export const actionApi = {
   },
 
   logs: async (
-    tenantId: string,
+    serviceId: string,
     actionId?: string,
     success?: boolean,
     limit = 50,
     accessToken?: string
   ): Promise<{ data: ActionExecution[]; pagination: { page: number; per_page: number; total: number; total_pages: number } }> => {
-    let url = `${API_BASE_URL}/api/v1/tenants/${tenantId}/actions/logs?limit=${limit}`;
+    let url = `${API_BASE_URL}/api/v1/services/${serviceId}/actions/logs?limit=${limit}`;
     if (actionId) url += `&action_id=${actionId}`;
     if (success !== undefined) url += `&success=${success}`;
     const response = await fetch(url, {
@@ -2070,12 +2072,12 @@ export const actionApi = {
   },
 
   stats: async (
-    tenantId: string,
+    serviceId: string,
     actionId: string,
     accessToken?: string
   ): Promise<{ data: ActionStats }> => {
     const response = await fetch(
-      `${API_BASE_URL}/api/v1/tenants/${tenantId}/actions/${actionId}/stats`,
+      `${API_BASE_URL}/api/v1/services/${serviceId}/actions/${actionId}/stats`,
       {
         headers: getHeaders(accessToken),
       }
@@ -2088,5 +2090,43 @@ export const actionApi = {
       headers: getHeaders(accessToken),
     });
     return handleResponse(response);
+  },
+};
+
+// Service Branding API
+export interface ServiceBranding {
+  id: string;
+  service_id: string;
+  config: BrandingConfig;
+  created_at: string;
+  updated_at: string;
+}
+
+export const serviceBrandingApi = {
+  get: async (serviceId: string, accessToken?: string): Promise<{ data: BrandingConfig }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/branding`, {
+      headers: getHeaders(accessToken),
+    });
+    return handleResponse(response);
+  },
+
+  update: async (serviceId: string, config: BrandingConfig, accessToken?: string): Promise<{ data: ServiceBranding }> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/branding`, {
+      method: "PUT",
+      headers: getHeaders(accessToken),
+      body: JSON.stringify({ config }),
+    });
+    return handleResponse(response);
+  },
+
+  delete: async (serviceId: string, accessToken?: string): Promise<void> => {
+    const response = await fetch(`${API_BASE_URL}/api/v1/services/${serviceId}/branding`, {
+      method: "DELETE",
+      headers: getHeaders(accessToken),
+    });
+    if (!response.ok) {
+      const error: ApiError = await response.json();
+      throw new Error(error.message);
+    }
   },
 };
