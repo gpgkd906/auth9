@@ -59,12 +59,12 @@ for line in sys.stdin:
         results[k] = v
 data = {
     'agent_mode': sys.argv[1],
-    'include_uiux': sys.argv[2] == 'true',
+    'only_mode': sys.argv[2],
     'results': results
 }
 with open(sys.argv[3], 'w') as f:
     json.dump(data, f, indent=2, ensure_ascii=False)
-" "$AGENT_MODE" "$INCLUDE_UIUX" "$PROGRESS_FILE" < <(
+" "$AGENT_MODE" "$ONLY_MODE" "$PROGRESS_FILE" < <(
         for key in "${!completed_results[@]}"; do
             echo "${key}=${completed_results[$key]}"
         done
@@ -81,23 +81,23 @@ import json, sys
 with open(sys.argv[1]) as f:
     data = json.load(f)
 print(data.get('agent_mode', ''))
-print(str(data.get('include_uiux', False)).lower())
+print(data.get('only_mode', ''))
 for file, status in data.get('results', {}).items():
     print('RESULT:' + file + '=' + status)
 " "$PROGRESS_FILE" 2>/dev/null) || return 1
 
-    local saved_mode saved_uiux
+    local saved_mode saved_only_mode
     saved_mode=$(sed -n '1p' <<< "$progress")
-    saved_uiux=$(sed -n '2p' <<< "$progress")
+    saved_only_mode=$(sed -n '2p' <<< "$progress")
 
     if [[ "$saved_mode" != "$AGENT_MODE" ]]; then
         echo -e "${YELLOW}Note: switching agent from '${saved_mode}' to '${AGENT_MODE}' for remaining files.${NC}"
     fi
 
-    # Inherit include_uiux from progress file unless explicitly overridden by CLI
-    if [[ "$INCLUDE_UIUX_EXPLICIT" != true && "$saved_uiux" == "true" ]]; then
-        INCLUDE_UIUX=true
-        echo -e "${YELLOW}Note: restored include_uiux=true from progress file.${NC}"
+    # Inherit only_mode from progress file unless explicitly overridden by CLI
+    if [[ -z "$ONLY_MODE" && -n "$saved_only_mode" ]]; then
+        ONLY_MODE="$saved_only_mode"
+        echo -e "${YELLOW}Note: restored only_mode='${ONLY_MODE}' from progress file.${NC}"
     fi
 
     while IFS= read -r line; do
@@ -143,22 +143,22 @@ if [[ "${1:-}" == "--orchestrator-cli" ]]; then
 fi
 
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    echo "Usage: $0 [--orchestrator] [--orchestrator-cli] [--agent opencode|gemini] [--uiux] [--resume] [cli-options]"
+    echo "Usage: $0 [--orchestrator] [--orchestrator-cli] [--agent <mode>] [--only-security|--only-uiux] [--resume] [cli-options]"
     echo ""
-    echo "Default: run QA docs via minimax agent."
+    echo "Default: run all QA docs (docs/qa/, docs/security/, docs/uiux/) via minimax agent."
     echo "  --orchestrator       Launch tools/qa-orchestrator (Tauri UI workflow)"
     echo "  --orchestrator-cli   Run tools/qa-orchestrator in CLI automation mode"
     echo "  --agent <mode>       Agent mode: 'minimax' (default), 'opencode', 'gemini', 'kimi',"
     echo "                       'big-pickle', 'glm-air', 'glm-5', 'gpt-oss', 'kilo-minimax', 'qwen3-coder'"
-    echo "  --uiux               Include UI/UX test documents (docs/uiux/)"
+    echo "  --only-security      Run only security test documents (docs/security/)"
+    echo "  --only-uiux          Run only UI/UX test documents (docs/uiux/)"
     echo "  --resume             Resume from last interrupted run"
     exit 0
 fi
 
 # Parse flags
 AGENT_MODE="minimax"
-INCLUDE_UIUX=false
-INCLUDE_UIUX_EXPLICIT=false
+ONLY_MODE=""  # empty = all, 'security' = only security, 'uiux' = only uiux
 RESUME=false
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -166,9 +166,12 @@ while [[ $# -gt 0 ]]; do
             AGENT_MODE="${2:-minimax}"
             shift 2
             ;;
-        --uiux)
-            INCLUDE_UIUX=true
-            INCLUDE_UIUX_EXPLICIT=true
+        --only-security)
+            ONLY_MODE="security"
+            shift
+            ;;
+        --only-uiux)
+            ONLY_MODE="uiux"
             shift
             ;;
         --resume)
@@ -199,9 +202,11 @@ if [[ -n "${TIMEOUT_CMD:-}" ]]; then
 else
     echo -e "${YELLOW}Timeout: disabled (install coreutils for timeout support)${NC}"
 fi
-if [[ "$INCLUDE_UIUX" == true ]]; then
-    echo -e "${YELLOW}UI/UX tests: included${NC}"
-fi
+case "$ONLY_MODE" in
+    security) echo -e "${YELLOW}Scope: security tests only (docs/security/)${NC}" ;;
+    uiux)     echo -e "${YELLOW}Scope: UI/UX tests only (docs/uiux/)${NC}" ;;
+    *)        echo -e "${YELLOW}Scope: all tests (docs/qa/, docs/security/, docs/uiux/)${NC}" ;;
+esac
 if [[ "$RESUME" == true ]]; then
     echo -e "${YELLOW}Resume: enabled${NC}"
 fi
@@ -212,15 +217,25 @@ echo -e "${CYAN}  Auth9 QA Test Runner${NC}"
 echo -e "${CYAN}========================================${NC}"
 echo ""
 
-# Collect all .md files under docs/qa/ and docs/security/, excluding README.md
-# Optionally include docs/uiux/ when --uiux is specified
+# Collect .md files based on ONLY_MODE, excluding README.md
+# Default (empty): docs/qa/ + docs/security/ + docs/uiux/
+# --only-security: docs/security/ only
+# --only-uiux: docs/uiux/ only
 mapfile -t qa_files < <(
     {
-        find "$QA_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
-        find "$SECURITY_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
-        if [[ "$INCLUDE_UIUX" == true ]]; then
-            find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
-        fi
+        case "$ONLY_MODE" in
+            security)
+                find "$SECURITY_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                ;;
+            uiux)
+                find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                ;;
+            *)
+                find "$QA_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                find "$SECURITY_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                ;;
+        esac
     } | sort
 )
 

@@ -53,10 +53,15 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/users/me | jq .
 # 不应包含: password, password_hash, keycloak_id (如果敏感)
 
-# 服务客户端检查
+# 服务客户端检查 - 常规列表端点
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/services/{id}/clients | jq .
 # 不应包含: client_secret (仅创建时返回)
+#
+# 注意: GET /api/v1/services/{id}/integration 是管理员专用的集成信息端点，
+# 会返回 client_secret 用于应用配置（类似 Auth0/AWS 控制台的行为）。
+# 该端点需要管理员权限，UI 默认掩码显示并提供 Reveal 切换，属于设计行为。
+# 测试应验证: (1) 非管理员无法访问该端点 (2) 常规 GET /services/{id} 不泄露 secret
 
 # 系统配置检查
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
@@ -312,7 +317,7 @@ curl http://localhost:8080/nonexistent
 | 数据类型 | 存储位置 | 处理要求 |
 |---------|---------|---------|
 | 用户密码 | Keycloak | 仅哈希存储，永不返回 |
-| Client Secret | services 表 | 哈希存储，创建时返回一次 |
+| Client Secret | services 表 | 哈希存储，创建时返回一次；管理员可通过 Integration 端点查看（需权限） |
 | API Key | api_keys 表 | 哈希存储，创建时返回一次 |
 | JWT Secret | 环境变量 | 永不记录或返回 |
 | SMTP 密码 | system_settings | 加密存储，脱敏显示 |

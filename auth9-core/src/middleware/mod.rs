@@ -7,6 +7,7 @@
 //! - Authentication enforcement middleware
 
 pub mod auth;
+pub mod client_ip;
 pub mod error_response;
 pub mod metrics;
 pub mod path_guard;
@@ -16,6 +17,7 @@ pub mod security_headers;
 pub mod trace;
 
 pub use auth::{AuthUser, OptionalAuth, RequireAuth};
+pub use client_ip::inject_client_ip;
 pub use error_response::normalize_error_response;
 pub use path_guard::path_guard_middleware;
 pub use rate_limit::{RateLimitLayer, RateLimitState};

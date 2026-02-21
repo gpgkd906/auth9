@@ -62,6 +62,11 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   const activeTenant = tenants.find((t) => t.tenant_id === activeTenantId);
 
+  // Block access if active tenant is pending — redirect to onboard pending page
+  if (activeTenant?.tenant?.status === "pending") {
+    throw redirect("/onboard/pending");
+  }
+
   const data = { currentUser, tenants, activeTenant, activeTenantId };
 
   if (responseHeaders.length > 0) {

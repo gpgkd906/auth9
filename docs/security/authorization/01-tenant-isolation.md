@@ -24,11 +24,31 @@ Auth9 是多租户系统，核心隔离要求：
 - `services` - 租户下的服务
 - `roles` / `permissions` - 租户下的 RBAC
 
+> **⚠️ 关键测试要求：平台管理员绕过**
+>
+> `admin@auth9.local` 是默认平台管理员（由 `PLATFORM_ADMIN_EMAILS` 环境变量配置）。
+> **平台管理员在策略引擎中拥有全局绕过权限**，可以跨租户访问所有数据、创建租户、访问系统设置等。
+> 这是设计行为，不是安全漏洞。
+>
+> **测试租户隔离时，必须使用非平台管理员账号。** 使用 `admin@auth9.local` 测试会导致所有隔离检查被绕过，产生误报。
+
+---
+
+## 故障排除
+
+| 现象 | 原因 | 解决方法 |
+|------|------|----------|
+| 所有跨租户请求返回 200 而非 403 | 使用了平台管理员账号（如 `admin@auth9.local`） | 创建非平台管理员的测试用户，用该用户的 token 测试 |
+| Token 邮箱非管理员，但仍绕过隔离 | Token 的 `sub`（user_id）复用了管理员用户的 ID，DB 查询发现该 user_id 在 auth9-platform 租户中有 admin 角色 | **Token 的 user_id 也不能使用管理员用户的 ID**。使用随机 UUID 或非管理员用户的真实 ID |
+| Token 无 tenant_id 却能访问租户数据 | Identity Token 被平台管理员绕过识别 | 确认测试账号不在 `PLATFORM_ADMIN_EMAILS` 列表中 |
+| 租户管理员能执行平台操作 | 该用户同时是平台管理员 | 检查 `PLATFORM_ADMIN_EMAILS` 配置，确保测试用户不在其中 |
+
 ---
 
 ## 场景 1：跨租户数据访问 (IDOR)
 
 ### 前置条件
+- **用户 A 必须是非平台管理员**（邮箱不在 `PLATFORM_ADMIN_EMAILS` 中，默认不能是 `admin@auth9.local`）
 - 用户 A 属于租户 1
 - 用户 A 不属于租户 2
 - 租户 2 存在数据
@@ -81,7 +101,7 @@ ORDER BY created_at DESC LIMIT 10;
 ## 场景 2：批量操作租户泄露
 
 ### 前置条件
-- 具有列表查询权限的用户
+- **具有列表查询权限的非平台管理员用户**（邮箱不在 `PLATFORM_ADMIN_EMAILS` 中）
 
 ### 攻击目标
 验证列表 API 是否泄露其他租户数据
@@ -133,6 +153,7 @@ WHERE user_id NOT IN (
 ## 场景 3：关联资源跨租户访问
 
 ### 前置条件
+- **用户 A 必须是非平台管理员**（邮箱不在 `PLATFORM_ADMIN_EMAILS` 中）
 - 用户 A 属于租户 1
 - 租户 2 下有服务、角色等资源
 
@@ -181,8 +202,8 @@ curl -X POST -H "Authorization: Bearer $TOKEN_A" \
 ## 场景 4：管理员权限边界测试
 
 ### 前置条件
-- 租户 1 的管理员
-- 平台管理员
+- **租户 1 的管理员（非平台管理员）**（邮箱不在 `PLATFORM_ADMIN_EMAILS` 中）
+- 平台管理员（如 `admin@auth9.local`，仅用于对比验证）
 
 ### 攻击目标
 验证不同管理员的权限边界

@@ -311,7 +311,7 @@ impl AbacRepository for AbacRepositoryImpl {
     async fn fetch_published_policy_json(&self, tenant_id: StringUuid) -> Result<Option<String>> {
         sqlx::query_scalar(
             r#"
-            SELECT psv.policy_json
+            SELECT CAST(psv.policy_json AS CHAR) as policy_json
             FROM abac_policy_sets ps
             JOIN abac_policy_set_versions psv ON psv.id = ps.published_version_id
             WHERE ps.tenant_id = ?

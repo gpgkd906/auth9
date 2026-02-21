@@ -17,13 +17,26 @@
 ### 测试操作流程
 测试以下 URL：
 1. 有效 HTTPS：`https://api.example.com/webhook` ✓
-2. 有效 localhost：`http://localhost:3000/webhook` ✓
-3. 无效 HTTP（非本地）：`http://api.example.com/webhook` ✗
+2. **Localhost / 回环地址**：`http://localhost:3000/webhook` ✗（SSRF 防护，`internal_ip_blocked`）
+3. 无效 HTTP（非本地）：`http://api.example.com/webhook` ✗（`http_not_allowed`，要求 HTTPS）
 4. 无协议：`api.example.com/webhook` ✗
-5. 内网 IP：`http://192.168.1.1/webhook` ✗（视安全策略）
+5. 内网 IP：`http://192.168.1.1/webhook` ✗（`internal_ip_blocked`）
+6. 回环 IPv6：`http://[::1]/webhook` ✗（`internal_ip_blocked`）
+7. 云元数据端点：`http://169.254.169.254/latest/meta-data` ✗（`ssrf_blocked`）
+
+> **注意**：所有 localhost、127.0.0.1、::1、0.0.0.0 及内网 IP 均被严格 SSRF 防护拦截。Webhook URL 仅允许外部 HTTPS 地址。如需本地测试 Webhook 接收，请使用 `https://webhook.site` 等外部工具或配置反向代理。
 
 ### 预期结果
-- 非法 URL 被拒绝
+- 仅 HTTPS 外部 URL 被接受
+- Localhost / 内网 IP / 云元数据端点 均被拒绝
+
+### 常见失败排查
+
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| `internal_ip_blocked` 错误 | URL 包含 localhost / 127.0.0.1 / 内网 IP | 改用外部 HTTPS URL（如 `https://webhook.site/<uuid>`） |
+| `http_not_allowed` 错误 | 使用了 HTTP 协议访问外部地址 | 改用 HTTPS |
+| `ssrf_blocked` 错误 | URL 指向云元数据端点（169.254.169.254） | 使用正常的外部域名 |
 
 ---
 

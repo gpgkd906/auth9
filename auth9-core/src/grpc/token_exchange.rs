@@ -9,10 +9,71 @@ use crate::grpc::proto::{
 use crate::jwt::JwtManager;
 use crate::repository::audit::{AuditRepository, CreateAuditLogInput};
 use crate::repository::{RbacRepository, ServiceRepository, TenantRepository, UserRepository};
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+use std::time::{SystemTime, UNIX_EPOCH};
 use tonic::{Request, Response, Status};
 use tracing::debug;
 use uuid::Uuid;
+
+/// In-memory sliding window rate limiter for gRPC token exchange.
+#[derive(Clone)]
+pub struct GrpcRateLimiter {
+    /// Map of key -> list of request timestamps (epoch seconds)
+    buckets: Arc<Mutex<HashMap<String, Vec<u64>>>>,
+    /// Maximum requests per window
+    max_requests: u64,
+    /// Window size in seconds
+    window_secs: u64,
+}
+
+impl GrpcRateLimiter {
+    pub fn new(max_requests: u64, window_secs: u64) -> Self {
+        Self {
+            buckets: Arc::new(Mutex::new(HashMap::new())),
+            max_requests,
+            window_secs,
+        }
+    }
+
+    /// Check and record a request. Returns `Ok(())` if allowed, `Err(Status)` if rate-limited.
+    pub fn check(&self, key: &str) -> Result<(), Status> {
+        if self.max_requests == 0 {
+            return Ok(()); // disabled
+        }
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
+        let cutoff = now.saturating_sub(self.window_secs);
+
+        let mut buckets = self.buckets.lock().unwrap();
+        let timestamps = buckets.entry(key.to_string()).or_default();
+
+        // Evict expired entries
+        timestamps.retain(|&ts| ts > cutoff);
+
+        if timestamps.len() as u64 >= self.max_requests {
+            metrics::counter!("auth9_grpc_rate_limit_exceeded_total", "method" => "exchange_token")
+                .increment(1);
+            return Err(Status::resource_exhausted(format!(
+                "Rate limit exceeded: max {} requests per {} seconds",
+                self.max_requests, self.window_secs
+            )));
+        }
+        timestamps.push(now);
+
+        // Periodic cleanup to avoid unbounded growth
+        if buckets.len() > 10_000 {
+            buckets.retain(|_, v| {
+                v.retain(|&ts| ts > cutoff);
+                !v.is_empty()
+            });
+        }
+
+        Ok(())
+    }
+}
 
 /// Trait for cache operations needed by TokenExchangeService
 pub trait TokenExchangeCache: Send + Sync {
@@ -128,6 +189,7 @@ where
     rbac_repo: Arc<R>,
     tenant_repo: Option<Arc<dyn TenantRepository>>,
     audit_repo: Option<Arc<dyn AuditRepository>>,
+    rate_limiter: Option<GrpcRateLimiter>,
     is_production: bool,
 }
 
@@ -154,6 +216,7 @@ where
             rbac_repo,
             tenant_repo: None,
             audit_repo: None,
+            rate_limiter: None,
             is_production,
         }
     }
@@ -175,12 +238,18 @@ where
             rbac_repo,
             tenant_repo: Some(tenant_repo),
             audit_repo: None,
+            rate_limiter: None,
             is_production,
         }
     }
 
     pub fn with_audit_repo(mut self, audit_repo: Arc<dyn AuditRepository>) -> Self {
         self.audit_repo = Some(audit_repo);
+        self
+    }
+
+    pub fn with_rate_limiter(mut self, rate_limiter: GrpcRateLimiter) -> Self {
+        self.rate_limiter = Some(rate_limiter);
         self
     }
 
@@ -236,6 +305,12 @@ where
                     .and_then(|v| v.to_str().ok())
                     .map(|s| s.trim().to_string())
             });
+
+        // Rate limit check (by client IP)
+        if let Some(ref rate_limiter) = self.rate_limiter {
+            let key = ip_address.as_deref().unwrap_or("unknown");
+            rate_limiter.check(key)?;
+        }
 
         let req = request.into_inner();
         let requested_tenant = req.tenant_id.clone();
@@ -438,16 +513,17 @@ where
             }
         }
 
-        // Create tenant access token
+        // Create tenant access token (propagate session_id for blacklist support)
         let access_token = self
             .jwt_manager
-            .create_tenant_access_token(
+            .create_tenant_access_token_with_session(
                 Uuid::from(user_id),
                 &claims.email,
                 Uuid::from(tenant_id),
                 &client.client_id,
                 roles,
                 user_roles.permissions,
+                claims.sid.clone(),
             )
             .map_err(|e| Status::internal(format!("Failed to create access token: {}", e)))?;
 
@@ -573,6 +649,21 @@ where
                 }
             }
         };
+
+        // Verify user is a member of the target tenant (security check)
+        match self
+            .rbac_repo
+            .find_tenant_user_id(user_id, tenant_id)
+            .await
+            .map_err(|e| Status::internal(format!("Failed to check tenant membership: {}", e)))?
+        {
+            Some(_) => {} // User is member, proceed
+            None => {
+                return Err(Status::permission_denied(
+                    "User is not a member of this tenant",
+                ));
+            }
+        }
 
         let (user_roles, role_records) = if req.service_id.is_empty() {
             let user_roles = match self
@@ -1048,5 +1139,43 @@ mod tests {
         };
 
         assert!(Uuid::parse_str(&request.tenant_id).is_ok());
+    }
+
+    #[test]
+    fn test_grpc_rate_limiter_allows_within_limit() {
+        let limiter = GrpcRateLimiter::new(5, 60);
+        for _ in 0..5 {
+            assert!(limiter.check("test-ip").is_ok());
+        }
+    }
+
+    #[test]
+    fn test_grpc_rate_limiter_blocks_over_limit() {
+        let limiter = GrpcRateLimiter::new(3, 60);
+        assert!(limiter.check("test-ip").is_ok());
+        assert!(limiter.check("test-ip").is_ok());
+        assert!(limiter.check("test-ip").is_ok());
+        let err = limiter.check("test-ip").unwrap_err();
+        assert_eq!(err.code(), tonic::Code::ResourceExhausted);
+    }
+
+    #[test]
+    fn test_grpc_rate_limiter_isolates_keys() {
+        let limiter = GrpcRateLimiter::new(1, 60);
+        assert!(limiter.check("ip-a").is_ok());
+        assert!(limiter.check("ip-b").is_ok());
+        // ip-a is now at limit
+        assert!(limiter.check("ip-a").is_err());
+        // ip-b is also at limit
+        assert!(limiter.check("ip-b").is_err());
+    }
+
+    #[test]
+    fn test_grpc_rate_limiter_zero_disables() {
+        let limiter = GrpcRateLimiter::new(0, 60);
+        // Zero max_requests means disabled
+        for _ in 0..100 {
+            assert!(limiter.check("test-ip").is_ok());
+        }
     }
 }

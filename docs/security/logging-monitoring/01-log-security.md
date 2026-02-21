@@ -111,6 +111,10 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/audit?resource_type=user&limit=5"
 # 预期: 包含 user.created 记录，含 actor_id, resource_id, ip_address
+# 注意: ip_address 通过以下优先级获取:
+#   1. X-Forwarded-For 头（反向代理场景）
+#   2. X-Real-IP 头（反向代理场景）
+#   3. TCP 连接的 socket 地址（直连场景，由 inject_client_ip 中间件自动注入）
 
 # 尝试删除审计日志（不应存在此端点）
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \

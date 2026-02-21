@@ -42,6 +42,9 @@ pub struct IdentityClaims {
 pub struct TenantAccessClaims {
     /// Subject (user ID)
     pub sub: String,
+    /// Session ID (for token blacklist after logout)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sid: Option<String>,
     /// Email
     pub email: String,
     /// Issuer
@@ -221,7 +224,8 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-        let header = Header::new(self.algorithm);
+        let mut header = Header::new(self.algorithm);
+        header.kid = Some("auth9-current".to_string());
         encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
@@ -235,11 +239,33 @@ impl JwtManager {
         roles: Vec<String>,
         permissions: Vec<String>,
     ) -> Result<String> {
+        self.create_tenant_access_token_with_session(
+            user_id,
+            email,
+            tenant_id,
+            service_client_id,
+            roles,
+            permissions,
+            None,
+        )
+    }
+
+    pub fn create_tenant_access_token_with_session(
+        &self,
+        user_id: Uuid,
+        email: &str,
+        tenant_id: Uuid,
+        service_client_id: &str,
+        roles: Vec<String>,
+        permissions: Vec<String>,
+        session_id: Option<String>,
+    ) -> Result<String> {
         let now = Utc::now();
         let exp = now + Duration::seconds(self.config.access_token_ttl_secs);
 
         let claims = TenantAccessClaims {
             sub: user_id.to_string(),
+            sid: session_id,
             email: email.to_string(),
             iss: self.config.issuer.clone(),
             aud: service_client_id.to_string(),
@@ -250,7 +276,8 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-        let header = Header::new(self.algorithm);
+        let mut header = Header::new(self.algorithm);
+        header.kid = Some("auth9-current".to_string());
         encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
@@ -272,7 +299,8 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-        let header = Header::new(self.algorithm);
+        let mut header = Header::new(self.algorithm);
+        header.kid = Some("auth9-current".to_string());
         encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
@@ -296,7 +324,8 @@ impl JwtManager {
             iat: now.timestamp(),
             exp: exp.timestamp(),
         };
-        let header = Header::new(self.algorithm);
+        let mut header = Header::new(self.algorithm);
+        header.kid = Some("auth9-current".to_string());
         encode(&header, &claims, &self.encoding_key).map_err(|e| AppError::Internal(e.into()))
     }
 
@@ -634,6 +663,7 @@ mod tests {
     fn test_tenant_access_claims_serialization() {
         let claims = TenantAccessClaims {
             sub: "user-456".to_string(),
+            sid: None,
             email: "tenant@example.com".to_string(),
             iss: "https://auth9.test".to_string(),
             aud: "my-app".to_string(),
@@ -650,6 +680,40 @@ mod tests {
         assert!(json.contains("\"roles\":[\"admin\",\"user\"]"));
         assert!(json.contains("\"permissions\":[\"read\",\"write\"]"));
         assert!(json.contains("\"token_type\":\"access\""));
+        // sid=None should not appear in serialized JSON
+        assert!(!json.contains("\"sid\""));
+    }
+
+    #[test]
+    fn test_tenant_access_claims_with_session_id() {
+        let claims = TenantAccessClaims {
+            sub: "user-456".to_string(),
+            sid: Some("session-abc".to_string()),
+            email: "tenant@example.com".to_string(),
+            iss: "https://auth9.test".to_string(),
+            aud: "my-app".to_string(),
+            token_type: "access".to_string(),
+            tenant_id: "tenant-789".to_string(),
+            roles: vec!["admin".to_string()],
+            permissions: vec![],
+            iat: 1000000,
+            exp: 1003600,
+        };
+
+        let json = serde_json::to_string(&claims).unwrap();
+        assert!(json.contains("\"sid\":\"session-abc\""));
+
+        // Verify round-trip deserialization
+        let decoded: TenantAccessClaims = serde_json::from_str(&json).unwrap();
+        assert_eq!(decoded.sid, Some("session-abc".to_string()));
+    }
+
+    #[test]
+    fn test_tenant_access_claims_without_session_id() {
+        // Token without sid (e.g., from old tokens before this fix)
+        let json = r#"{"sub":"user-1","email":"a@b.com","iss":"auth9","aud":"svc","token_type":"access","tenant_id":"t-1","roles":[],"permissions":[],"iat":0,"exp":9999999999}"#;
+        let claims: TenantAccessClaims = serde_json::from_str(json).unwrap();
+        assert_eq!(claims.sid, None);
     }
 
     #[test]

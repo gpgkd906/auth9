@@ -21,6 +21,10 @@ const ttl = 3600; // 1 hour
 // Test data
 const DEFAULT_TENANT_ID = "73fa0f3b-ee55-44a1-8fde-787b7a925107"; // Demo Organization (may differ per environment)
 const DEFAULT_USER_ID = "47116b28-b60b-4b73-a9d0-baace9245cf0";
+// Non-admin user ID for identity-user/tenant-access tokens. Must NOT match any real
+// admin user in the DB, otherwise is_platform_admin_with_db() will grant platform
+// admin privileges via the auth9-platform tenant role check, bypassing all isolation.
+const NON_ADMIN_USER_ID = "00000000-0000-0000-0000-000000000099";
 const SERVICE_ID = "00000000-0000-0000-0000-000000000001"; // Valid UUID for testing
 
 function parseArgs(argv) {
@@ -54,9 +58,9 @@ function generateToken(type, { tenantId, userId }) {
 
         case 'identity-user':
             // Regular user Identity Token (NOT a platform admin)
-            // Use a valid UUID format (reuse admin user ID but with non-admin email)
+            // Uses NON_ADMIN_USER_ID to avoid DB-based platform admin bypass
             payload = {
-                sub: ADMIN_USER_ID,
+                sub: userId || NON_ADMIN_USER_ID,
                 email: "regular-user@example.com",
                 name: "Regular User",
                 iss: issuer,
@@ -68,9 +72,9 @@ function generateToken(type, { tenantId, userId }) {
 
         case 'tenant-access':
             // Tenant Access Token (for tenant member, not owner)
-            // Use a valid UUID format
+            // Uses NON_ADMIN_USER_ID to avoid DB-based platform admin bypass
             payload = {
-                sub: ADMIN_USER_ID,
+                sub: userId || NON_ADMIN_USER_ID,
                 email: "regular-user@example.com",
                 iss: issuer,
                 aud: "test-service-client-id", // Service client_id as audience
