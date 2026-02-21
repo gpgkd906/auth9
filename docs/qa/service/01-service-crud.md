@@ -23,29 +23,31 @@
 
 ---
 
-## 场景 1：创建服务
+## 场景 1：服务管理入口可见性与创建服务
 
 ### 初始状态
 - 管理员已登录
 - 不存在同名服务
 
 ### 目的
-验证服务创建功能，包括 Keycloak OIDC 客户端同步
+验证用户可从可见导航入口进入服务模块，并完成服务创建与 Keycloak OIDC 客户端同步
 
 ### 测试操作流程
-1. 进入「服务管理」页面
-2. 点击「注册服务」
-3. 填写：
+1. 在管理后台左侧导航确认存在「服务管理」菜单入口
+2. 点击「服务管理」进入列表页
+3. 点击「注册服务」
+4. 填写：
    - 服务名称：`My Web App`
    - Client ID：`my-web-app`
    - Base URL：`https://myapp.example.com`
    - Redirect URIs：`https://myapp.example.com/callback`
    - Logout URIs：`https://myapp.example.com/logout`
-4. 点击「创建」
+5. 点击「创建」
 
 ### 预期结果
 - 显示创建成功
 - 显示初始 Client Secret（仅此一次）
+- 侧边栏入口可见且可点击进入
 - 服务出现在列表中
 
 ### 预期数据状态
@@ -190,8 +192,11 @@ FROM services s WHERE s.id = '{service_id}';
 验证页面正确检查认证状态，未登录或 session 失效时重定向到登录页
 
 ### 测试操作流程
-1. 关闭浏览器
-2. 重新打开浏览器，访问本页面对应的 URL
+1. 通过以下任一方式构造未认证状态：
+   - 使用浏览器无痕/隐私窗口访问
+   - 手动清除 auth9_session cookie
+   - 在当前会话点击「Sign out」退出登录
+2. 访问本页面对应的 URL
 
 ### 预期结果
 - 页面自动重定向到 `/login`

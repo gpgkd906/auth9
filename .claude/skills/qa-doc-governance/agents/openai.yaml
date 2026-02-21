@@ -1,0 +1,4 @@
+interface:
+  display_name: "QA Doc Governance"
+  short_description: "Periodic QA docs governance, drift checks, and remediation."
+  default_prompt: "Use $qa-doc-governance to audit and remediate docs/qa drift, then sync README/manifest and return a governance report."

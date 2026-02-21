@@ -13,7 +13,7 @@
 
 ---
 
-## 场景 1：侧边栏显示真实用户信息
+## 场景 1：Account 入口可见性与侧边栏显示真实用户信息
 
 ### 初始状态
 - 用户已登录（display_name 为 `Jane Smith`，邮箱为 `jane@example.com`）
@@ -43,7 +43,7 @@
 验证 Account 区域的布局和子导航功能
 
 ### 测试操作流程
-1. 点击侧边栏底部用户卡片，或直接访问 `/dashboard/account`
+1. 点击侧边栏底部用户卡片进入 `/dashboard/account`
 2. 确认页面结构：
    - 页面标题 "Account"
    - 副标题 "Manage your personal account settings"

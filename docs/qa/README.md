@@ -1,8 +1,21 @@
 # Auth9 QA 测试用例文档
 
-本目录包含 Auth9 系统的手动测试用例，每个文档不超过 5 个场景，便于多名 QA 工程师并行测试。
+本目录包含 Auth9 系统的手动测试用例。文档正在向“每文档不超过 5 个场景”的规范收敛，便于多名 QA 工程师并行测试。
 
 ## 测试用例索引
+
+## 文档治理
+
+- 规范文件: [docs/qa/_standards.md](./_standards.md)
+- 清单真值: [docs/qa/_manifest.yaml](./_manifest.yaml)
+- 校验脚本: `./scripts/qa-doc-lint.sh`
+- 周期执行入口: `./scripts/run-weekly-qa-governance.sh`
+
+推荐周期任务：
+
+1. 每周执行一次 `./scripts/run-weekly-qa-governance.sh`
+2. 版本发布前强制执行一次 `./scripts/run-weekly-qa-governance.sh`
+3. 仅看审计不阻断时可用 `./scripts/run-weekly-qa-governance.sh --no-lint`
 
 ### 租户管理 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -68,7 +81,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (9 个文档, 43 个场景)
+### 认证流程 (12 个文档, 55 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 5 |
@@ -76,10 +89,13 @@
 | [auth/03-password.md](./auth/03-password.md) | 密码管理（**Sign in with password** 路径进入） | 5 |
 | [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点（**Sign in with password** 路径进入 Keycloak 页面） | 5 |
 | [auth/05-boundary.md](./auth/05-boundary.md) | 边界测试 | 3 |
+| [auth/06-client-credentials.md](./auth/06-client-credentials.md) | Client Credentials、服务对服务授权 | 5 |
+| [auth/07-public-endpoints.md](./auth/07-public-endpoints.md) | Public 端点访问控制与最小暴露 | 5 |
 | [auth/08-demo-auth-flow.md](./auth/08-demo-auth-flow.md) | Auth9 Demo 完整认证流程回归（等价 **Sign in with password** 路径） | 5 |
-| [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与登录路由（**Continue with Enterprise SSO** 路径） | 5 |
+| [auth/09-enterprise-sso-discovery.md](./auth/09-enterprise-sso-discovery.md) | 企业 SSO 域名发现与登录路由（API 主路径） | 5 |
 | [auth/10-b2b-onboarding-flow.md](./auth/10-b2b-onboarding-flow.md) | B2B 首次入驻流程（三种登录方式均可触发） | 5 |
 | [auth/11-tenant-selection-token-exchange.md](./auth/11-tenant-selection-token-exchange.md) | 登录后 tenant 选择、tenant token exchange、identity token 权限收敛、gRPC tenant token 使用 | 5 |
+| [auth/12-enterprise-sso-ui-regression.md](./auth/12-enterprise-sso-ui-regression.md) | 企业 SSO UI 入口可见性与异常回归（Portal `/login`） | 2 |
 
 ### 系统设置 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -113,15 +129,21 @@
 |------|------|--------|
 | [audit/01-audit-logs.md](./audit/01-audit-logs.md) | 审计日志查看、验证 | 5 |
 
-### Action (6 个文档, 35 个场景)
+### Action (12 个文档, 49 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [action/01-crud.md](./action/01-crud.md) | 创建、更新、删除、启用/禁用（Service 级别） | 5 |
-| [action/02-execution.md](./action/02-execution.md) | 脚本执行、V8 沙箱、上下文注入 | 5 |
-| [action/03-logs.md](./action/03-logs.md) | 执行日志、统计、查询 | 5 |
-| [action/04-security.md](./action/04-security.md) | 安全沙箱、超时、资源限制、Service 隔离 | 5 |
-| [action/05-api-sdk.md](./action/05-api-sdk.md) | REST API、TypeScript SDK 集成 | 10 |
+| [action/01-crud.md](./action/01-crud.md) | CRUD 基础（入口、创建、列表） | 4 |
+| [action/02-execution.md](./action/02-execution.md) | 执行基础（触发器、条件、失败、顺序） | 4 |
+| [action/03-logs.md](./action/03-logs.md) | 日志查询基础（列表/筛选/范围/用户/全局） | 5 |
+| [action/04-security.md](./action/04-security.md) | 安全基础（沙箱与无限循环） | 4 |
+| [action/05-api-sdk.md](./action/05-api-sdk.md) | API/SDK 基础（CRUD、筛选、批量、测试） | 5 |
 | [action/06-async-fetch.md](./action/06-async-fetch.md) | Async/Await、fetch()、setTimeout、安全限制 | 5 |
+| [action/07-crud-advanced.md](./action/07-crud-advanced.md) | CRUD 进阶（详情、更新、启停、删除） | 4 |
+| [action/08-execution-advanced.md](./action/08-execution-advanced.md) | 执行进阶（超时、禁用、上下文、Service 隔离） | 4 |
+| [action/09-logs-detail.md](./action/09-logs-detail.md) | 日志详情查看 | 1 |
+| [action/10-security-boundary.md](./action/10-security-boundary.md) | 安全边界（内存、隔离、注入） | 4 |
+| [action/11-security-attack-defense.md](./action/11-security-attack-defense.md) | 攻击防护（命令注入、提权、伪造、脚本注入） | 4 |
+| [action/12-api-sdk-advanced.md](./action/12-api-sdk-advanced.md) | API/SDK 进阶（日志、统计、错误、并发、AI Agent） | 5 |
 
 ### SDK (@auth9/core + @auth9/node) (6 个文档, 30 个场景)
 | 文档 | 描述 | 场景数 |
@@ -133,17 +155,26 @@
 | [sdk/05-express-middleware.md](./sdk/05-express-middleware.md) | Express 中间件、权限控制、角色控制、AuthInfo | 5 |
 | [sdk/06-middleware-testing.md](./sdk/06-middleware-testing.md) | Next.js/Fastify 中间件、Mock Token、构建输出 | 5 |
 
-### 集成测试 (8 个文档, 40 个场景)
+### 集成测试 (11 个文档, 54 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 5 |
+| [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 4 |
 | [integration/02-password-policy.md](./integration/02-password-policy.md) | 密码策略强制执行 | 5 |
+| [integration/03-rate-limiting.md](./integration/03-rate-limiting.md) | 限流策略与异常窗口验证 | 5 |
+| [integration/04-health-check.md](./integration/04-health-check.md) | 健康检查端点与依赖状态 | 5 |
+| [integration/05-keycloak-events.md](./integration/05-keycloak-events.md) | Keycloak 事件兼容入口与映射 | 5 |
 | [integration/11-keycloak26-event-stream.md](./integration/11-keycloak26-event-stream.md) | Keycloak 26 升级、Redis Stream 事件接入、Webhook 兼容回归 | 5 |
 | [integration/06-init-seed-data.md](./integration/06-init-seed-data.md) | Init 初始种子数据、幂等性、Keycloak 重置恢复 | 5 |
 | [integration/07-observability-metrics.md](./integration/07-observability-metrics.md) | Prometheus /metrics 端点、HTTP 指标、X-Request-ID、路径折叠 | 5 |
 | [integration/08-observability-stack.md](./integration/08-observability-stack.md) | 可观测性栈启动、Grafana 仪表盘、业务指标、限流指标 | 5 |
 | [integration/09-security-hardening-config.md](./integration/09-security-hardening-config.md) | 生产环境安全启动校验、REST aud 严格校验、HSTS 条件下发、gRPC audience 必填 | 5 |
 | [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Keycloak 事件源安全校验、外部系统同步 | 5 |
+
+### Provisioning (2 个文档, 10 个场景)
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [provisioning/01-scim-token-management.md](./provisioning/01-scim-token-management.md) | SCIM Token 生命周期管理 | 5 |
+| [provisioning/02-scim-user-crud.md](./provisioning/02-scim-user-crud.md) | SCIM 用户 CRUD 与同步 | 5 |
 
 ---
 
@@ -158,16 +189,17 @@
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
-| 认证流程 | 9 | 43 |
+| 认证流程 | 12 | 55 |
 | 系统设置 | 3 | 15 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
 | 分析与统计 | 2 | 10 |
 | 审计日志 | 1 | 5 |
-| Action | 6 | 35 |
+| Action | 12 | 49 |
 | SDK | 6 | 30 |
-| 集成测试 | 8 | 40 |
-| **总计** | **77** | **379** |
+| 集成测试 | 11 | 54 |
+| Provisioning | 2 | 10 |
+| **总计** | **91** | **429** |
 
 ---
 
@@ -311,6 +343,9 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-22 | 5.2.1 | 新增仓库级周期治理入口脚本 `scripts/run-weekly-qa-governance.sh`（扩展审计 + 严格 lint + 日志落盘），并在 README 文档治理章节补充定期执行建议 |
+| 2026-02-21 | 5.2.0 | 第二阶段文档治理完成：将超长文档拆分为 `action/07~12` 与 `auth/12`，使既有超限文档全部收敛到每文档 ≤5 场景；`action/01~05`、`auth/09` 改为基础/进阶分层；索引同步为 91 个文档、429 个场景 |
+| 2026-02-21 | 5.1.0 | 新增 QA 文档治理基线：增加 `_standards.md`、`_manifest.yaml` 与 `scripts/qa-doc-lint.sh`；补齐 README 漏索引文档（`auth/06`、`auth/07`、`integration/03~05`、`provisioning/01~02`）；统一通用认证场景为“无痕/清 Cookie/Sign out”可执行流程；补充 `action/01`、`integration/01`、`integration/02` 检查清单，并增强 `tenant/01`、`service/01`、`settings/02`、`user/04`、`rbac/02` 的 UI 入口可见性说明；总计 84 个文档 429 个场景 |
 | 2026-02-21 | 5.0.0 | **Action 迁移到 Service 级别 + Service Branding**：Action 从 Tenant 级别迁移到 Service 级别（API 路径 `/tenants/{id}/actions` → `/services/{id}/actions`，DB 字段 `tenant_id` → `service_id`，Portal 入口从 Tenant 详情页 Quick Links 迁移到 Service 详情页 Actions Tab）；新增 Service 级品牌配置（`service/06-service-branding.md`）覆盖 API CRUD、公开端点 client_id 查询、Keycloak 主题集成；更新 `action/01-06` 全部 6 个文档、`service/01`（级联删除）、`settings/01`（两级品牌架构说明）；共 76 个文档 374 个场景 |
 | 2026-02-18 | 4.4.2 | 补充多 tenant 登录后 `/tenant/select` 分流说明，统一 6 份既有文档执行步骤（`auth/01`、`session/07`、`integration/06`、`passkeys/02`、`user/06`、`service/05`），避免 QA 对登录后页面路径理解不一致；文档总数与场景数不变（74/364） |
 | 2026-02-18 | 4.4.1 | 新增会话与安全文档 `session/08`：覆盖 Identity Token 最小白名单、tenant 接口强制 Tenant Token、tenant/service 不匹配拒绝、切租户后旧 token 隔离；共 74 个文档 364 个场景 |

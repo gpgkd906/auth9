@@ -27,19 +27,20 @@
 
 ---
 
-## 场景 1：配置 SMTP 邮件服务
+## 场景 1：邮件设置入口可见性与配置 SMTP 邮件服务
 
 ### 初始状态
 - 管理员已登录
 - 当前无邮件服务商配置（显示 Email Provider Not Configured）
 
 ### 目的
-验证 SMTP 邮件服务配置功能
+验证用户可从设置导航发现邮件设置入口，并完成 SMTP 配置
 
 ### 测试操作流程
-1. 进入「设置」→「邮件设置」
-2. 在 Provider Type 下拉选择「SMTP」
-3. 填写配置：
+1. 在管理后台左侧导航确认存在「设置」入口并点击进入
+2. 在设置子导航确认存在「邮件设置」并点击进入
+3. 在 Provider Type 下拉选择「SMTP」
+4. 填写配置：
    - Server Host：`smtp.example.com`
    - Port：`587`
    - Username：`testuser`
@@ -47,12 +48,13 @@
    - From Email：`noreply@example.com`
    - From Name：`Auth9`
    - 勾选「Use TLS encryption」
-4. 点击「Save Settings」
+5. 点击「Save Settings」
 
 ### 预期结果
 - 显示「Email settings saved successfully」提示
 - 状态卡片变为「Email Provider Active」
 - 显示「Using SMTP (smtp.example.com:587)」
+- 「设置」→「邮件设置」导航入口可见且可点击
 
 ### 预期数据状态
 ```sql
@@ -189,8 +191,11 @@ WHERE category = 'email' AND setting_key = 'provider_config';
 验证页面正确检查认证状态，未登录或 session 失效时重定向到登录页
 
 ### 测试操作流程
-1. 关闭浏览器
-2. 重新打开浏览器，访问本页面对应的 URL
+1. 通过以下任一方式构造未认证状态：
+   - 使用浏览器无痕/隐私窗口访问
+   - 手动清除 auth9_session cookie
+   - 在当前会话点击「Sign out」退出登录
+2. 访问本页面对应的 URL
 
 ### 预期结果
 - 页面自动重定向到 `/login`
