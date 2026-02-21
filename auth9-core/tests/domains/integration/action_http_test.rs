@@ -1521,7 +1521,7 @@ async fn test_query_logs_only_returns_own_tenant() {
     let user_id = Uuid::new_v4();
 
     let service_id_1 = setup_tenant_and_service(&state, tenant_id_1).await;
-    let service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
+    let _service_id_2 = setup_tenant_and_service(&state, tenant_id_2).await;
 
     let token = create_tenant_access_token(
         &state.jwt_manager,
