@@ -6,6 +6,8 @@ use crate::domain::{
     UpdateServiceInput,
 };
 use crate::error::{AppError, Result};
+use crate::repository::action::ActionRepository;
+use crate::repository::service_branding::ServiceBrandingRepository;
 use crate::repository::{RbacRepository, ServiceRepository};
 use argon2::{
     password_hash::{rand_core::OsRng, PasswordHasher, SaltString},
@@ -17,19 +19,29 @@ use tracing::warn;
 use uuid::Uuid;
 use validator::Validate;
 
-pub struct ClientService<R: ServiceRepository, RR: RbacRepository> {
+pub struct ClientService<R: ServiceRepository, RR: RbacRepository, AR: ActionRepository = crate::repository::action::ActionRepositoryImpl, BR: ServiceBrandingRepository = crate::repository::service_branding::ServiceBrandingRepositoryImpl> {
     repo: Arc<R>,
     rbac_repo: Arc<RR>,
+    action_repo: Option<Arc<AR>>,
+    branding_repo: Option<Arc<BR>>,
     cache_manager: Option<CacheManager>,
 }
 
-impl<R: ServiceRepository, RR: RbacRepository> ClientService<R, RR> {
+impl<R: ServiceRepository, RR: RbacRepository, AR: ActionRepository, BR: ServiceBrandingRepository> ClientService<R, RR, AR, BR> {
     pub fn new(repo: Arc<R>, rbac_repo: Arc<RR>, cache_manager: Option<CacheManager>) -> Self {
         Self {
             repo,
             rbac_repo,
+            action_repo: None,
+            branding_repo: None,
             cache_manager,
         }
+    }
+
+    pub fn with_cascade_repos(mut self, action_repo: Arc<AR>, branding_repo: Arc<BR>) -> Self {
+        self.action_repo = Some(action_repo);
+        self.branding_repo = Some(branding_repo);
+        self
     }
 
     pub async fn create(&self, input: CreateServiceInput) -> Result<ServiceWithClient> {
@@ -310,10 +322,29 @@ impl<R: ServiceRepository, RR: RbacRepository> ClientService<R, RR> {
             "Deleted permissions for service"
         );
 
-        // 5. Delete the service itself
+        // 5. Delete actions for this service
+        if let Some(action_repo) = &self.action_repo {
+            let deleted_actions = action_repo.delete_by_service(service_id).await?;
+            warn!(
+                service_id = %id,
+                deleted_actions = deleted_actions,
+                "Deleted actions for service"
+            );
+        }
+
+        // 6. Delete service branding
+        if let Some(branding_repo) = &self.branding_repo {
+            branding_repo.delete_by_service_id(service_id).await?;
+            warn!(
+                service_id = %id,
+                "Deleted service branding"
+            );
+        }
+
+        // 7. Delete the service itself
         self.repo.delete(id).await?;
 
-        // 6. Clear cache
+        // 8. Clear cache
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_service_config(id).await;
         }

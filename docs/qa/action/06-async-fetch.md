@@ -36,9 +36,9 @@ Action Engine 新增异步执行能力，允许用户脚本使用 `async/await`�
 #### 1.1 创建同步 Action（向后兼容）
 ```bash
 TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
-TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;")
+SERVICE_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM services LIMIT 1;")
 
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -53,12 +53,12 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 #### 1.2 测试同步 Action 执行
 ```bash
 ACTION_ID="<from_create_response>"
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/test \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$TENANT_ID'", "slug": "test", "name": "Test" },
+    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
     "request": { "timestamp": "2026-02-13T00:00:00Z" }
   }' | jq '.'
 ```
@@ -67,7 +67,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/
 
 #### 1.3 创建 async/await Action
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -82,12 +82,12 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 #### 1.4 测试 async Action 执行
 ```bash
 ACTION_ID="<from_async_create_response>"
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/test \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$TENANT_ID'", "slug": "test", "name": "Test" },
+    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
     "request": { "timestamp": "2026-02-13T00:00:00Z" }
   }' | jq '.'
 ```
@@ -100,7 +100,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/
 ### 预期数据状态
 ```sql
 SELECT id, name, script FROM actions
-WHERE tenant_id = '{tenant_id}' AND name IN ('Sync Compat Test', 'Async Basic Test');
+WHERE service_id = '{service_id}' AND name IN ('Sync Compat Test', 'Async Basic Test');
 -- 预期: 两条记录均存在
 ```
 
@@ -119,7 +119,7 @@ WHERE tenant_id = '{tenant_id}' AND name IN ('Sync Compat Test', 'Async Basic Te
 
 #### 2.1 创建使用 fetch() 的 Action
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -136,19 +136,19 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 #### 2.2 测试 fetch Action
 ```bash
 ACTION_ID="<from_create_response>"
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/test \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$TENANT_ID'", "slug": "test", "name": "Test" },
+    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
     "request": { "timestamp": "2026-02-13T00:00:00Z" }
   }' | jq '.'
 ```
 
 #### 2.3 验证 fetch POST 请求
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -180,7 +180,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 3.1 fetch 未授权域名 — 被拒绝
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -195,12 +195,12 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 测试执行：
 ```bash
 ACTION_ID="<from_create_response>"
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/test \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$TENANT_ID'", "slug": "test", "name": "Test" },
+    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
     "request": { "timestamp": "2026-02-13T00:00:00Z" }
   }' | jq '.'
 ```
@@ -209,7 +209,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/
 
 #### 3.2 fetch 私有 IP — 被拦截（SSRF 防护）
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -250,7 +250,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 4.1 使用 setTimeout 的 Action
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -265,12 +265,12 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 测试执行：
 ```bash
 ACTION_ID="<from_create_response>"
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/test \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$TENANT_ID'", "slug": "test", "name": "Test" },
+    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
     "request": { "timestamp": "2026-02-13T00:00:00Z" }
   }' | jq '.'
 ```
@@ -279,7 +279,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/
 
 #### 4.2 使用 console.log 的 Action
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -298,7 +298,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 4.3 验证 setTimeout 上限（30s 封顶）
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -331,7 +331,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 5.1 Promise.reject — 明确拒绝
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -346,12 +346,12 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 测试执行：
 ```bash
 ACTION_ID="<from_create_response>"
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/test \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$TENANT_ID'", "slug": "test", "name": "Test" },
+    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
     "request": { "timestamp": "2026-02-13T00:00:00Z" }
   }' | jq '.'
 ```
@@ -360,7 +360,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID/
 
 #### 5.2 async 函数中 throw Error
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -376,7 +376,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 5.3 Action 超时
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -392,7 +392,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 5.4 fetch 网络错误的优雅处理
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -420,7 +420,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 1. 创建一个执行多次 fetch 的 Action：
 ```bash
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{

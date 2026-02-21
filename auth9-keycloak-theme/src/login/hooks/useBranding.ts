@@ -38,7 +38,7 @@ interface UseBrandingResult {
  *
  * @param apiUrl - The auth9 API URL from theme properties
  */
-export function useBranding(apiUrl: string): UseBrandingResult {
+export function useBranding(apiUrl: string, clientId?: string): UseBrandingResult {
   const [branding, setBranding] = useState<BrandingConfig>(DEFAULT_BRANDING);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -48,7 +48,10 @@ export function useBranding(apiUrl: string): UseBrandingResult {
 
     async function fetchBranding() {
       try {
-        const response = await fetch(`${apiUrl}/api/v1/public/branding`, {
+        const brandingUrl = clientId
+          ? `${apiUrl}/api/v1/public/branding?client_id=${encodeURIComponent(clientId)}`
+          : `${apiUrl}/api/v1/public/branding`;
+        const response = await fetch(brandingUrl, {
           headers: { Accept: "application/json" },
           signal: controller.signal,
         });
@@ -78,7 +81,7 @@ export function useBranding(apiUrl: string): UseBrandingResult {
     fetchBranding();
 
     return () => controller.abort();
-  }, [apiUrl]);
+  }, [apiUrl, clientId]);
 
   return { branding, loading, error };
 }

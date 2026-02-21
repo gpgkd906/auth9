@@ -35,7 +35,7 @@
 | [07-dashboard-page.md](./07-dashboard-page.md) | 概览页统计、动态列表 | 5 |
 | [08-tenants-page.md](./08-tenants-page.md) | 租户列表、搜索栏适配 | 5 |
 | [09-users-page.md](./09-users-page.md) | 用户目录、角色分配弹窗 | 6 |
-| [10-services-page.md](./10-services-page.md) | 服务管理、密钥显示适配 | 5 |
+| [10-services-page.md](./10-services-page.md) | 服务管理、密钥显示适配、Actions/Branding Tab 布局 | 6 |
 | [11-settings-page.md](./11-settings-page.md) | 系统设置、子导航体验 | 5 |
 
 ---
@@ -47,8 +47,8 @@
 | 视觉设计 | 3 | 13 |
 | 交互体验 | 2 | 9 |
 | 可访问性 | 1 | 5 |
-| 页面专项 | 5 | 26 |
-| **总计** | **11** | **53** |
+| 页面专项 | 5 | 27 |
+| **总计** | **11** | **54** |
 
 ---
 
@@ -210,4 +210,5 @@ box-shadow: 0 8px 32px var(--glass-shadow),
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-21 | 1.1.0 | Services 页面新增 Actions/Branding Tab 布局场景（`10-services-page.md`）；共 11 个文档 54 个场景 |
 | 2026-02-06 | 1.0.0 | 初始版本：6 个文档，27 个 UI/UX 测试场景 |

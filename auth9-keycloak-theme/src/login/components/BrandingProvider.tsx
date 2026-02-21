@@ -5,6 +5,7 @@ const BrandingContext = createContext<BrandingConfig>(DEFAULT_BRANDING);
 
 interface BrandingProviderProps {
   apiUrl: string;
+  clientId?: string;
   children: ReactNode;
 }
 
@@ -32,8 +33,8 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
  * - background_color → --bg-primary (page background)
  * - text_color → --text-primary (main text)
  */
-export function BrandingProvider({ apiUrl, children }: BrandingProviderProps) {
-  const { branding, loading } = useBranding(apiUrl);
+export function BrandingProvider({ apiUrl, clientId, children }: BrandingProviderProps) {
+  const { branding, loading } = useBranding(apiUrl, clientId);
 
   // Update favicon when branding loads
   useEffect(() => {

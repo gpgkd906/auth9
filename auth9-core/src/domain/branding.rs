@@ -160,6 +160,29 @@ pub struct UpdateBrandingRequest {
     pub config: BrandingConfig,
 }
 
+/// Service-level branding configuration
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ServiceBranding {
+    pub id: String,
+    pub service_id: String,
+    pub config: BrandingConfig,
+    pub created_at: chrono::DateTime<chrono::Utc>,
+    pub updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Request body for updating service-level branding
+#[derive(Debug, Clone, Deserialize, Validate, ToSchema)]
+pub struct UpdateServiceBrandingRequest {
+    #[validate(nested)]
+    pub config: BrandingConfig,
+}
+
+/// Query parameters for public branding endpoint
+#[derive(Debug, Clone, Deserialize, ToSchema)]
+pub struct PublicBrandingQuery {
+    pub client_id: Option<String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

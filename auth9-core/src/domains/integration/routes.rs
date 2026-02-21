@@ -40,34 +40,34 @@ where
             post(integration_api::webhook::regenerate_webhook_secret::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions",
+            "/api/v1/services/{service_id}/actions",
             get(integration_api::action::list_actions::<S>)
                 .post(integration_api::action::create_action::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions/{action_id}",
+            "/api/v1/services/{service_id}/actions/{action_id}",
             get(integration_api::action::get_action::<S>)
                 .patch(integration_api::action::update_action::<S>)
                 .delete(integration_api::action::delete_action::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions/batch",
+            "/api/v1/services/{service_id}/actions/batch",
             post(integration_api::action::batch_upsert_actions::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions/{action_id}/test",
+            "/api/v1/services/{service_id}/actions/{action_id}/test",
             post(integration_api::action::test_action::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions/{action_id}/stats",
+            "/api/v1/services/{service_id}/actions/{action_id}/stats",
             get(integration_api::action::get_action_stats::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions/logs",
+            "/api/v1/services/{service_id}/actions/logs",
             get(integration_api::action::query_action_logs::<S>),
         )
         .route(
-            "/api/v1/tenants/{tenant_id}/actions/logs/{log_id}",
+            "/api/v1/services/{service_id}/actions/logs/{log_id}",
             get(integration_api::action::get_action_log::<S>),
         )
         .route(

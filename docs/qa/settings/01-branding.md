@@ -8,11 +8,12 @@
 
 ## 架构说明
 
-Auth9 采用 Headless Keycloak 架构，品牌设置影响的是 Auth9 品牌化登录页外观（底层由 Keycloak 渲染）：
+Auth9 采用 Headless Keycloak 架构，品牌设置支持两级配置：
 
-1. **品牌配置存储在 Auth9** → 管理员在 Auth9 Portal 的「设置 → 登录页品牌」页面配置颜色、Logo、公司名称等
-2. **auth9-keycloak-theme 消费品牌配置** → Keycloak 使用 auth9-keycloak-theme（基于 Keycloakify），该主题在渲染登录/注册页面时通过公开端点 `GET /api/v1/public/branding` 获取 Auth9 中的品牌配置
-3. **最终用户看到的效果** → 用户在 Keycloak 托管的登录/注册/忘记密码等页面上看到的是 Auth9 品牌风格的界面
+1. **系统级品牌**（本页面） → 管理员在 Auth9 Portal 的「设置 → 登录页品牌」页面配置颜色、Logo、公司名称等，作为全局默认
+2. **Service 级品牌**（见 [service/06-service-branding.md](../service/06-service-branding.md)） → 在 Service 详情页「Branding」标签页可为单个 Service 覆盖品牌配置
+3. **auth9-keycloak-theme 消费品牌配置** → Keycloak 主题通过公开端点 `GET /api/v1/public/branding?client_id={client_id}` 获取品牌配置；若该 client 所属 Service 有自定义品牌则优先使用，否则降级到系统默认
+4. **最终用户看到的效果** → 用户在 Keycloak 托管的登录/注册/忘记密码等页面上看到的是品牌风格的界面（可能因 Service 不同而不同）
 
 **页面归属**：
 - 「设置 → 登录页品牌」管理页面 → Auth9 Portal

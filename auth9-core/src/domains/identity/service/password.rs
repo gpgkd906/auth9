@@ -432,10 +432,11 @@ impl<
                 timestamp: Utc::now(),
             },
             claims: None,
+            service: None,
         };
 
         if let Err(e) = action_engine
-            .execute_trigger(tenant_id, "post-change-password", context)
+            .execute_trigger_by_tenant(tenant_id, "post-change-password", context)
             .await
         {
             tracing::warn!(

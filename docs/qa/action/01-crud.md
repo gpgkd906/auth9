@@ -12,7 +12,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
-| tenant_id | CHAR(36) | 所属租户 ID |
+| service_id | CHAR(36) | 所属 Service ID |
 | name | VARCHAR(255) | Action 名称 |
 | description | TEXT | 描述 |
 | trigger_id | VARCHAR(50) | 触发器类型 |
@@ -32,7 +32,7 @@
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
 | action_id | CHAR(36) | Action ID |
-| tenant_id | CHAR(36) | 租户 ID |
+| service_id | CHAR(36) | Service ID |
 | trigger_id | VARCHAR(50) | 触发器类型 |
 | user_id | CHAR(36) | 用户 ID（可选） |
 | success | BOOLEAN | 是否成功 |
@@ -42,29 +42,26 @@
 
 ---
 
-## 场景 1：Tenant 详情页 Actions 入口可见性
+## 场景 1：Service 详情页 Actions Tab 入口可见性
 
 ### 初始状态
 - 管理员已登录
-- 存在租户 id=`{tenant_id}`，且该租户下已创建至少 1 个 Action
+- 存在 Service id=`{service_id}`，且该 Service 下已创建至少 1 个 Action
 
 ### 目的
-验证用户可以从 Tenant 详情页的 Quick Links 区域发现并导航到 Actions 页面，而无需手动输入 URL
+验证用户可以从 Service 详情页的 Actions Tab 发现并访问 Actions 管理页面，而无需手动输入 URL
 
 ### 测试操作流程（Portal UI）
-1. 进入租户详情页：`/dashboard/tenants/{tenant_id}`
-2. 在右侧「Quick Links」卡片中，验证存在「Actions」按钮（位于 Enterprise SSO 下方）
-3. 验证「Actions」按钮显示闪电图标（⚡）
-4. 验证「Actions」按钮右侧显示当前 Actions 数量
-5. 在下方「Overview」统计卡片中，验证存在「Actions」统计行，显示闪电图标和数量
-6. 点击 Quick Links 中的「Actions」按钮
+1. 进入 Service 详情页：`/dashboard/services/{service_id}`
+2. 验证页面顶部 Tab 栏中存在「Actions」标签页
+3. 点击「Actions」标签页
+4. 验证 Actions 列表正确加载，显示该 Service 下的 Actions
+5. 验证列表中每个 Action 显示名称、触发器类型、状态等信息
 
 ### 预期结果
-- Quick Links 区域显示「Actions」入口，带闪电图标
-- Actions 数量与实际 Action 数一致
-- Overview 统计中 Actions 数量与 Quick Links 中一致
-- 点击后成功跳转到 `/dashboard/tenants/{tenant_id}/actions` 页面
-- Actions 列表页正确加载，显示该租户下的 Actions
+- Service 详情页显示「Actions」Tab 入口
+- 点击后成功加载 `/dashboard/services/{service_id}/actions` 页面
+- Actions 列表页正确加载，显示该 Service 下的 Actions
 
 ---
 
@@ -72,15 +69,15 @@
 
 ### 初始状态
 - 管理员已登录
-- 存在租户 id=`{tenant_id}`
+- 存在 Service id=`{service_id}`
 - 已获取 API Token
 
 ### 目的
 验证 Action 创建功能（API 和 Portal UI）
 
 ### 测试操作流程（Portal UI）
-1. 进入租户详情页：`/dashboard/tenants/{tenant_id}`
-2. 点击 Quick Links 中的「Actions」按钮进入 Actions 管理页面
+1. 进入 Service 详情页：`/dashboard/services/{service_id}`
+2. 点击「Actions」Tab 进入 Actions 管理页面
 3. 点击「New Action」按钮
 4. 填写基本信息：
    - 名称：`Test Post Login Action`
@@ -101,7 +98,7 @@
 ### 测试操作流程（API）
 ```bash
 TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
-curl -X POST http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
+curl -X POST http://localhost:8080/api/v1/services/{service_id}/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -129,7 +126,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
 ```sql
 SELECT id, name, trigger_id, enabled, script, execution_order, timeout_ms
 FROM actions
-WHERE name = 'Test Post Login Action' AND tenant_id = '{tenant_id}';
+WHERE name = 'Test Post Login Action' AND service_id = '{service_id}';
 -- 预期:
 -- - 存在记录
 -- - enabled = true
@@ -145,13 +142,13 @@ WHERE name = 'Test Post Login Action' AND tenant_id = '{tenant_id}';
 
 ### 初始状态
 - 管理员已登录
-- 存在租户 id=`{tenant_id}`
+- 存在 Service id=`{service_id}`
 
 ### 目的
 验证使用内置模板快速创建 Action
 
 ### 测试操作流程（Portal UI）
-1. 从租户详情页 Quick Links 点击「Actions」进入 Actions 管理页面，点击「New Action」
+1. 从 Service 详情页点击「Actions」Tab 进入 Actions 管理页面，点击「New Action」
 2. 在「Script Templates」下拉菜单中选择「Add Custom Claims」模板
 3. 验证脚本自动填充
 4. 填写基本信息：
@@ -167,7 +164,7 @@ WHERE name = 'Test Post Login Action' AND tenant_id = '{tenant_id}';
 ### 预期数据状态
 ```sql
 SELECT name, script FROM actions
-WHERE name = 'Department Claims Action' AND tenant_id = '{tenant_id}';
+WHERE name = 'Department Claims Action' AND service_id = '{service_id}';
 -- 预期: script 包含 "department" 和 "tier"
 ```
 
@@ -182,7 +179,7 @@ WHERE name = 'Department Claims Action' AND tenant_id = '{tenant_id}';
 验证 Action 列表、搜索和筛选功能
 
 ### 测试操作流程（Portal UI）
-1. 从租户详情页 Quick Links 点击「Actions」进入 Actions 管理页面
+1. 从 Service 详情页点击「Actions」Tab 进入 Actions 管理页面
 2. 验证列表显示所有 Actions
 3. 点击「Post Login」触发器筛选按钮
 4. 验证仅显示 post-login 类型的 Actions
@@ -192,11 +189,11 @@ WHERE name = 'Department Claims Action' AND tenant_id = '{tenant_id}';
 ### 测试操作流程（API）
 ```bash
 # 列出所有 Actions
-curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
+curl http://localhost:8080/api/v1/services/{service_id}/actions \
   -H "Authorization: Bearer $TOKEN"
 
 # 按触发器筛选
-curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions?trigger_id=post-login \
+curl http://localhost:8080/api/v1/services/{service_id}/actions?trigger_id=post-login \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -231,11 +228,11 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions?trigger_id=post-lo
 ### 测试操作流程（API）
 ```bash
 # 获取 Action 详情
-curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id} \
+curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id} \
   -H "Authorization: Bearer $TOKEN"
 
 # 获取统计信息
-curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/stats \
+curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/stats \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -265,7 +262,7 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/stats 
 
 ### 测试操作流程（API）
 ```bash
-curl -X PATCH http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id} \
+curl -X PATCH http://localhost:8080/api/v1/services/{service_id}/actions/{action_id} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -314,13 +311,13 @@ WHERE id = '{action_id}';
 ### 测试操作流程（API）
 ```bash
 # 禁用
-curl -X PATCH http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id} \
+curl -X PATCH http://localhost:8080/api/v1/services/{service_id}/actions/{action_id} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enabled": false}'
 
 # 启用
-curl -X PATCH http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id} \
+curl -X PATCH http://localhost:8080/api/v1/services/{service_id}/actions/{action_id} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"enabled": true}'
@@ -355,7 +352,7 @@ SELECT enabled FROM actions WHERE id = '{action_id}';
 
 ### 测试操作流程（API）
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id} \
+curl -X DELETE http://localhost:8080/api/v1/services/{service_id}/actions/{action_id} \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -382,9 +379,9 @@ SELECT COUNT(*) FROM action_executions WHERE action_id = '{action_id}';
 ## 边界条件测试
 
 ### 1. 重复名称
-- **操作**: 创建同租户、同触发器类型下同名 Action
+- **操作**: 创建同 Service、同触发器类型下同名 Action
 - **API 预期**: HTTP 409 Conflict，返回错误信息
-- **实际约束**: 同一租户和触发器类型组合下名称必须唯一，不同触发器类型下允许重复
+- **实际约束**: 同一 Service 和触发器类型组合下名称必须唯一，不同触发器类型下允许重复
 
 ### 2. 无效触发器
 - **操作**: 使用不存在的 trigger_id
@@ -413,14 +410,14 @@ SELECT COUNT(*) FROM action_executions WHERE action_id = '{action_id}';
 ```bash
 # 批量创建 100 个 Actions
 for i in {1..100}; do
-  curl -X POST http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
+  curl -X POST http://localhost:8080/api/v1/services/{service_id}/actions \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"name\": \"Action $i\", \"trigger_id\": \"post-login\", \"script\": \"context;\", \"enabled\": true}"
 done
 
 # 列表查询性能
-time curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
+time curl http://localhost:8080/api/v1/services/{service_id}/actions \
   -H "Authorization: Bearer $TOKEN"
 ```
 

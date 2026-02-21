@@ -14,10 +14,10 @@
 
 ```bash
 TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
-TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;")
+SERVICE_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM services LIMIT 1;")
 
 # 创建测试 Action
-ACTION_ID=$(curl -s -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+ACTION_ID=$(curl -s -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -55,18 +55,18 @@ WHERE action_id = '{action_id}';
 验证日志列表查询和分页功能
 
 ### 测试操作流程（Portal UI）
-1. 进入 Action 详情页：`/dashboard/tenants/{tenant_id}/actions/{action_id}`
+1. 进入 Action 详情页：`/dashboard/services/{service_id}/actions/{action_id}`
 2. 点击「Logs」标签页
 3. 验证日志列表显示
 
 ### 测试操作流程（API）
 ```bash
 # 查询最近 50 条日志
-curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/logs?limit=50 \
+curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?limit=50 \
   -H "Authorization: Bearer $TOKEN"
 
 # 分页查询
-curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/logs?limit=10\&offset=10 \
+curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?limit=10\&offset=10 \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -89,7 +89,7 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/logs?l
       {
         "id": "log-uuid",
         "action_id": "action-uuid",
-        "tenant_id": "tenant-uuid",
+        "service_id": "service-uuid",
         "trigger_id": "post-login",
         "user_id": "user-uuid",
         "success": true,
@@ -129,11 +129,11 @@ LIMIT 10;
 ### 测试操作流程（API）
 ```bash
 # 查询所有成功的执行
-curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/logs?success=true&limit=50" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?success=true&limit=50" \
   -H "Authorization: Bearer $TOKEN"
 
 # 查询所有失败的执行
-curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/logs?success=false&limit=50" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?success=false&limit=50" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -171,7 +171,7 @@ WHERE action_id = '{action_id}' AND success = false;
 FROM=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)
 TO=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
-curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?from=$FROM&to=$TO&limit=100" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?from=$FROM&to=$TO&limit=100" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -182,7 +182,7 @@ curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?from=$FROM&t
 ### 预期数据状态
 ```sql
 SELECT COUNT(*) FROM action_executions
-WHERE tenant_id = '{tenant_id}'
+WHERE service_id = '{service_id}'
   AND executed_at >= '2026-02-11 10:00:00'
   AND executed_at <= '2026-02-12 10:00:00';
 -- 预期: 与 API 返回的 total 一致
@@ -203,7 +203,7 @@ WHERE tenant_id = '{tenant_id}'
 # 查询特定用户的所有执行日志
 USER_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM users WHERE email = 'test@example.com';")
 
-curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?user_id=$USER_ID&limit=100" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?user_id=$USER_ID&limit=100" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -214,7 +214,7 @@ curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?user_id=$USE
 ### 预期数据状态
 ```sql
 SELECT COUNT(*) FROM action_executions
-WHERE tenant_id = '{tenant_id}'
+WHERE service_id = '{service_id}'
   AND user_id = '{user_id}';
 -- 预期: 与 API 返回的 total 一致
 ```
@@ -224,7 +224,7 @@ WHERE tenant_id = '{tenant_id}'
 ## 场景 5：全局日志查询（跨 Actions）
 
 ### 初始状态
-- 租户下存在多个 Actions
+- Service 下存在多个 Actions
 - 每个 Action 都有执行日志
 
 ### 目的
@@ -232,17 +232,17 @@ WHERE tenant_id = '{tenant_id}'
 
 ### 测试操作流程（API）
 ```bash
-# 查询租户下所有 Actions 的日志
-curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?limit=100" \
+# 查询Service 下所有 Actions 的日志
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?limit=100" \
   -H "Authorization: Bearer $TOKEN"
 
 # 查询特定触发器的所有日志
-curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?trigger_id=post-login&limit=100" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?trigger_id=post-login&limit=100" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
 ### 预期结果
-- 返回租户下所有符合条件的日志
+- 返回Service 下所有符合条件的日志
 - 日志来自不同的 Actions
 - 按时间倒序排列
 
@@ -250,12 +250,12 @@ curl "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?trigger_id=p
 ```sql
 -- 验证全局日志查询
 SELECT COUNT(*) FROM action_executions
-WHERE tenant_id = '{tenant_id}';
+WHERE service_id = '{service_id}';
 -- 预期: 与 API 返回的 total 一致
 
 -- 验证触发器筛选
 SELECT COUNT(*) FROM action_executions
-WHERE tenant_id = '{tenant_id}'
+WHERE service_id = '{service_id}'
   AND trigger_id = 'post-login';
 -- 预期: 与 API 返回的 total 一致
 ```
@@ -300,15 +300,15 @@ WHERE id = '{execution_id}';
 # 生成 10,000 条测试日志（通过模拟执行）
 for i in {1..10000}; do
   mysql -h 127.0.0.1 -P 4000 -u root auth9 -e "
-    INSERT INTO action_executions (id, action_id, tenant_id, trigger_id, success, duration_ms, executed_at)
-    VALUES (UUID(), '$ACTION_ID', '$TENANT_ID', 'post-login', TRUE, FLOOR(RAND() * 100), NOW() - INTERVAL FLOOR(RAND() * 86400) SECOND);
+    INSERT INTO action_executions (id, action_id, service_id, trigger_id, success, duration_ms, executed_at)
+    VALUES (UUID(), '$ACTION_ID', '$SERVICE_ID', 'post-login', TRUE, FLOOR(RAND() * 100), NOW() - INTERVAL FLOOR(RAND() * 86400) SECOND);
   "
 done
 ```
 
 **测试方法**:
 ```bash
-time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?limit=100" \
+time curl -s "http://localhost:8080/api/v1/services/{service_id}/actions/logs?limit=100" \
   -H "Authorization: Bearer $TOKEN" > /dev/null
 ```
 
@@ -318,7 +318,7 @@ time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?limi
 
 **测试方法**:
 ```bash
-time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?success=false&from=2026-01-01T00:00:00Z&to=2026-02-12T23:59:59Z&limit=100" \
+time curl -s "http://localhost:8080/api/v1/services/{service_id}/actions/logs?success=false&from=2026-01-01T00:00:00Z&to=2026-02-12T23:59:59Z&limit=100" \
   -H "Authorization: Bearer $TOKEN" > /dev/null
 ```
 
@@ -329,11 +329,11 @@ time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?succ
 **测试方法**:
 ```bash
 # 第 1 页
-time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?limit=50&offset=0" \
+time curl -s "http://localhost:8080/api/v1/services/{service_id}/actions/logs?limit=50&offset=0" \
   -H "Authorization: Bearer $TOKEN" > /dev/null
 
 # 第 100 页
-time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?limit=50&offset=4950" \
+time curl -s "http://localhost:8080/api/v1/services/{service_id}/actions/logs?limit=50&offset=4950" \
   -H "Authorization: Bearer $TOKEN" > /dev/null
 ```
 
@@ -348,8 +348,8 @@ time curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/actions/logs?limi
 **测试方法**:
 ```sql
 -- 插入 90 天前的日志
-INSERT INTO action_executions (id, action_id, tenant_id, trigger_id, success, duration_ms, executed_at)
-VALUES (UUID(), '{action_id}', '{tenant_id}', 'post-login', TRUE, 10, NOW() - INTERVAL 90 DAY);
+INSERT INTO action_executions (id, action_id, service_id, trigger_id, success, duration_ms, executed_at)
+VALUES (UUID(), '{action_id}', '{service_id}', 'post-login', TRUE, 10, NOW() - INTERVAL 90 DAY);
 
 -- 等待清理任务运行
 

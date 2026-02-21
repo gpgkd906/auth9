@@ -7,7 +7,7 @@ import { Badge } from "~/components/ui/badge";
 import { Switch } from "~/components/ui/switch";
 import type { Action } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
-import { getAuth9Client, withTenant, getTriggers } from "~/lib/auth9-client";
+import { getAuth9Client, withService, getTriggers } from "~/lib/auth9-client";
 import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { useState, useRef } from "react";
@@ -18,21 +18,21 @@ export const meta: MetaFunction = () => {
 };
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
-  const { tenantId } = params;
-  if (!tenantId) throw new Error("Tenant ID is required");
+  const { serviceId } = params;
+  if (!serviceId) throw new Error("Service ID is required");
   const accessToken = await getAccessToken(request);
 
   const url = new URL(request.url);
   const triggerFilter = url.searchParams.get("trigger") as string | null;
 
   const client = getAuth9Client(accessToken || undefined);
-  const api = withTenant(client, tenantId);
+  const api = withService(client, serviceId);
 
   const actionsRes = await api.actions.list(triggerFilter || undefined);
   const triggersRes = await getTriggers(client);
 
   return {
-    tenantId,
+    serviceId,
     actions: actionsRes.data,
     triggers: triggersRes.data,
     currentTrigger: triggerFilter,
@@ -40,8 +40,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 }
 
 export async function action({ params, request }: { params: Record<string, string | undefined>; request: Request }) {
-  const { tenantId } = params;
-  if (!tenantId) return Response.json({ error: "Tenant ID required" }, { status: 400 });
+  const { serviceId } = params;
+  if (!serviceId) return Response.json({ error: "Service ID required" }, { status: 400 });
   const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
@@ -49,7 +49,7 @@ export async function action({ params, request }: { params: Record<string, strin
   const actionId = formData.get("actionId") as string;
 
   const client = getAuth9Client(accessToken || undefined);
-  const api = withTenant(client, tenantId);
+  const api = withService(client, serviceId);
 
   try {
     if (intent === "toggle") {
@@ -80,7 +80,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 export default function ActionsListPage() {
-  const { tenantId, actions, triggers, currentTrigger } = useLoaderData<typeof loader>();
+  const { serviceId, actions, triggers, currentTrigger } = useLoaderData<typeof loader>();
   const [searchQuery, setSearchQuery] = useState("");
 
   // Filter actions by search query
@@ -100,7 +100,7 @@ export default function ActionsListPage() {
           </p>
         </div>
         <Button asChild>
-          <Link to={`/dashboard/tenants/${tenantId}/actions/new`}>
+          <Link to={`/dashboard/services/${serviceId}/actions/new`}>
             <PlusIcon className="mr-2 h-4 w-4" />
             New Action
           </Link>
@@ -122,7 +122,7 @@ export default function ActionsListPage() {
                 size="sm"
                 asChild
               >
-                <Link to={`/dashboard/tenants/${tenantId}/actions`}>All</Link>
+                <Link to={`/dashboard/services/${serviceId}/actions`}>All</Link>
               </Button>
               {triggers.map((trigger) => (
                 <Button
@@ -131,7 +131,7 @@ export default function ActionsListPage() {
                   size="sm"
                   asChild
                 >
-                  <Link to={`/dashboard/tenants/${tenantId}/actions?trigger=${trigger}`}>
+                  <Link to={`/dashboard/services/${serviceId}/actions?trigger=${trigger}`}>
                     {TRIGGER_LABELS[trigger]}
                   </Link>
                 </Button>
@@ -166,7 +166,7 @@ export default function ActionsListPage() {
               </p>
               {!searchQuery && (
                 <Button asChild>
-                  <Link to={`/dashboard/tenants/${tenantId}/actions/new`}>
+                  <Link to={`/dashboard/services/${serviceId}/actions/new`}>
                     <PlusIcon className="mr-2 h-4 w-4" />
                     Create Action
                   </Link>
@@ -178,7 +178,7 @@ export default function ActionsListPage() {
       ) : (
         <div className="grid gap-4">
           {filteredActions.map((action) => (
-            <ActionCard key={action.id} action={action} tenantId={tenantId} />
+            <ActionCard key={action.id} action={action} serviceId={serviceId} />
           ))}
         </div>
       )}
@@ -186,7 +186,7 @@ export default function ActionsListPage() {
   );
 }
 
-function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) {
+function ActionCard({ action, serviceId }: { action: Action; serviceId: string }) {
   const fetcher = useFetcher();
   const toggleFormRef = useRef<HTMLFormElement>(null);
   const isToggling = fetcher.state !== "idle" && fetcher.formData?.get("intent") === "toggle";
@@ -210,7 +210,7 @@ function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) 
             <div className="flex items-center gap-2 mb-1">
               <CardTitle className="text-lg">
                 <Link
-                  to={`/dashboard/tenants/${tenantId}/actions/${action.id}`}
+                  to={`/dashboard/services/${serviceId}/actions/${action.id}`}
                   className="hover:underline"
                 >
                   {action.name}
@@ -292,12 +292,12 @@ function ActionCard({ action, tenantId }: { action: Action; tenantId: string }) 
 
         <div className="mt-4 flex gap-2">
           <Button asChild variant="outline" size="sm">
-            <Link to={`/dashboard/tenants/${tenantId}/actions/${action.id}`}>
+            <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}>
               View Details
             </Link>
           </Button>
           <Button asChild variant="outline" size="sm">
-            <Link to={`/dashboard/tenants/${tenantId}/actions/${action.id}/edit`}>
+            <Link to={`/dashboard/services/${serviceId}/actions/${action.id}/edit`}>
               Edit
             </Link>
           </Button>
