@@ -20,6 +20,12 @@
 | mfa.disabled | MFA 禁用 |
 | session.revoked | 会话撤销 |
 | security.alert | 安全告警 |
+| scim.user.provisioned | SCIM 用户同步创建 |
+| scim.user.updated | SCIM 用户同步更新 |
+| scim.user.deprovisioned | SCIM 用户同步停用 |
+| scim.group.created | SCIM 组同步创建 |
+| scim.group.updated | SCIM 组同步更新 |
+| scim.group.deleted | SCIM 组同步删除 |
 
 ---
 

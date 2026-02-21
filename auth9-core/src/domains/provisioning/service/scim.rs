@@ -143,7 +143,7 @@ where
 
         // Handle active=false → lock the user
         if fields.active == Some(false) {
-            let far_future = DateTime::parse_from_rfc3339("9999-12-31T23:59:59Z")
+            let far_future = DateTime::parse_from_rfc3339("2037-12-31T23:59:59Z")
                 .unwrap()
                 .with_timezone(&Utc);
             self.user_repo
@@ -224,7 +224,7 @@ where
                 None
             } else {
                 Some(
-                    DateTime::parse_from_rfc3339("9999-12-31T23:59:59Z")
+                    DateTime::parse_from_rfc3339("2037-12-31T23:59:59Z")
                         .unwrap()
                         .with_timezone(&Utc),
                 )
@@ -332,7 +332,7 @@ where
             .ok_or_else(|| AppError::NotFound(format!("User {} not found", user_id)))?;
 
         // Soft-delete: lock the user
-        let far_future = DateTime::parse_from_rfc3339("9999-12-31T23:59:59Z")
+        let far_future = DateTime::parse_from_rfc3339("2037-12-31T23:59:59Z")
             .unwrap()
             .with_timezone(&Utc);
         self.user_repo
@@ -756,7 +756,7 @@ where
                 None
             } else {
                 Some(
-                    DateTime::parse_from_rfc3339("9999-12-31T23:59:59Z")
+                    DateTime::parse_from_rfc3339("2037-12-31T23:59:59Z")
                         .unwrap()
                         .with_timezone(&Utc),
                 )
