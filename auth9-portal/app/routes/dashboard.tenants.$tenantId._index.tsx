@@ -1,13 +1,13 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, Link, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
-import { ArrowLeftIcon, EnvelopeClosedIcon, GlobeIcon, Link2Icon, PersonIcon } from "@radix-ui/react-icons";
+import { ArrowLeftIcon, EnvelopeClosedIcon, GlobeIcon, LightningBoltIcon, Link2Icon, PersonIcon } from "@radix-ui/react-icons";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
 import { redirect } from "react-router";
-import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi } from "~/services/api";
+import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi, actionApi } from "~/services/api";
 import { formatErrorMessage } from "~/lib/error-messages";
 import { getAccessToken } from "~/services/session.server";
 import { FormattedDate } from "~/components/ui/formatted-date";
@@ -30,12 +30,13 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   }
 
   // Fetch related counts in parallel - tolerate individual failures
-  const [servicesRes, invitationsRes, webhooksRes, tenantServicesRes, tenantUsersRes] = await Promise.all([
+  const [servicesRes, invitationsRes, webhooksRes, tenantServicesRes, tenantUsersRes, actionsRes] = await Promise.all([
     serviceApi.list(tenantId, 1, 1, accessToken || undefined).catch(() => ({ pagination: { total: 0 } })),
     invitationApi.list(tenantId, 1, 1, "pending", accessToken || undefined).catch(() => ({ pagination: { total: 0 } })),
     webhookApi.list(tenantId, accessToken || undefined).catch(() => ({ data: [] })),
     tenantServiceApi.listServices(tenantId, accessToken || undefined).catch(() => ({ data: [] })),
     tenantUserApi.list(tenantId, accessToken || undefined).catch(() => ({ data: [] })),
+    actionApi.list(tenantId, undefined, accessToken || undefined).catch(() => ({ data: [] })),
   ]);
 
   const enabledServicesCount = tenantServicesRes.data.filter((s: { enabled: boolean }) => s.enabled).length;
@@ -47,6 +48,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     servicesCount: servicesRes.pagination.total,
     pendingInvitationsCount: invitationsRes.pagination.total,
     webhooksCount: webhooksRes.data.length,
+    actionsCount: actionsRes.data.length,
     enabledServicesCount,
     totalGlobalServicesCount,
   };
@@ -90,7 +92,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 }
 
 export default function TenantDetailPage() {
-  const { tenant, usersCount, servicesCount, pendingInvitationsCount, webhooksCount, enabledServicesCount, totalGlobalServicesCount } =
+  const { tenant, usersCount, servicesCount, pendingInvitationsCount, webhooksCount, actionsCount, enabledServicesCount, totalGlobalServicesCount } =
     useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -286,6 +288,15 @@ export default function TenantDetailPage() {
                   Enterprise SSO
                 </Link>
               </Button>
+              <Button variant="outline" className="w-full justify-start" asChild>
+                <Link to={`/dashboard/tenants/${tenant.id}/actions`}>
+                  <LightningBoltIcon className="mr-2 h-4 w-4" />
+                  Actions
+                  <span className="ml-auto text-xs text-[var(--text-tertiary)]">
+                    {actionsCount}
+                  </span>
+                </Link>
+              </Button>
             </CardContent>
           </Card>
 
@@ -331,6 +342,13 @@ export default function TenantDetailPage() {
                     Webhooks
                   </div>
                   <span className="font-medium">{webhooksCount}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                    <LightningBoltIcon className="h-4 w-4" />
+                    Actions
+                  </div>
+                  <span className="font-medium">{actionsCount}</span>
                 </div>
               </div>
             </CardContent>

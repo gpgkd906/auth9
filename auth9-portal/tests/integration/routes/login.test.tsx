@@ -26,20 +26,14 @@ describe("Login Page", () => {
     // Loader Tests
     // ============================================================================
 
-    it("loader redirects to SSO when no error or passkey params", async () => {
+    it("loader returns page data without redirecting", async () => {
         const request = new Request("http://localhost:3000/login");
-        try {
-            await loader({ request, params: {}, context: {} });
-            throw new Error("Expected redirect");
-        } catch (response: unknown) {
-            expect(response).toBeInstanceOf(Response);
-            const res = response as Response;
-            expect(res.status).toBe(302);
-            const location = res.headers.get("Location");
-            expect(location).toContain("/api/v1/auth/authorize");
-            expect(location).toContain("response_type=code");
-            expect(location).toContain("scope=openid+email+profile");
-        }
+        const result = await loader({ request, params: {}, context: {} });
+
+        expect(result).toEqual({
+            error: null,
+            apiBaseUrl: "http://localhost:8080",
+        });
     });
 
     it("loader returns error data when error param present", async () => {
@@ -48,7 +42,6 @@ describe("Login Page", () => {
 
         expect(result).toEqual({
             error: "access_denied",
-            showPasskey: true,
             apiBaseUrl: "http://localhost:8080",
         });
     });
@@ -59,7 +52,6 @@ describe("Login Page", () => {
 
         expect(result).toEqual({
             error: "server_error",
-            showPasskey: true,
             apiBaseUrl: "http://localhost:8080",
         });
     });
@@ -188,7 +180,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "access_denied", showPasskey: true, apiBaseUrl: "http://localhost:8080" };
+                    return { error: "access_denied", apiBaseUrl: "http://localhost:8080" };
                 },
             },
         ]);
@@ -207,7 +199,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "server_error", showPasskey: true, apiBaseUrl: "http://localhost:8080" };
+                    return { error: "server_error", apiBaseUrl: "http://localhost:8080" };
                 },
             },
         ]);
@@ -224,7 +216,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "test_error", showPasskey: true, apiBaseUrl: "http://localhost:8080" };
+                    return { error: "test_error", apiBaseUrl: "http://localhost:8080" };
                 },
             },
         ]);
@@ -235,30 +227,16 @@ describe("Login Page", () => {
     });
 
     // ============================================================================
-    // Passkey Mode Loader Tests
+    // Loader Always Renders Page Tests
     // ============================================================================
 
-    it("loader shows passkey login page when passkey param is true", async () => {
+    it("loader always returns page data regardless of query params", async () => {
         const request = new Request("http://localhost:3000/login?passkey=true");
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({
             error: null,
-            showPasskey: true,
             apiBaseUrl: "http://localhost:8080",
         });
-    });
-
-    it("loader redirects to SSO by default (passkey mode off)", async () => {
-        const request = new Request("http://localhost:3000/login");
-        try {
-            await loader({ request, params: {}, context: {} });
-            throw new Error("Expected redirect");
-        } catch (response: unknown) {
-            expect(response).toBeInstanceOf(Response);
-            const res = response as Response;
-            expect(res.status).toBe(302);
-            expect(res.headers.get("Location")).toContain("/api/v1/auth/authorize");
-        }
     });
 });

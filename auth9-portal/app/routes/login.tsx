@@ -39,32 +39,9 @@ function buildAuthorizeParams(requestUrl: URL) {
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
   const error = url.searchParams.get("error");
-  const showPasskey = url.searchParams.get("passkey") === "true";
-
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
 
-  if (error) {
-    return { error, showPasskey: true, apiBaseUrl };
-  }
-
-  // Default behavior: auto-redirect to SSO when no error/passkey params
-  if (!showPasskey) {
-    const auth = buildAuthorizeParams(url);
-    const authorizeUrl = new URL(`${auth.corePublicUrl}/api/v1/auth/authorize`);
-    authorizeUrl.searchParams.set("response_type", auth.response_type);
-    authorizeUrl.searchParams.set("client_id", auth.client_id);
-    authorizeUrl.searchParams.set("redirect_uri", auth.redirect_uri);
-    authorizeUrl.searchParams.set("scope", auth.scope);
-    authorizeUrl.searchParams.set("state", auth.state);
-    authorizeUrl.searchParams.set("nonce", auth.nonce);
-
-    const oauthCookie = await serializeOAuthState(auth.state);
-    throw redirect(authorizeUrl.toString(), {
-      headers: { "Set-Cookie": oauthCookie },
-    });
-  }
-
-  return { error: null, showPasskey, apiBaseUrl };
+  return { error, apiBaseUrl };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -180,7 +157,7 @@ function toRequestOptions(publicKey: Record<string, unknown>): PublicKeyCredenti
 }
 
 export default function Login() {
-  const data = useLoaderData<typeof loader>() as { error: string | null; showPasskey: boolean; apiBaseUrl: string };
+  const data = useLoaderData<typeof loader>() as { error: string | null; apiBaseUrl: string };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
