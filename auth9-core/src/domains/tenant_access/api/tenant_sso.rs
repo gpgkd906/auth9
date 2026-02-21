@@ -269,6 +269,14 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
         .await?;
 
     let mut tx = state.db_pool().begin().await?;
+    sqlx::query("DELETE FROM scim_group_role_mappings WHERE connector_id = ?")
+        .bind(connector_id.to_string())
+        .execute(tx.as_mut())
+        .await?;
+    sqlx::query("DELETE FROM scim_tokens WHERE connector_id = ?")
+        .bind(connector_id.to_string())
+        .execute(tx.as_mut())
+        .await?;
     sqlx::query("DELETE FROM enterprise_sso_domains WHERE connector_id = ?")
         .bind(connector_id.to_string())
         .execute(tx.as_mut())
@@ -572,10 +580,18 @@ fn normalize_domains(domains: Vec<String>) -> Result<Vec<String>> {
 }
 
 fn map_conflict_if_duplicate(error: sqlx::Error) -> AppError {
-    if let sqlx::Error::Database(db_err) = &error {
+    if let sqlx::Error::Database(ref db_err) = error {
         if db_err.code().as_deref() == Some("1062") {
             return AppError::Conflict("Duplicate connector alias or domain".to_string());
         }
+        let msg = db_err.message().to_lowercase();
+        if msg.contains("duplicate entry") || msg.contains("1062") {
+            return AppError::Conflict("Duplicate connector alias or domain".to_string());
+        }
+    }
+    let err_str = error.to_string().to_lowercase();
+    if err_str.contains("duplicate") && err_str.contains("1062") {
+        return AppError::Conflict("Duplicate connector alias or domain".to_string());
     }
     AppError::Database(error)
 }

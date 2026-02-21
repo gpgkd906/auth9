@@ -18,6 +18,13 @@
 - `DELETE /api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}`
 - `POST /api/v1/tenants/{tenant_id}/sso/connectors/{connector_id}/test`
 
+**SCIM Provisioning**（连接器创建后可配置）：
+- `POST /api/v1/tenants/{tid}/sso/connectors/{cid}/scim/tokens` — 生成 SCIM Bearer Token
+- `GET /api/v1/tenants/{tid}/sso/connectors/{cid}/scim/tokens` — 列出 SCIM Token
+- `DELETE /api/v1/tenants/{tid}/sso/connectors/{cid}/scim/tokens/{id}` — 吊销 SCIM Token
+
+> 详细 SCIM 测试参见 `docs/qa/provisioning/01-scim-token-management.md`
+
 ---
 
 ## 场景 1：创建 SAML 连接器成功
