@@ -186,6 +186,26 @@ This ensures:
 - User has real-time visibility into each issue as it surfaces
 - Ticket evidence is freshest at the moment of failure (logs, DB state haven't been polluted by subsequent tests)
 
+#### UIUX Visibility / Accessibility Ticket Rule
+
+**For UIUX test documents**: In addition to functional failures, **visibility and accessibility issues MUST also result in ticket creation**. This applies even when the underlying functionality works correctly. Examples include:
+
+- Elements not visible or hidden behind overlapping components
+- Missing or incorrect ARIA labels / roles
+- Insufficient color contrast ratios
+- Elements not reachable via keyboard navigation (Tab / Enter / Escape)
+- Focus management issues (e.g., focus not trapped in modals, focus lost after actions)
+- Missing focus indicators on interactive elements
+- Screen reader incompatible content or structure
+- Text truncation or overflow that hides meaningful content
+- Touch targets too small for mobile interaction
+- Missing or misleading alt text on images
+
+When creating a ticket for a UIUX visibility/accessibility issue, set:
+- **Severity**: `Medium` (default) — raise to `High` if the issue blocks a user action or violates WCAG 2.1 Level A
+- **Related Components**: `Frontend`
+- **Analysis > Root Cause**: Clearly describe the visibility or accessibility deficiency
+
 #### Ticket Naming
 
 **Format**: `{module}_{document}_scenario{N}_{YYMMDD_HHMMSS}.md`

@@ -3,6 +3,19 @@ import { authApi } from "~/services/api";
 
 const isProduction = process.env.NODE_ENV === "production";
 const SESSION_MAX_AGE = 8 * 60 * 60;
+const DEFAULT_SESSION_SECRET = "default-secret-change-me";
+
+function resolveSessionSecret(): string {
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (isProduction && (!sessionSecret || sessionSecret === DEFAULT_SESSION_SECRET)) {
+    throw new Error(
+      "SESSION_SECRET must be set to a strong non-default value in production"
+    );
+  }
+  return sessionSecret || DEFAULT_SESSION_SECRET;
+}
+
+const cookieSecret = resolveSessionSecret();
 
 export const NO_STORE_HEADERS: HeadersInit = {
   "Cache-Control": "no-store, no-cache, must-revalidate, private",
@@ -11,7 +24,7 @@ export const NO_STORE_HEADERS: HeadersInit = {
 };
 
 export const sessionCookie = createCookie("auth9_session", {
-  secrets: [process.env.SESSION_SECRET || "default-secret-change-me"],
+  secrets: [cookieSecret],
   path: "/",
   sameSite: "lax",
   httpOnly: true,
@@ -32,7 +45,7 @@ export interface SessionData {
 }
 
 export const oauthStateCookie = createCookie("oauth_state", {
-  secrets: [process.env.SESSION_SECRET || "default-secret-change-me"],
+  secrets: [cookieSecret],
   path: "/",
   sameSite: "lax",
   httpOnly: true,
