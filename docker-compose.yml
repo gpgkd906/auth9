@@ -98,6 +98,8 @@ services:
       PASSWORD_RESET_TOKEN_TTL_SECS: 3600
       # Action Engine - allowed domains for fetch() in Action scripts
       ACTION_ALLOWED_DOMAINS: "httpbin.org,api.github.com,jsonplaceholder.typicode.com"
+      # Branding - allowed domains for logo/favicon URLs
+      BRANDING_ALLOWED_DOMAINS: "cdn.example.com,assets.example.com"
     depends_on:
       auth9-init:
         condition: service_completed_successfully

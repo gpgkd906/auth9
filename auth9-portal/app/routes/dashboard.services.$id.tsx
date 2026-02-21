@@ -506,7 +506,7 @@ function ActionsTab({ actions, serviceId }: { actions: Action[]; serviceId: stri
 }
 
 // Branding Tab component
-function BrandingTab({ branding, serviceId }: { branding: BrandingConfig | null; serviceId: string }) {
+function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
     const navigation = useNavigation();
     const actionData = useActionData<typeof action>();
     const [isCustomizing, setIsCustomizing] = useState(!!branding);
@@ -953,7 +953,7 @@ export default function ServiceDetailPage() {
                 </TabsContent>
 
                 <TabsContent value="branding">
-                    <BrandingTab branding={branding} serviceId={service.id} />
+                    <BrandingTab branding={branding} />
                 </TabsContent>
             </Tabs>
 
