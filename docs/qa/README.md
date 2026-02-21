@@ -133,16 +133,17 @@
 | [sdk/05-express-middleware.md](./sdk/05-express-middleware.md) | Express 中间件、权限控制、角色控制、AuthInfo | 5 |
 | [sdk/06-middleware-testing.md](./sdk/06-middleware-testing.md) | Next.js/Fastify 中间件、Mock Token、构建输出 | 5 |
 
-### 集成测试 (7 个文档, 35 个场景)
+### 集成测试 (8 个文档, 40 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 5 |
 | [integration/02-password-policy.md](./integration/02-password-policy.md) | 密码策略强制执行 | 5 |
+| [integration/11-keycloak26-event-stream.md](./integration/11-keycloak26-event-stream.md) | Keycloak 26 升级、Redis Stream 事件接入、Webhook 兼容回归 | 5 |
 | [integration/06-init-seed-data.md](./integration/06-init-seed-data.md) | Init 初始种子数据、幂等性、Keycloak 重置恢复 | 5 |
 | [integration/07-observability-metrics.md](./integration/07-observability-metrics.md) | Prometheus /metrics 端点、HTTP 指标、X-Request-ID、路径折叠 | 5 |
 | [integration/08-observability-stack.md](./integration/08-observability-stack.md) | 可观测性栈启动、Grafana 仪表盘、业务指标、限流指标 | 5 |
 | [integration/09-security-hardening-config.md](./integration/09-security-hardening-config.md) | 生产环境安全启动校验、REST aud 严格校验、HSTS 条件下发、gRPC audience 必填 | 5 |
-| [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Webhook Secret 生产强制校验、外部系统同步 | 5 |
+| [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Keycloak 事件源安全校验、外部系统同步 | 5 |
 
 ---
 
@@ -165,8 +166,8 @@
 | 审计日志 | 1 | 5 |
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
-| 集成测试 | 7 | 35 |
-| **总计** | **76** | **374** |
+| 集成测试 | 8 | 40 |
+| **总计** | **77** | **379** |
 
 ---
 

@@ -22,7 +22,7 @@ data:
   KC_HOSTNAME_STRICT: "false"
   KC_HEALTH_ENABLED: "true"
   KC_METRICS_ENABLED: "true"
-  KC_PROXY: edge
+  KC_PROXY_HEADERS: xforwarded
 
   # Theme configuration - use auth9 for login, keycloak defaults for others
   KC_SPI_THEME_LOGIN_DEFAULT: auth9
@@ -32,10 +32,8 @@ data:
   # Auth9 API URL for theme integration
   AUTH9_API_URL: http://auth9-core:8080
 
-  # Keycloak Events SPI configuration (p2-inc/keycloak-events v0.25+)
-  # Events are sent to auth9-core for security monitoring and analytics
-  KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
-  # Note: KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET is set via keycloak-secrets
+  # Keycloak event source: built-in jboss-logging listener.
+  # A log forwarder should write these events into Redis Stream for auth9-core consumption.
 
   # Logging
   KC_LOG_LEVEL: INFO

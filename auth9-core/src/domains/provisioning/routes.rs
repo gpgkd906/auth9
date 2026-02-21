@@ -32,8 +32,7 @@ where
         // Users
         .route(
             "/api/v1/scim/v2/Users",
-            get(scim_api::scim_users::list_users::<S>)
-                .post(scim_api::scim_users::create_user::<S>),
+            get(scim_api::scim_users::list_users::<S>).post(scim_api::scim_users::create_user::<S>),
         )
         .route(
             "/api/v1/scim/v2/Users/{id}",

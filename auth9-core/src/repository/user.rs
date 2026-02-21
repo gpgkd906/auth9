@@ -74,10 +74,7 @@ pub trait UserRepository: Send + Sync {
     // SCIM provisioning methods
 
     /// Find user by SCIM external ID
-    async fn find_by_scim_external_id(
-        &self,
-        scim_external_id: String,
-    ) -> Result<Option<User>>;
+    async fn find_by_scim_external_id(&self, scim_external_id: String) -> Result<Option<User>>;
 
     /// Update SCIM tracking fields on a user
     async fn update_scim_fields(
@@ -554,10 +551,7 @@ impl UserRepository for UserRepositoryImpl {
         Ok(())
     }
 
-    async fn find_by_scim_external_id(
-        &self,
-        scim_external_id: String,
-    ) -> Result<Option<User>> {
+    async fn find_by_scim_external_id(&self, scim_external_id: String) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
             SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at

@@ -265,13 +265,8 @@ impl KeycloakSeeder {
     async fn update_realm_settings(&self, token: &str) -> anyhow::Result<()> {
         let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
 
-        // Build events listeners list
-        // Always include jboss-logging for server logs
-        // Add ext-event-http if webhook secret is configured (p2-inc/keycloak-events HTTP forwarder)
-        let mut events_listeners = vec!["jboss-logging"];
-        if self.config.webhook_secret.is_some() {
-            events_listeners.push("ext-event-http");
-        }
+        // Keycloak 26 path: use built-in event logging only.
+        let events_listeners = vec!["jboss-logging"];
 
         // Use GET-merge-PUT pattern to avoid resetting fields not included in our update.
         // Partial PUTs in Keycloak 23 can reset boolean fields to false when omitted.
@@ -340,13 +335,6 @@ impl KeycloakSeeder {
             "Updated realm '{}': SSL='{}', loginTheme='auth9', registrationAllowed=false, eventsEnabled=true, eventsListeners={:?}",
             self.config.realm, self.config.ssl_required, events_listeners
         );
-
-        // Configure ext-event-http provider via realm attributes
-        // p2-inc/keycloak-events reads config from realm attribute: _providerConfig.ext-event-http
-        if let Some(ref webhook_secret) = self.config.webhook_secret {
-            self.configure_event_http_provider(token, webhook_secret)
-                .await?;
-        }
 
         // NOTE: configure_realm_security is NOT called here. It is called separately via
         // apply_realm_security() AFTER admin user seeding, because Keycloak 23's
@@ -434,77 +422,6 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Configure ext-event-http provider via realm attributes
-    ///
-    /// The p2-inc/keycloak-events plugin reads its configuration from realm attributes,
-    /// not from Keycloak's standard SPI config. The attribute key is:
-    /// `_providerConfig.ext-event-http` with a JSON value containing targetUri and sharedSecret.
-    async fn configure_event_http_provider(
-        &self,
-        token: &str,
-        webhook_secret: &str,
-    ) -> anyhow::Result<()> {
-        let url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
-
-        // Build the webhook target URL - use the internal Docker network URL
-        // auth9-core listens on port 8080 inside the network
-        let target_uri = std::env::var("KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI")
-            .unwrap_or_else(|_| "http://auth9-core:8080/api/v1/keycloak/events".to_string());
-
-        let provider_config = serde_json::json!({
-            "targetUri": target_uri,
-            "sharedSecret": webhook_secret,
-            "hmacAlgorithm": "HmacSHA256"
-        });
-
-        // Use GET-merge-PUT to avoid resetting other realm fields
-        let current: serde_json::Value = self
-            .http_client
-            .get(&url)
-            .bearer_auth(token)
-            .send()
-            .await
-            .context("Failed to get realm for ext-event-http config")?
-            .json()
-            .await
-            .context("Failed to parse realm JSON")?;
-
-        let mut updated = current;
-        if let Some(obj) = updated.as_object_mut() {
-            let attributes = obj
-                .entry("attributes")
-                .or_insert_with(|| serde_json::json!({}));
-            if let Some(attrs) = attributes.as_object_mut() {
-                attrs.insert(
-                    "_providerConfig.ext-event-http".to_string(),
-                    serde_json::json!(provider_config.to_string()),
-                );
-            }
-        }
-
-        let response = self
-            .http_client
-            .put(&url)
-            .bearer_auth(token)
-            .json(&updated)
-            .send()
-            .await
-            .context("Failed to configure ext-event-http provider")?;
-
-        if !response.status().is_success() {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            warn!("Failed to configure ext-event-http: {} - {}", status, body);
-        } else {
-            info!(
-                "Configured ext-event-http provider: targetUri={}",
-                target_uri
-            );
-        }
-
-        Ok(())
-    }
-
     /// Ensure realm exists (create if not). Does NOT configure any settings yet.
     /// All settings (events, security, password policy) are applied separately via
     /// `apply_realm_settings()` AFTER admin user seeding, because Keycloak 23 rejects
@@ -521,7 +438,7 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Apply ALL realm settings: events, SSL, login theme, ext-event-http, password policy,
+    /// Apply ALL realm settings: events, SSL, login theme, password policy,
     /// and brute force protection.
     /// Call this AFTER seeding the admin user, because Keycloak 23 rejects user creation
     /// with credentials (POST /users returns 400 "Password policy not met") and

@@ -63,7 +63,11 @@ pub async fn scim_auth_middleware<S: ProvisioningContext>(
     };
 
     // Validate token
-    match state.scim_token_service().validate_token(token, &base_url).await {
+    match state
+        .scim_token_service()
+        .validate_token(token, &base_url)
+        .await
+    {
         Ok(ctx) => {
             request.extensions_mut().insert(ctx);
             next.run(request).await

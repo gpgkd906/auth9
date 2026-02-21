@@ -316,6 +316,247 @@ fn verify_signature(secret: &str, body: &[u8], signature: &str) -> bool {
     mac.verify_slice(&expected_bytes).is_ok()
 }
 
+/// Parse a raw Keycloak event payload.
+pub fn parse_keycloak_event(body: &[u8]) -> Result<KeycloakEvent, AppError> {
+    serde_json::from_slice(body)
+        .map_err(|err| AppError::BadRequest(format!("Invalid event payload: {}", err)))
+}
+
+/// Process a Keycloak event from webhook or stream.
+pub async fn process_keycloak_event<
+    S: HasServices + HasAnalytics + HasSecurityAlerts + HasCache,
+>(
+    state: &S,
+    event: KeycloakEvent,
+    headers: Option<&HeaderMap>,
+) -> Result<StatusCode, AppError> {
+    // Reject expired events (older than 5 minutes)
+    if event.time > 0 {
+        let now_millis = Utc::now().timestamp_millis();
+        let age_secs = (now_millis - event.time) / 1000;
+        if age_secs > 300 {
+            warn!(
+                "Rejecting expired Keycloak event: age={}s, type={:?}, user_id={:?}",
+                age_secs, event.event_type, event.user_id
+            );
+            return Err(AppError::BadRequest(format!(
+                "Event timestamp too old ({}s > 300s)",
+                age_secs
+            )));
+        }
+    }
+
+    // Deduplicate with Redis SETNX.
+    if let Some(ref id) = event.id {
+        match state.cache().check_and_mark_webhook_event(id, 3600).await {
+            Ok(true) => {
+                debug!("Duplicate webhook event detected, skipping: {}", id);
+                return Ok(StatusCode::NO_CONTENT);
+            }
+            Ok(false) => {}
+            Err(e) => {
+                warn!(
+                    "Webhook dedup cache check failed, using in-memory fallback: {}",
+                    e
+                );
+                if check_in_memory_dedup(id, 3600) {
+                    debug!(
+                        "Duplicate webhook event detected (in-memory fallback), skipping: {}",
+                        id
+                    );
+                    return Ok(StatusCode::NO_CONTENT);
+                }
+            }
+        }
+    }
+
+    // Skip admin events (operationType/resourceType)
+    if event.event_type.is_none() {
+        debug!(
+            "Skipping Keycloak admin event: operation={:?}, resource={:?}",
+            event.operation_type, event.resource_type
+        );
+        return Ok(StatusCode::NO_CONTENT);
+    }
+
+    let event_type_str = event.event_type.as_deref().unwrap_or("");
+    debug!(
+        "Received Keycloak event: type={}, user_id={:?}, error={:?}, details={:?}",
+        event_type_str, event.user_id, event.error, event.details
+    );
+
+    let mut login_event_type =
+        match map_event_type_with_details(event_type_str, event.error.as_deref(), &event.details) {
+            Some(t) => t,
+            None => return Ok(StatusCode::NO_CONTENT),
+        };
+
+    if login_event_type == LoginEventType::FailedPassword
+        && event.error.as_deref() == Some("invalid_user_credentials")
+    {
+        if let Some(ref kc_user_id) = event.user_id {
+            match state
+                .keycloak_client()
+                .list_user_credentials(kc_user_id)
+                .await
+            {
+                Ok(creds) => {
+                    let has_otp = creds.iter().any(|c| {
+                        let ct = c.credential_type.to_lowercase();
+                        ct == "otp" || ct == "totp"
+                    });
+                    if has_otp {
+                        debug!(
+                            "User {} has OTP credentials; reclassifying LOGIN_ERROR as FailedMfa",
+                            kc_user_id
+                        );
+                        login_event_type = LoginEventType::FailedMfa;
+                    }
+                }
+                Err(e) => {
+                    debug!(
+                        "Failed to check user credentials for MFA detection, keeping FailedPassword: {}",
+                        e
+                    );
+                }
+            }
+        }
+    }
+
+    let user_id = if let Some(ref kc_user_id) = event.user_id {
+        match state.user_service().get_by_keycloak_id(kc_user_id).await {
+            Ok(user) => Some(user.id),
+            Err(_) => {
+                debug!(
+                    "Could not resolve Keycloak user_id {} to auth9 user; storing as-is",
+                    kc_user_id
+                );
+                uuid::Uuid::parse_str(kc_user_id).ok().map(StringUuid::from)
+            }
+        }
+    } else {
+        None
+    };
+
+    let email = event
+        .details
+        .email
+        .clone()
+        .or_else(|| event.details.username.clone());
+    let ip_address = event.ip_address.clone().or_else(|| {
+        headers.and_then(crate::api::extract_ip).or_else(|| {
+            headers
+                .and_then(|h| h.get("x-forwarded-for"))
+                .and_then(|v| v.to_str().ok())
+                .map(str::to_string)
+        })
+    });
+
+    let input = CreateLoginEventInput {
+        user_id,
+        email: email.clone(),
+        tenant_id: None,
+        event_type: login_event_type.clone(),
+        ip_address: ip_address.clone(),
+        user_agent: headers
+            .and_then(|h| {
+                h.get("x-forwarded-user-agent")
+                    .or_else(|| h.get("user-agent"))
+            })
+            .and_then(|v| v.to_str().ok())
+            .map(String::from),
+        device_type: None,
+        location: ip_address.as_deref().map(derive_location_from_ip),
+        session_id: event
+            .session_id
+            .as_ref()
+            .and_then(|id| uuid::Uuid::parse_str(id).ok())
+            .map(StringUuid::from),
+        failure_reason: if login_event_type == LoginEventType::FailedMfa
+            && event.error.as_deref() == Some("invalid_user_credentials")
+            && !is_mfa_context(&event.details)
+        {
+            Some("Invalid MFA code".to_string())
+        } else {
+            derive_failure_reason_with_details(event.error.as_deref(), &event.details)
+        },
+    };
+
+    let event_id = state.analytics_service().record_login_event(input).await?;
+    info!(
+        "Recorded login event: id={}, type={}, user_id={:?}",
+        event_id, event_type_str, event.user_id
+    );
+
+    if login_event_type == LoginEventType::FailedPassword
+        || login_event_type == LoginEventType::FailedMfa
+    {
+        if let Some(ref email_val) = email {
+            let since = Utc::now() - chrono::Duration::minutes(10);
+            let failed_count = state
+                .analytics_service()
+                .list_events_by_email(email_val, 1, 10)
+                .await
+                .map(|(events, _)| {
+                    events
+                        .iter()
+                        .take_while(|e| {
+                            e.event_type == LoginEventType::FailedPassword
+                                || e.event_type == LoginEventType::FailedMfa
+                        })
+                        .filter(|e| e.created_at >= since)
+                        .count()
+                })
+                .unwrap_or(0);
+
+            if failed_count >= 5 {
+                let locked_input = CreateLoginEventInput {
+                    user_id,
+                    email: email.clone(),
+                    tenant_id: None,
+                    event_type: LoginEventType::Locked,
+                    ip_address: ip_address.clone(),
+                    user_agent: None,
+                    device_type: None,
+                    location: ip_address.as_deref().map(derive_location_from_ip),
+                    session_id: None,
+                    failure_reason: Some(
+                        "Account temporarily locked due to repeated login failures".to_string(),
+                    ),
+                };
+
+                match state
+                    .analytics_service()
+                    .record_login_event(locked_input)
+                    .await
+                {
+                    Ok(locked_id) => {
+                        info!(
+                            "Auto-recorded account lockout event: id={}, email={}, consecutive_failures={}",
+                            locked_id, email_val, failed_count
+                        );
+                    }
+                    Err(err) => {
+                        error!("Failed to record lockout event for {}: {}", email_val, err);
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(Some(login_event)) = state.analytics_service().get_event(event_id).await {
+        if let Err(err) = state
+            .security_detection_service()
+            .analyze_login_event(&login_event)
+            .await
+        {
+            error!("Security analysis failed for event {}: {}", event_id, err);
+        }
+    }
+
+    Ok(StatusCode::NO_CONTENT)
+}
+
 /// Receive Keycloak events webhook
 ///
 /// POST /api/v1/keycloak/events
@@ -364,275 +605,19 @@ pub async fn receive<S: HasServices + HasAnalytics + HasSecurityAlerts + HasCach
         debug!("Keycloak webhook signature verification skipped (no secret configured)");
     }
 
-    // 2. Parse the event payload
-    let event: KeycloakEvent = match serde_json::from_slice(&body) {
+    let event = match parse_keycloak_event(&body) {
         Ok(e) => e,
         Err(err) => {
-            // Log truncated raw body for debugging (max 500 chars, avoid sensitive data)
             let body_preview = String::from_utf8_lossy(&body[..body.len().min(500)]);
             error!(
                 "Failed to parse Keycloak event: {}. Body preview: {}",
                 err, body_preview
             );
-            return Err(AppError::BadRequest(format!(
-                "Invalid event payload: {}",
-                err
-            )));
+            return Err(err);
         }
     };
 
-    // 2b. Reject expired events (older than 5 minutes)
-    if event.time > 0 {
-        let now_millis = Utc::now().timestamp_millis();
-        let age_secs = (now_millis - event.time) / 1000;
-        if age_secs > 300 {
-            warn!(
-                "Rejecting expired Keycloak event: age={}s, type={:?}, user_id={:?}",
-                age_secs, event.event_type, event.user_id
-            );
-            return Err(AppError::BadRequest(format!(
-                "Event timestamp too old ({}s > 300s)",
-                age_secs
-            )));
-        }
-    }
-
-    // 2c. Deduplicate webhook events using Redis SETNX
-    // Only deduplicate when Keycloak provides an explicit event ID (indicating a
-    // redelivery). Without an ID, each event is treated as distinct — this is
-    // critical for security monitoring where multiple rapid login failures from the
-    // same user must all be recorded to trigger brute-force alerts.
-    if let Some(ref id) = event.id {
-        match state.cache().check_and_mark_webhook_event(id, 3600).await {
-            Ok(true) => {
-                debug!("Duplicate webhook event detected, skipping: {}", id);
-                return Ok(StatusCode::NO_CONTENT);
-            }
-            Ok(false) => {} // New event, proceed
-            Err(e) => {
-                warn!(
-                    "Webhook dedup cache check failed, using in-memory fallback: {}",
-                    e
-                );
-                if check_in_memory_dedup(id, 3600) {
-                    debug!(
-                        "Duplicate webhook event detected (in-memory fallback), skipping: {}",
-                        id
-                    );
-                    return Ok(StatusCode::NO_CONTENT);
-                }
-            }
-        }
-    }
-
-    // 3. Skip admin events (operationType/resourceType) - we only track user login events
-    if event.event_type.is_none() {
-        debug!(
-            "Skipping Keycloak admin event: operation={:?}, resource={:?}",
-            event.operation_type, event.resource_type
-        );
-        return Ok(StatusCode::NO_CONTENT);
-    }
-
-    let event_type_str = event.event_type.as_deref().unwrap_or("");
-
-    debug!(
-        "Received Keycloak event: type={}, user_id={:?}, error={:?}, details={:?}",
-        event_type_str, event.user_id, event.error, event.details
-    );
-
-    // 4. Map to our login event type (skip non-login events)
-    let mut login_event_type =
-        match map_event_type_with_details(event_type_str, event.error.as_deref(), &event.details) {
-            Some(t) => t,
-            None => {
-                // Not a login event we track, acknowledge receipt
-                return Ok(StatusCode::NO_CONTENT);
-            }
-        };
-
-    // 4b. MFA detection fallback: when Keycloak sends LOGIN_ERROR with
-    // invalid_user_credentials but without MFA-indicating fields, check if the
-    // user actually has TOTP credentials configured. If they do, reclassify
-    // this as FailedMfa since the password step must have already succeeded
-    // for Keycloak to show the MFA prompt.
-    if login_event_type == LoginEventType::FailedPassword
-        && event.error.as_deref() == Some("invalid_user_credentials")
-    {
-        if let Some(ref kc_user_id) = event.user_id {
-            match state
-                .keycloak_client()
-                .list_user_credentials(kc_user_id)
-                .await
-            {
-                Ok(creds) => {
-                    let has_otp = creds.iter().any(|c| {
-                        let ct = c.credential_type.to_lowercase();
-                        ct == "otp" || ct == "totp"
-                    });
-                    if has_otp {
-                        debug!(
-                            "User {} has OTP credentials; reclassifying LOGIN_ERROR as FailedMfa",
-                            kc_user_id
-                        );
-                        login_event_type = LoginEventType::FailedMfa;
-                    }
-                }
-                Err(e) => {
-                    debug!(
-                        "Failed to check user credentials for MFA detection, keeping FailedPassword: {}",
-                        e
-                    );
-                }
-            }
-        }
-    }
-
-    // 5. Resolve Keycloak user ID to auth9 user ID
-    // Keycloak sends its own internal user UUID, which differs from auth9's users.id.
-    // We look up the auth9 user by keycloak_id so that login events and security alerts
-    // reference the correct user.
-    let user_id = if let Some(ref kc_user_id) = event.user_id {
-        match state.user_service().get_by_keycloak_id(kc_user_id).await {
-            Ok(user) => Some(user.id),
-            Err(_) => {
-                debug!(
-                    "Could not resolve Keycloak user_id {} to auth9 user; storing as-is",
-                    kc_user_id
-                );
-                // Fall back to using the Keycloak UUID directly (for users not yet synced)
-                uuid::Uuid::parse_str(kc_user_id).ok().map(StringUuid::from)
-            }
-        }
-    } else {
-        None
-    };
-
-    // 6. Get email from event details
-    let email = event
-        .details
-        .email
-        .clone()
-        .or_else(|| event.details.username.clone());
-
-    // 7. Create login event input
-    // Resolve IP address: prefer Keycloak's ipAddress field, fall back to HTTP headers
-    let ip_address = event
-        .ip_address
-        .clone()
-        .or_else(|| crate::api::extract_ip(&headers));
-
-    let input = CreateLoginEventInput {
-        user_id,
-        email: email.clone(),
-        tenant_id: None, // Keycloak events are realm-level, not tenant-specific
-        event_type: login_event_type.clone(),
-        ip_address: ip_address.clone(),
-        user_agent: headers
-            .get("x-forwarded-user-agent")
-            .or_else(|| headers.get("user-agent"))
-            .and_then(|v| v.to_str().ok())
-            .map(String::from),
-        device_type: None,
-        location: ip_address.as_deref().map(derive_location_from_ip),
-        session_id: event
-            .session_id
-            .as_ref()
-            .and_then(|id| uuid::Uuid::parse_str(id).ok())
-            .map(StringUuid::from),
-        failure_reason: if login_event_type == LoginEventType::FailedMfa
-            && event.error.as_deref() == Some("invalid_user_credentials")
-            && !is_mfa_context(&event.details)
-        {
-            // Reclassified via Keycloak credential check; override the failure reason
-            Some("Invalid MFA code".to_string())
-        } else {
-            derive_failure_reason_with_details(event.error.as_deref(), &event.details)
-        },
-    };
-
-    // 8. Record the login event
-    let event_id = state.analytics_service().record_login_event(input).await?;
-
-    info!(
-        "Recorded login event: id={}, type={}, user_id={:?}",
-        event_id, event_type_str, event.user_id
-    );
-
-    // 9. Auto-detect account lockout from consecutive failures
-    // When we record a failed login, check if the user has hit the lockout threshold
-    // (5+ consecutive failures). If so, also record a "locked" event.
-    if login_event_type == LoginEventType::FailedPassword
-        || login_event_type == LoginEventType::FailedMfa
-    {
-        if let Some(ref email_val) = email {
-            let since = Utc::now() - chrono::Duration::minutes(10);
-            let failed_count = state
-                .analytics_service()
-                .list_events_by_email(email_val, 1, 10)
-                .await
-                .map(|(events, _)| {
-                    // Count consecutive failures (stop at first non-failure)
-                    events
-                        .iter()
-                        .take_while(|e| {
-                            e.event_type == LoginEventType::FailedPassword
-                                || e.event_type == LoginEventType::FailedMfa
-                        })
-                        .filter(|e| e.created_at >= since)
-                        .count()
-                })
-                .unwrap_or(0);
-
-            if failed_count >= 5 {
-                let locked_input = CreateLoginEventInput {
-                    user_id,
-                    email: email.clone(),
-                    tenant_id: None,
-                    event_type: LoginEventType::Locked,
-                    ip_address: ip_address.clone(),
-                    user_agent: None,
-                    device_type: None,
-                    location: ip_address.as_deref().map(derive_location_from_ip),
-                    session_id: None,
-                    failure_reason: Some(
-                        "Account temporarily locked due to repeated login failures".to_string(),
-                    ),
-                };
-
-                match state
-                    .analytics_service()
-                    .record_login_event(locked_input)
-                    .await
-                {
-                    Ok(locked_id) => {
-                        info!(
-                            "Auto-recorded account lockout event: id={}, email={}, consecutive_failures={}",
-                            locked_id, email_val, failed_count
-                        );
-                    }
-                    Err(err) => {
-                        error!("Failed to record lockout event for {}: {}", email_val, err);
-                    }
-                }
-            }
-        }
-    }
-
-    // 10. Trigger security detection analysis
-    // Fetch the event we just created by its ID to pass to security detection
-    if let Ok(Some(login_event)) = state.analytics_service().get_event(event_id).await {
-        if let Err(err) = state
-            .security_detection_service()
-            .analyze_login_event(&login_event)
-            .await
-        {
-            error!("Security analysis failed for event {}: {}", event_id, err);
-            // Don't fail the webhook for security analysis errors
-        }
-    }
-
-    Ok(StatusCode::NO_CONTENT)
+    process_keycloak_event(&state, event, Some(&headers)).await
 }
 
 #[cfg(test)]

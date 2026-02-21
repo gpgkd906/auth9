@@ -58,6 +58,18 @@ pub fn describe_metrics() {
         "auth9_redis_operation_duration_seconds",
         "Redis operation duration in seconds"
     );
+    describe_counter!(
+        "auth9_keycloak_stream_poll_total",
+        "Keycloak Redis Stream poll results by outcome (timeout/empty/messages)"
+    );
+    describe_counter!(
+        "auth9_keycloak_stream_read_errors_total",
+        "Keycloak Redis Stream read/connect errors"
+    );
+    describe_counter!(
+        "auth9_keycloak_stream_events_total",
+        "Keycloak Redis Stream event processing outcomes"
+    );
 
     // Auth metrics
     describe_counter!("auth9_auth_login_total", "Total number of login attempts");
@@ -131,6 +143,17 @@ pub fn describe_metrics() {
     .absolute(0);
     counter!("auth9_redis_operations_total", "operation" => "get").absolute(0);
     histogram!("auth9_redis_operation_duration_seconds", "operation" => "get").record(0.0);
+    counter!("auth9_keycloak_stream_poll_total", "result" => "timeout").absolute(0);
+    counter!(
+        "auth9_keycloak_stream_read_errors_total",
+        "error_type" => "xreadgroup_failed"
+    )
+    .absolute(0);
+    counter!(
+        "auth9_keycloak_stream_events_total",
+        "result" => "processed"
+    )
+    .absolute(0);
     gauge!("auth9_http_requests_in_flight").set(0.0);
 
     // Action metrics initial values

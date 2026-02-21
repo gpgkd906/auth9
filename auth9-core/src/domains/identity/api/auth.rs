@@ -361,7 +361,11 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                             // Pre* trigger errors are blocking.
                             state
                                 .action_service()
-                                .execute_trigger(service_id, "pre-user-registration", pre_reg_context)
+                                .execute_trigger(
+                                    service_id,
+                                    "pre-user-registration",
+                                    pre_reg_context,
+                                )
                                 .await?;
                         }
                     }
@@ -400,7 +404,11 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                             // Post* trigger errors are non-blocking.
                             if let Err(e) = state
                                 .action_service()
-                                .execute_trigger(service_id, "post-user-registration", post_reg_context)
+                                .execute_trigger(
+                                    service_id,
+                                    "post-user-registration",
+                                    post_reg_context,
+                                )
                                 .await
                             {
                                 tracing::warn!(
@@ -457,7 +465,9 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                 )
                 .await;
 
-                if let (Some(service_id), Some(tenant_id)) = (resolved_service_id, resolved_tenant_id) {
+                if let (Some(service_id), Some(tenant_id)) =
+                    (resolved_service_id, resolved_tenant_id)
+                {
                     // Resolve tenant slug/name for ActionContext
                     let (tenant_slug, tenant_name) =
                         resolve_action_tenant_profile(&state, tenant_id).await;
@@ -638,7 +648,9 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                 )
                 .await;
 
-                if let (Some(service_id), Some(tenant_id)) = (resolved_service_id, resolved_tenant_id) {
+                if let (Some(service_id), Some(tenant_id)) =
+                    (resolved_service_id, resolved_tenant_id)
+                {
                     let (tenant_slug, tenant_name) =
                         resolve_action_tenant_profile(&state, tenant_id).await;
                     let pre_refresh_context = ActionContext {

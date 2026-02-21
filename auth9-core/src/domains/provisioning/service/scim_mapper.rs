@@ -20,14 +20,15 @@ pub fn map_scim_user_to_fields(scim_user: &ScimUser) -> MappedUserFields {
 
     // Display name
     let display_name = scim_user.display_name.clone().or_else(|| {
-        scim_user.name.as_ref().and_then(|n| {
-            match (&n.given_name, &n.family_name) {
+        scim_user
+            .name
+            .as_ref()
+            .and_then(|n| match (&n.given_name, &n.family_name) {
                 (Some(given), Some(family)) => Some(format!("{} {}", given, family)),
                 (Some(given), None) => Some(given.clone()),
                 (None, Some(family)) => Some(family.clone()),
                 (None, None) => n.formatted.clone(),
-            }
-        })
+            })
     });
 
     // Avatar URL from photos
@@ -71,14 +72,8 @@ pub fn map_patch_value_to_fields(
         Some("name.givenName") | Some("name.familyName") | Some("name") => {
             // For name updates, try to reconstruct display_name
             if let Some(obj) = value.as_object() {
-                let given = obj
-                    .get("givenName")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
-                let family = obj
-                    .get("familyName")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("");
+                let given = obj.get("givenName").and_then(|v| v.as_str()).unwrap_or("");
+                let family = obj.get("familyName").and_then(|v| v.as_str()).unwrap_or("");
                 let name = format!("{} {}", given, family).trim().to_string();
                 if !name.is_empty() {
                     fields.display_name = Some(name);
@@ -136,11 +131,7 @@ mod tests {
     use super::*;
     use crate::domain::scim::{ScimEmail, ScimName, ScimPhoto, ScimUser};
 
-    fn make_user(
-        user_name: &str,
-        display_name: Option<&str>,
-        active: bool,
-    ) -> ScimUser {
+    fn make_user(user_name: &str, display_name: Option<&str>, active: bool) -> ScimUser {
         ScimUser {
             schemas: vec![ScimUser::SCHEMA.to_string()],
             id: None,

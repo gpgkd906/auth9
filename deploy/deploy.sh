@@ -494,23 +494,11 @@ generate_secrets() {
         print_info "SESSION_SECRET 已存在（不会重新生成）"
     fi
 
-    # KEYCLOAK_WEBHOOK_SECRET (shared between auth9-secrets and keycloak-secrets)
-    if [ -z "${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}" ]; then
-        local webhook_secret=$(openssl rand -hex 32)
-        AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]="$webhook_secret"
-        KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]="$webhook_secret"
-        echo ""
-        print_warning "已生成 KEYCLOAK_WEBHOOK_SECRET - 请安全保存："
-        echo -e "${GREEN}${webhook_secret}${NC}"
-        echo ""
-        read "?保存后按 Enter 继续..."
-    else
-        print_info "KEYCLOAK_WEBHOOK_SECRET 已存在（不会重新生成）"
-        # Sync to keycloak-secrets if not already set
-        if [ -z "${KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]}" ]; then
-            KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]="${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}"
-        fi
-    fi
+    # Keycloak event source (Redis Stream)
+    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]="redis_stream"
+    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_KEY]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_KEY]="auth9:keycloak:events"
+    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_GROUP]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_GROUP]="auth9-core"
+    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_CONSUMER]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_CONSUMER]="auth9-core-1"
 
     # GRPC_API_KEYS
     if [ -z "${AUTH9_SECRETS[GRPC_API_KEYS]}" ]; then
@@ -696,12 +684,12 @@ run_interactive_setup() {
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
         "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" \
         "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
-        "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
+        "KEYCLOAK_EVENT_SOURCE" "KEYCLOAK_EVENT_STREAM_KEY" "KEYCLOAK_EVENT_STREAM_GROUP" \
+        "KEYCLOAK_EVENT_STREAM_CONSUMER" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
 
     # Detect keycloak-secrets
     detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
-        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" \
-        "KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET" || true
+        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" || true
 
     # Detect ConfigMap
     detect_existing_configmap || true
@@ -852,7 +840,10 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
         echo "      --from-literal=SETTINGS_ENCRYPTION_KEY='...' \\"
-        echo "      --from-literal=KEYCLOAK_WEBHOOK_SECRET='...' \\"
+        echo "      --from-literal=KEYCLOAK_EVENT_SOURCE='redis_stream' \\"
+        echo "      --from-literal=KEYCLOAK_EVENT_STREAM_KEY='auth9:keycloak:events' \\"
+        echo "      --from-literal=KEYCLOAK_EVENT_STREAM_GROUP='auth9-core' \\"
+        echo "      --from-literal=KEYCLOAK_EVENT_STREAM_CONSUMER='auth9-core-1' \\"
         echo "      --from-literal=GRPC_API_KEYS='...' \\"
         echo "      -n $NAMESPACE"
         echo ""
@@ -870,7 +861,6 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
         echo "      --from-literal=KC_DB_USERNAME='keycloak' \\"
         echo "      --from-literal=KC_DB_PASSWORD='...' \\"
-        echo "      --from-literal=KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET='...' \\"
         echo "      -n $NAMESPACE"
         echo ""
         if [ -z "$DRY_RUN" ]; then

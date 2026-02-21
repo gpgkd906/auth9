@@ -92,11 +92,12 @@ impl ScimTokenRepository for ScimTokenRepositoryImpl {
     }
 
     async fn revoke(&self, id: StringUuid) -> Result<()> {
-        let result =
-            sqlx::query("UPDATE scim_tokens SET revoked_at = NOW(), updated_at = NOW() WHERE id = ?")
-                .bind(id)
-                .execute(&self.pool)
-                .await?;
+        let result = sqlx::query(
+            "UPDATE scim_tokens SET revoked_at = NOW(), updated_at = NOW() WHERE id = ?",
+        )
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound(format!("SCIM token {} not found", id)));
@@ -133,9 +134,7 @@ mod tests {
     async fn test_mock_revoke() {
         let mut mock = MockScimTokenRepository::new();
         let id = StringUuid::new_v4();
-        mock.expect_revoke()
-            .with(eq(id))
-            .returning(|_| Ok(()));
+        mock.expect_revoke().with(eq(id)).returning(|_| Ok(()));
 
         assert!(mock.revoke(id).await.is_ok());
     }

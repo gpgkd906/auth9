@@ -673,8 +673,14 @@ mod tests {
     #[test]
     fn test_scim_attr_to_column() {
         assert_eq!(scim_attr_to_column("userName"), Some("users.email"));
-        assert_eq!(scim_attr_to_column("displayName"), Some("users.display_name"));
-        assert_eq!(scim_attr_to_column("externalId"), Some("users.scim_external_id"));
+        assert_eq!(
+            scim_attr_to_column("displayName"),
+            Some("users.display_name")
+        );
+        assert_eq!(
+            scim_attr_to_column("externalId"),
+            Some("users.scim_external_id")
+        );
         assert_eq!(scim_attr_to_column("active"), Some("users.locked_until"));
         assert_eq!(scim_attr_to_column("id"), Some("users.id"));
         assert_eq!(scim_attr_to_column("unknownAttr"), None);

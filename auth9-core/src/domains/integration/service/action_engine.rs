@@ -432,7 +432,9 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
 
         // Execute each action in order
         for action in actions {
-            context = self.execute_single_action_with_record(&action, context, trigger_id).await?;
+            context = self
+                .execute_single_action_with_record(&action, context, trigger_id)
+                .await?;
         }
 
         Ok(context)

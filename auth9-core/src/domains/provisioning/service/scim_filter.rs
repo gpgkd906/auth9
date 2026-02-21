@@ -3,9 +3,7 @@
 //! Recursive descent parser for SCIM filter expressions.
 //! Compiles parsed AST into SQL WHERE clauses with bind parameters.
 
-use crate::domain::scim::{
-    scim_attr_to_column, CompiledFilter, ScimCompareOp, ScimFilterExpr,
-};
+use crate::domain::scim::{scim_attr_to_column, CompiledFilter, ScimCompareOp, ScimFilterExpr};
 use crate::error::{AppError, Result};
 
 /// Parse a SCIM filter string into an expression AST.
@@ -146,7 +144,9 @@ fn tokenize(input: &str) -> Result<Vec<String>> {
                 i += 1;
             }
             if i >= chars.len() {
-                return Err(AppError::BadRequest("Unterminated string in SCIM filter".to_string()));
+                return Err(AppError::BadRequest(
+                    "Unterminated string in SCIM filter".to_string(),
+                ));
             }
             let value: String = chars[start..i].iter().collect();
             tokens.push(format!("\"{}\"", value));
@@ -154,7 +154,8 @@ fn tokenize(input: &str) -> Result<Vec<String>> {
         } else {
             // Unquoted token (attribute name, operator, or value)
             let start = i;
-            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '(' && chars[i] != ')' {
+            while i < chars.len() && !chars[i].is_whitespace() && chars[i] != '(' && chars[i] != ')'
+            {
                 i += 1;
             }
             let token: String = chars[start..i].iter().collect();
@@ -200,7 +201,9 @@ fn parse_not(tokens: &[String], pos: &mut usize) -> Result<ScimFilterExpr> {
 
 fn parse_atom(tokens: &[String], pos: &mut usize) -> Result<ScimFilterExpr> {
     if *pos >= tokens.len() {
-        return Err(AppError::BadRequest("Unexpected end of SCIM filter".to_string()));
+        return Err(AppError::BadRequest(
+            "Unexpected end of SCIM filter".to_string(),
+        ));
     }
 
     // Parenthesized expression
@@ -208,7 +211,9 @@ fn parse_atom(tokens: &[String], pos: &mut usize) -> Result<ScimFilterExpr> {
         *pos += 1;
         let expr = parse_or(tokens, pos)?;
         if *pos >= tokens.len() || tokens[*pos] != ")" {
-            return Err(AppError::BadRequest("Missing closing parenthesis in SCIM filter".to_string()));
+            return Err(AppError::BadRequest(
+                "Missing closing parenthesis in SCIM filter".to_string(),
+            ));
         }
         *pos += 1;
         return Ok(expr);
@@ -334,13 +339,15 @@ mod tests {
 
     #[test]
     fn test_parse_parentheses() {
-        let expr = parse_filter("(userName eq \"a\" or userName eq \"b\") and active eq \"true\"").unwrap();
+        let expr = parse_filter("(userName eq \"a\" or userName eq \"b\") and active eq \"true\"")
+            .unwrap();
         assert!(matches!(expr, ScimFilterExpr::And(_, _)));
     }
 
     #[test]
     fn test_parse_nested_and_or() {
-        let expr = parse_filter("userName eq \"a\" and displayName eq \"b\" or active eq \"true\"").unwrap();
+        let expr = parse_filter("userName eq \"a\" and displayName eq \"b\" or active eq \"true\"")
+            .unwrap();
         // OR has lower precedence, so this is: (userName eq "a" and displayName eq "b") or (active eq "true")
         assert!(matches!(expr, ScimFilterExpr::Or(_, _)));
     }
@@ -444,10 +451,7 @@ mod tests {
     fn test_compile_not() {
         let expr = parse_filter("not active eq \"true\"").unwrap();
         let compiled = compile_filter(&expr).unwrap();
-        assert_eq!(
-            compiled.where_clause,
-            "NOT (users.locked_until IS NULL)"
-        );
+        assert_eq!(compiled.where_clause, "NOT (users.locked_until IS NULL)");
     }
 
     #[test]

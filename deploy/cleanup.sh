@@ -379,7 +379,6 @@ interactive_delete_secrets() {
     echo "    - SESSION_SECRET、SETTINGS_ENCRYPTION_KEY"
     echo "    - KEYCLOAK_URL、KEYCLOAK_ADMIN、KEYCLOAK_ADMIN_PASSWORD"
     echo "    - KEYCLOAK_ADMIN_CLIENT_SECRET"
-    echo "    - KEYCLOAK_WEBHOOK_SECRET"
     echo "    - GRPC_API_KEYS"
     echo ""
 

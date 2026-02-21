@@ -79,8 +79,16 @@ where
                 )
                 .await?;
 
-            self.log_operation(ctx, "create", "User", fields.external_id.as_deref(), Some(existing.id), "success", None)
-                .await;
+            self.log_operation(
+                ctx,
+                "create",
+                "User",
+                fields.external_id.as_deref(),
+                Some(existing.id),
+                "success",
+                None,
+            )
+            .await;
 
             return self.user_to_scim(&existing, ctx).await;
         }
@@ -130,11 +138,7 @@ where
 
         // Set SCIM fields
         self.user_repo
-            .update_scim_fields(
-                user.id,
-                fields.external_id.clone(),
-                Some(ctx.connector_id),
-            )
+            .update_scim_fields(user.id, fields.external_id.clone(), Some(ctx.connector_id))
             .await?;
 
         // Handle active=false → lock the user
@@ -142,24 +146,37 @@ where
             let far_future = DateTime::parse_from_rfc3339("9999-12-31T23:59:59Z")
                 .unwrap()
                 .with_timezone(&Utc);
-            self.user_repo.update_locked_until(user.id, Some(far_future)).await?;
+            self.user_repo
+                .update_locked_until(user.id, Some(far_future))
+                .await?;
         }
 
-        self.log_operation(ctx, "create", "User", fields.external_id.as_deref(), Some(user.id), "success", None)
-            .await;
+        self.log_operation(
+            ctx,
+            "create",
+            "User",
+            fields.external_id.as_deref(),
+            Some(user.id),
+            "success",
+            None,
+        )
+        .await;
 
         // Re-fetch to get updated fields
-        let updated_user = self
-            .user_repo
-            .find_by_id(user.id)
-            .await?
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("User not found after creation")))?;
+        let updated_user =
+            self.user_repo.find_by_id(user.id).await?.ok_or_else(|| {
+                AppError::Internal(anyhow::anyhow!("User not found after creation"))
+            })?;
 
         self.user_to_scim(&updated_user, ctx).await
     }
 
     /// Get a user by auth9 ID
-    pub async fn get_user(&self, user_id: StringUuid, ctx: &ScimRequestContext) -> Result<ScimUser> {
+    pub async fn get_user(
+        &self,
+        user_id: StringUuid,
+        ctx: &ScimRequestContext,
+    ) -> Result<ScimUser> {
         let user = self
             .user_repo
             .find_by_id(user_id)
@@ -193,7 +210,11 @@ where
         // Update SCIM fields
         if fields.external_id.is_some() {
             self.user_repo
-                .update_scim_fields(user_id, fields.external_id.clone(), existing.scim_provisioned_by)
+                .update_scim_fields(
+                    user_id,
+                    fields.external_id.clone(),
+                    existing.scim_provisioned_by,
+                )
                 .await?;
         }
 
@@ -211,14 +232,21 @@ where
             self.user_repo.update_locked_until(user_id, locked).await?;
         }
 
-        self.log_operation(ctx, "replace", "User", fields.external_id.as_deref(), Some(user_id), "success", None)
-            .await;
+        self.log_operation(
+            ctx,
+            "replace",
+            "User",
+            fields.external_id.as_deref(),
+            Some(user_id),
+            "success",
+            None,
+        )
+        .await;
 
-        let updated = self
-            .user_repo
-            .find_by_id(user_id)
-            .await?
-            .ok_or_else(|| AppError::Internal(anyhow::anyhow!("User not found after update")))?;
+        let updated =
+            self.user_repo.find_by_id(user_id).await?.ok_or_else(|| {
+                AppError::Internal(anyhow::anyhow!("User not found after update"))
+            })?;
         self.user_to_scim(&updated, ctx).await
     }
 
@@ -240,9 +268,9 @@ where
             match op.as_str() {
                 "replace" | "add" => {
                     if let Some(value) = &operation.value {
-                        let fields =
-                            map_patch_value_to_fields(operation.path.as_deref(), value);
-                        self.apply_mapped_fields(user_id, &fields, &existing).await?;
+                        let fields = map_patch_value_to_fields(operation.path.as_deref(), value);
+                        self.apply_mapped_fields(user_id, &fields, &existing)
+                            .await?;
                     }
                 }
                 "remove" => {
@@ -276,8 +304,16 @@ where
             }
         }
 
-        self.log_operation(ctx, "patch", "User", existing.scim_external_id.as_deref(), Some(user_id), "success", None)
-            .await;
+        self.log_operation(
+            ctx,
+            "patch",
+            "User",
+            existing.scim_external_id.as_deref(),
+            Some(user_id),
+            "success",
+            None,
+        )
+        .await;
 
         let updated = self
             .user_repo
@@ -303,8 +339,16 @@ where
             .update_locked_until(user_id, Some(far_future))
             .await?;
 
-        self.log_operation(ctx, "delete", "User", user.scim_external_id.as_deref(), Some(user_id), "success", None)
-            .await;
+        self.log_operation(
+            ctx,
+            "delete",
+            "User",
+            user.scim_external_id.as_deref(),
+            Some(user_id),
+            "success",
+            None,
+        )
+        .await;
 
         Ok(())
     }
@@ -334,7 +378,12 @@ where
                 // Optimized: single email lookup
                 if let Some(user) = self.user_repo.find_by_email(&compiled.bindings[0]).await? {
                     let scim_user = self.user_to_scim(&user, ctx).await?;
-                    return Ok(ScimListResponse::new(vec![scim_user], 1, start_index, count));
+                    return Ok(ScimListResponse::new(
+                        vec![scim_user],
+                        1,
+                        start_index,
+                        count,
+                    ));
                 }
                 return Ok(ScimListResponse::new(vec![], 0, start_index, count));
             }
@@ -351,7 +400,12 @@ where
                     .await?
                 {
                     let scim_user = self.user_to_scim(&user, ctx).await?;
-                    return Ok(ScimListResponse::new(vec![scim_user], 1, start_index, count));
+                    return Ok(ScimListResponse::new(
+                        vec![scim_user],
+                        1,
+                        start_index,
+                        count,
+                    ));
                 }
                 return Ok(ScimListResponse::new(vec![], 0, start_index, count));
             }
@@ -421,8 +475,16 @@ where
         };
         self.group_mapping_repo.upsert(&mapping).await?;
 
-        self.log_operation(ctx, "create", "Group", Some(&scim_group_id), Some(mapping.id), "success", None)
-            .await;
+        self.log_operation(
+            ctx,
+            "create",
+            "Group",
+            Some(&scim_group_id),
+            Some(mapping.id),
+            "success",
+            None,
+        )
+        .await;
 
         Ok(ScimGroup {
             schemas: vec![ScimGroup::SCHEMA.to_string()],
@@ -459,10 +521,7 @@ where
             schemas: vec![ScimGroup::SCHEMA.to_string()],
             id: Some(mapping.id.to_string()),
             external_id: Some(mapping.scim_group_id.clone()),
-            display_name: mapping
-                .scim_group_display_name
-                .clone()
-                .unwrap_or_default(),
+            display_name: mapping.scim_group_display_name.clone().unwrap_or_default(),
             members: vec![], // Members would need to be resolved from user_tenant_roles
             meta: Some(ScimMeta {
                 resource_type: "Group".to_string(),
@@ -509,15 +568,19 @@ where
     }
 
     /// Delete a SCIM group mapping
-    pub async fn delete_group(
-        &self,
-        group_id: StringUuid,
-        ctx: &ScimRequestContext,
-    ) -> Result<()> {
+    pub async fn delete_group(&self, group_id: StringUuid, ctx: &ScimRequestContext) -> Result<()> {
         self.group_mapping_repo.delete(group_id).await?;
 
-        self.log_operation(ctx, "delete", "Group", None, Some(group_id), "success", None)
-            .await;
+        self.log_operation(
+            ctx,
+            "delete",
+            "Group",
+            None,
+            Some(group_id),
+            "success",
+            None,
+        )
+        .await;
 
         Ok(())
     }
@@ -584,7 +647,10 @@ where
                             bulk_id: op.bulk_id.clone(),
                             location: None,
                             status: "500".to_string(),
-                            response: Some(serde_json::to_value(ScimError::internal(e.to_string())).unwrap_or_default()),
+                            response: Some(
+                                serde_json::to_value(ScimError::internal(e.to_string()))
+                                    .unwrap_or_default(),
+                            ),
                         });
                         break;
                     }
@@ -593,7 +659,10 @@ where
                         bulk_id: op.bulk_id.clone(),
                         location: None,
                         status: "400".to_string(),
-                        response: Some(serde_json::to_value(ScimError::bad_request(e.to_string())).unwrap_or_default()),
+                        response: Some(
+                            serde_json::to_value(ScimError::bad_request(e.to_string()))
+                                .unwrap_or_default(),
+                        ),
                     }
                 }
             };
@@ -815,9 +884,7 @@ mod tests {
     #[tokio::test]
     async fn test_get_user_not_found() {
         let mut user_mock = MockUserRepository::new();
-        user_mock
-            .expect_find_by_id()
-            .returning(|_| Ok(None));
+        user_mock.expect_find_by_id().returning(|_| Ok(None));
 
         let group_mock = MockScimGroupRoleMappingRepository::new();
         let log_mock = MockScimProvisioningLogRepository::new();

@@ -106,7 +106,11 @@ impl<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> BrandingServic
         &self,
         service_id: crate::domain::StringUuid,
     ) -> Result<BrandingConfig> {
-        if let Some(sb) = self.service_branding_repo.get_by_service_id(service_id).await? {
+        if let Some(sb) = self
+            .service_branding_repo
+            .get_by_service_id(service_id)
+            .await?
+        {
             return Ok(sb.config);
         }
         self.get_branding().await
@@ -168,9 +172,10 @@ impl<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> BrandingServic
             .map_err(|_| AppError::Validation(format!("{field_name}: invalid URL")))?;
         let host = parsed.host_str().unwrap_or("");
 
-        let domain_allowed = self.allowed_domains.iter().any(|allowed| {
-            host == allowed.as_str() || host.ends_with(&format!(".{}", allowed))
-        });
+        let domain_allowed = self
+            .allowed_domains
+            .iter()
+            .any(|allowed| host == allowed.as_str() || host.ends_with(&format!(".{}", allowed)));
 
         if !domain_allowed {
             return Err(AppError::Validation(format!(
@@ -195,8 +200,7 @@ mod tests {
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use mockall::predicate::*;
 
-    fn create_service(
-    ) -> (MockSystemSettingsRepository, MockServiceBrandingRepository) {
+    fn create_service() -> (MockSystemSettingsRepository, MockServiceBrandingRepository) {
         (
             MockSystemSettingsRepository::new(),
             MockServiceBrandingRepository::new(),
@@ -311,9 +315,7 @@ mod tests {
         let (mut mock_sys, mut mock_sb) = create_service();
 
         // No service-level branding
-        mock_sb
-            .expect_get_by_service_id()
-            .returning(|_| Ok(None));
+        mock_sb.expect_get_by_service_id().returning(|_| Ok(None));
 
         // System-level returns default
         mock_sys
@@ -333,20 +335,18 @@ mod tests {
         let (mock_sys, mut mock_sb) = create_service();
 
         // Service-level branding exists
-        mock_sb
-            .expect_get_by_service_id()
-            .returning(|_| {
-                Ok(Some(ServiceBranding {
-                    id: "sb-1".to_string(),
-                    service_id: "svc-1".to_string(),
-                    config: BrandingConfig {
-                        primary_color: "#FF0000".to_string(),
-                        ..Default::default()
-                    },
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                }))
-            });
+        mock_sb.expect_get_by_service_id().returning(|_| {
+            Ok(Some(ServiceBranding {
+                id: "sb-1".to_string(),
+                service_id: "svc-1".to_string(),
+                config: BrandingConfig {
+                    primary_color: "#FF0000".to_string(),
+                    ..Default::default()
+                },
+                created_at: chrono::Utc::now(),
+                updated_at: chrono::Utc::now(),
+            }))
+        });
 
         let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
         let service_id = crate::domain::StringUuid::new_v4();

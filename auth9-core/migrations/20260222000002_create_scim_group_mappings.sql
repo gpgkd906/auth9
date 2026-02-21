@@ -1,8 +1,13 @@
--- Add SCIM tracking fields to users table
+-- Add SCIM tracking fields to users table.
+-- Keep column additions and index creation in separate statements for TiDB compatibility.
 ALTER TABLE users
-    ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER keycloak_id,
-    ADD COLUMN scim_provisioned_by CHAR(36) NULL AFTER scim_external_id,
-    ADD INDEX idx_users_scim_external_id (scim_external_id);
+    ADD COLUMN IF NOT EXISTS scim_external_id VARCHAR(255) NULL AFTER keycloak_id;
+
+ALTER TABLE users
+    ADD COLUMN IF NOT EXISTS scim_provisioned_by CHAR(36) NULL AFTER scim_external_id;
+
+ALTER TABLE users
+    ADD INDEX IF NOT EXISTS idx_users_scim_external_id (scim_external_id);
 
 -- SCIM Group to Auth9 Role mapping table
 CREATE TABLE IF NOT EXISTS scim_group_role_mappings (
