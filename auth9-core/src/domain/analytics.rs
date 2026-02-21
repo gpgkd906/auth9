@@ -361,6 +361,12 @@ pub const WEBHOOK_EVENTS: &[&str] = &[
     "mfa.disabled",
     "session.revoked",
     "security.alert",
+    "scim.user.provisioned",
+    "scim.user.updated",
+    "scim.user.deprovisioned",
+    "scim.group.created",
+    "scim.group.updated",
+    "scim.group.deleted",
 ];
 
 /// Webhook event payload sent to webhook endpoints

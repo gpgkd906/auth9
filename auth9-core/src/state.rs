@@ -14,11 +14,15 @@ use crate::domains::integration::service::{ActionService, WebhookService};
 use crate::domains::platform::service::{
     BrandingService, EmailService, EmailTemplateService, SystemSettingsService,
 };
+use crate::domains::provisioning::service::{ScimService, ScimTokenService};
 use crate::domains::security_observability::service::{AnalyticsService, SecurityDetectionService};
 use crate::domains::tenant_access::service::{InvitationService, TenantService, UserService};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
+use crate::repository::scim_group_mapping::ScimGroupRoleMappingRepository;
+use crate::repository::scim_log::ScimProvisioningLogRepository;
+use crate::repository::scim_token::ScimTokenRepository;
 use crate::repository::{
     ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
     PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceBrandingRepository,
@@ -267,6 +271,44 @@ pub trait HasSecurityAlerts: Clone + Send + Sync + 'static {
 
     /// Get the JWT manager for token verification
     fn jwt_manager(&self) -> &JwtManager;
+}
+
+// ============================================================
+// SCIM Service Type Aliases
+// ============================================================
+
+/// Generic ScimService type parameterized by trait associated types
+pub type ScimServiceType<S> = ScimService<
+    <S as HasServices>::UserRepo,
+    <S as HasScimServices>::ScimGroupMappingRepo,
+    <S as HasScimServices>::ScimLogRepo,
+>;
+
+/// Generic ScimTokenService type parameterized by trait associated types
+pub type ScimTokenServiceType<S> = ScimTokenService<<S as HasScimServices>::ScimTokenRepo>;
+
+/// Trait for states that provide SCIM provisioning services
+pub trait HasScimServices: Clone + Send + Sync + 'static {
+    /// The SCIM token repository type
+    type ScimTokenRepo: ScimTokenRepository;
+    /// The SCIM group-role mapping repository type
+    type ScimGroupMappingRepo: ScimGroupRoleMappingRepository;
+    /// The SCIM provisioning log repository type
+    type ScimLogRepo: ScimProvisioningLogRepository;
+
+    /// Get the SCIM service
+    fn scim_service(&self) -> &ScimServiceType<Self>
+    where
+        Self: HasServices;
+
+    /// Get the SCIM token service
+    fn scim_token_service(&self) -> &ScimTokenServiceType<Self>;
+
+    /// Get the SCIM group mapping repository (for admin API direct access)
+    fn scim_group_mapping_repo(&self) -> &Self::ScimGroupMappingRepo;
+
+    /// Get the SCIM log repository (for admin API direct access)
+    fn scim_log_repo(&self) -> &Self::ScimLogRepo;
 }
 
 /// Trait for states that provide direct database access

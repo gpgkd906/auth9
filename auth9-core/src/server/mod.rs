@@ -15,6 +15,7 @@ use crate::domains::identity::service::{
     IdentityProviderService, PasswordService, SessionService, WebAuthnService,
 };
 use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
+use crate::domains::provisioning::service::{ScimService, ScimTokenService};
 use crate::domains::platform::service::{
     BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
 };
@@ -30,6 +31,8 @@ use crate::repository::{
     action::ActionRepositoryImpl, audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl,
     linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
     password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
+    scim_group_mapping::ScimGroupRoleMappingRepositoryImpl,
+    scim_log::ScimProvisioningLogRepositoryImpl, scim_token::ScimTokenRepositoryImpl,
     security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
     service_branding::ServiceBrandingRepositoryImpl,
     session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
@@ -37,8 +40,8 @@ use crate::repository::{
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
-    HasInvitations, HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
-    HasSystemSettings, HasWebAuthn, HasWebhooks,
+    HasInvitations, HasPasswordManagement, HasScimServices, HasSecurityAlerts, HasServices,
+    HasSessionManagement, HasSystemSettings, HasWebAuthn, HasWebhooks,
 };
 use anyhow::Result;
 use axum::{extract::DefaultBodyLimit, routing::get, Router};
@@ -139,6 +142,17 @@ pub struct AppState {
         >,
     >,
     pub action_service: Arc<ActionService<ActionRepositoryImpl>>,
+    // SCIM provisioning services
+    pub scim_service: Arc<
+        ScimService<
+            UserRepositoryImpl,
+            ScimGroupRoleMappingRepositoryImpl,
+            ScimProvisioningLogRepositoryImpl,
+        >,
+    >,
+    pub scim_token_service: Arc<ScimTokenService<ScimTokenRepositoryImpl>>,
+    pub scim_group_mapping_repo: Arc<ScimGroupRoleMappingRepositoryImpl>,
+    pub scim_log_repo: Arc<ScimProvisioningLogRepositoryImpl>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -386,6 +400,38 @@ impl HasCache for AppState {
     }
 }
 
+/// Implement HasScimServices trait for production AppState
+impl HasScimServices for AppState {
+    type ScimTokenRepo = ScimTokenRepositoryImpl;
+    type ScimGroupMappingRepo = ScimGroupRoleMappingRepositoryImpl;
+    type ScimLogRepo = ScimProvisioningLogRepositoryImpl;
+
+    fn scim_service(
+        &self,
+    ) -> &ScimService<
+        <Self as HasServices>::UserRepo,
+        Self::ScimGroupMappingRepo,
+        Self::ScimLogRepo,
+    >
+    where
+        Self: HasServices,
+    {
+        &self.scim_service
+    }
+
+    fn scim_token_service(&self) -> &ScimTokenService<Self::ScimTokenRepo> {
+        &self.scim_token_service
+    }
+
+    fn scim_group_mapping_repo(&self) -> &Self::ScimGroupMappingRepo {
+        &self.scim_group_mapping_repo
+    }
+
+    fn scim_log_repo(&self) -> &Self::ScimLogRepo {
+        &self.scim_log_repo
+    }
+}
+
 /// Run the server
 pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) -> Result<()> {
     // Create database connection pool
@@ -420,6 +466,9 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let security_alert_repo = Arc::new(SecurityAlertRepositoryImpl::new(db_pool.clone()));
     let action_repo = Arc::new(ActionRepositoryImpl::new(db_pool.clone()));
     let service_branding_repo = Arc::new(ServiceBrandingRepositoryImpl::new(db_pool.clone()));
+    let scim_token_repo = Arc::new(ScimTokenRepositoryImpl::new(db_pool.clone()));
+    let scim_group_mapping_repo = Arc::new(ScimGroupRoleMappingRepositoryImpl::new(db_pool.clone()));
+    let scim_log_repo = Arc::new(ScimProvisioningLogRepositoryImpl::new(db_pool.clone()));
 
     // Create JWT manager
     let jwt_manager = JwtManager::new(config.jwt.clone());
@@ -605,6 +654,15 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         SecurityDetectionConfig::default(),
     ));
 
+    // Create SCIM provisioning services
+    let scim_token_service = Arc::new(ScimTokenService::new(scim_token_repo));
+    let scim_service = Arc::new(ScimService::new(
+        user_repo.clone(),
+        scim_group_mapping_repo.clone(),
+        scim_log_repo.clone(),
+        Some(keycloak_client.clone()),
+    ));
+
     // Create app state
     let state = AppState {
         config: Arc::new(config.clone()),
@@ -631,6 +689,11 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         webhook_service,
         security_detection_service,
         action_service,
+        // SCIM provisioning
+        scim_service,
+        scim_token_service,
+        scim_group_mapping_repo,
+        scim_log_repo,
     };
 
     // Create rate limit state for middleware
@@ -1154,6 +1217,16 @@ where
     .with_cache(std::sync::Arc::new(state.cache().clone()));
 
     // ============================================================
+    // SCIM PROTOCOL ROUTES (Bearer Token auth, separate from JWT)
+    // ============================================================
+    let scim_state = state.clone();
+    let scim_protocol_routes = domains::provisioning::routes::scim_routes::<S>()
+        .layer(axum::middleware::from_fn_with_state(
+            scim_state,
+            crate::middleware::scim_auth::scim_auth_middleware::<S>,
+        ));
+
+    // ============================================================
     // PUBLIC ROUTES (no authentication required)
     // ============================================================
     let public_routes = Router::new()
@@ -1173,6 +1246,7 @@ where
         .merge(domains::platform::routes::protected_routes::<S>())
         .merge(domains::integration::routes::protected_routes::<S>())
         .merge(domains::security_observability::routes::protected_routes::<S>())
+        .merge(domains::provisioning::routes::protected_routes::<S>())
         // Apply authentication middleware to all protected routes
         .layer(axum::middleware::from_fn_with_state(
             auth_state,
@@ -1221,6 +1295,7 @@ where
     Router::new()
         .merge(public_routes)
         .merge(protected_routes)
+        .merge(scim_protocol_routes)
         // Explicit fallback so unmatched routes pass through middleware layers
         // (axum skips .layer() middleware for its implicit 404 fallback)
         .fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not Found") })
