@@ -291,6 +291,7 @@ mod tests {
     fn test_auth_user_from_tenant_access_claims() {
         let claims = TenantAccessClaims {
             sub: "550e8400-e29b-41d4-a716-446655440000".to_string(),
+            sid: None,
             email: "test@example.com".to_string(),
             iss: "https://auth9.test".to_string(),
             aud: "my-service".to_string(),

@@ -23,8 +23,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
     throw redirect("/onboard", { headers: headers || undefined });
   }
 
-  if (tenants.length === 1) {
-    const tenantCookie = await setActiveTenant(request, tenants[0].tenant_id);
+  // Separate active vs non-active tenants
+  const activeTenants = tenants.filter((t) => t.tenant?.status === "active");
+
+  // If user has tenants but none are active (all pending/suspended), go to pending page
+  if (activeTenants.length === 0) {
+    throw redirect("/onboard/pending", { headers: headers || undefined });
+  }
+
+  if (activeTenants.length === 1) {
+    const tenantCookie = await setActiveTenant(request, activeTenants[0].tenant_id);
     const responseHeaders: [string, string][] = [["Set-Cookie", tenantCookie]];
     if (headers) {
       const refreshed = (headers as Record<string, string>)["Set-Cookie"];
@@ -34,7 +42,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
   }
 
   return {
-    tenants,
+    tenants: activeTenants,
     activeTenantId: session.activeTenantId,
     error: new URL(request.url).searchParams.get("error"),
   };

@@ -23,15 +23,16 @@ Auth9 资源访问模型：
 ## 场景 1：IDOR (不安全直接对象引用)
 
 ### 前置条件
-- 用户 A 拥有资源 1
-- 用户 B 拥有资源 2
-- 用户 A 已知资源 2 的 ID
+- 用户 A 拥有租户 A 的 Tenant Access Token
+- 用户 B 拥有租户 B 的资源（Service）
+- 用户 A 已知用户 B 资源的 ID
+- **⚠️ 用户 A 必须是非 Platform Admin 用户**（Platform Admin 的 email 在 `PLATFORM_ADMIN_EMAILS` 中配置，具有全局访问权限，会绕过所有租户隔离检查）
 
 ### 攻击目标
 验证是否可通过 ID 访问他人资源
 
 ### 攻击步骤
-1. 以用户 A 身份登录
+1. 以用户 A 身份登录（**确保使用非 Platform Admin 的普通租户用户**）
 2. 获取用户 B 的资源 ID
 3. 直接访问：
    - `GET /api/v1/services/{resource_2_id}`
@@ -46,9 +47,14 @@ Auth9 资源访问模型：
 
 ### 验证方法
 ```bash
-# 用户 A 的 Token
-TOKEN_A="..."
-# 用户 B 的服务 ID
+# ⚠️ 必须使用非 Platform Admin 的普通租户用户 Token
+# Platform Admin 拥有全局访问权限，使用其 Token 测试 IDOR 会产生误报
+# 可通过 gen-test-tokens.js 生成指定用户的 tenant-access token:
+TENANT_A_ID="<租户A的ID>"
+USER_A_ID="<非admin用户的ID>"
+TOKEN_A=$(.claude/skills/tools/gen-test-tokens.js tenant-access --tenant-id "$TENANT_A_ID" --user-id "$USER_A_ID")
+
+# 用户 B 的服务 ID（属于另一个租户）
 SERVICE_B_ID="..."
 
 # 读取
@@ -58,6 +64,7 @@ curl -H "Authorization: Bearer $TOKEN_A" \
 
 # 修改
 curl -X PUT -H "Authorization: Bearer $TOKEN_A" \
+  -H "Content-Type: application/json" \
   http://localhost:8080/api/v1/services/$SERVICE_B_ID \
   -d '{"name":"hacked"}'
 # 预期: 403 或 404
@@ -70,6 +77,14 @@ curl -X DELETE -H "Authorization: Bearer $TOKEN_A" \
 # 验证资源未被修改
 SELECT * FROM services WHERE id = '$SERVICE_B_ID';
 ```
+
+### 常见误报原因
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 跨租户访问返回 200 | 使用了 Platform Admin 用户的 Token | 换用非 Platform Admin 的普通租户用户 |
+| 所有请求返回 401 | Token 过期或格式错误 | 重新生成 Token |
+| 返回 404 而非 403 | 目标资源不存在 | 先确认 SERVICE_B_ID 存在于数据库中 |
 
 ### 修复建议
 - 每次访问验证资源归属

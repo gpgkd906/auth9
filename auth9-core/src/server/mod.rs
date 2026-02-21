@@ -684,7 +684,11 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         tenant_repo.clone(),
         config.is_production(),
     )
-    .with_audit_repo(audit_repo.clone());
+    .with_audit_repo(audit_repo.clone())
+    .with_rate_limiter(crate::grpc::token_exchange::GrpcRateLimiter::new(
+        config.grpc_security.exchange_rate_limit_requests,
+        config.grpc_security.exchange_rate_limit_window_secs,
+    ));
 
     // Wrap prometheus handle in Arc for sharing
     let prom_handle = Arc::new(prometheus_handle);
@@ -786,9 +790,12 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let http_server = async {
         let listener = TcpListener::bind(&http_addr).await?;
         info!("HTTP server started on {}", http_addr);
-        axum::serve(listener, app)
-            .with_graceful_shutdown(shutdown_signal())
-            .await?;
+        axum::serve(
+            listener,
+            app.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+        )
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
         Ok::<_, anyhow::Error>(())
     };
 
@@ -1210,7 +1217,12 @@ where
         // (axum skips .layer() middleware for its implicit 404 fallback)
         .fallback(|| async { (axum::http::StatusCode::NOT_FOUND, "Not Found") })
         // --- Innermost layers (run first on request, last on response) ---
-        // 0. Path traversal guard - reject requests with `..` in path
+        // 0a. Client IP injection - inject X-Real-IP from socket address
+        //     when no proxy headers are present (ensures audit logs always have IP)
+        .layer(axum::middleware::from_fn(
+            crate::middleware::inject_client_ip,
+        ))
+        // 0b. Path traversal guard - reject requests with `..` in path
         .layer(axum::middleware::from_fn(
             crate::middleware::path_guard::path_guard_middleware,
         ))

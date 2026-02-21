@@ -377,6 +377,10 @@ pub struct GrpcSecurityConfig {
     pub tls_ca_cert_path: Option<String>,
     /// Whether to enable gRPC reflection (for debugging tools like grpcurl)
     pub enable_reflection: bool,
+    /// Rate limit: max token exchange requests per window per IP
+    pub exchange_rate_limit_requests: u64,
+    /// Rate limit: window size in seconds
+    pub exchange_rate_limit_window_secs: u64,
 }
 
 impl fmt::Debug for GrpcSecurityConfig {
@@ -388,6 +392,13 @@ impl fmt::Debug for GrpcSecurityConfig {
             .field("tls_key_path", &self.tls_key_path)
             .field("tls_ca_cert_path", &self.tls_ca_cert_path)
             .field("enable_reflection", &self.enable_reflection)
+            .field(
+                "exchange_rate_limit",
+                &format!(
+                    "{}/{}s",
+                    self.exchange_rate_limit_requests, self.exchange_rate_limit_window_secs
+                ),
+            )
             .finish()
     }
 }
@@ -401,6 +412,8 @@ impl Default for GrpcSecurityConfig {
             tls_key_path: None,
             tls_ca_cert_path: None,
             enable_reflection: false,
+            exchange_rate_limit_requests: 20,
+            exchange_rate_limit_window_secs: 60,
         }
     }
 }
@@ -639,6 +652,14 @@ impl Config {
                 enable_reflection: env::var("GRPC_ENABLE_REFLECTION")
                     .map(|s| s.to_lowercase() == "true")
                     .unwrap_or(false),
+                exchange_rate_limit_requests: env::var("GRPC_EXCHANGE_RATE_LIMIT_REQUESTS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(20),
+                exchange_rate_limit_window_secs: env::var("GRPC_EXCHANGE_RATE_LIMIT_WINDOW_SECS")
+                    .ok()
+                    .and_then(|s| s.parse().ok())
+                    .unwrap_or(60),
             },
             rate_limit: {
                 let endpoints: HashMap<String, RateLimitEndpointConfig> =
@@ -1213,6 +1234,8 @@ mod tests {
             tls_key_path: None,
             tls_ca_cert_path: None,
             enable_reflection: false,
+            exchange_rate_limit_requests: 20,
+            exchange_rate_limit_window_secs: 60,
         };
 
         assert_eq!(config.auth_mode, "api_key");
@@ -1228,6 +1251,8 @@ mod tests {
             tls_key_path: Some("/path/to/server.key".to_string()),
             tls_ca_cert_path: Some("/path/to/ca.crt".to_string()),
             enable_reflection: false,
+            exchange_rate_limit_requests: 20,
+            exchange_rate_limit_window_secs: 60,
         };
 
         assert_eq!(config.auth_mode, "mtls");
@@ -1245,6 +1270,8 @@ mod tests {
             tls_key_path: None,
             tls_ca_cert_path: None,
             enable_reflection: true,
+            exchange_rate_limit_requests: 20,
+            exchange_rate_limit_window_secs: 60,
         };
 
         assert!(config.enable_reflection);
@@ -1778,6 +1805,8 @@ mod tests {
                 tls_key_path: None,
                 tls_ca_cert_path: None,
                 enable_reflection: false,
+                exchange_rate_limit_requests: 20,
+                exchange_rate_limit_window_secs: 60,
             },
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),

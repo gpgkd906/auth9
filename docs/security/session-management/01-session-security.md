@@ -87,23 +87,50 @@ curl -I -c - http://localhost:3000/login
 - 旧 Session ID 失效
 - 不接受客户端设置的 Session ID
 
+**重要说明 - Auth9 会话架构**:
+
+Auth9 使用 Keycloak OIDC + 自有 JWT 的多层会话保护架构。测试时需要监控**正确的 Cookie**：
+
+| Cookie | 用途 | 登录后是否更新 |
+|--------|------|---------------|
+| `AUTH_SESSION_ID` | Keycloak 内部 OIDC 流程追踪标识符 | **不一定** - 这是流程 ID，不是认证凭证 |
+| `KEYCLOAK_IDENTITY` | Keycloak 认证 JWT Token | **是** - 登录后新生成 |
+| `auth9_session` | Auth9 Portal 会话 Cookie（含 JWT） | **是** - 登录后新生成 |
+
+> **注意**: `AUTH_SESSION_ID` 不变**不是** Session Fixation 漏洞。Keycloak 23+ 使用 token-based 会话保护，
+> 实际认证凭证是 `KEYCLOAK_IDENTITY`（JWE 加密 Token）和 `auth9_session`（含签名 JWT）。
+> 攻击者即使控制 `AUTH_SESSION_ID`，也无法获得有效认证 Token。
+
 ### 验证方法
 ```bash
-# 1. 获取未认证 Session
-UNAUTHENTICATED_SESSION=$(curl -c - http://localhost:3000/ | grep session | awk '{print $7}')
-echo "Pre-login session: $UNAUTHENTICATED_SESSION"
+# 1. 获取未认证 Session（监控 auth9_session Cookie）
+PRE_LOGIN=$(curl -c - http://localhost:3000/ 2>/dev/null | grep auth9_session | awk '{print $7}')
+echo "Pre-login auth9_session: $PRE_LOGIN"
 
-# 2. 用该 Session 登录
-curl -b "session=$UNAUTHENTICATED_SESSION" \
-  -c - -X POST http://localhost:3000/login \
-  -d '{"username":"test","password":"test123"}'
-# 检查响应中的新 Session
+# 2. 完成 OIDC 登录流程后获取新 Cookie
+# 登录后检查 auth9_session 是否为新值
+POST_LOGIN=$(curl -c - -b "auth9_session=$PRE_LOGIN" \
+  http://localhost:3000/dashboard 2>/dev/null | grep auth9_session | awk '{print $7}')
+echo "Post-login auth9_session: $POST_LOGIN"
 
 # 3. 验证旧 Session 是否失效
-curl -b "session=$UNAUTHENTICATED_SESSION" \
+curl -b "auth9_session=$PRE_LOGIN" \
   http://localhost:3000/dashboard
 # 预期: 重定向到登录页 (旧 Session 无效)
+
+# 4. 验证 Keycloak Token 更新（可选）
+# 使用浏览器 DevTools 比较登录前后:
+# - KEYCLOAK_IDENTITY: 应该登录后新增
+# - auth9_session: 应该登录后为新值
 ```
+
+### 常见误报排查
+
+| 现象 | 原因 | 结论 |
+|------|------|------|
+| AUTH_SESSION_ID 登录前后相同 | 这是 Keycloak OIDC 流程 ID，非认证凭证 | **非漏洞** |
+| KEYCLOAK_IDENTITY 登录后新增 | 正常行为，这是实际认证 Token | 安全 |
+| auth9_session 登录后变化 | 正常行为，JWT session 重新生成 | 安全 |
 
 ### 修复建议
 - 登录成功后重新生成 Session ID

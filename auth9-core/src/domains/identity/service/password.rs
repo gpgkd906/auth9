@@ -486,10 +486,8 @@ mod tests {
     use super::*;
     use crate::domain::PasswordResetToken;
     use crate::domains::platform::service::SystemSettingsService;
-    use crate::repository::action::MockActionRepository;
     use crate::repository::password_reset::MockPasswordResetRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
-    use crate::repository::tenant::MockTenantRepository;
     use crate::repository::user::MockUserRepository;
     use mockall::predicate::*;
 

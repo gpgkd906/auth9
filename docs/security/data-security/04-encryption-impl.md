@@ -196,8 +196,16 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 \
 - 密钥长度必须为 32 字节（AES-256）
 - 密钥来自环境变量或密钥管理系统（不在代码/配置文件中）
 - 应用启动时验证密钥有效性
-- Git 历史无密钥泄露
+- **当前代码无密钥泄露**（Docker 配置使用 `${SETTINGS_ENCRYPTION_KEY:?...}` 必填变量）
+- Git 历史中的旧泄露已通过代码修复消除（commit `e1e9797`），但历史记录仍可见 — 需配合密钥轮换
 - 弱密钥或短密钥被拒绝
+
+### 已知历史泄露（已修复）
+
+> **状态**: 已修复（当前代码安全）
+> **历史**: commit `ff28687` 曾在 `docker-compose.yml` 中设置默认密钥 fallback，commit `e1e9797` 已移除并改为必填环境变量。
+> **处置建议**: 如密钥曾在生产使用，应立即轮换（`openssl rand -base64 32`）并重新加密数据。
+> **Git 历史清理**: 可选使用 `git filter-repo` 或 BFG Repo Cleaner 清除历史记录（需 force push 协调）。
 
 ### 验证方法
 ```bash

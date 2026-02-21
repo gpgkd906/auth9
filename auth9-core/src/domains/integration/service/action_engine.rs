@@ -415,6 +415,11 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             .await?;
 
         if actions.is_empty() {
+            tracing::debug!(
+                "No enabled actions found for trigger '{}' in tenant {}",
+                trigger_id,
+                tenant_id
+            );
             return Ok(context);
         }
 

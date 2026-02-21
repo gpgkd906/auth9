@@ -46,15 +46,15 @@ Auth9 中**不存在文件上传功能**，所有图片/资源通过 **URL 字�
 3. 提交 URL 编码遍历：`..%2F..%2Fetc%2Fpasswd`
 4. 提交 null 字节注入：`https://example.com/avatar\x00.png`
 5. 提交 Tenant `logo_url` 包含路径遍历字符
-6. ⚠️ 提交 TenantBranding `logo_url` 包含路径遍历（`validate_branding_logo_url` 仅检查 scheme，未检查 `..`）
-7. ⚠️ 提交 TenantBranding `logo_url` 包含 null 字节
+6. 提交 TenantBranding `logo_url` 包含路径遍历（`validate_branding_logo_url` 委托给 `validate_url_no_ssrf_strict`，已检查 `..`）
+7. 提交 TenantBranding `logo_url` 包含 null 字节（`validate_url_no_ssrf_strict` 已检查 null 字节）
 
 ### 预期安全行为
 - 无 scheme 的路径遍历被拒绝（`validate_avatar_url` 要求 http/https）
 - 包含 `..` 的 URL 被拒绝（`validate_avatar_url` 检查 `..`）
 - null 字节被拒绝
 - `logo_url` 通过 `url::Url::parse` 解析，畸形 URL 被拒绝
-- ⚠️ TenantBranding `logo_url` 应拒绝包含 `..` 的 URL，但**当前实现未检查**
+- ✅ TenantBranding `logo_url` 通过 `validate_branding_logo_url` → `validate_url_no_ssrf_strict` 检查 `..` 和 null 字节
 
 ### 验证方法
 ```bash
@@ -94,23 +94,21 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
 # 预期: 400
 # 注意: url::Url::parse 会将 /../ 规范化为 /，可能不会报错（需验证）
 
-# 6. ⚠️ [漏洞] TenantBranding logo_url - 路径遍历
-#    validate_branding_logo_url 仅检查 scheme，不检查 .. 字符
+# 6. ✅ TenantBranding logo_url - 路径遍历（已修复）
+#    validate_branding_logo_url → validate_url_no_ssrf_strict 检查 .. 字符
 curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"settings": {"branding": {"logo_url": "https://example.com/../../etc/passwd"}}}' \
   http://localhost:8080/api/v1/tenants/$TENANT_ID
-# 预期应为: 400
-# 当前实际: 200 - url::Url::parse 规范化路径后未拒绝
+# 预期: 400 - path_traversal
 
-# 7. ⚠️ [漏洞] TenantBranding logo_url - null 字节
-#    validate_branding_logo_url 未检查 null 字节
+# 7. ✅ TenantBranding logo_url - null 字节（已修复）
+#    validate_branding_logo_url → validate_url_no_ssrf_strict 检查 null 字节
 curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"settings": {"branding": {"logo_url": "https://example.com/logo\u0000.png"}}}' \
   http://localhost:8080/api/v1/tenants/$TENANT_ID
-# 预期应为: 400
-# 当前实际: 取决于 url::Url::parse 对 null 字节的处理
+# 预期: 400 - null_byte
 
 # 8. 正常 URL 应该通过
 curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
@@ -301,10 +299,10 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
 
 ## 已知验证漏洞汇总
 
-| # | 漏洞 | 影响字段 | 验证函数 | 缺失检查 | 建议修复 |
-|---|------|---------|---------|---------|---------|
-| V1 | avatar_url 缺少 SSRF 防护 | `User.avatar_url` | `validate_avatar_url` | 私有 IP / 回环地址 / 云元数据 | 改用 `validate_url_no_ssrf_strict` 或添加 IP 检查 |
-| V2 | TenantBranding logo_url 缺少路径遍历检查 | `TenantBranding.logo_url` | `validate_branding_logo_url` | `..` 和 null 字节 | 添加 `..` / `\0` 检查或改用 `validate_url_no_ssrf_strict` |
+| # | 漏洞 | 影响字段 | 验证函数 | 缺失检查 | 状态 |
+|---|------|---------|---------|---------|------|
+| V1 | avatar_url 缺少 SSRF 防护 | `User.avatar_url` | `validate_avatar_url` | 私有 IP / 回环地址 / 云元数据 | **待修复** - 改用 `validate_url_no_ssrf_strict` 或添加 IP 检查 |
+| ~~V2~~ | ~~TenantBranding logo_url 缺少路径遍历检查~~ | `TenantBranding.logo_url` | `validate_branding_logo_url` | ~~`..` 和 null 字节~~ | **已修复** - `validate_branding_logo_url` 已委托给 `validate_url_no_ssrf_strict`（含 `..` 和 `\0` 检查） |
 
 ---
 
@@ -313,8 +311,8 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
 | 1 | URL 路径遍历攻击 | ☐ | | | |
-| 1.6 | ⚠️ TenantBranding logo_url 路径遍历（漏洞 V2） | ☐ | | | |
-| 1.7 | ⚠️ TenantBranding logo_url null 字节（漏洞 V2） | ☐ | | | |
+| 1.6 | ✅ TenantBranding logo_url 路径遍历（V2 已修复） | ☐ | | | |
+| 1.7 | ✅ TenantBranding logo_url null 字节（V2 已修复） | ☐ | | | |
 | 2 | URL Scheme 注入 | ☐ | | | |
 | 3 | SSRF - 通过 URL 字段探测内网 | ☐ | | | |
 | 3.6 | ⚠️ avatar_url AWS 云元数据 SSRF（漏洞 V1） | ☐ | | | |
