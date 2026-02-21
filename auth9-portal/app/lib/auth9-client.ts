@@ -29,41 +29,41 @@ export function getTriggers(client: Auth9HttpClient) {
 }
 
 /**
- * Helper to make API requests with tenant context
+ * Helper to make API requests with service context (for Actions)
  */
-export function withTenant(client: Auth9HttpClient, tenantId: string) {
+export function withService(client: Auth9HttpClient, serviceId: string) {
   return {
     actions: {
       list: (trigger?: string) => {
         const query = trigger ? `?trigger_id=${trigger}` : "";
         return client.get<{ data: Action[] }>(
-          `/api/v1/tenants/${tenantId}/actions${query}`
+          `/api/v1/services/${serviceId}/actions${query}`
         );
       },
       get: (id: string) =>
         client.get<{ data: Action }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}`
+          `/api/v1/services/${serviceId}/actions/${id}`
         ),
       create: (input: CreateActionInput) =>
         client.post<{ data: Action }>(
-          `/api/v1/tenants/${tenantId}/actions`,
+          `/api/v1/services/${serviceId}/actions`,
           input
         ),
       update: (id: string, input: UpdateActionInput) =>
         client.patch<{ data: Action }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}`,
+          `/api/v1/services/${serviceId}/actions/${id}`,
           input
         ),
       delete: (id: string) =>
-        client.delete(`/api/v1/tenants/${tenantId}/actions/${id}`),
+        client.delete(`/api/v1/services/${serviceId}/actions/${id}`),
       test: (id: string, context: ActionContext) =>
         client.post<{ data: TestActionResponse }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}/test`,
+          `/api/v1/services/${serviceId}/actions/${id}/test`,
           { context }
         ),
       getLog: (logId: string) =>
         client.get<{ data: ActionExecution }>(
-          `/api/v1/tenants/${tenantId}/actions/logs/${logId}`
+          `/api/v1/services/${serviceId}/actions/logs/${logId}`
         ),
       logs: (options?: { actionId?: string; success?: boolean; limit?: number }) => {
         const params = new URLSearchParams();
@@ -72,12 +72,12 @@ export function withTenant(client: Auth9HttpClient, tenantId: string) {
         if (options?.limit) params.append("limit", String(options.limit));
         const query = params.toString();
         return client.get<{ data: ActionExecution[]; pagination: { page: number; per_page: number; total: number; total_pages: number } }>(
-          `/api/v1/tenants/${tenantId}/actions/logs${query ? `?${query}` : ""}`
+          `/api/v1/services/${serviceId}/actions/logs${query ? `?${query}` : ""}`
         );
       },
       stats: (id: string) =>
         client.get<{ data: ActionStats }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}/stats`
+          `/api/v1/services/${serviceId}/actions/${id}/stats`
         ),
     },
   };

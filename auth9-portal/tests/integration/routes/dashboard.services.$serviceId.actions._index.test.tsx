@@ -2,7 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import ActionsListPage, { loader, action } from "~/routes/dashboard.tenants.$tenantId.actions._index";
+import ActionsListPage, { loader, action } from "~/routes/dashboard.services.$serviceId.actions._index";
 import { ActionTrigger } from "@auth9/core";
 
 // Mock the session module
@@ -15,7 +15,7 @@ vi.mock("~/lib/auth9-client", () => ({
   getAuth9Client: vi.fn(() => ({
     actions: mockActionsApi,
   })),
-  withTenant: vi.fn(() => ({
+  withService: vi.fn(() => ({
     actions: mockActionsApi,
   })),
   getTriggers: vi.fn(() => Promise.resolve({ data: Object.values(ActionTrigger) })),
@@ -31,7 +31,7 @@ const mockActionsApi = {
 
 const mockAction1 = {
   id: "action-1",
-  tenantId: "tenant-1",
+  serviceId: "service-1",
   name: "Add Custom Claims",
   description: "Adds department and tier claims",
   triggerId: ActionTrigger.PostLogin,
@@ -50,7 +50,7 @@ const mockAction1 = {
 
 const mockAction2 = {
   id: "action-2",
-  tenantId: "tenant-1",
+  serviceId: "service-1",
   name: "Block Spam Domains",
   description: "Prevents registration from spam domains",
   triggerId: ActionTrigger.PreUserRegistration,
@@ -80,13 +80,13 @@ describe("Actions List Page", () => {
     mockActionsApi.list.mockResolvedValue({ data: [mockAction1, mockAction2] });
 
     const response = await loader({
-      request: new Request("http://localhost/dashboard/tenants/tenant-1/actions"),
-      params: { tenantId: "tenant-1" },
+      request: new Request("http://localhost/dashboard/services/service-1/actions"),
+      params: { serviceId: "service-1" },
       context: {},
     });
 
     expect(response).toEqual({
-      tenantId: "tenant-1",
+      serviceId: "service-1",
       actions: [mockAction1, mockAction2],
       triggers: Object.values(ActionTrigger),
       currentTrigger: null,
@@ -98,8 +98,8 @@ describe("Actions List Page", () => {
     mockActionsApi.list.mockResolvedValue({ data: [mockAction1] });
 
     const response = await loader({
-      request: new Request("http://localhost/dashboard/tenants/tenant-1/actions?trigger=post_login"),
-      params: { tenantId: "tenant-1" },
+      request: new Request("http://localhost/dashboard/services/service-1/actions?trigger=post_login"),
+      params: { serviceId: "service-1" },
       context: {},
     });
 
@@ -107,14 +107,14 @@ describe("Actions List Page", () => {
     expect(mockActionsApi.list).toHaveBeenCalledWith("post_login");
   });
 
-  it("loader throws when tenantId is missing", async () => {
+  it("loader throws when serviceId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/tenants//actions"),
+        request: new Request("http://localhost/dashboard/services//actions"),
         params: {},
         context: {},
       })
-    ).rejects.toThrow("Tenant ID is required");
+    ).rejects.toThrow("Service ID is required");
   });
 
   // ============================================================================
@@ -124,13 +124,13 @@ describe("Actions List Page", () => {
   it("renders page header and create button", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
-        loader: () => ({ tenantId: "tenant-1", actions: [], triggers: [], currentTrigger: null }),
+        loader: () => ({ serviceId: "service-1", actions: [], triggers: [], currentTrigger: null }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Actions")).toBeInTheDocument();
@@ -142,13 +142,13 @@ describe("Actions List Page", () => {
   it("renders empty state when no actions", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
-        loader: () => ({ tenantId: "tenant-1", actions: [], triggers: [], currentTrigger: null }),
+        loader: () => ({ serviceId: "service-1", actions: [], triggers: [], currentTrigger: null }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("No actions found")).toBeInTheDocument();
@@ -159,10 +159,10 @@ describe("Actions List Page", () => {
   it("renders action list with status indicators", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1, mockAction2],
           triggers: [],
           currentTrigger: null,
@@ -170,7 +170,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
@@ -183,10 +183,10 @@ describe("Actions List Page", () => {
   it("renders action statistics", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1],
           triggers: [],
           currentTrigger: null,
@@ -194,7 +194,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("100")).toBeInTheDocument(); // Execution count
@@ -205,10 +205,10 @@ describe("Actions List Page", () => {
   it("renders success rate with green icon when >= 95%", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1],
           triggers: [],
           currentTrigger: null,
@@ -216,7 +216,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    const { container } = render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    const { container } = render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       const greenIcon = container.querySelector(".text-green-500");
@@ -227,10 +227,10 @@ describe("Actions List Page", () => {
   it("renders success rate with red icon when < 95%", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction2],
           triggers: [],
           currentTrigger: null,
@@ -238,7 +238,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    const { container } = render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    const { container } = render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       const redIcon = container.querySelector(".text-red-500");
@@ -249,10 +249,10 @@ describe("Actions List Page", () => {
   it("renders last executed time", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1],
           triggers: [],
           currentTrigger: null,
@@ -260,7 +260,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText(/1\/15\/2024/)).toBeInTheDocument();
@@ -270,10 +270,10 @@ describe("Actions List Page", () => {
   it("renders 'Never' when action has not been executed", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction2],
           triggers: [],
           currentTrigger: null,
@@ -281,7 +281,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Never")).toBeInTheDocument();
@@ -291,10 +291,10 @@ describe("Actions List Page", () => {
   it("renders last error when present", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction2],
           triggers: [],
           currentTrigger: null,
@@ -302,7 +302,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Domain not allowed")).toBeInTheDocument();
@@ -316,10 +316,10 @@ describe("Actions List Page", () => {
   it("filters actions by search query", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1, mockAction2],
           triggers: [],
           currentTrigger: null,
@@ -328,7 +328,7 @@ describe("Actions List Page", () => {
     ]);
 
     const user = userEvent.setup();
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
@@ -346,10 +346,10 @@ describe("Actions List Page", () => {
   it("shows empty message when search returns no results", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1],
           triggers: [],
           currentTrigger: null,
@@ -358,7 +358,7 @@ describe("Actions List Page", () => {
     ]);
 
     const user = userEvent.setup();
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
@@ -376,10 +376,10 @@ describe("Actions List Page", () => {
   it("renders toggle switch with correct state", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1, mockAction2],
           triggers: [],
           currentTrigger: null,
@@ -388,7 +388,7 @@ describe("Actions List Page", () => {
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
@@ -406,10 +406,10 @@ describe("Actions List Page", () => {
   it("delete button shows confirmation and deletes action", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1],
           triggers: [],
           currentTrigger: null,
@@ -424,7 +424,7 @@ describe("Actions List Page", () => {
     // Mock window.confirm
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
@@ -445,10 +445,10 @@ describe("Actions List Page", () => {
   it("cancel delete confirmation does not delete", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions",
+        path: "/dashboard/services/:serviceId/actions",
         Component: ActionsListPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           actions: [mockAction1],
           triggers: [],
           currentTrigger: null,
@@ -462,7 +462,7 @@ describe("Actions List Page", () => {
     // Mock window.confirm to return false
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(false);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
@@ -491,7 +491,7 @@ describe("Actions List Page", () => {
       for (const [key, value] of Object.entries(data)) {
         formData.append(key, value);
       }
-      return new Request("http://localhost/dashboard/tenants/tenant-1/actions", {
+      return new Request("http://localhost/dashboard/services/service-1/actions", {
         method: "POST",
         body: formData,
       });
@@ -506,7 +506,7 @@ describe("Actions List Page", () => {
         enabled: "false",
       });
 
-      const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
+      const response = await action({ request, params: { serviceId: "service-1" }, context: {} });
 
       expect(mockActionsApi.update).toHaveBeenCalledWith("action-1", { enabled: false });
       expect(response).toEqual({ success: true });
@@ -520,26 +520,26 @@ describe("Actions List Page", () => {
         actionId: "action-1",
       });
 
-      const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
+      const response = await action({ request, params: { serviceId: "service-1" }, context: {} });
 
       expect(mockActionsApi.delete).toHaveBeenCalledWith("action-1");
       expect(response).toEqual({ success: true });
     });
 
-    it("returns error when tenantId is missing", async () => {
+    it("returns error when serviceId is missing", async () => {
       const request = createFormRequest({ intent: "toggle", actionId: "action-1" });
 
       const response = await action({ request, params: {}, context: {} });
 
       expect(response).toBeInstanceOf(Response);
       const json = await (response as Response).json();
-      expect(json).toEqual({ error: "Tenant ID required" });
+      expect(json).toEqual({ error: "Service ID required" });
     });
 
     it("returns error for invalid intent", async () => {
       const request = createFormRequest({ intent: "invalid", actionId: "action-1" });
 
-      const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
+      const response = await action({ request, params: { serviceId: "service-1" }, context: {} });
 
       expect(response).toBeInstanceOf(Response);
       const json = await (response as Response).json();
@@ -555,7 +555,7 @@ describe("Actions List Page", () => {
         enabled: "true",
       });
 
-      const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
+      const response = await action({ request, params: { serviceId: "service-1" }, context: {} });
 
       expect(response).toBeInstanceOf(Response);
       const json = await (response as Response).json();

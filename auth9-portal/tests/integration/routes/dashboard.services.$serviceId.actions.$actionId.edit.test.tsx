@@ -2,7 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import EditActionPage, { loader, action } from "~/routes/dashboard.tenants.$tenantId.actions.$actionId.edit";
+import EditActionPage, { loader, action } from "~/routes/dashboard.services.$serviceId.actions.$actionId.edit";
 import { ActionTrigger } from "@auth9/core";
 
 // Mock the session module
@@ -15,7 +15,7 @@ vi.mock("~/lib/auth9-client", () => ({
   getAuth9Client: vi.fn(() => ({
     actions: mockActionsApi,
   })),
-  withTenant: vi.fn(() => ({
+  withService: vi.fn(() => ({
     actions: mockActionsApi,
   })),
   getTriggers: vi.fn(() => Promise.resolve({ data: Object.values(ActionTrigger) })),
@@ -30,7 +30,7 @@ const mockActionsApi = {
 
 const mockAction = {
   id: "action-1",
-  tenantId: "tenant-1",
+  serviceId: "service-1",
   name: "Add Custom Claims",
   description: "Adds department and tier claims",
   triggerId: ActionTrigger.PostLogin,
@@ -60,37 +60,37 @@ describe("Edit Action Page", () => {
     mockActionsApi.get.mockResolvedValue({ data: mockAction });
 
     const response = await loader({
-      request: new Request("http://localhost/dashboard/tenants/tenant-1/actions/action-1/edit"),
-      params: { tenantId: "tenant-1", actionId: "action-1" },
+      request: new Request("http://localhost/dashboard/services/service-1/actions/action-1/edit"),
+      params: { serviceId: "service-1", actionId: "action-1" },
       context: {},
     });
 
     expect(response).toEqual({
-      tenantId: "tenant-1",
+      serviceId: "service-1",
       action: mockAction,
       triggers: Object.values(ActionTrigger),
     });
     expect(mockActionsApi.get).toHaveBeenCalledWith("action-1");
   });
 
-  it("loader throws when tenantId is missing", async () => {
+  it("loader throws when serviceId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/tenants//actions/action-1/edit"),
+        request: new Request("http://localhost/dashboard/services//actions/action-1/edit"),
         params: { actionId: "action-1" },
         context: {},
       })
-    ).rejects.toThrow("Tenant ID and Action ID are required");
+    ).rejects.toThrow("Service ID and Action ID are required");
   });
 
   it("loader throws when actionId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/tenants/tenant-1/actions//edit"),
-        params: { tenantId: "tenant-1" },
+        request: new Request("http://localhost/dashboard/services/service-1/actions//edit"),
+        params: { serviceId: "service-1" },
         context: {},
       })
-    ).rejects.toThrow("Tenant ID and Action ID are required");
+    ).rejects.toThrow("Service ID and Action ID are required");
   });
 
   // ============================================================================
@@ -100,17 +100,17 @@ describe("Edit Action Page", () => {
   it("renders edit page header", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Edit Action")).toBeInTheDocument();
@@ -121,17 +121,17 @@ describe("Edit Action Page", () => {
   it("renders form with pre-filled data", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       const nameInput = screen.getByLabelText(/name/i) as HTMLInputElement;
@@ -160,17 +160,17 @@ describe("Edit Action Page", () => {
   it("renders trigger as read-only", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Post Login")).toBeInTheDocument();
@@ -181,17 +181,17 @@ describe("Edit Action Page", () => {
   it("renders execution statistics", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Execution Statistics")).toBeInTheDocument();
@@ -208,17 +208,17 @@ describe("Edit Action Page", () => {
 
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: actionWithError,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       expect(screen.getByText("Last Error")).toBeInTheDocument();
@@ -233,17 +233,17 @@ describe("Edit Action Page", () => {
   it("requires name field", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       const nameInput = screen.getByLabelText(/name/i);
@@ -254,17 +254,17 @@ describe("Edit Action Page", () => {
   it("requires script field", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       const scriptTextarea = screen.getByLabelText(/typescript code/i);
@@ -275,17 +275,17 @@ describe("Edit Action Page", () => {
   it("validates timeout range (100-30000ms)", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       const timeoutInput = screen.getByLabelText(/timeout/i);
@@ -297,17 +297,17 @@ describe("Edit Action Page", () => {
   it("validates execution order is non-negative", async () => {
     const RoutesStub = createRoutesStub([
       {
-        path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+        path: "/dashboard/services/:serviceId/actions/:actionId/edit",
         Component: EditActionPage,
         loader: () => ({
-          tenantId: "tenant-1",
+          serviceId: "service-1",
           action: mockAction,
           triggers: Object.values(ActionTrigger),
         }),
       },
     ]);
 
-    render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+    render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
     await waitFor(() => {
       const orderInput = screen.getByLabelText(/execution order/i);
@@ -329,7 +329,7 @@ describe("Edit Action Page", () => {
       for (const [key, value] of Object.entries(data)) {
         formData.append(key, value);
       }
-      return new Request("http://localhost/dashboard/tenants/tenant-1/actions/action-1/edit", {
+      return new Request("http://localhost/dashboard/services/service-1/actions/action-1/edit", {
         method: "POST",
         body: formData,
       });
@@ -349,7 +349,7 @@ describe("Edit Action Page", () => {
 
       const response = await action({
         request,
-        params: { tenantId: "tenant-1", actionId: "action-1" },
+        params: { serviceId: "service-1", actionId: "action-1" },
         context: {},
       });
 
@@ -367,7 +367,7 @@ describe("Edit Action Page", () => {
       expect(response).toBeInstanceOf(Response);
       expect((response as Response).status).toBe(302);
       expect((response as Response).headers.get("Location")).toBe(
-        "/dashboard/tenants/tenant-1/actions/action-1"
+        "/dashboard/services/service-1/actions/action-1"
       );
     });
 
@@ -384,7 +384,7 @@ describe("Edit Action Page", () => {
 
       await action({
         request,
-        params: { tenantId: "tenant-1", actionId: "action-1" },
+        params: { serviceId: "service-1", actionId: "action-1" },
         context: {},
       });
 
@@ -408,7 +408,7 @@ describe("Edit Action Page", () => {
 
       await action({
         request,
-        params: { tenantId: "tenant-1", actionId: "action-1" },
+        params: { serviceId: "service-1", actionId: "action-1" },
         context: {},
       });
 
@@ -418,7 +418,7 @@ describe("Edit Action Page", () => {
       );
     });
 
-    it("returns error when tenantId is missing", async () => {
+    it("returns error when serviceId is missing", async () => {
       const request = createFormRequest({
         name: "Test",
         script: "context;",
@@ -447,7 +447,7 @@ describe("Edit Action Page", () => {
 
       const response = await action({
         request,
-        params: { tenantId: "tenant-1" },
+        params: { serviceId: "service-1" },
         context: {},
       });
 
@@ -469,7 +469,7 @@ describe("Edit Action Page", () => {
 
       const response = await action({
         request,
-        params: { tenantId: "tenant-1", actionId: "action-1" },
+        params: { serviceId: "service-1", actionId: "action-1" },
         context: {},
       });
 
@@ -479,10 +479,10 @@ describe("Edit Action Page", () => {
     it("displays error message on page when action fails", async () => {
       const RoutesStub = createRoutesStub([
         {
-          path: "/dashboard/tenants/:tenantId/actions/:actionId/edit",
+          path: "/dashboard/services/:serviceId/actions/:actionId/edit",
           Component: EditActionPage,
           loader: () => ({
-            tenantId: "tenant-1",
+            serviceId: "service-1",
             action: mockAction,
             triggers: Object.values(ActionTrigger),
           }),
@@ -491,7 +491,7 @@ describe("Edit Action Page", () => {
       ]);
 
       const user = userEvent.setup();
-      render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/actions/action-1/edit"]} />);
+      render(<RoutesStub initialEntries={["/dashboard/services/service-1/actions/action-1/edit"]} />);
 
       await waitFor(() => {
         expect(screen.getByText("Edit Action")).toBeInTheDocument();

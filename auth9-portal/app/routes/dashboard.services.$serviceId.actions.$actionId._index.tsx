@@ -7,7 +7,7 @@ import { Badge } from "~/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import type { ActionExecution } from "@auth9/core";
 import { ActionTrigger } from "@auth9/core";
-import { getAuth9Client, withTenant } from "~/lib/auth9-client";
+import { getAuth9Client, withService } from "~/lib/auth9-client";
 import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { ArrowLeftIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon, CodeIcon, ActivityLogIcon, ChevronDownIcon, ChevronRightIcon } from "@radix-ui/react-icons";
@@ -17,12 +17,12 @@ export const meta: MetaFunction<typeof loader> = ({ data }) => {
 };
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
-  const { tenantId, actionId } = params;
-  if (!tenantId || !actionId) throw new Error("Tenant ID and Action ID are required");
+  const { serviceId, actionId } = params;
+  if (!serviceId || !actionId) throw new Error("Service ID and Action ID are required");
   const accessToken = await getAccessToken(request);
 
   const client = getAuth9Client(accessToken || undefined);
-  const api = withTenant(client, tenantId);
+  const api = withService(client, serviceId);
 
   const [actionRes, logsRes, statsRes] = await Promise.all([
     api.actions.get(actionId),
@@ -31,7 +31,7 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
   ]);
 
   return {
-    tenantId,
+    serviceId,
     action: actionRes.data,
     logs: logsRes.data,
     stats: statsRes?.data || null,
@@ -48,7 +48,7 @@ const TRIGGER_LABELS: Record<string, string> = {
 };
 
 export default function ActionDetailPage() {
-  const { tenantId, action, logs, stats } = useLoaderData<typeof loader>();
+  const { serviceId, action, logs, stats } = useLoaderData<typeof loader>();
 
   // Calculate success rate
   const successRate = stats && stats.executionCount > 0
@@ -60,7 +60,7 @@ export default function ActionDetailPage() {
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to={`/dashboard/tenants/${tenantId}/actions`}>
+          <Link to={`/dashboard/services/${serviceId}/actions`}>
             <ArrowLeftIcon className="h-4 w-4" />
           </Link>
         </Button>
@@ -81,7 +81,7 @@ export default function ActionDetailPage() {
         </div>
         <div className="flex gap-2">
           <Button asChild variant="outline">
-            <Link to={`/dashboard/tenants/${tenantId}/actions/${action.id}/edit`}>
+            <Link to={`/dashboard/services/${serviceId}/actions/${action.id}/edit`}>
               Edit
             </Link>
           </Button>
@@ -218,8 +218,8 @@ export default function ActionDetailPage() {
             <code className="text-xs bg-muted px-2 py-1 rounded">{action.id}</code>
           </div>
           <div>
-            <div className="text-muted-foreground mb-1">Tenant ID</div>
-            <code className="text-xs bg-muted px-2 py-1 rounded">{action.tenantId}</code>
+            <div className="text-muted-foreground mb-1">Service ID</div>
+            <code className="text-xs bg-muted px-2 py-1 rounded">{action.serviceId}</code>
           </div>
           <div>
             <div className="text-muted-foreground mb-1">Created At</div>

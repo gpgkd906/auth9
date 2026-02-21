@@ -31,14 +31,15 @@
 | [rbac/04-advanced.md](./rbac/04-advanced.md) | 层次视图、循环检测 | 3 |
 | [rbac/05-abac-policy-management.md](./rbac/05-abac-policy-management.md) | ABAC 策略草稿、发布、回滚、模拟 | 5 |
 
-### 服务与客户端 (5 个文档, 25 个场景)
+### 服务与客户端 (6 个文档, 30 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [service/01-service-crud.md](./service/01-service-crud.md) | 服务 CRUD | 5 |
+| [service/01-service-crud.md](./service/01-service-crud.md) | 服务 CRUD（含 Actions/Branding 级联删除） | 5 |
 | [service/02-client.md](./service/02-client.md) | 客户端管理、密钥 | 5 |
 | [service/03-oidc.md](./service/03-oidc.md) | OIDC 配置、URI 验证 | 5 |
 | [service/04-tenant-service-toggle.md](./service/04-tenant-service-toggle.md) | 租户服务启停 | 5 |
 | [service/05-integration-info.md](./service/05-integration-info.md) | 集成信息 API 与 Portal 页面 | 5 |
+| [service/06-service-branding.md](./service/06-service-branding.md) | Service 级品牌配置、公开端点 client_id、Keycloak 主题集成 | 5 |
 
 ### 邀请管理 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -112,13 +113,13 @@
 |------|------|--------|
 | [audit/01-audit-logs.md](./audit/01-audit-logs.md) | 审计日志查看、验证 | 5 |
 
-### Action (6 个文档, 35 个场景) 🆕
+### Action (6 个文档, 35 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [action/01-crud.md](./action/01-crud.md) | 创建、更新、删除、启用/禁用 | 5 |
+| [action/01-crud.md](./action/01-crud.md) | 创建、更新、删除、启用/禁用（Service 级别） | 5 |
 | [action/02-execution.md](./action/02-execution.md) | 脚本执行、V8 沙箱、上下文注入 | 5 |
 | [action/03-logs.md](./action/03-logs.md) | 执行日志、统计、查询 | 5 |
-| [action/04-security.md](./action/04-security.md) | 安全沙箱、超时、资源限制 | 5 |
+| [action/04-security.md](./action/04-security.md) | 安全沙箱、超时、资源限制、Service 隔离 | 5 |
 | [action/05-api-sdk.md](./action/05-api-sdk.md) | REST API、TypeScript SDK 集成 | 10 |
 | [action/06-async-fetch.md](./action/06-async-fetch.md) | Async/Await、fetch()、setTimeout、安全限制 | 5 |
 
@@ -152,7 +153,7 @@
 | 租户管理 | 4 | 20 |
 | 用户管理 | 6 | 28 |
 | RBAC 角色权限 | 5 | 22 |
-| 服务与客户端 | 5 | 25 |
+| 服务与客户端 | 6 | 30 |
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
@@ -165,7 +166,7 @@
 | Action | 6 | 35 |
 | SDK | 6 | 30 |
 | 集成测试 | 7 | 35 |
-| **总计** | **75** | **369** |
+| **总计** | **76** | **374** |
 
 ---
 
@@ -309,6 +310,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-21 | 5.0.0 | **Action 迁移到 Service 级别 + Service Branding**：Action 从 Tenant 级别迁移到 Service 级别（API 路径 `/tenants/{id}/actions` → `/services/{id}/actions`，DB 字段 `tenant_id` → `service_id`，Portal 入口从 Tenant 详情页 Quick Links 迁移到 Service 详情页 Actions Tab）；新增 Service 级品牌配置（`service/06-service-branding.md`）覆盖 API CRUD、公开端点 client_id 查询、Keycloak 主题集成；更新 `action/01-06` 全部 6 个文档、`service/01`（级联删除）、`settings/01`（两级品牌架构说明）；共 76 个文档 374 个场景 |
 | 2026-02-18 | 4.4.2 | 补充多 tenant 登录后 `/tenant/select` 分流说明，统一 6 份既有文档执行步骤（`auth/01`、`session/07`、`integration/06`、`passkeys/02`、`user/06`、`service/05`），避免 QA 对登录后页面路径理解不一致；文档总数与场景数不变（74/364） |
 | 2026-02-18 | 4.4.1 | 新增会话与安全文档 `session/08`：覆盖 Identity Token 最小白名单、tenant 接口强制 Tenant Token、tenant/service 不匹配拒绝、切租户后旧 token 隔离；共 74 个文档 364 个场景 |
 | 2026-02-18 | 4.4.0 | 新增 tenant 选择与 token exchange 测试文档（`auth/11`），并更新 B2B 入驻路由说明（`auth/10`）：覆盖登录后 `/tenant/select` 分流、切换 tenant 强制 exchange、identity token 最小白名单、gRPC 使用 tenant token；共 73 个文档 359 个场景 |

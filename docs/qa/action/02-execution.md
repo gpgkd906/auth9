@@ -82,7 +82,7 @@ echo $TOKEN | cut -d. -f2 | base64 -d | jq
 SELECT action_id, success, duration_ms, error_message, executed_at
 FROM action_executions
 WHERE trigger_id = 'post-login'
-  AND tenant_id = '{tenant_id}'
+  AND service_id = '{service_id}'
 ORDER BY executed_at DESC
 LIMIT 1;
 -- 预期:
@@ -222,7 +222,7 @@ context;
 -- 验证执行顺序
 SELECT action_id, executed_at FROM action_executions
 WHERE trigger_id = 'post-login'
-  AND tenant_id = '{tenant_id}'
+  AND service_id = '{service_id}'
   AND executed_at > NOW() - INTERVAL 1 MINUTE
 ORDER BY executed_at ASC;
 -- 预期: 3 条记录，按 A → B → C 顺序
@@ -344,38 +344,38 @@ ORDER BY executed_at DESC LIMIT 1;
 
 ---
 
-## 场景 8：租户隔离
+## 场景 8：Service 隔离
 
 ### 初始状态
-- 租户 A 有 Action A
-- 租户 B 有 Action B
+- Service A 有 Action A
+- Service B 有 Action B
 
 ### 目的
-验证 Action 执行的租户隔离
+验证 Action 执行的 Service 隔离
 
 ### 测试操作流程
-1. 以租户 A 用户身份登录
-2. 验证仅执行租户 A 的 Actions
-3. 以租户 B 用户身份登录
-4. 验证仅执行租户 B 的 Actions
+1. 以 Service A 用户身份登录
+2. 验证仅执行 Service A 的 Actions
+3. 以 Service B 用户身份登录
+4. 验证仅执行 Service B 的 Actions
 
 ### 预期结果
-- 租户 A 用户 Token 仅包含 Action A 的 claims
-- 租户 B 用户 Token 仅包含 Action B 的 claims
-- 执行日志中 tenant_id 正确匹配
+- Service A 用户 Token 仅包含 Action A 的 claims
+- Service B 用户 Token 仅包含 Action B 的 claims
+- 执行日志中 service_id 正确匹配
 
 ### 预期数据状态
 ```sql
--- 验证租户 A 的执行记录
+-- 验证 Service A 的执行记录
 SELECT COUNT(*) FROM action_executions
-WHERE tenant_id = '{tenant_a_id}'
-  AND action_id IN (SELECT id FROM actions WHERE tenant_id = '{tenant_a_id}');
--- 预期: 仅包含租户 A 的 Actions
+WHERE service_id = '{service_a_id}'
+  AND action_id IN (SELECT id FROM actions WHERE service_id = '{service_a_id}');
+-- 预期: 仅包含 Service A 的 Actions
 
--- 验证不会误执行其他租户的 Actions
+-- 验证不会误执行其他 Service 的 Actions
 SELECT COUNT(*) FROM action_executions
-WHERE tenant_id = '{tenant_a_id}'
-  AND action_id IN (SELECT id FROM actions WHERE tenant_id = '{tenant_b_id}');
+WHERE service_id = '{service_a_id}'
+  AND action_id IN (SELECT id FROM actions WHERE service_id = '{service_b_id}');
 -- 预期: COUNT = 0
 ```
 
@@ -469,7 +469,7 @@ while (true) {
 - [ ] 多个 Actions 按顺序执行
 - [ ] 禁用的 Actions 不执行
 - [ ] 超时控制生效
-- [ ] 租户隔离正确
+- [ ] Service 隔离正确
 - [ ] 执行日志完整记录
 - [ ] 统计数据准确更新
 - [ ] 性能指标达标

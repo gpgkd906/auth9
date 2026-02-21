@@ -30,7 +30,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     }
 
     /// Create a new action
-    pub async fn create(&self, tenant_id: StringUuid, input: CreateActionInput) -> Result<Action> {
+    pub async fn create(&self, service_id: StringUuid, input: CreateActionInput) -> Result<Action> {
         let start = Instant::now();
 
         // Validate input
@@ -42,10 +42,10 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         // Validate script by attempting to compile it
         self.validate_script(&input.script)?;
 
-        // Check for duplicate name within tenant and trigger
+        // Check for duplicate name within service and trigger
         let existing = self
             .action_repo
-            .list_by_trigger(tenant_id, &input.trigger_id, false)
+            .list_by_trigger(service_id, &input.trigger_id, false)
             .await?;
 
         if existing.iter().any(|a| a.name == input.name) {
@@ -56,7 +56,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         }
 
         // Create action
-        let result = self.action_repo.create(tenant_id, &input).await;
+        let result = self.action_repo.create(service_id, &input).await;
 
         // Record metrics
         let duration = start.elapsed().as_secs_f64();
@@ -70,27 +70,27 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     }
 
     /// Get action by ID
-    pub async fn get(&self, id: StringUuid, tenant_id: StringUuid) -> Result<Action> {
+    pub async fn get(&self, id: StringUuid, service_id: StringUuid) -> Result<Action> {
         let action = self
             .action_repo
             .find_by_id(id)
             .await?
             .ok_or_else(|| AppError::NotFound("Action not found".to_string()))?;
 
-        // Verify tenant ownership
-        if action.tenant_id != tenant_id {
+        // Verify service ownership
+        if action.service_id != service_id {
             return Err(AppError::Forbidden(
-                "Action does not belong to this tenant".to_string(),
+                "Action does not belong to this service".to_string(),
             ));
         }
 
         Ok(action)
     }
 
-    /// List all actions for a tenant
-    pub async fn list(&self, tenant_id: StringUuid) -> Result<Vec<Action>> {
+    /// List all actions for a service
+    pub async fn list(&self, service_id: StringUuid) -> Result<Vec<Action>> {
         let start = Instant::now();
-        let result = self.action_repo.list_by_tenant(tenant_id).await;
+        let result = self.action_repo.list_by_service(service_id).await;
         let duration = start.elapsed().as_secs_f64();
         let status = if result.is_ok() { "success" } else { "error" };
         counter!("auth9_action_operations_total", "operation" => "list", "result" => status)
@@ -103,14 +103,14 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// List actions by trigger
     pub async fn list_by_trigger(
         &self,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         trigger_id: &str,
     ) -> Result<Vec<Action>> {
         // Validate trigger_id
         trigger_id.parse::<ActionTrigger>()?;
 
         self.action_repo
-            .list_by_trigger(tenant_id, trigger_id, false)
+            .list_by_trigger(service_id, trigger_id, false)
             .await
     }
 
@@ -118,7 +118,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     pub async fn update(
         &self,
         id: StringUuid,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         input: UpdateActionInput,
     ) -> Result<Action> {
         let start = Instant::now();
@@ -126,8 +126,8 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         // Validate input
         input.validate()?;
 
-        // Verify action exists and belongs to tenant
-        let _action = self.get(id, tenant_id).await?;
+        // Verify action exists and belongs to service
+        let _action = self.get(id, service_id).await?;
 
         // If script is being updated, validate it
         if let Some(ref script) = input.script {
@@ -149,11 +149,11 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     }
 
     /// Delete an action
-    pub async fn delete(&self, id: StringUuid, tenant_id: StringUuid) -> Result<()> {
+    pub async fn delete(&self, id: StringUuid, service_id: StringUuid) -> Result<()> {
         let start = Instant::now();
 
-        // Verify action exists and belongs to tenant
-        let _action = self.get(id, tenant_id).await?;
+        // Verify action exists and belongs to service
+        let _action = self.get(id, service_id).await?;
 
         let result = self.action_repo.delete(id).await;
 
@@ -171,7 +171,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// Batch upsert actions (create or update)
     pub async fn batch_upsert(
         &self,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         inputs: Vec<UpsertActionInput>,
     ) -> Result<BatchUpsertResponse> {
         let mut created = Vec::new();
@@ -223,7 +223,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
                         timeout_ms: Some(input.timeout_ms),
                     };
 
-                    match self.update(id, tenant_id, update_input).await {
+                    match self.update(id, service_id, update_input).await {
                         Ok(action) => updated.push(action),
                         Err(e) => errors.push(BatchError {
                             input_index: index,
@@ -245,7 +245,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
                         timeout_ms: input.timeout_ms,
                     };
 
-                    match self.create(tenant_id, create_input).await {
+                    match self.create(service_id, create_input).await {
                         Ok(action) => created.push(action),
                         Err(e) => errors.push(BatchError {
                             input_index: index,
@@ -268,11 +268,11 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     pub async fn test(
         &self,
         id: StringUuid,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         context: ActionContext,
     ) -> Result<TestActionResponse> {
-        // Verify action exists and belongs to tenant
-        let action = self.get(id, tenant_id).await?;
+        // Verify action exists and belongs to service
+        let action = self.get(id, service_id).await?;
 
         // Check if action engine is available
         let Some(ref action_engine) = self.action_engine else {
@@ -308,7 +308,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     pub async fn get_execution(
         &self,
         execution_id: StringUuid,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
     ) -> Result<ActionExecution> {
         let execution = self
             .action_repo
@@ -316,10 +316,10 @@ impl<R: ActionRepository + 'static> ActionService<R> {
             .await?
             .ok_or_else(|| AppError::NotFound("Execution log not found".to_string()))?;
 
-        // Verify tenant ownership
-        if execution.tenant_id != tenant_id {
+        // Verify service ownership
+        if execution.service_id != service_id {
             return Err(AppError::Forbidden(
-                "Execution log does not belong to this tenant".to_string(),
+                "Execution log does not belong to this service".to_string(),
             ));
         }
 
@@ -329,12 +329,12 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// Query execution logs with total count for pagination
     pub async fn query_logs(
         &self,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         filter: LogQueryFilter,
     ) -> Result<(Vec<ActionExecution>, i64)> {
-        // If action_id is specified, verify it belongs to tenant
+        // If action_id is specified, verify it belongs to service
         if let Some(action_id) = filter.action_id {
-            let _action = self.get(action_id, tenant_id).await?;
+            let _action = self.get(action_id, service_id).await?;
         }
 
         let logs = self.action_repo.query_logs(&filter).await?;
@@ -344,9 +344,9 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     }
 
     /// Get action statistics
-    pub async fn get_stats(&self, id: StringUuid, tenant_id: StringUuid) -> Result<ActionStats> {
-        // Verify action exists and belongs to tenant
-        let _action = self.get(id, tenant_id).await?;
+    pub async fn get_stats(&self, id: StringUuid, service_id: StringUuid) -> Result<ActionStats> {
+        // Verify action exists and belongs to service
+        let _action = self.get(id, service_id).await?;
 
         let stats = self
             .action_repo
@@ -381,14 +381,45 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// If no ActionEngine is configured, returns the context unchanged.
     pub async fn execute_trigger(
         &self,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         trigger_id: &str,
         context: ActionContext,
     ) -> Result<ActionContext> {
         match &self.action_engine {
-            Some(engine) => engine.execute_trigger(tenant_id, trigger_id, context).await,
+            Some(engine) => engine.execute_trigger(service_id, trigger_id, context).await,
             None => Ok(context),
         }
+    }
+
+    /// Execute actions for a trigger across all services in a tenant (PostChangePassword fallback)
+    ///
+    /// Used when no specific service_id is available (e.g. password change flow).
+    /// Finds all actions matching the trigger across services belonging to the tenant.
+    pub async fn execute_trigger_by_tenant(
+        &self,
+        tenant_id: StringUuid,
+        trigger_id: &str,
+        context: ActionContext,
+    ) -> Result<ActionContext> {
+        let Some(ref engine) = self.action_engine else {
+            return Ok(context);
+        };
+
+        let actions = self
+            .action_repo
+            .list_by_tenant_trigger(tenant_id, trigger_id, true)
+            .await?;
+
+        if actions.is_empty() {
+            return Ok(context);
+        }
+
+        // Execute collected actions through the engine's single-action path
+        let mut ctx = context;
+        for action in actions {
+            ctx = engine.execute_single_action_with_record(&action, ctx, trigger_id).await?;
+        }
+        Ok(ctx)
     }
 
     /// Get all available triggers
@@ -401,19 +432,20 @@ impl<R: ActionRepository + 'static> ActionService<R> {
 mod tests {
     use super::*;
     use crate::domain::{
-        Action, ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
-        ActionExecution, CreateActionInput, LogQueryFilter, StringUuid, UpdateActionInput,
-        UpsertActionInput,
+        Action, ActionContext, ActionContextRequest, ActionContextTenant,
+        ActionContextUser, ActionExecution, CreateActionInput, LogQueryFilter, StringUuid,
+        UpdateActionInput, UpsertActionInput,
     };
     use crate::repository::action::MockActionRepository;
     use chrono::Utc;
     use mockall::predicate::*;
 
-    /// Helper: build a test Action with the given tenant_id
-    fn make_test_action(tenant_id: StringUuid) -> Action {
+    /// Helper: build a test Action with the given service_id
+    fn make_test_action(service_id: StringUuid) -> Action {
         Action {
             id: StringUuid::new_v4(),
-            tenant_id,
+            tenant_id: None,
+            service_id,
             name: "Test Action".to_string(),
             trigger_id: "post-login".to_string(),
             script: "export default async function(ctx) { return ctx; }".to_string(),
@@ -449,6 +481,7 @@ mod tests {
                 slug: "test-tenant".to_string(),
                 name: "Test Tenant".to_string(),
             },
+            service: None,
             request: ActionContextRequest {
                 ip: Some("127.0.0.1".to_string()),
                 user_agent: Some("test-agent".to_string()),
@@ -463,29 +496,29 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_success() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let input = make_create_input();
-        let expected_action = make_test_action(tenant_id);
+        let expected_action = make_test_action(service_id);
 
         let mut mock = MockActionRepository::new();
 
         // list_by_trigger should return empty (no duplicate)
         mock.expect_list_by_trigger()
-            .withf(move |tid, trig, enabled| *tid == tenant_id && trig == "post-login" && !enabled)
+            .withf(move |sid, trig, enabled| *sid == service_id && trig == "post-login" && !enabled)
             .returning(|_, _, _| Ok(vec![]));
 
         // create should succeed
         let action_clone = expected_action.clone();
         mock.expect_create()
-            .withf(move |tid, _| *tid == tenant_id)
+            .withf(move |sid, _| *sid == service_id)
             .returning(move |_, _| Ok(action_clone.clone()));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, input).await;
+        let result = service.create(service_id, input).await;
 
         assert!(result.is_ok());
         let action = result.unwrap();
-        assert_eq!(action.tenant_id, tenant_id);
+        assert_eq!(action.service_id, service_id);
     }
 
     // ---------------------------------------------------------------
@@ -493,9 +526,9 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_duplicate_name() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let input = make_create_input();
-        let existing = make_test_action(tenant_id);
+        let existing = make_test_action(service_id);
 
         let mut mock = MockActionRepository::new();
 
@@ -504,7 +537,7 @@ mod tests {
             .returning(move |_, _, _| Ok(vec![existing.clone()]));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, input).await;
+        let result = service.create(service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -520,13 +553,13 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_invalid_trigger() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let mut input = make_create_input();
         input.trigger_id = "invalid-trigger".to_string();
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, input).await;
+        let result = service.create(service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -542,13 +575,13 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_empty_script() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let mut input = make_create_input();
         input.script = "   ".to_string(); // whitespace-only
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, input).await;
+        let result = service.create(service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -564,8 +597,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_success() {
-        let tenant_id = StringUuid::new_v4();
-        let action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let action = make_test_action(service_id);
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -575,7 +608,7 @@ mod tests {
             .returning(move |_| Ok(Some(action_clone.clone())));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get(action_id, tenant_id).await;
+        let result = service.get(action_id, service_id).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().id, action_id);
@@ -586,7 +619,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_not_found() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let action_id = StringUuid::new_v4();
 
         let mut mock = MockActionRepository::new();
@@ -595,7 +628,7 @@ mod tests {
             .returning(|_| Ok(None));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get(action_id, tenant_id).await;
+        let result = service.get(action_id, service_id).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -607,13 +640,13 @@ mod tests {
     }
 
     // ---------------------------------------------------------------
-    // 7. get - wrong tenant returns Forbidden
+    // 7. get - wrong service returns Forbidden
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_wrong_tenant() {
-        let owner_tenant = StringUuid::new_v4();
-        let other_tenant = StringUuid::new_v4();
-        let action = make_test_action(owner_tenant);
+        let owner_service = StringUuid::new_v4();
+        let other_service = StringUuid::new_v4();
+        let action = make_test_action(owner_service);
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -623,7 +656,7 @@ mod tests {
             .returning(move |_| Ok(Some(action_clone.clone())));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get(action_id, other_tenant).await;
+        let result = service.get(action_id, other_service).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -639,17 +672,17 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_list_success() {
-        let tenant_id = StringUuid::new_v4();
-        let actions = vec![make_test_action(tenant_id), make_test_action(tenant_id)];
+        let service_id = StringUuid::new_v4();
+        let actions = vec![make_test_action(service_id), make_test_action(service_id)];
 
         let mut mock = MockActionRepository::new();
         let actions_clone = actions.clone();
-        mock.expect_list_by_tenant()
-            .with(eq(tenant_id))
+        mock.expect_list_by_service()
+            .with(eq(service_id))
             .returning(move |_| Ok(actions_clone.clone()));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.list(tenant_id).await;
+        let result = service.list(service_id).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
@@ -660,17 +693,17 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_list_by_trigger_success() {
-        let tenant_id = StringUuid::new_v4();
-        let actions = vec![make_test_action(tenant_id)];
+        let service_id = StringUuid::new_v4();
+        let actions = vec![make_test_action(service_id)];
 
         let mut mock = MockActionRepository::new();
         let actions_clone = actions.clone();
         mock.expect_list_by_trigger()
-            .withf(move |tid, trig, enabled| *tid == tenant_id && trig == "post-login" && !enabled)
+            .withf(move |sid, trig, enabled| *sid == service_id && trig == "post-login" && !enabled)
             .returning(move |_, _, _| Ok(actions_clone.clone()));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.list_by_trigger(tenant_id, "post-login").await;
+        let result = service.list_by_trigger(service_id, "post-login").await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 1);
@@ -681,11 +714,11 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_list_by_trigger_invalid_trigger() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.list_by_trigger(tenant_id, "bogus-trigger").await;
+        let result = service.list_by_trigger(service_id, "bogus-trigger").await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -701,8 +734,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_update_success() {
-        let tenant_id = StringUuid::new_v4();
-        let action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let action = make_test_action(service_id);
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -726,7 +759,7 @@ mod tests {
             name: Some("Updated Name".to_string()),
             ..Default::default()
         };
-        let result = service.update(action_id, tenant_id, input).await;
+        let result = service.update(action_id, service_id, input).await;
 
         assert!(result.is_ok());
         assert_eq!(result.unwrap().name, "Updated Name");
@@ -737,7 +770,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_update_not_found() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let action_id = StringUuid::new_v4();
 
         let mut mock = MockActionRepository::new();
@@ -750,7 +783,7 @@ mod tests {
             name: Some("New Name".to_string()),
             ..Default::default()
         };
-        let result = service.update(action_id, tenant_id, input).await;
+        let result = service.update(action_id, service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -766,7 +799,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_update_empty_name_validation() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let action_id = StringUuid::new_v4();
 
         let mock = MockActionRepository::new();
@@ -775,7 +808,7 @@ mod tests {
             name: Some("".to_string()), // empty name fails validation (min = 1)
             ..Default::default()
         };
-        let result = service.update(action_id, tenant_id, input).await;
+        let result = service.update(action_id, service_id, input).await;
 
         assert!(result.is_err());
     }
@@ -785,8 +818,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_delete_success() {
-        let tenant_id = StringUuid::new_v4();
-        let action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let action = make_test_action(service_id);
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -802,7 +835,7 @@ mod tests {
             .returning(|_| Ok(()));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.delete(action_id, tenant_id).await;
+        let result = service.delete(action_id, service_id).await;
 
         assert!(result.is_ok());
     }
@@ -812,7 +845,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_delete_not_found() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let action_id = StringUuid::new_v4();
 
         let mut mock = MockActionRepository::new();
@@ -821,7 +854,7 @@ mod tests {
             .returning(|_| Ok(None));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.delete(action_id, tenant_id).await;
+        let result = service.delete(action_id, service_id).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -837,8 +870,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_test_action_without_engine() {
-        let tenant_id = StringUuid::new_v4();
-        let action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let action = make_test_action(service_id);
         let action_id = action.id;
         let context = make_test_context();
 
@@ -849,7 +882,7 @@ mod tests {
             .returning(move |_| Ok(Some(action_clone.clone())));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.test(action_id, tenant_id, context).await;
+        let result = service.test(action_id, service_id, context).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -864,13 +897,14 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_execution_success() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let execution_id = StringUuid::new_v4();
         let now = Utc::now();
         let execution = ActionExecution {
             id: execution_id,
             action_id: StringUuid::new_v4(),
-            tenant_id,
+            tenant_id: None,
+            service_id,
             trigger_id: "post-login".to_string(),
             user_id: None,
             success: false,
@@ -886,7 +920,7 @@ mod tests {
             .returning(move |_| Ok(Some(execution_clone.clone())));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get_execution(execution_id, tenant_id).await;
+        let result = service.get_execution(execution_id, service_id).await;
 
         assert!(result.is_ok());
         let exec = result.unwrap();
@@ -900,7 +934,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_execution_not_found() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let execution_id = StringUuid::new_v4();
 
         let mut mock = MockActionRepository::new();
@@ -909,7 +943,7 @@ mod tests {
             .returning(|_| Ok(None));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get_execution(execution_id, tenant_id).await;
+        let result = service.get_execution(execution_id, service_id).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -925,14 +959,15 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_execution_wrong_tenant() {
-        let owner_tenant = StringUuid::new_v4();
-        let other_tenant = StringUuid::new_v4();
+        let owner_service = StringUuid::new_v4();
+        let other_service = StringUuid::new_v4();
         let execution_id = StringUuid::new_v4();
         let now = Utc::now();
         let execution = ActionExecution {
             id: execution_id,
             action_id: StringUuid::new_v4(),
-            tenant_id: owner_tenant,
+            tenant_id: None,
+            service_id: owner_service,
             trigger_id: "post-login".to_string(),
             user_id: None,
             success: true,
@@ -948,7 +983,7 @@ mod tests {
             .returning(move |_| Ok(Some(execution_clone.clone())));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get_execution(execution_id, other_tenant).await;
+        let result = service.get_execution(execution_id, other_service).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -964,12 +999,13 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_query_logs_success() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let now = Utc::now();
         let executions = vec![ActionExecution {
             id: StringUuid::new_v4(),
             action_id: StringUuid::new_v4(),
-            tenant_id,
+            tenant_id: None,
+            service_id,
             trigger_id: "post-login".to_string(),
             user_id: None,
             success: true,
@@ -986,7 +1022,7 @@ mod tests {
 
         let service = ActionService::new(Arc::new(mock), None);
         let filter = LogQueryFilter::default();
-        let result = service.query_logs(tenant_id, filter).await;
+        let result = service.query_logs(service_id, filter).await;
 
         assert!(result.is_ok());
         let (logs, total) = result.unwrap();
@@ -999,8 +1035,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_stats_success() {
-        let tenant_id = StringUuid::new_v4();
-        let action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let action = make_test_action(service_id);
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -1017,7 +1053,7 @@ mod tests {
             .returning(|_| Ok(Some((100, 5, 23.5, 42))));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get_stats(action_id, tenant_id).await;
+        let result = service.get_stats(action_id, service_id).await;
 
         assert!(result.is_ok());
         let stats = result.unwrap();
@@ -1032,8 +1068,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_get_stats_not_found() {
-        let tenant_id = StringUuid::new_v4();
-        let action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let action = make_test_action(service_id);
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -1050,7 +1086,7 @@ mod tests {
             .returning(|_| Ok(None));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.get_stats(action_id, tenant_id).await;
+        let result = service.get_stats(action_id, service_id).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -1096,14 +1132,14 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_execute_trigger_without_engine() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let context = make_test_context();
         let original_user_email = context.user.email.clone();
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
         let result = service
-            .execute_trigger(tenant_id, "post-login", context)
+            .execute_trigger(service_id, "post-login", context)
             .await;
 
         assert!(result.is_ok());
@@ -1134,8 +1170,8 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_batch_upsert_create_and_update() {
-        let tenant_id = StringUuid::new_v4();
-        let existing_action = make_test_action(tenant_id);
+        let service_id = StringUuid::new_v4();
+        let existing_action = make_test_action(service_id);
         let existing_id = existing_action.id;
 
         let mut mock = MockActionRepository::new();
@@ -1145,10 +1181,10 @@ mod tests {
             .returning(|_, _, _| Ok(vec![]));
 
         // For the create path
-        mock.expect_create().returning(move |tid, input| {
+        mock.expect_create().returning(move |sid, input| {
             Ok(Action {
                 id: StringUuid::new_v4(),
-                tenant_id: tid,
+                service_id: sid,
                 name: input.name.clone(),
                 trigger_id: input.trigger_id.clone(),
                 script: input.script.clone(),
@@ -1167,11 +1203,11 @@ mod tests {
         });
 
         // For the update path
-        let tenant_for_update = tenant_id;
+        let service_for_update = service_id;
         mock.expect_update().returning(move |id, input| {
             Ok(Action {
                 id,
-                tenant_id: tenant_for_update,
+                service_id: service_for_update,
                 name: input.name.clone().unwrap_or_default(),
                 ..Default::default()
             })
@@ -1206,7 +1242,7 @@ mod tests {
             },
         ];
 
-        let result = service.batch_upsert(tenant_id, inputs).await;
+        let result = service.batch_upsert(service_id, inputs).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -1220,7 +1256,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_batch_upsert_validation_errors() {
-        let tenant_id = StringUuid::new_v4();
+        let service_id = StringUuid::new_v4();
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
 
@@ -1251,7 +1287,7 @@ mod tests {
             },
         ];
 
-        let result = service.batch_upsert(tenant_id, inputs).await;
+        let result = service.batch_upsert(service_id, inputs).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -1265,9 +1301,9 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_query_logs_with_action_id_checks_tenant() {
-        let tenant_id = StringUuid::new_v4();
-        let other_tenant = StringUuid::new_v4();
-        let action = make_test_action(other_tenant); // belongs to other_tenant
+        let service_id = StringUuid::new_v4();
+        let other_service = StringUuid::new_v4();
+        let action = make_test_action(other_service); // belongs to other_service
         let action_id = action.id;
 
         let mut mock = MockActionRepository::new();
@@ -1282,7 +1318,7 @@ mod tests {
             ..Default::default()
         };
 
-        let result = service.query_logs(tenant_id, filter).await;
+        let result = service.query_logs(service_id, filter).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();

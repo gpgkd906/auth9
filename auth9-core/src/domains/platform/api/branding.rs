@@ -1,18 +1,20 @@
 //! Branding API handlers
 
 use crate::api::{require_platform_admin_with_db, write_audit_log_generic, SuccessResponse};
-use crate::domain::UpdateBrandingRequest;
+use crate::domain::{PublicBrandingQuery, StringUuid, UpdateBrandingRequest, UpdateServiceBrandingRequest};
 use crate::error::Result;
 use crate::middleware::auth::AuthUser;
 use crate::state::{HasBranding, HasServices};
-use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
+use axum::{extract::{Path, Query, State}, http::HeaderMap, response::IntoResponse, Json};
+use crate::api::MessageResponse;
 
 /// Get branding configuration (public endpoint, no authentication required)
 ///
 /// This endpoint is intended for use by Keycloak themes to fetch branding settings.
-/// It returns the full branding configuration without any masking.
+/// Accepts optional `client_id` query parameter to return service-specific branding.
+/// Falls back to system default if no service-level branding is configured.
 ///
-/// GET /api/v1/public/branding
+/// GET /api/v1/public/branding?client_id=xxx
 #[utoipa::path(
     get,
     path = "/api/v1/public/branding",
@@ -23,8 +25,16 @@ use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 )]
 pub async fn get_public_branding<S: HasBranding>(
     State(state): State<S>,
+    Query(query): Query<PublicBrandingQuery>,
 ) -> Result<impl IntoResponse> {
-    let config = state.branding_service().get_branding().await?;
+    let config = if let Some(client_id) = &query.client_id {
+        state
+            .branding_service()
+            .get_branding_by_client_id(client_id)
+            .await?
+    } else {
+        state.branding_service().get_branding().await?
+    };
     Ok(Json(SuccessResponse::new(config)))
 }
 
@@ -83,6 +93,116 @@ pub async fn update_branding<S: HasBranding + HasServices>(
     .await;
 
     Ok(Json(SuccessResponse::new(config)))
+}
+
+/// Get branding for a specific service
+///
+/// GET /api/v1/services/{service_id}/branding
+#[utoipa::path(
+    get,
+    path = "/api/v1/services/{service_id}/branding",
+    tag = "Platform",
+    params(
+        ("service_id" = String, Path, description = "Service ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
+pub async fn get_service_branding<S: HasBranding + HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    Path(service_id): Path<StringUuid>,
+) -> Result<impl IntoResponse> {
+    require_platform_admin_with_db(&state, &auth).await?;
+    let config = state
+        .branding_service()
+        .get_branding_for_service(service_id)
+        .await?;
+    Ok(Json(SuccessResponse::new(config)))
+}
+
+/// Update branding for a specific service
+///
+/// PUT /api/v1/services/{service_id}/branding
+#[utoipa::path(
+    put,
+    path = "/api/v1/services/{service_id}/branding",
+    tag = "Platform",
+    params(
+        ("service_id" = String, Path, description = "Service ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
+pub async fn update_service_branding<S: HasBranding + HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    Path(service_id): Path<StringUuid>,
+    headers: HeaderMap,
+    Json(request): Json<UpdateServiceBrandingRequest>,
+) -> Result<impl IntoResponse> {
+    require_platform_admin_with_db(&state, &auth).await?;
+    let result = state
+        .branding_service()
+        .update_service_branding(service_id, request.config)
+        .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "service.branding.update",
+        "service_branding",
+        Some(*service_id),
+        None,
+        serde_json::to_value(&result).ok(),
+    )
+    .await;
+
+    Ok(Json(SuccessResponse::new(result)))
+}
+
+/// Delete branding for a specific service (revert to system default)
+///
+/// DELETE /api/v1/services/{service_id}/branding
+#[utoipa::path(
+    delete,
+    path = "/api/v1/services/{service_id}/branding",
+    tag = "Platform",
+    params(
+        ("service_id" = String, Path, description = "Service ID")
+    ),
+    responses(
+        (status = 200, description = "Success")
+    )
+)]
+pub async fn delete_service_branding<S: HasBranding + HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    Path(service_id): Path<StringUuid>,
+    headers: HeaderMap,
+) -> Result<impl IntoResponse> {
+    require_platform_admin_with_db(&state, &auth).await?;
+    state
+        .branding_service()
+        .delete_service_branding(service_id)
+        .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "service.branding.delete",
+        "service_branding",
+        Some(*service_id),
+        None,
+        None,
+    )
+    .await;
+
+    Ok(Json(MessageResponse::new(
+        "Service branding deleted, reverted to system default.",
+    )))
 }
 
 #[cfg(test)]

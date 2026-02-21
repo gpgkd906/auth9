@@ -37,9 +37,9 @@ npm install @auth9/core
 
 #### 1.1 创建 Action
 ```bash
-TENANT_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants LIMIT 1;")
+SERVICE_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM services LIMIT 1;")
 
-curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -59,7 +59,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
   "success": true,
   "data": {
     "id": "action-uuid",
-    "tenant_id": "tenant-uuid",
+    "service_id": "service-uuid",
     "name": "API Test Action",
     "trigger_id": "post-login",
     "enabled": true,
@@ -70,7 +70,7 @@ curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 
 #### 1.2 获取 Action 列表
 ```bash
-curl http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+curl http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
@@ -79,7 +79,7 @@ curl http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
 #### 1.3 获取单个 Action
 ```bash
 ACTION_ID="<from_create_response>"
-curl http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID \
+curl http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID \
   -H "Authorization: Bearer $TOKEN" | jq '.'
 ```
 
@@ -87,7 +87,7 @@ curl http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID \
 
 #### 1.4 更新 Action
 ```bash
-curl -X PATCH http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID \
+curl -X PATCH http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -100,7 +100,7 @@ curl -X PATCH http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID
 
 #### 1.5 删除 Action
 ```bash
-curl -X DELETE http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID \
+curl -X DELETE http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -108,7 +108,7 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_I
 
 #### 1.6 验证删除
 ```bash
-curl http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID \
+curl http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_ID \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -122,7 +122,7 @@ curl http://localhost:8080/api/v1/tenants/$TENANT_ID/actions/$ACTION_ID \
 ```bash
 # 创建多个不同触发器的 Actions
 for trigger in post-login pre-user-registration post-user-registration; do
-  curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+  curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d "{
@@ -133,7 +133,7 @@ for trigger in post-login pre-user-registration post-user-registration; do
 done
 
 # 筛选 post-login 触发器
-curl "http://localhost:8080/api/v1/tenants/$TENANT_ID/actions?trigger_id=post-login" \
+curl "http://localhost:8080/api/v1/services/$SERVICE_ID/actions?trigger_id=post-login" \
   -H "Authorization: Bearer $TOKEN" | jq '.data | length'
 ```
 
@@ -150,7 +150,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!, // 从环境变量读取 Token
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testCRUD() {
@@ -211,7 +211,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!,
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testBatchUpsert() {
@@ -259,7 +259,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!,
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testAction() {
@@ -341,7 +341,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!,
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testLogs() {
@@ -394,7 +394,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!,
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testStats() {
@@ -443,7 +443,7 @@ import { Auth9Client, NotFoundError, ValidationError, AuthenticationError } from
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: 'invalid-token',
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testErrors() {
@@ -459,7 +459,7 @@ async function testErrors() {
   const validClient = new Auth9Client({
     baseUrl: 'http://localhost:8080',
     apiKey: process.env.AUTH9_API_KEY!,
-    tenantId: 'tenant-uuid',
+    serviceId: 'service-uuid',
   });
 
   try {
@@ -506,7 +506,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!,
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 async function testConcurrency() {
@@ -547,7 +547,7 @@ import { Auth9Client } from '@auth9/core';
 const client = new Auth9Client({
   baseUrl: 'http://localhost:8080',
   apiKey: process.env.AUTH9_API_KEY!,
-  tenantId: 'tenant-uuid',
+  serviceId: 'service-uuid',
 });
 
 /**
@@ -643,7 +643,7 @@ Service access granted: ["service-x"]
 ### 1. API 响应时间
 ```bash
 # 创建 Action
-time curl -X POST http://localhost:8080/api/v1/tenants/$TENANT_ID/actions \
+time curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"name":"Perf Test","trigger_id":"post-login","script":"context;"}' \

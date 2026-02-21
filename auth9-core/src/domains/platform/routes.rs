@@ -56,4 +56,10 @@ where
             get(platform_api::branding::get_branding::<S>)
                 .put(platform_api::branding::update_branding::<S>),
         )
+        .route(
+            "/api/v1/services/{service_id}/branding",
+            get(platform_api::branding::get_service_branding::<S>)
+                .put(platform_api::branding::update_service_branding::<S>)
+                .delete(platform_api::branding::delete_service_branding::<S>),
+        )
 }

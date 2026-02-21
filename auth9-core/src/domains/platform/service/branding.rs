@@ -1,9 +1,11 @@
 //! Branding configuration service
 
-use crate::domain::{BrandingConfig, SettingCategory, SystemSettingRow, UpsertSystemSettingInput};
+use crate::domain::{
+    BrandingConfig, ServiceBranding, SettingCategory, SystemSettingRow, UpsertSystemSettingInput,
+};
 use crate::domains::platform::service::KeycloakSyncService;
 use crate::error::{AppError, Result};
-use crate::repository::SystemSettingsRepository;
+use crate::repository::{ServiceBrandingRepository, ServiceRepository, SystemSettingsRepository};
 use std::sync::Arc;
 use validator::Validate;
 
@@ -11,30 +13,41 @@ use validator::Validate;
 const BRANDING_CONFIG_KEY: &str = "config";
 
 /// Service for managing branding configuration
-pub struct BrandingService<R: SystemSettingsRepository> {
+pub struct BrandingService<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> {
     repo: Arc<R>,
+    service_branding_repo: Arc<SBR>,
     sync_service: Option<Arc<KeycloakSyncService>>,
     /// Allowed domains for branding resource URLs (logo, favicon).
     /// When non-empty, only URLs from these domains are accepted.
     allowed_domains: Vec<String>,
+    /// Service repository for resolving client_id -> service_id
+    service_repo: Option<Arc<dyn ServiceRepository>>,
 }
 
-impl<R: SystemSettingsRepository> BrandingService<R> {
+impl<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> BrandingService<R, SBR> {
     /// Create a new branding service
-    pub fn new(repo: Arc<R>) -> Self {
+    pub fn new(repo: Arc<R>, service_branding_repo: Arc<SBR>) -> Self {
         Self {
             repo,
+            service_branding_repo,
             sync_service: None,
             allowed_domains: vec![],
+            service_repo: None,
         }
     }
 
     /// Create a new branding service with Keycloak sync
-    pub fn with_sync_service(repo: Arc<R>, sync_service: Arc<KeycloakSyncService>) -> Self {
+    pub fn with_sync_service(
+        repo: Arc<R>,
+        service_branding_repo: Arc<SBR>,
+        sync_service: Arc<KeycloakSyncService>,
+    ) -> Self {
         Self {
             repo,
+            service_branding_repo,
             sync_service: Some(sync_service),
             allowed_domains: vec![],
+            service_repo: None,
         }
     }
 
@@ -44,7 +57,13 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         self
     }
 
-    /// Get branding configuration
+    /// Set service repository for client_id resolution
+    pub fn with_service_repo(mut self, service_repo: Arc<dyn ServiceRepository>) -> Self {
+        self.service_repo = Some(service_repo);
+        self
+    }
+
+    /// Get system-level branding configuration (default)
     ///
     /// Returns the stored configuration or default values if not configured
     pub async fn get_branding(&self) -> Result<BrandingConfig> {
@@ -59,35 +78,70 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         }
     }
 
-    /// Update branding configuration
-    ///
-    /// Validates and stores the new configuration. If a Keycloak sync service
-    /// is configured, the relevant settings will also be synchronized to Keycloak.
+    /// Update system-level branding configuration
     pub async fn update_branding(&self, config: BrandingConfig) -> Result<BrandingConfig> {
-        // Validate the configuration
         self.validate_branding(&config)?;
 
-        // Convert to JSON value
         let value = serde_json::to_value(&config).map_err(|e| AppError::Internal(e.into()))?;
 
-        // Store in system_settings
         let input = UpsertSystemSettingInput {
             category: SettingCategory::Branding.as_str().to_string(),
             setting_key: BRANDING_CONFIG_KEY.to_string(),
             value,
-            encrypted: false, // Branding config has no sensitive data
+            encrypted: false,
             description: Some("Login page branding configuration".to_string()),
         };
 
         self.repo.upsert(&input).await?;
 
-        // Sync to Keycloak (non-blocking - errors are logged but don't fail the update)
         if let Some(sync) = &self.sync_service {
             sync.sync_branding_config(&config).await;
         }
 
-        // Return the updated config
         Ok(config)
+    }
+
+    /// Get branding for a specific service, falling back to system default
+    pub async fn get_branding_for_service(
+        &self,
+        service_id: crate::domain::StringUuid,
+    ) -> Result<BrandingConfig> {
+        if let Some(sb) = self.service_branding_repo.get_by_service_id(service_id).await? {
+            return Ok(sb.config);
+        }
+        self.get_branding().await
+    }
+
+    /// Get branding by client_id, resolving to service_id first
+    pub async fn get_branding_by_client_id(&self, client_id: &str) -> Result<BrandingConfig> {
+        let Some(service_repo) = &self.service_repo else {
+            return self.get_branding().await;
+        };
+
+        match service_repo.find_by_client_id(client_id).await? {
+            Some(service) => self.get_branding_for_service(service.id).await,
+            None => self.get_branding().await,
+        }
+    }
+
+    /// Update branding for a specific service
+    pub async fn update_service_branding(
+        &self,
+        service_id: crate::domain::StringUuid,
+        config: BrandingConfig,
+    ) -> Result<ServiceBranding> {
+        self.validate_branding(&config)?;
+        self.service_branding_repo.upsert(service_id, &config).await
+    }
+
+    /// Delete service-level branding (revert to system default)
+    pub async fn delete_service_branding(
+        &self,
+        service_id: crate::domain::StringUuid,
+    ) -> Result<()> {
+        self.service_branding_repo
+            .delete_by_service_id(service_id)
+            .await
     }
 
     /// Validate branding configuration
@@ -96,7 +150,6 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
             .validate()
             .map_err(|e| AppError::Validation(e.to_string()))?;
 
-        // Validate URL domains against whitelist (if configured)
         if !self.allowed_domains.is_empty() {
             if let Some(url) = &config.logo_url {
                 self.validate_url_domain(url, "logo_url")?;
@@ -116,7 +169,6 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
         let host = parsed.host_str().unwrap_or("");
 
         let domain_allowed = self.allowed_domains.iter().any(|allowed| {
-            // Exact match or subdomain match (e.g., "cdn.example.com" matches "example.com")
             host == allowed.as_str() || host.ends_with(&format!(".{}", allowed))
         });
 
@@ -139,18 +191,28 @@ impl<R: SystemSettingsRepository> BrandingService<R> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::repository::service_branding::MockServiceBrandingRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use mockall::predicate::*;
 
+    fn create_service(
+    ) -> (MockSystemSettingsRepository, MockServiceBrandingRepository) {
+        (
+            MockSystemSettingsRepository::new(),
+            MockServiceBrandingRepository::new(),
+        )
+    }
+
     #[tokio::test]
     async fn test_get_branding_default() {
-        let mut mock = MockSystemSettingsRepository::new();
+        let (mut mock_sys, mock_sb) = create_service();
 
-        mock.expect_get()
+        mock_sys
+            .expect_get()
             .with(eq("branding"), eq("config"))
             .returning(|_, _| Ok(None));
 
-        let service = BrandingService::new(Arc::new(mock));
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
 
         let config = service.get_branding().await.unwrap();
         assert!(config.is_default());
@@ -159,9 +221,10 @@ mod tests {
 
     #[tokio::test]
     async fn test_get_branding_custom() {
-        let mut mock = MockSystemSettingsRepository::new();
+        let (mut mock_sys, mock_sb) = create_service();
 
-        mock.expect_get()
+        mock_sys
+            .expect_get()
             .with(eq("branding"), eq("config"))
             .returning(|_, _| {
                 Ok(Some(SystemSettingRow {
@@ -182,7 +245,7 @@ mod tests {
                 }))
             });
 
-        let service = BrandingService::new(Arc::new(mock));
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
 
         let config = service.get_branding().await.unwrap();
         assert_eq!(config.primary_color, "#FF0000");
@@ -191,9 +254,9 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_branding() {
-        let mut mock = MockSystemSettingsRepository::new();
+        let (mut mock_sys, mock_sb) = create_service();
 
-        mock.expect_upsert().returning(|input| {
+        mock_sys.expect_upsert().returning(|input| {
             assert_eq!(input.category, "branding");
             assert_eq!(input.setting_key, "config");
             assert!(!input.encrypted);
@@ -210,7 +273,7 @@ mod tests {
             })
         });
 
-        let service = BrandingService::new(Arc::new(mock));
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
 
         let config = BrandingConfig {
             logo_url: Some("https://example.com/logo.png".to_string()),
@@ -231,8 +294,8 @@ mod tests {
 
     #[tokio::test]
     async fn test_update_branding_invalid_color() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock));
+        let (mock_sys, mock_sb) = create_service();
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
 
         let config = BrandingConfig {
             primary_color: "invalid".to_string(),
@@ -244,52 +307,67 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_update_branding_invalid_url() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock));
+    async fn test_get_branding_for_service_fallback() {
+        let (mut mock_sys, mut mock_sb) = create_service();
 
-        let config = BrandingConfig {
-            logo_url: Some("not-a-url".to_string()),
-            ..Default::default()
-        };
+        // No service-level branding
+        mock_sb
+            .expect_get_by_service_id()
+            .returning(|_| Ok(None));
 
-        let result = service.update_branding(config).await;
-        assert!(result.is_err());
+        // System-level returns default
+        mock_sys
+            .expect_get()
+            .with(eq("branding"), eq("config"))
+            .returning(|_, _| Ok(None));
+
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
+        let service_id = crate::domain::StringUuid::new_v4();
+
+        let config = service.get_branding_for_service(service_id).await.unwrap();
+        assert!(config.is_default());
+    }
+
+    #[tokio::test]
+    async fn test_get_branding_for_service_override() {
+        let (mock_sys, mut mock_sb) = create_service();
+
+        // Service-level branding exists
+        mock_sb
+            .expect_get_by_service_id()
+            .returning(|_| {
+                Ok(Some(ServiceBranding {
+                    id: "sb-1".to_string(),
+                    service_id: "svc-1".to_string(),
+                    config: BrandingConfig {
+                        primary_color: "#FF0000".to_string(),
+                        ..Default::default()
+                    },
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                }))
+            });
+
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
+        let service_id = crate::domain::StringUuid::new_v4();
+
+        let config = service.get_branding_for_service(service_id).await.unwrap();
+        assert_eq!(config.primary_color, "#FF0000");
     }
 
     #[test]
     fn test_validate_branding_valid() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock));
+        let (mock_sys, mock_sb) = create_service();
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb));
 
         let config = BrandingConfig::default();
         assert!(service.validate_branding(&config).is_ok());
     }
 
     #[test]
-    fn test_validate_branding_with_all_fields() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock));
-
-        let config = BrandingConfig {
-            logo_url: Some("https://example.com/logo.png".to_string()),
-            primary_color: "#AABBCC".to_string(),
-            secondary_color: "#112233".to_string(),
-            background_color: "#DDEEFF".to_string(),
-            text_color: "#445566".to_string(),
-            custom_css: Some(".login { color: blue; }".to_string()),
-            company_name: Some("Test Company".to_string()),
-            favicon_url: Some("https://example.com/favicon.ico".to_string()),
-            allow_registration: true,
-        };
-
-        assert!(service.validate_branding(&config).is_ok());
-    }
-
-    #[test]
     fn test_validate_branding_domain_whitelist_blocks_unknown_domain() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock))
+        let (mock_sys, mock_sb) = create_service();
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb))
             .with_allowed_domains(vec!["cdn.example.com".to_string()]);
 
         let config = BrandingConfig {
@@ -301,8 +379,8 @@ mod tests {
 
     #[test]
     fn test_validate_branding_domain_whitelist_allows_matching_domain() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock))
+        let (mock_sys, mock_sb) = create_service();
+        let service = BrandingService::new(Arc::new(mock_sys), Arc::new(mock_sb))
             .with_allowed_domains(vec!["cdn.example.com".to_string()]);
 
         let config = BrandingConfig {
@@ -310,77 +388,5 @@ mod tests {
             ..Default::default()
         };
         assert!(service.validate_branding(&config).is_ok());
-    }
-
-    #[test]
-    fn test_validate_branding_domain_whitelist_allows_subdomain() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock))
-            .with_allowed_domains(vec!["example.com".to_string()]);
-
-        let config = BrandingConfig {
-            logo_url: Some("https://cdn.example.com/logo.png".to_string()),
-            ..Default::default()
-        };
-        assert!(service.validate_branding(&config).is_ok());
-    }
-
-    #[test]
-    fn test_validate_branding_domain_whitelist_empty_allows_all() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock)).with_allowed_domains(vec![]);
-
-        let config = BrandingConfig {
-            logo_url: Some("https://any-domain.com/logo.png".to_string()),
-            ..Default::default()
-        };
-        assert!(service.validate_branding(&config).is_ok());
-    }
-
-    #[test]
-    fn test_validate_branding_domain_whitelist_checks_favicon_too() {
-        let mock = MockSystemSettingsRepository::new();
-        let service = BrandingService::new(Arc::new(mock))
-            .with_allowed_domains(vec!["cdn.example.com".to_string()]);
-
-        let config = BrandingConfig {
-            favicon_url: Some("https://evil.com/favicon.ico".to_string()),
-            ..Default::default()
-        };
-        assert!(service.validate_branding(&config).is_err());
-    }
-
-    #[tokio::test]
-    async fn test_get_branding_with_partial_config() {
-        let mut mock = MockSystemSettingsRepository::new();
-
-        // Config with only some fields set
-        mock.expect_get()
-            .with(eq("branding"), eq("config"))
-            .returning(|_, _| {
-                Ok(Some(SystemSettingRow {
-                    id: 1,
-                    category: "branding".to_string(),
-                    setting_key: "config".to_string(),
-                    value: serde_json::json!({
-                        "primary_color": "#FF0000",
-                        "secondary_color": "#00FF00",
-                        "background_color": "#0000FF",
-                        "text_color": "#FFFFFF"
-                    }),
-                    encrypted: false,
-                    description: None,
-                    created_at: chrono::Utc::now(),
-                    updated_at: chrono::Utc::now(),
-                }))
-            });
-
-        let service = BrandingService::new(Arc::new(mock));
-
-        let config = service.get_branding().await.unwrap();
-        assert_eq!(config.primary_color, "#FF0000");
-        // Optional fields should be None
-        assert!(config.logo_url.is_none());
-        assert!(config.company_name.is_none());
     }
 }

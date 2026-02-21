@@ -1,7 +1,7 @@
 # Action 安全测试
 
 **模块**: Action 安全性
-**测试范围**: 沙箱隔离、注入防护、租户隔离、资源限制、权限控制
+**测试范围**: 沙箱隔离、注入防护、Service 隔离、资源限制、权限控制
 **场景数**: 12
 
 ---
@@ -196,63 +196,63 @@ ORDER BY executed_at DESC LIMIT 1;
 
 ---
 
-## 场景 6：租户隔离 - 跨租户数据访问
+## 场景 6：Service 隔离 - 跨 Service 数据访问
 
 ### 攻击场景
-租户 A 的 Action 尝试访问租户 B 的数据
+Service A 的 Action 尝试访问 Service B 的数据
 
 ### 准备数据
 ```sql
--- 创建两个租户
-INSERT INTO tenants (id, slug, name) VALUES
-  ('tenant-a-id', 'tenant-a', 'Tenant A'),
-  ('tenant-b-id', 'tenant-b', 'Tenant B');
+-- 创建两个 Service
+INSERT INTO services (id, slug, name) VALUES
+  ('service-a-id', 'service-a', 'Service A'),
+  ('service-b-id', 'service-b', 'Service B');
 
--- 租户 A 创建 Action
--- 租户 B 创建用户
+-- Service A 创建 Action
+-- Service B 创建用户
 ```
 
-### 测试 Action 脚本（租户 A）
+### 测试 Action 脚本（Service A）
 ```typescript
-// 尝试猜测租户 B 的用户 ID
-const guessed_user_id = "tenant-b-user-id";
+// 尝试猜测 Service B 的用户 ID
+const guessed_user_id = "service-b-user-id";
 
-// 即使猜对 ID，ActionContext 也不应包含其他租户数据
+// 即使猜对 ID，ActionContext 也不应包含其他 Service 数据
 context.claims = context.claims || {};
 context.claims.attacked_user = guessed_user_id;
 
-// 尝试修改 tenant_id（应该失败）
-context.tenant.id = "tenant-b-id";
+// 尝试修改 service_id（应该失败）
+context.tenant.id = "service-b-id";
 
 context;
 ```
 
 ### 预期结果
-- ✅ ActionContext 只包含 **租户 A** 的数据
-- ✅ 即使脚本修改 `context.tenant.id`，实际租户上下文 **不变**
-- ✅ 生成的 Token 仍然绑定到租户 A
-- ✅ 脚本 **无法** 调用跨租户查询（因为没有提供 Host Functions）
+- ✅ ActionContext 只包含 **Service A** 的数据
+- ✅ 即使脚本修改 `context.tenant.id`，实际 Service 上下文 **不变**
+- ✅ 生成的 Token 仍然绑定到 Service A
+- ✅ 脚本 **无法** 调用跨 Service 查询（因为没有提供 Host Functions）
 
 ### 验证方法
 ```bash
 # 解码 Token
-echo $TOKEN | cut -d. -f2 | base64 -d | jq '.tenant_id'
-# 预期: "tenant-a-id"（未被篡改）
+echo $TOKEN | cut -d. -f2 | base64 -d | jq '.service_id'
+# 预期: "service-a-id"（未被篡改）
 ```
 
 ### 预期数据状态
 ```sql
--- 验证执行日志的租户 ID
-SELECT tenant_id FROM action_executions
-WHERE action_id = '{tenant_a_action_id}'
+-- 验证执行日志的 Service ID
+SELECT service_id FROM action_executions
+WHERE action_id = '{service_a_action_id}'
 ORDER BY executed_at DESC LIMIT 1;
--- 预期: tenant_id = 'tenant-a-id'
+-- 预期: service_id = 'service-a-id'
 
--- 验证租户 B 的数据未被访问
+-- 验证 Service B 的数据未被访问
 SELECT COUNT(*) FROM action_executions
-WHERE action_id IN (SELECT id FROM actions WHERE tenant_id = 'tenant-b-id')
+WHERE action_id IN (SELECT id FROM actions WHERE service_id = 'service-b-id')
   AND executed_at > NOW() - INTERVAL 1 MINUTE;
--- 预期: COUNT = 0（租户 B 的 Actions 未被触发）
+-- 预期: COUNT = 0（Service B 的 Actions 未被触发）
 ```
 
 ---
@@ -465,7 +465,7 @@ context;
 USER_TOKEN=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM users WHERE email = 'user@example.com';")
 # 生成 user token（需要实现）
 
-curl -X POST http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
+curl -X POST http://localhost:8080/api/v1/services/{service_id}/actions \
   -H "Authorization: Bearer $USER_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
@@ -477,13 +477,13 @@ curl -X POST http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
 
 **预期**: HTTP 403 Forbidden
 
-### 2. 跨租户 Action 访问
+### 2. 跨 Service Action 访问
 
 **测试方法**:
 ```bash
-# 租户 A 的管理员尝试访问租户 B 的 Action
-curl -X GET http://localhost:8080/api/v1/tenants/{tenant_b_id}/actions/{action_id} \
-  -H "Authorization: Bearer $TENANT_A_ADMIN_TOKEN"
+# Service A 的管理员尝试访问 Service B 的 Action
+curl -X GET http://localhost:8080/api/v1/services/{service_b_id}/actions/{action_id} \
+  -H "Authorization: Bearer $SERVICE_A_ADMIN_TOKEN"
 ```
 
 **预期**: HTTP 403 Forbidden 或 404 Not Found
@@ -493,7 +493,7 @@ curl -X GET http://localhost:8080/api/v1/tenants/{tenant_b_id}/actions/{action_i
 **测试方法**:
 ```bash
 # 普通用户尝试删除管理员的 Action
-curl -X DELETE http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{admin_action_id} \
+curl -X DELETE http://localhost:8080/api/v1/services/{service_id}/actions/{admin_action_id} \
   -H "Authorization: Bearer $USER_TOKEN"
 ```
 
@@ -509,7 +509,7 @@ curl -X DELETE http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{admin_a
 ```bash
 # 短时间内创建大量 Actions
 for i in {1..50}; do
-  curl -X POST http://localhost:8080/api/v1/tenants/{tenant_id}/actions \
+  curl -X POST http://localhost:8080/api/v1/services/{service_id}/actions \
     -H "Authorization: Bearer $TOKEN" \
     -H "Content-Type: application/json" \
     -d "{\"name\": \"Action $i\", \"trigger_id\": \"post-login\", \"script\": \"context;\"}"
@@ -573,10 +573,10 @@ WHERE error_message LIKE '%password%'
 - [ ] 大内存分配被堆限制（100MB）
 - [ ] CPU 密集型脚本被超时控制
 
-### 租户隔离
-- [ ] Action 只能访问所属租户数据
-- [ ] ActionContext 不包含其他租户信息
-- [ ] 跨租户 Action 访问被阻止
+### Service 隔离
+- [ ] Action 只能访问所属 Service 数据
+- [ ] ActionContext 不包含其他 Service 信息
+- [ ] 跨 Service Action 访问被阻止
 
 ### 注入防护
 - [ ] SQL 注入：后端使用参数化查询
@@ -585,7 +585,7 @@ WHERE error_message LIKE '%password%'
 
 ### 权限控制
 - [ ] 未授权用户无法创建/修改 Actions
-- [ ] 跨租户访问被拒绝
+- [ ] 跨 Service 访问被拒绝
 - [ ] Token 签名验证生效
 
 ### 审计日志
@@ -617,4 +617,4 @@ WHERE error_message LIKE '%password%'
 ### 5. 输入验证
 - Action 脚本创建时进行 TypeScript 编译验证
 - 限制脚本大小（如 100KB）
-- 限制 Action 数量（如每租户最多 50 个）
+- 限制 Action 数量（如每 Service 最多 50 个）

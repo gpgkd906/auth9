@@ -11,10 +11,17 @@ use sqlx::MySqlPool;
 #[async_trait]
 #[allow(clippy::too_many_arguments)]
 pub trait ActionRepository: Send + Sync {
-    async fn create(&self, tenant_id: StringUuid, input: &CreateActionInput) -> Result<Action>;
+    async fn create(&self, service_id: StringUuid, input: &CreateActionInput) -> Result<Action>;
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Action>>;
-    async fn list_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<Action>>;
+    async fn list_by_service(&self, service_id: StringUuid) -> Result<Vec<Action>>;
     async fn list_by_trigger(
+        &self,
+        service_id: StringUuid,
+        trigger_id: &str,
+        enabled_only: bool,
+    ) -> Result<Vec<Action>>;
+    /// List actions by tenant and trigger (for PostChangePassword fallback where no service_id is available)
+    async fn list_by_tenant_trigger(
         &self,
         tenant_id: StringUuid,
         trigger_id: &str,
@@ -22,11 +29,12 @@ pub trait ActionRepository: Send + Sync {
     ) -> Result<Vec<Action>>;
     async fn update(&self, id: StringUuid, input: &UpdateActionInput) -> Result<Action>;
     async fn delete(&self, id: StringUuid) -> Result<()>;
+    async fn delete_by_service(&self, service_id: StringUuid) -> Result<u64>;
     async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
     async fn record_execution(
         &self,
         action_id: StringUuid,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         trigger_id: String,
         user_id: Option<StringUuid>,
         success: bool,
@@ -57,19 +65,19 @@ impl ActionRepositoryImpl {
 
 #[async_trait]
 impl ActionRepository for ActionRepositoryImpl {
-    async fn create(&self, tenant_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
+    async fn create(&self, service_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
         let id = StringUuid::new_v4();
 
         sqlx::query(
             r#"
-            INSERT INTO actions (id, tenant_id, name, description, trigger_id, script,
+            INSERT INTO actions (id, service_id, name, description, trigger_id, script,
                                  enabled, strict_mode, execution_order, timeout_ms,
                                  created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             "#,
         )
         .bind(id)
-        .bind(tenant_id)
+        .bind(service_id)
         .bind(&input.name)
         .bind(&input.description)
         .bind(&input.trigger_id)
@@ -89,7 +97,7 @@ impl ActionRepository for ActionRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Action>> {
         let action = sqlx::query_as::<_, Action>(
             r#"
-            SELECT id, tenant_id, name, description, trigger_id, script, enabled,
+            SELECT id, tenant_id, service_id, name, description, trigger_id, script, enabled,
                    strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
                    error_count, last_error, created_at, updated_at
             FROM actions
@@ -103,18 +111,18 @@ impl ActionRepository for ActionRepositoryImpl {
         Ok(action)
     }
 
-    async fn list_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<Action>> {
+    async fn list_by_service(&self, service_id: StringUuid) -> Result<Vec<Action>> {
         let actions = sqlx::query_as::<_, Action>(
             r#"
-            SELECT id, tenant_id, name, description, trigger_id, script, enabled,
+            SELECT id, tenant_id, service_id, name, description, trigger_id, script, enabled,
                    strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
                    error_count, last_error, created_at, updated_at
             FROM actions
-            WHERE tenant_id = ?
+            WHERE service_id = ?
             ORDER BY trigger_id, execution_order, created_at
             "#,
         )
-        .bind(tenant_id)
+        .bind(service_id)
         .fetch_all(&self.pool)
         .await?;
 
@@ -123,27 +131,64 @@ impl ActionRepository for ActionRepositoryImpl {
 
     async fn list_by_trigger(
         &self,
+        service_id: StringUuid,
+        trigger_id: &str,
+        enabled_only: bool,
+    ) -> Result<Vec<Action>> {
+        let query = if enabled_only {
+            r#"
+            SELECT id, tenant_id, service_id, name, description, trigger_id, script, enabled,
+                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
+                   error_count, last_error, created_at, updated_at
+            FROM actions
+            WHERE service_id = ? AND trigger_id = ? AND enabled = TRUE
+            ORDER BY execution_order, created_at
+            "#
+        } else {
+            r#"
+            SELECT id, tenant_id, service_id, name, description, trigger_id, script, enabled,
+                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
+                   error_count, last_error, created_at, updated_at
+            FROM actions
+            WHERE service_id = ? AND trigger_id = ?
+            ORDER BY execution_order, created_at
+            "#
+        };
+
+        let actions = sqlx::query_as::<_, Action>(query)
+            .bind(service_id)
+            .bind(trigger_id)
+            .fetch_all(&self.pool)
+            .await?;
+
+        Ok(actions)
+    }
+
+    async fn list_by_tenant_trigger(
+        &self,
         tenant_id: StringUuid,
         trigger_id: &str,
         enabled_only: bool,
     ) -> Result<Vec<Action>> {
         let query = if enabled_only {
             r#"
-            SELECT id, tenant_id, name, description, trigger_id, script, enabled,
-                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
-                   error_count, last_error, created_at, updated_at
-            FROM actions
-            WHERE tenant_id = ? AND trigger_id = ? AND enabled = TRUE
-            ORDER BY execution_order, created_at
+            SELECT a.id, a.tenant_id, a.service_id, a.name, a.description, a.trigger_id, a.script, a.enabled,
+                   a.strict_mode, a.execution_order, a.timeout_ms, a.last_executed_at, a.execution_count,
+                   a.error_count, a.last_error, a.created_at, a.updated_at
+            FROM actions a
+            JOIN services s ON a.service_id = s.id
+            WHERE s.tenant_id = ? AND a.trigger_id = ? AND a.enabled = TRUE
+            ORDER BY a.execution_order, a.created_at
             "#
         } else {
             r#"
-            SELECT id, tenant_id, name, description, trigger_id, script, enabled,
-                   strict_mode, execution_order, timeout_ms, last_executed_at, execution_count,
-                   error_count, last_error, created_at, updated_at
-            FROM actions
-            WHERE tenant_id = ? AND trigger_id = ?
-            ORDER BY execution_order, created_at
+            SELECT a.id, a.tenant_id, a.service_id, a.name, a.description, a.trigger_id, a.script, a.enabled,
+                   a.strict_mode, a.execution_order, a.timeout_ms, a.last_executed_at, a.execution_count,
+                   a.error_count, a.last_error, a.created_at, a.updated_at
+            FROM actions a
+            JOIN services s ON a.service_id = s.id
+            WHERE s.tenant_id = ? AND a.trigger_id = ?
+            ORDER BY a.execution_order, a.created_at
             "#
         };
 
@@ -224,11 +269,26 @@ impl ActionRepository for ActionRepositoryImpl {
         Ok(())
     }
 
-    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
-        let result = sqlx::query("DELETE FROM actions WHERE tenant_id = ?")
-            .bind(tenant_id)
+    async fn delete_by_service(&self, service_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query("DELETE FROM actions WHERE service_id = ?")
+            .bind(service_id)
             .execute(&self.pool)
             .await?;
+
+        Ok(result.rows_affected())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let result = sqlx::query(
+            r#"
+            DELETE a FROM actions a
+            JOIN services s ON a.service_id = s.id
+            WHERE s.tenant_id = ?
+            "#,
+        )
+        .bind(tenant_id)
+        .execute(&self.pool)
+        .await?;
 
         Ok(result.rows_affected())
     }
@@ -236,7 +296,7 @@ impl ActionRepository for ActionRepositoryImpl {
     async fn record_execution(
         &self,
         action_id: StringUuid,
-        tenant_id: StringUuid,
+        service_id: StringUuid,
         trigger_id: String,
         user_id: Option<StringUuid>,
         success: bool,
@@ -247,14 +307,14 @@ impl ActionRepository for ActionRepositoryImpl {
 
         sqlx::query(
             r#"
-            INSERT INTO action_executions (id, action_id, tenant_id, trigger_id, user_id,
+            INSERT INTO action_executions (id, action_id, service_id, trigger_id, user_id,
                                             success, duration_ms, error_message, executed_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
             "#,
         )
         .bind(id)
         .bind(action_id)
-        .bind(tenant_id)
+        .bind(service_id)
         .bind(&trigger_id)
         .bind(user_id)
         .bind(success)
@@ -307,7 +367,7 @@ impl ActionRepository for ActionRepositoryImpl {
     async fn find_execution_by_id(&self, id: StringUuid) -> Result<Option<ActionExecution>> {
         let execution = sqlx::query_as::<_, ActionExecution>(
             r#"
-            SELECT id, action_id, tenant_id, trigger_id, user_id, success,
+            SELECT id, action_id, tenant_id, service_id, trigger_id, user_id, success,
                    duration_ms, error_message, executed_at
             FROM action_executions
             WHERE id = ?
@@ -323,7 +383,7 @@ impl ActionRepository for ActionRepositoryImpl {
     async fn query_logs(&self, filter: &LogQueryFilter) -> Result<Vec<ActionExecution>> {
         let mut query_str = String::from(
             r#"
-            SELECT id, action_id, tenant_id, trigger_id, user_id, success,
+            SELECT id, action_id, tenant_id, service_id, trigger_id, user_id, success,
                    duration_ms, error_message, executed_at
             FROM action_executions
             WHERE 1=1

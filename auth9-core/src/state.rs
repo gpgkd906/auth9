@@ -21,9 +21,9 @@ use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
 use crate::repository::{
     ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
-    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceRepository,
-    SessionRepository, SystemSettingsRepository, TenantRepository, UserRepository,
-    WebhookRepository,
+    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceBrandingRepository,
+    ServiceRepository, SessionRepository, SystemSettingsRepository, TenantRepository,
+    UserRepository, WebhookRepository,
 };
 
 // ============================================================
@@ -158,9 +158,11 @@ pub trait HasEmailTemplates: HasSystemSettings {
 pub trait HasBranding: Clone + Send + Sync + 'static {
     /// The system settings repository type used for branding storage
     type BrandingRepo: SystemSettingsRepository;
+    /// The service branding repository type
+    type ServiceBrandingRepo: ServiceBrandingRepository;
 
     /// Get the branding service
-    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo>;
+    fn branding_service(&self) -> &BrandingService<Self::BrandingRepo, Self::ServiceBrandingRepo>;
 }
 
 /// Trait for states that provide password management services

@@ -7,45 +7,40 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { Switch } from "~/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { ActionTrigger } from "@auth9/core";
-import { getAuth9Client, withTenant, getTriggers } from "~/lib/auth9-client";
-import { FormattedDate } from "~/components/ui/formatted-date";
+import { getAuth9Client, withService, getTriggers } from "~/lib/auth9-client";
 import { getAccessToken } from "~/services/session.server";
 import { ArrowLeftIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  return [{ title: `Edit ${data?.action.name || "Action"} - Auth9` }];
+export const meta: MetaFunction = () => {
+  return [{ title: "New Action - Auth9" }];
 };
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
-  const { tenantId, actionId } = params;
-  if (!tenantId || !actionId) throw new Error("Tenant ID and Action ID are required");
+  const { serviceId } = params;
+  if (!serviceId) throw new Error("Service ID is required");
   const accessToken = await getAccessToken(request);
 
   const client = getAuth9Client(accessToken || undefined);
-  const api = withTenant(client, tenantId);
-
-  const [actionRes, triggersRes] = await Promise.all([
-    api.actions.get(actionId),
-    getTriggers(client),
-  ]);
+  const triggersRes = await getTriggers(client);
 
   return {
-    tenantId,
-    action: actionRes.data,
+    serviceId,
     triggers: triggersRes.data,
   };
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
-  const { tenantId, actionId } = params;
-  if (!tenantId || !actionId) return Response.json({ error: "IDs required" }, { status: 400 });
+  const { serviceId } = params;
+  if (!serviceId) return Response.json({ error: "Service ID required" }, { status: 400 });
   const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
   const name = formData.get("name") as string;
   const description = formData.get("description") as string;
+  const triggerId = formData.get("trigger_id") as string;
   const script = formData.get("script") as string;
   const enabled = formData.get("enabled") === "on";
   const strictMode = formData.get("strict_mode") === "on";
@@ -54,11 +49,12 @@ export async function action({ params, request }: ActionFunctionArgs) {
 
   try {
     const client = getAuth9Client(accessToken || undefined);
-    const api = withTenant(client, tenantId);
+    const api = withService(client, serviceId);
 
-    await api.actions.update(actionId, {
+    const result = await api.actions.create({
       name,
       description: description || undefined,
+      triggerId,
       script,
       enabled,
       strictMode,
@@ -66,7 +62,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
       timeoutMs,
     });
 
-    return redirect(`/dashboard/tenants/${tenantId}/actions/${actionId}`);
+    return redirect(`/dashboard/services/${serviceId}/actions/${result.data.id}`);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
     return { error: message };
@@ -82,32 +78,98 @@ const TRIGGER_LABELS: Record<string, string> = {
   [ActionTrigger.PreTokenRefresh]: "Pre Token Refresh",
 };
 
-export default function EditActionPage() {
-  const { tenantId, action } = useLoaderData<typeof loader>();
+const SCRIPT_TEMPLATES: Record<string, { name: string; description: string; script: string }> = {
+  "add-claims": {
+    name: "Add Custom Claims",
+    description: "Add custom claims to the user's token",
+    script: `// Add custom claims to token
+context.claims = context.claims || {};
+context.claims.department = "engineering";
+context.claims.tier = "premium";
+
+// Return modified context
+context;`,
+  },
+  "block-domain": {
+    name: "Block Email Domain",
+    description: "Block users from specific email domains",
+    script: `// Block specific email domains
+const blockedDomains = ["@competitor.com", "@spam.com"];
+if (blockedDomains.some(domain => context.user.email.endsWith(domain))) {
+  throw new Error("Email domain not allowed");
+}
+
+context;`,
+  },
+  "require-mfa": {
+    name: "Conditional MFA",
+    description: "Require MFA for specific IP ranges",
+    script: `// Require MFA for specific IP ranges
+if (context.request.ip?.startsWith("203.")) {
+  context.claims = context.claims || {};
+  context.claims.require_mfa = true;
+}
+
+context;`,
+  },
+  "service-access": {
+    name: "Service Access Control",
+    description: "Grant access to services based on roles",
+    script: `// Check user roles and grant service access
+const allowedRoles = ["admin", "developer"];
+const userRoles = (context.claims?.roles as string[]) || [];
+
+const hasAccess = allowedRoles.some(role => userRoles.includes(role));
+
+if (!hasAccess) {
+  throw new Error("Insufficient permissions");
+}
+
+// Grant service access
+context.claims = context.claims || {};
+context.claims.service_access = context.claims.service_access || [];
+(context.claims.service_access as string[]).push("my-service");
+
+context;`,
+  },
+};
+
+export default function NewActionPage() {
+  const { serviceId, triggers } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
 
-  const [script, setScript] = useState(action.script);
+  const [selectedTemplate, setSelectedTemplate] = useState<string>("");
+  const [script, setScript] = useState<string>("// Your TypeScript code here\ncontext;");
+
+  const handleTemplateSelect = (templateId: string) => {
+    setSelectedTemplate(templateId);
+    if (templateId && SCRIPT_TEMPLATES[templateId]) {
+      setScript(SCRIPT_TEMPLATES[templateId].script);
+    }
+  };
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to={`/dashboard/tenants/${tenantId}/actions/${action.id}`}>
+          <Link to={`/dashboard/services/${serviceId}/actions`}>
             <ArrowLeftIcon className="h-4 w-4" />
           </Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">Edit Action</h1>
-          <p className="text-muted-foreground mt-1">{action.name}</p>
+          <h1 className="text-3xl font-bold">New Action</h1>
+          <p className="text-muted-foreground mt-1">
+            Create a new authentication flow action
+          </p>
         </div>
       </div>
 
-      {actionData && typeof actionData === "object" && "error" in actionData && (
+      {actionData?.error && (
         <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-          {String(actionData.error)}
+          {actionData.error}
         </div>
       )}
 
@@ -117,7 +179,7 @@ export default function EditActionPage() {
           <CardHeader>
             <CardTitle>Basic Information</CardTitle>
             <CardDescription>
-              Update the basic settings for your action
+              Configure the basic settings for your action
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -126,7 +188,7 @@ export default function EditActionPage() {
               <Input
                 id="name"
                 name="name"
-                defaultValue={action.name}
+                placeholder="my-action"
                 required
               />
             </div>
@@ -136,18 +198,24 @@ export default function EditActionPage() {
               <Input
                 id="description"
                 name="description"
-                defaultValue={action.description || ""}
+                placeholder="What does this action do?"
               />
             </div>
 
             <div className="space-y-2">
-              <Label>Trigger</Label>
-              <div className="p-2 bg-muted rounded-md">
-                {TRIGGER_LABELS[action.triggerId]}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Trigger cannot be changed after creation
-              </p>
+              <Label htmlFor="trigger_id">Trigger *</Label>
+              <Select name="trigger_id" required>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select a trigger" />
+                </SelectTrigger>
+                <SelectContent>
+                  {triggers.map((trigger) => (
+                    <SelectItem key={trigger} value={trigger}>
+                      {TRIGGER_LABELS[trigger]}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -157,9 +225,12 @@ export default function EditActionPage() {
                   id="execution_order"
                   name="execution_order"
                   type="number"
-                  defaultValue={action.executionOrder}
+                  defaultValue="0"
                   min="0"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Lower numbers execute first
+                </p>
               </div>
 
               <div className="space-y-2">
@@ -168,20 +239,23 @@ export default function EditActionPage() {
                   id="timeout_ms"
                   name="timeout_ms"
                   type="number"
-                  defaultValue={action.timeoutMs}
+                  defaultValue="3000"
                   min="100"
                   max="30000"
                 />
+                <p className="text-sm text-muted-foreground">
+                  Maximum execution time
+                </p>
               </div>
             </div>
 
             <div className="flex items-center space-x-2">
-              <Switch id="enabled" name="enabled" defaultChecked={action.enabled} />
+              <Switch id="enabled" name="enabled" defaultChecked />
               <Label htmlFor="enabled">Enabled</Label>
             </div>
 
             <div className="flex items-center space-x-2">
-              <Switch id="strict_mode" name="strict_mode" defaultChecked={action.strictMode} />
+              <Switch id="strict_mode" name="strict_mode" />
               <Label htmlFor="strict_mode">Strict Mode</Label>
               <span className="text-sm text-muted-foreground">
                 Block authentication flow on action failure
@@ -195,10 +269,28 @@ export default function EditActionPage() {
           <CardHeader>
             <CardTitle>Script</CardTitle>
             <CardDescription>
-              Update the TypeScript code for this action
+              Write TypeScript code to modify the authentication context
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            {/* Template Selector */}
+            <div className="space-y-2">
+              <Label>Script Templates</Label>
+              <Select value={selectedTemplate} onValueChange={handleTemplateSelect}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Choose a template (optional)" />
+                </SelectTrigger>
+                <SelectContent>
+                  {Object.entries(SCRIPT_TEMPLATES).map(([id, template]) => (
+                    <SelectItem key={id} value={id}>
+                      {template.name} - {template.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Code Editor (Basic) */}
             <div className="space-y-2">
               <Label htmlFor="script">TypeScript Code *</Label>
               <Textarea
@@ -207,8 +299,12 @@ export default function EditActionPage() {
                 value={script}
                 onChange={(e) => setScript(e.target.value)}
                 className="font-mono text-sm min-h-[400px]"
+                placeholder="// Your TypeScript code here&#10;context;"
                 required
               />
+              <p className="text-sm text-muted-foreground">
+                The <code>context</code> object is available globally. Modify it and return it.
+              </p>
             </div>
 
             {/* Context Reference */}
@@ -239,47 +335,13 @@ export default function EditActionPage() {
           </CardContent>
         </Card>
 
-        {/* Execution Stats */}
-        <Card>
-          <CardHeader>
-            <CardTitle>Execution Statistics</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-muted-foreground mb-1">Total Executions</div>
-                <div className="text-2xl font-bold">{action.executionCount.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1">Errors</div>
-                <div className="text-2xl font-bold text-destructive">{action.errorCount.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1">Last Executed</div>
-                <div className="text-sm font-semibold">
-                  {action.lastExecutedAt
-                    ? <FormattedDate date={action.lastExecutedAt} />
-                    : "Never"}
-                </div>
-              </div>
-            </div>
-
-            {action.lastError && (
-              <div className="mt-4 p-3 bg-destructive/10 rounded-md">
-                <div className="text-sm font-medium text-destructive mb-1">Last Error</div>
-                <div className="text-sm text-muted-foreground">{action.lastError}</div>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
         {/* Actions */}
         <div className="flex gap-2">
           <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save Changes"}
+            {isSubmitting ? "Creating..." : "Create Action"}
           </Button>
           <Button type="button" variant="outline" asChild>
-            <Link to={`/dashboard/tenants/${tenantId}/actions/${action.id}`}>Cancel</Link>
+            <Link to={`/dashboard/services/${serviceId}/actions`}>Cancel</Link>
           </Button>
         </div>
       </Form>
