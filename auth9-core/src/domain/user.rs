@@ -13,6 +13,8 @@ use validator::Validate;
 pub struct User {
     pub id: StringUuid,
     pub keycloak_id: String,
+    pub scim_external_id: Option<String>,
+    pub scim_provisioned_by: Option<StringUuid>,
     pub email: String,
     pub display_name: Option<String>,
     pub avatar_url: Option<String>,
@@ -29,6 +31,8 @@ impl Default for User {
         Self {
             id: StringUuid::new_v4(),
             keycloak_id: String::new(),
+            scim_external_id: None,
+            scim_provisioned_by: None,
             email: String::new(),
             display_name: None,
             avatar_url: None,

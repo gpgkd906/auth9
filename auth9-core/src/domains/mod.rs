@@ -4,6 +4,7 @@ pub mod authorization;
 pub mod identity;
 pub mod integration;
 pub mod platform;
+pub mod provisioning;
 pub mod security_observability;
 pub mod tenant_access;
 
@@ -18,6 +19,7 @@ pub trait DomainRouterState:
     + platform::context::PlatformContext
     + integration::context::IntegrationContext
     + security_observability::context::SecurityObservabilityContext
+    + provisioning::context::ProvisioningContext
 {
 }
 
@@ -28,5 +30,6 @@ impl<T> DomainRouterState for T where
         + platform::context::PlatformContext
         + integration::context::IntegrationContext
         + security_observability::context::SecurityObservabilityContext
+        + provisioning::context::ProvisioningContext
 {
 }

@@ -366,6 +366,8 @@ impl UserRepository for TestUserRepository {
             display_name: input.display_name.clone(),
             avatar_url: input.avatar_url.clone(),
             keycloak_id: keycloak_id.to_string(),
+            scim_external_id: None,
+            scim_provisioned_by: None,
             mfa_enabled: false,
             password_changed_at: None,
             locked_until: None,
@@ -630,6 +632,32 @@ impl UserRepository for TestUserRepository {
         let mut users = self.users.write().await;
         if let Some(user) = users.iter_mut().find(|u| u.id == id) {
             user.locked_until = locked_until;
+            user.updated_at = Utc::now();
+        }
+        Ok(())
+    }
+
+    async fn find_by_scim_external_id(
+        &self,
+        scim_external_id: String,
+    ) -> Result<Option<User>> {
+        let users = self.users.read().await;
+        Ok(users
+            .iter()
+            .find(|u| u.scim_external_id.as_deref() == Some(scim_external_id.as_str()))
+            .cloned())
+    }
+
+    async fn update_scim_fields(
+        &self,
+        id: StringUuid,
+        scim_external_id: Option<String>,
+        scim_provisioned_by: Option<StringUuid>,
+    ) -> Result<()> {
+        let mut users = self.users.write().await;
+        if let Some(user) = users.iter_mut().find(|u| u.id == id) {
+            user.scim_external_id = scim_external_id;
+            user.scim_provisioned_by = scim_provisioned_by;
             user.updated_at = Utc::now();
         }
         Ok(())
@@ -2997,6 +3025,8 @@ pub fn create_test_user(id: Option<Uuid>) -> User {
         display_name: Some("Test User".to_string()),
         avatar_url: None,
         keycloak_id: "kc-user-test".to_string(),
+        scim_external_id: None,
+        scim_provisioned_by: None,
         mfa_enabled: false,
         password_changed_at: None,
         locked_until: None,
@@ -3316,5 +3346,219 @@ mod tests {
         let result = tenant_service.get(tenant.id).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().name, "Test Tenant");
+    }
+}
+
+// ============================================================================
+// Test SCIM Repositories
+// ============================================================================
+
+use auth9_core::domain::scim::{
+    CreateScimLogInput, ScimGroupRoleMapping, ScimProvisioningLog, ScimToken, ScimTokenResponse,
+};
+use auth9_core::repository::scim_group_mapping::ScimGroupRoleMappingRepository;
+use auth9_core::repository::scim_log::ScimProvisioningLogRepository;
+use auth9_core::repository::scim_token::ScimTokenRepository;
+
+pub struct TestScimTokenRepository {
+    tokens: RwLock<Vec<ScimToken>>,
+}
+
+impl TestScimTokenRepository {
+    pub fn new() -> Self {
+        Self {
+            tokens: RwLock::new(vec![]),
+        }
+    }
+}
+
+impl Default for TestScimTokenRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ScimTokenRepository for TestScimTokenRepository {
+    async fn create(&self, token: &ScimToken) -> Result<ScimToken> {
+        self.tokens.write().await.push(token.clone());
+        Ok(token.clone())
+    }
+
+    async fn find_by_hash(&self, token_hash: &str) -> Result<Option<ScimToken>> {
+        Ok(self
+            .tokens
+            .read()
+            .await
+            .iter()
+            .find(|t| t.token_hash == token_hash)
+            .cloned())
+    }
+
+    async fn list_by_connector(&self, connector_id: StringUuid) -> Result<Vec<ScimToken>> {
+        Ok(self
+            .tokens
+            .read()
+            .await
+            .iter()
+            .filter(|t| t.connector_id == connector_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn update_last_used(&self, _id: StringUuid) -> Result<()> {
+        Ok(())
+    }
+
+    async fn revoke(&self, id: StringUuid) -> Result<()> {
+        let mut tokens = self.tokens.write().await;
+        if let Some(token) = tokens.iter_mut().find(|t| t.id == id) {
+            token.revoked_at = Some(Utc::now());
+        }
+        Ok(())
+    }
+
+    async fn delete_by_connector(&self, connector_id: StringUuid) -> Result<u64> {
+        let mut tokens = self.tokens.write().await;
+        let before = tokens.len();
+        tokens.retain(|t| t.connector_id != connector_id);
+        Ok((before - tokens.len()) as u64)
+    }
+}
+
+pub struct TestScimGroupMappingRepository {
+    mappings: RwLock<Vec<ScimGroupRoleMapping>>,
+}
+
+impl TestScimGroupMappingRepository {
+    pub fn new() -> Self {
+        Self {
+            mappings: RwLock::new(vec![]),
+        }
+    }
+}
+
+impl Default for TestScimGroupMappingRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ScimGroupRoleMappingRepository for TestScimGroupMappingRepository {
+    async fn find_by_scim_group(
+        &self,
+        connector_id: StringUuid,
+        scim_group_id: &str,
+    ) -> Result<Option<ScimGroupRoleMapping>> {
+        Ok(self
+            .mappings
+            .read()
+            .await
+            .iter()
+            .find(|m| m.connector_id == connector_id && m.scim_group_id == scim_group_id)
+            .cloned())
+    }
+
+    async fn list_by_connector(
+        &self,
+        connector_id: StringUuid,
+    ) -> Result<Vec<ScimGroupRoleMapping>> {
+        Ok(self
+            .mappings
+            .read()
+            .await
+            .iter()
+            .filter(|m| m.connector_id == connector_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn upsert(&self, mapping: &ScimGroupRoleMapping) -> Result<ScimGroupRoleMapping> {
+        let mut mappings = self.mappings.write().await;
+        mappings.retain(|m| {
+            !(m.connector_id == mapping.connector_id && m.scim_group_id == mapping.scim_group_id)
+        });
+        mappings.push(mapping.clone());
+        Ok(mapping.clone())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        self.mappings.write().await.retain(|m| m.id != id);
+        Ok(())
+    }
+
+    async fn delete_by_connector(&self, connector_id: StringUuid) -> Result<u64> {
+        let mut mappings = self.mappings.write().await;
+        let before = mappings.len();
+        mappings.retain(|m| m.connector_id != connector_id);
+        Ok((before - mappings.len()) as u64)
+    }
+}
+
+pub struct TestScimLogRepository {
+    logs: RwLock<Vec<ScimProvisioningLog>>,
+}
+
+impl TestScimLogRepository {
+    pub fn new() -> Self {
+        Self {
+            logs: RwLock::new(vec![]),
+        }
+    }
+}
+
+impl Default for TestScimLogRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl ScimProvisioningLogRepository for TestScimLogRepository {
+    async fn create(&self, input: &CreateScimLogInput) -> Result<ScimProvisioningLog> {
+        let log = ScimProvisioningLog {
+            id: StringUuid::new_v4(),
+            tenant_id: input.tenant_id,
+            connector_id: input.connector_id,
+            operation: input.operation.clone(),
+            resource_type: input.resource_type.clone(),
+            scim_resource_id: input.scim_resource_id.clone(),
+            auth9_resource_id: input.auth9_resource_id,
+            status: input.status.clone(),
+            error_detail: input.error_detail.clone(),
+            response_status: input.response_status,
+            created_at: Utc::now(),
+        };
+        self.logs.write().await.push(log.clone());
+        Ok(log)
+    }
+
+    async fn list_by_connector(
+        &self,
+        connector_id: StringUuid,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<ScimProvisioningLog>> {
+        Ok(self
+            .logs
+            .read()
+            .await
+            .iter()
+            .filter(|l| l.connector_id == connector_id)
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn count_by_connector(&self, connector_id: StringUuid) -> Result<i64> {
+        Ok(self
+            .logs
+            .read()
+            .await
+            .iter()
+            .filter(|l| l.connector_id == connector_id)
+            .count() as i64)
     }
 }
