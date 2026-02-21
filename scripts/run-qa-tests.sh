@@ -231,7 +231,7 @@ mapfile -t qa_files < <(
                 find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
                 ;;
             *)
-                find "$QA_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
+                find "$QA_DIR" -name '*.md' ! -name 'README.md' ! -name '_standards.md' 2>/dev/null || true
                 find "$SECURITY_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
                 find "$UIUX_DIR" -name '*.md' ! -name 'README.md' 2>/dev/null || true
                 ;;
