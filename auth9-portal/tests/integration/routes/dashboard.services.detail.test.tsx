@@ -3,7 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ServiceDetailPage, { loader, action, meta } from "~/routes/dashboard.services.$id";
-import { serviceApi, actionApi, serviceBrandingApi } from "~/services/api";
+import { serviceApi } from "~/services/api";
 import { ConfirmProvider } from "~/hooks/useConfirm";
 
 // Mock the APIs

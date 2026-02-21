@@ -27,6 +27,7 @@ describe("Action Types with HTTP Client", () => {
   });
 
   const serviceId = "service-123";
+  const tenantId = "tenant-123";
 
   describe("CRUD Operations", () => {
     it("creates an action with POST", async () => {
