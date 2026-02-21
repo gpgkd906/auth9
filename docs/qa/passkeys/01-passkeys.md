@@ -37,7 +37,7 @@ Passkeys 已从 Keycloak 代理模式迁移到原生 WebAuthn 实现。注册流
 
 ---
 
-## 场景 1：查看 Passkeys 列表（无 Passkey）
+## 场景 1：Passkeys 入口可见性与列表查看（无 Passkey）
 
 ### 初始状态
 - 用户已登录

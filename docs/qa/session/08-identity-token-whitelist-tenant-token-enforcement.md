@@ -19,7 +19,7 @@
 
 ---
 
-## 场景 1：Identity Token 访问白名单接口成功
+## 场景 1：租户切换入口可见性与 Identity Token 访问白名单接口成功
 
 ### 初始状态
 - 已完成登录并获得 `{identity_token}`

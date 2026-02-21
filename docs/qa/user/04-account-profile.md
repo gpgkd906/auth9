@@ -87,27 +87,29 @@ SELECT id, email, display_name, avatar_url, mfa_enabled FROM users WHERE id = '{
 
 ---
 
-## 场景 3：通过 Profile 页面编辑显示名称和头像
+## 场景 3：Account 入口可见性与 Profile 编辑显示名称和头像
 
 ### 初始状态
 - 用户已登录并进入 `/dashboard/account` 页面
 - 当前 display_name 为 `Test User`
 
 ### 目的
-验证 Profile 页面可以成功修改用户的显示名称和头像 URL，并同步到 Keycloak
+验证用户可以从侧边栏可见入口进入 Account Profile，并成功修改显示名称和头像 URL（含 Keycloak 同步）
 
 ### 测试操作流程
-1. 导航至 `/dashboard/account`
-2. 确认当前用户信息显示正确（头像、名称、邮箱、MFA 状态、加入日期）
-3. 在「Display name」输入框中修改为 `Updated Name`
-4. 在「Avatar URL」输入框中填写 `https://example.com/new-avatar.png`
-5. 确认「Email」字段为只读状态（灰色禁用）
-6. 点击「Save changes」
+1. 在任意 Dashboard 页面，确认左侧边栏底部存在当前用户卡片入口
+2. 点击用户卡片进入「Account / Profile」页面
+3. 确认当前用户信息显示正确（头像、名称、邮箱、MFA 状态、加入日期）
+4. 在「Display name」输入框中修改为 `Updated Name`
+5. 在「Avatar URL」输入框中填写 `https://example.com/new-avatar.png`
+6. 确认「Email」字段为只读状态（灰色禁用）
+7. 点击「Save changes」
 
 ### 预期结果
 - 显示成功提示 "Profile updated successfully"
 - 页面上的头像预览更新为新 URL
 - 侧边栏底部用户名更新为 `Updated Name`
+- 侧边栏用户卡片入口可见且可点击进入 Profile 页面
 
 ### 预期数据状态
 ```sql
