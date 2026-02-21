@@ -13,6 +13,7 @@ pub mod metrics;
 pub mod path_guard;
 pub mod rate_limit;
 pub mod require_auth;
+pub mod scim_auth;
 pub mod security_headers;
 pub mod trace;
 

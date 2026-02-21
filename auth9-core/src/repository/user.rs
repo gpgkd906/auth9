@@ -70,6 +70,22 @@ pub trait UserRepository: Send + Sync {
         id: StringUuid,
         locked_until: Option<chrono::DateTime<chrono::Utc>>,
     ) -> Result<()>;
+
+    // SCIM provisioning methods
+
+    /// Find user by SCIM external ID
+    async fn find_by_scim_external_id(
+        &self,
+        scim_external_id: String,
+    ) -> Result<Option<User>>;
+
+    /// Update SCIM tracking fields on a user
+    async fn update_scim_fields(
+        &self,
+        id: StringUuid,
+        scim_external_id: Option<String>,
+        scim_provisioned_by: Option<StringUuid>,
+    ) -> Result<()>;
 }
 
 pub struct UserRepositoryImpl {
@@ -109,7 +125,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
+            SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE id = ?
             "#,
@@ -124,7 +140,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_email(&self, email: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
+            SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE email = ?
             "#,
@@ -139,7 +155,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>> {
         let user = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
+            SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE keycloak_id = ?
             "#,
@@ -154,7 +170,7 @@ impl UserRepository for UserRepositoryImpl {
     async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
+            SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             ORDER BY created_at DESC
             LIMIT ? OFFSET ?
@@ -179,7 +195,7 @@ impl UserRepository for UserRepositoryImpl {
         let pattern = format!("%{}%", query);
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT id, keycloak_id, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
+            SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
             FROM users
             WHERE email LIKE ? OR display_name LIKE ?
             ORDER BY created_at DESC
@@ -366,7 +382,7 @@ impl UserRepository for UserRepositoryImpl {
     ) -> Result<Vec<User>> {
         let users = sqlx::query_as::<_, User>(
             r#"
-            SELECT u.id, u.keycloak_id, u.email, u.display_name, u.avatar_url, u.mfa_enabled, u.password_changed_at, u.locked_until, u.created_at, u.updated_at
+            SELECT u.id, u.keycloak_id, u.scim_external_id, u.scim_provisioned_by, u.email, u.display_name, u.avatar_url, u.mfa_enabled, u.password_changed_at, u.locked_until, u.created_at, u.updated_at
             FROM users u
             INNER JOIN tenant_users tu ON u.id = tu.user_id
             WHERE tu.tenant_id = ?
@@ -531,6 +547,45 @@ impl UserRepository for UserRepositoryImpl {
                 .bind(id)
                 .execute(&self.pool)
                 .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!("User {} not found", id)));
+        }
+        Ok(())
+    }
+
+    async fn find_by_scim_external_id(
+        &self,
+        scim_external_id: String,
+    ) -> Result<Option<User>> {
+        let user = sqlx::query_as::<_, User>(
+            r#"
+            SELECT id, keycloak_id, scim_external_id, scim_provisioned_by, email, display_name, avatar_url, mfa_enabled, password_changed_at, locked_until, created_at, updated_at
+            FROM users
+            WHERE scim_external_id = ?
+            "#,
+        )
+        .bind(&scim_external_id)
+        .fetch_optional(&self.pool)
+        .await?;
+
+        Ok(user)
+    }
+
+    async fn update_scim_fields(
+        &self,
+        id: StringUuid,
+        scim_external_id: Option<String>,
+        scim_provisioned_by: Option<StringUuid>,
+    ) -> Result<()> {
+        let result = sqlx::query(
+            "UPDATE users SET scim_external_id = ?, scim_provisioned_by = ?, updated_at = NOW() WHERE id = ?",
+        )
+        .bind(&scim_external_id)
+        .bind(scim_provisioned_by)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
 
         if result.rows_affected() == 0 {
             return Err(AppError::NotFound(format!("User {} not found", id)));
