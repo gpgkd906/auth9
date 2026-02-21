@@ -647,6 +647,10 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
+            event_source: "redis_stream".to_string(),
+            event_stream_key: "auth9:keycloak:events".to_string(),
+            event_stream_group: "auth9-core".to_string(),
+            event_stream_consumer: "auth9-core-1".to_string(),
         });
 
         let service = WebAuthnService::new(
@@ -720,6 +724,10 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
+            event_source: "redis_stream".to_string(),
+            event_stream_key: "auth9:keycloak:events".to_string(),
+            event_stream_group: "auth9-core".to_string(),
+            event_stream_consumer: "auth9-core-1".to_string(),
         });
 
         let service = WebAuthnService::new(
@@ -776,6 +784,10 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
+            event_source: "redis_stream".to_string(),
+            event_stream_key: "auth9:keycloak:events".to_string(),
+            event_stream_group: "auth9-core".to_string(),
+            event_stream_consumer: "auth9-core-1".to_string(),
         });
 
         let service = WebAuthnService::new(
@@ -808,6 +820,10 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
+            event_source: "redis_stream".to_string(),
+            event_stream_key: "auth9:keycloak:events".to_string(),
+            event_stream_group: "auth9-core".to_string(),
+            event_stream_consumer: "auth9-core-1".to_string(),
         });
 
         let service = WebAuthnService::new(

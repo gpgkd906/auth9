@@ -637,10 +637,7 @@ impl UserRepository for TestUserRepository {
         Ok(())
     }
 
-    async fn find_by_scim_external_id(
-        &self,
-        scim_external_id: String,
-    ) -> Result<Option<User>> {
+    async fn find_by_scim_external_id(&self, scim_external_id: String) -> Result<Option<User>> {
         let users = self.users.read().await;
         Ok(users
             .iter()

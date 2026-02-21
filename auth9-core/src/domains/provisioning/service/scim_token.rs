@@ -75,7 +75,9 @@ impl<R: ScimTokenRepository + 'static> ScimTokenService<R> {
 
         // Check revoked
         if token.revoked_at.is_some() {
-            return Err(AppError::Unauthorized("SCIM token has been revoked".to_string()));
+            return Err(AppError::Unauthorized(
+                "SCIM token has been revoked".to_string(),
+            ));
         }
 
         // Check expired
@@ -144,8 +146,7 @@ mod tests {
         let mut mock = MockScimTokenRepository::new();
         mock.expect_find_by_hash()
             .returning(move |_| Ok(Some(token.clone())));
-        mock.expect_update_last_used()
-            .returning(|_| Ok(()));
+        mock.expect_update_last_used().returning(|_| Ok(()));
 
         let service = ScimTokenService::new(Arc::new(mock));
         let ctx = service
@@ -160,11 +161,12 @@ mod tests {
     #[tokio::test]
     async fn test_validate_token_not_found() {
         let mut mock = MockScimTokenRepository::new();
-        mock.expect_find_by_hash()
-            .returning(|_| Ok(None));
+        mock.expect_find_by_hash().returning(|_| Ok(None));
 
         let service = ScimTokenService::new(Arc::new(mock));
-        let result = service.validate_token("invalid", "https://example.com").await;
+        let result = service
+            .validate_token("invalid", "https://example.com")
+            .await;
         assert!(result.is_err());
     }
 
@@ -223,8 +225,7 @@ mod tests {
     #[tokio::test]
     async fn test_list_tokens() {
         let mut mock = MockScimTokenRepository::new();
-        mock.expect_list_by_connector()
-            .returning(|_| Ok(vec![]));
+        mock.expect_list_by_connector().returning(|_| Ok(vec![]));
 
         let service = ScimTokenService::new(Arc::new(mock));
         let result = service.list_tokens(StringUuid::new_v4()).await.unwrap();

@@ -11,8 +11,11 @@
 Auth9 采用 Headless Keycloak 架构，登录事件的产生和记录涉及两个系统：
 
 1. **登录操作发生在 Keycloak** → 测试可通过 Auth9 登录入口触发 OIDC 流程（底层由 Keycloak 执行用户名/密码与 MFA 验证）
-2. **事件通过 Webhook 异步传递** → Keycloak 通过 p2-inc/keycloak-events SPI 插件，将登录事件以 Webhook 形式 POST 到 Auth9 Core 的 `/api/v1/keycloak/events` 端点
-3. **Auth9 Core 记录和分析** → Auth9 接收事件后写入 `login_events` 表，并触发安全检测（如暴力破解告警）
+2. **事件通过 Redis Stream 异步传递** → Keycloak 事件先进入 `auth9:keycloak:events`，由 auth9-core 后台消费者拉取处理
+3. **Auth9 Core 记录和分析** → Auth9 消费事件后写入 `login_events` 表，并触发安全检测（如暴力破解告警）
+
+兼容说明：
+- `POST /api/v1/keycloak/events` 作为兼容入口仍可用于回归测试，但不再是默认主链路。
 
 **关键点**：Auth9 不直接处理用户名/密码验证，所有认证均通过 Keycloak OIDC 流程完成。本文档不要求必须手工访问 Keycloak 登录页 URL。
 

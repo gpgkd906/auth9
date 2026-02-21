@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
     use auth9_core::domain::UpdateUserInput;
+    use serde_json::json;
 
     #[test]
     fn test_update_user_with_mfa_enabled_bool() {
@@ -9,7 +9,7 @@ mod tests {
             "display_name": "Test",
             "mfa_enabled": true
         });
-        
+
         let input: Result<UpdateUserInput, _> = serde_json::from_value(json);
         match input {
             Ok(_) => println!("✓ mfa_enabled as bool (true) is accepted by serde"),
@@ -23,7 +23,7 @@ mod tests {
             "display_name": "Test",
             "mfa_enabled": "true"
         });
-        
+
         let input: Result<UpdateUserInput, _> = serde_json::from_value(json);
         match input {
             Ok(_) => println!("✓ mfa_enabled as string (\"true\") is accepted by serde"),
@@ -34,7 +34,7 @@ mod tests {
     #[test]
     fn test_update_user_only_mfa_enabled() {
         let json = json!({"mfa_enabled": true});
-        
+
         let input: Result<UpdateUserInput, _> = serde_json::from_value(json);
         match input {
             Ok(_) => println!("✓ Only mfa_enabled field is accepted"),

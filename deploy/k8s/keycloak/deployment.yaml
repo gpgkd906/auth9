@@ -31,7 +31,7 @@ spec:
         runAsNonRoot: true
         runAsUser: 1000
         fsGroup: 1000
-      # InitContainers: Extract theme and events SPI JARs
+      # InitContainers: Extract theme JAR
       initContainers:
         - name: init-theme
           image: ghcr.io/gpgkd906/auth9-keycloak-theme:latest
@@ -53,36 +53,16 @@ spec:
             capabilities:
               drop:
                 - ALL
-        - name: init-events
-          image: ghcr.io/gpgkd906/auth9-keycloak-events:latest
-          imagePullPolicy: Always
-          command: ["sh", "-c", "cp /events/*.jar /providers/ 2>/dev/null && echo 'Events SPI JAR copied'"]
-          volumeMounts:
-            - name: providers-volume
-              mountPath: /providers
-          resources:
-            requests:
-              cpu: 100m
-              memory: 64Mi
-            limits:
-              cpu: 200m
-              memory: 128Mi
-          securityContext:
-            allowPrivilegeEscalation: false
-            readOnlyRootFilesystem: false
-            capabilities:
-              drop:
-                - ALL
       containers:
         - name: keycloak
-          image: quay.io/keycloak/keycloak:23.0
+          image: quay.io/keycloak/keycloak:26.3.3
           imagePullPolicy: IfNotPresent
           args:
             - start
             - --hostname-strict=false
             - --http-enabled=true
             - --health-enabled=true
-            - --spi-login-protocol-openid-connect-legacy-logout-redirect-uri=true
+            - --legacy-observability-interface=true
           ports:
             - name: http
               containerPort: 8080
@@ -95,6 +75,17 @@ spec:
                 name: keycloak-config
             - secretRef:
                 name: keycloak-secrets
+          env:
+            - name: KC_BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: KEYCLOAK_ADMIN
+            - name: KC_BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: keycloak-secrets
+                  key: KEYCLOAK_ADMIN_PASSWORD
           volumeMounts:
             - name: providers-volume
               mountPath: /opt/keycloak/providers

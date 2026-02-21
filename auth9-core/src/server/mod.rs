@@ -4,6 +4,9 @@ use crate::cache::CacheManager;
 use crate::config::Config;
 use crate::crypto::EncryptionKey;
 use crate::domains;
+use crate::domains::integration::api::keycloak_event::{
+    parse_keycloak_event, process_keycloak_event,
+};
 use crate::grpc::interceptor::{ApiKeyAuthenticator, AuthInterceptor};
 use crate::grpc::proto::token_exchange_server::TokenExchangeServer;
 use crate::grpc::TokenExchangeService;
@@ -15,10 +18,10 @@ use crate::domains::identity::service::{
     IdentityProviderService, PasswordService, SessionService, WebAuthnService,
 };
 use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
-use crate::domains::provisioning::service::{ScimService, ScimTokenService};
 use crate::domains::platform::service::{
     BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
 };
+use crate::domains::provisioning::service::{ScimService, ScimTokenService};
 use crate::domains::security_observability::service::{
     AnalyticsService, SecurityDetectionConfig, SecurityDetectionService,
 };
@@ -34,9 +37,9 @@ use crate::repository::{
     scim_group_mapping::ScimGroupRoleMappingRepositoryImpl,
     scim_log::ScimProvisioningLogRepositoryImpl, scim_token::ScimTokenRepositoryImpl,
     security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
-    service_branding::ServiceBrandingRepositoryImpl,
-    session::SessionRepositoryImpl, system_settings::SystemSettingsRepositoryImpl,
-    tenant::TenantRepositoryImpl, user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
+    service_branding::ServiceBrandingRepositoryImpl, session::SessionRepositoryImpl,
+    system_settings::SystemSettingsRepositoryImpl, tenant::TenantRepositoryImpl,
+    user::UserRepositoryImpl, webhook::WebhookRepositoryImpl,
 };
 use crate::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
@@ -46,10 +49,12 @@ use crate::state::{
 use anyhow::Result;
 use axum::{extract::DefaultBodyLimit, routing::get, Router};
 use metrics_exporter_prometheus::PrometheusHandle;
+use redis::streams::StreamReadReply;
 use sqlx::{mysql::MySqlPoolOptions, MySqlPool};
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::net::TcpListener;
+use tokio::time::sleep;
 use tonic::transport::Server as TonicServer;
 use tower::ServiceBuilder;
 use tower_http::{timeout::TimeoutLayer, trace::TraceLayer};
@@ -118,7 +123,8 @@ pub struct AppState {
             SystemSettingsRepositoryImpl,
         >,
     >,
-    pub branding_service: Arc<BrandingService<SystemSettingsRepositoryImpl, ServiceBrandingRepositoryImpl>>,
+    pub branding_service:
+        Arc<BrandingService<SystemSettingsRepositoryImpl, ServiceBrandingRepositoryImpl>>,
     // New services for 5 features
     pub password_service: Arc<
         PasswordService<
@@ -408,11 +414,7 @@ impl HasScimServices for AppState {
 
     fn scim_service(
         &self,
-    ) -> &ScimService<
-        <Self as HasServices>::UserRepo,
-        Self::ScimGroupMappingRepo,
-        Self::ScimLogRepo,
-    >
+    ) -> &ScimService<<Self as HasServices>::UserRepo, Self::ScimGroupMappingRepo, Self::ScimLogRepo>
     where
         Self: HasServices,
     {
@@ -467,7 +469,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let action_repo = Arc::new(ActionRepositoryImpl::new(db_pool.clone()));
     let service_branding_repo = Arc::new(ServiceBrandingRepositoryImpl::new(db_pool.clone()));
     let scim_token_repo = Arc::new(ScimTokenRepositoryImpl::new(db_pool.clone()));
-    let scim_group_mapping_repo = Arc::new(ScimGroupRoleMappingRepositoryImpl::new(db_pool.clone()));
+    let scim_group_mapping_repo =
+        Arc::new(ScimGroupRoleMappingRepositoryImpl::new(db_pool.clone()));
     let scim_log_repo = Arc::new(ScimProvisioningLogRepositoryImpl::new(db_pool.clone()));
 
     // Create JWT manager
@@ -695,6 +698,11 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         scim_group_mapping_repo,
         scim_log_repo,
     };
+
+    // Start Keycloak event stream consumer when configured.
+    if state.config.keycloak.event_source == "redis_stream" {
+        start_keycloak_event_stream_consumer(state.clone());
+    }
 
     // Create rate limit state for middleware
     let rate_limit_state = if config.rate_limit.enabled {
@@ -973,6 +981,230 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     Ok(())
 }
 
+fn start_keycloak_event_stream_consumer(state: AppState) {
+    let stream_key = state.config.keycloak.event_stream_key.clone();
+    let group = state.config.keycloak.event_stream_group.clone();
+    let consumer = state.config.keycloak.event_stream_consumer.clone();
+    let redis_url = state.config.redis.url.clone();
+
+    tokio::spawn(async move {
+        // Use a dedicated Redis connection manager for stream polling.
+        // Blocking stream reads can otherwise interfere with shared cache/rate-limit traffic.
+        let client = match redis::Client::open(redis_url.as_str()) {
+            Ok(c) => c,
+            Err(err) => {
+                metrics::counter!(
+                    "auth9_keycloak_stream_read_errors_total",
+                    "error_type" => "client_open_failed"
+                )
+                .increment(1);
+                tracing::error!(
+                    stream = %stream_key,
+                    group = %group,
+                    consumer = %consumer,
+                    error = %err,
+                    "Failed creating Redis client for keycloak event stream consumer"
+                );
+                return;
+            }
+        };
+
+        let mut conn = match redis::aio::ConnectionManager::new(client).await {
+            Ok(c) => c,
+            Err(err) => {
+                metrics::counter!(
+                    "auth9_keycloak_stream_read_errors_total",
+                    "error_type" => "connection_failed"
+                )
+                .increment(1);
+                tracing::error!(
+                    stream = %stream_key,
+                    group = %group,
+                    consumer = %consumer,
+                    error = %err,
+                    "Failed connecting Redis for keycloak event stream consumer"
+                );
+                return;
+            }
+        };
+
+        let create_group = redis::cmd("XGROUP")
+            .arg("CREATE")
+            .arg(&stream_key)
+            .arg(&group)
+            .arg("0")
+            .arg("MKSTREAM")
+            .query_async::<()>(&mut conn)
+            .await;
+        if let Err(err) = create_group {
+            let err_text = err.to_string();
+            if !err_text.contains("BUSYGROUP") {
+                tracing::error!(
+                    stream = %stream_key,
+                    group = %group,
+                    error = %err_text,
+                    "Failed to create keycloak event stream group"
+                );
+            }
+        }
+
+        info!(
+            stream = %stream_key,
+            group = %group,
+            consumer = %consumer,
+            "Keycloak event stream consumer started"
+        );
+
+        loop {
+            let read_result: redis::RedisResult<Option<StreamReadReply>> = redis::cmd("XREADGROUP")
+                .arg("GROUP")
+                .arg(&group)
+                .arg(&consumer)
+                .arg("COUNT")
+                .arg(20)
+                .arg("BLOCK")
+                // Keep BLOCK lower than client response timeout to avoid artificial timeouts.
+                .arg(200)
+                .arg("STREAMS")
+                .arg(&stream_key)
+                .arg(">")
+                .query_async(&mut conn)
+                .await;
+
+            let reply = match read_result {
+                Ok(r) => r,
+                Err(err) => {
+                    if err.is_timeout() {
+                        metrics::counter!(
+                            "auth9_keycloak_stream_poll_total",
+                            "result" => "timeout"
+                        )
+                        .increment(1);
+                        continue;
+                    }
+                    metrics::counter!(
+                        "auth9_keycloak_stream_read_errors_total",
+                        "error_type" => "xreadgroup_failed"
+                    )
+                    .increment(1);
+                    tracing::error!(
+                        stream = %stream_key,
+                        group = %group,
+                        consumer = %consumer,
+                        error = %err,
+                        "Failed reading keycloak event stream"
+                    );
+                    sleep(Duration::from_secs(2)).await;
+                    continue;
+                }
+            };
+
+            let Some(reply) = reply else {
+                metrics::counter!("auth9_keycloak_stream_poll_total", "result" => "empty")
+                    .increment(1);
+                continue;
+            };
+
+            metrics::counter!("auth9_keycloak_stream_poll_total", "result" => "messages")
+                .increment(1);
+
+            for stream_key_reply in reply.keys {
+                for entry in stream_key_reply.ids {
+                    let payload = entry
+                        .map
+                        .get("payload")
+                        .or_else(|| entry.map.get("event"))
+                        .and_then(|v| redis::from_redis_value::<String>(v.clone()).ok());
+
+                    if payload.is_none() {
+                        metrics::counter!(
+                            "auth9_keycloak_stream_events_total",
+                            "result" => "missing_payload"
+                        )
+                        .increment(1);
+                        tracing::warn!(
+                            stream = %stream_key_reply.key,
+                            entry_id = %entry.id,
+                            "Keycloak event stream entry missing payload field"
+                        );
+                        let _: redis::RedisResult<i64> = redis::cmd("XACK")
+                            .arg(&stream_key_reply.key)
+                            .arg(&group)
+                            .arg(&entry.id)
+                            .query_async(&mut conn)
+                            .await;
+                        continue;
+                    }
+
+                    let payload = payload.unwrap_or_default();
+                    match parse_keycloak_event(payload.as_bytes()) {
+                        Ok(event) => {
+                            if let Err(err) = process_keycloak_event(&state, event, None).await {
+                                metrics::counter!(
+                                    "auth9_keycloak_stream_events_total",
+                                    "result" => "process_failed"
+                                )
+                                .increment(1);
+                                tracing::error!(
+                                    stream = %stream_key_reply.key,
+                                    entry_id = %entry.id,
+                                    error = %err,
+                                    "Failed processing keycloak event from stream"
+                                );
+                            } else {
+                                metrics::counter!(
+                                    "auth9_keycloak_stream_events_total",
+                                    "result" => "processed"
+                                )
+                                .increment(1);
+                            }
+                        }
+                        Err(err) => {
+                            metrics::counter!(
+                                "auth9_keycloak_stream_events_total",
+                                "result" => "parse_failed"
+                            )
+                            .increment(1);
+                            tracing::error!(
+                                stream = %stream_key_reply.key,
+                                entry_id = %entry.id,
+                                error = %err,
+                                "Failed parsing keycloak event payload from stream"
+                            );
+                        }
+                    }
+
+                    let ack_result: redis::RedisResult<i64> = redis::cmd("XACK")
+                        .arg(&stream_key_reply.key)
+                        .arg(&group)
+                        .arg(&entry.id)
+                        .query_async(&mut conn)
+                        .await;
+                    if let Err(err) = ack_result {
+                        tracing::warn!(
+                            stream = %stream_key_reply.key,
+                            entry_id = %entry.id,
+                            error = %err,
+                            "Failed to ACK keycloak stream event"
+                        );
+                        metrics::counter!(
+                            "auth9_keycloak_stream_events_total",
+                            "result" => "ack_failed"
+                        )
+                        .increment(1);
+                    } else {
+                        metrics::counter!(
+                            "auth9_keycloak_stream_events_total",
+                            "result" => "acked"
+                        )
+                        .increment(1);
+                    }
+                }
+            }
+        }
+    });
+}
+
 /// Create gRPC authentication interceptor based on configuration
 fn create_grpc_auth_interceptor(config: &Config) -> Result<AuthInterceptor> {
     match config.grpc_security.auth_mode.as_str() {
@@ -1220,11 +1452,12 @@ where
     // SCIM PROTOCOL ROUTES (Bearer Token auth, separate from JWT)
     // ============================================================
     let scim_state = state.clone();
-    let scim_protocol_routes = domains::provisioning::routes::scim_routes::<S>()
-        .layer(axum::middleware::from_fn_with_state(
+    let scim_protocol_routes = domains::provisioning::routes::scim_routes::<S>().layer(
+        axum::middleware::from_fn_with_state(
             scim_state,
             crate::middleware::scim_auth::scim_auth_middleware::<S>,
-        ));
+        ),
+    );
 
     // ============================================================
     // PUBLIC ROUTES (no authentication required)

@@ -1,7 +1,7 @@
-# 集成测试 - 安全加固第二轮（事务性级联删除 & Webhook Secret 强制校验）
+# 集成测试 - 安全加固第二轮（事务性级联删除 & Keycloak 事件源安全校验）
 
 **模块**: 集成测试
-**测试范围**: P0-2 用户/租户删除事务原子性 + P0-3 生产环境 Keycloak Webhook Secret 强制校验
+**测试范围**: P0-2 用户/租户删除事务原子性 + P0-3 Keycloak 事件源配置安全校验
 **场景数**: 5
 **优先级**: 高
 
@@ -18,13 +18,16 @@
 
 外部系统操作（Keycloak 用户删除、Webhook 通知）在事务 commit 之后执行，确保数据库一致性优先。
 
-### Webhook Secret 强制校验（P0-3）
+### Keycloak 事件源安全校验（P0-3）
 
-`POST /api/v1/keycloak/events` 端点接收 Keycloak 事件。未配置 `KEYCLOAK_WEBHOOK_SECRET` 时，签名验证被跳过，任何人可发送伪造事件。
+Auth9 事件接入支持两种模式：
+- `KEYCLOAK_EVENT_SOURCE=redis_stream`（默认）：走 Redis Stream 消费链路
+- `KEYCLOAK_EVENT_SOURCE=webhook`：走 `POST /api/v1/keycloak/events` 兼容入口
 
-改进后：
-- **生产环境**：启动时校验 `KEYCLOAK_WEBHOOK_SECRET` 是否已配置，未配置则拒绝启动
-- **非生产环境**：打印 warn 日志，允许启动
+安全规则：
+- **生产环境 + webhook 模式**：必须配置 `KEYCLOAK_WEBHOOK_SECRET`，否则拒绝启动
+- **redis_stream 模式**：不强制要求 `KEYCLOAK_WEBHOOK_SECRET`
+- **非生产 + webhook 模式**：允许启动但输出 warn
 
 ---
 
@@ -172,19 +175,21 @@ SELECT COUNT(*) FROM invitations WHERE tenant_id = '{tenant_id}';
 
 ---
 
-## 场景 4：生产环境未配置 Webhook Secret — 启动失败
+## 场景 4：生产环境 webhook 模式未配置 Secret — 启动失败
 
 ### 初始状态
 - 环境变量 `AUTH9_ENV=production`（或等效生产标识）
-- 未设置 `KEYCLOAK_WEBHOOK_SECRET` 环境变量
+- 设置 `KEYCLOAK_EVENT_SOURCE=webhook`
+- 未设置 `KEYCLOAK_WEBHOOK_SECRET`
 
 ### 目的
-验证生产环境下未配置 Webhook Secret 时，auth9-core 拒绝启动
+验证生产环境 webhook 模式下未配置 secret 时，auth9-core 拒绝启动
 
 ### 测试操作流程
-1. 设置生产环境标识并移除 Webhook Secret：
+1. 设置生产环境标识和 webhook 模式，并移除 secret：
    ```bash
    export AUTH9_ENV=production
+   export KEYCLOAK_EVENT_SOURCE=webhook
    unset KEYCLOAK_WEBHOOK_SECRET
    ```
 2. 尝试启动 auth9-core：
@@ -194,35 +199,36 @@ SELECT COUNT(*) FROM invitations WHERE tenant_id = '{tenant_id}';
 
 ### 预期结果
 - 进程以非零退出码终止
-- 错误信息包含：`Keycloak webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET) in production`
-- 明确提示：`without it, anyone can send spoofed events to POST /api/v1/keycloak/events`
+- 错误信息包含：`KEYCLOAK_EVENT_SOURCE=webhook requires KEYCLOAK_WEBHOOK_SECRET in production`
 
 ---
 
-## 场景 5：非生产环境未配置 Webhook Secret — 警告但正常启动
+## 场景 5：生产环境 redis_stream 模式未配置 Secret — 正常启动
 
 ### 初始状态
-- 环境变量 `AUTH9_ENV=development`（或未设置，默认非生产）
-- 未设置 `KEYCLOAK_WEBHOOK_SECRET` 环境变量
+- 环境变量 `AUTH9_ENV=production`
+- 设置 `KEYCLOAK_EVENT_SOURCE=redis_stream`
+- 未设置 `KEYCLOAK_WEBHOOK_SECRET`
 
 ### 目的
-验证非生产环境下未配置 Webhook Secret 时，auth9-core 正常启动但输出警告
+验证生产环境在 redis_stream 模式下，不依赖 webhook secret 也可正常启动
 
 ### 测试操作流程
-1. 确保非生产环境：
+1. 设置生产环境与 redis_stream 模式：
    ```bash
-   export AUTH9_ENV=development
+   export AUTH9_ENV=production
+   export KEYCLOAK_EVENT_SOURCE=redis_stream
    unset KEYCLOAK_WEBHOOK_SECRET
    ```
 2. 启动 auth9-core：
    ```bash
    cd auth9-core && cargo run
    ```
-3. 检查启动日志
+3. 检查启动日志与健康状态
 
 ### 预期结果
 - 进程正常启动，监听端口
-- 日志中出现 `warn` 级别消息：`Keycloak webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET); webhook signature verification is disabled`
+- 未出现因 `KEYCLOAK_WEBHOOK_SECRET` 缺失导致的启动失败
 - 服务正常响应请求
 
 ---
@@ -234,5 +240,5 @@ SELECT COUNT(*) FROM invitations WHERE tenant_id = '{tenant_id}';
 | 1 | 用户删除 — 级联操作原子性验证 | ☐ | | | |
 | 2 | 租户删除 — 级联操作原子性验证 | ☐ | | | |
 | 3 | 删除后外部系统同步验证 | ☐ | | | |
-| 4 | 生产环境未配置 Webhook Secret — 启动失败 | ☐ | | | |
-| 5 | 非生产环境未配置 Webhook Secret — 警告但正常启动 | ☐ | | | |
+| 4 | 生产环境 webhook 模式未配置 Secret — 启动失败 | ☐ | | | |
+| 5 | 生产环境 redis_stream 模式未配置 Secret — 正常启动 | ☐ | | | |

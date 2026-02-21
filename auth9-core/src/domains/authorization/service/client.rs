@@ -27,7 +27,13 @@ pub struct ClientService<R: ServiceRepository, RR: RbacRepository, AR: ActionRep
     cache_manager: Option<CacheManager>,
 }
 
-impl<R: ServiceRepository, RR: RbacRepository, AR: ActionRepository, BR: ServiceBrandingRepository> ClientService<R, RR, AR, BR> {
+impl<
+        R: ServiceRepository,
+        RR: RbacRepository,
+        AR: ActionRepository,
+        BR: ServiceBrandingRepository,
+    > ClientService<R, RR, AR, BR>
+{
     pub fn new(repo: Arc<R>, rbac_repo: Arc<RR>, cache_manager: Option<CacheManager>) -> Self {
         Self {
             repo,
