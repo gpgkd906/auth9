@@ -865,22 +865,6 @@ mod tests {
         }
     }
 
-    fn make_scim_user(email: &str) -> ScimUser {
-        ScimUser {
-            schemas: vec![ScimUser::SCHEMA.to_string()],
-            id: None,
-            external_id: Some("ext-123".to_string()),
-            user_name: email.to_string(),
-            name: None,
-            display_name: Some("Test User".to_string()),
-            emails: vec![],
-            photos: vec![],
-            active: true,
-            meta: None,
-            groups: vec![],
-        }
-    }
-
     #[tokio::test]
     async fn test_get_user_not_found() {
         let mut user_mock = MockUserRepository::new();

@@ -3351,7 +3351,7 @@ mod tests {
 // ============================================================================
 
 use auth9_core::domain::scim::{
-    CreateScimLogInput, ScimGroupRoleMapping, ScimProvisioningLog, ScimToken, ScimTokenResponse,
+    CreateScimLogInput, ScimGroupRoleMapping, ScimProvisioningLog, ScimToken,
 };
 use auth9_core::repository::scim_group_mapping::ScimGroupRoleMappingRepository;
 use auth9_core::repository::scim_log::ScimProvisioningLogRepository;
