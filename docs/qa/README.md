@@ -170,11 +170,14 @@
 | [integration/09-security-hardening-config.md](./integration/09-security-hardening-config.md) | 生产环境安全启动校验、REST aud 严格校验、HSTS 条件下发、gRPC audience 必填 | 5 |
 | [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Keycloak 事件源安全校验、外部系统同步 | 5 |
 
-### Provisioning (2 个文档, 10 个场景)
+### SCIM Provisioning (5 个文档, 25 个场景) 🆕
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [provisioning/01-scim-token-management.md](./provisioning/01-scim-token-management.md) | SCIM Token 生命周期管理 | 5 |
-| [provisioning/02-scim-user-crud.md](./provisioning/02-scim-user-crud.md) | SCIM 用户 CRUD 与同步 | 5 |
+| [provisioning/01-scim-token-management.md](./provisioning/01-scim-token-management.md) | SCIM Bearer Token 创建、列表、吊销（管理 API） | 5 |
+| [provisioning/02-scim-user-crud.md](./provisioning/02-scim-user-crud.md) | SCIM 用户创建、查询、列表、替换、增量更新、停用 | 5 |
+| [provisioning/03-scim-group-crud.md](./provisioning/03-scim-group-crud.md) | SCIM 组 CRUD、Group-Role 映射管理 | 5 |
+| [provisioning/04-scim-bulk-discovery.md](./provisioning/04-scim-bulk-discovery.md) | Bulk 批量操作、ServiceProviderConfig/Schemas/ResourceTypes 发现 | 5 |
+| [provisioning/05-scim-auth-logs.md](./provisioning/05-scim-auth-logs.md) | SCIM 鉴权安全（无效/过期/吊销 Token）、审计日志查询 | 5 |
 
 ---
 
@@ -198,8 +201,8 @@
 | Action | 12 | 49 |
 | SDK | 6 | 30 |
 | 集成测试 | 11 | 54 |
-| Provisioning | 2 | 10 |
-| **总计** | **91** | **429** |
+| SCIM Provisioning | 5 | 25 |
+| **总计** | **94** | **444** |
 
 ---
 
@@ -222,6 +225,7 @@
 12. Webhook (webhook/*) - 测试事件通知
 13. 分析与统计 (analytics/*) - 验证登录统计
 14. 审计日志 (audit/*) - 验证操作记录
+15. SCIM Provisioning (provisioning/*) - 需先配置企业 SSO Connector
 
 ---
 
@@ -298,6 +302,23 @@ GROUP BY event_type;
 -- 查看系统设置
 SELECT category, setting_key, JSON_EXTRACT(value, '$.type') as type
 FROM system_settings;
+
+-- SCIM: 查看 Token 状态
+SELECT id, token_prefix, description, expires_at, last_used_at, revoked_at
+FROM scim_tokens WHERE connector_id = '{connector_id}';
+
+-- SCIM: 查看用户 SCIM 追踪字段
+SELECT id, email, scim_external_id, scim_provisioned_by
+FROM users WHERE scim_external_id IS NOT NULL;
+
+-- SCIM: 查看 Group-Role 映射
+SELECT scim_group_id, scim_group_display_name, role_id
+FROM scim_group_role_mappings WHERE connector_id = '{connector_id}';
+
+-- SCIM: 查看最近操作日志
+SELECT operation, resource_type, status, created_at
+FROM scim_provisioning_logs WHERE connector_id = '{connector_id}'
+ORDER BY created_at DESC LIMIT 10;
 ```
 
 ---
@@ -343,6 +364,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-22 | 5.3.0 | **新增 SCIM 2.0 Provisioning 测试文档**：覆盖 SCIM Bearer Token 管理（`provisioning/01`）、用户 CRUD（`provisioning/02`）、组 CRUD 与 Group-Role 映射（`provisioning/03`）、Bulk 批量操作与 Discovery 端点（`provisioning/04`）、鉴权安全与审计日志（`provisioning/05`）；跨文档影响：更新 `webhook/02-trigger.md` 新增 6 个 SCIM 事件类型、`identity-provider/03` 补充 SCIM Token 管理端点引用；共 94 个文档 444 个场景 |
 | 2026-02-22 | 5.2.1 | 新增仓库级周期治理入口脚本 `scripts/run-weekly-qa-governance.sh`（扩展审计 + 严格 lint + 日志落盘），并在 README 文档治理章节补充定期执行建议 |
 | 2026-02-21 | 5.2.0 | 第二阶段文档治理完成：将超长文档拆分为 `action/07~12` 与 `auth/12`，使既有超限文档全部收敛到每文档 ≤5 场景；`action/01~05`、`auth/09` 改为基础/进阶分层；索引同步为 91 个文档、429 个场景 |
 | 2026-02-21 | 5.1.0 | 新增 QA 文档治理基线：增加 `_standards.md`、`_manifest.yaml` 与 `scripts/qa-doc-lint.sh`；补齐 README 漏索引文档（`auth/06`、`auth/07`、`integration/03~05`、`provisioning/01~02`）；统一通用认证场景为“无痕/清 Cookie/Sign out”可执行流程；补充 `action/01`、`integration/01`、`integration/02` 检查清单，并增强 `tenant/01`、`service/01`、`settings/02`、`user/04`、`rbac/02` 的 UI 入口可见性说明；总计 84 个文档 429 个场景 |
