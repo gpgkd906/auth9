@@ -1,8 +1,8 @@
 # Action 管理 - CRUD 操作测试
 
 **模块**: Action 管理
-**测试范围**: Action 创建、列表、查看、更新、删除
-**场景数**: 7
+**测试范围**: Action 导航入口、创建、列表、查看、更新、删除
+**场景数**: 8
 
 ---
 
@@ -42,7 +42,33 @@
 
 ---
 
-## 场景 1：创建 Action（基础）
+## 场景 1：Tenant 详情页 Actions 入口可见性
+
+### 初始状态
+- 管理员已登录
+- 存在租户 id=`{tenant_id}`，且该租户下已创建至少 1 个 Action
+
+### 目的
+验证用户可以从 Tenant 详情页的 Quick Links 区域发现并导航到 Actions 页面，而无需手动输入 URL
+
+### 测试操作流程（Portal UI）
+1. 进入租户详情页：`/dashboard/tenants/{tenant_id}`
+2. 在右侧「Quick Links」卡片中，验证存在「Actions」按钮（位于 Enterprise SSO 下方）
+3. 验证「Actions」按钮显示闪电图标（⚡）
+4. 验证「Actions」按钮右侧显示当前 Actions 数量
+5. 在下方「Overview」统计卡片中，验证存在「Actions」统计行，显示闪电图标和数量
+6. 点击 Quick Links 中的「Actions」按钮
+
+### 预期结果
+- Quick Links 区域显示「Actions」入口，带闪电图标
+- Actions 数量与实际 Action 数一致
+- Overview 统计中 Actions 数量与 Quick Links 中一致
+- 点击后成功跳转到 `/dashboard/tenants/{tenant_id}/actions` 页面
+- Actions 列表页正确加载，显示该租户下的 Actions
+
+---
+
+## 场景 2：创建 Action（基础）
 
 ### 初始状态
 - 管理员已登录
@@ -53,23 +79,24 @@
 验证 Action 创建功能（API 和 Portal UI）
 
 ### 测试操作流程（Portal UI）
-1. 进入租户的「Actions」管理页面：`/dashboard/tenants/{tenant_id}/actions`
-2. 点击「New Action」按钮
-3. 填写基本信息：
+1. 进入租户详情页：`/dashboard/tenants/{tenant_id}`
+2. 点击 Quick Links 中的「Actions」按钮进入 Actions 管理页面
+3. 点击「New Action」按钮
+4. 填写基本信息：
    - 名称：`Test Post Login Action`
    - 描述：`Add custom claims for testing`
    - 触发器：选择 `Post Login`
    - 执行顺序：`0`
    - 超时：`3000`
-4. 填写脚本：
+5. 填写脚本：
    ```typescript
    // Add custom claims
    context.claims = context.claims || {};
    context.claims.test_claim = "test_value";
    context;
    ```
-5. 保持「Enabled」开关开启
-6. 点击「Create Action」
+6. 保持「Enabled」开关开启
+7. 点击「Create Action」
 
 ### 测试操作流程（API）
 ```bash
@@ -114,7 +141,7 @@ WHERE name = 'Test Post Login Action' AND tenant_id = '{tenant_id}';
 
 ---
 
-## 场景 2：创建 Action（使用模板）
+## 场景 3：创建 Action（使用模板）
 
 ### 初始状态
 - 管理员已登录
@@ -124,7 +151,7 @@ WHERE name = 'Test Post Login Action' AND tenant_id = '{tenant_id}';
 验证使用内置模板快速创建 Action
 
 ### 测试操作流程（Portal UI）
-1. 进入「Actions」管理页面，点击「New Action」
+1. 从租户详情页 Quick Links 点击「Actions」进入 Actions 管理页面，点击「New Action」
 2. 在「Script Templates」下拉菜单中选择「Add Custom Claims」模板
 3. 验证脚本自动填充
 4. 填写基本信息：
@@ -146,7 +173,7 @@ WHERE name = 'Department Claims Action' AND tenant_id = '{tenant_id}';
 
 ---
 
-## 场景 3：列表查看与筛选
+## 场景 4：列表查看与筛选
 
 ### 初始状态
 - 存在多个 Actions，包含不同触发器类型
@@ -155,7 +182,7 @@ WHERE name = 'Department Claims Action' AND tenant_id = '{tenant_id}';
 验证 Action 列表、搜索和筛选功能
 
 ### 测试操作流程（Portal UI）
-1. 进入「Actions」管理页面
+1. 从租户详情页 Quick Links 点击「Actions」进入 Actions 管理页面
 2. 验证列表显示所有 Actions
 3. 点击「Post Login」触发器筛选按钮
 4. 验证仅显示 post-login 类型的 Actions
@@ -184,7 +211,7 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions?trigger_id=post-lo
 
 ---
 
-## 场景 4：查看 Action 详情
+## 场景 5：查看 Action 详情
 
 ### 初始状态
 - 存在 Action id=`{action_id}`
@@ -220,7 +247,7 @@ curl http://localhost:8080/api/v1/tenants/{tenant_id}/actions/{action_id}/stats 
 
 ---
 
-## 场景 5：更新 Action
+## 场景 6：更新 Action
 
 ### 初始状态
 - 存在 Action id=`{action_id}`
@@ -269,7 +296,7 @@ WHERE id = '{action_id}';
 
 ---
 
-## 场景 6：启用/禁用 Action
+## 场景 7：启用/禁用 Action
 
 ### 初始状态
 - 存在已启用的 Action id=`{action_id}`
@@ -312,7 +339,7 @@ SELECT enabled FROM actions WHERE id = '{action_id}';
 
 ---
 
-## 场景 7：删除 Action
+## 场景 8：删除 Action
 
 ### 初始状态
 - 存在 Action id=`{action_id}`

@@ -2,7 +2,7 @@
 
 **模块**: Passkeys
 **测试范围**: 使用 Passkey 在登录页面进行无密码认证
-**场景数**: 5
+**场景数**: 6
 **优先级**: 高
 
 ---
@@ -23,25 +23,27 @@
 
 ---
 
-## 场景 1：登录页面显示 Passkey 登录按钮
+## 场景 1：登录页面显示全部认证方式
 
 ### 初始状态
 - 用户已登出
-- 访问 `/login?error=access_denied` 或 `/login?passkey=true`
 
 ### 目的
-验证登录页面在 error 或 passkey 模式下正确显示 SSO 和 Passkey 两种登录方式
+验证登录页面始终渲染，显示全部三种认证方式（Enterprise SSO、密码、Passkey）
 
 ### 测试操作流程
-1. 访问 `/login?passkey=true`
+1. 访问 `/login`（不带任何查询参数）
 
 ### 预期结果
+- 页面正常渲染（**不会** auto-redirect 到 Keycloak）
 - 显示 Auth9 Logo「A9」
 - 显示标题「Sign In」
-- 显示「Sign in with SSO」按钮
+- 显示副标题「Choose how you want to sign in」
+- 显示 Enterprise SSO 邮箱输入框和「Continue with Enterprise SSO」按钮
 - 显示分割线「or」
+- 显示「Sign in with password」按钮
 - 显示「Sign in with passkey」按钮（带锁图标）
-- 两个按钮均可点击
+- 三个按钮均可点击
 
 ---
 
@@ -56,7 +58,7 @@
 验证完整的 Passkey 认证流程：从点击按钮到成功登录跳转
 
 ### 测试操作流程
-1. 访问 `/login?passkey=true`
+1. 访问 `/login`
 2. 点击「Sign in with passkey」按钮
 3. 按钮变为「Verifying...」状态（禁用）
 4. 浏览器弹出 Passkey 选择器（显示可用的 Passkey 列表）
@@ -91,13 +93,12 @@ ORDER BY last_used_at DESC LIMIT 1;
 
 ### 初始状态
 - 用户已登出
-- 访问 `/login?passkey=true`
 
 ### 目的
 验证用户取消 Passkey 认证时的错误处理
 
 ### 测试操作流程
-1. 访问 `/login?passkey=true`
+1. 访问 `/login`
 2. 点击「Sign in with passkey」按钮
 3. 在浏览器弹出 Passkey 选择器时**点击取消**
 
@@ -129,23 +130,34 @@ ORDER BY last_used_at DESC LIMIT 1;
 
 ---
 
-## 场景 5：默认自动跳转 SSO（无 error/passkey 参数）
+## 场景 5：`/login` 不再 auto-redirect 到 Keycloak（回归测试）
 
 ### 初始状态
 - 用户已登出
 - 直接访问 `/login`（不带任何查询参数）
 
 ### 目的
-验证默认行为保持不变：自动重定向到 SSO 认证
+**回归验证**：确认 `/login` 页面不会自动 302 重定向到 Keycloak，始终渲染认证方式选择页面。
+
+> **回归背景**：commit `25ea411` 曾引入 loader auto-redirect，当 URL 不含 `?passkey=true` 或 `?error=` 时，loader 直接 `throw redirect()` 跳转到 Keycloak authorize 端点，导致用户永远无法看到 Enterprise SSO 邮箱输入和 Passkey 按钮——只能进入 Keycloak 默认的用户名/密码表单。该问题已在后续提交中修复，loader 始终返回数据让页面渲染。
 
 ### 测试操作流程
 1. 在浏览器地址栏输入 `/login` 并回车
+2. 观察页面是否正常渲染
 
 ### 预期结果
-- 页面自动 302 重定向到 Keycloak `/api/v1/auth/authorize` 端点
-- 不显示登录页面 UI
-- 重定向 URL 包含 `response_type=code`、`scope=openid email profile`、`state=` 参数
-- 用户正常进入 Keycloak SSO 流程
+- 页面 URL 停留在 `/login`（**不发生** 302 重定向）
+- 登录页面正常渲染，显示三种认证方式：
+  - Enterprise SSO 邮箱输入框 + 「Continue with Enterprise SSO」按钮
+  - 「Sign in with password」按钮
+  - 「Sign in with passkey」按钮
+- 点击「Sign in with password」后才跳转到 Keycloak SSO 流程
+- 输入企业邮箱点击「Continue with Enterprise SSO」后进入企业 IdP 流程
+
+### 回归失败的表现（若 bug 复发）
+- 访问 `/login` 后立即被 302 重定向到 `/api/v1/auth/authorize`
+- 用户无法看到登录页面 UI
+- Enterprise SSO 和 Passkey 选项无法使用
 
 ---
 
@@ -167,7 +179,7 @@ ORDER BY last_used_at DESC LIMIT 1;
 
 ## Agent 自动化测试：Playwright MCP 工具 + CDP 虚拟认证器
 
-本文档的场景 1、2、4、5 可由 AI Agent 通过 Playwright MCP 工具执行。场景 2（Passkey 登录）需要先注册凭据，因此必须在**同一个 `browser_run_code` 调用**中完成「注册 + 登出 + Passkey 登录」的完整流程（虚拟认证器的凭据存储在 CDP 会话内存中，跨调用会丢失）。
+本文档的场景 1、2、4、5 可由 AI Agent 通过 Playwright MCP 工具执行。场景 2（Passkey 登录）需要先注册凭据，因此必须在**同一个 `browser_run_code` 调用**中完成「注册 + 登出 + Passkey 登录」的完整流程（虚拟认证器的凭据存储在 CDP 会话内存中，跨调用会丢失）。场景 5（回归测试）只需验证 `/login` 不发生重定向即可。
 
 > **前提条件**: 全栈环境运行中（Docker + auth9-core on :8080 + auth9-portal on :3000）。
 
@@ -194,13 +206,15 @@ async (page) => {
 
 ### 步骤 1：场景 1 — 登录页面 UI 验证
 
-1. 调用 **`browser_navigate`**: `http://localhost:3000/login?passkey=true`
+1. 调用 **`browser_navigate`**: `http://localhost:3000/login`
 2. 调用 **`browser_snapshot`** 查看页面
 3. **验证**（从 snapshot 中确认）：
+   - 页面 URL 仍为 `/login`（未发生重定向）
    - 显示 Auth9 Logo「A9」
    - 显示标题「Sign In」
-   - 存在「Sign in with SSO」按钮
+   - 存在 Enterprise SSO 邮箱输入框和「Continue with Enterprise SSO」按钮
    - 存在分割线「or」
+   - 存在「Sign in with password」按钮
    - 存在「Sign in with passkey」按钮（带锁图标）
 
 ### 步骤 2：场景 4 — 错误页面 Passkey 选项
@@ -212,11 +226,14 @@ async (page) => {
    - 显示错误描述「Access was denied...」
    - 同时存在「Sign in with SSO」和「Sign in with passkey」按钮
 
-### 步骤 3：场景 5 — 默认 SSO 重定向
+### 步骤 3：场景 5 — 回归测试（无 auto-redirect）
 
 1. 调用 **`browser_navigate`**: `http://localhost:3000/login`（不带参数）
 2. 调用 **`browser_snapshot`** 查看页面
-3. **验证**: 页面已自动跳转到 Keycloak SSO 页面（URL 包含 `/realms/auth9` 或 `/api/v1/auth/authorize`）
+3. **验证**:
+   - 页面 URL 仍为 `http://localhost:3000/login`（**未跳转**到 Keycloak）
+   - 页面显示三种认证方式（Enterprise SSO、Password、Passkey）
+   - 若 URL 变为包含 `/api/v1/auth/authorize` 或 `/realms/auth9`，说明 auto-redirect bug 复发
 
 ### 步骤 4：场景 2 — Passkey 完整登录流程（核心）
 
@@ -236,9 +253,9 @@ async (page) => {
     },
   });
 
-  // ===== 2. SSO 登录 =====
+  // ===== 2. 密码登录（通过登录页「Sign in with password」按钮） =====
   await page.goto('http://localhost:3000/login');
-  await page.getByRole('button', { name: /sign in/i }).click();
+  await page.getByRole('button', { name: /sign in with password/i }).click();
   await page.waitForURL(/\/realms\/auth9\/protocol\/openid-connect/, { timeout: 10000 });
   await page.getByLabel(/username/i).fill('e2e-test-user');
   await page.getByLabel(/password/i).fill('Test123!');
@@ -258,7 +275,7 @@ async (page) => {
   await page.waitForTimeout(2000);
 
   // ===== 5. Passkey 登录 =====
-  await page.goto('http://localhost:3000/login?passkey=true');
+  await page.goto('http://localhost:3000/login');
   await page.waitForSelector('text=Sign in with passkey', { timeout: 5000 });
   await page.getByRole('button', { name: /Sign in with passkey/i }).click();
   // 虚拟认证器自动完成 discoverable authentication
@@ -291,7 +308,7 @@ async (page) => {
 
 - **`hasResidentKey: true` 是必须的**：Passkey 登录使用 discoverable authentication（`navigator.credentials.get()` 不指定 `allowCredentials`），虚拟认证器必须支持 resident key 才能响应。
 - **注册和登录必须同一调用**：虚拟认证器的凭据存储在 CDP 会话内存中，每次 `browser_run_code` 创建新 CDP session 时凭据不保留。
-- **场景 1、4、5 可独立执行**：这些场景只验证 UI 和重定向行为，不涉及 WebAuthn 交互，可以用普通 MCP 工具（`browser_navigate` + `browser_snapshot`）完成。
+- **场景 1、4、5 可独立执行**：这些场景只验证 UI 渲染和回归行为，不涉及 WebAuthn 交互，可以用普通 MCP 工具（`browser_navigate` + `browser_snapshot`）完成。
 
 ---
 
@@ -299,9 +316,9 @@ async (page) => {
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 登录页面显示 Passkey 登录按钮 | ☐ | | | |
+| 1 | 登录页面显示全部认证方式 | ☐ | | | |
 | 2 | 使用 Passkey 成功登录 | ☐ | | | 核心流程 |
 | 3 | Passkey 认证取消 | ☐ | | | |
 | 4 | 错误页面显示 Passkey 登录选项 | ☐ | | | |
-| 5 | 默认自动跳转 SSO | ☐ | | | 回归测试 |
+| 5 | `/login` 无 auto-redirect（回归） | ☐ | | | 防止 auto-redirect 绕过 SSO/Passkey |
 | 6 | Passkey 登录后 Token 有效性 | ☐ | | | |

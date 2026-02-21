@@ -26,6 +26,7 @@ From the confirmed plan and merged implementation, extract:
 - **Behavior**: Normal flow, error cases, edge cases
 - **Behavior deltas**: What changed compared to old docs (redirects, auth rules, token types, permission boundaries, UI routes, API contracts)
 - **UI interactions**: Pages, buttons, forms involved
+- **UI entry points**: Navigation links, Quick Links, sidebar items, or buttons that lead to the feature (where users discover and access the feature)
 - **API endpoints**: If applicable, include method, path, request/response
 - **Database changes**: New tables/columns, expected data states
 - **Acceptance criteria**: What constitutes correct behavior
@@ -60,12 +61,26 @@ Read `references/qa-doc-template.md` for the exact format template.
 6. **SQL verification**: Every scenario with data mutations needs a 预期数据状态 section with verification SQL
 7. **Checklist**: End with a checklist table listing all scenarios (including any 通用场景)
 
+### UI 可见性规则（功能追加/更新/重构时必须遵循）
+
+当变更涉及 UI 部分时（新功能入口、页面跳转变化、导航结构调整等），测试文档**必须**包含用户可见性验证场景。禁止仅通过直接输入 URL 来测试页面——用户无法发现的功能等于不存在。
+
+具体要求：
+
+1. **新功能入口**：如果新增了页面/功能，必须有场景验证用户可以从现有 UI 导航到达该页面（侧边栏、Quick Links、按钮、菜单项等），而非直接访问 URL
+2. **跳转逻辑变化**：如果修改了页面跳转目标、重定向路径、或导航结构，必须有场景验证新的跳转路径正确，且旧入口（如有保留）仍可达
+3. **入口信息准确性**：入口处显示的计数、状态、徽章等摘要信息必须与目标页面的实际数据一致
+4. **Portal UI 测试流程的导航起点**：后续 CRUD 等操作场景中，Portal UI 流程应从用户可见入口导航进入目标页面，而非直接输入 URL
+
+示例：为 Tenant 下新增 Actions 功能时，第一个场景应验证 Tenant 详情页 Quick Links 中出现「Actions」入口（图标、计数、跳转），后续创建/编辑场景的 Portal UI 流程应从该入口导航进入。
+
 ### Scenario design guidelines
 
 For each feature behavior in the plan, generate scenarios covering:
 
 | Type | Example |
 |------|---------|
+| UI entry point | Verify navigation link/button exists and leads to the feature page |
 | Normal flow | Create a resource with valid data |
 | Duplicate/conflict | Create with existing unique key |
 | Invalid input | Missing required fields, bad format |
@@ -73,7 +88,7 @@ For each feature behavior in the plan, generate scenarios covering:
 | Boundary | Max length, empty string, special chars |
 | Cascade effects | Delete with dependent data |
 
-Not every type is needed for every feature - select the relevant ones.
+Not every type is needed for every feature - select the relevant ones. **UI entry point** is mandatory when the change adds or modifies a UI-accessible feature.
 
 ## Step 4: Run Cross-Doc Impact Analysis (Mandatory)
 
