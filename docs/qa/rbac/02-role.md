@@ -169,20 +169,32 @@ SELECT parent_role_id FROM roles WHERE name = 'Super Admin';
 ## 通用场景：认证状态检查
 
 ### 初始状态
-- 用户已登录管理后台
-- 页面正常显示
+- 用户未登录（无有效 session cookie）
 
 ### 目的
 验证页面正确检查认证状态，未登录或 session 失效时重定向到登录页
 
 ### 测试操作流程
-1. 关闭浏览器
-2. 重新打开浏览器，访问本页面对应的 URL
+1. 打开浏览器的隐私/无痕模式（确保无遗留 cookie）
+2. 直接访问本页面对应的 URL（如 `/dashboard/roles`）
 
 ### 预期结果
 - 页面自动重定向到 `/login`
 - 不显示 dashboard 内容
 - 登录后可正常访问原页面
+
+### 注意事项
+> **Session 为持久化 Cookie（maxAge: 8 小时）**：关闭浏览器不会清除 session。
+> 要测试未认证状态，请使用以下方法之一：
+> 1. 使用浏览器隐私/无痕模式（推荐）
+> 2. 手动点击「Sign out」退出登录
+> 3. 手动清除 `auth9_session` cookie
+> 4. 等待 session 过期（8 小时）
+>
+> | 症状 | 原因 | 解决方法 |
+> |------|------|----------|
+> | 关闭浏览器后重新打开仍可访问 Dashboard | 持久化 Cookie 未过期 | 使用无痕模式或手动清除 Cookie |
+> | 清除 Cookie 后页面未跳转 | 浏览器缓存 | 强制刷新（Ctrl+Shift+R） |
 
 ---
 

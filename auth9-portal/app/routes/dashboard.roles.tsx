@@ -503,6 +503,12 @@ export default function RolesPage() {
                         <div className="flex items-center gap-2">
                           <span className={`w-2 h-2 rounded-full ${level === 0 ? 'bg-[var(--accent-blue)]' : 'bg-gray-400'}`} />
                           <span className="font-medium text-[var(--text-primary)]">{role.name}</span>
+                          {role.parent_role_id && (() => {
+                            const parent = entry.roles.find(r => r.id === role.parent_role_id);
+                            return parent ? (
+                              <span className="text-[var(--text-secondary)] text-xs italic">inherits from {parent.name}</span>
+                            ) : null;
+                          })()}
                           {role.description && (
                             <span className="text-[var(--text-secondary)] text-xs">({role.description})</span>
                           )}

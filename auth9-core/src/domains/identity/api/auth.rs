@@ -481,10 +481,19 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                         .await
                     {
                         Ok(modified_context) => {
-                            tracing::info!(
-                                "PostLogin actions executed for user {} via token endpoint",
-                                user.id
-                            );
+                            if modified_context.claims.is_some() {
+                                tracing::info!(
+                                    "PostLogin actions executed with custom claims for user {} (tenant {}) via token endpoint",
+                                    user.id,
+                                    tenant_id
+                                );
+                            } else {
+                                tracing::debug!(
+                                    "PostLogin action trigger completed for user {} (tenant {}), no claims modified",
+                                    user.id,
+                                    tenant_id
+                                );
+                            }
                             modified_context.claims
                         }
                         Err(e) => {
@@ -733,6 +742,15 @@ pub async fn tenant_token<S: HasServices>(
         Err(_) => state.tenant_service().get_by_slug(tenant_ref).await?.id,
     };
 
+    // Verify tenant is active before allowing token exchange
+    let tenant = state.tenant_service().get(tenant_id).await?;
+    if tenant.status != crate::domain::TenantStatus::Active {
+        return Err(AppError::Forbidden(format!(
+            "Tenant is not active (status: '{}')",
+            tenant.status
+        )));
+    }
+
     state
         .rbac_service()
         .ensure_tenant_membership(user_id, tenant_id)
@@ -762,13 +780,14 @@ pub async fn tenant_token<S: HasServices>(
         .await?;
 
     let jwt_manager = state.jwt_manager();
-    let access_token = jwt_manager.create_tenant_access_token(
+    let access_token = jwt_manager.create_tenant_access_token_with_session(
         *user_id,
         &identity_claims.email,
         *tenant_id,
         service_id,
         user_roles.roles,
         user_roles.permissions,
+        identity_claims.sid.clone(),
     )?;
     let refresh_token = jwt_manager.create_refresh_token(*user_id, *tenant_id, service_id)?;
 

@@ -100,7 +100,7 @@ pub async fn require_auth_middleware(
             .jwt_manager
             .verify_tenant_access_token_strict(token, &auth_state.tenant_access_allowed_audiences)
         {
-            session_id = Some(claims.sub.clone());
+            session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
             Some("tenant_access")
         } else {
             None
@@ -113,7 +113,7 @@ pub async fn require_auth_middleware(
             .jwt_manager
             .verify_tenant_access_token(token, None)
     } {
-        session_id = Some(claims.sub.clone());
+        session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
         Some("tenant_access")
     } else {
         None

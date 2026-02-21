@@ -183,7 +183,7 @@ pub struct KeycloakRealm {
 
 /// Keycloak SMTP server configuration
 /// Note: All fields in Keycloak Admin API are string types
-#[derive(Debug, Clone, Serialize, Deserialize, Default, PartialEq)]
+#[derive(Clone, Serialize, Deserialize, Default, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SmtpServerConfig {
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -204,6 +204,22 @@ pub struct SmtpServerConfig {
     pub ssl: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub starttls: Option<String>,
+}
+
+impl std::fmt::Debug for SmtpServerConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("SmtpServerConfig")
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("from", &self.from)
+            .field("from_display_name", &self.from_display_name)
+            .field("auth", &self.auth)
+            .field("user", &self.user.as_ref().map(|_| "<REDACTED>"))
+            .field("password", &self.password.as_ref().map(|_| "<REDACTED>"))
+            .field("ssl", &self.ssl)
+            .field("starttls", &self.starttls)
+            .finish()
+    }
 }
 
 /// Realm update parameters

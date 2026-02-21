@@ -111,10 +111,14 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 # 预期: 400 Invalid type for timeout
 
 # 布尔字段混淆
+# 注意: PUT /api/v1/users/me 仅接受 display_name 和 avatar_url，
+# mfa_enabled 不在该端点的输入字段中，未知字段会被 serde 静默忽略（预期行为）。
+# 应使用包含布尔字段的端点进行测试，例如 registration_allowed:
 curl -X PUT -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/users/me \
-  -d '{"mfa_enabled": "true"}'
-# 预期: 布尔 true 而非字符串 "true"
+  http://localhost:8080/api/v1/system/branding \
+  -H "Content-Type: application/json" \
+  -d '{"allow_registration": "true"}'
+# 预期: 400/422 类型错误（布尔字段不接受字符串）
 
 # 数组注入
 curl -X POST -H "Authorization: Bearer $TOKEN" \

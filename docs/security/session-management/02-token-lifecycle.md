@@ -140,51 +140,74 @@ curl -X POST http://localhost:8080/api/v1/auth/revoke \
 ## 场景 3：Token 黑名单
 
 ### 前置条件
-- 有效的 Token
+- 有效的 Identity Token（通过 Keycloak 登录获取）
+- 已通过 Token Exchange 获取 Tenant Access Token
 
 ### 攻击目标
-验证 Token 吊销/黑名单机制
+验证 Token 吊销/黑名单机制 - 登出后所有 Token（Identity 和 Tenant Access）立即失效
+
+### 实现说明
+
+Auth9 使用 `sid`（Session ID）作为黑名单键：
+- Identity Token 包含 `sid` 字段（来自 Keycloak 会话）
+- Tenant Access Token 继承 Identity Token 的 `sid`（通过 Token Exchange 传播）
+- 登出时，`sid` 被加入 Redis 黑名单，所有同一会话的 Token 立即失效
+- 黑名单 TTL = Token 剩余有效期（自动清理）
+
+**关键**: `POST /api/v1/auth/logout` 需要 **Bearer Token**（Identity Token），GET 版本仅做重定向不执行撤销。
 
 ### 攻击步骤
-1. 获取 Token
-2. 主动登出
-3. 使用登出后的 Token
-4. 检查黑名单实现
+1. 通过 Keycloak 登录获取 Identity Token
+2. 通过 Token Exchange 获取 Tenant Access Token
+3. 验证两种 Token 都有效（200 OK）
+4. 调用 `POST /api/v1/auth/logout`（带 Bearer Token）
+5. 使用已登出的 Identity Token 和 Tenant Access Token 再次访问 API
 
 ### 预期安全行为
-- 登出后 Token 立即失效
-- 黑名单检查高效
-- TTL 与 Token 过期一致
+- `POST /api/v1/auth/logout` 返回 302 重定向到 Keycloak（同时完成 session 撤销）
+- 登出后 Identity Token 访问返回 401 `"Token has been revoked"`
+- 登出后 Tenant Access Token 访问返回 401 `"Token has been revoked"`
+- Redis 黑名单高效检查（fail-closed: Redis 不可用时返回 503）
+- TTL 与 Token 剩余过期时间一致
 
 ### 验证方法
 ```bash
-# 获取 Token
-TOKEN=$(get_access_token)
+# 1. 获取 Identity Token（通过 Keycloak 登录流程）
+IDENTITY_TOKEN=$(... # 通过 OIDC 登录获取)
 
-# 验证 Token 有效
-curl -H "Authorization: Bearer $TOKEN" \
+# 2. Token Exchange 获取 Tenant Access Token
+TENANT_TOKEN=$(curl -s -X POST http://localhost:8080/api/v1/auth/tenant-token \
+  -H "Authorization: Bearer $IDENTITY_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":"<tenant-id>","service_id":"auth9-portal"}' | jq -r .access_token)
+
+# 3. 验证 Tenant Access Token 有效
+curl -H "Authorization: Bearer $TENANT_TOKEN" \
   http://localhost:8080/api/v1/users/me
 # 预期: 200
 
-# 登出
-curl -X POST -H "Authorization: Bearer $TOKEN" \
+# 4. 登出（必须用 POST + Bearer Token）
+curl -X POST -H "Authorization: Bearer $IDENTITY_TOKEN" \
   http://localhost:8080/api/v1/auth/logout
+# 预期: 302 重定向到 Keycloak
 
-# 使用已登出的 Token
-curl -H "Authorization: Bearer $TOKEN" \
+# 5. 使用已登出的 Tenant Access Token（应失败）
+curl -H "Authorization: Bearer $TENANT_TOKEN" \
   http://localhost:8080/api/v1/users/me
-# 预期: 401 {"error": "token_revoked"}
+# 预期: 401 {"error": "Token has been revoked"}
 
-# 检查 Redis 黑名单
-redis-cli KEYS "blacklist:*"
-redis-cli GET "blacklist:$TOKEN_JTI"
+# 6. 检查 Redis 黑名单
+docker exec auth9-redis redis-cli KEYS "auth9:token_blacklist:*"
 ```
 
-### 修复建议
-- 使用 Redis 存储黑名单
-- TTL 等于 Token 剩余时间
-- 使用 jti (JWT ID) 作为键
-- 批量吊销支持
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 登出后 Token 仍有效 (200) | 使用了 GET /logout（仅重定向） | 改用 POST /api/v1/auth/logout 并携带 Bearer Token |
+| Tenant Access Token 登出后仍有效 | Token 缺少 sid 字段（旧版本 Token） | 重新通过 Token Exchange 获取新 Token（新版本包含 sid） |
+| 登出返回 401 | Token 已过期 | 使用有效的 Identity Token 登出 |
+| Redis 503 错误 | Redis 不可用（fail-closed 设计） | 检查 Redis 容器健康状态 |
 
 ---
 
