@@ -29,6 +29,9 @@ use auth9_core::domains::integration::service::{ActionService, WebhookService};
 use auth9_core::domains::platform::service::{
     BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
 };
+use auth9_core::domains::provisioning::service::{ScimService, ScimTokenService};
+use auth9_core::state::HasScimServices;
+use crate::support::{TestScimTokenRepository, TestScimGroupMappingRepository, TestScimLogRepository};
 use auth9_core::domains::security_observability::service::{
     AnalyticsService, SecurityDetectionService,
 };
@@ -211,6 +214,11 @@ pub struct TestAppState {
     #[allow(dead_code)]
     pub invitation_repo: Arc<TestInvitationRepository>,
     pub action_repo: Arc<TestActionRepository>,
+    // SCIM provisioning
+    pub scim_service: Arc<ScimService<TestUserRepository, TestScimGroupMappingRepository, TestScimLogRepository>>,
+    pub scim_token_service: Arc<ScimTokenService<TestScimTokenRepository>>,
+    pub scim_group_mapping_repo: Arc<TestScimGroupMappingRepository>,
+    pub scim_log_repo: Arc<TestScimLogRepository>,
 }
 
 impl TestAppState {
@@ -350,6 +358,17 @@ impl TestAppState {
         // Use None for action_engine in tests to avoid slow V8 initialization
         let action_service = Arc::new(ActionService::new(action_repo.clone(), None));
 
+        let scim_token_repo = Arc::new(TestScimTokenRepository::new());
+        let scim_group_mapping_repo = Arc::new(TestScimGroupMappingRepository::new());
+        let scim_log_repo = Arc::new(TestScimLogRepository::new());
+        let scim_token_service = Arc::new(ScimTokenService::new(scim_token_repo));
+        let scim_service = Arc::new(ScimService::new(
+            user_repo.clone(),
+            scim_group_mapping_repo.clone(),
+            scim_log_repo.clone(),
+            None, // No Keycloak in tests
+        ));
+
         Self {
             config,
             tenant_service,
@@ -387,6 +406,10 @@ impl TestAppState {
             security_alert_repo,
             invitation_repo,
             action_repo,
+            scim_service,
+            scim_token_service,
+            scim_group_mapping_repo,
+            scim_log_repo,
         }
     }
 
@@ -649,6 +672,38 @@ impl HasCache for TestAppState {
 
     fn cache(&self) -> &Self::Cache {
         &self.cache_manager
+    }
+}
+
+/// Implement HasScimServices trait for TestAppState
+impl HasScimServices for TestAppState {
+    type ScimTokenRepo = TestScimTokenRepository;
+    type ScimGroupMappingRepo = TestScimGroupMappingRepository;
+    type ScimLogRepo = TestScimLogRepository;
+
+    fn scim_service(
+        &self,
+    ) -> &ScimService<
+        <Self as HasServices>::UserRepo,
+        Self::ScimGroupMappingRepo,
+        Self::ScimLogRepo,
+    >
+    where
+        Self: HasServices,
+    {
+        &self.scim_service
+    }
+
+    fn scim_token_service(&self) -> &ScimTokenService<Self::ScimTokenRepo> {
+        &self.scim_token_service
+    }
+
+    fn scim_group_mapping_repo(&self) -> &Self::ScimGroupMappingRepo {
+        &self.scim_group_mapping_repo
+    }
+
+    fn scim_log_repo(&self) -> &Self::ScimLogRepo {
+        &self.scim_log_repo
     }
 }
 
