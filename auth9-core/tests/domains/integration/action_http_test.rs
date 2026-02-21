@@ -7,9 +7,8 @@ use crate::support::http::{
     post_json_with_auth, TestAppState,
 };
 use crate::support::{
-    create_test_action, create_test_service, create_test_tenant,
-    create_test_tenant_access_token, create_test_tenant_access_token_for_tenant,
-    MockKeycloakServer,
+    create_test_action, create_test_service, create_test_tenant, create_test_tenant_access_token,
+    create_test_tenant_access_token_for_tenant, MockKeycloakServer,
 };
 use auth9_core::api::{MessageResponse, SuccessResponse};
 use auth9_core::domain::{
@@ -293,7 +292,8 @@ async fn test_list_actions_filters_by_trigger() {
 
     // Create 2 post-login actions
     for i in 1..=2 {
-        let mut action = create_action_for_service(tenant_id, service_id, &format!("Post Login {}", i));
+        let mut action =
+            create_action_for_service(tenant_id, service_id, &format!("Post Login {}", i));
         action.trigger_id = "post-login".to_string();
         state.action_repo.add_action(action).await;
     }
@@ -421,7 +421,10 @@ async fn test_get_action_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/services/{}/actions/{}", service_id, non_existent_id),
+        &format!(
+            "/api/v1/services/{}/actions/{}",
+            service_id, non_existent_id
+        ),
         &token,
     )
     .await;
@@ -551,7 +554,10 @@ async fn test_update_action_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = patch_json_with_auth(
         &app,
-        &format!("/api/v1/services/{}/actions/{}", service_id, non_existent_id),
+        &format!(
+            "/api/v1/services/{}/actions/{}",
+            service_id, non_existent_id
+        ),
         &input,
         &token,
     )
@@ -614,7 +620,10 @@ async fn test_delete_action_returns_404() {
     let app = build_test_router(state.clone());
     let (status, _): (StatusCode, Option<MessageResponse>) = delete_json_with_auth(
         &app,
-        &format!("/api/v1/services/{}/actions/{}", service_id, non_existent_id),
+        &format!(
+            "/api/v1/services/{}/actions/{}",
+            service_id, non_existent_id
+        ),
         &token,
     )
     .await;
@@ -909,7 +918,10 @@ async fn test_get_stats_returns_200() {
     let app = build_test_router(state.clone());
     let (status, body): (StatusCode, Option<SuccessResponse<ActionStats>>) = get_json_with_auth(
         &app,
-        &format!("/api/v1/services/{}/actions/{}/stats", service_id, action_id),
+        &format!(
+            "/api/v1/services/{}/actions/{}/stats",
+            service_id, action_id
+        ),
         &token,
     )
     .await;
@@ -1462,13 +1474,15 @@ async fn test_list_actions_only_returns_own_tenant() {
 
     // Create 2 actions in tenant 1
     for i in 1..=2 {
-        let action = create_action_for_service(tenant_id_1, service_id_1, &format!("T1 Action {}", i));
+        let action =
+            create_action_for_service(tenant_id_1, service_id_1, &format!("T1 Action {}", i));
         state.action_repo.add_action(action).await;
     }
 
     // Create 3 actions in tenant 2
     for i in 1..=3 {
-        let action = create_action_for_service(tenant_id_2, service_id_2, &format!("T2 Action {}", i));
+        let action =
+            create_action_for_service(tenant_id_2, service_id_2, &format!("T2 Action {}", i));
         state.action_repo.add_action(action).await;
     }
 

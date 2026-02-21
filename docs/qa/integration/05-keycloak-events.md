@@ -1,7 +1,7 @@
-# 集成测试 - Keycloak 事件接收器测试
+# 集成测试 - Keycloak 事件接收器兼容测试（Webhook）
 
 **模块**: 集成测试
-**测试范围**: Keycloak 事件 Webhook 接收、签名验证、事件映射、安全检测联动
+**测试范围**: Keycloak 事件兼容入口（Webhook）接收、签名验证、事件映射、安全检测联动
 **场景数**: 5
 **优先级**: 中
 
@@ -9,7 +9,8 @@
 
 ## 背景说明
 
-Auth9 通过 `POST /api/v1/keycloak/events` 端点接收来自 Keycloak p2-inc/keycloak-events SPI 插件的实时事件推送。
+Auth9 当前默认事件主链路为 Redis Stream 消费（见 `integration/11-keycloak26-event-stream.md`）。
+本文档用于验证兼容入口 `POST /api/v1/keycloak/events` 在回归/应急场景下仍可正确处理事件。
 
 ### 事件类型映射
 
@@ -23,7 +24,7 @@ Auth9 通过 `POST /api/v1/keycloak/events` 端点接收来自 Keycloak p2-inc/k
 | `USER_DISABLED_BY_TEMPORARY_LOCKOUT` | `Locked` | 暴力破解锁定 |
 | `LOGOUT` / `REGISTER` / `REFRESH_TOKEN` | 忽略 | 非登录事件 |
 
-### 签名验证
+### 签名验证（仅在 `KEYCLOAK_EVENT_SOURCE=webhook` 且配置 secret 时生效）
 使用 HMAC-SHA256 签名，头部：`X-Keycloak-Signature: sha256=<hex>`
 
 ---

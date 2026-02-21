@@ -170,8 +170,8 @@ ORDER BY created_at DESC LIMIT 1;
 
 > **架构说明**: Auth9 采用 Headless Keycloak 架构，账户锁定由 Keycloak 的 Brute Force
 > Protection 执行。Auth9 负责将 `lockout_threshold` 和 `lockout_duration_mins` 同步到
-> Keycloak realm 设置。登录事件通过 Keycloak webhook 事件 SPI 异步传递到 auth9-core
-> 的 `/api/v1/keycloak/events` 端点，再触发安全检测。
+> Keycloak realm 设置。登录事件默认通过 Redis Stream 异步传递到 auth9-core 消费链路，
+> 再触发安全检测（兼容 webhook 入口用于回归）。
 
 ### 初始状态
 - 租户密码策略：
@@ -191,7 +191,7 @@ ORDER BY created_at DESC LIMIT 1;
 2. 验证 Keycloak realm 的 brute force 配置正确
 3. 通过 Auth9 登录入口触发 OIDC 流程，使用错误密码尝试 5 次
 4. 第 6 次使用正确密码尝试登录
-5. 检查 Keycloak webhook 事件是否传递到 auth9
+5. 检查 Keycloak 登录事件是否传递到 auth9（Stream 主链路）
 
 ### 验证方式
 ```bash
@@ -216,18 +216,18 @@ print('waitIncrementSeconds:', r.get('waitIncrementSeconds'))
 ### 预期结果
 - 步骤 2: Keycloak realm `bruteForceProtected=true`, `failureFactor=5`, `maxFailureWaitSeconds=1800`
 - 步骤 4: Keycloak 返回 `user_disabled` 错误（账户被 Keycloak 暂时锁定）
-- 步骤 5: Keycloak webhook 事件触发 auth9 `login_events` 和 `security_alerts` 记录
+- 步骤 5: Keycloak 登录事件触发 auth9 `login_events` 和 `security_alerts` 记录
 
 ### 预期数据状态
 ```sql
--- 检查安全告警（由 Keycloak webhook 事件触发）
+-- 检查安全告警（由 Keycloak 登录事件触发）
 SELECT alert_type, severity FROM security_alerts
 WHERE user_id = '{user_id}'
   AND alert_type = 'brute_force'
 ORDER BY created_at DESC LIMIT 1;
 -- 预期: 1 条记录，severity = 'high'
 
--- 检查登录事件（由 Keycloak webhook 事件触发）
+-- 检查登录事件（由 Keycloak 登录事件触发）
 SELECT event_type, COUNT(*) FROM login_events
 WHERE user_id = '{user_id}'
   AND created_at >= DATE_SUB(NOW(), INTERVAL 1 HOUR)
@@ -329,6 +329,6 @@ Auth9 不存储密码历史（无 password_history 表）。
 1. **Headless Keycloak 架构**：Auth9 不直接处理用户名/密码登录，所有认证通过 Keycloak OIDC 流程。`/api/v1/auth/token` 仅支持 `authorization_code`、`client_credentials`、`refresh_token` grant types，不支持 `password` grant
 2. **密码策略同步**：Auth9 配置的策略通过 `KeycloakSyncService` 同步到 Keycloak realm，包括密码复杂度、年龄限制、历史记录和暴力破解防护
 3. **密码设置方式**：使用 Keycloak 用户更新 API（GET-merge-PUT）设置密码，绕过 Keycloak 23.x `reset-password` 端点的已知 bug
-4. **登录事件来源**：登录事件通过 Keycloak p2-inc/keycloak-events SPI webhook 异步传递到 auth9-core，而非在 auth9 token 端点直接记录
+4. **登录事件来源**：登录事件默认通过 Redis Stream 异步传递到 auth9-core，而非在 auth9 token 端点直接记录
 5. **向后兼容**：现有用户的密码可能不符合新策略，但不强制立即修改
 6. **审计合规**：所有密码修改操作必须记录到 `audit_logs`

@@ -386,7 +386,11 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         context: ActionContext,
     ) -> Result<ActionContext> {
         match &self.action_engine {
-            Some(engine) => engine.execute_trigger(service_id, trigger_id, context).await,
+            Some(engine) => {
+                engine
+                    .execute_trigger(service_id, trigger_id, context)
+                    .await
+            }
             None => Ok(context),
         }
     }
@@ -417,7 +421,9 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         // Execute collected actions through the engine's single-action path
         let mut ctx = context;
         for action in actions {
-            ctx = engine.execute_single_action_with_record(&action, ctx, trigger_id).await?;
+            ctx = engine
+                .execute_single_action_with_record(&action, ctx, trigger_id)
+                .await?;
         }
         Ok(ctx)
     }
@@ -432,9 +438,9 @@ impl<R: ActionRepository + 'static> ActionService<R> {
 mod tests {
     use super::*;
     use crate::domain::{
-        Action, ActionContext, ActionContextRequest, ActionContextTenant,
-        ActionContextUser, ActionExecution, CreateActionInput, LogQueryFilter, StringUuid,
-        UpdateActionInput, UpsertActionInput,
+        Action, ActionContext, ActionContextRequest, ActionContextTenant, ActionContextUser,
+        ActionExecution, CreateActionInput, LogQueryFilter, StringUuid, UpdateActionInput,
+        UpsertActionInput,
     };
     use crate::repository::action::MockActionRepository;
     use chrono::Utc;

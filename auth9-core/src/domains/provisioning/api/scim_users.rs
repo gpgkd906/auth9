@@ -54,9 +54,10 @@ pub async fn create_user<S: ProvisioningContext>(
                 crate::error::AppError::Conflict(_) => {
                     (StatusCode::CONFLICT, ScimError::conflict(e.to_string()))
                 }
-                crate::error::AppError::BadRequest(_) | crate::error::AppError::Validation(_) => {
-                    (StatusCode::BAD_REQUEST, ScimError::bad_request(e.to_string()))
-                }
+                crate::error::AppError::BadRequest(_) | crate::error::AppError::Validation(_) => (
+                    StatusCode::BAD_REQUEST,
+                    ScimError::bad_request(e.to_string()),
+                ),
                 _ => (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     ScimError::internal(e.to_string()),
@@ -158,11 +159,7 @@ pub async fn patch_user<S: ProvisioningContext>(
         }
     };
 
-    match state
-        .scim_service()
-        .patch_user(user_id, &ctx, patch)
-        .await
-    {
+    match state.scim_service().patch_user(user_id, &ctx, patch).await {
         Ok(user) => ScimJson(user).into_response(),
         Err(e) => {
             let (status, err) = match &e {

@@ -16,6 +16,9 @@ use crate::support::{
     TestServiceRepository, TestSessionRepository, TestSystemSettingsRepository,
     TestTenantRepository, TestUserRepository, TestWebhookRepository,
 };
+use crate::support::{
+    TestScimGroupMappingRepository, TestScimLogRepository, TestScimTokenRepository,
+};
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
     Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig,
@@ -30,8 +33,6 @@ use auth9_core::domains::platform::service::{
     BrandingService, EmailService, EmailTemplateService, KeycloakSyncService, SystemSettingsService,
 };
 use auth9_core::domains::provisioning::service::{ScimService, ScimTokenService};
-use auth9_core::state::HasScimServices;
-use crate::support::{TestScimTokenRepository, TestScimGroupMappingRepository, TestScimLogRepository};
 use auth9_core::domains::security_observability::service::{
     AnalyticsService, SecurityDetectionService,
 };
@@ -42,6 +43,7 @@ use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
 use auth9_core::middleware::RateLimitState;
 use auth9_core::server::build_full_router;
+use auth9_core::state::HasScimServices;
 use auth9_core::state::{
     HasAnalytics, HasBranding, HasCache, HasDbPool, HasEmailTemplates, HasIdentityProviders,
     HasInvitations, HasPasswordManagement, HasSecurityAlerts, HasServices, HasSessionManagement,
@@ -97,6 +99,10 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
+            event_source: "redis_stream".to_string(),
+            event_stream_key: "auth9:keycloak:events".to_string(),
+            event_stream_group: "auth9-core".to_string(),
+            event_stream_consumer: "auth9-core-1".to_string(),
         },
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
@@ -215,7 +221,8 @@ pub struct TestAppState {
     pub invitation_repo: Arc<TestInvitationRepository>,
     pub action_repo: Arc<TestActionRepository>,
     // SCIM provisioning
-    pub scim_service: Arc<ScimService<TestUserRepository, TestScimGroupMappingRepository, TestScimLogRepository>>,
+    pub scim_service:
+        Arc<ScimService<TestUserRepository, TestScimGroupMappingRepository, TestScimLogRepository>>,
     pub scim_token_service: Arc<ScimTokenService<TestScimTokenRepository>>,
     pub scim_group_mapping_repo: Arc<TestScimGroupMappingRepository>,
     pub scim_log_repo: Arc<TestScimLogRepository>,
@@ -683,11 +690,7 @@ impl HasScimServices for TestAppState {
 
     fn scim_service(
         &self,
-    ) -> &ScimService<
-        <Self as HasServices>::UserRepo,
-        Self::ScimGroupMappingRepo,
-        Self::ScimLogRepo,
-    >
+    ) -> &ScimService<<Self as HasServices>::UserRepo, Self::ScimGroupMappingRepo, Self::ScimLogRepo>
     where
         Self: HasServices,
     {

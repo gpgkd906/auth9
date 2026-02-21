@@ -437,13 +437,10 @@ async fn resolve_service_tenant<S: HasServices>(
     state: &S,
     service_id: StringUuid,
 ) -> Result<StringUuid, AppError> {
-    let service = state
-        .client_service()
-        .get(*service_id)
-        .await?;
-    service.tenant_id.ok_or_else(|| {
-        AppError::NotFound("Service has no associated tenant".to_string())
-    })
+    let service = state.client_service().get(*service_id).await?;
+    service
+        .tenant_id
+        .ok_or_else(|| AppError::NotFound("Service has no associated tenant".to_string()))
 }
 
 // ============================================================

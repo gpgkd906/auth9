@@ -9,8 +9,11 @@ use sqlx::MySqlPool;
 #[async_trait]
 pub trait ServiceBrandingRepository: Send + Sync {
     async fn get_by_service_id(&self, service_id: StringUuid) -> Result<Option<ServiceBranding>>;
-    async fn upsert(&self, service_id: StringUuid, config: &BrandingConfig)
-        -> Result<ServiceBranding>;
+    async fn upsert(
+        &self,
+        service_id: StringUuid,
+        config: &BrandingConfig,
+    ) -> Result<ServiceBranding>;
     async fn delete_by_service_id(&self, service_id: StringUuid) -> Result<()>;
 }
 
@@ -27,7 +30,16 @@ impl ServiceBrandingRepositoryImpl {
 #[async_trait]
 impl ServiceBrandingRepository for ServiceBrandingRepositoryImpl {
     async fn get_by_service_id(&self, service_id: StringUuid) -> Result<Option<ServiceBranding>> {
-        let row = sqlx::query_as::<_, (String, String, String, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>)>(
+        let row = sqlx::query_as::<
+            _,
+            (
+                String,
+                String,
+                String,
+                chrono::DateTime<chrono::Utc>,
+                chrono::DateTime<chrono::Utc>,
+            ),
+        >(
             r#"
             SELECT id, service_id, CAST(config AS CHAR) as config, created_at, updated_at
             FROM service_branding

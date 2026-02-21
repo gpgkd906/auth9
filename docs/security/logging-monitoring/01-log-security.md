@@ -245,23 +245,17 @@ docker logs auth9-core 2>&1 | grep -i "REDACTED\|<REDACTED>"
 ### 验证方法
 ```bash
 # 说明：Auth9 不支持 /api/v1/auth/token + grant_type=password。
-# 通过 Keycloak 事件 webhook 模拟登录事件，验证检测逻辑与告警产出。
-WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}"
+# 当前默认链路使用 Redis Stream 注入 Keycloak 事件，验证检测逻辑与告警产出。
 
-send_signed_event() {
+send_stream_event() {
   local body="$1"
-  local signature
-  signature=$(echo -n "$body" | openssl dgst -sha256 -hmac "$WEBHOOK_SECRET" | awk '{print $NF}')
-  curl -s -o /dev/null -w "%{http_code}" \
-    -X POST http://localhost:8080/api/v1/keycloak/events \
-    -H "Content-Type: application/json" \
-    -H "X-Keycloak-Signature: sha256=$signature" \
-    -d "$body"
+  redis-cli XADD auth9:keycloak:events '*' payload "$body" >/dev/null
+  sleep 1
 }
 
 # 暴力破解检测测试
 for i in $(seq 1 6); do
-  send_signed_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"192.168.1.10\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\"}}"
+  send_stream_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"192.168.1.10\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\"}}"
   echo " - attempt $i"
   sleep 1
 done
@@ -273,7 +267,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 # 密码喷洒检测测试
 for user in user1@test.com user2@test.com user3@test.com user4@test.com user5@test.com user6@test.com; do
-  send_signed_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"203.0.113.20\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"$user\",\"email\":\"$user\"}}"
+  send_stream_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"203.0.113.20\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"$user\",\"email\":\"$user\"}}"
   echo " - $user"
   sleep 0.5
 done
@@ -284,7 +278,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 # 预期: CRITICAL 级别告警
 
 # 新设备检测测试
-send_signed_event "{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"198.51.100.88\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\",\"user_agent\":\"NewDevice/1.0 (Unknown OS)\"}}"
+send_stream_event "{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"198.51.100.88\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\",\"user_agent\":\"NewDevice/1.0 (Unknown OS)\"}}"
 
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   "http://localhost:8080/api/v1/security-alerts?type=new_device&limit=5"
@@ -292,7 +286,7 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 # 检测规避测试 - 低速攻击
 for i in $(seq 1 10); do
-  send_signed_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"192.168.1.10\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\"}}"
+  send_stream_event "{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"clientId\":\"auth9-portal\",\"userId\":\"550e8400-e29b-41d4-a716-446655440000\",\"ipAddress\":\"192.168.1.10\",\"error\":\"invalid_user_credentials\",\"time\":$(date +%s)000,\"details\":{\"username\":\"test@test.com\",\"email\":\"test@test.com\"}}"
   sleep 180  # 每 3 分钟一次
 done
 # 检查是否仍然触发告警（根据滑动窗口设计）
