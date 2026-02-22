@@ -367,6 +367,34 @@ where
             }
         };
 
+        // Verify tenant is active before allowing token exchange
+        if let Some(ref tenant_repo) = self.tenant_repo {
+            let tenant = tenant_repo
+                .find_by_id(tenant_id)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to lookup tenant: {}", e)))?
+                .ok_or_else(|| Status::not_found("Tenant not found"))?;
+            if tenant.status != crate::domain::TenantStatus::Active {
+                self.write_exchange_audit_log(
+                    Some(actor_id),
+                    "token_exchange.exchange.failed",
+                    None,
+                    serde_json::json!({
+                        "tenant_id": Uuid::from(tenant_id),
+                        "service_id": req.service_id,
+                        "reason": "tenant_not_active",
+                        "tenant_status": tenant.status.to_string()
+                    }),
+                    ip_address.clone(),
+                )
+                .await;
+                return Err(Status::permission_denied(format!(
+                    "Tenant is not active (status: '{}')",
+                    tenant.status
+                )));
+            }
+        }
+
         let user_exists = self
             .user_repo
             .find_by_id(user_id)

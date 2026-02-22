@@ -71,6 +71,9 @@ pub struct PolicyInput {
 
 pub fn enforce(config: &Config, auth: &AuthUser, input: &PolicyInput) -> PolicyResult<()> {
     // Platform admin bypass: applies to both Identity and TenantAccess tokens
+    // for tenant-scoped operations (cross-tenant access).
+    // Platform-level operations (e.g. tenant creation) use require_platform_admin_with_db
+    // which restricts email-based checks to Identity tokens only.
     if auth.token_type != TokenType::ServiceClient && config.is_platform_admin_email(&auth.email) {
         return Ok(());
     }
@@ -254,6 +257,43 @@ pub async fn require_platform_admin_with_db<S: HasServices>(
     } else {
         Err(AppError::Forbidden("Platform admin required".to_string()))
     }
+}
+
+/// Require platform admin with Identity token for platform-level mutations.
+///
+/// Unlike `require_platform_admin_with_db` (used for general admin access), this
+/// requires an Identity token for email-based platform admin checks. TenantAccess
+/// tokens are rejected because they are scoped to a specific tenant and should not
+/// grant platform-level mutation access (e.g. creating/deleting tenants).
+///
+/// TenantAccess tokens can still pass via auth9-platform tenant membership in the DB.
+pub async fn require_platform_admin_identity<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+) -> PolicyResult<()> {
+    if auth.token_type == TokenType::ServiceClient {
+        return Err(AppError::Forbidden("Platform admin required".to_string()));
+    }
+    // Email-based platform admin: only Identity tokens
+    if auth.token_type == TokenType::Identity
+        && state.config().is_platform_admin_email(&auth.email)
+    {
+        return Ok(());
+    }
+    // DB-based: check auth9-platform tenant admin membership (any token type)
+    if let Ok(user_tenants) = state
+        .user_service()
+        .get_user_tenants_with_tenant(StringUuid::from(auth.user_id))
+        .await
+    {
+        if user_tenants
+            .iter()
+            .any(|tu| tu.tenant.slug == "auth9-platform" && tu.role_in_tenant == "admin")
+        {
+            return Ok(());
+        }
+    }
+    Err(AppError::Forbidden("Platform admin required".to_string()))
 }
 
 pub async fn enforce_with_state<S: HasServices>(

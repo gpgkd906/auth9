@@ -381,6 +381,7 @@ export default function UsersPage() {
         <Input
           type="text"
           placeholder="Search by email or name..."
+          aria-label="Search users"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="flex-1"
@@ -413,14 +414,14 @@ export default function UsersPage() {
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <Button
                         variant="outline"
-                        className="min-h-11 text-[13px]"
+                        className="w-full min-h-11 text-[13px]"
                         onClick={() => setManagingTenantsUser(user)}
                       >
                         Manage Tenants
                       </Button>
                       <Button
                         variant="secondary"
-                        className="min-h-11 text-[13px]"
+                        className="w-full min-h-11 text-[13px]"
                         onClick={() => setEditingUser(user)}
                       >
                         Edit

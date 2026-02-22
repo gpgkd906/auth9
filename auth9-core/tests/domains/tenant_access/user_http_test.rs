@@ -8,7 +8,7 @@ use crate::support::http::{
 };
 use crate::support::mock_keycloak::MockKeycloakServer;
 use crate::support::{
-    create_test_identity_token_for_user, create_test_tenant_access_token,
+    create_test_identity_token_for_user, create_test_tenant, create_test_tenant_access_token,
     create_test_tenant_access_token_for_user, create_test_user,
 };
 use auth9_core::api::{MessageResponse, PaginatedResponse, SuccessResponse};
@@ -376,6 +376,10 @@ async fn test_add_user_to_tenant() {
 
     let user = create_test_user(Some(user_id));
     state.user_repo.add_user(user).await;
+
+    // Create the target tenant (required for tenant status check)
+    let tenant = create_test_tenant(Some(tenant_id));
+    state.tenant_repo.add_tenant(tenant).await;
 
     // Auth user must be owner of the target tenant
     let owner_tu = TenantUser {

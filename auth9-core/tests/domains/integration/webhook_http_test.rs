@@ -535,20 +535,15 @@ async fn test_create_webhook_tenant_not_found() {
         "enabled": true
     });
 
-    // The create_webhook handler does not validate tenant existence,
-    // so the webhook is created successfully with the given tenant_id.
-    let (status, body): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
+    // Tenant status check rejects webhooks for non-existent tenants
+    let (status, _body): (StatusCode, Option<SuccessResponse<Webhook>>) = post_json(
         &app,
         &format!("/api/v1/tenants/{}/webhooks", nonexistent_tenant_id),
         &input,
     )
     .await;
 
-    assert_eq!(status, StatusCode::OK);
-    assert!(body.is_some());
-    let webhook = body.unwrap().data;
-    assert_eq!(webhook.name, "Orphan Webhook");
-    assert_eq!(webhook.tenant_id, nonexistent_tenant_id);
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 // ============================================================================

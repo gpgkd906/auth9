@@ -659,11 +659,12 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 
     // Create SCIM provisioning services
     let scim_token_service = Arc::new(ScimTokenService::new(scim_token_repo));
-    let scim_service = Arc::new(ScimService::new(
+    let scim_service = Arc::new(ScimService::with_rbac(
         user_repo.clone(),
         scim_group_mapping_repo.clone(),
         scim_log_repo.clone(),
         Some(keycloak_client.clone()),
+        rbac_repo.clone(),
     ));
 
     // Create app state
@@ -939,7 +940,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
             None
         };
 
-        // Build server with optional TLS
+        // Build server with optional TLS and HTTP/2 hardening
         let mut server_builder = if let Some(tls) = tls_config {
             TonicServer::builder()
                 .tls_config(tls)
@@ -947,6 +948,11 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         } else {
             TonicServer::builder()
         };
+
+        // Limit metadata size to 8KB to prevent oversized-header DoS
+        server_builder = server_builder
+            .http2_max_header_list_size(8 * 1024)
+            .concurrency_limit_per_connection(64);
 
         // Add services based on configuration
         if config.grpc_security.enable_reflection {

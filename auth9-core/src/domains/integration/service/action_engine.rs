@@ -502,6 +502,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
+                        action.tenant_id,
                         action.service_id,
                         trigger_id.to_string(),
                         user_id,
@@ -543,6 +544,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
+                        action.tenant_id,
                         action.service_id,
                         trigger_id.to_string(),
                         user_id,
@@ -944,6 +946,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
+                        action.tenant_id,
                         action.service_id,
                         "test".to_string(),
                         user_id,
@@ -968,6 +971,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
+                        action.tenant_id,
                         action.service_id,
                         "test".to_string(),
                         user_id,

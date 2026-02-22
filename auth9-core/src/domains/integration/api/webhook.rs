@@ -107,6 +107,9 @@ pub async fn create_webhook<S: HasWebhooks + HasServices>(
         },
     )?;
 
+    // Block write operations on non-active tenants
+    state.tenant_service().require_active(tenant_id).await?;
+
     let webhook = state.webhook_service().create(tenant_id, input).await?;
     Ok(Json(SuccessResponse::new(webhook)))
 }

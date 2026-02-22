@@ -62,9 +62,9 @@
 - 点击后侧边栏从左侧滑入（overlay）
 
 #### 移动端（< 768px）
-- 侧边栏完全隐藏
+- 侧边栏通过 `transform: translateX(-100%)` 隐藏（**非** `display: none`，以支持滑入动画）
 - 汉堡菜单按钮必须可见
-- 点击后全屏侧边栏（覆盖整个视口）
+- 点击后全屏侧边栏（`width: 100vw`，覆盖整个视口）
 - 背景遮罩（半透明黑色，`bg-black/50`）
 - 点击遮罩关闭侧边栏
 
@@ -88,6 +88,9 @@
 ```
 
 #### JavaScript 检查
+
+> **注意**：侧边栏在移动端/平板端使用 `transform: translateX(-100%)` 隐藏（非 `display: none`），以支持平滑滑入动画。验证隐藏状态时应检查 `transform` 属性，而非 `display` 或 `visibility`。
+
 ```javascript
 // 检查侧边栏状态
 const sidebar = document.querySelector('.sidebar');
@@ -95,14 +98,21 @@ const sidebarStyles = getComputedStyle(sidebar);
 const windowWidth = window.innerWidth;
 
 console.log(`Window width: ${windowWidth}px`);
-console.log('Sidebar display:', sidebarStyles.display);
 console.log('Sidebar transform:', sidebarStyles.transform);
+console.log('Sidebar width:', sidebarStyles.width);
 
 // 检查断点行为
 if (windowWidth >= 1024) {
-  console.log('Desktop mode: Sidebar should be visible');
+  // 桌面端: transform 应为 none 或 translateX(0)
+  console.log('Desktop mode: Sidebar should be visible (transform: none)');
 } else {
-  console.log('Mobile/Tablet mode: Sidebar should be collapsible');
+  // 移动端/平板端: 默认隐藏 (translateX(-100%))，打开时 translateX(0)
+  const isHidden = sidebarStyles.transform.includes('matrix') &&
+    sidebarStyles.transform !== 'none';
+  console.log('Mobile/Tablet mode: Sidebar hidden via transform:', isHidden);
+  if (windowWidth < 768) {
+    console.log('Mobile: Sidebar should be full-width (100vw) when opened');
+  }
 }
 ```
 

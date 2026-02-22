@@ -527,6 +527,11 @@ fn normalize_config(
                 .or_insert(cert);
         }
     }
+    // Trim all config values to prevent Keycloak "Empty Space not allowed" errors
+    for value in config.values_mut() {
+        let trimmed = value.trim().to_string();
+        *value = trimmed;
+    }
     config
 }
 

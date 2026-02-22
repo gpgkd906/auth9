@@ -81,27 +81,52 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 
 ---
 
-## 场景 4：可疑 IP 告警
+## 场景 4：可疑 IP 告警（密码喷洒检测）
 
 ### 初始状态
-- 存在已知恶意 IP 黑名单
+- seed.sql 数据已加载
+- 系统中存在多个用户账号
 
 ### 目的
-验证可疑 IP 检测
+验证可疑 IP 检测（基于密码喷洒行为模式：同一 IP 在短时间内尝试登录 5+ 个不同账户）
+
+**注意**：系统**不支持 IP 黑名单功能**，可疑 IP 告警仅通过行为模式检测触发。
 
 ### 测试操作流程
-1. 从已知可疑 IP 地址登录
+1. 从同一 IP 模拟对 5 个以上不同账户的登录失败事件：
+
+```bash
+SECRET="dev-webhook-secret"
+for i in $(seq 1 6); do
+  BODY="{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"userId\":\"spray-user-$i\",\"error\":\"invalid_user_credentials\",\"ipAddress\":\"10.99.99.99\",\"details\":{\"username\":\"spray-target-$i@example.com\"}}"
+  SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+  curl -s -X POST "http://localhost:8080/api/v1/keycloak/events" \
+    -H "Content-Type: application/json" \
+    -H "x-keycloak-signature: sha256=$SIG" -d "$BODY"
+  sleep 0.5
+done
+```
+
+2. 查询安全告警表确认告警生成
 
 ### 预期结果
-- 触发可疑 IP 告警
-- 可选：登录被阻止
+- 同一 IP 对 5+ 不同账户登录失败后触发 `suspicious_ip` 告警
+- 告警严重度为 `critical`
 
 ### 预期数据状态
 ```sql
-SELECT alert_type, severity FROM security_alerts
+SELECT alert_type, severity, details FROM security_alerts
 WHERE alert_type = 'suspicious_ip' ORDER BY created_at DESC LIMIT 1;
--- 预期: severity = 'critical'
+-- 预期: severity = 'critical', details 包含 detection_reason = 'password_spray'
 ```
+
+### 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 无告警生成 | 不同账户数未达阈值（默认 5） | 确保发送 5+ 个不同 userId 的事件 |
+| 请求返回 401 | 缺少 HMAC 签名或密钥不匹配 | 检查 `x-keycloak-signature` 头和 `SECRET` 值 |
+| 事件入库但无告警 | 事件间隔超出检测窗口（默认 10 分钟） | 确保所有事件在 10 分钟内发送 |
 
 ---
 

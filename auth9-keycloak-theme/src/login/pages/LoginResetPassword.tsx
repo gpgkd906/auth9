@@ -14,7 +14,7 @@ export default function LoginResetPassword(
   props: PageProps<Extract<KcContext, { pageId: "login-reset-password.ftl" }>, I18n>
 ) {
   const { kcContext, i18n } = props;
-  const { url, realm, messagesPerField, auth } = kcContext;
+  const { url, realm, messagesPerField, auth, message } = kcContext;
   const { msg, msgStr } = i18n;
   const branding = useBrandingContext();
 
@@ -48,7 +48,14 @@ export default function LoginResetPassword(
           <p className="login-subtitle">{msg("emailInstruction")}</p>
         </div>
 
-        {/* Error Message */}
+        {/* Status Message */}
+        {message !== undefined && (
+          <GlassAlert variant={message.type === "error" ? "error" : message.type === "warning" ? "warning" : "success"}>
+            <span dangerouslySetInnerHTML={{ __html: message.summary }} />
+          </GlassAlert>
+        )}
+
+        {/* Field Error Message */}
         {messagesPerField.existsError("username") && (
           <GlassAlert variant="error">
             {messagesPerField.getFirstError("username")}

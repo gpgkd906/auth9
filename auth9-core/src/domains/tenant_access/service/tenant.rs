@@ -239,6 +239,19 @@ impl<
         Ok(tenant)
     }
 
+    /// Verify that a tenant is active. Returns an error if the tenant is not in active status.
+    /// Used to guard write operations on tenants that are suspended, inactive, or pending.
+    pub async fn require_active(&self, tenant_id: StringUuid) -> Result<()> {
+        let tenant = self.get(tenant_id).await?;
+        if tenant.status != TenantStatus::Active {
+            return Err(AppError::Forbidden(format!(
+                "Tenant is not active (status: '{}'). Write operations are not allowed on non-active tenants.",
+                tenant.status
+            )));
+        }
+        Ok(())
+    }
+
     pub async fn get_by_slug(&self, slug: &str) -> Result<Tenant> {
         let tenant = self
             .repo

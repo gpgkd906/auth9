@@ -2,7 +2,7 @@
 
 use crate::api::{
     deserialize_page, deserialize_per_page, extract_actor_id_generic, extract_ip,
-    require_platform_admin_with_db, write_audit_log_generic, MessageResponse, PaginatedResponse,
+    require_platform_admin_identity, write_audit_log_generic, MessageResponse, PaginatedResponse,
     SuccessResponse,
 };
 use crate::domain::{AddUserToTenantInput, CreateTenantInput, StringUuid, UpdateTenantInput};
@@ -183,7 +183,7 @@ pub async fn create<S: HasServices>(
     Json(input): Json<CreateTenantInput>,
 ) -> Result<impl IntoResponse> {
     // Only platform admins can create tenants
-    require_platform_admin_with_db(&state, &auth).await?;
+    require_platform_admin_identity(&state, &auth).await?;
 
     let tenant = state.tenant_service().create(input).await?;
 
@@ -264,7 +264,7 @@ pub async fn delete<S: HasServices>(
     Path(id): Path<Uuid>,
 ) -> Result<impl IntoResponse> {
     // Only platform admins can delete tenants
-    require_platform_admin_with_db(&state, &auth).await?;
+    require_platform_admin_identity(&state, &auth).await?;
 
     // Require explicit confirmation header for destructive operation
     let confirmed = headers

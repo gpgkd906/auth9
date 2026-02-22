@@ -16,9 +16,11 @@
 Auth9 接收来自 Keycloak 的 Event Webhook，并向外部系统发送 Webhook 通知：
 
 **入站 Webhook（Keycloak → Auth9）**:
-- 端点: `POST /api/v1/webhooks/keycloak`
-- 验证: `X-Webhook-Secret` 头与配置的 `KEYCLOAK_WEBHOOK_SECRET` 比较
+- 端点: `POST /api/v1/keycloak/events`
+- 验证: `X-Keycloak-Signature` 头（HMAC-SHA256 签名，格式 `sha256=<hex>`）与 `KEYCLOAK_WEBHOOK_SECRET` 计算的签名比较
+- 备用头: `X-Webhook-Signature`（兼容旧版）
 - 用途: 接收用户登录事件、管理事件等
+- **注意**: 使用常数时间比较（`hmac::verify_slice`）防止时间侧信道攻击
 
 **出站 Webhook（Auth9 → 外部系统）**:
 - 签名: HMAC-SHA256
@@ -52,56 +54,86 @@ Webhook 伪造可导致：虚假用户事件注入、安全告警绕过、业务
 - 使用常数时间比较防止时间侧信道
 - 暴力破解签名有速率限制
 
+### 前置条件（重要）
+
+**必须确保 `KEYCLOAK_WEBHOOK_SECRET` 已配置**，否则签名验证不会启用。
+
+Docker 默认配置中已在 `docker-compose.yml` 中设置：
+```yaml
+KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
+```
+
+如需手动验证：
+```bash
+# 确认环境变量已生效
+docker exec auth9-core env | grep KEYCLOAK_WEBHOOK_SECRET
+# 预期输出: KEYCLOAK_WEBHOOK_SECRET=dev-webhook-secret-change-in-production
+```
+
 ### 验证方法
 ```bash
+# 设置 webhook secret（与 docker-compose.yml 一致）
+export KEYCLOAK_WEBHOOK_SECRET="dev-webhook-secret-change-in-production"
+
 # Keycloak 事件 payload
 EVENT='{"type":"LOGIN","realmId":"auth9","userId":"test-user","time":1706000000}'
 
+# 注意: 正确的端点是 /api/v1/keycloak/events（不是 /api/v1/webhooks/keycloak）
+# 注意: 签名头是 X-Keycloak-Signature（不是 X-Webhook-Secret）
+# 签名格式: sha256=<hex-encoded-hmac-sha256>
+
 # 无签名头
 curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:8080/api/v1/webhooks/keycloak \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
   -d "$EVENT"
-# 预期: 401 或 403
+# 预期: 401 (Missing webhook signature)
 
 # 空签名
 curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:8080/api/v1/webhooks/keycloak \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: " \
+  -H "X-Keycloak-Signature: " \
   -d "$EVENT"
-# 预期: 401 或 403
+# 预期: 401 (Missing webhook signature)
 
 # 错误签名
 curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:8080/api/v1/webhooks/keycloak \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: wrong-secret-value" \
+  -H "X-Keycloak-Signature: sha256=0000000000000000000000000000000000000000000000000000000000000000" \
   -d "$EVENT"
-# 预期: 401 或 403
+# 预期: 401 (Invalid webhook signature)
+
+# 正确签名（验证合法请求可通过）
+SIGNATURE=$(echo -n "$EVENT" | openssl dgst -sha256 -hmac "$KEYCLOAK_WEBHOOK_SECRET" | awk '{print $2}')
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
+  -H "Content-Type: application/json" \
+  -H "X-Keycloak-Signature: sha256=$SIGNATURE" \
+  -d "$EVENT"
+# 预期: 204 (No Content - 事件已接受)
 
 # 时间侧信道测试
-# 发送多个请求，密钥第一个字符正确 vs 全部错误
-# 比较响应时间，如果差异显著则存在时间侧信道
 python3 << 'PYEOF'
 import requests, time, statistics
 
-url = "http://localhost:8080/api/v1/webhooks/keycloak"
+url = "http://localhost:8080/api/v1/keycloak/events"
 headers = {"Content-Type": "application/json"}
 event = '{"type":"LOGIN","realmId":"auth9"}'
 
-# 全错密钥
+# 全错签名
 times_wrong = []
 for _ in range(100):
     start = time.perf_counter()
-    requests.post(url, headers={**headers, "X-Webhook-Secret": "AAAA"}, data=event)
+    requests.post(url, headers={**headers, "X-Keycloak-Signature": "sha256=0000000000000000000000000000000000000000000000000000000000000000"}, data=event)
     times_wrong.append(time.perf_counter() - start)
 
-# 部分正确密钥（假设第一个字符正确）
+# 部分正确签名
 times_partial = []
 for _ in range(100):
     start = time.perf_counter()
-    requests.post(url, headers={**headers, "X-Webhook-Secret": "correct-first-char-rest-wrong"}, data=event)
+    requests.post(url, headers={**headers, "X-Keycloak-Signature": "sha256=ff00000000000000000000000000000000000000000000000000000000000000"}, data=event)
     times_partial.append(time.perf_counter() - start)
 
 print(f"Wrong: mean={statistics.mean(times_wrong)*1000:.2f}ms, stdev={statistics.stdev(times_wrong)*1000:.2f}ms")
@@ -109,6 +141,14 @@ print(f"Partial: mean={statistics.mean(times_partial)*1000:.2f}ms, stdev={statis
 # 预期: 两者响应时间无显著差异（常数时间比较）
 PYEOF
 ```
+
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 所有请求返回 204 | `KEYCLOAK_WEBHOOK_SECRET` 未配置 | 在 docker-compose.yml 或 .env 中设置 |
+| 404 Not Found | 端点路径错误 | 使用 `/api/v1/keycloak/events`（不是 `/api/v1/webhooks/keycloak`） |
+| 正确签名仍返回 401 | 签名格式错误 | 确保格式为 `sha256=<hex>`，使用 HMAC-SHA256 |
 
 ### 修复建议
 - 使用 `hmac::verify` 或等效的常数时间比较
@@ -140,49 +180,67 @@ PYEOF
 - 重放的事件不产生重复业务操作
 - 重放尝试记录日志
 
+### 前置条件（重要）
+
+**必须确保 `KEYCLOAK_WEBHOOK_SECRET` 已配置**，否则签名验证不会启用。Docker 默认配置已设置为 `dev-webhook-secret-change-in-production`。
+
+**必须确保 Redis 正常运行**，否则去重机制使用内存缓存（仅进程内有效）。
+
+**事件 payload 必须包含 `id` 字段**，否则去重机制不会生效（`id` 是可选字段）。
+
 ### 验证方法
 ```bash
-# 获取合法 Webhook 响应
-# (需要从 Keycloak 实际发出或使用正确的 secret)
-VALID_SECRET="$KEYCLOAK_WEBHOOK_SECRET"
-EVENT='{"type":"LOGIN","realmId":"auth9","userId":"test-user","time":1706000000,"id":"event-123"}'
+# 重要: 必须先定义 EVENT，再计算签名（顺序不可颠倒）
+VALID_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}"
 
-# 使用正确 secret 发送（模拟合法请求）
+# 使用当前时间戳，确保事件不过期（5 分钟窗口）
+CURRENT_TIME=$(date +%s)
+EVENT="{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"userId\":\"test-user\",\"time\":${CURRENT_TIME},\"id\":\"event-replay-test-123\"}"
+
+# 计算签名（必须在 EVENT 定义之后）
+VALID_SIGNATURE=$(echo -n "$EVENT" | openssl dgst -sha256 -hmac "$VALID_SECRET" | awk '{print $2}')
+
+# 第一次发送（应成功）
 curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:8080/api/v1/webhooks/keycloak \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: $VALID_SECRET" \
+  -H "X-Keycloak-Signature: sha256=$VALID_SIGNATURE" \
   -d "$EVENT"
-# 预期: 200
+# 预期: 204 (No Content - 事件已接受)
 
-# 立即重放（应被去重或接受但幂等）
+# 立即重放同一事件（应被 Redis 去重拒绝）
 curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:8080/api/v1/webhooks/keycloak \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: $VALID_SECRET" \
+  -H "X-Keycloak-Signature: sha256=$VALID_SIGNATURE" \
   -d "$EVENT"
-# 预期: 200 (幂等处理) 或 409 (已处理)
+# 预期: 204 (幂等返回，但不执行业务逻辑 - 日志显示 "Duplicate webhook event detected")
 
-# 发送过期事件（timestamp 很旧）
+# 发送过期事件（timestamp 很旧，超出 5 分钟窗口）
 OLD_EVENT='{"type":"LOGIN","realmId":"auth9","userId":"test-user","time":1600000000,"id":"event-old"}'
+OLD_SIGNATURE=$(echo -n "$OLD_EVENT" | openssl dgst -sha256 -hmac "$VALID_SECRET" | awk '{print $2}')
 curl -s -o /dev/null -w "%{http_code}" \
-  -X POST http://localhost:8080/api/v1/webhooks/keycloak \
+  -X POST http://localhost:8080/api/v1/keycloak/events \
   -H "Content-Type: application/json" \
-  -H "X-Webhook-Secret: $VALID_SECRET" \
+  -H "X-Keycloak-Signature: sha256=$OLD_SIGNATURE" \
   -d "$OLD_EVENT"
-# 预期: 400 或 200 但不处理（事件过期）
-
-# 检查是否产生了重复的登录事件记录
-curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
-  "http://localhost:8080/api/v1/audit?action=login&user_id=test-user&limit=10" | jq '.total'
-# 预期: 重放不增加额外记录
+# 预期: 400 (Event timestamp too old)
 ```
 
-### 修复建议
-- 事件包含唯一 ID（event_id），服务端去重
-- 事件包含时间戳，拒绝超过 5 分钟的过期事件
-- 已处理的 event_id 存储在 Redis（TTL = 1 小时）
-- 幂等处理：重复事件返回 200 但不执行业务逻辑
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 重放请求未被去重（两次都返回 204 且都执行了业务逻辑） | event payload 缺少 `id` 字段 | 确保 JSON 中包含 `"id": "event-xxx"` 字段 |
+| 签名验证未生效（所有请求都返回 204） | `KEYCLOAK_WEBHOOK_SECRET` 未配置 | 在 docker-compose.yml 中设置该环境变量 |
+| 签名不匹配（返回 401） | 签名计算在 EVENT 定义之前，或 EVENT 包含额外空白 | 先定义 EVENT，再计算签名；使用 `echo -n` 避免尾部换行 |
+| 过期事件未被拒绝 | payload 中的 `time` 字段在 5 分钟窗口内 | 使用明确的旧时间戳（如 `1600000000`） |
+
+### 已实现的安全机制
+- **签名验证**: HMAC-SHA256 签名 + 常数时间比较（防时间侧信道）
+- **时间戳验证**: 拒绝超过 5 分钟的过期事件
+- **事件去重**: Redis SETNX（TTL=1h）+ 内存缓存降级
+- **幂等处理**: 重复事件返回 204 但不执行业务逻辑
 
 ---
 

@@ -29,6 +29,21 @@ pub(crate) async fn require_platform_admin_with_db<S: HasServices>(
         })
 }
 
+/// Require platform admin with Identity token for platform-level mutations.
+/// TenantAccess tokens with platform admin email are rejected to prevent
+/// tenant isolation bypass via token exchange.
+pub(crate) async fn require_platform_admin_identity<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+) -> Result<()> {
+    policy::require_platform_admin_identity(state, auth)
+        .await
+        .map_err(|e| match e {
+            AppError::Forbidden(_) => AppError::Forbidden("Platform admin required".to_string()),
+            other => other,
+        })
+}
+
 /// Pagination query parameters
 #[derive(Debug, Clone, Deserialize, Serialize, ToSchema)]
 pub struct PaginationQuery {

@@ -34,6 +34,7 @@ pub trait ActionRepository: Send + Sync {
     async fn record_execution(
         &self,
         action_id: StringUuid,
+        tenant_id: Option<StringUuid>,
         service_id: StringUuid,
         trigger_id: String,
         user_id: Option<StringUuid>,
@@ -296,6 +297,7 @@ impl ActionRepository for ActionRepositoryImpl {
     async fn record_execution(
         &self,
         action_id: StringUuid,
+        tenant_id: Option<StringUuid>,
         service_id: StringUuid,
         trigger_id: String,
         user_id: Option<StringUuid>,
@@ -307,13 +309,14 @@ impl ActionRepository for ActionRepositoryImpl {
 
         sqlx::query(
             r#"
-            INSERT INTO action_executions (id, action_id, service_id, trigger_id, user_id,
+            INSERT INTO action_executions (id, action_id, tenant_id, service_id, trigger_id, user_id,
                                             success, duration_ms, error_message, executed_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
             "#,
         )
         .bind(id)
         .bind(action_id)
+        .bind(tenant_id)
         .bind(service_id)
         .bind(&trigger_id)
         .bind(user_id)
