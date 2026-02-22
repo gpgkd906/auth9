@@ -103,7 +103,7 @@ export const tenantApi = {
     return handleResponse(response);
   },
 
-  update: async (id: string, input: Partial<CreateTenantInput>, accessToken?: string): Promise<{ data: Tenant }> => {
+  update: async (id: string, input: Partial<CreateTenantInput> & { status?: Tenant["status"] }, accessToken?: string): Promise<{ data: Tenant }> => {
     const response = await fetch(`${API_BASE_URL}/api/v1/tenants/${id}`, {
       method: "PUT",
       headers: getHeaders(accessToken),

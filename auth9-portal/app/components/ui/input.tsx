@@ -13,7 +13,8 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           "bg-[var(--sidebar-item-hover)] text-[var(--text-primary)]",
           "border border-[var(--glass-border-subtle)]",
           "placeholder:text-[var(--text-tertiary)]",
-          "focus:outline-none focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue-light)]",
+          "focus-visible:outline-2 focus-visible:outline-[var(--accent-blue)] focus-visible:outline-offset-2",
+          "focus:border-[var(--accent-blue)] focus:ring-2 focus:ring-[var(--accent-blue-light)]",
           "disabled:cursor-not-allowed disabled:opacity-50",
           "transition-all duration-200",
           className

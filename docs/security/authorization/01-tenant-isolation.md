@@ -101,7 +101,9 @@ ORDER BY created_at DESC LIMIT 10;
 ## 场景 2：批量操作租户泄露
 
 ### 前置条件
-- **具有列表查询权限的非平台管理员用户**（邮箱不在 `PLATFORM_ADMIN_EMAILS` 中）
+- **用户必须是非平台管理员**（邮箱不在 `PLATFORM_ADMIN_EMAILS` 中，默认不能是 `admin@auth9.local`）
+- 用户拥有 demo 租户的 Tenant Access Token
+- **⚠️ 严禁使用 Platform Admin Token 测试此场景** — Platform Admin 拥有全局绕过权限，会导致所有列表 API 返回全量数据，产生误报
 
 ### 攻击目标
 验证列表 API 是否泄露其他租户数据
@@ -111,9 +113,10 @@ ORDER BY created_at DESC LIMIT 10;
    - `GET /api/v1/users`
    - `GET /api/v1/services`
    - `GET /api/v1/roles`
-   - `GET /api/v1/audit-logs`
 2. 检查返回数据是否仅限当前租户
 3. 尝试通过分页/过滤枚举其他租户数据
+
+> **注意**: `GET /api/v1/audit-logs` 不在此场景测试范围内。审计日志 API 在策略引擎中要求 `PlatformAdmin` 权限（非平台管理员会收到 403），且审计日志按设计为全局可见（无 tenant_id 列），不适用租户隔离测试。
 
 ### 预期安全行为
 - 列表 API 自动过滤为当前租户
@@ -122,15 +125,21 @@ ORDER BY created_at DESC LIMIT 10;
 
 ### 验证方法
 ```bash
+# ⚠️ 必须使用非 Platform Admin 的普通租户用户 Token
+# 可通过 gen-test-tokens.js 生成指定用户的 tenant-access token:
+TENANT_ID="<demo租户的ID>"
+USER_ID="<非admin用户的ID>"
+TOKEN=$(.claude/skills/tools/gen-test-tokens.js tenant-access --tenant-id "$TENANT_ID" --user-id "$USER_ID")
+
 # 列出用户
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/users
 # 验证: 所有返回用户都属于当前租户
 
-# 检查审计日志
+# 列出服务
 curl -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/audit-logs
-# 验证: 仅返回当前租户的日志
+  http://localhost:8080/api/v1/services
+# 验证: 所有返回服务都属于当前租户
 
 # SQL 验证
 SELECT COUNT(*) FROM (
@@ -141,6 +150,14 @@ WHERE user_id NOT IN (
 );
 # 预期: 0
 ```
+
+### 常见误报原因
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 所有列表返回全量数据 | 使用了 Platform Admin 用户的 Token | 换用非 Platform Admin 的普通租户用户，使用 gen-test-tokens.js 生成 |
+| audit-logs 返回所有日志 | 审计日志是平台级资源，按设计对平台管理员全局可见 | 此 API 不属于租户隔离测试范围 |
+| Token 邮箱非管理员但仍绕过隔离 | Token 的 user_id 复用了管理员用户的 ID | Token 的 user_id 也不能使用管理员用户的 ID |
 
 ### 修复建议
 - 所有查询默认添加租户过滤
@@ -219,21 +236,42 @@ curl -X POST -H "Authorization: Bearer $TOKEN_A" \
 - 租户管理员仅能管理本租户
 - 平台管理员才能创建/管理租户
 - 系统设置仅平台管理员可访问
+- **平台管理员使用 TenantAccess Token（通过 token exchange 获得）不能创建/删除租户**
+  - 租户创建/删除使用 `require_platform_admin_identity` 策略，仅接受 Identity Token
+  - 这防止通过 token exchange 提升 TenantAccess Token 的权限范围
 
 ### 验证方法
 ```bash
-# 租户管理员尝试创建租户
-curl -X POST -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+# 租户管理员尝试创建租户（使用 TenantAccess Token）
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
   http://localhost:8080/api/v1/tenants \
   -d '{"name":"New Tenant","slug":"new-tenant"}'
 # 预期: 403 "Platform admin required"
 
+# 平台管理员使用 TenantAccess Token 尝试创建租户
+# （即使邮箱在 PLATFORM_ADMIN_EMAILS 中，TenantAccess Token 也无法创建租户）
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST -H "Authorization: Bearer $PLATFORM_ADMIN_TENANT_TOKEN" \
+  -H "Content-Type: application/json" \
+  http://localhost:8080/api/v1/tenants \
+  -d '{"name":"New Tenant","slug":"new-tenant"}'
+# 预期: 403 "Platform admin required"
+
+# 平台管理员使用 Identity Token 创建租户（正确方式）
+curl -s -o /dev/null -w "%{http_code}" \
+  -X POST -H "Authorization: Bearer $PLATFORM_ADMIN_IDENTITY_TOKEN" \
+  -H "Content-Type: application/json" \
+  http://localhost:8080/api/v1/tenants \
+  -d '{"name":"New Tenant","slug":"new-tenant"}'
+# 预期: 201 Created
+
 # 租户管理员尝试访问系统设置
-curl -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
+curl -s -o /dev/null -w "%{http_code}" \
+  -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
   http://localhost:8080/api/v1/system/email
 # 预期: 403
-
-# 验证权限矩阵
 ```
 
 ### 修复建议

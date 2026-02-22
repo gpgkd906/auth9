@@ -47,27 +47,40 @@ Auth9 包含多个关键业务流程，攻击者可能尝试篡改流程状态�
 - 交换操作有审计日志
 
 ### 验证方法
+
+> **环境说明**: Docker 环境中 gRPC 通过 nginx mTLS 代理暴露（`localhost:50051`），
+> 需要使用客户端证书。证书已预置于 `deploy/dev-certs/grpc/` 目录。
+> API Key 默认值：`dev-grpc-api-key`（见 docker-compose.yml）。
+
 ```bash
+# 公共变量
+CERT_DIR="deploy/dev-certs/grpc"
+API_KEY="dev-grpc-api-key"
+# 注意: gRPC reflection 默认关闭，需要指定 proto 文件
+PROTO_FLAGS="-import-path auth9-core/proto -proto auth9.proto"
+
 # 正常交换（应成功）
-grpcurl -plaintext \
+grpcurl $PROTO_FLAGS \
+  -cert $CERT_DIR/client.crt -key $CERT_DIR/client.key -cacert $CERT_DIR/ca.crt \
   -H "x-api-key: $API_KEY" \
   -d '{
     "identity_token": "'$IDENTITY_TOKEN'",
     "tenant_id": "'$MY_TENANT_ID'",
     "service_id": "'$MY_SERVICE_ID'"
   }' \
-  localhost:50051 auth9.TokenService/ExchangeToken
+  localhost:50051 auth9.TokenExchange/ExchangeToken
 # 预期: 返回 Tenant Access Token
 
 # 跨租户交换（应失败）
-grpcurl -plaintext \
+grpcurl $PROTO_FLAGS \
+  -cert $CERT_DIR/client.crt -key $CERT_DIR/client.key -cacert $CERT_DIR/ca.crt \
   -H "x-api-key: $API_KEY" \
   -d '{
     "identity_token": "'$IDENTITY_TOKEN'",
     "tenant_id": "'$OTHER_TENANT_ID'",
     "service_id": "'$OTHER_SERVICE_ID'"
   }' \
-  localhost:50051 auth9.TokenService/ExchangeToken
+  localhost:50051 auth9.TokenExchange/ExchangeToken
 # 预期: PERMISSION_DENIED - User is not a member of this tenant
 
 # 伪造 Token 交换
@@ -76,10 +89,11 @@ import jwt
 token = jwt.encode({'sub': 'admin-user-id', 'exp': 9999999999}, 'wrong-key', algorithm='HS256')
 print(token)
 ")
-grpcurl -plaintext \
+grpcurl $PROTO_FLAGS \
+  -cert $CERT_DIR/client.crt -key $CERT_DIR/client.key -cacert $CERT_DIR/ca.crt \
   -H "x-api-key: $API_KEY" \
   -d '{"identity_token": "'$FORGED_TOKEN'", "tenant_id": "any"}' \
-  localhost:50051 auth9.TokenService/ExchangeToken
+  localhost:50051 auth9.TokenExchange/ExchangeToken
 # 预期: UNAUTHENTICATED - Invalid token signature
 ```
 
@@ -117,7 +131,23 @@ grpcurl -plaintext \
 - 角色信息从服务端数据库读取，不信任 Token 中的角色
 
 ### 验证方法
+
+> **前置准备**: 邀请功能需要租户已配置 Service 和 Role。
+> 使用 **Tenant Owner Token**（非 Identity Token）访问管理 API：
+> ```bash
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+> ```
+> 如果租户尚未创建 Service，需先创建：
+> ```bash
+> curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+>   http://localhost:8080/api/v1/tenants/$TENANT_ID/services \
+>   -d '{"name": "test-service", "description": "Security test service"}'
+> ```
+
 ```bash
+# 生成 Tenant Owner Token
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+
 # 创建邀请
 INVITATION=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -177,7 +207,16 @@ curl -X POST http://localhost:8080/api/v1/invitations/accept \
 - 已删除租户的 Token 在验证时失败（或进入黑名单）
 
 ### 验证方法
+
+> **Token 要求**: 租户管理 API 需要 **Tenant Access Token** 或 **Platform Admin Token**。
+> ```bash
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+> ```
+
 ```bash
+# 生成 Tenant Owner Token
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+
 # 创建测试租户
 TENANT=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -241,7 +280,16 @@ curl -s -X POST -H "Authorization: Bearer $TOKEN" \
 - 循环检测错误信息明确
 
 ### 验证方法
+
+> **前置准备**: 需要先创建 Service 才能创建 Role。使用 Tenant Owner Token：
+> ```bash
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+> ```
+
 ```bash
+# 生成 Tenant Owner Token
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+
 # 创建三个角色
 ROLE_A=$(curl -s -X POST -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -302,7 +350,16 @@ time curl -H "Authorization: Bearer $TOKEN" \
 - 安全设置变更触发告警通知
 
 ### 验证方法
+
+> **Token 要求**: 系统设置 API 通常需要 Platform Admin 权限。
+> ```bash
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+> ```
+
 ```bash
+# 生成 Token
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+
 # 尝试设置极弱密码策略
 curl -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -350,6 +407,16 @@ curl -H "Authorization: Bearer $TOKEN" \
 | 5 | 系统设置安全降级攻击 | ☐ | | | |
 
 ---
+
+## 常见问题排查
+
+| 症状 | 原因 | 修复方法 |
+|------|------|----------|
+| gRPC 连接被拒绝 / TLS handshake 失败 | Docker 环境通过 nginx mTLS 代理暴露 gRPC | 使用 `deploy/dev-certs/grpc/` 中的客户端证书：`-cert client.crt -key client.key -cacert ca.crt` |
+| `FORBIDDEN: Identity token is only allowed for...` | 使用了 Identity Token 访问管理 API | 使用 `gen-test-tokens.js tenant-owner` 生成 Tenant Access Token |
+| 邀请功能提示 "No services configured" | 租户未创建 Service，无法分配角色 | 先通过 API 创建 Service：`POST /api/v1/tenants/{tid}/services` |
+| gRPC `UNAUTHENTICATED` 无任何详细信息 | 缺少 API Key header | 添加 `-H "x-api-key: dev-grpc-api-key"` |
+| `generate-certs.sh` 不存在 | 证书已预生成提交到仓库 | 直接使用 `deploy/dev-certs/grpc/` 中的证书（有效期至 2036 年） |
 
 ## 参考资料
 

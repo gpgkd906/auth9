@@ -16,8 +16,6 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 QA_DIR="$PROJECT_ROOT/docs/qa"
 SECURITY_DIR="$PROJECT_ROOT/docs/security"
 UIUX_DIR="$PROJECT_ROOT/docs/uiux"
-ORCHESTRATOR_LAUNCHER="$PROJECT_ROOT/tools/qa-orchestrator/scripts/open-ui.sh"
-ORCHESTRATOR_CLI="$PROJECT_ROOT/tools/qa-orchestrator/scripts/run-cli.sh"
 
 # Colors for output
 GREEN='\033[0;32m'
@@ -125,29 +123,10 @@ for file, status in data.get('results', {}).items():
     return 0
 }
 
-if [[ "${1:-}" == "--orchestrator" ]]; then
-    if [[ ! -x "$ORCHESTRATOR_LAUNCHER" ]]; then
-        echo "Orchestrator launcher not found: $ORCHESTRATOR_LAUNCHER"
-        exit 1
-    fi
-    exec "$ORCHESTRATOR_LAUNCHER"
-fi
-
-if [[ "${1:-}" == "--orchestrator-cli" ]]; then
-    if [[ ! -x "$ORCHESTRATOR_CLI" ]]; then
-        echo "Orchestrator CLI not found: $ORCHESTRATOR_CLI"
-        exit 1
-    fi
-    shift
-    exec "$ORCHESTRATOR_CLI" "$@"
-fi
-
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    echo "Usage: $0 [--orchestrator] [--orchestrator-cli] [--agent <mode>] [--only-security|--only-uiux] [--resume] [cli-options]"
+    echo "Usage: $0 [--agent <mode>] [--only-security|--only-uiux] [--resume] [cli-options]"
     echo ""
     echo "Default: run all QA docs (docs/qa/, docs/security/, docs/uiux/) via minimax agent."
-    echo "  --orchestrator       Launch tools/qa-orchestrator (Tauri UI workflow)"
-    echo "  --orchestrator-cli   Run tools/qa-orchestrator in CLI automation mode"
     echo "  --agent <mode>       Agent mode: 'minimax' (default), 'opencode', 'gemini', 'kimi',"
     echo "                       'big-pickle', 'glm-air', 'glm-5', 'gpt-oss', 'kilo-minimax', 'qwen3-coder'"
     echo "  --only-security      Run only security test documents (docs/security/)"

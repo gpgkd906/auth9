@@ -247,6 +247,15 @@ impl<
             .reset_user_password(&user.keycloak_id, &input.new_password, false)
             .await?;
 
+        // Invalidate all Keycloak sessions for the user (security: revoke stolen sessions)
+        if let Err(e) = self.keycloak.logout_user(&user.keycloak_id).await {
+            tracing::warn!(
+                user_id = %user_id,
+                "Failed to invalidate Keycloak sessions after password change: {}",
+                e
+            );
+        }
+
         // Track password change timestamp
         let _ = self.user_repo.update_password_changed_at(user_id).await;
 
@@ -1235,6 +1244,16 @@ mod tests {
         Mock::given(method("PUT"))
             .and(path_regex(format!(
                 "/admin/realms/auth9/users/{}",
+                kc_user_id
+            )))
+            .respond_with(ResponseTemplate::new(204))
+            .mount(&mock_server)
+            .await;
+
+        // Mock POST logout (invalidate sessions after password change)
+        Mock::given(method("POST"))
+            .and(path(format!(
+                "/admin/realms/auth9/users/{}/logout",
                 kc_user_id
             )))
             .respond_with(ResponseTemplate::new(204))

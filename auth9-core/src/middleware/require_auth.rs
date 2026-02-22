@@ -192,6 +192,10 @@ fn is_identity_token_path_allowed(path: &str) -> bool {
         || path.starts_with("/api/v1/users/me/passkeys")
         // Platform admin endpoints use identity tokens (admin email check in handler)
         || path.starts_with("/api/v1/system/")
+        || path.starts_with("/api/v1/security/")
+        // Tenant CRUD: create/delete requires platform admin Identity token;
+        // other operations have handler-level policy enforcement
+        || path.starts_with("/api/v1/tenants")
 }
 
 /// Generate a 503 Service Unavailable response
@@ -484,18 +488,19 @@ mod tests {
     }
 
     #[test]
-    fn test_identity_token_path_denied_tenants() {
-        // Tenant management paths should NOT be allowed for identity tokens
-        // (require tenant access token obtained via token exchange)
-        assert!(!is_identity_token_path_allowed("/api/v1/tenants"));
-        assert!(!is_identity_token_path_allowed("/api/v1/tenants/some-uuid"));
-        assert!(!is_identity_token_path_allowed(
+    fn test_identity_token_path_allowed_tenants() {
+        // Tenant CRUD paths are allowed for identity tokens (platform admin operations)
+        // Handler-level policy enforcement (require_platform_admin_identity) provides
+        // the actual authorization check
+        assert!(is_identity_token_path_allowed("/api/v1/tenants"));
+        assert!(is_identity_token_path_allowed("/api/v1/tenants/some-uuid"));
+        assert!(is_identity_token_path_allowed(
             "/api/v1/tenants/some-uuid/sso/connectors"
         ));
-        assert!(!is_identity_token_path_allowed(
+        assert!(is_identity_token_path_allowed(
             "/api/v1/tenants/some-uuid/users"
         ));
-        assert!(!is_identity_token_path_allowed(
+        assert!(is_identity_token_path_allowed(
             "/api/v1/tenants/some-uuid/invitations"
         ));
     }

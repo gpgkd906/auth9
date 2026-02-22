@@ -146,7 +146,7 @@ export default function Dashboard() {
       <div className="page-backdrop" />
 
       {/* Mobile Header */}
-      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 z-30 px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
+      <header className="lg:hidden fixed top-0 left-0 right-0 h-16 z-[60] px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
         <Link to="/dashboard" className="flex items-center gap-2">
           <div className="logo-icon w-8 h-8 text-sm">A9</div>
           <span className="logo-text text-lg">Auth9</span>
@@ -175,7 +175,7 @@ export default function Dashboard() {
       {/* Sidebar - Floating Glass Card */}
       <aside
         className={cn(
-          "sidebar transition-transform duration-300 ease-in-out z-50",
+          "sidebar z-50",
           "fixed -translate-x-full lg:translate-x-0",
           isSidebarOpen && "translate-x-0"
         )}

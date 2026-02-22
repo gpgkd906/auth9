@@ -110,8 +110,9 @@ grpcurl -plaintext -d '{"access_token":"dummy"}' \
 ## 场景 2：mTLS 证书验证绕过
 
 ### 前置条件
-- gRPC 服务配置了 mTLS（修复后）
-- 攻击者获取了客户端证书
+- Docker 服务运行中（`docker compose up -d`）
+- gRPC 服务通过 nginx mTLS 代理暴露在 `localhost:50051`
+- **重要：必须从宿主机连接 `localhost:50051`（nginx mTLS 代理），不要从 Docker 容器内直接连接 `auth9-core:50051`（明文 gRPC，无 TLS）**
 
 ### 攻击目标
 验证证书链验证的正确性
@@ -120,11 +121,12 @@ grpcurl -plaintext -d '{"access_token":"dummy"}' \
 1. 尝试使用自签名证书连接：
    ```bash
    # 生成自签名证书
-   openssl req -x509 -newkey rsa:4096 -keyout client-key.pem -out client-cert.pem -days 365 -nodes
-   
-   # 尝试连接
-   grpcurl -cert client-cert.pem -key client-key.pem \
-     -cacert ca.pem localhost:50051 list
+   openssl req -x509 -newkey rsa:2048 -keyout /tmp/test-key.pem -out /tmp/test-cert.pem -days 1 -nodes -subj "/CN=test"
+
+   # 从宿主机尝试连接（必须使用 localhost:50051，即 nginx mTLS 代理）
+   grpcurl -cert /tmp/test-cert.pem -key /tmp/test-key.pem \
+     -cacert deploy/dev-certs/grpc/ca.crt localhost:50051 list
+   # 预期：400 Bad Request（nginx 拒绝未受信任的客户端证书）
    ```
 
 2. 尝试使用过期证书：
@@ -149,21 +151,31 @@ grpcurl -plaintext -d '{"access_token":"dummy"}' \
    ```
 
 ### 预期安全行为
-- 自签名证书被拒绝（除非明确信任）
+- 自签名证书被拒绝（nginx 返回 HTTP 400 Bad Request）
 - 过期证书被拒绝
 - 被吊销的证书被拒绝（需要 OCSP 或 CRL 检查）
 - 证书固定（Certificate Pinning）防止中间人攻击
-- 错误返回 `UNAVAILABLE` 或 `UNAUTHENTICATED`
+- 合法客户端证书（由 CA 签发）应能正常连接
 
 ### 验证方法
 ```bash
-# 测试证书验证
-openssl s_client -connect localhost:50051 -cert invalid-cert.pem -key invalid-key.pem
+# 1. 验证自签名证书被拒绝（预期：400 Bad Request）
+openssl req -x509 -newkey rsa:2048 -keyout /tmp/test-key.pem -out /tmp/test-cert.pem -days 1 -nodes -subj "/CN=test"
+grpcurl -cert /tmp/test-cert.pem -key /tmp/test-key.pem \
+  -cacert deploy/dev-certs/grpc/ca.crt localhost:50051 list
 
-# 检查 TLS 配置
-openssl s_client -connect localhost:50051 -tls1_2  # 应拒绝 TLS 1.2
-openssl s_client -connect localhost:50051 -tls1_3  # 应接受 TLS 1.3
+# 2. 验证合法证书可以连接（预期：成功建立连接）
+grpcurl -cert deploy/dev-certs/grpc/client.crt -key deploy/dev-certs/grpc/client.key \
+  -cacert deploy/dev-certs/grpc/ca.crt localhost:50051 list
 ```
+
+### 常见误报排查
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 自签名证书连接成功 | 直接连接了 `auth9-core:50051`（明文），绕过了 nginx mTLS 代理 | 确保连接 `localhost:50051`（nginx） |
+| 连接被拒但不是 400 | 可能是 TLS 握手失败，`-cacert` 参数使用了错误的 CA 证书 | 使用 `deploy/dev-certs/grpc/ca.crt` |
+| 从 Docker 容器内测试通过 | 容器内 `auth9-grpc-tls:50051` 指向 nginx，但 `auth9-core:50051` 是明文端口 | 测试必须使用 `auth9-grpc-tls:50051` 而非 `auth9-core:50051` |
 
 ### 修复建议
 - 使用 `tonic` 的 TLS 配置：
@@ -336,9 +348,21 @@ grpcurl -plaintext -H "X-Test: $(head -c 10M < /dev/zero | tr '\0' 'A')" \
      localhost:50051
    ```
 
+5. **超大 Metadata 头攻击**：
+   ```bash
+   # 生成 100KB 的 header 值
+   LARGE_HEADER=$(python3 -c "print('A' * 102400)")
+   grpcurl -cert client.crt -key client.key -cacert ca.crt \
+     -H "x-api-key: dev-grpc-api-key" \
+     -H "X-Large-Header: ${LARGE_HEADER}" \
+     -d '{"access_token":"dummy"}' \
+     auth9-grpc-tls:50051 auth9.TokenExchange/ValidateToken
+   ```
+
 ### 预期安全行为
 - 限制并发连接数（如 1000）
 - 限制请求体大小（如 4MB）
+- **限制 metadata 大小（8KB），超大 metadata 返回错误而非关闭连接**
 - 流式 RPC 超时机制（idle timeout）
 - 连接速率限制（rate limiting）
 - 返回 `RESOURCE_EXHAUSTED` 而不是崩溃

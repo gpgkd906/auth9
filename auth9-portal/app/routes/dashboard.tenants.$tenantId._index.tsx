@@ -6,6 +6,7 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { redirect } from "react-router";
 import { tenantApi, serviceApi, invitationApi, webhookApi, tenantServiceApi, tenantUserApi } from "~/services/api";
 import { formatErrorMessage } from "~/lib/error-messages";
@@ -74,6 +75,17 @@ export async function action({ request, params }: ActionFunctionArgs) {
       return { success: true };
     }
 
+    if (intent === "update_status") {
+      const status = formData.get("status") as string;
+      if (!["active", "inactive", "suspended", "pending"].includes(status)) {
+        return Response.json({ error: "Invalid status" }, { status: 400 });
+      }
+      await tenantApi.update(tenantId, {
+        status: status as "active" | "inactive" | "suspended" | "pending",
+      }, accessToken || undefined);
+      return { success: true, statusUpdated: true };
+    }
+
     if (intent === "update_settings") {
       const requireMfa = formData.get("require_mfa") === "true";
       await tenantApi.update(tenantId, {
@@ -95,9 +107,16 @@ export default function TenantDetailPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const settingsFetcher = useFetcher();
+  const statusFetcher = useFetcher();
 
   const isSubmitting = navigation.state === "submitting";
   const isSettingsUpdating = settingsFetcher.state !== "idle";
+  const isStatusUpdating = statusFetcher.state !== "idle";
+
+  // Optimistic status state
+  const currentStatus = statusFetcher.formData
+    ? (statusFetcher.formData.get("status") as string)
+    : tenant.status;
 
   // Optimistic MFA state
   const requireMfa = settingsFetcher.formData
@@ -174,8 +193,35 @@ export default function TenantDetailPage() {
                 </div>
                 <div className="grid grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    <Label className="text-[var(--text-tertiary)]">Status</Label>
-                    <div className="text-sm capitalize">{tenant.status}</div>
+                    <Label>Status</Label>
+                    <Select
+                      value={currentStatus}
+                      disabled={isStatusUpdating}
+                      onValueChange={(value: string) => {
+                        statusFetcher.submit(
+                          { intent: "update_status", status: value },
+                          { method: "post" }
+                        );
+                      }}
+                    >
+                      <SelectTrigger>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="active">Active</SelectItem>
+                        <SelectItem value="inactive">Inactive</SelectItem>
+                        <SelectItem value="suspended">Suspended</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {statusFetcher.data && "success" in (statusFetcher.data as Record<string, unknown>) && (
+                      <p className="text-sm text-[var(--accent-green)]">Status updated</p>
+                    )}
+                    {statusFetcher.data && "error" in (statusFetcher.data as Record<string, unknown>) && (
+                      <p className="text-sm text-[var(--accent-red)]">
+                        {String((statusFetcher.data as Record<string, unknown>).error)}
+                      </p>
+                    )}
                   </div>
                   <div className="space-y-2">
                     <Label className="text-[var(--text-tertiary)]">Created</Label>

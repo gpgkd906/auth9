@@ -107,8 +107,17 @@ curl -s "http://localhost:8080/api/v1/scim/v2/Users" \
 
 ### 测试操作流程
 
+> **重要**: 创建 SCIM Token 使用的是管理 API (`/api/v1/tenants/*`)，需要 **Tenant Access Token**，
+> 不能使用 Identity Token。使用 `gen-test-tokens.js tenant-owner` 生成：
+> ```bash
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+> ```
+
 **API 测试**:
 ```bash
+# 生成 Tenant Owner Token（管理 API 需要）
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+
 # 先创建一个 token
 RESULT=$(curl -s -X POST "http://localhost:8080/api/v1/tenants/$TENANT_ID/sso/connectors/$CONNECTOR_ID/scim/tokens" \
   -H "Authorization: Bearer $TOKEN" \
@@ -136,7 +145,7 @@ curl -s "http://localhost:8080/api/v1/scim/v2/Users" \
 ## 场景 4：有效 Token 的 last_used_at 自动更新
 
 ### 初始状态
-- 已有有效 SCIM Bearer Token
+- 已有有效 SCIM Bearer Token（通过管理 API 创建，见场景 3 的 token 创建步骤）
 
 ### 目的
 验证每次使用有效 Token 访问 SCIM 端点时，`last_used_at` 字段被自动更新
@@ -145,18 +154,27 @@ curl -s "http://localhost:8080/api/v1/scim/v2/Users" \
 
 **API 测试**:
 ```bash
-SCIM_TOKEN="{scim_bearer_token}"
-SCIM_TOKEN_ID="{scim_token_id}"
+# 步骤 1: 先通过管理 API 创建 SCIM Token
+TENANT_ID="{tenant_id}"
+CONNECTOR_ID="{connector_id}"
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
 
-# 记录初始状态
+RESULT=$(curl -s -X POST "http://localhost:8080/api/v1/tenants/$TENANT_ID/sso/connectors/$CONNECTOR_ID/scim/tokens" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"description": "last_used_at test", "expires_in_days": 30}')
+SCIM_TOKEN=$(echo $RESULT | jq -r '.token')
+SCIM_TOKEN_ID=$(echo $RESULT | jq -r '.id')
+
+# 步骤 2: 记录初始状态
 mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
   "SELECT last_used_at FROM scim_tokens WHERE id = '$SCIM_TOKEN_ID';"
 
-# 访问 SCIM 端点
+# 步骤 3: 访问 SCIM 端点
 curl -s "http://localhost:8080/api/v1/scim/v2/ServiceProviderConfig" \
   -H "Authorization: Bearer $SCIM_TOKEN" > /dev/null
 
-# 检查 last_used_at 更新
+# 步骤 4: 检查 last_used_at 更新
 mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
   "SELECT last_used_at FROM scim_tokens WHERE id = '$SCIM_TOKEN_ID';"
 ```
@@ -177,7 +195,7 @@ SELECT last_used_at FROM scim_tokens WHERE id = '{scim_token_id}';
 
 ### 初始状态
 - 前序场景已产生多条 SCIM 操作日志
-- 已有 Admin JWT Token
+- **已有 Tenant Access Token（非 Identity Token）**
 
 ### 目的
 验证管理 API 能分页查询 SCIM 操作审计日志
@@ -188,6 +206,9 @@ SELECT last_used_at FROM scim_tokens WHERE id = '{scim_token_id}';
 ```bash
 TENANT_ID="{tenant_id}"
 CONNECTOR_ID="{connector_id}"
+
+# 生成 Tenant Owner Token（管理 API 需要 Tenant Access Token）
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
 
 # 查询日志（第一页）
 curl -s "http://localhost:8080/api/v1/tenants/$TENANT_ID/sso/connectors/$CONNECTOR_ID/scim/logs?offset=0&limit=5" \
@@ -238,6 +259,15 @@ WHERE connector_id = '{connector_id}';
 ```
 
 ---
+
+## 常见问题排查
+
+| 症状 | 原因 | 修复方法 |
+|------|------|----------|
+| `FORBIDDEN: Identity token is only allowed for tenant selection and exchange` | 使用了 Identity Token（`gen-admin-token.sh`）访问管理 API | 使用 `node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID` 生成 Tenant Access Token |
+| 创建 SCIM Token 返回 `FORBIDDEN` | 同上，创建 SCIM Token 的 API 也需要 Tenant Access Token | 同上 |
+| SCIM Token 验证失败（手动插入 DB） | SCIM Token 通过 SHA-256 hash 验证，手动插入的 hash 不匹配 | 必须通过管理 API 创建 SCIM Token，API 返回原始 token 字符串 |
+| 场景 4 无法获取有效 SCIM Token | 未通过管理 API 创建 token | 先用 Tenant Owner Token 调用 `POST .../scim/tokens` 创建，保存返回的 `.token` 值 |
 
 ## 检查清单
 

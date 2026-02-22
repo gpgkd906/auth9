@@ -1,12 +1,12 @@
 //! Core SCIM service - orchestrates user/group CRUD operations
 
 use crate::domain::scim::*;
-use crate::domain::{CreateUserInput, StringUuid, UpdateUserInput, User};
+use crate::domain::{AssignRolesInput, CreateUserInput, StringUuid, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::scim_group_mapping::ScimGroupRoleMappingRepository;
 use crate::repository::scim_log::ScimProvisioningLogRepository;
-use crate::repository::UserRepository;
+use crate::repository::{RbacRepository, UserRepository};
 use chrono::{DateTime, Utc};
 use std::sync::Arc;
 
@@ -23,6 +23,7 @@ where
     group_mapping_repo: Arc<G>,
     log_repo: Arc<L>,
     keycloak: Option<KeycloakClient>,
+    rbac_repo: Option<Arc<dyn RbacRepository>>,
 }
 
 impl<U, G, L> ScimService<U, G, L>
@@ -42,6 +43,23 @@ where
             group_mapping_repo,
             log_repo,
             keycloak,
+            rbac_repo: None,
+        }
+    }
+
+    pub fn with_rbac(
+        user_repo: Arc<U>,
+        group_mapping_repo: Arc<G>,
+        log_repo: Arc<L>,
+        keycloak: Option<KeycloakClient>,
+        rbac_repo: Arc<dyn RbacRepository>,
+    ) -> Self {
+        Self {
+            user_repo,
+            group_mapping_repo,
+            log_repo,
+            keycloak,
+            rbac_repo: Some(rbac_repo),
         }
     }
 
@@ -517,12 +535,17 @@ where
             .find(|m| m.id == group_id)
             .ok_or_else(|| AppError::NotFound(format!("Group {} not found", group_id)))?;
 
+        // Resolve members from user_tenant_roles via RBAC repository
+        let members = self
+            .resolve_group_members(ctx.tenant_id, mapping.role_id, ctx)
+            .await;
+
         Ok(ScimGroup {
             schemas: vec![ScimGroup::SCHEMA.to_string()],
             id: Some(mapping.id.to_string()),
             external_id: Some(mapping.scim_group_id.clone()),
             display_name: mapping.scim_group_display_name.clone().unwrap_or_default(),
-            members: vec![], // Members would need to be resolved from user_tenant_roles
+            members,
             meta: Some(ScimMeta {
                 resource_type: "Group".to_string(),
                 created: Some(mapping.created_at.to_rfc3339()),
@@ -539,12 +562,80 @@ where
         ctx: &ScimRequestContext,
         patch: ScimPatchOp,
     ) -> Result<ScimGroup> {
-        // For now, just acknowledge the patch - member management requires RBAC integration
+        // Find the group mapping to get the role_id
+        let mappings = self
+            .group_mapping_repo
+            .list_by_connector(ctx.connector_id)
+            .await?;
+        let mapping = mappings
+            .iter()
+            .find(|m| m.id == group_id)
+            .ok_or_else(|| AppError::NotFound(format!("Group {} not found", group_id)))?;
+
         for operation in &patch.operations {
             let op = operation.op.to_lowercase();
             match op.as_str() {
-                "add" | "replace" | "remove" => {
-                    // Log the operation for now
+                "add" | "replace" => {
+                    let is_members = operation
+                        .path
+                        .as_deref()
+                        .map(|p| p.eq_ignore_ascii_case("members"))
+                        .unwrap_or(false);
+
+                    if is_members {
+                        if let Some(value) = &operation.value {
+                            let member_refs = self.parse_member_values(value);
+                            for member_id in member_refs {
+                                self.add_member_to_group(
+                                    ctx.tenant_id,
+                                    mapping.role_id,
+                                    &member_id,
+                                )
+                                .await?;
+                            }
+                        }
+                    }
+
+                    tracing::info!(
+                        "SCIM Group PATCH: op={}, path={:?}, group_id={}",
+                        op,
+                        operation.path,
+                        group_id
+                    );
+                }
+                "remove" => {
+                    let is_members = operation
+                        .path
+                        .as_deref()
+                        .map(|p| p.starts_with("members"))
+                        .unwrap_or(false);
+
+                    if is_members {
+                        // Parse member ID from path like "members[value eq \"user-id\"]"
+                        // or from value array
+                        if let Some(value) = &operation.value {
+                            let member_refs = self.parse_member_values(value);
+                            for member_id in member_refs {
+                                self.remove_member_from_group(
+                                    ctx.tenant_id,
+                                    mapping.role_id,
+                                    &member_id,
+                                )
+                                .await?;
+                            }
+                        } else if let Some(path) = &operation.path {
+                            // Extract ID from filter path: members[value eq "uuid"]
+                            if let Some(member_id) = Self::extract_member_id_from_path(path) {
+                                self.remove_member_from_group(
+                                    ctx.tenant_id,
+                                    mapping.role_id,
+                                    &member_id,
+                                )
+                                .await?;
+                            }
+                        }
+                    }
+
                     tracing::info!(
                         "SCIM Group PATCH: op={}, path={:?}, group_id={}",
                         op,
@@ -565,6 +656,150 @@ where
             .await;
 
         self.get_group(group_id, ctx).await
+    }
+
+    /// Parse member values from SCIM patch operation value
+    fn parse_member_values(&self, value: &serde_json::Value) -> Vec<String> {
+        let mut ids = Vec::new();
+        match value {
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    if let Some(v) = item.get("value").and_then(|v| v.as_str()) {
+                        ids.push(v.to_string());
+                    }
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                if let Some(v) = obj.get("value").and_then(|v| v.as_str()) {
+                    ids.push(v.to_string());
+                }
+            }
+            _ => {}
+        }
+        ids
+    }
+
+    /// Extract member ID from SCIM filter path like `members[value eq "uuid"]`
+    fn extract_member_id_from_path(path: &str) -> Option<String> {
+        // Pattern: members[value eq "uuid"]
+        let start = path.find("eq \"").or_else(|| path.find("eq \""))?;
+        let after_eq = &path[start + 4..];
+        let end = after_eq.find('"')?;
+        Some(after_eq[..end].to_string())
+    }
+
+    /// Add a member (user) to a group (assign role)
+    async fn add_member_to_group(
+        &self,
+        tenant_id: StringUuid,
+        role_id: StringUuid,
+        member_user_id: &str,
+    ) -> Result<()> {
+        let rbac = match &self.rbac_repo {
+            Some(r) => r,
+            None => {
+                tracing::warn!("SCIM Group member add skipped: RBAC repository not configured");
+                return Ok(());
+            }
+        };
+
+        let user_id = StringUuid::parse_str(member_user_id)
+            .map_err(|_| AppError::BadRequest(format!("Invalid member ID: {}", member_user_id)))?;
+
+        let input = AssignRolesInput {
+            user_id: uuid::Uuid::from(user_id),
+            tenant_id: uuid::Uuid::from(tenant_id),
+            role_ids: vec![uuid::Uuid::from(role_id)],
+        };
+
+        rbac.assign_roles_to_user(&input, None).await?;
+
+        tracing::info!(
+            user_id = %member_user_id,
+            role_id = %role_id,
+            "SCIM: Added member to group (role assigned)"
+        );
+
+        Ok(())
+    }
+
+    /// Remove a member (user) from a group (remove role)
+    async fn remove_member_from_group(
+        &self,
+        tenant_id: StringUuid,
+        role_id: StringUuid,
+        member_user_id: &str,
+    ) -> Result<()> {
+        let rbac = match &self.rbac_repo {
+            Some(r) => r,
+            None => {
+                tracing::warn!("SCIM Group member remove skipped: RBAC repository not configured");
+                return Ok(());
+            }
+        };
+
+        let user_id = StringUuid::parse_str(member_user_id)
+            .map_err(|_| AppError::BadRequest(format!("Invalid member ID: {}", member_user_id)))?;
+
+        let tenant_user_id = rbac
+            .find_tenant_user_id(user_id, tenant_id)
+            .await?
+            .ok_or_else(|| {
+                AppError::NotFound(format!("User {} not found in tenant", member_user_id))
+            })?;
+
+        rbac.remove_role_from_user(tenant_user_id, role_id).await?;
+
+        tracing::info!(
+            user_id = %member_user_id,
+            role_id = %role_id,
+            "SCIM: Removed member from group (role removed)"
+        );
+
+        Ok(())
+    }
+
+    /// Resolve group members by finding users with the mapped role in the tenant
+    async fn resolve_group_members(
+        &self,
+        tenant_id: StringUuid,
+        role_id: StringUuid,
+        ctx: &ScimRequestContext,
+    ) -> Vec<ScimMember> {
+        let rbac = match &self.rbac_repo {
+            Some(r) => r,
+            None => return vec![],
+        };
+
+        // Look up the role name for this role_id
+        let role = match rbac.find_role_by_id(role_id).await {
+            Ok(Some(r)) => r,
+            _ => return vec![],
+        };
+
+        // Get all tenant users and check who has this role
+        let users = match self.user_repo.find_tenant_users(tenant_id, 0, 1000).await {
+            Ok(users) => users,
+            Err(_) => return vec![],
+        };
+
+        let mut members = Vec::new();
+        for user in &users {
+            if let Ok(roles_in_tenant) = rbac
+                .find_user_roles_in_tenant(user.id, tenant_id)
+                .await
+            {
+                if roles_in_tenant.roles.iter().any(|r| r == &role.name) {
+                    members.push(ScimMember {
+                        value: user.id.to_string(),
+                        ref_uri: Some(format!("{}/Users/{}", ctx.base_url, user.id)),
+                        display: user.display_name.clone(),
+                    });
+                }
+            }
+        }
+
+        members
     }
 
     /// Delete a SCIM group mapping

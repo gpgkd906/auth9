@@ -160,7 +160,7 @@ function CopyValue({ value, fieldId }: { value: string; fieldId: string }) {
 
     return (
         <div className="flex items-center gap-2 min-w-0">
-            <code className="flex-1 min-w-0 font-mono text-sm text-[var(--text-primary)] break-all select-all whitespace-normal">{value}</code>
+            <code className="flex-1 min-w-0 font-mono text-sm text-[var(--text-primary)] break-all [word-break:break-all] select-all whitespace-normal">{value}</code>
             <Button
                 variant="ghost"
                 className="h-11 min-w-11 px-2 shrink-0 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] sm:h-8 sm:min-w-8 sm:px-2"
@@ -235,7 +235,7 @@ function IntegrationTab({ integration }: { integration: ServiceIntegrationInfo }
                                         <Label className="text-xs text-[var(--text-tertiary)]">Client Secret</Label>
                                         {client.client_secret ? (
                                             <div className="flex items-center gap-2 min-w-0">
-                                                <code className="flex-1 min-w-0 font-mono text-sm text-[var(--text-primary)] break-all select-all whitespace-normal">
+                                                <code className="flex-1 min-w-0 font-mono text-sm text-[var(--text-primary)] break-all [word-break:break-all] select-all whitespace-normal">
                                                     {revealedSecrets.has(client.client_id) ? client.client_secret : "••••••••••••••••••••••••"}
                                                 </code>
                                                 <Button
@@ -578,10 +578,9 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
                 </CardHeader>
                 <CardContent>
                     <Form method="post" className="space-y-6">
-                        <input type="hidden" name="intent" value="update_branding" />
 
                         {/* Company Identity */}
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                             <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Company Identity</h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="space-y-2">
@@ -621,7 +620,7 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
                         </div>
 
                         {/* Login Options */}
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                             <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Login Options</h3>
                             <div className="flex items-center justify-between">
                                 <div className="space-y-0.5">
@@ -647,7 +646,7 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
                         </div>
 
                         {/* Colors */}
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                             <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Colors</h3>
                             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                                 <ColorPicker
@@ -682,7 +681,7 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
                         </div>
 
                         {/* Custom CSS */}
-                        <div className="space-y-4">
+                        <div className="space-y-2">
                             <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">
                                 Custom CSS
                                 <span className="font-normal text-[var(--text-secondary)] ml-2">(Advanced)</span>
@@ -992,7 +991,7 @@ export default function ServiceDetailPage() {
                         <div>
                             <Label className="text-xs text-[var(--text-secondary)]">Client Secret</Label>
                             <div className="flex items-center gap-2 mt-1">
-                                <div className="flex-1 p-3 bg-[var(--accent-green)]/10 rounded border border-[var(--accent-green)]/20 font-mono text-center break-all select-all font-bold text-[var(--accent-green)]">
+                                <div className="flex-1 p-3 bg-[var(--accent-green)]/10 rounded border border-[var(--accent-green)]/20 font-mono text-center break-all [word-break:break-all] select-all font-bold text-[var(--accent-green)]">
                                     {secretDialog?.secret}
                                 </div>
                                 <Button
