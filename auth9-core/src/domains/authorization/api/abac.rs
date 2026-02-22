@@ -18,6 +18,7 @@ use serde_json::json;
 use std::sync::Arc;
 use utoipa::ToSchema;
 use uuid::Uuid;
+use validator::Validate;
 
 #[derive(Debug, Deserialize, ToSchema)]
 pub struct CreateAbacPolicyInput {
@@ -117,6 +118,7 @@ pub async fn create_policy<S: HasServices + HasDbPool>(
     Json(input): Json<CreateAbacPolicyInput>,
 ) -> Result<impl IntoResponse> {
     ensure_abac_permission(&state, &auth, tenant_id, PolicyAction::AbacWrite).await?;
+    input.policy.validate()?;
     let out = abac_service(&state)
         .create_policy(
             StringUuid::from(tenant_id),
@@ -153,6 +155,7 @@ pub async fn update_policy<S: HasServices + HasDbPool>(
     Json(input): Json<UpdateAbacPolicyInput>,
 ) -> Result<impl IntoResponse> {
     ensure_abac_permission(&state, &auth, tenant_id, PolicyAction::AbacWrite).await?;
+    input.policy.validate()?;
     abac_service(&state)
         .update_policy(
             StringUuid::from(tenant_id),
@@ -243,6 +246,9 @@ pub async fn simulate_policy<S: HasServices + HasDbPool>(
     Json(input): Json<SimulateAbacPolicyInput>,
 ) -> Result<impl IntoResponse> {
     ensure_abac_permission(&state, &auth, tenant_id, PolicyAction::AbacSimulate).await?;
+    if let Some(ref policy) = input.policy {
+        policy.validate()?;
+    }
     let result = abac_service(&state)
         .simulate_policy(StringUuid::from(tenant_id), input.policy, input.simulation)
         .await?;

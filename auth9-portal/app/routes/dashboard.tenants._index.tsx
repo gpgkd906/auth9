@@ -123,14 +123,14 @@ export default function TenantsIndexPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-1">
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Tenants</h1>
           <p className="text-sm text-[var(--text-secondary)]">Manage tenant lifecycle and settings</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
-            <Button className="relative left-1/2 w-screen -translate-x-1/2 md:static md:w-auto md:translate-x-0">
+            <Button className="relative left-1/2 w-screen -translate-x-1/2 lg:static lg:w-auto lg:translate-x-0">
               <PlusIcon className="mr-2 h-4 w-4" /> Create Tenant
             </Button>
           </DialogTrigger>
@@ -192,6 +192,7 @@ export default function TenantsIndexPage() {
                 <Input
                   name="search"
                   placeholder="Search tenants..."
+                  aria-label="Search tenants"
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
                   className="w-full sm:w-[200px] pl-8"
@@ -220,7 +221,7 @@ export default function TenantsIndexPage() {
           </div>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+          <div className="mt-6 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>

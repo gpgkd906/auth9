@@ -593,7 +593,7 @@ export default function IdentityProvidersPage() {
               </Button>
               <Button
                 type="submit"
-                disabled={isSubmitting || (!selectedTemplate && !editingProvider) || (!!template && !hasRequiredFields) || isDuplicateAlias}
+                disabled={isSubmitting || (!selectedTemplate && !editingProvider) || !formData.alias.trim() || (!!template && !hasRequiredFields) || isDuplicateAlias}
               >
                 {isSubmitting
                   ? "Saving..."

@@ -50,14 +50,14 @@ export async function action({ request, params }: ActionFunctionArgs) {
 
       const config: Record<string, string> = {};
       if (providerType === "saml") {
-        config.entityId = String(formData.get("entity_id") || "");
-        config.singleSignOnServiceUrl = String(formData.get("sso_url") || "");
-        config.signingCertificate = String(formData.get("certificate") || "");
+        config.entityId = String(formData.get("entity_id") || "").trim();
+        config.singleSignOnServiceUrl = String(formData.get("sso_url") || "").trim();
+        config.signingCertificate = String(formData.get("certificate") || "").trim();
       } else {
-        config.clientId = String(formData.get("client_id") || "");
-        config.clientSecret = String(formData.get("client_secret") || "");
-        config.authorizationUrl = String(formData.get("authorization_url") || "");
-        config.tokenUrl = String(formData.get("token_url") || "");
+        config.clientId = String(formData.get("client_id") || "").trim();
+        config.clientSecret = String(formData.get("client_secret") || "").trim();
+        config.authorizationUrl = String(formData.get("authorization_url") || "").trim();
+        config.tokenUrl = String(formData.get("token_url") || "").trim();
       }
 
       await tenantSsoApi.create(

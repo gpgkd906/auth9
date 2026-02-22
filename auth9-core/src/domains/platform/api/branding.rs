@@ -124,7 +124,7 @@ pub async fn get_service_branding<S: HasBranding + HasServices>(
     require_platform_admin_with_db(&state, &auth).await?;
     let config = state
         .branding_service()
-        .get_branding_for_service(service_id)
+        .get_service_branding_only(service_id)
         .await?;
     Ok(Json(SuccessResponse::new(config)))
 }

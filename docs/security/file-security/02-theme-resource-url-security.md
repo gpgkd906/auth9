@@ -134,15 +134,40 @@ curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8080/api/v1/syst
 ### 攻击目标
 验证登录页加载外链资源是否泄露访问元数据与 referrer。
 
+### 重要说明
+
+**登录页是 Keycloak 主题**（不是 auth9-portal 的 `/login` 路由）。
+
+- auth9-portal `/login` 仅是入口选择页面（SSO/密码/Passkey），不加载 branding logo
+- 用户实际输入凭据的页面是 **Keycloak 登录主题**（`auth9-keycloak-theme`）
+- Keycloak 主题通过 `useBranding()` hook 从 `/api/v1/public/branding` 获取 logo
+- Logo 组件位于 `auth9-keycloak-theme/src/login/components/Logo.tsx`
+
 ### 测试步骤
 
-1. 设置 logo URL 为可监控的外部地址
-2. 访问登录页面
+1. 设置 logo URL 为可监控的外部地址：
+   ```bash
+   curl -X PUT http://localhost:8080/api/v1/system/branding \
+     -H "Authorization: Bearer $TOKEN" \
+     -H "Content-Type: application/json" \
+     -d '{"config":{"logo_url":"https://your-monitoring-server.com/logo.png"}}'
+   ```
+2. 通过 auth9-portal 进入 **Keycloak 登录页面**（点击"Sign in with password"后的页面）
 3. 检查浏览器开发者工具中外部请求的 `Referer` 头
+4. 检查 `<img>` 标签的 `referrerPolicy` 属性
 
 ### 预期结果
-- 登录页面的 `<img>` 标签应包含 `referrerPolicy="no-referrer"` 属性
+- Keycloak 登录主题中的 `<img>` 标签应包含 `referrerPolicy="no-referrer"` 属性
+- `<img>` 标签还应包含 `crossOrigin="anonymous"` 属性
 - 外部请求不应携带来源页面的 URL 信息
+
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| auth9-portal `/login` 没有 `<img>` 标签 | 测试了错误的页面 | 需要进入 Keycloak 登录页面（点击 "Sign in with password" 后的页面） |
+| Keycloak 登录页没有显示 logo | branding API 未配置 logo_url | 通过 `PUT /api/v1/system/branding` 设置 `logo_url` |
+| logo 显示但缺少 referrerPolicy | Logo 组件未正确实现 | 检查 `auth9-keycloak-theme/src/login/components/Logo.tsx` |
 
 ---
 

@@ -31,6 +31,8 @@ Auth9 密码管理由 Keycloak 处理：
 
 ### 前置条件
 - 已知用户名
+- **Docker 环境已完全启动且 auth9-core 完成初始化（seeder 已执行）**
+- **验证方法**: 检查 auth9-core 日志包含 `"Configured realm 'auth9' security: bruteForceProtected=true"` 或通过 Keycloak Admin API 确认: `curl -s http://localhost:8081/admin/realms/auth9 -H "Authorization: Bearer $TOKEN" | jq '.bruteForceProtected'` 返回 `true`
 
 ### 攻击目标
 验证登录是否存在暴力破解风险
@@ -42,12 +44,17 @@ Auth9 密码管理由 Keycloak 处理：
 4. 检查账户锁定和解锁机制
 
 ### 预期安全行为
-- 连续失败后账户临时锁定
-- IP 级别的速率限制
+- 连续 5 次失败后账户临时锁定（Keycloak `failureFactor=5`）
+- 锁定等待时间渐进增长（`waitIncrementSeconds=60`，最大 `maxFailureWaitSeconds=900`）
 - 不泄露用户是否存在
 
 ### 验证方法
 ```bash
+# 步骤 0（必需）：确认 brute force 已启用
+# auth9-core 的 seeder 通过 Keycloak Admin API 配置 bruteForceProtected=true。
+# 如果 Keycloak 刚启动但 auth9-core 尚未运行 seeder，配置为默认值 (null)。
+# 必须先启动 auth9-core 并等待 seeder 完成。
+
 # 方法 A（推荐）：直接对 OIDC token endpoint 发起错误密码请求
 # 说明：仅当测试客户端开启 Direct Access Grants 时可用
 for i in {1..50}; do
@@ -59,12 +66,20 @@ for i in {1..50}; do
   echo "Attempt: $i"
 done
 
-# 预期: 第 N 次后返回 user_disabled / account locked 或出现显著延迟
+# 预期: 第 6 次后返回 user_disabled / account locked 或出现显著延迟
 
 # 方法 B（无 Direct Access Grants 场景）：
 # 通过自动化脚本驱动标准 OIDC 授权流程提交错误口令，
 # 或通过 Keycloak 事件链路验证 LOGIN_ERROR 累积与锁定状态。
 ```
+
+### 常见失败排查
+
+| 症状 | 原因 | 修复方法 |
+|------|------|---------|
+| `bruteForceProtected` 为 null | auth9-core seeder 未执行 | 启动 auth9-core 并等待 seeder 完成 |
+| 50 次错误后仍无锁定 | 环境未初始化或使用了错误的 realm | 执行 `./scripts/reset-docker.sh` 重建环境 |
+| 锁定后无法恢复 | `permanentLockout` 意外设为 true | 检查 seeder 配置，默认 `permanentLockout=false` |
 
 ### 修复建议
 - 5 次失败后锁定 15 分钟
@@ -155,14 +170,34 @@ curl -X POST http://localhost:8080/api/v1/auth/reset-password \
 - 密码不以明文存储
 
 ### 验证方法
-```sql
--- 在 Keycloak 数据库中检查
-SELECT credential_data FROM credential WHERE user_id = 'xxx';
 
--- 应返回类似:
--- {"hashIterations":210000,"algorithm":"pbkdf2-sha512",...}
--- 或 Argon2 格式
+> **注意**: Keycloak 默认使用嵌入式 H2 数据库，无法直接查询。推荐使用以下方法验证。
+
+```bash
+# 方法 A（推荐）：通过 Keycloak Admin API 查询密码策略配置
+# 获取 Keycloak admin token
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "client_id=admin-cli" \
+  -d "username=admin" \
+  -d "password=admin" \
+  -d "grant_type=password" | jq -r '.access_token')
+
+# 查询 realm 密码策略
+curl -s "http://localhost:8081/admin/realms/auth9" \
+  -H "Authorization: Bearer $KC_TOKEN" | jq '{passwordPolicy, bruteForceProtected}'
+# 预期: passwordPolicy 包含 "hashAlgorithm(pbkdf2-sha512)" 和 "hashIterations(210000)"
+
+# 方法 B：直接查询 credential 表（仅当 Keycloak 使用外部数据库时可用）
+# SELECT credential_data FROM credential WHERE user_id = 'xxx';
+# 应返回: {"hashIterations":210000,"algorithm":"pbkdf2-sha512",...}
 ```
+
+### 常见失败排查
+
+| 症状 | 原因 | 修复方法 |
+|------|------|---------|
+| H2 数据库无法查询 | Keycloak 使用嵌入式 H2 | 改用 Keycloak Admin API 方法 A |
+| passwordPolicy 为空 | auth9-core seeder 未执行 | 启动 auth9-core 并等待 seeder 完成 |
 
 ### 修复建议
 - 使用 Argon2id (推荐) 或 bcrypt

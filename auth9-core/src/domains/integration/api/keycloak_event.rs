@@ -185,9 +185,10 @@ fn map_event_type_with_details(
                     }
                 }
                 Some("user_not_found") => Some(LoginEventType::FailedPassword),
-                Some("invalid_totp") | Some("invalid_otp") | Some("invalid_authenticator") => {
-                    Some(LoginEventType::FailedMfa)
-                }
+                Some("invalid_totp")
+                | Some("invalid_otp")
+                | Some("invalid_otp_credentials")
+                | Some("invalid_authenticator") => Some(LoginEventType::FailedMfa),
                 Some("user_disabled") | Some("user_temporarily_disabled") => {
                     Some(LoginEventType::Locked)
                 }
@@ -248,7 +249,8 @@ fn derive_failure_reason_with_details(
                 }
             }
             "user_not_found" => "User not found",
-            "invalid_totp" | "invalid_otp" | "invalid_authenticator" => "Invalid MFA code",
+            "invalid_totp" | "invalid_otp" | "invalid_otp_credentials"
+            | "invalid_authenticator" => "Invalid MFA code",
             "user_disabled" => "Account disabled",
             "user_temporarily_disabled" => "Account temporarily locked",
             "expired_code" => "Authentication code expired",
@@ -887,6 +889,14 @@ mod tests {
     fn test_map_event_type_login_error_invalid_otp() {
         assert_eq!(
             map_event_type("LOGIN_ERROR", Some("invalid_otp")),
+            Some(LoginEventType::FailedMfa)
+        );
+    }
+
+    #[test]
+    fn test_map_event_type_login_error_invalid_otp_credentials() {
+        assert_eq!(
+            map_event_type("LOGIN_ERROR", Some("invalid_otp_credentials")),
             Some(LoginEventType::FailedMfa)
         );
     }

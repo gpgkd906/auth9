@@ -101,9 +101,22 @@ SELECT id, created_at, keycloak_id FROM users WHERE id = '...';
 - 返回 400 Bad Request
 - 不崩溃或异常
 
+### 常见误报说明
+
+> **重要**: auth9-core 使用 Rust + serde 强类型反序列化，DTO 仅定义允许的字段。
+> 向不包含某字段的 DTO 发送该字段（如向 `CreateTenantInput` 发送 `password_policy`），
+> serde 会静默忽略未知字段 —— 这是**预期行为**，不是类型混淆漏洞。
+>
+> 测试类型混淆时，**必须使用 DTO 中实际存在的字段**。例如：
+> - `POST /api/v1/services` 的 `timeout` 字段（u64 类型）
+> - `PUT /api/v1/system/branding` 的 `allow_registration` 字段（bool 类型）
+> - `PUT /api/v1/tenants/:id/password-policy` 的 `min_length` 字段（u32 类型）
+>
+> **不要**测试 `POST /api/v1/tenants` 的 `password_policy` —— 该端点的 `CreateTenantInput` 不包含此字段。
+
 ### 验证方法
 ```bash
-# 数字字段发送字符串
+# 数字字段发送字符串（使用 DTO 中实际存在的数值字段）
 curl -X POST -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/services \
   -H "Content-Type: application/json" \
@@ -126,6 +139,13 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
   -d '{"role_id": ["role1", "role2"]}'
 # 预期: 400 或仅处理第一个
 ```
+
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 发送未知字段返回 200 且字段为 null | 测试了 DTO 中不存在的字段 | 使用 DTO 中实际定义的字段（见上方说明） |
+| 字符串值被接受为默认值 | serde `#[serde(default)]` 在类型不匹配时使用默认值 | 确认 DTO 无 `default` 属性，或测试无 `default` 的必填字段 |
 
 ### 修复建议
 - 使用强类型语言特性

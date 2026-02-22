@@ -138,6 +138,7 @@ curl -i -X POST "http://localhost:8080/api/v1/auth/tenant-token" \
 ## 场景 5：Portal 切换 tenant 后旧 token 不应继续用于新 tenant 资源
 
 ### 初始状态
+- **必须使用非平台管理员用户**（平台管理员 email 配置在 `PLATFORM_ADMIN_EMAILS` 中，其拥有跨租户访问特权，会绕过 tenant scope 校验）
 - 用户属于 `{tenant_a}` 与 `{tenant_b}`
 - 已在 Portal 中选中 `{tenant_a}` 并拿到 `{token_a}`
 
@@ -165,6 +166,13 @@ curl -i "http://localhost:8080/api/v1/tenants/{tenant_b}" \
 - 切换动作触发新的 tenant token exchange
 - 第 3 步返回 `403 FORBIDDEN`
 - 第 4 步返回 `200 OK`
+
+### 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 第 3 步返回 200 而非 403 | 使用了平台管理员账号（平台管理员可跨租户访问） | 使用非平台管理员用户重新测试 |
+| 两个请求都返回 403 | token 已过期或签名无效 | 确认 token exchange 正常并获取新 token |
 
 ---
 

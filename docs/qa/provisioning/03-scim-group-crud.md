@@ -186,7 +186,18 @@ curl -s "http://localhost:8080/api/v1/scim/v2/Groups?startIndex=1&count=10" \
 
 ### 初始状态
 - 场景 1 已自动创建 Group-Role 映射
-- 已有 Admin JWT Token
+- **已有 Tenant Access Token（非 Identity Token）**
+
+> **重要**: 管理 API (`/api/v1/tenants/*`) 要求 **Tenant Access Token** 或 **Service Client Token**。
+> Identity Token（如 `gen-admin-token.sh` 生成的）**不能**访问此路径，会返回 `FORBIDDEN` 错误。
+> 使用以下命令生成正确的 Token：
+> ```bash
+> # 方式 1: 生成 Tenant Owner Token（推荐，包含 owner 权限）
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+>
+> # 方式 2: 生成 Service Client Token
+> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js service-client --tenant-id $TENANT_ID)
+> ```
 
 ### 目的
 验证管理员可以通过 JWT 保护的 API 查看和手动调整 SCIM Group → Auth9 Role 映射
@@ -198,6 +209,9 @@ curl -s "http://localhost:8080/api/v1/scim/v2/Groups?startIndex=1&count=10" \
 TENANT_ID="{tenant_id}"
 CONNECTOR_ID="{connector_id}"
 ROLE_ID="{custom_role_id}"
+
+# 生成 Tenant Owner Token
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
 
 # 列出映射
 curl -s "http://localhost:8080/api/v1/tenants/$TENANT_ID/sso/connectors/$CONNECTOR_ID/scim/group-mappings" \
@@ -265,6 +279,14 @@ ORDER BY created_at DESC LIMIT 1;
 ```
 
 ---
+
+## 常见问题排查
+
+| 症状 | 原因 | 修复方法 |
+|------|------|----------|
+| `FORBIDDEN: Identity token is only allowed for tenant selection and exchange` | 使用了 Identity Token 访问 `/api/v1/tenants/*` 路径 | 使用 `gen-test-tokens.js tenant-owner` 生成 Tenant Access Token |
+| `UNAUTHORIZED` | Token 过期或签名无效 | 重新生成 Token，确保 `jwt_private_clean.key` 存在 |
+| `404 Not Found` on group-mappings | `tenant_id` 或 `connector_id` 不正确 | 从数据库查询正确的 ID：`SELECT id, tenant_id FROM sso_connectors;` |
 
 ## 检查清单
 

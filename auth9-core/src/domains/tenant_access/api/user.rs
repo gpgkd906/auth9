@@ -602,6 +602,12 @@ pub async fn add_to_tenant<S: HasServices>(
     // Check authorization: require owner of the target tenant
     require_tenant_owner(&state, &auth, input.tenant_id).await?;
 
+    // Block write operations on non-active tenants
+    state
+        .tenant_service()
+        .require_active(StringUuid::from(input.tenant_id))
+        .await?;
+
     let tenant_user = state
         .user_service()
         .add_to_tenant(AddUserToTenantInput {

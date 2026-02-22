@@ -17,6 +17,12 @@ Auth9 租户有三种状态：
 | `inactive` | 已停用，业务功能应受限 |
 | `suspended` | 已暂停，可能因违规或欠费 |
 
+**重要说明**：
+- 状态变更**必须通过 API 进行**，不要直接修改数据库。直接修改数据库不会触发缓存清除和审计日志。
+- 通过 API 变更状态时，Redis 缓存会**自动清除**，审计日志会**自动记录**。
+- Portal UI 租户详情页提供状态下拉选择器，可直接编辑状态。
+- 非 active 状态的租户会**阻止写操作**（创建 Webhook、发送邀请、添加用户）和 **Token Exchange**。
+
 状态通过 `PUT /api/v1/tenants/{id}` 更新：
 ```json
 {
@@ -146,10 +152,8 @@ ORDER BY created_at DESC LIMIT 2;
 2. 检查响应
 
 ### 预期结果
-- 根据实现策略，预期以下行为之一：
-  - **严格模式**：返回错误「Tenant is not active」，拒绝发放 Token
-  - **宽松模式**：正常发放 Token，但 Token 中可能包含租户状态信息
-- 检查实际行为并记录
+- 返回错误「Tenant is not active (status: 'inactive')」，HTTP 403 / gRPC PermissionDenied
+- 拒绝发放 Token
 
 ### 预期数据状态
 ```sql
@@ -186,10 +190,8 @@ SELECT status FROM tenants WHERE id = '{tenant_id}';
    ```
 
 ### 预期结果
-- 根据实现策略，记录以下行为：
-  - 管理员是否可以在 suspended 租户下添加用户/邀请/Webhook
-  - 如果允许，操作正常完成
-  - 如果不允许，返回明确的错误信息（如「Tenant is suspended」）
+- 所有写操作应被阻止，返回 HTTP 403 错误
+- 错误信息包含「Tenant is not active (status: 'suspended'). Write operations are not allowed on non-active tenants.」
 
 ---
 

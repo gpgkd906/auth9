@@ -101,6 +101,22 @@ impl<R: SystemSettingsRepository, SBR: ServiceBrandingRepository> BrandingServic
         Ok(config)
     }
 
+    /// Get service-specific branding only (no fallback to system default).
+    /// Returns NotFound if the service has no custom branding.
+    pub async fn get_service_branding_only(
+        &self,
+        service_id: crate::domain::StringUuid,
+    ) -> Result<BrandingConfig> {
+        match self
+            .service_branding_repo
+            .get_by_service_id(service_id)
+            .await?
+        {
+            Some(sb) => Ok(sb.config),
+            None => Err(AppError::NotFound("Service branding not found".to_string())),
+        }
+    }
+
     /// Get branding for a specific service, falling back to system default
     pub async fn get_branding_for_service(
         &self,

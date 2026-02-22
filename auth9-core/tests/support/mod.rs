@@ -2112,6 +2112,7 @@ impl ActionRepository for TestActionRepository {
     async fn record_execution(
         &self,
         _action_id: StringUuid,
+        _tenant_id: Option<StringUuid>,
         _service_id: StringUuid,
         _trigger_id: String,
         _user_id: Option<StringUuid>,

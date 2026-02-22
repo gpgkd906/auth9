@@ -187,7 +187,7 @@ export default function BrandingSettingsPage() {
           <Form method="post" className="space-y-6">
 
             {/* Company Identity */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Company Identity</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
@@ -245,7 +245,7 @@ export default function BrandingSettingsPage() {
             </div>
 
             {/* Login Options */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Login Options</h3>
               <div className="flex items-center justify-between">
                 <div className="space-y-0.5">
@@ -271,7 +271,7 @@ export default function BrandingSettingsPage() {
             </div>
 
             {/* Colors */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Colors</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                 <ColorPicker
@@ -306,7 +306,7 @@ export default function BrandingSettingsPage() {
             </div>
 
             {/* Preview */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Preview</h3>
               <div
                 className="rounded-lg p-0 sm:p-8 flex items-center justify-center min-h-[300px]"
@@ -372,7 +372,7 @@ export default function BrandingSettingsPage() {
             </div>
 
             {/* Custom CSS */}
-            <div className="space-y-4">
+            <div className="space-y-2">
               <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">
                 Custom CSS
                 <span className="font-normal text-[var(--text-secondary)] ml-2">(Advanced)</span>

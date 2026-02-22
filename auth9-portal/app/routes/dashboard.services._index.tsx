@@ -196,7 +196,7 @@ export default function ServicesPage() {
                   Updated <FormattedDate date={service.updated_at} />
                 </div>
 
-                <div className="mt-auto flex items-center justify-between gap-2 pt-2">
+                <div className="mt-auto [margin-top:auto] flex items-center justify-between gap-2 pt-2">
                   <a
                     href={`/dashboard/services/${service.id}`}
                     className="inline-flex items-center rounded-md border border-[var(--glass-border-subtle)] px-3 py-2 text-xs font-medium text-[var(--text-primary)] hover:bg-[var(--sidebar-item-hover)]"
@@ -255,7 +255,7 @@ export default function ServicesPage() {
             <DialogTitle>Initial Client Secret Generated</DialogTitle>
             <DialogDescription>Please copy this value. It will not be shown again.</DialogDescription>
           </DialogHeader>
-          <div className="p-4 bg-[var(--sidebar-item-hover)] rounded border font-mono text-center break-all select-all">
+          <div className="p-4 bg-[var(--sidebar-item-hover)] rounded border font-mono text-center break-all [word-break:break-all] select-all">
             {newSecret}
           </div>
           <DialogFooter>

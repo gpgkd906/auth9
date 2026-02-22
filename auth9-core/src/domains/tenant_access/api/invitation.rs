@@ -125,6 +125,9 @@ pub async fn create<S: HasInvitations>(
     )
     .await?;
 
+    // Block write operations on non-active tenants
+    state.tenant_service().require_active(tenant_id).await?;
+
     // Get the actor (inviter) from the JWT (prefer auth.user_id, fallback to header extraction)
     let invited_by = StringUuid::from(auth.user_id);
     let _ = &headers; // Used by audit log in future

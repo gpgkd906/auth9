@@ -96,6 +96,8 @@ SELECT * FROM services WHERE id = '$SERVICE_B_ID';
 
 ## 场景 2：路径遍历访问
 
+> **已有防护**: `path_guard_middleware`（`src/middleware/path_guard.rs`）在请求进入路由匹配之前，拒绝所有包含 `..` 或 `.` 路径段的请求，返回 HTTP 400。该中间件在 `server/mod.rs` 中作为 Layer 0b 应用，早于认证和路由。
+
 ### 前置条件
 - 已知资源层级结构
 
@@ -113,21 +115,36 @@ SELECT * FROM services WHERE id = '$SERVICE_B_ID';
 ### 预期安全行为
 - 路径规范化处理
 - 不接受 `..` 或 `.` 序列
-- 返回 400 或 404
+- 返回 **400 Bad Request**（由 `path_guard_middleware` 拦截）
 
 ### 验证方法
 ```bash
-# 路径遍历尝试
-curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/tenants/../admin/config"
-# 预期: 400 或 404
+# ⚠️ 必须使用 --path-as-is 防止 curl 自动规范化 ../
+# 不加此参数时 curl 会在发送前将 ../.. 解析掉，导致服务器收到正常路径而返回 404
 
-curl -H "Authorization: Bearer $TOKEN" \
+# 路径遍历尝试（均应返回 400）
+curl -v --path-as-is -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/v1/tenants/../admin/config"
+# 预期: 400 Bad Request
+
+curl -v --path-as-is -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/v1/services/../tenants"
+# 预期: 400 Bad Request
+
+curl -v --path-as-is -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users/%2e%2e/admin"
-# 预期: 400 或 404 (URL 编码的 ..)
+# 预期: 400 Bad Request (URL 编码的 ..)
 
 # 检查服务器日志是否有异常
 ```
+
+### 常见误报原因
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 路径遍历返回 200 | 中间件未正确加载（配置错误或测试环境差异） | 确认 `path_guard_middleware` 在 `server/mod.rs` 中注册 |
+| 路径遍历返回 404 而非 400 | curl 未使用 `--path-as-is`，自动在客户端解析了 `../` | 添加 `--path-as-is` 参数，确保原始路径发送到服务器 |
+| 使用浏览器测试时路径被自动规范化 | 浏览器/HTTP 客户端在发送前自动解析 `../` | 使用 curl `--path-as-is` 或原始 HTTP 请求工具 |
 
 ### 修复建议
 - URL 路径规范化

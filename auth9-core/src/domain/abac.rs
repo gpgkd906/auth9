@@ -2,6 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 use utoipa::ToSchema;
+use validator::Validate;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, ToSchema, Default)]
 #[serde(rename_all = "snake_case")]
@@ -19,9 +20,10 @@ pub enum AbacEffect {
     Deny,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize, ToSchema)]
+#[derive(Debug, Clone, Serialize, Deserialize, Validate, ToSchema)]
+#[serde(deny_unknown_fields)]
 pub struct AbacPolicyDocument {
-    #[serde(default)]
+    #[validate(length(min = 1, message = "Policy must contain at least one rule"))]
     pub rules: Vec<AbacRule>,
 }
 

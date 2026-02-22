@@ -24,6 +24,7 @@ export default function Login(
     messagesPerField,
     social,
     auth,
+    message,
   } = kcContext;
   const { msg, msgStr } = i18n;
   const branding = useBrandingContext();
@@ -54,7 +55,14 @@ export default function Login(
           />
         </div>
 
-        {/* Error Messages */}
+        {/* Status Message (e.g. password reset success) */}
+        {message !== undefined && (
+          <GlassAlert variant={message.type === "error" ? "error" : message.type === "warning" ? "warning" : "success"}>
+            <span dangerouslySetInnerHTML={{ __html: message.summary }} />
+          </GlassAlert>
+        )}
+
+        {/* Field Error Messages */}
         {messagesPerField.existsError("username", "password") && (
           <GlassAlert variant="error">
             {messagesPerField.getFirstError("username", "password")}
