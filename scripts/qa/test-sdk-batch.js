@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -14,7 +14,7 @@ async function testBatchUpsert() {
   try {
     // 先创建一个现有的Action用于更新
     console.log('创建现有Action用于更新...');
-    const existingAction = await client.post(`/api/v1/tenants/${TENANT_ID}/actions`, {
+    const existingAction = await client.post(`/api/v1/services/${SERVICE_ID}/actions`, {
       name: 'service-c-rule',
       trigger_id: 'post-login',
       script: 'context.claims = context.claims || {}; context.claims.service_c = "old"; context;',
@@ -24,7 +24,7 @@ async function testBatchUpsert() {
 
     // 批量创建/更新 Actions
     console.log('执行批量操作...');
-    const result = await client.post(`/api/v1/tenants/${TENANT_ID}/actions/batch`, {
+    const result = await client.post(`/api/v1/services/${SERVICE_ID}/actions/batch`, {
       actions: [
         {
           name: 'service-a-rule',
@@ -59,11 +59,11 @@ async function testBatchUpsert() {
 
     // 清理
     console.log('清理测试数据...');
-    const listResult = await client.get(`/api/v1/tenants/${TENANT_ID}/actions`);
+    const listResult = await client.get(`/api/v1/services/${SERVICE_ID}/actions`);
     const actions = listResult.data;
     for (const action of actions) {
       if (action.name.includes('service-') || action.name.includes('updated-service-')) {
-        await client.delete(`/api/v1/tenants/${TENANT_ID}/actions/${action.id}`);
+        await client.delete(`/api/v1/services/${SERVICE_ID}/actions/${action.id}`);
       }
     }
     

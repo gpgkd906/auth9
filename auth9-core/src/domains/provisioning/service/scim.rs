@@ -493,6 +493,20 @@ where
         };
         self.group_mapping_repo.upsert(&mapping).await?;
 
+        // Persist member associations (assign role to each member user)
+        for member in &group.members {
+            if let Err(e) = self
+                .add_member_to_group(ctx.tenant_id, mapping.role_id, &member.value)
+                .await
+            {
+                tracing::warn!(
+                    member = %member.value,
+                    error = %e,
+                    "SCIM: Failed to add member during group creation"
+                );
+            }
+        }
+
         self.log_operation(
             ctx,
             "create",
@@ -504,12 +518,17 @@ where
         )
         .await;
 
+        // Resolve actual persisted members for the response
+        let members = self
+            .resolve_group_members(ctx.tenant_id, mapping.role_id, ctx)
+            .await;
+
         Ok(ScimGroup {
             schemas: vec![ScimGroup::SCHEMA.to_string()],
             id: Some(mapping.id.to_string()),
             external_id: Some(scim_group_id),
             display_name: group.display_name,
-            members: group.members,
+            members,
             meta: Some(ScimMeta {
                 resource_type: "Group".to_string(),
                 created: Some(Utc::now().to_rfc3339()),
@@ -771,32 +790,27 @@ where
             None => return vec![],
         };
 
-        // Look up the role name for this role_id
-        let role = match rbac.find_role_by_id(role_id).await {
-            Ok(Some(r)) => r,
-            _ => return vec![],
-        };
-
-        // Get all tenant users and check who has this role
-        let users = match self.user_repo.find_tenant_users(tenant_id, 0, 1000).await {
-            Ok(users) => users,
+        // Query user_tenant_roles directly by role_id (works for both
+        // real RBAC roles and SCIM placeholder role_ids)
+        let user_ids = match rbac
+            .find_user_ids_by_role_in_tenant(tenant_id, role_id)
+            .await
+        {
+            Ok(ids) => ids,
             Err(_) => return vec![],
         };
 
         let mut members = Vec::new();
-        for user in &users {
-            if let Ok(roles_in_tenant) = rbac
-                .find_user_roles_in_tenant(user.id, tenant_id)
-                .await
-            {
-                if roles_in_tenant.roles.iter().any(|r| r == &role.name) {
-                    members.push(ScimMember {
-                        value: user.id.to_string(),
-                        ref_uri: Some(format!("{}/Users/{}", ctx.base_url, user.id)),
-                        display: user.display_name.clone(),
-                    });
-                }
-            }
+        for user_id in user_ids {
+            let display = match self.user_repo.find_by_id(user_id).await {
+                Ok(Some(u)) => u.display_name,
+                _ => None,
+            };
+            members.push(ScimMember {
+                value: user_id.to_string(),
+                ref_uri: Some(format!("{}/Users/{}", ctx.base_url, user_id)),
+                display,
+            });
         }
 
         members
@@ -834,24 +848,31 @@ where
 
         let total = mappings.len() as i64;
         let offset = (start_index - 1).max(0) as usize;
-        let groups: Vec<ScimGroup> = mappings
+        let page: Vec<_> = mappings
             .into_iter()
             .skip(offset)
             .take(count as usize)
-            .map(|m| ScimGroup {
+            .collect();
+
+        let mut groups = Vec::with_capacity(page.len());
+        for m in page {
+            let members = self
+                .resolve_group_members(ctx.tenant_id, m.role_id, ctx)
+                .await;
+            groups.push(ScimGroup {
                 schemas: vec![ScimGroup::SCHEMA.to_string()],
                 id: Some(m.id.to_string()),
                 external_id: Some(m.scim_group_id),
                 display_name: m.scim_group_display_name.unwrap_or_default(),
-                members: vec![],
+                members,
                 meta: Some(ScimMeta {
                     resource_type: "Group".to_string(),
                     created: Some(m.created_at.to_rfc3339()),
                     last_modified: Some(m.updated_at.to_rfc3339()),
                     location: Some(format!("{}/Groups/{}", ctx.base_url, m.id)),
                 }),
-            })
-            .collect();
+            });
+        }
 
         Ok(ScimListResponse::new(groups, total, start_index, count))
     }

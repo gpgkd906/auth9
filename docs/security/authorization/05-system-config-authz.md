@@ -237,11 +237,21 @@ curl -sS -i -X PUT "http://localhost:8080/api/v1/tenants/$TENANT_ID/password-pol
 
 ---
 
-## 修复建议（与测试联动）
+## 常见误报原因
 
-1. `/api/v1/system/*` 必须引入平台管理员授权校验（`PLATFORM_ADMIN_EMAILS` 或后续升级模型）。  
-2. 租户策略类接口（例如 password policy）必须做 tenant owner/admin 校验。  
-3. 为 system/策略变更补齐 audit log 与告警（未授权尝试建议写 security alert）。  
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 非管理员 Token 调用返回 200 | Token 的 `user_id`（sub）使用了管理员用户 ID（如 `935fb048-...`），`is_platform_admin_with_db()` 通过 DB 查询发现该用户在 `auth9-platform` 租户中有 admin 角色，触发平台管理员绕过 | **Token 的 user_id 必须使用非管理员用户 ID**。使用 `gen-test-tokens.js tenant-access`（不带 `--user-id`）自动使用安全的 `NON_ADMIN_USER_ID` |
+| Service Client Token 调用返回 200 | 同上，使用了管理员 user_id | 使用 `gen-test-tokens.js service-client`（不带 `--user-id`）|
+| 所有请求返回 401 | Token 过期、签名密钥不匹配、或 audience 不在允许列表 | 重新生成 Token，确认 JWT 私钥与服务端一致 |
+
+> **⚠️ 关键提醒**：`gen-test-tokens.js` 的 `--user-id` 参数会覆盖默认安全 ID。如果传入的 user_id 对应数据库中的平台管理员（如 `admin@auth9.local` 的 user_id），即使 Token 中的 email 不是管理员邮箱，`is_platform_admin_with_db()` 仍会通过 DB 查询判定为平台管理员。**测试越权场景时，严禁使用 `--user-id` 传入管理员用户的 ID**。
+
+---
+
+## 当前实现状态
+
+> **已实现**：所有 `/api/v1/system/*` 接口均已包含 `require_platform_admin_with_db` 授权校验（见 `src/domains/platform/api/system_settings.rs`、`email_template.rs`、`branding.rs`）。密码策略接口已包含 `SystemConfigWrite` 策略校验，要求 `owner` 或 `admin` 角色（见 `src/domains/identity/api/password.rs`）。
 
 ---
 

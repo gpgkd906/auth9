@@ -165,8 +165,8 @@ fn unauthorized_response(message: &str) -> Response {
     (
         StatusCode::UNAUTHORIZED,
         Json(json!({
-            "error": message,
-            "code": "UNAUTHORIZED"
+            "error": "unauthorized",
+            "message": message
         })),
     )
         .into_response()
@@ -176,8 +176,8 @@ fn forbidden_response(message: &str) -> Response {
     (
         StatusCode::FORBIDDEN,
         Json(json!({
-            "error": message,
-            "code": "FORBIDDEN"
+            "error": "forbidden",
+            "message": message
         })),
     )
         .into_response()
@@ -196,6 +196,8 @@ fn is_identity_token_path_allowed(path: &str) -> bool {
         // Tenant CRUD: create/delete requires platform admin Identity token;
         // other operations have handler-level policy enforcement
         || path.starts_with("/api/v1/tenants")
+        // Invitation management (resend, revoke, get by ID)
+        || path.starts_with("/api/v1/invitations")
 }
 
 /// Generate a 503 Service Unavailable response
@@ -206,8 +208,8 @@ fn service_unavailable_response(message: &str) -> Response {
     (
         StatusCode::SERVICE_UNAVAILABLE,
         Json(json!({
-            "error": message,
-            "code": "SERVICE_UNAVAILABLE"
+            "error": "service_unavailable",
+            "message": message
         })),
     )
         .into_response()
@@ -513,6 +515,15 @@ mod tests {
         assert!(is_identity_token_path_allowed("/api/v1/users/me"));
         assert!(is_identity_token_path_allowed("/api/v1/users/me/sessions"));
         assert!(is_identity_token_path_allowed("/api/v1/users/me/passkeys"));
+
+        // Invitation management paths
+        assert!(is_identity_token_path_allowed(
+            "/api/v1/invitations/some-uuid/resend"
+        ));
+        assert!(is_identity_token_path_allowed(
+            "/api/v1/invitations/some-uuid/revoke"
+        ));
+        assert!(is_identity_token_path_allowed("/api/v1/invitations/some-uuid"));
 
         // Non-allowed paths
         assert!(!is_identity_token_path_allowed("/api/v1/users"));

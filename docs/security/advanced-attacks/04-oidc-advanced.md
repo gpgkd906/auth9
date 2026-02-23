@@ -41,11 +41,16 @@ Auth9 也支持多个 Identity Provider（社交登录），IdP 混淆攻击利�
 5. 检查每种 Token 的 `typ` 或 `token_type` claim 是否被验证
 
 ### 预期安全行为
-- Identity Token 不能访问需要权限检查的端点
+- Identity Token 不能访问需要权限检查的端点（如 `/api/v1/roles`）
+- **注意设计行为**：Identity Token 可以访问以下端点（通过 `is_identity_token_path_allowed` 白名单或 public route）：
+  - `/api/v1/tenants*`（租户列表/创建/管理 — 平台管理员需要 Identity Token 操作租户）
+  - `/api/v1/system/*`（系统配置 — handler 内部检查平台管理员权限）
+  - `/api/v1/users`（public route，handler 内部检查授权）
 - Tenant Access Token 不能作为 Identity Token 使用
 - Refresh Token 仅能用于 Token 刷新端点
 - Keycloak 原始 Token 不被 Auth9 API 直接接受
 - 每个端点验证 Token 类型
+- **⚠️ 测试时必须使用非平台管理员用户**：平台管理员拥有全局绕过权限，会使所有端点返回 200
 
 ### 验证方法
 ```bash
@@ -90,6 +95,14 @@ for token_name in IDENTITY TENANT REFRESH; do
   echo $token | cut -d. -f2 | base64 -d 2>/dev/null | jq '{typ, iss, aud, token_type}' 2>/dev/null
 done
 ```
+
+### 常见误报原因
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| Identity Token 访问 `/api/v1/tenants` 返回 200 | **设计行为**：该路径在 Identity Token 白名单中，平台管理员需要用 Identity Token 列出租户进行 token exchange | 非漏洞，使用非管理员的 Identity Token 测试时应返回仅用户所属租户 |
+| Identity Token 访问 `/api/v1/users` 返回 200 | `GET /api/v1/users` 是 public route（为支持用户注册），不经过 `require_auth_middleware`。如果用户是平台管理员，handler 内部授权通过 | 使用**非管理员用户的 Identity Token** 测试，应返回 403（无 tenant context） |
+| 所有端点返回 200 | 测试使用了平台管理员（`admin@auth9.local`）的 Token | 换用非管理员用户的 Token |
 
 ### 修复建议
 - 在 Token 中包含 `token_type` claim 区分类型

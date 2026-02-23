@@ -89,17 +89,22 @@
 
 ---
 
-## 场景 4：Identity Token 访问 tenant 业务接口被拒绝
+## 场景 4：Identity Token 访问范围验证
 
 ### 初始状态
 - 已获取一个有效 Identity Token（登录后 `access_token`）
 - 未进行 tenant token exchange
 
 ### 目的
-验证 Identity Token 权限收窄生效，tenant 业务接口拒绝 identity token
+验证 Identity Token 的 handler-level 权限收窄生效：Identity Token 可以访问 `/api/v1/tenants`，但返回数据范围受限（仅返回用户自己所属的 tenant，不返回所有 tenant）
+
+> **设计说明**: `/api/v1/tenants` 路径在 middleware 层允许 Identity Token 访问，因为：
+> 1. Platform Admin 需要使用 Identity Token 创建/删除 Tenant
+> 2. Handler 层通过 `resolve_tenant_list_mode_with_state` 对 Identity Token 返回 `UserMemberships` 模式（仅用户自己的 tenant）
+> 3. 真正的租户业务接口（如 `/api/v1/services/{id}/actions`）在 handler 层会进行 tenant-scope 权限检查
 
 ### 测试操作流程
-1. 使用 Identity Token 调用 tenant API
+1. 使用 Identity Token 调用 tenant 列表 API
 
 ```bash
 curl -i http://localhost:8080/api/v1/tenants \
@@ -113,10 +118,17 @@ curl -i http://localhost:8080/api/v1/users/me/tenants \
   -H "Authorization: Bearer {identity_token}"
 ```
 
+3. 使用 Identity Token 调用需要 tenant-scope 的业务接口（如 user CRUD）
+
+```bash
+curl -i http://localhost:8080/api/v1/tenants/{tenant_id}/users \
+  -H "Authorization: Bearer {identity_token}"
+```
+
 ### 预期结果
-- 调用 `/api/v1/tenants` 返回 `403 FORBIDDEN`
-- 错误信息包含 identity token 仅用于 tenant 选择/交换的语义
-- 调用 `/api/v1/users/me/tenants` 返回 `200 OK`
+- 调用 `/api/v1/tenants` 返回 `200 OK`，**但仅包含用户自己所属的 tenant**（不是全部 tenant）
+- 调用 `/api/v1/users/me/tenants` 返回 `200 OK`（返回相同数据）
+- 调用 tenant-scope 业务接口（如 `/api/v1/tenants/{id}/users`）返回 `403 FORBIDDEN`（需要 TenantAccess Token）
 
 ---
 

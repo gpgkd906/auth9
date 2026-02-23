@@ -174,9 +174,10 @@ curl http://localhost:8080/.well-known/jwks.json | jq .
 
 ### 前置条件
 - 数据库访问权限
+- **`SETTINGS_ENCRYPTION_KEY` 环境变量已设置**（Docker dev 默认未设置，此时敏感字段以明文存储，这是设计行为）
 
 ### 攻击目标
-验证敏感配置的加密存储
+验证敏感配置的加密存储（**仅在 `SETTINGS_ENCRYPTION_KEY` 已配置时有效**）
 
 ### 攻击步骤
 1. 检查数据库中的敏感配置
@@ -212,6 +213,14 @@ env | grep -i secret
 cat /app/config.yaml
 # 敏感值应该是环境变量引用
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| SMTP 密码明文存储 | `SETTINGS_ENCRYPTION_KEY` 未设置 | 设置环境变量后重新保存邮件配置：`export SETTINGS_ENCRYPTION_KEY=$(openssl rand -base64 32)` |
+| Docker dev 环境中明文 | Docker dev 默认不配置加密密钥 | 这是设计行为：dev 环境可选加密，生产环境必须启用 |
+| API 返回 `***` 但 DB 明文 | API 层始终 mask，与数据库加密独立 | 检查 `encrypted` 列是否为 `true`；若为 `false` 则表示未加密 |
 
 ### 修复建议
 - 使用 AES-256-GCM 加密

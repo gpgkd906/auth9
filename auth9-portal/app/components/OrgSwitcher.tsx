@@ -48,7 +48,7 @@ export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
     // Single tenant - just display, no switcher
     return (
       <div className="px-3 py-2 mb-1">
-        <div className="flex items-center gap-2 text-sm">
+        <div className="flex items-center gap-2 text-sm min-h-[44px]">
           <div className="w-6 h-6 rounded bg-[var(--accent-blue)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             {displayName.charAt(0).toUpperCase()}
           </div>
@@ -63,7 +63,7 @@ export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
   return (
     <div className="px-3 py-2 mb-1">
       <DropdownMenu>
-        <DropdownMenuTrigger className="w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 hover:bg-[var(--surface-secondary)] transition-colors outline-none">
+        <DropdownMenuTrigger className="w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 min-h-[44px] hover:bg-[var(--surface-secondary)] transition-colors outline-none">
           <div className="w-6 h-6 rounded bg-[var(--accent-blue)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             {displayName.charAt(0).toUpperCase()}
           </div>

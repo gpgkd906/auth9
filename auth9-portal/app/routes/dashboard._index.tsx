@@ -144,12 +144,12 @@ function StatsCard({
   };
 
   return (
-    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full shadow-[0_12px_36px_var(--glass-shadow-strong)] hover:shadow-[0_16px_44px_var(--glass-shadow-strong)]`}>
+    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full shadow-[0_12px_36px_var(--glass-shadow-strong),inset_0_1px_0_var(--glass-highlight),inset_0_-1px_0_rgba(0,0,0,0.05)] hover:shadow-[0_16px_44px_var(--glass-shadow-strong),inset_0_1px_0_var(--glass-highlight),inset_0_-1px_0_rgba(0,0,0,0.05)]`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${colorClasses[color]} pointer-events-none`} />
       <CardContent className="pt-5 relative h-full flex flex-col">
         <p className="text-[13px] font-medium text-[var(--text-secondary)]">{title}</p>
         <p className="mt-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{value}</p>
-        <Button asChild variant="outline" size="sm" className="mt-4 h-11 w-full !flex justify-between px-4 text-xs sm:mt-3 sm:h-8 sm:w-auto sm:gap-1 sm:px-3 sm:justify-center">
+        <Button asChild variant="outline" size="sm" className="mt-4 -mx-5 -mb-5 h-11 w-[calc(100%+2.5rem)] rounded-t-none !flex justify-between px-4 text-xs sm:mt-3 sm:mx-0 sm:mb-0 sm:h-8 sm:w-auto sm:rounded-md sm:gap-1 sm:px-3 sm:justify-center">
           <Link to={href}>
             View details
             <ArrowRightIcon className="h-3.5 w-3.5" />

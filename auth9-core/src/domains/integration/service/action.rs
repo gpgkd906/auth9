@@ -30,7 +30,12 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     }
 
     /// Create a new action
-    pub async fn create(&self, service_id: StringUuid, input: CreateActionInput) -> Result<Action> {
+    pub async fn create(
+        &self,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+        input: CreateActionInput,
+    ) -> Result<Action> {
         let start = Instant::now();
 
         // Validate input
@@ -56,7 +61,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
         }
 
         // Create action
-        let result = self.action_repo.create(service_id, &input).await;
+        let result = self.action_repo.create(tenant_id, service_id, &input).await;
 
         // Record metrics
         let duration = start.elapsed().as_secs_f64();
@@ -171,6 +176,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// Batch upsert actions (create or update)
     pub async fn batch_upsert(
         &self,
+        tenant_id: StringUuid,
         service_id: StringUuid,
         inputs: Vec<UpsertActionInput>,
     ) -> Result<BatchUpsertResponse> {
@@ -245,7 +251,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
                         timeout_ms: input.timeout_ms,
                     };
 
-                    match self.create(service_id, create_input).await {
+                    match self.create(tenant_id, service_id, create_input).await {
                         Ok(action) => created.push(action),
                         Err(e) => errors.push(BatchError {
                             input_index: index,
@@ -502,6 +508,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_success() {
+        let tenant_id = StringUuid::new_v4();
         let service_id = StringUuid::new_v4();
         let input = make_create_input();
         let expected_action = make_test_action(service_id);
@@ -516,11 +523,11 @@ mod tests {
         // create should succeed
         let action_clone = expected_action.clone();
         mock.expect_create()
-            .withf(move |sid, _| *sid == service_id)
-            .returning(move |_, _| Ok(action_clone.clone()));
+            .withf(move |tid, sid, _| *tid == tenant_id && *sid == service_id)
+            .returning(move |_, _, _| Ok(action_clone.clone()));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(service_id, input).await;
+        let result = service.create(tenant_id, service_id, input).await;
 
         assert!(result.is_ok());
         let action = result.unwrap();
@@ -532,6 +539,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_duplicate_name() {
+        let tenant_id = StringUuid::new_v4();
         let service_id = StringUuid::new_v4();
         let input = make_create_input();
         let existing = make_test_action(service_id);
@@ -543,7 +551,7 @@ mod tests {
             .returning(move |_, _, _| Ok(vec![existing.clone()]));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(service_id, input).await;
+        let result = service.create(tenant_id, service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -559,13 +567,14 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_invalid_trigger() {
+        let tenant_id = StringUuid::new_v4();
         let service_id = StringUuid::new_v4();
         let mut input = make_create_input();
         input.trigger_id = "invalid-trigger".to_string();
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(service_id, input).await;
+        let result = service.create(tenant_id, service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -581,13 +590,14 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_create_empty_script() {
+        let tenant_id = StringUuid::new_v4();
         let service_id = StringUuid::new_v4();
         let mut input = make_create_input();
         input.script = "   ".to_string(); // whitespace-only
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(service_id, input).await;
+        let result = service.create(tenant_id, service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -1176,6 +1186,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_batch_upsert_create_and_update() {
+        let tenant_id = StringUuid::new_v4();
         let service_id = StringUuid::new_v4();
         let existing_action = make_test_action(service_id);
         let existing_id = existing_action.id;
@@ -1187,7 +1198,7 @@ mod tests {
             .returning(|_, _, _| Ok(vec![]));
 
         // For the create path
-        mock.expect_create().returning(move |sid, input| {
+        mock.expect_create().returning(move |_tid, sid, input| {
             Ok(Action {
                 id: StringUuid::new_v4(),
                 service_id: sid,
@@ -1248,7 +1259,7 @@ mod tests {
             },
         ];
 
-        let result = service.batch_upsert(service_id, inputs).await;
+        let result = service.batch_upsert(tenant_id, service_id, inputs).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -1262,6 +1273,7 @@ mod tests {
     // ---------------------------------------------------------------
     #[tokio::test]
     async fn test_batch_upsert_validation_errors() {
+        let tenant_id = StringUuid::new_v4();
         let service_id = StringUuid::new_v4();
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
@@ -1293,7 +1305,7 @@ mod tests {
             },
         ];
 
-        let result = service.batch_upsert(service_id, inputs).await;
+        let result = service.batch_upsert(tenant_id, service_id, inputs).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();

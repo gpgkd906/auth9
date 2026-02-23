@@ -301,7 +301,7 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
 
 | # | 漏洞 | 影响字段 | 验证函数 | 缺失检查 | 状态 |
 |---|------|---------|---------|---------|------|
-| V1 | avatar_url 缺少 SSRF 防护 | `User.avatar_url` | `validate_avatar_url` | 私有 IP / 回环地址 / 云元数据 | **待修复** - 改用 `validate_url_no_ssrf_strict` 或添加 IP 检查 |
+| ~~V1~~ | ~~avatar_url 缺少 SSRF 防护~~ | `User.avatar_url` | `validate_avatar_url` | ~~私有 IP / 回环地址 / 云元数据~~ | **已修复** - `validate_avatar_url` 已检查内网 IP、回环地址、云元数据端点（2026-02-23 QA 验证通过） |
 | ~~V2~~ | ~~TenantBranding logo_url 缺少路径遍历检查~~ | `TenantBranding.logo_url` | `validate_branding_logo_url` | ~~`..` 和 null 字节~~ | **已修复** - `validate_branding_logo_url` 已委托给 `validate_url_no_ssrf_strict`（含 `..` 和 `\0` 检查） |
 
 ---
@@ -310,17 +310,17 @@ curl -s -X PUT -H "Authorization: Bearer $TOKEN" \
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
-| 1 | URL 路径遍历攻击 | ☐ | | | |
-| 1.6 | ✅ TenantBranding logo_url 路径遍历（V2 已修复） | ☐ | | | |
-| 1.7 | ✅ TenantBranding logo_url null 字节（V2 已修复） | ☐ | | | |
-| 2 | URL Scheme 注入 | ☐ | | | |
-| 3 | SSRF - 通过 URL 字段探测内网 | ☐ | | | |
-| 3.6 | ⚠️ avatar_url AWS 云元数据 SSRF（漏洞 V1） | ☐ | | | |
-| 3.7 | ⚠️ avatar_url localhost SSRF（漏洞 V1） | ☐ | | | |
-| 3.8 | ⚠️ avatar_url 私有网段 SSRF（漏洞 V1） | ☐ | | | |
-| 3.9 | ⚠️ avatar_url GCP 元数据 SSRF（漏洞 V1） | ☐ | | | |
-| 3.10 | ⚠️ avatar_url IPv6 localhost SSRF（漏洞 V1） | ☐ | | | |
-| 3.11 | ⚠️ avatar_url 0.0.0.0 SSRF（漏洞 V1） | ☐ | | | |
+| 1 | URL 路径遍历攻击 | ✅ | 2026-02-23 | QA Bot | 无 |
+| 1.6 | ✅ TenantBranding logo_url 路径遍历（V2 已修复） | ✅ | 2026-02-23 | QA Bot | 无 |
+| 1.7 | ✅ TenantBranding logo_url null 字节（V2 已修复） | ✅ | 2026-02-23 | QA Bot | 无 |
+| 2 | URL Scheme 注入 | ✅ | 2026-02-23 | QA Bot | 无 |
+| 3 | SSRF - 通过 URL 字段探测内网 | ✅ | 2026-02-23 | QA Bot | 无 |
+| 3.6 | ✅ avatar_url AWS 云元数据 SSRF（V1 已修复） | ✅ | 2026-02-23 | QA Bot | 无 - V1 已修复 |
+| 3.7 | ✅ avatar_url localhost SSRF（V1 已修复） | ✅ | 2026-02-23 | QA Bot | 无 - V1 已修复 |
+| 3.8 | ✅ avatar_url 私有网段 SSRF（V1 已修复） | ✅ | 2026-02-23 | QA Bot | 无 - V1 已修复 |
+| 3.9 | ✅ avatar_url GCP 元数据 SSRF（V1 已修复） | ✅ | 2026-02-23 | QA Bot | 无 - V1 已修复 |
+| 3.10 | ✅ avatar_url IPv6 localhost SSRF（V1 已修复） | ✅ | 2026-02-23 | QA Bot | 无 - V1 已修复 |
+| 3.11 | ✅ avatar_url 0.0.0.0 SSRF（V1 已修复） | ✅ | 2026-02-23 | QA Bot | 无 - V1 已修复 |
 
 ---
 

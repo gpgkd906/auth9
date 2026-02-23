@@ -236,9 +236,11 @@ curl -X POST -H "Authorization: Bearer $TOKEN_A" \
 - 租户管理员仅能管理本租户
 - 平台管理员才能创建/管理租户
 - 系统设置仅平台管理员可访问
-- **平台管理员使用 TenantAccess Token（通过 token exchange 获得）不能创建/删除租户**
-  - 租户创建/删除使用 `require_platform_admin_identity` 策略，仅接受 Identity Token
-  - 这防止通过 token exchange 提升 TenantAccess Token 的权限范围
+- **邮箱配置型平台管理员使用 TenantAccess Token（通过 token exchange 获得）不能创建/删除租户**
+  - 租户创建/删除使用 `require_platform_admin_identity` 策略
+  - 邮箱型管理员（email 在 `PLATFORM_ADMIN_EMAILS` 中）：仅接受 Identity Token
+  - **DB 型管理员（auth9-platform 租户 admin 角色）：允许任何 Token 类型**（包括 TenantAccess Token），这是设计行为
+  - 测试时需区分这两种管理员路径，避免误报
 
 ### 验证方法
 ```bash
@@ -250,14 +252,17 @@ curl -s -o /dev/null -w "%{http_code}" \
   -d '{"name":"New Tenant","slug":"new-tenant"}'
 # 预期: 403 "Platform admin required"
 
-# 平台管理员使用 TenantAccess Token 尝试创建租户
-# （即使邮箱在 PLATFORM_ADMIN_EMAILS 中，TenantAccess Token 也无法创建租户）
+# 邮箱型平台管理员使用 TenantAccess Token 尝试创建租户
+# （邮箱在 PLATFORM_ADMIN_EMAILS 中，但使用 TenantAccess Token 时此路径被拒绝）
 curl -s -o /dev/null -w "%{http_code}" \
   -X POST -H "Authorization: Bearer $PLATFORM_ADMIN_TENANT_TOKEN" \
   -H "Content-Type: application/json" \
   http://localhost:8080/api/v1/tenants \
   -d '{"name":"New Tenant","slug":"new-tenant"}'
 # 预期: 403 "Platform admin required"
+# ⚠️ 注意: 如果该用户同时是 auth9-platform 租户的 admin（DB 型管理员），
+# 则 DB 路径允许 TenantAccess Token 创建租户（返回 201）。这是设计行为，不是漏洞。
+# 测试此场景时，$PLATFORM_ADMIN_TENANT_TOKEN 的 user_id 不能是 auth9-platform admin。
 
 # 平台管理员使用 Identity Token 创建租户（正确方式）
 curl -s -o /dev/null -w "%{http_code}" \

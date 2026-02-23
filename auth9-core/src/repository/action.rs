@@ -11,7 +11,12 @@ use sqlx::MySqlPool;
 #[async_trait]
 #[allow(clippy::too_many_arguments)]
 pub trait ActionRepository: Send + Sync {
-    async fn create(&self, service_id: StringUuid, input: &CreateActionInput) -> Result<Action>;
+    async fn create(
+        &self,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+        input: &CreateActionInput,
+    ) -> Result<Action>;
     async fn find_by_id(&self, id: StringUuid) -> Result<Option<Action>>;
     async fn list_by_service(&self, service_id: StringUuid) -> Result<Vec<Action>>;
     async fn list_by_trigger(
@@ -66,18 +71,24 @@ impl ActionRepositoryImpl {
 
 #[async_trait]
 impl ActionRepository for ActionRepositoryImpl {
-    async fn create(&self, service_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
+    async fn create(
+        &self,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+        input: &CreateActionInput,
+    ) -> Result<Action> {
         let id = StringUuid::new_v4();
 
         sqlx::query(
             r#"
-            INSERT INTO actions (id, service_id, name, description, trigger_id, script,
+            INSERT INTO actions (id, tenant_id, service_id, name, description, trigger_id, script,
                                  enabled, strict_mode, execution_order, timeout_ms,
                                  created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
             "#,
         )
         .bind(id)
+        .bind(tenant_id)
         .bind(service_id)
         .bind(&input.name)
         .bind(&input.description)

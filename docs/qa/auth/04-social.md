@@ -19,6 +19,12 @@ Auth9 采用 Headless Keycloak 架构，社交登录通过 Auth9 登录入口触
 
 > **注意**：社交登录按钮不在 Portal `/login` 页面上，而是在 Keycloak 品牌化登录页上。QA 需要先点击「Sign in with password」进入 Keycloak 页面才能看到社交登录选项。
 
+> **⚠️ 环境前置条件**：场景 1-3 **需要预先在 Keycloak 中配置 Identity Provider**（如 Google、GitHub）。本地开发 Docker 环境默认不包含 IdP 配置。如果 Keycloak 登录页未显示社交登录按钮，请先完成以下配置：
+> 1. 访问 Keycloak Admin Console (`http://localhost:8081/admin`) → `auth9` realm → Identity Providers
+> 2. 添加 Google IdP（需要 Google OAuth Client ID/Secret）
+> 3. 添加 GitHub IdP（需要 GitHub OAuth App Client ID/Secret）
+> 4. 如果没有真实的 OAuth credentials，场景 1-3 应标记为 **SKIP（环境未配置）** 而非 FAILED
+
 **页面归属**：
 - Portal `/login` 页面 → 认证方式选择（Enterprise SSO / Password / Passkey）
 - Keycloak 品牌化登录页 → 用户名密码表单 + 社交登录按钮（auth9-keycloak-theme 定制外观）

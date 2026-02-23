@@ -203,6 +203,10 @@
     background-color: rgba(0, 122, 255, 0.3);
   }
 
+  button, a, input, select, textarea, [role="button"] {
+    touch-action: manipulation;
+  }
+
   /* Focus styles */
   :focus-visible {
     outline: 2px solid var(--accent-blue);
@@ -267,7 +271,7 @@
       0 12px 40px var(--glass-shadow-strong),
       inset 0 1px 0 var(--glass-highlight),
       inset 0 -1px 0 rgba(0, 0, 0, 0.05);
-    translate: 0 -2px;
+    transform: translateY(-2px) !important;
   }
 
   /* Liquid Glass Pill (for buttons, badges) */
@@ -387,6 +391,11 @@
   .sidebar-item:hover {
     color: var(--text-primary);
     background: var(--sidebar-item-hover);
+  }
+
+  .sidebar-item:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
   }
 
   .sidebar-item.active {

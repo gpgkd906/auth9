@@ -112,6 +112,12 @@ export default function TenantsIndexPage() {
   const [searchValue, setSearchValue] = useState(data.search || "");
 
   const isSubmitting = navigation.state === "submitting";
+  const createError = actionData && "error" in actionData && "intent" in actionData && actionData.intent === "create"
+    ? String(actionData.error)
+    : null;
+  const updateError = actionData && "error" in actionData && "intent" in actionData && actionData.intent === "update"
+    ? String(actionData.error)
+    : null;
 
   // Close dialogs on success
   useEffect(() => {
@@ -141,22 +147,52 @@ export default function TenantsIndexPage() {
                 Add a new tenant to the system. Slug must be unique.
               </DialogDescription>
             </DialogHeader>
-            <Form method="post" className="space-y-4">
+            <Form method="post" className="space-y-3">
               <input type="hidden" name="intent" value="create" />
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-name">Name</Label>
-                <Input id="create-name" name="name" placeholder="Acme Corp" required aria-required="true" />
+                <Input
+                  id="create-name"
+                  name="name"
+                  placeholder="Acme Corp"
+                  required
+                  aria-required="true"
+                  aria-describedby={createError ? "create-name-help create-tenant-form-error" : "create-name-help"}
+                  aria-invalid={createError ? true : undefined}
+                  aria-errormessage={createError ? "create-tenant-form-error" : undefined}
+                />
+                <p id="create-name-help" className="text-xs text-[var(--text-tertiary)]">A friendly name for your tenant</p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-slug">Slug</Label>
-                <Input id="create-slug" name="slug" placeholder="acme" required aria-required="true" />
+                <Input
+                  id="create-slug"
+                  name="slug"
+                  placeholder="acme"
+                  required
+                  aria-required="true"
+                  aria-describedby={createError ? "create-slug-help create-tenant-form-error" : "create-slug-help"}
+                  aria-invalid={createError ? true : undefined}
+                  aria-errormessage={createError ? "create-tenant-form-error" : undefined}
+                />
+                <p id="create-slug-help" className="text-xs text-[var(--text-tertiary)]">Unique identifier used in URLs (lowercase, no spaces)</p>
               </div>
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-logo">Logo URL</Label>
-                <Input id="create-logo" name="logo_url" placeholder="https://..." />
+                <Input
+                  id="create-logo"
+                  name="logo_url"
+                  placeholder="https://..."
+                  aria-describedby={createError ? "create-logo-help create-tenant-form-error" : "create-logo-help"}
+                  aria-invalid={createError ? true : undefined}
+                  aria-errormessage={createError ? "create-tenant-form-error" : undefined}
+                />
+                <p id="create-logo-help" className="text-xs text-[var(--text-tertiary)]">Optional URL to your organization logo</p>
               </div>
-              {actionData && "error" in actionData && (
-                <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
+              {createError && (
+                <p id="create-tenant-form-error" className="text-sm text-[var(--accent-red)]">
+                  {formatErrorMessage(createError)}
+                </p>
               )}
               <DialogFooter className="-mx-6 sm:mx-0">
                 <Button
@@ -221,7 +257,68 @@ export default function TenantsIndexPage() {
           </div>
         </CardHeader>
         <div className="px-6 pb-6">
-          <div className="mt-6 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+          <div className="mt-6 space-y-3 md:hidden">
+            {data.data.map((tenant) => (
+              <div
+                key={tenant.id}
+                className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-4"
+              >
+                <Link to={`/dashboard/tenants/${tenant.id}`} className="block hover:underline">
+                  <p className="text-sm font-semibold text-[var(--text-primary)]">{tenant.name}</p>
+                  <p className="mt-1 text-xs text-[var(--text-tertiary)]">{tenant.slug}</p>
+                </Link>
+                <div className="mt-3 flex items-center gap-2">
+                  <span className="text-xs text-[var(--text-tertiary)]">Status</span>
+                  <span className="inline-flex items-center rounded-full bg-[var(--accent-blue)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent-blue)] capitalize">
+                    {tenant.status}
+                  </span>
+                </div>
+                <p className="mt-2 text-xs text-[var(--text-tertiary)]">
+                  Updated <FormattedDate date={tenant.updated_at} />
+                </p>
+                <div className="mt-4 flex items-center gap-2">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="h-11 flex-1"
+                    onClick={() => setEditingTenant(tenant)}
+                  >
+                    <Pencil2Icon className="mr-2 h-3.5 w-3.5" />
+                    Edit
+                  </Button>
+                  <Button asChild variant="outline" size="sm" className="h-11 flex-1">
+                    <Link to={`/dashboard/tenants/${tenant.id}/invitations`}>Invitations</Link>
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    size="sm"
+                    className="h-11"
+                    onClick={async () => {
+                      const ok = await confirm({
+                        title: "Delete Tenant",
+                        description: "Are you sure you want to delete this tenant?",
+                        variant: "destructive",
+                      });
+                      if (ok) {
+                        submit({ intent: "delete", id: tenant.id }, { method: "post" });
+                      }
+                    }}
+                  >
+                    <TrashIcon className="h-3.5 w-3.5" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+            {data.data.length === 0 && (
+              <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] px-4 py-6 text-center text-[var(--text-tertiary)]">
+                No tenants found
+              </div>
+            )}
+          </div>
+
+          <div className="mt-6 hidden overflow-hidden rounded-xl border border-[var(--glass-border-subtle)] md:block">
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
@@ -352,6 +449,9 @@ export default function TenantsIndexPage() {
                 name="name"
                 defaultValue={editingTenant?.name}
                 required
+                aria-required="true"
+                aria-invalid={updateError ? true : undefined}
+                aria-errormessage={updateError ? "edit-tenant-form-error" : undefined}
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -361,6 +461,9 @@ export default function TenantsIndexPage() {
                 name="slug"
                 defaultValue={editingTenant?.slug}
                 required
+                aria-required="true"
+                aria-invalid={updateError ? true : undefined}
+                aria-errormessage={updateError ? "edit-tenant-form-error" : undefined}
               />
             </div>
             <div className="flex flex-col gap-1.5">
@@ -369,10 +472,14 @@ export default function TenantsIndexPage() {
                 id="edit-logo"
                 name="logo_url"
                 defaultValue={editingTenant?.logo_url}
+                aria-invalid={updateError ? true : undefined}
+                aria-errormessage={updateError ? "edit-tenant-form-error" : undefined}
               />
             </div>
-            {actionData && "error" in actionData && "intent" in actionData && actionData.intent === "update" && (
-              <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
+            {updateError && (
+              <p id="edit-tenant-form-error" className="text-sm text-[var(--accent-red)]">
+                {formatErrorMessage(updateError)}
+              </p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setEditingTenant(null)}>

@@ -45,9 +45,11 @@
 
 #### 悬停变化
 **位置变化**：
-- 向上平移：`transform: translateY(-2px)`
+- 向上平移：`transform: translateY(-2px) !important`
 - 时长：300ms
 - 缓动：`cubic-bezier(0.4, 0, 0.2, 1)`
+
+> **注意**：统计卡片使用 `fadeInUp` 动画（`animation-fill-mode: forwards`），`transform` 属性被动画锁定。悬停位移通过 `.liquid-glass:hover` 的 `transform: translateY(-2px) !important` 强制覆盖动画锁定值。验证时应检查 `getComputedStyle(card).transform`。
 
 **背景变化**：
 - 透明度增加：`--glass-bg` → `--glass-bg-hover`
@@ -73,10 +75,20 @@ const styles = getComputedStyle(card);
 console.log('Transition:', styles.transition);
 // 预期: all 0.3s cubic-bezier(0.4, 0, 0.2, 1)
 
-// 触发悬停
-card.style.transform = 'translateY(-2px)';
-card.style.boxShadow = '0 12px 40px var(--glass-shadow-strong)';
+// 悬停后检查 transform 属性
+// .liquid-glass:hover 使用 !important 覆盖 fadeInUp forwards 锁定值
+card.dispatchEvent(new MouseEvent('mouseenter'));
+setTimeout(() => {
+  console.log('transform:', getComputedStyle(card).transform);
+  // 预期: matrix(1, 0, 0, 1, 0, -2) — 即 translateY(-2px)
+}, 400);
 ```
+
+#### 常见误报排查
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| `transform` 悬停前后不变 | hover 样式未加载或被其他样式覆盖 | 确认 `.liquid-glass:hover` 的 `!important` 生效 |
+| `transform` 为 `matrix(1,0,0,1,0,0)`（非悬停态） | 正常——`fadeInUp` 动画结束后 transform 为 `translateY(0)` | 确保在悬停状态下检查 |
 
 #### Performance 分析
 ```

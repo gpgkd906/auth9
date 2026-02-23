@@ -95,6 +95,13 @@ pub trait RbacRepository: Send + Sync {
 
     /// Clear parent_role_id references for a specific role (SET NULL before deleting the role)
     async fn clear_parent_role_reference_by_id(&self, role_id: StringUuid) -> Result<u64>;
+
+    /// Find user IDs that have a specific role assigned in a tenant (via user_tenant_roles)
+    async fn find_user_ids_by_role_in_tenant(
+        &self,
+        tenant_id: StringUuid,
+        role_id: StringUuid,
+    ) -> Result<Vec<StringUuid>>;
 }
 
 pub struct RbacRepositoryImpl {
@@ -592,6 +599,27 @@ impl RbacRepository for RbacRepositoryImpl {
             .await?;
 
         Ok(result.rows_affected())
+    }
+
+    async fn find_user_ids_by_role_in_tenant(
+        &self,
+        tenant_id: StringUuid,
+        role_id: StringUuid,
+    ) -> Result<Vec<StringUuid>> {
+        let rows: Vec<(StringUuid,)> = sqlx::query_as(
+            r#"
+            SELECT tu.user_id
+            FROM user_tenant_roles utr
+            INNER JOIN tenant_users tu ON utr.tenant_user_id = tu.id
+            WHERE tu.tenant_id = ? AND utr.role_id = ?
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(role_id)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(rows.into_iter().map(|(id,)| id).collect())
     }
 }
 
