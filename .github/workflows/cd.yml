@@ -13,7 +13,6 @@ env:
   CORE_IMAGE_NAME: gpgkd906/auth9-core
   PORTAL_IMAGE_NAME: gpgkd906/auth9-portal
   THEME_IMAGE_NAME: gpgkd906/auth9-keycloak-theme
-  EVENTS_IMAGE_NAME: gpgkd906/auth9-keycloak-events
 
 jobs:
   # ==================== Build and Push auth9-core ====================
@@ -173,63 +172,11 @@ jobs:
             type=registry,ref=${{ env.REGISTRY }}/${{ env.THEME_IMAGE_NAME }}:buildcache,mode=max
           platforms: linux/amd64
 
-  # ==================== Build and Push auth9-keycloak-events ====================
-  build-events:
-    name: Build auth9-keycloak-events
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-      full_image: ${{ steps.meta.outputs.tags }}
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.EVENTS_IMAGE_NAME }}
-          tags: |
-            type=sha,prefix=
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=ref,event=branch
-
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: ./auth9-keycloak-events
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache,mode=max
-          platforms: linux/amd64
-
   # ==================== Generate Summary ====================
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [build-core, build-portal, build-theme, build-events]
+    needs: [build-core, build-portal, build-theme]
     permissions:
       contents: read
 
@@ -265,13 +212,6 @@ jobs:
           ghcr.io/gpgkd906/auth9-keycloak-theme:latest
           ```
 
-          ### auth9-keycloak-events
-
-          ```
-          ghcr.io/gpgkd906/auth9-keycloak-events:${SHORT_SHA}
-          ghcr.io/gpgkd906/auth9-keycloak-events:latest
-          ```
-
           ### Quick Copy (with commit SHA)
 
           | Component | Image |
@@ -279,7 +219,6 @@ jobs:
           | auth9-core | `ghcr.io/gpgkd906/auth9-core:${SHORT_SHA}` |
           | auth9-portal | `ghcr.io/gpgkd906/auth9-portal:${SHORT_SHA}` |
           | auth9-keycloak-theme | `ghcr.io/gpgkd906/auth9-keycloak-theme:${SHORT_SHA}` |
-          | auth9-keycloak-events | `ghcr.io/gpgkd906/auth9-keycloak-events:${SHORT_SHA}` |
 
           ### Quick Copy (latest)
 
@@ -288,7 +227,6 @@ jobs:
           | auth9-core | `ghcr.io/gpgkd906/auth9-core:latest` |
           | auth9-portal | `ghcr.io/gpgkd906/auth9-portal:latest` |
           | auth9-keycloak-theme | `ghcr.io/gpgkd906/auth9-keycloak-theme:latest` |
-          | auth9-keycloak-events | `ghcr.io/gpgkd906/auth9-keycloak-events:latest` |
           
           ---
           

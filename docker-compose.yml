@@ -215,7 +215,6 @@ services:
     profiles:
       - build
 
-  # ==================== Keycloak Events SPI Builder ====================
   # ==================== Keycloak (Auth Engine) ====================
   keycloak:
     image: quay.io/keycloak/keycloak:26.3.3
