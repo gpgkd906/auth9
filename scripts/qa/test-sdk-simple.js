@@ -5,7 +5,7 @@ class SimpleAuth9Client {
   constructor(config) {
     this.baseUrl = config.baseUrl;
     this.apiKey = config.apiKey;
-    this.tenantId = config.tenantId;
+    this.serviceId = config.serviceId;
   }
 
   async request(method, path, body = null) {
@@ -37,26 +37,26 @@ class SimpleAuth9Client {
   get actions() {
     return {
       create: async (data) => {
-        const result = await this.request('POST', `/api/v1/tenants/${this.tenantId}/actions`, data);
+        const result = await this.request('POST', `/api/v1/services/${this.serviceId}/actions`, data);
         return result.data;
       },
       list: async (triggerId) => {
         const path = triggerId 
-          ? `/api/v1/tenants/${this.tenantId}/actions?trigger_id=${triggerId}`
-          : `/api/v1/tenants/${this.tenantId}/actions`;
+          ? `/api/v1/services/${this.serviceId}/actions?trigger_id=${triggerId}`
+          : `/api/v1/services/${this.serviceId}/actions`;
         const result = await this.request('GET', path);
         return result.data;
       },
       get: async (id) => {
-        const result = await this.request('GET', `/api/v1/tenants/${this.tenantId}/actions/${id}`);
+        const result = await this.request('GET', `/api/v1/services/${this.serviceId}/actions/${id}`);
         return result.data;
       },
       update: async (id, data) => {
-        const result = await this.request('PATCH', `/api/v1/tenants/${this.tenantId}/actions/${id}`, data);
+        const result = await this.request('PATCH', `/api/v1/services/${this.serviceId}/actions/${id}`, data);
         return result.data;
       },
       delete: async (id) => {
-        await this.request('DELETE', `/api/v1/tenants/${this.tenantId}/actions/${id}`);
+        await this.request('DELETE', `/api/v1/services/${this.serviceId}/actions/${id}`);
         return true;
       },
     };
@@ -65,17 +65,17 @@ class SimpleAuth9Client {
 
 async function testCRUD() {
   const TOKEN = process.env.AUTH9_API_KEY;
-  const TENANT_ID = process.env.TENANT_ID;
+  const SERVICE_ID = process.env.SERVICE_ID;
 
-  if (!TOKEN || !TENANT_ID) {
-    console.error('Please set AUTH9_API_KEY and TENANT_ID environment variables');
+  if (!TOKEN || !SERVICE_ID) {
+    console.error('Please set AUTH9_API_KEY and SERVICE_ID environment variables');
     process.exit(1);
   }
 
   const client = new SimpleAuth9Client({
     baseUrl: 'http://localhost:8080',
     apiKey: TOKEN,
-    tenantId: TENANT_ID,
+    serviceId: SERVICE_ID,
   });
 
   try {

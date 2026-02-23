@@ -286,10 +286,16 @@ WHERE u.display_name = 'Admin User';
 ### 测试操作流程
 1. 打开浏览器访问 Portal：http://localhost:3000
 2. 点击「登录」按钮，页面跳转至 Keycloak 登录页
-3. 输入管理员凭据（用户名: `admin`，密码: Init 时生成或通过 `AUTH9_ADMIN_PASSWORD` 设置的密码）
+3. 输入管理员凭据：
+   - **用户名**: `admin`（**不是** email `admin@auth9.local`）
+   - **密码**: Docker 环境默认为 `SecurePass123!`（由 `AUTH9_ADMIN_PASSWORD` 环境变量控制）
 4. 登录成功后，若进入 `/tenant/select`，先选择任一 tenant 完成 token exchange
 5. 验证 Dashboard 页面
 6. 查看租户列表
+
+> **重要**: Keycloak 登录使用 **用户名**（`admin`），不能使用 email（`admin@auth9.local`），
+> 除非 Realm 显式开启了 `loginWithEmailAllowed`。如果未设置 `AUTH9_ADMIN_PASSWORD` 环境变量，
+> init 命令会生成随机密码并输出到日志中。
 
 ### 预期结果
 - 登录流程正常完成，无错误
@@ -297,6 +303,15 @@ WHERE u.display_name = 'Admin User';
 - 租户列表中显示 "Auth9 Platform" 和 "Demo Organization" 两个租户
 - 管理员在两个租户中均为 `admin` 角色
 - 切换租户功能正常
+
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| "Invalid username or password" | 使用了 email 而非 username 登录 | 使用用户名 `admin`，而非 `admin@auth9.local` |
+| "Invalid username or password" | AUTH9_ADMIN_PASSWORD 未设置 | 检查 docker-compose.yml 中的 `AUTH9_ADMIN_PASSWORD` 值，或查看 init 日志 |
+| "Invalid username or password" | 密码策略阻止密码设置 | 运行 `./scripts/reset-docker.sh` 重置环境 |
+| 登录后页面空白 | auth9-core 未正常运行 | 检查 `docker logs auth9-core` |
 
 ### 预期数据状态
 ```sql

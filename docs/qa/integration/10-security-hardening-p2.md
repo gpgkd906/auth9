@@ -31,6 +31,24 @@ Auth9 事件接入支持两种模式：
 
 ---
 
+## 前置条件
+
+> **Token 类型要求**: 场景 1-3 的删除操作需要 **TenantAccess Token**（非 Identity Token）。
+> Identity Token 仅用于租户选择和 token exchange，不能执行用户/租户管理操作。
+>
+> **获取 TenantAccess Token**:
+> ```bash
+> # 方法 1: 使用脚本生成（需要在项目根目录）
+> node .claude/skills/tools/gen_tenant_access_token.js
+>
+> # 方法 2: 通过 Portal 登录后从浏览器 DevTools 获取
+> # Application → Cookies → auth9_session → 复制 token 值
+> ```
+>
+> **登录凭据**: 用户名 `admin`（不是 email），密码为 `AUTH9_ADMIN_PASSWORD`（Docker 默认: `SecurePass123!`）
+
+---
+
 ## 场景 1：用户删除 — 级联操作原子性验证
 
 ### 初始状态
@@ -48,10 +66,10 @@ Auth9 事件接入支持两种模式：
    SELECT COUNT(*) FROM login_events WHERE user_id = '{user_id}';
    SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}';
    ```
-2. 通过 Portal「用户管理」页面删除用户，或调用 API：
+2. 通过 Portal「用户管理」页面删除用户，或调用 API（**需要 TenantAccess Token**）：
    ```bash
    curl -s -w "\n%{http_code}" -X DELETE \
-     -H "Authorization: Bearer {admin_token}" \
+     -H "Authorization: Bearer {tenant_access_token}" \
      http://localhost:8080/api/v1/tenants/{tenant_id}/users/{user_id}
    ```
 3. 验证所有关联数据已清除

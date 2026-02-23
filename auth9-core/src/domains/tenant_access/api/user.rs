@@ -7,7 +7,7 @@ use crate::config::Config;
 use crate::domain::{AddUserToTenantInput, CreateUserInput, StringUuid, UpdateUserInput, User};
 use crate::error::{AppError, Result};
 use crate::keycloak::{CreateKeycloakUserInput, KeycloakCredential, KeycloakUserUpdate};
-use crate::middleware::auth::AuthUser;
+use crate::middleware::auth::{AuthUser, TokenType};
 use crate::policy::{
     enforce, enforce_with_state, is_platform_admin_with_db, PolicyAction, PolicyInput,
     ResourceScope,
@@ -919,6 +919,12 @@ pub async fn list_by_tenant<S: HasServices>(
     Path(tenant_id): Path<Uuid>,
     Query(pagination): Query<PaginationQuery>,
 ) -> Result<impl IntoResponse> {
+    if auth.token_type == TokenType::Identity {
+        return Err(AppError::Forbidden(
+            "Identity token is only allowed for tenant selection and exchange".to_string(),
+        ));
+    }
+
     enforce_with_state(
         &state,
         &auth,

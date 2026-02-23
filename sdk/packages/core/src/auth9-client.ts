@@ -15,11 +15,13 @@ export interface Auth9ClientConfig {
   baseUrl: string;
   apiKey: string;
   tenantId?: string;
+  serviceId?: string;
 }
 
 export class Auth9Client {
   private http: Auth9HttpClient;
   private tenantId?: string;
+  private serviceId?: string;
 
   constructor(config: Auth9ClientConfig) {
     this.http = new Auth9HttpClient({
@@ -27,61 +29,70 @@ export class Auth9Client {
       accessToken: config.apiKey,
     });
     this.tenantId = config.tenantId;
+    this.serviceId = config.serviceId;
   }
 
   setTenantId(tenantId: string) {
     this.tenantId = tenantId;
   }
 
-  get actions() {
-    if (!this.tenantId) {
-      throw new Error("tenantId must be set to use actions API");
+  setServiceId(serviceId: string) {
+    this.serviceId = serviceId;
+  }
+
+  private requireServiceId(): string {
+    if (!this.serviceId) {
+      throw new Error("serviceId must be set to use actions API");
     }
-    const tenantId = this.tenantId;
+    return this.serviceId;
+  }
+
+  get actions() {
+    const serviceId = this.requireServiceId();
 
     return {
       list: async (triggerId?: string) => {
         const params: Record<string, string> = {};
         if (triggerId) params.trigger_id = triggerId;
         const result = await this.http.get<{ data: Action[] }>(
-          `/api/v1/tenants/${tenantId}/actions`,
+          `/api/v1/services/${serviceId}/actions`,
           params
         );
         return result.data;
       },
       get: async (id: string) => {
         const result = await this.http.get<{ data: Action }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}`
+          `/api/v1/services/${serviceId}/actions/${id}`
         );
         return result.data;
       },
       create: async (input: CreateActionInput) => {
         const result = await this.http.post<{ data: Action }>(
-          `/api/v1/tenants/${tenantId}/actions`,
+          `/api/v1/services/${serviceId}/actions`,
           input
         );
         return result.data;
       },
       update: async (id: string, input: UpdateActionInput) => {
         const result = await this.http.patch<{ data: Action }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}`,
+          `/api/v1/services/${serviceId}/actions/${id}`,
           input
         );
         return result.data;
       },
       delete: async (id: string) => {
-        await this.http.delete(`/api/v1/tenants/${tenantId}/actions/${id}`);
+        await this.http.delete(`/api/v1/services/${serviceId}/actions/${id}`);
       },
       test: async (id: string, context: ActionContext) => {
         const result = await this.http.post<{ data: TestActionResponse }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}/test`,
+          `/api/v1/services/${serviceId}/actions/${id}/test`,
           { context }
         );
         return result.data;
       },
       batchUpsert: async (actions: UpsertActionInput[]) => {
         const result = await this.http.post<{ data: BatchUpsertResponse }>(
-          `/api/v1/tenants/${tenantId}/actions/batch`,
+          `/api/v1/services/${serviceId}/actions/batch`,
           { actions }
         );
         return result.data;
@@ -93,14 +104,14 @@ export class Auth9Client {
         if (options?.limit) params.limit = String(options.limit);
         
         const result = await this.http.get<{ data: ActionExecution[] }>(
-          `/api/v1/tenants/${tenantId}/actions/logs`,
+          `/api/v1/services/${serviceId}/actions/logs`,
           params
         );
         return result.data;
       },
       stats: async (id: string) => {
         const result = await this.http.get<{ data: ActionStats }>(
-          `/api/v1/tenants/${tenantId}/actions/${id}/stats`
+          `/api/v1/services/${serviceId}/actions/${id}/stats`
         );
         return result.data;
       },

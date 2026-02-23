@@ -76,16 +76,22 @@ SELECT parent_role_id FROM roles WHERE name = 'B';
 ### 初始状态
 - 服务 A 有权限 `perm-a`
 - 服务 B 有角色 `role-b`
+- **环境已通过 `./scripts/reset-docker.sh` 重置**（清除可能存在的历史遗留数据）
 
 ### 目的
 验证不能跨服务分配权限
 
 ### 测试操作流程
-1. 尝试为 role-b 分配 perm-a
+1. 尝试为 role-b 分配 perm-a（通过 API 或 UI）
+
+> **注意**: 后端 `assign_permission_to_role` 和 `create_role` 方法已包含跨服务验证逻辑，
+> 会在 `role.service_id != permission.service_id` 时返回 400 Bad Request。
+> 如果在数据库中发现跨服务权限记录，这些是在验证逻辑添加之前创建的历史数据，
+> 需要重置环境清除。
 
 ### 预期结果
 - UI 中只显示服务 B 的权限
-- API 尝试会返回错误
+- API 尝试返回 `400 Bad Request`: "Cannot assign permission from service X to role in service Y"
 
 ### 预期数据状态
 ```sql
@@ -94,8 +100,15 @@ SELECT rp.* FROM role_permissions rp
 JOIN roles r ON r.id = rp.role_id
 JOIN permissions p ON p.id = rp.permission_id
 WHERE r.service_id != p.service_id;
--- 预期: 0 条记录
+-- 预期: 0 条记录（需先重置环境清除历史数据）
 ```
+
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 存在跨服务权限记录 | 历史遗留数据（验证逻辑添加前创建） | 运行 `./scripts/reset-docker.sh` 重置环境 |
+| API 返回 200 而非 400 | 可能使用了旧版本 auth9-core | 确认使用最新版本 |
 
 ---
 

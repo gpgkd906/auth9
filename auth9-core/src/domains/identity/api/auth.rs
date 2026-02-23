@@ -515,8 +515,8 @@ pub async fn token<S: HasServices + HasSessionManagement + HasCache + HasAnalyti
                             modified_context.claims
                         }
                         Err(e) => {
-                            tracing::warn!("PostLogin action failed for user {}: {}", user.id, e);
-                            None
+                            tracing::warn!("PostLogin action failed (strict_mode) for user {}: {}", user.id, e);
+                            return Err(e);
                         }
                     }
                 } else {
