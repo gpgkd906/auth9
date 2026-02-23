@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = process.env.SERVICE_ID || '0df463ad-10a2-4589-8708-0b56dba70161';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -15,7 +15,7 @@ async function testPerformance() {
     // 测试批量操作性能（创建10个而不是100个以节省时间）
     console.log('性能测试2：批量操作性能（10个Actions）...');
     const batchStart = Date.now();
-    const batchResult = await client.post(`/api/v1/tenants/${TENANT_ID}/actions/batch`, {
+    const batchResult = await client.post(`/api/v1/services/${SERVICE_ID}/actions/batch`, {
       actions: Array.from({ length: 10 }, (_, i) => ({
         name: `Batch Perf ${i}`,
         trigger_id: 'post-login',
@@ -29,7 +29,7 @@ async function testPerformance() {
     console.log('清理批量测试数据...');
     if (batchResult.data && batchResult.data.created) {
       const cleanupPromises = batchResult.data.created.map(action =>
-        client.delete(`/api/v1/tenants/${TENANT_ID}/actions/${action.id}`)
+        client.delete(`/api/v1/services/${SERVICE_ID}/actions/${action.id}`)
       );
       await Promise.all(cleanupPromises);
     }
@@ -37,7 +37,7 @@ async function testPerformance() {
     // 测试日志查询性能
     console.log('性能测试3：日志查询性能...');
     const logsStart = Date.now();
-    const logsResult = await client.get(`/api/v1/tenants/${TENANT_ID}/actions/logs`, {
+    const logsResult = await client.get(`/api/v1/services/${SERVICE_ID}/actions/logs`, {
       limit: 100
     });
     const logsDuration = Date.now() - logsStart;
