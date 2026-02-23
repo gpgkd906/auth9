@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -14,7 +14,7 @@ async function testStats() {
   try {
     // 创建 Action
     console.log('创建测试Action...');
-    const action = await client.post(`/api/v1/tenants/${TENANT_ID}/actions`, {
+    const action = await client.post(`/api/v1/services/${SERVICE_ID}/actions`, {
       name: 'Stats Test',
       trigger_id: 'post-login',
       script: 'context;',
@@ -24,7 +24,7 @@ async function testStats() {
 
     // 查询统计
     console.log('查询统计信息...');
-    const statsResult = await client.get(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}/stats`);
+    const statsResult = await client.get(`/api/v1/services/${SERVICE_ID}/actions/${actionId}/stats`);
     
     const stats = statsResult.data;
     console.log('Execution count:', stats?.executionCount || 0);
@@ -42,7 +42,7 @@ async function testStats() {
 
     // 清理
     console.log('清理测试数据...');
-    await client.delete(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}`);
+    await client.delete(`/api/v1/services/${SERVICE_ID}/actions/${actionId}`);
     
   } catch (error) {
     console.error('❌ 场景7测试失败:', error.message);

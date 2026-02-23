@@ -203,6 +203,8 @@ SELECT id, deleted_at FROM services WHERE id IN ('allowed_1', 'forbidden_1', 'al
 
 ### 前置条件
 - 资源间存在关联关系
+- **⚠️ 必须使用非平台管理员用户的 Token**（Platform Admin 拥有全局访问权限，会绕过所有租户隔离检查，导致用户列表返回全量数据产生误报）
+- **⚠️ Token 的 user_id（sub）也不能使用管理员用户的 ID**（即使 email 不是管理员邮箱，`is_platform_admin_with_db()` 会通过 DB 查询发现该 user_id 在 `auth9-platform` 租户中有 admin 角色，仍触发平台管理员绕过）
 
 ### 攻击目标
 验证通过关联资源是否能访问未授权数据
@@ -222,6 +224,11 @@ SELECT id, deleted_at FROM services WHERE id IN ('allowed_1', 'forbidden_1', 'al
 
 ### 验证方法
 ```bash
+# ⚠️ Token 构造要求：
+# 必须使用 gen-test-tokens.js tenant-access（不带 --user-id 参数）
+# 自动使用安全的 NON_ADMIN_USER_ID，避免 DB-based 平台管理员绕过
+TOKEN=$(.claude/skills/tools/gen-test-tokens.js tenant-access --tenant-id "$TENANT_ID")
+
 # 访问服务详情 (包含关联的角色)
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/services/{id}?include=roles,permissions
@@ -237,6 +244,13 @@ curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/users/{id}?include=tenants
 # 验证仅返回当前租户信息
 ```
+
+### 常见误报原因
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 用户列表返回所有租户的用户 | Token 的 user_id 使用了平台管理员用户 ID（如 `935fb048-...`），DB-based 管理员绕过生效 | 使用 `gen-test-tokens.js tenant-access`（不带 `--user-id`）|
+| 跨租户资源返回 200 | 使用了 Platform Admin 邮箱的 Token | 确认 Token 邮箱不在 `PLATFORM_ADMIN_EMAILS` 中 |
 
 ### 修复建议
 - 关联查询添加租户过滤

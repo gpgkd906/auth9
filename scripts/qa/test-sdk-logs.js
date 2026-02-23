@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -14,7 +14,7 @@ async function testLogs() {
   try {
     // 创建 Action
     console.log('创建测试Action...');
-    const action = await client.post(`/api/v1/tenants/${TENANT_ID}/actions`, {
+    const action = await client.post(`/api/v1/services/${SERVICE_ID}/actions`, {
       name: 'Logging Test',
       trigger_id: 'post-login',
       script: 'context;',
@@ -25,7 +25,7 @@ async function testLogs() {
     // 由于测试端点不可用，我们无法触发执行
     // 直接查询日志（可能为空）
     console.log('查询日志...');
-    const logsResult = await client.get(`/api/v1/tenants/${TENANT_ID}/actions/logs`, {
+    const logsResult = await client.get(`/api/v1/services/${SERVICE_ID}/actions/logs`, {
       action_id: actionId,
       limit: 10
     });
@@ -42,7 +42,7 @@ async function testLogs() {
 
     // 清理
     console.log('清理测试数据...');
-    await client.delete(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}`);
+    await client.delete(`/api/v1/services/${SERVICE_ID}/actions/${actionId}`);
     
   } catch (error) {
     console.error('❌ 场景6测试失败:', error.message);

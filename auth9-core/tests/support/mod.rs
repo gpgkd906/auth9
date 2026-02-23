@@ -1222,6 +1222,15 @@ impl RbacRepository for TestRbacRepository {
         }
         Ok(count)
     }
+
+    async fn find_user_ids_by_role_in_tenant(
+        &self,
+        _tenant_id: StringUuid,
+        _role_id: StringUuid,
+    ) -> Result<Vec<StringUuid>> {
+        // Test stub - real implementation joins user_tenant_roles with tenant_users
+        Ok(vec![])
+    }
 }
 
 /// Configurable test audit repository
@@ -1978,11 +1987,16 @@ impl Default for TestActionRepository {
 
 #[async_trait]
 impl ActionRepository for TestActionRepository {
-    async fn create(&self, service_id: StringUuid, input: &CreateActionInput) -> Result<Action> {
+    async fn create(
+        &self,
+        tenant_id: StringUuid,
+        service_id: StringUuid,
+        input: &CreateActionInput,
+    ) -> Result<Action> {
         let now = Utc::now();
         let action = Action {
             id: StringUuid::new_v4(),
-            tenant_id: None,
+            tenant_id: Some(tenant_id),
             service_id,
             name: input.name.clone(),
             description: input.description.clone(),

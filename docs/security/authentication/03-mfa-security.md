@@ -25,6 +25,7 @@ Auth9 通过 Keycloak 支持多种 MFA 方式：
 ### 前置条件
 - 启用了 TOTP 的用户账户
 - 已知用户名和密码
+- **环境必须已执行 `auth9-core init`**（seeder 会配置 Keycloak realm 的 bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600, waitIncrementSeconds=60）
 
 ### 攻击目标
 验证 TOTP 验证是否存在暴力破解风险
@@ -43,7 +44,14 @@ Auth9 通过 Keycloak 支持多种 MFA 方式：
 
 ### 验证方法
 ```bash
-# 使用脚本快速提交错误 TOTP
+# 1. 确认 realm 安全配置已生效（init 后执行）
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" | jq -r '.access_token')
+curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" | \
+  jq '{bruteForceProtected, failureFactor, maxDeltaTimeSeconds, waitIncrementSeconds}'
+# 预期: bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600, waitIncrementSeconds=60
+
+# 2. 使用脚本快速提交错误 TOTP
 for i in {1..20}; do
   curl -X POST "http://localhost:8081/realms/auth9/login-actions/authenticate" \
     -d "session_code=xxx&otp=$i"
@@ -53,6 +61,13 @@ done
 # 检查是否被锁定或限速
 # 预期: 第 6 次后返回 "Account locked temporarily"
 ```
+
+### 常见误报排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| bruteForceProtected 为 null | 环境未执行 `auth9-core init`，或 init 后 Keycloak 被重建 | 执行 `./scripts/reset-docker.sh` 重建环境 |
+| realm 配置存在但未生效 | Keycloak 缓存 | 重启 Keycloak 容器 |
 
 ### 修复建议
 - 实现指数退避锁定策略
@@ -67,6 +82,7 @@ done
 ### 前置条件
 - 启用 TOTP 的用户账户
 - 能够获取用户的 TOTP 密钥 (模拟泄露场景)
+- **环境必须已执行 `auth9-core init`**（seeder 会配置 OTP 策略: otpPolicyType=totp, otpPolicyDigits=6, otpPolicyPeriod=30, otpPolicyLookAheadWindow=1）
 
 ### 攻击目标
 验证 TOTP 时间窗口容忍度是否过大
@@ -85,7 +101,17 @@ done
 - 过早或过晚的代码应被拒绝
 
 ### 验证方法
+```bash
+# 1. 确认 OTP 策略已配置（init 后执行）
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" | jq -r '.access_token')
+curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" | \
+  jq '{otpPolicyType, otpPolicyDigits, otpPolicyPeriod, otpPolicyLookAheadWindow, otpPolicyAlgorithm}'
+# 预期: otpPolicyType="totp", otpPolicyDigits=6, otpPolicyPeriod=30, otpPolicyLookAheadWindow=1
+```
+
 ```python
+# 2. 测试时间窗口
 import pyotp
 import time
 
@@ -96,6 +122,13 @@ for offset in [-120, -60, -30, 0, 30, 60, 120]:
     code = totp.at(time.time() + offset)
     # 提交 code 测试是否被接受
 ```
+
+### 常见误报排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| otpPolicy 字段全为 null | 环境未执行 `auth9-core init` | 执行 `./scripts/reset-docker.sh` 重建环境 |
+| 配置正确但窗口过大 | Keycloak 缓存了旧配置 | 重启 Keycloak 容器 |
 
 ### 修复建议
 - 时间窗口不超过 ± 30 秒

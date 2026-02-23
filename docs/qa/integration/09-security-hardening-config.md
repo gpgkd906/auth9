@@ -121,6 +121,14 @@
   - `{tenant_token_aud_auth9_portal}`（`aud=auth9-portal`）
   - `{tenant_token_aud_other}`（`aud=other-service`）
 
+> **重要**：默认 Docker 环境中 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 和 `AUTH9_PORTAL_CLIENT_ID` **均未配置**。
+> 在非 production 模式下，缺少这些配置时系统会回退到不检查 audience 的兼容模式（deprecated 行为）。
+> **测试本场景必须**：
+> 1. 在 docker-compose.yml 的 auth9-core 环境变量中添加 `ENVIRONMENT: production`
+> 2. 添加 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: auth9-portal`
+> 3. 重启 auth9-core 容器使配置生效
+> 4. Token 必须通过 gRPC TokenExchange 生成（`service_id` 对应的 client 的 `client_id` 即为 token 的 `aud` 值）
+
 ### 目的
 验证 REST 认证链路只接受 allowlist 内 aud
 
@@ -139,7 +147,15 @@
 ### 预期结果
 - 第 1 步返回 200
 - 第 2 步返回 401（或统一未授权错误）
-- 响应体包含未授权语义（如 `UNAUTHORIZED` / `Invalid or expired token`）
+- 响应体包含未授权语义（如 `{"error": "unauthorized", "message": "..."}` / `Invalid or expired token`）
+
+### 常见误报排查
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 两个 token 都返回 401 (InvalidAudience) | `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 未生效或值与 token aud 不匹配 | 确认 docker-compose 中配置正确并重启容器；用 `jwt.io` 解码 token 验证 aud 值 |
+| 两个 token 都返回 200 | 未设置 `ENVIRONMENT=production`，系统回退到兼容模式 | 在 auth9-core 环境变量中添加 `ENVIRONMENT: production` 并重启 |
+| Token 无法生成 | TokenExchange 的 `service_id` 与数据库中的 client `client_id` 不匹配 | 查询数据库 `SELECT client_id FROM clients` 确认正确的 service_id |
 
 ---
 

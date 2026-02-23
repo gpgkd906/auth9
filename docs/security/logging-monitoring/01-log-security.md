@@ -323,17 +323,30 @@ done
 - 所有错误使用统一格式
 
 ### 验证方法
+
+> **统一错误格式说明**：
+> Auth9 所有 HTTP 错误响应（4xx/5xx）均使用统一格式：
+> ```json
+> {"error": "<error_type>", "message": "<human_readable_message>"}
+> ```
+> 其中 `error` 是小写蛇形命名的错误类型（如 `"unauthorized"`、`"not_found"`、`"bad_request"`），
+> `message` 是人类可读的描述信息。SCIM 端点例外，使用 RFC 7644 格式。
+
 ```bash
 # 畸形 JSON
 curl -s -X POST http://localhost:8080/api/v1/tenants \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"invalid json'
-# 预期: {"error": "Bad Request", "message": "Invalid JSON"} (无内部细节)
+# 预期: {"error": "bad_request", "message": "Invalid request body"} (无内部细节)
 
 # 不存在的端点
 curl -s http://localhost:8080/api/v1/nonexistent
-# 预期: {"error": "Not Found"} (无路由泄露)
+# 预期: {"error": "not_found", "message": "Not found"} (无路由泄露)
+
+# 未授权请求
+curl -s http://localhost:8080/api/v1/tenants
+# 预期: {"error": "unauthorized", "message": "..."} (无内部细节)
 
 # 超大请求体
 python3 -c "print('A' * 10_000_000)" | curl -s -X POST \
@@ -344,9 +357,9 @@ python3 -c "print('A' * 10_000_000)" | curl -s -X POST \
 # 无效 UUID
 curl -s -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/tenants/not-a-uuid
-# 预期: 400 或 404 (无 SQL 错误)
+# 预期: {"error": "bad_request", "message": "..."} 或 {"error": "not_found", "message": "..."} (无 SQL 错误)
 
-# 检查所有错误响应格式一致性
+# 检查所有错误响应格式一致性 - 所有响应应包含 "error" 和 "message" 字段
 for code in 400 401 403 404 409 422 429 500; do
   echo "=== HTTP $code ==="
   # 触发各状态码并检查响应格式
@@ -354,10 +367,10 @@ done
 ```
 
 ### 修复建议
-- 统一错误响应格式：`{"error": "...", "message": "..."}`
+- 统一错误响应格式：`{"error": "<type>", "message": "<description>"}`
 - 生产环境禁用详细错误信息
 - 500 错误仅返回通用消息，详细信息记录到日志
-- 实现全局错误处理中间件
+- 实现全局错误处理中间件（已实现：`normalize_error_response`）
 
 ---
 

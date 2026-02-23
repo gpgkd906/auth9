@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -16,7 +16,7 @@ async function testConcurrency() {
     console.log('并发创建10个Actions...');
     const start = Date.now();
     const promises = Array.from({ length: 10 }, (_, i) =>
-      client.post(`/api/v1/tenants/${TENANT_ID}/actions`, {
+      client.post(`/api/v1/services/${SERVICE_ID}/actions`, {
         name: `Concurrent Action ${i}`,
         trigger_id: 'post-login',
         script: 'context;',
@@ -42,7 +42,7 @@ async function testConcurrency() {
     // 清理
     console.log('清理测试数据...');
     const cleanupPromises = results.map(result =>
-      client.delete(`/api/v1/tenants/${TENANT_ID}/actions/${result.data.id}`)
+      client.delete(`/api/v1/services/${SERVICE_ID}/actions/${result.data.id}`)
     );
     await Promise.all(cleanupPromises);
     console.log('清理完成');

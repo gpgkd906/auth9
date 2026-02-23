@@ -127,14 +127,16 @@ WHERE category = 'branding' AND setting_key = 'config';
 1. 进入「设置」→「登录页品牌」
 2. 填写：
    - Company Name：`Test Corporation`
-   - Logo URL：`https://example.com/logo.png`
-   - Favicon URL：`https://example.com/favicon.ico`
+   - Logo URL：`https://cdn.example.com/logo.png`
+   - Favicon URL：`https://assets.example.com/favicon.ico`
 3. 点击「Save Changes」
 
 ### 预期结果
 - 显示保存成功提示
 - Logo 预览区显示图片
 - 预览登录表单显示公司名称或 Logo
+
+> **注意**: Logo URL 和 Favicon URL 的域名必须在 `BRANDING_ALLOWED_DOMAINS` 允许列表中（默认：`cdn.example.com`, `assets.example.com`）。使用未授权域名会返回验证错误。
 
 ### 预期数据状态
 ```sql
@@ -143,7 +145,7 @@ SELECT JSON_EXTRACT(value, '$.company_name') as company_name,
        JSON_EXTRACT(value, '$.favicon_url') as favicon_url
 FROM system_settings
 WHERE category = 'branding' AND setting_key = 'config';
--- 预期: company_name = "Test Corporation", logo_url = "https://example.com/logo.png"
+-- 预期: company_name = "Test Corporation", logo_url = "https://cdn.example.com/logo.png"
 ```
 
 ---
@@ -178,6 +180,14 @@ WHERE category = 'branding' AND setting_key = 'config';
 ### Keycloak 验证
 - 访问 `http://localhost:8081/realms/auth9/protocol/openid-connect/auth?...`
 - 页面应显示注册链接
+
+### 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| DB 中 `allow_registration = true` 但 Keycloak `registrationAllowed` 未变 | Keycloak 同步是异步 fire-and-forget，可能因 Keycloak 暂时不可达而静默失败 | 检查 auth9-core 日志中 `Failed to sync realm settings to Keycloak` 错误；确认 Keycloak 容器健康后重新保存设置 |
+| 保存后 Keycloak 返回 401/403 | Keycloak admin token 过期或权限不足 | 重启 auth9-core 刷新 admin token |
+| 登录页未显示注册链接 | 浏览器缓存或 Keycloak theme 缓存 | 清除浏览器缓存，或重启 Keycloak 容器清除 theme 缓存 |
 
 ---
 

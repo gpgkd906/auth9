@@ -259,7 +259,10 @@ curl -s -H "Authorization: Bearer $ADMIN_TOKEN" \
 
 ## 场景 4：不可能旅行检测准确性
 
+> **⚠️ 当前状态**：GeoIP 解析功能**尚未实现**。登录事件的 `location` 字段默认为 `"Local Network"`，impossible_travel 检测逻辑虽存在但因缺少真实位置数据而无法触发。本场景需等待 GeoIP 集成后才能有效测试。
+
 ### 前置条件
+- **需要 GeoIP 集成完成后才能测试**（当前返回 "Local Network" 默认值）
 - 支持 GeoIP 查询的环境
 - 不同地理位置的 IP 地址
 

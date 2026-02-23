@@ -127,6 +127,13 @@ grpcurl -plaintext \
 # 预期: NOT_FOUND "Service not found"
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| Exchange 成功但预期失败 | 用户实际是目标租户的成员 | **测试前先查数据库确认**: `SELECT * FROM tenant_users WHERE user_id = ?` 确保用户只属于源租户 |
+| 使用 admin 用户测试失败 | admin 用户可能被自动加入多个租户 | 创建新的测试用户，确保只关联单个租户 |
+
 ### 修复建议
 - 验证所有输入参数
 - 从数据库查询实际关联
@@ -167,6 +174,14 @@ done
 # 检查响应是否泄露用户存在性
 # 不存在的用户应返回相同错误
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| PermissionDenied 但用户确实是成员 | user_id UUID 拼写错误（如 `f042-4f54` 与 `f042-f54a` 混淆） | 从数据库复制精确 UUID: `SELECT user_id FROM tenant_users WHERE tenant_id = ?` |
+| UUID 查询失败但 slug 成功 | 使用了错误的 tenant UUID | 用 `SELECT id, slug FROM tenants` 确认正确的 UUID |
+| GetUserRoles 测试全部成功 | gRPC API key 认证已开启时 API key 有特殊权限 | 确认 `GRPC_AUTH_MODE` 配置 |
 
 ### 修复建议
 - 需要调用方认证

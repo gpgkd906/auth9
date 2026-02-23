@@ -733,18 +733,14 @@ fn build_env_vars(
             description: "OAuth Client ID".to_string(),
         });
 
-        if first.public_client {
-            vars.push(EnvVar {
-                key: "AUTH9_CLIENT_SECRET".to_string(),
-                value: "(not required — public client)".to_string(),
-                description: "Public client does not use a secret".to_string(),
-            });
-        } else if let Some(ref secret) = first.client_secret {
-            vars.push(EnvVar {
-                key: "AUTH9_CLIENT_SECRET".to_string(),
-                value: secret.clone(),
-                description: "OAuth Client Secret (confidential)".to_string(),
-            });
+        if !first.public_client {
+            if let Some(ref secret) = first.client_secret {
+                vars.push(EnvVar {
+                    key: "AUTH9_CLIENT_SECRET".to_string(),
+                    value: secret.clone(),
+                    description: "OAuth Client Secret (confidential)".to_string(),
+                });
+            }
         }
     }
 
@@ -1304,9 +1300,13 @@ mod tests {
 
         let vars = build_env_vars(&ep, &grpc, &clients);
 
+        // Public client should NOT have AUTH9_CLIENT_SECRET env var at all
         let secret_var = vars.iter().find(|v| v.key == "AUTH9_CLIENT_SECRET");
-        assert!(secret_var.is_some());
-        assert!(secret_var.unwrap().value.contains("not required"));
+        assert!(secret_var.is_none());
+        // Should still have AUTH9_CLIENT_ID
+        let client_id_var = vars.iter().find(|v| v.key == "AUTH9_CLIENT_ID");
+        assert!(client_id_var.is_some());
+        assert_eq!(client_id_var.unwrap().value, "spa-client");
     }
 
     #[test]

@@ -524,20 +524,23 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
 
     const isSubmitting = navigation.state === "submitting";
     const currentIntent = navigation.formData?.get("intent");
+    const resetToDefault = () => {
+        setLogoUrl("");
+        setPrimaryColor(DEFAULT_BRANDING.primary_color);
+        setSecondaryColor(DEFAULT_BRANDING.secondary_color);
+        setBackgroundColor(DEFAULT_BRANDING.background_color);
+        setTextColor(DEFAULT_BRANDING.text_color);
+        setCustomCss("");
+        setCompanyName("");
+        setFaviconUrl("");
+        setAllowRegistration(false);
+    };
 
     // Reset form after delete_branding
     useEffect(() => {
         if (actionData && "success" in actionData && actionData.success && actionData.intent === "delete_branding") {
             setIsCustomizing(false);
-            setLogoUrl("");
-            setPrimaryColor(DEFAULT_BRANDING.primary_color);
-            setSecondaryColor(DEFAULT_BRANDING.secondary_color);
-            setBackgroundColor(DEFAULT_BRANDING.background_color);
-            setTextColor(DEFAULT_BRANDING.text_color);
-            setCustomCss("");
-            setCompanyName("");
-            setFaviconUrl("");
-            setAllowRegistration(false);
+            resetToDefault();
         }
     }, [actionData]);
 
@@ -702,13 +705,26 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
                                 {isSubmitting && currentIntent === "update_branding" ? "Saving..." : "Save Branding"}
                             </Button>
 
-                            {branding && (
+                            {branding ? (
                                 <Button
                                     type="submit"
                                     name="intent"
                                     value="delete_branding"
-                                    variant="outline"
+                                    variant="destructive"
                                     disabled={isSubmitting}
+                                >
+                                    <ResetIcon className="h-4 w-4 mr-2" />
+                                    Reset to Default
+                                </Button>
+                            ) : (
+                                <Button
+                                    type="button"
+                                    variant="destructive"
+                                    disabled={isSubmitting}
+                                    onClick={() => {
+                                        resetToDefault();
+                                        setIsCustomizing(false);
+                                    }}
                                 >
                                     <ResetIcon className="h-4 w-4 mr-2" />
                                     Reset to Default

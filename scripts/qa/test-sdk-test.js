@@ -1,7 +1,7 @@
 const { Auth9HttpClient } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
 
 const client = new Auth9HttpClient({
   baseUrl: 'http://localhost:8080',
@@ -14,7 +14,7 @@ async function testAction() {
   try {
     // 创建 Action
     console.log('创建测试Action...');
-    const action = await client.post(`/api/v1/tenants/${TENANT_ID}/actions`, {
+    const action = await client.post(`/api/v1/services/${SERVICE_ID}/actions`, {
       name: 'Test Action',
       trigger_id: 'post-login',
       script: `
@@ -31,7 +31,7 @@ async function testAction() {
 
     // 测试：允许的邮箱域
     console.log('测试允许的邮箱域...');
-    const successResult = await client.post(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}/test`, {
+    const successResult = await client.post(`/api/v1/services/${SERVICE_ID}/actions/${actionId}/test`, {
       context: {
         user: {
           id: 'test-user-id',
@@ -39,7 +39,7 @@ async function testAction() {
           mfa_enabled: false,
         },
         tenant: {
-          id: TENANT_ID,
+          id: SERVICE_ID,
           slug: 'test-tenant',
           name: 'Test Tenant',
         },
@@ -55,7 +55,7 @@ async function testAction() {
 
     // 测试：阻止的邮箱域
     console.log('测试阻止的邮箱域...');
-    const failResult = await client.post(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}/test`, {
+    const failResult = await client.post(`/api/v1/services/${SERVICE_ID}/actions/${actionId}/test`, {
       context: {
         user: {
           id: 'test-user-id',
@@ -63,7 +63,7 @@ async function testAction() {
           mfa_enabled: false,
         },
         tenant: {
-          id: TENANT_ID,
+          id: SERVICE_ID,
           slug: 'test-tenant',
           name: 'Test Tenant',
         },
@@ -90,7 +90,7 @@ async function testAction() {
 
     // 清理
     console.log('清理测试数据...');
-    await client.delete(`/api/v1/tenants/${TENANT_ID}/actions/${actionId}`);
+    await client.delete(`/api/v1/services/${SERVICE_ID}/actions/${actionId}`);
     
   } catch (error) {
     console.error('❌ 场景5测试失败:', error.message);

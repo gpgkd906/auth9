@@ -567,8 +567,10 @@ impl CacheManager {
     ) -> Result<bool> {
         let key = format!("{}:{}", keys::WEBHOOK_EVENT_DEDUP, event_key);
         let mut conn = self.conn.clone();
-        // SET key "1" NX EX ttl — returns true only if key was newly set
-        let was_set: bool = redis::cmd("SET")
+        // SET key "1" NX EX ttl — returns Some("OK") if key was newly set, None if existed.
+        // Use Option<String> instead of bool: redis SET NX returns OK (success) or nil (key
+        // exists), and the redis crate's bool parsing of nil is unreliable across versions.
+        let result: Option<String> = redis::cmd("SET")
             .arg(&key)
             .arg("1")
             .arg("NX")
@@ -576,9 +578,9 @@ impl CacheManager {
             .arg(ttl_secs)
             .query_async(&mut conn)
             .await
-            .unwrap_or(false);
-        // If was_set is true, event is new (not a duplicate). If false, it's a duplicate.
-        Ok(!was_set)
+            .unwrap_or(None);
+        let is_new = result.is_some();
+        Ok(!is_new)
     }
 }
 

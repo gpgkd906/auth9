@@ -46,33 +46,58 @@ Auth9 密钥类型：
 3. 检查日志文件
 
 ### 预期安全行为
-- 密钥不在代码中
-- 配置文件不含密钥
-- 使用 Secret 管理服务
+- 密钥不在代码中（生产密钥）
+- 配置文件不含生产密钥
+- 使用 Secret 管理服务（K8s Secrets / HashiCorp Vault）
+
+> **重要：开发环境 vs 生产环境的区别**
+>
+> `docker-compose.yml` 中包含的密钥是**开发专用值**，均标记有 `change-in-production` 后缀
+> （如 `dev-jwt-secret-change-in-production`），这是标准开发实践，**不属于安全漏洞**。
+>
+> 本场景的检查重点是：
+> 1. `.env` 文件被 `.gitignore` 排除（✅ 已实现）
+> 2. 生产部署使用 K8s Secrets（✅ 已实现，见 `deploy/k8s/secrets.yaml.example`）
+> 3. `docker-compose.yml` 中的开发密钥不会被误用于生产
+> 4. Git 历史中不含真实生产密钥
 
 ### 验证方法
 ```bash
-# 代码仓库搜索
-git log -p | grep -i "password\|secret\|key\|token" | head -50
-grep -r "password\s*=" --include="*.rs" --include="*.ts" src/
+# 1. 确认 .gitignore 排除敏感文件
+grep -n ".env" .gitignore
+# 预期: .env 和 .env.* 被排除，.env.example 例外
+
+# 2. 确认开发密钥有 "change-in-production" 标记
+grep "change-in-production" docker-compose.yml | wc -l
+# 预期: 所有敏感环境变量都包含此标记
+
+# 3. 检查 K8s 生产部署是否使用 Secrets
+ls deploy/k8s/secrets.yaml.example
+# 预期: 存在模板文件，且不包含真实密钥
+
+# 4. 代码仓库搜索（排除已知开发值）
 grep -r "sk_live\|pk_live" .  # API Key 模式
+git log -p --diff-filter=A -- '*.env' | head -20
+# 预期: 无真实生产密钥
 
-# 检查配置文件
-cat config/default.yaml | grep -i password
-cat .env.example  # 检查是否有真实密钥
-
-# Docker 镜像检查
-docker history auth9-core:latest
+# 5. Docker 镜像检查
 docker run --rm auth9-core:latest env | grep -i secret
+# 预期: 仅包含开发占位符
 
-# .git 目录泄露
-curl http://localhost:8080/.git/config
-curl http://localhost:3000/.git/config
-
-# 检查 K8s Secrets (需要权限)
-kubectl get secrets -n auth9
-kubectl describe secret auth9-secrets -n auth9
+# 6. .git 目录泄露
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/.git/config
+curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/.git/config
+# 预期: 404（非 200）
 ```
+
+### 常见误报排查
+
+| 症状 | 是否为真实问题 | 说明 |
+|------|--------------|------|
+| docker-compose.yml 含 JWT_PRIVATE_KEY | ❌ 否 | 开发专用密钥，用于本地测试，不用于生产 |
+| docker-compose.yml 含 KEYCLOAK_ADMIN_PASSWORD: admin | ❌ 否 | 本地 Keycloak 默认管理员，生产使用 K8s Secrets |
+| .env 文件含 SETTINGS_ENCRYPTION_KEY | ⚠️ 需确认 | .env 已被 .gitignore 排除；确认该文件未被提交即可 |
+| Git 历史含生产密钥 | ✅ 是 | 需立即轮换密钥并使用 BFG/git-filter-repo 清理历史 |
 
 ### 修复建议
 - 使用 K8s Secrets 或 HashiCorp Vault

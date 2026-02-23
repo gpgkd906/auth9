@@ -60,6 +60,23 @@ curl -I -c - http://localhost:3000/login
 # Set-Cookie: session=xxx; HttpOnly; Secure; SameSite=Strict; Path=/
 ```
 
+> **重要：Auth9 Cookie vs Keycloak Cookie 的区别**
+>
+> 浏览器中会看到多种 Cookie，需区分来源：
+>
+> | Cookie | 来源 | Auth9 可控 | 检查重点 |
+> |--------|------|-----------|----------|
+> | `auth9_session` | Auth9 Portal | ✅ 是 | **必须** HttpOnly=true, SameSite=Lax, Secure=true(生产) |
+> | `oauth_state` | Auth9 Portal | ✅ 是 | **必须** HttpOnly=true, SameSite=Lax, TTL=5min |
+> | `AUTH_SESSION_ID` | Keycloak | ❌ 否 | Keycloak 内部 OIDC 流程 Cookie |
+> | `KC_AUTH_SESSION_HASH` | Keycloak | ❌ 否 | Keycloak 内部 Cookie（可能无 HttpOnly） |
+> | `KEYCLOAK_SESSION` | Keycloak | ❌ 否 | Keycloak 内部 Cookie（可能无 HttpOnly） |
+> | `KEYCLOAK_IDENTITY` | Keycloak | ❌ 否 | Keycloak 身份 Cookie |
+>
+> **本场景仅验证 Auth9 控制的 Cookie 安全属性**（`auth9_session`、`oauth_state`）。
+> Keycloak 的 Cookie 安全属性由 Keycloak 自身管理，部分 Cookie 设计上不设 HttpOnly
+> （如 `KC_AUTH_SESSION_HASH`），这是 Keycloak 的已知行为，不属于 Auth9 安全漏洞。
+
 ### 修复建议
 - 使用 CSPRNG 生成
 - 至少 128 位熵

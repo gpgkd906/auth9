@@ -144,8 +144,8 @@ impl IntoResponse for AuthError {
         };
 
         let body = serde_json::json!({
-            "error": message,
-            "code": "UNAUTHORIZED"
+            "error": "unauthorized",
+            "message": message
         });
 
         (status, axum::Json(body)).into_response()

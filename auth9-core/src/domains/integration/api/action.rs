@@ -49,7 +49,7 @@ pub async fn create_action<S: HasServices>(
     )?;
 
     let action_service = state.action_service();
-    let action = action_service.create(service_id, input).await?;
+    let action = action_service.create(tenant_id, service_id, input).await?;
 
     Ok(Json(SuccessResponse::new(action)))
 }
@@ -235,7 +235,7 @@ pub async fn batch_upsert_actions<S: HasServices>(
     )?;
 
     let action_service = state.action_service();
-    let response = action_service.batch_upsert(service_id, req.actions).await?;
+    let response = action_service.batch_upsert(tenant_id, service_id, req.actions).await?;
 
     Ok(Json(SuccessResponse::new(response)))
 }

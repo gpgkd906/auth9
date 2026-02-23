@@ -1,7 +1,7 @@
 const { Auth9HttpClient, NotFoundError, ValidationError, UnauthorizedError } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const TENANT_ID = '0df463ad-10a2-4589-8708-0b56dba70161';
+const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
 
 async function testErrors() {
   console.log('=== 场景8：错误处理 - SDK ===');
@@ -15,7 +15,7 @@ async function testErrors() {
     });
     
     try {
-      await invalidClient.get(`/api/v1/tenants/${TENANT_ID}/actions`);
+      await invalidClient.get(`/api/v1/services/${SERVICE_ID}/actions`);
       console.log('❌ 预期认证失败但请求成功');
     } catch (error) {
       if (error instanceof UnauthorizedError) {
@@ -33,7 +33,7 @@ async function testErrors() {
     });
     
     try {
-      await validClient.get(`/api/v1/tenants/${TENANT_ID}/actions/00000000-0000-0000-0000-000000000000`);
+      await validClient.get(`/api/v1/services/${SERVICE_ID}/actions/00000000-0000-0000-0000-000000000000`);
       console.log('❌ 预期404但请求成功');
     } catch (error) {
       if (error instanceof NotFoundError) {
@@ -46,7 +46,7 @@ async function testErrors() {
     // 测试验证错误
     console.log('3. 测试验证错误...');
     try {
-      await validClient.post(`/api/v1/tenants/${TENANT_ID}/actions`, {
+      await validClient.post(`/api/v1/services/${SERVICE_ID}/actions`, {
         name: '',
         trigger_id: 'invalid-trigger',
         script: '',

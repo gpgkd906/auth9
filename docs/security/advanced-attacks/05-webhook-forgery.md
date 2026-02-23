@@ -191,7 +191,7 @@ PYEOF
 ### 验证方法
 ```bash
 # 重要: 必须先定义 EVENT，再计算签名（顺序不可颠倒）
-VALID_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}"
+VALID_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
 # 使用当前时间戳，确保事件不过期（5 分钟窗口）
 CURRENT_TIME=$(date +%s)
@@ -232,9 +232,16 @@ curl -s -o /dev/null -w "%{http_code}" \
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
 | 重放请求未被去重（两次都返回 204 且都执行了业务逻辑） | event payload 缺少 `id` 字段 | 确保 JSON 中包含 `"id": "event-xxx"` 字段 |
+| 重放请求未被去重，但 Redis key 存在 | 去重日志级别为 `debug`，RUST_LOG=info 不显示 | 将 `RUST_LOG` 改为 `debug` 后重启，确认日志输出 `Duplicate webhook event detected` |
 | 签名验证未生效（所有请求都返回 204） | `KEYCLOAK_WEBHOOK_SECRET` 未配置 | 在 docker-compose.yml 中设置该环境变量 |
+| 签名不匹配（返回 401） | 测试脚本使用的 secret 与服务端不同（默认值为 `dev-webhook-secret-change-in-production`） | 确认 `VALID_SECRET` 与 docker-compose.yml 中的值一致 |
 | 签名不匹配（返回 401） | 签名计算在 EVENT 定义之前，或 EVENT 包含额外空白 | 先定义 EVENT，再计算签名；使用 `echo -n` 避免尾部换行 |
 | 过期事件未被拒绝 | payload 中的 `time` 字段在 5 分钟窗口内 | 使用明确的旧时间戳（如 `1600000000`） |
+
+> **验证去重生效的正确方法**：
+> 1. 发送两次相同请求后，检查 Redis key：`redis-cli GET auth9:webhook_dedup:{event_id}`
+> 2. 查看日志：将 `RUST_LOG` 设为 `auth9_core=debug`，重放后应出现 `Duplicate webhook event detected`
+> 3. 查询数据库：只应有一条对应的 login event 记录（第二次不应写入新记录）
 
 ### 已实现的安全机制
 - **签名验证**: HMAC-SHA256 签名 + 常数时间比较（防时间侧信道）

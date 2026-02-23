@@ -47,24 +47,29 @@ context;
 ```
 
 ### 预期结果
-- ✅ Claims 中可以写入任意值
-- ✅ **关键**: auth9-core 在后续授权检查时 **必须**:
-  - 从数据库重新加载用户角色/权限（不信任 Token claims）
-  - 或使用签名的 claims（如 JWT 中的标准 claims）
-  - Token claims 仅用于应用层逻辑，**不用于** 核心权限判断
+- ✅ Claims 中可以写入任意值（Action 脚本的设计用途）
+- ✅ **关键安全保障 — Token Exchange 切断 claims 传播链**:
+  - Action 修改的 claims **仅存在于 Identity Token** 中（post-login 阶段生成）
+  - Token Exchange（`POST /api/v1/auth/tenant-token` 或 gRPC `ExchangeToken`）生成 TenantAccess Token 时，**从数据库重新加载** roles/permissions，**不传播** Identity Token 中的自定义 claims
+  - 因此，即使 Action 脚本注入 `roles: ["admin"]`，TenantAccess Token 中的权限仍然来自数据库
+- ✅ API handler 使用 `enforce()` 基于 TenantAccess Token 中的 DB-sourced roles/permissions 进行授权，这是安全的
 
 ### 验证方法
-1. 以普通用户登录
-2. 执行上述 Action
-3. 尝试访问管理员功能（如删除租户）
-4. **预期**: 403 Forbidden（权限检查失败）
+1. 以普通用户登录（触发 post-login Action，Identity Token 包含注入的 claims）
+2. 进行 Token Exchange 获取 TenantAccess Token
+3. 使用 TenantAccess Token 尝试访问管理员功能（如删除租户）
+4. **预期**: 403 Forbidden（TenantAccess Token 的 roles/permissions 来自数据库，不受 Action claims 影响）
 
 ### 代码审查重点
 ```rust
-// 检查 auth9-core 的授权中间件
-// 确保不直接使用 Token claims 进行权限判断
-// ✅ 从数据库查询: rbac_service.get_user_permissions(user_id)
-// ❌ 直接读取: token.claims.get("permissions")
+// Token Exchange 安全链:
+// 1. Identity Token 包含 Action 修改的 custom claims（仅用于应用层逻辑）
+// 2. Token Exchange 从 DB 获取 roles/permissions → 生成 TenantAccess Token
+// 3. API handler enforce() 检查 TenantAccess Token 中的 DB-sourced 权限
+//
+// ✅ grpc/token_exchange.rs: find_user_roles_in_tenant_for_service() 从 DB 查询
+// ✅ api/auth.rs: create_tenant_access_token_with_session() 不传播 custom claims
+// ✅ enforce() 检查的 roles/permissions 来自 TenantAccess Token（DB-sourced）
 ```
 
 ---
