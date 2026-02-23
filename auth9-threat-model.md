@@ -1,12 +1,11 @@
 ## Executive summary
-Auth9 的最高风险集中在多租户授权边界、Token 体系（Identity/TenantAccess/ServiceClient）混淆与降级、以及可出网集成面（Webhook/Action/Keycloak 事件）带来的跨边界滥用。当前代码已具备较强的基础控制（统一鉴权中间件、策略引擎、生产配置 fail-fast、Webhook 签名与去重、gRPC 可切 API Key/mTLS），但在 ASVS 5.0 视角下仍存在覆盖不均：V8/V10/V15/V16 章节的测试映射不足，`auth9-keycloak-theme` 的 `custom_css` 信任边界与 `auth9-keycloak-events` 外部 SPI 供应链边界是最关键的补强点。
+Auth9 的最高风险集中在多租户授权边界、Token 体系（Identity/TenantAccess/ServiceClient）混淆与降级、以及可出网集成面（Webhook/Action/Keycloak 事件）带来的跨边界滥用。当前代码已具备较强的基础控制（统一鉴权中间件、策略引擎、生产配置 fail-fast、Webhook 签名与去重、gRPC 可切 API Key/mTLS），但在 ASVS 5.0 视角下仍存在覆盖不均：V8/V10/V15/V16 章节的测试映射不足，`auth9-keycloak-theme` 的 `custom_css` 信任边界是最关键的补强点之一。
 
 ## Scope and assumptions
 - In-scope paths:
   - `auth9-core/src/**`
   - `auth9-portal/app/**`
   - `auth9-keycloak-theme/src/**`
-  - `auth9-keycloak-events/**`
   - `docs/security/**`
   - `deploy/k8s/**`
 - Out-of-scope:
@@ -14,7 +13,7 @@ Auth9 的最高风险集中在多租户授权边界、Token 体系（Identity/Te
   - 第三方组件内部实现（Keycloak、TiDB、Redis、浏览器）
 - Clarified assumptions:
   - 合规目标为“整体 ASVS L2 + 高风险域部分 L3”。
-  - 审计范围包含 portal、keycloak-events、theme。
+  - 审计范围包含 portal、theme。
   - 本轮输出以文档补完和可执行测试任务为主。
 - Open questions:
   - 生产是否启用 WAF/API Gateway 的协议规范化（影响 HTTP smuggling 优先级）。
@@ -28,7 +27,6 @@ Auth9 的最高风险集中在多租户授权边界、Token 体系（Identity/Te
 - `TiDB`：持久化租户、用户、RBAC、审计、集成配置。
 - `Redis`：黑名单、OIDC state、限流与缓存。
 - `auth9-keycloak-theme`：登录主题，运行时从 `/api/v1/public/branding` 拉取品牌配置并注入 CSS。
-- `auth9-keycloak-events`：通过 Dockerfile 拉取外部 SPI Jar（`p2-inc/keycloak-events`），向 Core 推送登录事件。
 
 ### Data flows and trust boundaries
 - Internet User -> Portal
@@ -51,7 +49,7 @@ Auth9 的最高风险集中在多租户授权边界、Token 体系（Identity/Te
   - Channel: HTTP(S)
   - Security: 管理 token 缓存、超时、错误处理
   - Validation: 业务级授权后再调用
-- Keycloak Events SPI -> Core `/api/v1/keycloak/events`
+- Keycloak events webhook -> Core `/api/v1/keycloak/events`
   - Data: 登录事件、错误、IP、session
   - Channel: HTTP webhook
   - Security: HMAC 签名（生产要求）、5 分钟时间窗、去重（Redis/内存回退）
@@ -73,7 +71,7 @@ flowchart LR
   C --> D[TiDB]
   C --> R[Redis]
   C --> K
-  E[Keycloak Events SPI] --> C
+  E[Keycloak Events Webhook] --> C
   C --> X[External Webhook Targets]
   C --> A[Action Fetch Targets]
   T[Keycloak Theme] --> C
@@ -114,7 +112,6 @@ flowchart LR
 | Action fetch op | action script runtime | Core -> External | allowlist + private IP block + req limit | `auth9-core/src/domains/integration/service/action_engine.rs` |
 | Theme branding API + custom CSS | Keycloak login pages | Core -> Browser | `dangerouslySetInnerHTML` 注入 CSS | `auth9-keycloak-theme/src/login/components/BrandingProvider.tsx` |
 | Session cookie + token refresh | Portal SSR routes | Browser -> Portal | HttpOnly/SameSite + refresh/exchange | `auth9-portal/app/services/session.server.ts` |
-| External SPI build source | Docker build | Build -> Runtime | clone external repo tag v0.26 | `auth9-keycloak-events/Dockerfile` |
 
 ## Top abuse paths
 1. 攻击者拿到 Identity token -> 调用 tenant-token 交换非所属租户 -> 若成员校验缺陷则获得跨租户访问 -> 读取/篡改租户数据。
@@ -124,7 +121,6 @@ flowchart LR
 5. 恶意租户配置 webhook/action URL -> 通过 DNS rebinding / 内网地址探测 -> 打探内网服务或 metadata endpoint。
 6. 管理员可写 `custom_css` -> 在登录页覆盖 UI/误导输入 -> 凭证钓鱼与品牌信任破坏。
 7. 攻击者重放旧 OIDC state/code 或 token -> 若过期和一次性检查缺陷 -> 会话接管。
-8. 供应链污染 `auth9-keycloak-events` 上游 tag 或依赖 -> 事件 SPI 注入恶意逻辑 -> 敏感登录事件外传。
 
 ## Threat model table
 | Threat ID | Threat source | Prerequisites | Threat action | Impact | Impacted assets | Existing controls (evidence) | Gaps | Recommended mitigations | Detection ideas | Likelihood | Impact severity | Priority |
@@ -136,7 +132,6 @@ flowchart LR
 | TM-005 | 恶意租户管理员 | 可配置 webhook/action URL | 利用 SSRF 访问内网或 metadata | 内网信息泄漏、侧向移动 | infra metadata、internal services | allowlist + private IP blocking + DNS resolve check（`action_engine.rs`, `webhook.rs`） | 域名 allowlist 误配、DNS rebinding 仍需持续验证 | 加入解析后 IP pinning 与 CIDR denylist 回归测试 | 记录 outbound destination/ASN 异常 | medium | high | high |
 | TM-006 | 平台管理员误用/被劫持 | 可写 branding 配置 | 注入恶意 `custom_css` 诱导输入 | 账号钓鱼、品牌信任损害 | login trust boundary | 支持动态 branding（`useBranding.ts`, `BrandingProvider.tsx`） | `dangerouslySetInnerHTML` 直接注入 CSS，缺少白名单过滤 | 引入 CSS sanitizer 或仅允许变量级覆盖；禁用 `@import/url()` | 记录 branding 变更审计 + 登录失败异常波动 | medium | medium | medium |
 | TM-007 | 远程攻击者 | 截获 state/code/token 或利用过期窗口 | 重放授权流程/会话 token | 会话接管 | OIDC state、session | OIDC state 存储并消费一次（`store_oidc_state/consume_oidc_state`）；JWT strict leeway | 需统一覆盖 refresh/tenant exchange 复合流程 | 增加 state/code/token 重放 e2e 套件并并发化 | 指标化 `invalid_state`, `invalid_grant`, revoked token hits | medium | high | high |
-| TM-008 | 供应链攻击者 | 上游仓库/依赖被污染 | 污染 keycloak-events SPI Jar | 事件泄露/后门注入 | login events、cluster runtime | 当前仅固定 tag `v0.26`（`auth9-keycloak-events/Dockerfile`） | 缺少 checksum/SLSA/SBOM 强约束 | 固定 commit SHA + 校验和 + SBOM/CVE gate | 构建产物签名校验失败告警 | medium | high | high |
 
 ## Criticality calibration
 - critical:
@@ -146,7 +141,6 @@ flowchart LR
 - high:
   - 高权限配置越权（TM-002）。
   - OIDC/token 重放导致会话接管（TM-007）。
-  - 供应链污染造成事件通道后门（TM-008）。
 - medium:
   - 事件伪造导致检测质量下降但未形成直接接管（TM-004）。
   - `custom_css` 引发登录界面诱导风险（TM-006）。
@@ -171,12 +165,10 @@ flowchart LR
 | `auth9-keycloak-theme/src/login/components/BrandingProvider.tsx` | `custom_css` 注入信任边界 | TM-006 |
 | `auth9-keycloak-theme/src/login/hooks/useBranding.ts` | 主题配置拉取来源与降级逻辑 | TM-006 |
 | `auth9-portal/app/services/session.server.ts` | Portal 会话 Cookie 与 refresh/exchange 路径 | TM-007 |
-| `auth9-keycloak-events/Dockerfile` | 外部 SPI 供应链入口 | TM-008 |
 | `deploy/k8s/configmap.yaml` | 生产公网地址、CORS 与 issuer 等关键配置 | TM-003, TM-007 |
 
 ## Quality check
 - [x] 覆盖了已发现主要入口（REST/gRPC/OIDC/webhook/theme/session/action）。
 - [x] 每条信任边界至少在威胁中出现一次。
-- [x] 已区分运行时路径与构建/供应链路径（`auth9-keycloak-events`）。
-- [x] 已纳入用户确认的范围与目标（L2 + 部分 L3，含 portal/theme/events）。
+- [x] 已纳入用户确认的范围与目标（L2 + 部分 L3，含 portal/theme）。
 - [x] 假设与未确认项已显式标注。

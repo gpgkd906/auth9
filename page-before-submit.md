@@ -1,0 +1,152 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - link "A9 Auth9" [ref=e7] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e8]: A9
+        - generic [ref=e9]: Auth9
+      - generic [ref=e10]:
+        - button "Switch to light mode" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+        - button "Switch to dark mode" [ref=e14] [cursor=pointer]:
+          - img [ref=e15]
+    - button "D Demo Organization" [ref=e18]:
+      - generic [ref=e19]: D
+      - generic [ref=e20]: Demo Organization
+      - img [ref=e21]
+    - navigation "Main navigation" [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Main
+        - link "Overview" [ref=e26] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e27]
+          - text: Overview
+        - link "Tenants" [ref=e29] [cursor=pointer]:
+          - /url: /dashboard/tenants
+          - img [ref=e30]
+          - text: Tenants
+        - link "Users" [ref=e32] [cursor=pointer]:
+          - /url: /dashboard/users
+          - img [ref=e33]
+          - text: Users
+        - link "Services" [ref=e35] [cursor=pointer]:
+          - /url: /dashboard/services
+          - img [ref=e36]
+          - text: Services
+      - generic [ref=e38]:
+        - generic [ref=e39]: Security
+        - link "Roles" [ref=e40] [cursor=pointer]:
+          - /url: /dashboard/roles
+          - img [ref=e41]
+          - text: Roles
+        - link "ABAC Policies" [ref=e43] [cursor=pointer]:
+          - /url: /dashboard/abac
+          - img [ref=e44]
+          - text: ABAC Policies
+        - link "Analytics" [ref=e46] [cursor=pointer]:
+          - /url: /dashboard/analytics
+          - img [ref=e47]
+          - text: Analytics
+        - link "Security" [ref=e49] [cursor=pointer]:
+          - /url: /dashboard/security/alerts
+          - img [ref=e50]
+          - text: Security
+        - link "Audit Logs" [ref=e52] [cursor=pointer]:
+          - /url: /dashboard/audit-logs
+          - img [ref=e53]
+          - text: Audit Logs
+      - generic [ref=e55]:
+        - generic [ref=e56]: System
+        - link "Settings" [ref=e57] [cursor=pointer]:
+          - /url: /dashboard/settings
+          - img [ref=e58]
+          - text: Settings
+    - generic [ref=e62]:
+      - link "AU Admin User admin@auth9.local" [ref=e63] [cursor=pointer]:
+        - /url: /dashboard/account
+        - generic [ref=e65]: AU
+        - generic [ref=e66]:
+          - paragraph [ref=e67]: Admin User
+          - paragraph [ref=e68]: admin@auth9.local
+      - link "Sign out" [ref=e69] [cursor=pointer]:
+        - /url: /logout
+        - img [ref=e70]
+  - main [ref=e72]:
+    - generic [ref=e155]:
+      - generic [ref=e156]:
+        - link [ref=e157] [cursor=pointer]:
+          - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions
+          - img [ref=e158]
+        - generic [ref=e160]:
+          - heading "New Action" [level=1] [ref=e161]
+          - paragraph [ref=e162]: Create a new authentication flow action
+      - generic [ref=e163]:
+        - generic [ref=e164]:
+          - generic [ref=e165]:
+            - heading "Basic Information" [level=3] [ref=e166]
+            - paragraph [ref=e167]: Configure the basic settings for your action
+          - generic [ref=e168]:
+            - generic [ref=e169]:
+              - text: Name *
+              - textbox "Name *" [ref=e170]:
+                - /placeholder: my-action
+                - text: Test Post Login Action
+            - generic [ref=e171]:
+              - text: Description
+              - textbox "Description" [ref=e172]:
+                - /placeholder: What does this action do?
+                - text: Add custom claims for testing
+            - generic [ref=e173]:
+              - text: Trigger *
+              - combobox [ref=e174]:
+                - generic: Post Login
+                - img [ref=e175]
+              - combobox [ref=e177]
+            - generic [ref=e178]:
+              - generic [ref=e179]:
+                - text: Execution Order
+                - spinbutton "Execution Order" [ref=e180]: "0"
+                - paragraph [ref=e181]: Lower numbers execute first
+              - generic [ref=e182]:
+                - text: Timeout (ms)
+                - spinbutton "Timeout (ms)" [ref=e183]: "3000"
+                - paragraph [ref=e184]: Maximum execution time
+            - generic [ref=e185]:
+              - switch "Enabled" [checked] [ref=e186] [cursor=pointer]
+              - checkbox [checked]
+              - generic [ref=e187]: Enabled
+            - generic [ref=e188]:
+              - switch "Strict Mode" [ref=e189] [cursor=pointer]
+              - checkbox
+              - generic [ref=e190]: Strict Mode
+              - generic [ref=e191]: Block authentication flow on action failure
+        - generic [ref=e192]:
+          - generic [ref=e193]:
+            - heading "Script" [level=3] [ref=e194]
+            - paragraph [ref=e195]: Write TypeScript code to modify the authentication context
+          - generic [ref=e196]:
+            - generic [ref=e197]:
+              - text: Script Templates
+              - combobox [ref=e198]:
+                - generic: Choose a template (optional)
+                - img [ref=e199]
+              - combobox [ref=e201]
+            - generic [ref=e202]:
+              - text: TypeScript Code *
+              - textbox "TypeScript Code *" [active] [ref=e203]:
+                - /placeholder: "// Your TypeScript code here\ncontext;"
+                - text: "context.claims = context.claims || {}; context.claims.test_claim = \"test_value\"; context;"
+              - paragraph [ref=e204]:
+                - text: The
+                - code [ref=e205]: context
+                - text: object is available globally. Modify it and return it.
+            - generic [ref=e206]:
+              - generic [ref=e207]: "Context Structure:"
+              - generic [ref=e208]: "interface ActionContext { user: { id: string; email: string; display_name?: string; mfa_enabled: boolean; }; tenant: { id: string; slug: string; name: string; }; request: { ip?: string; user_agent?: string; timestamp: string; }; claims?: Record<string, unknown>; }"
+        - generic [ref=e209]:
+          - button "Create Action" [ref=e210]
+          - link "Cancel" [ref=e211] [cursor=pointer]:
+            - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions
+  - contentinfo [ref=e135]: Auth9 Dashboard Footer

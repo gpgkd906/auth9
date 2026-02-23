@@ -1,0 +1,142 @@
+- generic [ref=e2]:
+  - link "Skip to main content" [ref=e3] [cursor=pointer]:
+    - /url: "#main-content"
+  - complementary [ref=e5]:
+    - generic [ref=e6]:
+      - link "A9 Auth9" [ref=e7] [cursor=pointer]:
+        - /url: /dashboard
+        - generic [ref=e8]: A9
+        - generic [ref=e9]: Auth9
+      - generic [ref=e10]:
+        - button "Switch to light mode" [ref=e11] [cursor=pointer]:
+          - img [ref=e12]
+        - button "Switch to dark mode" [ref=e14] [cursor=pointer]:
+          - img [ref=e15]
+    - button "D Demo Organization" [ref=e18]:
+      - generic [ref=e19]: D
+      - generic [ref=e20]: Demo Organization
+      - img [ref=e21]
+    - navigation "Main navigation" [ref=e23]:
+      - generic [ref=e24]:
+        - generic [ref=e25]: Main
+        - link "Overview" [ref=e26] [cursor=pointer]:
+          - /url: /dashboard
+          - img [ref=e27]
+          - text: Overview
+        - link "Tenants" [ref=e29] [cursor=pointer]:
+          - /url: /dashboard/tenants
+          - img [ref=e30]
+          - text: Tenants
+        - link "Users" [ref=e32] [cursor=pointer]:
+          - /url: /dashboard/users
+          - img [ref=e33]
+          - text: Users
+        - link "Services" [ref=e35] [cursor=pointer]:
+          - /url: /dashboard/services
+          - img [ref=e36]
+          - text: Services
+      - generic [ref=e38]:
+        - generic [ref=e39]: Security
+        - link "Roles" [ref=e40] [cursor=pointer]:
+          - /url: /dashboard/roles
+          - img [ref=e41]
+          - text: Roles
+        - link "ABAC Policies" [ref=e43] [cursor=pointer]:
+          - /url: /dashboard/abac
+          - img [ref=e44]
+          - text: ABAC Policies
+        - link "Analytics" [ref=e46] [cursor=pointer]:
+          - /url: /dashboard/analytics
+          - img [ref=e47]
+          - text: Analytics
+        - link "Security" [ref=e49] [cursor=pointer]:
+          - /url: /dashboard/security/alerts
+          - img [ref=e50]
+          - text: Security
+        - link "Audit Logs" [ref=e52] [cursor=pointer]:
+          - /url: /dashboard/audit-logs
+          - img [ref=e53]
+          - text: Audit Logs
+      - generic [ref=e55]:
+        - generic [ref=e56]: System
+        - link "Settings" [ref=e57] [cursor=pointer]:
+          - /url: /dashboard/settings
+          - img [ref=e58]
+          - text: Settings
+    - generic [ref=e62]:
+      - link "AU Admin User admin@auth9.local" [ref=e63] [cursor=pointer]:
+        - /url: /dashboard/account
+        - generic [ref=e65]: AU
+        - generic [ref=e66]:
+          - paragraph [ref=e67]: Admin User
+          - paragraph [ref=e68]: admin@auth9.local
+      - link "Sign out" [ref=e69] [cursor=pointer]:
+        - /url: /logout
+        - img [ref=e70]
+  - main [ref=e72]:
+    - generic [ref=e536]:
+      - generic [ref=e537]:
+        - generic [ref=e538]:
+          - heading "Actions" [level=1] [ref=e539]
+          - paragraph [ref=e540]: Manage authentication flow actions with TypeScript
+        - link "New Action" [ref=e541] [cursor=pointer]:
+          - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions/new
+          - img [ref=e542]
+          - text: New Action
+      - generic [ref=e544]:
+        - heading "Filters" [level=3] [ref=e546]
+        - generic [ref=e547]:
+          - generic [ref=e548]:
+            - generic [ref=e549]: Trigger Type
+            - generic [ref=e550]:
+              - link "All" [ref=e551] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions
+              - link "Post Login" [ref=e552] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions?trigger=post-login
+              - link "Pre Registration" [ref=e553] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions?trigger=pre-user-registration
+              - link "Post Registration" [ref=e554] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions?trigger=post-user-registration
+              - link "Post Password Change" [ref=e555] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions?trigger=post-change-password
+              - link "Post Email Verification" [ref=e556] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions?trigger=post-email-verification
+              - link "Pre Token Refresh" [ref=e557] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions?trigger=pre-token-refresh
+          - generic [ref=e558]:
+            - img [ref=e559]
+            - searchbox "Search actions..." [active] [ref=e561]: Department
+      - generic [ref=e597]:
+        - generic [ref=e599]:
+          - generic [ref=e601]:
+            - heading "Department Claims Action" [level=3] [ref=e602]:
+              - link "Department Claims Action" [ref=e603] [cursor=pointer]:
+                - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions/ff611989-5b4e-401f-829b-0421ad504ede
+            - generic [ref=e604]: Enabled
+            - generic [ref=e605]: Post Login
+          - generic [ref=e607]:
+            - switch [checked] [ref=e608] [cursor=pointer]
+            - checkbox [checked]
+        - generic [ref=e609]:
+          - generic [ref=e610]:
+            - generic [ref=e611]:
+              - generic [ref=e612]: Executions
+              - generic [ref=e613]: "0"
+            - generic [ref=e614]:
+              - generic [ref=e615]: Success Rate
+              - generic [ref=e616]: N/A%
+            - generic [ref=e617]:
+              - generic [ref=e618]: Last Executed
+              - generic [ref=e619]:
+                - img [ref=e620]
+                - text: Never
+            - generic [ref=e622]:
+              - generic [ref=e623]: Order
+              - generic [ref=e624]: "0"
+          - generic [ref=e625]:
+            - link "View Details" [ref=e626] [cursor=pointer]:
+              - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions/ff611989-5b4e-401f-829b-0421ad504ede
+            - link "Edit" [ref=e627] [cursor=pointer]:
+              - /url: /dashboard/services/903cf5c9-907c-4f5d-bc6c-666d8027eaf2/actions/ff611989-5b4e-401f-829b-0421ad504ede/edit
+            - button "Delete" [ref=e629]
+  - contentinfo [ref=e135]: Auth9 Dashboard Footer

@@ -3,7 +3,7 @@
 ## Project Structure & Module Organization
 - `auth9-core/`: Rust backend (axum + tonic). Key code lives in `auth9-core/src/` with `api/`, `grpc/`, `service/`, `repository/`, `domain/`, `jwt/`, `cache/`, and `config/`.
 - `auth9-portal/`: React Router 7 + TypeScript + Vite admin UI.
-- `auth9-keycloak-events/` and `auth9-keycloak-theme/`: Keycloak integrations and theming.
+- `auth9-keycloak-theme/`: Keycloak theming and branding integration.
 - `docs/`: Architecture and design references.
 - `deploy/` and `docker-compose*.yml`: Deployment and local infra.
 - `scripts/`: Utility scripts for dev and ops.
