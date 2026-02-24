@@ -1,14 +1,40 @@
 # Auth9
 
-**A production-grade IAM platform built entirely through AI-native software development.**
+**[中文版](README-zh.md)** | English
 
-Auth9 is two things at once: a self-hosted identity and access management service (Auth0 alternative), and a living proof-of-concept that AI agents can drive the full software development lifecycle — from planning and implementation to testing, bug fixing, and deployment.
+**An experiment: can AI-native software development lifecycle "polish" software like humans do?**
 
-## The Idea
+Auth9 is two things at once: a self-hosted identity and access management platform (Auth0 alternative), and a living experiment proving that AI agents can drive the full software development lifecycle — from planning and implementation to testing, bug fixing, and deployment.
 
-Most AI coding tools help you write code faster. Auth9 asks a different question: **what if AI could own the entire development loop?**
+> For a detailed writeup of the methodology, see the **[blog post](docs/blog-ai-native-sdlc.md)**.
 
-This repository ships with 16 Claude Code skills and 9 automation scripts that form a closed-loop SDLC pipeline. A human developer plans features with AI, then the AI generates test documentation, executes QA scenarios via browser automation, creates tickets for failures, fixes them autonomously, and iterates until the software converges on correctness — all without manual intervention in the inner loop.
+---
+
+## The Experiment
+
+I didn't set out to build an identity platform. I wanted to answer a more fundamental question: **can an AI-native development process actually produce a polished application?**
+
+I chose IAM as the test subject deliberately. This isn't simple CRUD: multi-tenant data isolation, OIDC/OAuth2 flows, Token Exchange, hierarchical RBAC permissions, webhook signature verification, audit logging — interconnected complexity where one wrong decision cascades into a dozen subtle bugs. Security isn't a nice-to-have; it's the very reason the system exists.
+
+If AI-native SDLC can produce a polished IAM platform, it can work for most applications.
+
+## The Real Challenge: Verifiability
+
+AI coding tools make you write code faster. But writing code was never the real difficulty. The difficulty is **knowing whether the code is correct** — and knowing it fast enough, automated enough, that verification doesn't become the bottleneck.
+
+The AI-native development process doesn't eliminate verification work. It makes verification **systematic and automated enough** to keep pace with AI-speed code generation. If AI writes code 10x faster but verification stays manual, you've just created a 10x larger QA backlog.
+
+## Testing Shifted Left
+
+**Testing didn't disappear. It became more important.** What changed is the form.
+
+Traditional automated tests still exist in the codebase — `cargo test`, Playwright, Vitest. All AI-generated, all essential. What we added is a layer *before* code-level tests: **QA test documents**. Structured specifications that describe what to test, how to test it, and how to verify correctness at the data layer. AI generates them; humans review and approve them. Then AI executes them — including browser automation, API calls, database queries, and gRPC validation.
+
+The human's role: review every generated test document for completeness, edge cases, and security considerations the AI might miss; observe the agent's automated testing to check if its behavior meets expectations. The AI's role: generate the documents, execute them, report failures, and fix what it can.
+
+## The Closed-Loop Pipeline
+
+The pipeline chains 16 Agent Skills together, where the output of each phase feeds the next:
 
 ```
 Human + AI ──► Plan feature
@@ -41,13 +67,9 @@ Human + AI ──► Plan feature
           └─────────────────────────
 ```
 
-The inner loop (test → ticket → fix → re-test) runs autonomously. The human's role shifts from writing code and chasing bugs to **planning, reviewing, and steering**.
+### Agent Skills
 
-## AI-Native SDLC Pipeline
-
-### Skills Overview
-
-The `.claude/skills/` directory contains 16 skills that cover every phase of the development lifecycle:
+The `.agents/skills/` directory contains 16 skills covering every phase of the development lifecycle:
 
 | Phase | Skills | What They Do |
 |-------|--------|-------------|
@@ -71,15 +93,34 @@ The `docs/` directory isn't passive documentation — it's a machine-readable te
 | `docs/uiux/` | 12 | UI/UX test cases with visibility-first navigation verification |
 | `docs/ticket/` | — | Active defect tickets, created and consumed by AI |
 
-Each QA document follows a strict template: initial state, objective, test steps, expected results, and expected data state — all parseable by AI agents for automated execution.
+### The Self-Healing Loop
 
-### Key Design Decisions
+The `ticket-fix` skill is the core mechanism of how AI "polishes" software. When a test fails, a structured ticket is created. AI reads the ticket, reproduces the issue, fixes it, resets the environment, re-runs the test, and closes the ticket.
 
-- **Documents are the source of truth for testing**, not code annotations or test frameworks alone. AI reads the docs and executes them.
-- **Ticket-driven self-healing**: test failures produce structured tickets; AI fixes them and re-validates in a convergent loop.
-- **Visibility-first UI testing**: every feature must be reachable through normal navigation, not just via direct URL.
-- **Zero external dependencies for unit tests**: all tests run in ~1-2 seconds via mocks (mockall, wiremock, NoOpCacheManager), keeping the AI iteration loop fast.
-- **Documentation governance prevents rot**: periodic audits classify issues by severity (P0/P1/P2) and auto-remediate.
+Not every failed test is a bug. The skill explicitly handles **false positives** — when a failure is caused by flawed test procedures rather than code defects, it updates the QA document to prevent recurrence. Every failure makes the test suite better.
+
+### What the Human Actually Does
+
+This is human-AI collaboration, not replacement:
+
+- **Planning**: Define what to build, acceptance criteria, architectural tradeoffs
+- **Reviewing**: Test documents and first-version code. QA execution and ticket-fix run autonomously
+- **Steering**: Root cause analysis for false positives, governance remediation decisions
+- **Architecture**: Domain modeling, data flow design, security boundaries
+
+After 20 rounds of iteration, AI-executed tests still produce tickets — but far fewer than the early rounds, and the application gets richer in detail with each pass. The polishing loop runs faster, and every round is documented.
+
+**The human's core value lies in defining "what we want to do and what we don't want to do"** and providing good enough taste and judgment. The role of human experts actually becomes more important — we need true full-stack engineers who understand not only development but also infrastructure, DevOps, and security.
+
+## By the Numbers
+
+- **16** Agent Skills covering the full development lifecycle
+- **156** test documents (96 QA + 48 security + 12 UI/UX)
+- **9** tool scripts for token generation, API testing, gRPC smoke tests
+- **~2,300** lines of skill definitions
+- **1** human
+
+---
 
 ## The IAM Platform
 
@@ -240,6 +281,7 @@ ghcr.io/gpgkd906/auth9-portal:latest
 
 ## Documentation
 
+- **[Blog: AI-Native SDLC](docs/blog-ai-native-sdlc.md)** — Detailed writeup of the methodology
 - **[Architecture](docs/architecture.md)** — System design overview
 - **[Design System](docs/design-system.md)** — Liquid Glass UI design language
 - **[API Access Control](docs/api-access-control.md)** — Authorization model
