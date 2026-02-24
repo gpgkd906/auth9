@@ -121,9 +121,14 @@ else
   [ "$REBUILD_THEME" = true ]  && echo "    auth9-theme-builder           → REBUILD" || echo "    auth9-theme-builder           → skip (unchanged)"
 fi
 
-# Step 0: Ensure dev gRPC TLS certificate exists
+# Step 0: Ensure dev certificates exist (JWT + gRPC TLS)
 echo ""
-echo "[0/7] gRPC TLS certificate..."
+echo "[0/7] Dev certificates..."
+
+# JWT signing key (extracted from docker-compose.yml)
+"$SCRIPT_DIR/gen-dev-keys.sh"
+
+# gRPC TLS certificate
 CERT_DIR="$PROJECT_DIR/deploy/dev-certs/grpc"
 mkdir -p "$CERT_DIR"
 if [ ! -f "$CERT_DIR/server.crt" ] || [ ! -f "$CERT_DIR/server.key" ]; then

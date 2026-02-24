@@ -4,7 +4,17 @@ const crypto = require('crypto');
 const { execSync } = require('child_process');
 
 const path = require('path');
-const keyPath = path.resolve(__dirname, 'jwt_private_clean.key');
+
+// Resolve project root (3 levels up from .claude/skills/tools/)
+const projectRoot = path.resolve(__dirname, '..', '..', '..');
+const keyPath = path.join(projectRoot, 'deploy', 'dev-certs', 'jwt', 'private.key');
+
+// Auto-generate key if missing
+if (!fs.existsSync(keyPath)) {
+    console.error("JWT dev key not found, generating...");
+    execSync(path.join(projectRoot, 'scripts', 'gen-dev-keys.sh'), { stdio: 'inherit' });
+}
+
 const privateKey = fs.readFileSync(keyPath, 'utf8');
 
 // Verify key is valid

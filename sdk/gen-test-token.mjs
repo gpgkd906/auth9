@@ -1,9 +1,22 @@
 import * as jose from 'jose';
-import { readFileSync } from 'fs';
+import { readFileSync, existsSync } from 'fs';
+import { execSync } from 'child_process';
+import { dirname, resolve } from 'path';
+import { fileURLToPath } from 'url';
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = resolve(__dirname, '..');
+const keyPath = resolve(projectRoot, 'deploy', 'dev-certs', 'jwt', 'private.key');
+
+// Auto-generate key if missing
+if (!existsSync(keyPath)) {
+  console.error("JWT dev key not found, generating...");
+  execSync(resolve(projectRoot, 'scripts', 'gen-dev-keys.sh'), { stdio: 'inherit' });
+}
 
 const JWKS = jose.createRemoteJWKSet(new URL('http://localhost:8080/.well-known/jwks.json'));
 const KEY = await jose.importPKCS8(
-  readFileSync('/Volumes/Yotta/auth9/.claude/skills/tools/jwt_private_clean.key', 'utf-8'),
+  readFileSync(keyPath, 'utf-8'),
   'RS256'
 );
 
