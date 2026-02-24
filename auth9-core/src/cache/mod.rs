@@ -407,10 +407,16 @@ impl CacheManager {
     }
 
     /// Check if a token JTI is in the blacklist.
+    /// Uses raw Redis EXISTS to avoid JSON deserialization issues —
+    /// blacklist values are simple flags, not JSON objects.
     pub async fn is_token_blacklisted(&self, jti: &str) -> Result<bool> {
         let key = format!("{}:{}", keys::TOKEN_BLACKLIST, jti);
-        let value: Option<String> = self.get(&key).await?;
-        Ok(value.is_some())
+        let mut conn = self.conn.clone();
+        let exists: bool = redis::cmd("EXISTS")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await?;
+        Ok(exists)
     }
 
     // ==================== WebAuthn Challenge State ====================

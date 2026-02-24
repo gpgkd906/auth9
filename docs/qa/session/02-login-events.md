@@ -81,13 +81,17 @@ WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 
 ### 初始状态
 - 用户使用错误密码登录
+- **Redis Stream 消费者已启动**（auth9-core 启动时自动启动，需配置 `KEYCLOAK_EVENT_SOURCE=redis_stream`）
+- **Keycloak 事件 SPI 已正常工作**（默认 Docker Compose 已包含配置）
 
 ### 目的
 验证失败登录事件被正确记录
 
 ### 测试操作流程
-1. 用户输入错误密码
+1. 用户通过 Portal 登录页输入错误密码
 2. 登录失败
+3. **等待 2-3 秒**（事件通过 Redis Stream 异步传递）
+4. 查询数据库
 
 ### 预期结果
 - 登录失败
@@ -99,6 +103,14 @@ SELECT event_type, failure_reason FROM login_events
 WHERE email = 'user@example.com' ORDER BY created_at DESC LIMIT 1;
 -- 预期: event_type = 'failed_password'
 ```
+
+### 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 事件未记录 | Redis Stream 消费者未启动 | 检查 auth9-core 日志中是否有 `Starting Keycloak event stream consumer` |
+| 事件未记录 | Keycloak 未推送事件到 Redis | 执行 `redis-cli XLEN auth9:keycloak:events` 检查流中是否有数据 |
+| 事件延迟 | 异步消费有延迟 | 等待 3-5 秒后再查询 |
 
 ---
 

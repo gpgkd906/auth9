@@ -53,7 +53,7 @@ const payload = {
 };
 
 try {
-    const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' });
+    const token = jwt.sign(payload, privateKey, { algorithm: 'RS256', keyid: 'auth9-current' });
     process.stdout.write(token);
 } catch (e) {
     console.error("JWT sign error:", e.message);

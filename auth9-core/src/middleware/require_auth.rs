@@ -7,7 +7,7 @@
 use axum::{
     body::Body,
     extract::State,
-    http::{header::AUTHORIZATION, Request, StatusCode},
+    http::{header::AUTHORIZATION, Method, Request, StatusCode},
     middleware::Next,
     response::{IntoResponse, Response},
     Json,
@@ -62,6 +62,7 @@ pub async fn require_auth_middleware(
     next: Next,
 ) -> Response {
     let request_path = request.uri().path().to_string();
+    let request_method = request.method().clone();
     // Extract the Authorization header
     let auth_header = match request.headers().get(AUTHORIZATION) {
         Some(header) => header,
@@ -123,7 +124,7 @@ pub async fn require_auth_middleware(
         return unauthorized_response("Invalid or expired token");
     };
 
-    if token_kind == "identity" && !is_identity_token_path_allowed(&request_path) {
+    if token_kind == "identity" && !is_identity_token_path_allowed(&request_path, &request_method) {
         return forbidden_response(
             "Identity token is only allowed for tenant selection and exchange",
         );
@@ -183,7 +184,7 @@ fn forbidden_response(message: &str) -> Response {
         .into_response()
 }
 
-fn is_identity_token_path_allowed(path: &str) -> bool {
+fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
     path.starts_with("/api/v1/auth/")
         || path == "/api/v1/users/me/tenants"
         || path == "/api/v1/organizations"
@@ -193,9 +194,10 @@ fn is_identity_token_path_allowed(path: &str) -> bool {
         // Platform admin endpoints use identity tokens (admin email check in handler)
         || path.starts_with("/api/v1/system/")
         || path.starts_with("/api/v1/security/")
-        // Tenant CRUD: create/delete requires platform admin Identity token;
-        // other operations have handler-level policy enforcement
-        || path.starts_with("/api/v1/tenants")
+        // Tenant create (POST) and delete (DELETE) require platform admin Identity token;
+        // GET/PUT tenant operations require Tenant Access Token.
+        || (path.starts_with("/api/v1/tenants")
+            && (*method == Method::POST || *method == Method::DELETE))
         // Invitation management (resend, revoke, get by ID)
         || path.starts_with("/api/v1/invitations")
 }
@@ -491,42 +493,48 @@ mod tests {
 
     #[test]
     fn test_identity_token_path_allowed_tenants() {
-        // Tenant CRUD paths are allowed for identity tokens (platform admin operations)
-        // Handler-level policy enforcement (require_platform_admin_identity) provides
-        // the actual authorization check
-        assert!(is_identity_token_path_allowed("/api/v1/tenants"));
-        assert!(is_identity_token_path_allowed("/api/v1/tenants/some-uuid"));
-        assert!(is_identity_token_path_allowed(
-            "/api/v1/tenants/some-uuid/sso/connectors"
+        // Tenant create (POST) and delete (DELETE) are allowed for identity tokens
+        // (platform admin operations with handler-level authorization)
+        assert!(is_identity_token_path_allowed("/api/v1/tenants", &Method::POST));
+        assert!(is_identity_token_path_allowed("/api/v1/tenants/some-uuid", &Method::DELETE));
+
+        // GET/PUT tenant operations require Tenant Access Token
+        assert!(!is_identity_token_path_allowed("/api/v1/tenants", &Method::GET));
+        assert!(!is_identity_token_path_allowed("/api/v1/tenants/some-uuid", &Method::GET));
+        assert!(!is_identity_token_path_allowed("/api/v1/tenants/some-uuid", &Method::PUT));
+        assert!(!is_identity_token_path_allowed(
+            "/api/v1/tenants/some-uuid/sso/connectors",
+            &Method::GET
         ));
-        assert!(is_identity_token_path_allowed(
-            "/api/v1/tenants/some-uuid/users"
-        ));
-        assert!(is_identity_token_path_allowed(
-            "/api/v1/tenants/some-uuid/invitations"
+        assert!(!is_identity_token_path_allowed(
+            "/api/v1/tenants/some-uuid/users",
+            &Method::GET
         ));
     }
 
     #[test]
     fn test_identity_token_path_allowed_existing() {
-        assert!(is_identity_token_path_allowed("/api/v1/auth/token"));
-        assert!(is_identity_token_path_allowed("/api/v1/users/me/tenants"));
-        assert!(is_identity_token_path_allowed("/api/v1/organizations"));
-        assert!(is_identity_token_path_allowed("/api/v1/users/me"));
-        assert!(is_identity_token_path_allowed("/api/v1/users/me/sessions"));
-        assert!(is_identity_token_path_allowed("/api/v1/users/me/passkeys"));
+        let get = Method::GET;
+        assert!(is_identity_token_path_allowed("/api/v1/auth/token", &get));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me/tenants", &get));
+        assert!(is_identity_token_path_allowed("/api/v1/organizations", &get));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me", &get));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me/sessions", &get));
+        assert!(is_identity_token_path_allowed("/api/v1/users/me/passkeys", &get));
 
         // Invitation management paths
         assert!(is_identity_token_path_allowed(
-            "/api/v1/invitations/some-uuid/resend"
+            "/api/v1/invitations/some-uuid/resend",
+            &get
         ));
         assert!(is_identity_token_path_allowed(
-            "/api/v1/invitations/some-uuid/revoke"
+            "/api/v1/invitations/some-uuid/revoke",
+            &get
         ));
-        assert!(is_identity_token_path_allowed("/api/v1/invitations/some-uuid"));
+        assert!(is_identity_token_path_allowed("/api/v1/invitations/some-uuid", &get));
 
         // Non-allowed paths
-        assert!(!is_identity_token_path_allowed("/api/v1/users"));
-        assert!(!is_identity_token_path_allowed("/api/v1/roles"));
+        assert!(!is_identity_token_path_allowed("/api/v1/users", &get));
+        assert!(!is_identity_token_path_allowed("/api/v1/roles", &get));
     }
 }

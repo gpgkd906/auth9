@@ -1035,13 +1035,13 @@ pub async fn logout<S: HasServices + HasSessionManagement + HasCache>(
     )
 )]
 /// UserInfo endpoint
+///
+/// Accepts Identity tokens, Tenant Access tokens, and Service Client tokens
+/// via the standard AuthUser middleware chain.
 pub async fn userinfo<S: HasServices>(
-    State(state): State<S>,
-    TypedHeader(auth): TypedHeader<Authorization<Bearer>>,
+    auth: crate::middleware::auth::AuthUser,
 ) -> Result<Response> {
-    let claims = state.jwt_manager().verify_identity_token(auth.token())?;
-
-    Ok(Json(claims).into_response())
+    Ok(Json(auth).into_response())
 }
 
 // ============================================================================

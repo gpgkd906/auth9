@@ -651,7 +651,7 @@ function BrandingTab({ branding }: { branding: BrandingConfig | null }) {
                         {/* Colors */}
                         <div className="space-y-2">
                             <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Colors</h3>
-                            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                            <div className="grid grid-cols-2 gap-4">
                                 <ColorPicker
                                     id="primary_color"
                                     label="Primary Color"

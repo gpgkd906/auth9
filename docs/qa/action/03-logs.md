@@ -8,6 +8,18 @@
 
 ## 前置条件
 
+### Token 要求
+
+**重要**：Action 日志查询 API（`/api/v1/services/{service_id}/actions/*/logs`）需要 **tenant access token**，不接受 identity token。
+
+| 测试方式 | Token 类型 | 说明 |
+|----------|-----------|------|
+| Portal UI | 自动 (tenant access token) | 浏览器登录后 Portal 自动处理 token exchange |
+| API 直接测试 | 需 tenant access token | 通过 Token Exchange 流程获取，或使用 Portal Network 面板复制 |
+| 数据库验证 | 不需要 token | 直接查询 `action_executions` 表 |
+
+> `gen-admin-token.sh` 生成的是 identity token，只能用于 Action 创建（`/api/v1/services/*/actions`），不能用于日志查询端点。
+
 ### 测试数据准备
 
 使用 API 或 Portal 创建测试 Actions 并触发执行，生成足够的日志数据：
@@ -270,6 +282,13 @@ WHERE service_id = '{service_id}'
 场景 6（日志详情查看）已拆分到 `docs/qa/action/09-logs-detail.md`。
 
 ---
+
+## 故障排除
+
+| 症状 | 原因 | 解决方案 |
+|------|------|----------|
+| `403 Forbidden` "Identity token is only allowed for tenant selection and exchange" | 使用 identity token 访问日志 API | 日志 API 需要 tenant access token，通过 Portal UI 测试或先进行 Token Exchange |
+| `401 Unauthorized` | Token 过期或无效 | 重新生成 token |
 
 ## 回归测试检查清单
 

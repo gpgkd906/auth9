@@ -57,9 +57,11 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_I
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
-    "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    "context": {
+      "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
+      "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
+      "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    }
   }' | jq '.'
 ```
 
@@ -86,9 +88,11 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_I
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
-    "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    "context": {
+      "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
+      "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
+      "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    }
   }' | jq '.'
 ```
 
@@ -140,9 +144,11 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_I
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
-    "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    "context": {
+      "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
+      "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
+      "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    }
   }' | jq '.'
 ```
 
@@ -199,9 +205,11 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_I
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
-    "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    "context": {
+      "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
+      "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
+      "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    }
   }' | jq '.'
 ```
 
@@ -269,9 +277,11 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_I
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
-    "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    "context": {
+      "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
+      "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
+      "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    }
   }' | jq '.'
 ```
 
@@ -350,9 +360,11 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions/$ACTION_I
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
-    "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
-    "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    "context": {
+      "user": { "id": "u1", "email": "test@example.com", "mfa_enabled": false },
+      "tenant": { "id": "'$SERVICE_ID'", "slug": "test", "name": "Test" },
+      "request": { "timestamp": "2026-02-13T00:00:00Z" }
+    }
   }' | jq '.'
 ```
 
@@ -440,6 +452,13 @@ curl -X POST http://localhost:8080/api/v1/services/$SERVICE_ID/actions \
 - `claims.completed_requests = 5`，`claims.blocked_at = 5`
 
 ---
+
+## 故障排除
+
+| 症状 | 原因 | 解决方案 |
+|------|------|----------|
+| `400 Bad Request` / `Invalid request body` | 请求体缺少 `"context"` 外层包装 | 确保 `/test` 端点的请求体格式为 `{"context": {"user": ..., "tenant": ..., "request": ...}}` |
+| `403 Forbidden` / `Identity token is only allowed for...` | 使用了 identity token 而非 tenant access token | Action API 需要 tenant access token，使用 `gen-admin-token.sh` 生成的 identity token 即可访问（已在允许列表中） |
 
 ## 检查清单
 

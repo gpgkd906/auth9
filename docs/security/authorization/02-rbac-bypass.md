@@ -241,33 +241,47 @@ SELECT role_in_tenant, created_at FROM tenant_users WHERE user_id = '...';
 4. 检查是否仍有权限
 
 ### 预期安全行为
-- Token 权限应与数据库实时同步
-- 或 Token 短期过期强制刷新
-- 敏感操作实时验证权限
+- **Auth9 使用 JWT 无状态令牌（TTL = 15 分钟），权限在签发时嵌入**
+- 在 Token 有效期内，旧权限仍然生效（这是 JWT 的标准行为，不是漏洞）
+- Token 过期后，重新交换的 Token 将反映最新权限
+- 对于需要即时撤销的场景，Auth9 支持 Redis session 黑名单机制（fail-closed）
+
+> **判定标准**：如果旧 Token 在 15 分钟 TTL 内仍可使用，这是**预期行为**（PASS），不应报为漏洞。
+> 只有在 Token 过期后仍可使用，或 session 黑名单无法阻止已撤销 Token，才应报为 FAIL。
 
 ### 验证方法
 ```bash
-# 步骤 1: 获取 Token
-ADMIN_TOKEN=$(get_token_for_user_with_admin_role)
+# 步骤 1: 获取 Token（通过 Token Exchange）
+ADMIN_TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
 
 # 步骤 2: 撤销角色
 curl -X DELETE -H "Authorization: Bearer $SUPER_ADMIN_TOKEN" \
   http://localhost:8080/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{admin_role_id}
 
-# 步骤 3: 使用旧 Token
+# 步骤 3: 使用旧 Token（15分钟内仍有效 — 预期行为）
 curl -H "Authorization: Bearer $ADMIN_TOKEN" \
   http://localhost:8080/api/v1/users
-# 预期: 403 (如果实时验证) 或在 Token 过期后失败
+# 预期: 200（Token 未过期，JWT 内嵌权限仍有效 — 这是 PASS）
+
+# 步骤 4: 等待 Token 过期后重新交换
+# 新 Token 应不再包含 admin 角色
+# 预期: 403
 
 # 验证数据库权限状态
 SELECT * FROM user_tenant_roles WHERE tenant_user_id = '...';
 ```
 
-### 修复建议
-- 敏感操作实时查询数据库权限
-- Token 有效期不超过 15 分钟
-- 实现权限变更时的 Token 吊销
-- 缓存权限时设置较短 TTL
+### 已实现的缓解措施
+- Tenant Access Token TTL = 15 分钟（不可配置更长）
+- Redis session 黑名单支持（fail-closed：Redis 不可用时拒绝所有请求）
+- Token Exchange 时双重校验租户成员资格（TOCTOU 防护）
+
+### 常见误报原因
+
+| 症状 | 原因 | 说明 |
+|------|------|------|
+| 撤销角色后旧 Token 仍可用 | JWT 无状态设计，权限在签发时嵌入 | 这是 PASS，不是 FAIL。Token 过期后（≤15min）自动失效 |
+| 重新登录后仍有旧权限 | 使用了缓存的旧 Token | 需要重新执行 Token Exchange 获取新 Token |
 
 ---
 

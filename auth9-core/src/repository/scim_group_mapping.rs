@@ -18,6 +18,7 @@ pub trait ScimGroupRoleMappingRepository: Send + Sync {
         connector_id: StringUuid,
     ) -> Result<Vec<ScimGroupRoleMapping>>;
     async fn upsert(&self, mapping: &ScimGroupRoleMapping) -> Result<ScimGroupRoleMapping>;
+    async fn update_display_name(&self, id: StringUuid, display_name: &str) -> Result<()>;
     async fn delete(&self, id: StringUuid) -> Result<()>;
     async fn delete_by_connector(&self, connector_id: StringUuid) -> Result<u64>;
 }
@@ -100,6 +101,24 @@ impl ScimGroupRoleMappingRepository for ScimGroupRoleMappingRepositoryImpl {
             .ok_or_else(|| {
                 AppError::Internal(anyhow::anyhow!("Failed to upsert SCIM group mapping"))
             })
+    }
+
+    async fn update_display_name(&self, id: StringUuid, display_name: &str) -> Result<()> {
+        let result = sqlx::query(
+            "UPDATE scim_group_role_mappings SET scim_group_display_name = ?, updated_at = NOW() WHERE id = ?",
+        )
+        .bind(display_name)
+        .bind(id)
+        .execute(&self.pool)
+        .await?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!(
+                "SCIM group mapping {} not found",
+                id
+            )));
+        }
+        Ok(())
     }
 
     async fn delete(&self, id: StringUuid) -> Result<()> {

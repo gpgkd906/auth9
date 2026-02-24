@@ -147,7 +147,7 @@ export default function TenantsIndexPage() {
                 Add a new tenant to the system. Slug must be unique.
               </DialogDescription>
             </DialogHeader>
-            <Form method="post" className="space-y-3">
+            <Form method="post" className="space-y-4">
               <input type="hidden" name="intent" value="create" />
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="create-name">Name</Label>
@@ -222,8 +222,8 @@ export default function TenantsIndexPage() {
                 {data.pagination.total_pages}
               </CardDescription>
             </div>
-            <Form method="get" className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-              <div className="relative w-full sm:w-auto">
+            <Form method="get" className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full md:w-auto">
+              <div className="relative w-full md:w-auto">
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
                 <Input
                   name="search"
@@ -231,11 +231,11 @@ export default function TenantsIndexPage() {
                   aria-label="Search tenants"
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
-                  className="w-full sm:w-[200px] pl-8"
+                  className="w-full md:w-[200px] pl-8"
                 />
               </div>
-              <div className="flex gap-2 w-full sm:w-auto">
-                <Button type="submit" variant="outline" className="bg-[var(--glass-bg)] flex-1 sm:flex-none" size="default">
+              <div className="flex gap-2 w-full md:w-auto">
+                <Button type="submit" variant="outline" className="bg-[var(--glass-bg)] flex-1 md:flex-none" size="default">
                   Search
                 </Button>
                 {data.search && (
@@ -243,7 +243,7 @@ export default function TenantsIndexPage() {
                     type="button"
                     variant="ghost"
                     size="default"
-                    className="flex-1 sm:flex-none"
+                    className="flex-1 md:flex-none"
                     onClick={() => {
                       setSearchValue("");
                       window.location.href = "/dashboard/tenants";

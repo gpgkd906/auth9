@@ -401,6 +401,7 @@
   .sidebar-item.active {
     color: var(--sidebar-item-active-text);
     background: var(--sidebar-item-active-bg);
+    font-weight: 600;
   }
 
   .sidebar-item svg {
