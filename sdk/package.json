@@ -14,5 +14,10 @@
   },
   "dependencies": {
     "jose": "^5.10.0"
+  },
+  "pnpm": {
+    "overrides": {
+      "ajv": ">=8.18.0"
+    }
   }
 }
