@@ -235,9 +235,9 @@ SQL 验证是关键。AI 不只是检查 UI 是否显示"成功"——它会直�
 
 ## 自己试试看
 
- 整条流水线开源：[github.com/gpgkd906/auth9](https://github.com/gpgkd906/auth9)
+想试试看？clone 这个项目，然后在项目下执行 `scripts/run-qa-tests.sh`，agent 会自动启动环境，然后开始执行 SDLC。当然你可以先 review 一下这个脚本，这是个好习惯。
 
-`.agents/skills/` 目录包含全部 16 个 Agent Skills。`docs/qa/`、`docs/security/`、`docs/uiux/` 目录包含测试文档。`project-bootstrap` skill 可以搭建一个同结构的新项目脚手架——Rust 后端、React 前端、Docker Compose、Kubernetes manifest、部署脚本——让你在自己的项目中复制这套方法。
+整条流水线开源：[github.com/gpgkd906/auth9](https://github.com/gpgkd906/auth9)
 
 这套方法论不是身份认证平台专用的。它是一种思考 AI 主导开发的方式：**不要只用 AI 更快地写代码——用它闭合"规划、测试、修复、部署"的循环。**
 

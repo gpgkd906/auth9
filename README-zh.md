@@ -8,6 +8,8 @@ Auth9 同时代表了两样东西：一个自托管的身份认证和访问管�
 
 > 方法论的详细阐述请见 **[博客文章](docs/blog-ai-native-sdlc-zh.md)**。
 
+**想试试看？** clone 这个项目，然后在项目下执行 `scripts/run-qa-tests.sh`，agent 会自动启动环境，然后开始执行 SDLC。（当然你可以先 review 一下这个脚本，这是个好习惯。）
+
 ---
 
 ## 实验初衷

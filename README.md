@@ -8,6 +8,8 @@ Auth9 is two things at once: a self-hosted identity and access management platfo
 
 > For a detailed writeup of the methodology, see the **[blog post](docs/blog-ai-native-sdlc.md)**.
 
+**Want to try it?** Clone the repo and run `scripts/run-qa-tests.sh` — the agent will spin up the environment and start executing the SDLC. (Review the script first — good practice.)
+
 ---
 
 ## The Experiment

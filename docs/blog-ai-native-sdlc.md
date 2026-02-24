@@ -235,9 +235,9 @@ If AI-native SDLC can produce a polished IAM platform, it can work for most appl
 
 ## Try It Yourself
 
-The entire pipeline is open source: [github.com/gpgkd906/auth9](https://github.com/gpgkd906/auth9)
+Want to try it? Clone the repo and run `scripts/run-qa-tests.sh` — the agent will spin up the environment and start executing the SDLC. Of course, you should review the script first (good practice).
 
-The `.agents/skills/` directory contains all 16 Agent Skills. The `docs/qa/`, `docs/security/`, and `docs/uiux/` directories contain the test documents. The `project-bootstrap` skill can scaffold a new project with the same structure — Rust backend, React frontend, Docker compose, Kubernetes manifests, and deployment scripts — so you can replicate this approach for your own projects.
+The entire pipeline is open source: [github.com/gpgkd906/auth9](https://github.com/gpgkd906/auth9)
 
 The methodology isn't specific to identity platforms. It's a way of thinking about AI-led development: **don't just use AI to write code faster — use it to close the loop between planning, testing, fixing, and deploying.**
 
