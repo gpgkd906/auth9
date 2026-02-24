@@ -12,7 +12,7 @@ Not a toy demo, not a weekend project. A real system — complex enough to test 
 
 I chose IAM (Identity and Access Management) as the test subject. This isn't simple CRUD: multi-tenant data isolation, OIDC/OAuth2 flows, Token Exchange, hierarchical RBAC permissions, webhook signature verification, audit logging — this interconnected complexity means one wrong decision can cascade into a dozen subtle bugs. Here, security isn't a nice-to-have; it's the very reason the system exists.
 
-The result is [Auth9](https://github.com/gpgkd906/auth9), a self-hosted Auth0 alternative built with Rust, React Router 7, TiDB, and Keycloak. But Auth9 is just the output. The real subject of the experiment is this development pipeline itself.
+The result is [Auth9](https://github.com/gpgkd906/auth9), a self-hosted alternative to Auth0 built with Rust, React Router 7, TiDB, and Keycloak. Almost all code in this project was AI-generated, and almost every step was driven by skills — from the backend Rust services to frontend React components, from test cases to deployment scripts. But Auth9 is just the output. The real subject of the experiment is this development pipeline itself.
 
 ## The Real Challenge: Verifiability
 
@@ -193,13 +193,15 @@ This is human-AI collaboration, not replacement. Here's what I actually do day-t
 - **Steering**: When the pipeline produces a false positive, I review the root cause analysis. When governance flags a P0, I decide the remediation approach.
 - **Architecture**: Domain modeling, data flow design, security boundaries — these require human judgment about the *system*, not just the code.
 
-The AI handles the mechanical work that used to consume 60-70% of my time. I focus on the 30-40% that requires human judgment.
+In this project, I invested the same amount of personal time but achieved over 10x the output.
 
 This doesn't mean you can let AI handle everything unsupervised. After 20 rounds of iteration, AI-executed tests still produce tickets — but far fewer than the early rounds, and the application gets richer in detail with each pass. The experience is remarkably similar to what human engineers do: we polish software through repeated QA, eliminating bugs layer by layer. The difference is that the polishing loop now runs faster, and every round is documented.
 
 **The human's core value lies in defining "what we want to do and what we don't want to do"** and providing good enough taste and judgment. The AI is responsible for efficiently implementing this definition and continuously verifying and correcting it through automated testing.
 
 A key insight: the role of human experts actually becomes more important — we need to create an environment where Agents can perform verification, which requires human experts to be proficient not only in development but also in infrastructure. Furthermore, the pursuit of DevOps and security issues helps human experts review documents more comprehensively and continuously improve this process. In short, we need true full-stack engineers.
+
+As a developer, I've always advocated for extreme programming. As a tech lead, I trust my team members, but I leverage agile development methodologies, including test-driven practices, for risk management as much as possible. So when it comes to AI, my perspective is quite open: I believe almost all risk management techniques used in software development, especially extreme programming practices, can be applied to managing Agents.
 
 ## Honest Limitations
 

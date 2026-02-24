@@ -4,7 +4,7 @@
 
 **An experiment: can AI-native software development lifecycle "polish" software like humans do?**
 
-Auth9 is two things at once: a self-hosted identity and access management platform (Auth0 alternative), and a living experiment proving that AI agents can drive the full software development lifecycle — from planning and implementation to testing, bug fixing, and deployment.
+Auth9 is two things at once: a self-hosted identity and access management platform (an alternative to Auth0), and a living experiment proving that AI agents can drive the full software development lifecycle — from planning and implementation to testing, bug fixing, and deployment. Almost all code in this project was AI-generated, and almost every step was driven by skills — from the backend Rust services to frontend React components, from test cases to deployment scripts.
 
 > For a detailed writeup of the methodology, see the **[blog post](docs/blog-ai-native-sdlc.md)**.
 
@@ -111,6 +111,8 @@ This is human-AI collaboration, not replacement:
 After 20 rounds of iteration, AI-executed tests still produce tickets — but far fewer than the early rounds, and the application gets richer in detail with each pass. The polishing loop runs faster, and every round is documented.
 
 **The human's core value lies in defining "what we want to do and what we don't want to do"** and providing good enough taste and judgment. The role of human experts actually becomes more important — we need true full-stack engineers who understand not only development but also infrastructure, DevOps, and security.
+
+As a developer, I've always advocated for extreme programming. As a tech lead, I trust my team members, but I leverage agile development methodologies, including test-driven practices, for risk management as much as possible. So when it comes to AI, my perspective is quite open: I believe almost all risk management techniques used in software development, especially extreme programming practices, can be applied to managing Agents.
 
 ## By the Numbers
 
