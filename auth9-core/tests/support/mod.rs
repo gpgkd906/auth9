@@ -3495,6 +3495,19 @@ impl ScimGroupRoleMappingRepository for TestScimGroupMappingRepository {
         Ok(mapping.clone())
     }
 
+    async fn update_display_name(&self, id: StringUuid, display_name: &str) -> Result<()> {
+        let mut mappings = self.mappings.write().await;
+        if let Some(m) = mappings.iter_mut().find(|m| m.id == id) {
+            m.scim_group_display_name = Some(display_name.to_string());
+            Ok(())
+        } else {
+            Err(AppError::NotFound(format!(
+                "SCIM group mapping {} not found",
+                id
+            )))
+        }
+    }
+
     async fn delete(&self, id: StringUuid) -> Result<()> {
         self.mappings.write().await.retain(|m| m.id != id);
         Ok(())

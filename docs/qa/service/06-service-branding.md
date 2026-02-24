@@ -83,20 +83,36 @@ WHERE service_id = '{service_id}';
 4. 修改品牌配置：
    - Primary Color：`#E74C3C`
    - Company Name：`Service Custom Brand`
-   - Logo URL：`https://example.com/service-logo.png`
-5. 点击「Save Changes」
+   - Logo URL：`https://cdn.example.com/service-logo.png`（必须使用允许域名）
+5. 点击「Save Branding」
 
 ### 测试操作流程（API）
+
+> **注意 1**：`BrandingConfig` 中 `primary_color`、`secondary_color`、`background_color`、`text_color`
+> 四个颜色字段均为**必填项**（非 Optional），必须提供完整的 `#RRGGBB` 格式颜色值。
+> 缺少任一字段将导致 400 反序列化错误。
+>
+> **注意 2**：Logo URL 和 Favicon URL 的域名必须在 `BRANDING_ALLOWED_DOMAINS` 白名单中
+> （默认 Docker 环境：`cdn.example.com`, `assets.example.com`）。
+> 使用其他域名（如 `example.com`）会返回 422 验证错误。
+>
+> **注意 3**：此 API 需要 **Tenant Access Token**（不能使用 Identity Token）。
+> Identity Token 在 `/api/v1/services/*` 路径上会被 `require_auth` 中间件以 403 拒绝。
+> 使用 `gen-test-tokens.js tenant-owner` 生成正确的 Token。
+
 ```bash
-TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner)
 curl -X PUT http://localhost:8080/api/v1/services/{service_id}/branding \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
     "config": {
       "primary_color": "#E74C3C",
+      "secondary_color": "#5856D6",
+      "background_color": "#F5F5F7",
+      "text_color": "#1D1D1F",
       "company_name": "Service Custom Brand",
-      "logo_url": "https://example.com/service-logo.png"
+      "logo_url": "https://cdn.example.com/service-logo.png"
     }
   }'
 ```
@@ -239,3 +255,15 @@ WHERE service_id = '{service_id}';
 | 3 | 公开端点按 client_id 返回 Service 品牌 | ☐ | | | |
 | 4 | 删除 Service 品牌（恢复系统默认） | ☐ | | | |
 | 5 | Keycloak 主题按 client_id 加载 Service 品牌 | ☐ | | | |
+
+---
+
+## 常见问题排查
+
+| 症状 | 原因 | 修复方法 |
+|------|------|----------|
+| API 返回 403 "Identity token is only allowed for tenant selection and exchange" | 使用了 Identity Token（`gen-admin-token.sh`）访问 `/api/v1/services/*` 路径 | 使用 Tenant Access Token：`node .claude/skills/tools/gen-test-tokens.js tenant-owner` |
+| API 返回 422 "domain 'xxx' is not in the allowed domains list" | Logo/Favicon URL 域名不在 `BRANDING_ALLOWED_DOMAINS` 白名单中 | 使用允许域名（默认：`cdn.example.com`, `assets.example.com`），或留空 Logo URL |
+| API 返回 400 反序列化错误 | 缺少必填颜色字段（`primary_color`, `secondary_color`, `background_color`, `text_color`） | 确保 JSON 包含全部 4 个颜色字段，格式为 `#RRGGBB` |
+| Portal UI 保存返回 400 | 前端 action handler 将后端错误统一包装为 400 | 检查浏览器 DevTools Network 中实际 API 响应的 HTTP 状态码和错误消息 |
+| API 返回 403 "Platform admin required" | 当前用户不是平台管理员 | 确保使用 `admin@auth9.local` 用户登录，或用户在 `auth9-platform` 租户中拥有 admin 角色 |

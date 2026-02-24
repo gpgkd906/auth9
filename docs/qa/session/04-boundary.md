@@ -41,33 +41,40 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/session/seed.sql
 ## 场景 2：并发会话限制
 
 ### 初始状态
-- 系统配置了最大并发会话数（如 5 个）
-- 用户已有 5 个活跃会话
+- 用户已有多个活跃会话（接近 10 个）
+
+**注意**：并发会话限制已实现为**自动行为**（硬编码 `MAX_SESSIONS_PER_USER = 10`），无需手动配置。当活跃会话数达到上限时，系统自动撤销最早的会话。此功能**无 UI 配置入口**。
 
 ### 目的
-验证并发会话限制
+验证并发会话限制的自动撤销机制
 
 ### 测试操作流程
-1. 尝试从第 6 个设备登录
+1. 为同一用户创建 10 个活跃会话
+2. 尝试第 11 次登录
 
 ### 预期结果
-- 选项1：拒绝登录，提示超出会话限制
-- 选项2：自动撤销最早的会话
+- 第 11 次登录成功
+- 最早的会话被自动撤销
+- auth9-core 日志中出现 `Revoked oldest session due to session limit`
 
 ---
 
 ## 场景 3：社交登录事件记录
 
 ### 初始状态
-- 用户通过 Google/GitHub 等社交账号登录
+- **前提**：需要在 Keycloak 中预先配置社交登录 Identity Provider（如 Google、GitHub），需要有效的 OAuth Client ID 和 Secret
+- 用户通过社交账号登录
+
+**注意**：本地开发环境默认未配置任何 Identity Provider。测试此场景需先通过 Portal 的 Settings > Identity Providers 页面添加社交登录提供商，或在预发布/生产环境中测试。
 
 ### 目的
 验证社交登录事件被正确记录
 
 ### 测试操作流程
-1. 点击「使用 Google 登录」
-2. 完成 Google 授权
-3. 登录成功
+1. 在 Portal Settings > Identity Providers 中确认已配置社交登录
+2. 点击「使用 Google 登录」（或其他已配置的社交登录）
+3. 完成授权流程
+4. 登录成功
 
 ### 预期结果
 - 登录成功

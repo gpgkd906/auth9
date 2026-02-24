@@ -595,13 +595,13 @@ where
             let op = operation.op.to_lowercase();
             match op.as_str() {
                 "add" | "replace" => {
-                    let is_members = operation
+                    let path_lower = operation
                         .path
                         .as_deref()
-                        .map(|p| p.eq_ignore_ascii_case("members"))
-                        .unwrap_or(false);
+                        .unwrap_or("")
+                        .to_ascii_lowercase();
 
-                    if is_members {
+                    if path_lower == "members" {
                         if let Some(value) = &operation.value {
                             let member_refs = self.parse_member_values(value);
                             for member_id in member_refs {
@@ -612,6 +612,12 @@ where
                                 )
                                 .await?;
                             }
+                        }
+                    } else if path_lower == "displayname" {
+                        if let Some(serde_json::Value::String(new_name)) = &operation.value {
+                            self.group_mapping_repo
+                                .update_display_name(group_id, new_name)
+                                .await?;
                         }
                     }
 

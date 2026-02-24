@@ -292,6 +292,15 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 - 优先禁止 Webhook 跟随重定向
 - 记录所有重定向链到日志
 
+> **注意：URL 查询参数中的内网 IP 不构成 SSRF**
+>
+> 类似 `https://example.com/api?url=http://192.168.1.1` 的 URL，其查询参数中的内网 IP
+> **不是 SSRF 攻击向量**。HTTP 客户端只连接 URL 的主机部分（`example.com`），
+> 查询参数仅作为请求路径的一部分发送给目标服务器，不会导致服务端向内网发起连接。
+>
+> Auth9 的 SSRF 防护正确地只验证 URL 的 `host` 部分，这是符合安全最佳实践的行为。
+> 如果在测试中发现查询参数包含内网 IP 的 URL 未被拒绝，这是 **PASS**（预期行为），不应报为漏洞。
+
 ---
 
 ## 检查清单
