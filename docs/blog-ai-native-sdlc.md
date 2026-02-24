@@ -124,6 +124,8 @@ The SQL verification is the critical piece. The AI doesn't just check if the UI 
 
 We have **156 documents** like this: 96 QA, 48 security, 12 UI/UX — each one an executable specification, AI-generated and human-reviewed.
 
+We chose the filesystem as the information exchange medium (e.g., `docs/qa`, `docs/ticket` directories) for a simple reason — Agents are excellent at bash operations, and file system interactions are natural, precise, and efficient. This file-based workflow makes the entire verification process transparent and traceable.
+
 ## The Self-Healing Loop: How AI "Polishes" Software
 
 The `ticket-fix` skill is the most interesting part of the pipeline, and it's the core mechanism of how AI "polishes" software. When a test fails, a structured ticket is created. Then:
