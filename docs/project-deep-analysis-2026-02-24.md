@@ -219,8 +219,8 @@
 
 ## 6. 附：关键证据文件
 
-- `/home/runner/work/auth9/auth9/README.md`
-- `/home/runner/work/auth9/auth9/docs/architecture.md`
-- `/home/runner/work/auth9/auth9/docs/security/README.md`
-- `/home/runner/work/auth9/auth9/docs/qa/README.md`
-- `/home/runner/work/auth9/auth9/docs/actions-implementation-status.md`
+- `README.md`
+- `docs/architecture.md`
+- `docs/security/README.md`
+- `docs/qa/README.md`
+- `docs/actions-implementation-status.md`
