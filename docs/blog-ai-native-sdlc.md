@@ -36,6 +36,8 @@ This is testing shifted left into documentation. The test plan isn't an aftertho
 
 The human's role: review every generated test document for completeness, edge cases, and security considerations the AI might miss; observe the agent's automated testing to check if its testing behavior meets expectations, or if there's any cheating. The AI's role: generate the documents, execute them, report failures, and fix what it can. And the QA test documents themselves reflect the user stories.
 
+A hot take on spec-driven development: **QA test documents are the spec.** There's a lot of excitement right now about using design docs as specs to drive AI development. But a design doc describes *what you want* — it can't tell you whether you got it. A QA test document does both: it defines expected behavior *and* can be automatically verified against the running system. Design docs rot silently; QA docs fail loudly the moment reality drifts from the spec. If your spec isn't executable, it's just a wish.
+
 ## The Closed-Loop Pipeline
 
 The pipeline chains 16 Agent Skills together, where the output of each phase feeds the next:
@@ -207,9 +209,8 @@ As a developer, I've always advocated for extreme programming. As a tech lead, I
 
 This approach isn't magic. Here's what doesn't work well yet:
 
-- **Novel architecture decisions** — The AI is excellent at implementing patterns it's seen before. For genuinely novel design choices (our Token Exchange flow, for instance), human architects still lead.
+- **Novel architecture decisions** — The AI is excellent at implementing patterns it's seen before. For genuinely novel design choices, human architects still lead.
 - **Security review** — The AI generates security test documents and executes them, but the threat model itself requires human security expertise. Automated testing catches known patterns; it doesn't discover novel attack vectors.
-- **Diminishing returns on governance** — At some point, maintaining 156 test documents has overhead that approaches the overhead of not having them. We haven't hit that point yet, but the curve isn't linear.
 - **Process needs project adaptation** — The process itself needs optimization for specific projects. For example, some projects may not need UI testing, while others may focus more on API or data layer validation. The skill combinations and testing focus need adjustment based on project characteristics.
 
 ## By the Numbers
@@ -222,7 +223,7 @@ This approach isn't magic. Here's what doesn't work well yet:
 
 ## Why IAM?
 
-A common question: why build an identity platform to test a development methodology?
+Why build an identity platform to test a development methodology?
 
 Because easy problems don't test methodologies. A TODO app or a blog engine would prove nothing — any approach looks good when the domain is trivial. IAM forces you to deal with:
 
