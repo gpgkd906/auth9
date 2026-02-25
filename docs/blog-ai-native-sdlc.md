@@ -20,7 +20,7 @@ AI coding tools do make you write code faster. GitHub Copilot, Cursor, Claude Co
 
 But writing code was never the real difficulty. The difficulty is **knowing whether the code is correct** — and knowing it fast enough, automated enough, that verification doesn't become the bottleneck.
 
-Can you verify that a refactor didn't break three seemingly unrelated flows? Can you confirm a security fix didn't regress the permission model? Can you keep 156 test documents in sync when a route changes — not next week, but *right now*, within the same development cycle? Humans can certainly do these verifications, but it takes time — and time is precisely what AI-native development aims to solve.
+AI wrote a bunch of code that looks good, but it might fail the moment you test it — missing dependencies, lint errors, you name it. It's annoying to prompt the AI every time it makes a mistake. But that's fine — let the AI finish writing the code and test it itself.
 
 The AI-native development process doesn't eliminate verification work. It makes verification **systematic and automated enough** to keep pace with AI-speed code generation. If AI writes code 10x faster but verification stays manual, you've just created a 10x larger QA backlog.
 
