@@ -20,8 +20,8 @@ data:
   DATABASE_MIN_CONNECTIONS: "2"
   
   # JWT configuration
-  # IMPORTANT: JWT_ISSUER must be the Core API public URL (not portal URL)
-  # This is used to build the OAuth callback URL: {JWT_ISSUER}/api/v1/auth/callback
+  # JWT_ISSUER is auto-derived from AUTH9_CORE_PUBLIC_URL by deploy.sh.
+  # They must always be identical (used for OAuth callback + token iss claim).
   JWT_ISSUER: "https://api.auth9.example.com"
   JWT_ACCESS_TOKEN_TTL_SECS: "3600"
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"

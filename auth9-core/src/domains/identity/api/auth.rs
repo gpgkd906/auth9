@@ -1334,9 +1334,13 @@ async fn exchange_code_for_tokens<S: HasServices>(
         state.config().keycloak.url,
         state.config().keycloak.realm
     );
-    let callback_url = format!(
-        "{}/api/v1/auth/callback",
-        state.config().jwt.issuer.trim_end_matches('/')
+    let callback_url = build_callback_url(
+        state
+            .config()
+            .keycloak
+            .core_public_url
+            .as_deref()
+            .unwrap_or(&state.config().jwt.issuer),
     );
 
     let mut params = vec![

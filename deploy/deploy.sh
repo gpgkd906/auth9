@@ -385,27 +385,11 @@ collect_keycloak_db_password() {
 }
 
 collect_jwt_issuer() {
-    print_info "JWT Issuer 配置"
-    echo "  注意: JWT_ISSUER 必须是 Core API URL（用于 OAuth 回调）"
-
-    # Default to Core API URL, not portal URL
-    local current="${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}}"
-    echo "  当前 JWT Issuer: $current"
-
-    if confirm_action "  修改 JWT Issuer？"; then
-        local new_issuer
-        while true; do
-            new_issuer=$(prompt_user "  JWT Issuer URL" "$current")
-            if validate_url "$new_issuer"; then
-                CONFIGMAP_VALUES[JWT_ISSUER]="$new_issuer"
-                break
-            fi
-        done
-    else
-        CONFIGMAP_VALUES[JWT_ISSUER]="$current"
-    fi
-
-    print_success "JWT Issuer 已配置"
+    # JWT_ISSUER must always equal AUTH9_CORE_PUBLIC_URL (used for OAuth callback + token iss claim).
+    # Auto-derive from AUTH9_CORE_PUBLIC_URL instead of asking separately.
+    local core_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
+    CONFIGMAP_VALUES[JWT_ISSUER]="$core_url"
+    print_info "JWT Issuer 自动设置为 Core 公网 URL: $core_url"
 }
 
 collect_core_public_url() {
@@ -716,8 +700,8 @@ run_interactive_setup() {
     collect_redis_config
     collect_keycloak_config
     collect_keycloak_db_password
-    collect_jwt_issuer
     collect_core_public_url
+    collect_jwt_issuer
     collect_portal_url
     collect_keycloak_public_url
     collect_admin_email
