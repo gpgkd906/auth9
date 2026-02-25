@@ -215,6 +215,18 @@ services:
     profiles:
       - build
 
+  # ==================== Keycloak Events SPI Builder ====================
+  # Run with: docker-compose --profile build up auth9-keycloak-events-builder
+  auth9-keycloak-events-builder:
+    build:
+      context: ./auth9-keycloak-events
+      dockerfile: Dockerfile
+    container_name: auth9-keycloak-events-builder
+    volumes:
+      - keycloak-theme:/events-output
+    profiles:
+      - build
+
   # ==================== Keycloak (Auth Engine) ====================
   keycloak:
     image: quay.io/keycloak/keycloak:26.3.3

@@ -494,8 +494,13 @@ generate_secrets() {
         print_info "SESSION_SECRET 已存在（不会重新生成）"
     fi
 
-    # Keycloak event source (Redis Stream)
-    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]="redis_stream"
+    # Keycloak webhook secret (for ext-event-http SPI plugin)
+    if [ -z "${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}" ]; then
+        AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]=$(openssl rand -hex 32)
+    fi
+
+    # Keycloak event source (webhook mode, using ext-event-http SPI)
+    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]="webhook"
     [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_KEY]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_KEY]="auth9:keycloak:events"
     [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_GROUP]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_GROUP]="auth9-core"
     [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_CONSUMER]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_CONSUMER]="auth9-core-1"

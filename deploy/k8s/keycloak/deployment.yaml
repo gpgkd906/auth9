@@ -53,6 +53,26 @@ spec:
             capabilities:
               drop:
                 - ALL
+        - name: init-events
+          image: ghcr.io/gpgkd906/auth9-keycloak-events:latest
+          imagePullPolicy: Always
+          command: ["sh", "-c", "cp /events/*.jar /providers/ 2>/dev/null && echo 'Events SPI JAR copied'"]
+          volumeMounts:
+            - name: providers-volume
+              mountPath: /providers
+          resources:
+            requests:
+              cpu: 100m
+              memory: 64Mi
+            limits:
+              cpu: 200m
+              memory: 128Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
       containers:
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.3.3
