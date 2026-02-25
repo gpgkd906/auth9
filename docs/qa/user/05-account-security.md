@@ -25,7 +25,7 @@
 
 ### 初始状态
 - 用户已登录
-- 当前密码为 `OldPass123!`
+- 当前密码为 `SecurePass123!`（至少 12 字符，含大小写、数字、符号）
 
 ### 目的
 验证在 Account Security 页面可以成功修改密码
@@ -33,17 +33,18 @@
 ### 测试操作流程
 1. 导航至 `/dashboard/account/security`
 2. 确认页面标题为 "Change Password"
+3. 确认密码提示文字 "Must be at least 12 characters with uppercase, lowercase, numbers, and symbols"
 3. 填写：
-   - Current password：`OldPass123!`
-   - New password：`NewPass456!`
-   - Confirm new password：`NewPass456!`
+   - Current password：`SecurePass123!`
+   - New password：`NewSecure456!`
+   - Confirm new password：`NewSecure456!`
 4. 点击「Change password」
 
 ### 预期结果
 - 按钮显示 "Changing..." 加载状态
 - 成功后显示绿色提示 "Password changed successfully"
-- 使用旧密码 `OldPass123!` 无法登录
-- 使用新密码 `NewPass456!` 可以正常登录
+- 使用旧密码 `SecurePass123!` 无法登录
+- 使用新密码 `NewSecure456!` 可以正常登录
 
 ---
 
@@ -57,21 +58,21 @@
 
 ### 测试操作流程
 1. **空字段验证**：不填写任何字段，直接点击「Change password」
-2. **密码过短**：填写新密码为 `Short1`（少于 8 字符），点击提交
+2. **密码过短**：填写新密码为 `Short1!abc`（少于 12 字符），点击提交
 3. **密码不匹配**：
-   - Current password：`CurrentPass!`
-   - New password：`NewPass456!`
-   - Confirm new password：`DifferentPass!`
+   - Current password：`SecurePass123!`
+   - New password：`NewSecure456!`
+   - Confirm new password：`DifferentXyz!`
    - 点击「Change password」
 4. **错误的当前密码**：
    - Current password：`WrongPassword!`
-   - New password：`NewPass456!`
-   - Confirm new password：`NewPass456!`
+   - New password：`NewSecure456!`
+   - Confirm new password：`NewSecure456!`
    - 点击「Change password」
 
 ### 预期结果
 - 空字段：显示 "All password fields are required"
-- 密码过短：显示 "New password must be at least 8 characters"
+- 密码过短：显示 "Password must be at least 12 characters"
 - 密码不匹配：显示 "New passwords do not match"
 - 错误的当前密码：API 返回错误，显示对应错误信息
 

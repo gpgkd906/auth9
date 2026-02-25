@@ -125,10 +125,10 @@ export async function action({ request, params }: ActionFunctionArgs) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return Response.json({ error: message }, { status: 400 });
+    return { error: message };
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  return { error: "Invalid intent" };
 }
 
 export default function EmailTemplateEditorPage() {

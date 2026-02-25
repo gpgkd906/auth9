@@ -89,12 +89,15 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
 
         // Check for brute force attacks (IP-level)
         if let Some(ip) = &event.ip_address {
-            if let Some(alert) = self.check_brute_force(ip, event.user_id).await? {
+            if let Some(alert) = self
+                .check_brute_force(ip, event.user_id, event.tenant_id)
+                .await?
+            {
                 alerts.push(alert);
             }
 
             // Check for password spray attacks
-            if let Some(alert) = self.check_password_spray(ip).await? {
+            if let Some(alert) = self.check_password_spray(ip, event.tenant_id).await? {
                 alerts.push(alert);
             }
         }
@@ -102,7 +105,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         // Check for distributed brute force (account-level, across all IPs)
         if let Some(email) = &event.email {
             if let Some(alert) = self
-                .check_distributed_brute_force(email, event.user_id)
+                .check_distributed_brute_force(email, event.user_id, event.tenant_id)
                 .await?
             {
                 alerts.push(alert);
@@ -116,7 +119,10 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
                 .iter()
                 .any(|a| a.alert_type == SecurityAlertType::BruteForce);
             if !has_acute_alert {
-                if let Some(alert) = self.check_slow_brute_force_ip(ip, event.user_id).await? {
+                if let Some(alert) = self
+                    .check_slow_brute_force_ip(ip, event.user_id, event.tenant_id)
+                    .await?
+                {
                     alerts.push(alert);
                 }
             }
@@ -132,7 +138,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
             });
             if !has_distributed_alert {
                 if let Some(alert) = self
-                    .check_slow_brute_force_account(email, event.user_id)
+                    .check_slow_brute_force_account(email, event.user_id, event.tenant_id)
                     .await?
                 {
                     alerts.push(alert);
@@ -180,6 +186,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         &self,
         ip_address: &str,
         user_id: Option<StringUuid>,
+        tenant_id: Option<StringUuid>,
     ) -> Result<Option<SecurityAlert>> {
         let since = Utc::now() - Duration::minutes(self.config.brute_force_window_mins);
 
@@ -191,7 +198,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if failed_attempts >= self.config.brute_force_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::BruteForce,
                 severity: AlertSeverity::High,
                 details: Some(serde_json::json!({
@@ -210,7 +217,11 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
     }
 
     /// Check for password spray attack pattern
-    async fn check_password_spray(&self, ip_address: &str) -> Result<Option<SecurityAlert>> {
+    async fn check_password_spray(
+        &self,
+        ip_address: &str,
+        tenant_id: Option<StringUuid>,
+    ) -> Result<Option<SecurityAlert>> {
         let since = Utc::now() - Duration::minutes(self.config.password_spray_window_mins);
 
         let unique_accounts = self
@@ -221,7 +232,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if unique_accounts >= self.config.password_spray_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id: None,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::SuspiciousIp,
                 severity: AlertSeverity::Critical,
                 details: Some(serde_json::json!({
@@ -245,6 +256,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         &self,
         email: &str,
         user_id: Option<StringUuid>,
+        tenant_id: Option<StringUuid>,
     ) -> Result<Option<SecurityAlert>> {
         let since = Utc::now() - Duration::minutes(self.config.brute_force_window_mins);
 
@@ -256,7 +268,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if failed_attempts >= self.config.brute_force_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::BruteForce,
                 severity: AlertSeverity::High,
                 details: Some(serde_json::json!({
@@ -280,6 +292,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         &self,
         ip_address: &str,
         user_id: Option<StringUuid>,
+        tenant_id: Option<StringUuid>,
     ) -> Result<Option<SecurityAlert>> {
         // Check long window first (lower severity but broader pattern)
         let long_since =
@@ -292,7 +305,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if long_attempts >= self.config.slow_brute_force_long_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::SlowBruteForce,
                 severity: AlertSeverity::Medium,
                 details: Some(serde_json::json!({
@@ -318,7 +331,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if medium_attempts >= self.config.slow_brute_force_medium_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::SlowBruteForce,
                 severity: AlertSeverity::Medium,
                 details: Some(serde_json::json!({
@@ -341,6 +354,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         &self,
         email: &str,
         user_id: Option<StringUuid>,
+        tenant_id: Option<StringUuid>,
     ) -> Result<Option<SecurityAlert>> {
         // Check long window first
         let long_since =
@@ -353,7 +367,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if long_attempts >= self.config.slow_brute_force_long_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::SlowBruteForce,
                 severity: AlertSeverity::Medium,
                 details: Some(serde_json::json!({
@@ -379,7 +393,7 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         if medium_attempts >= self.config.slow_brute_force_medium_threshold as i64 {
             let input = CreateSecurityAlertInput {
                 user_id,
-                tenant_id: None,
+                tenant_id,
                 alert_type: SecurityAlertType::SlowBruteForce,
                 severity: AlertSeverity::Medium,
                 details: Some(serde_json::json!({

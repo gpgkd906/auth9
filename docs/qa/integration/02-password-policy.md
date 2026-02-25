@@ -239,20 +239,24 @@ GROUP BY event_type;
 
 ## 场景 5：管理员绕过密码策略（特殊场景）
 
-> **架构说明**: Auth9 管理员通过 `PUT /api/v1/users/{id}/password` 设置密码，
-> 内部调用 Keycloak 用户更新 API 设置 credentials。`temporary: true` 会在
-> Keycloak 用户上添加 `UPDATE_PASSWORD` required action，用户通过 Keycloak
-> OIDC 登录时会被强制修改密码。
+> **架构说明**: Auth9 管理员通过 **`PUT /api/v1/admin/users/{id}/password`** 设置密码，
+> 内部调用 `admin_reset_user_password()` 方法，该方法会**临时清除 Keycloak realm 密码策略**
+> 再设置密码，然后**恢复原策略**。`temporary: true` 会在 Keycloak 用户上添加
+> `UPDATE_PASSWORD` required action，用户通过 Keycloak OIDC 登录时会被强制修改密码。
+>
+> **⚠️ 重要**: 必须通过 Auth9 API 设置密码，**不能直接调用 Keycloak Admin API 的
+> `reset-password` 端点**——Keycloak 的 `reset-password` 会强制执行 realm 密码策略，
+> 无法绕过。只有 Auth9 的 `admin_reset_user_password` 实现了策略临时清除机制。
 
 ### 初始状态
 - 租户密码策略要求 12 位，包含大小写数字特殊字符
 - 平台管理员需要为用户设置临时密码
 
 ### 目的
-验证管理员可以设置临时弱密码，Keycloak 强制用户首次登录修改
+验证管理员可以通过 Auth9 API 设置临时弱密码，Keycloak 强制用户首次登录修改
 
 ### 测试操作流程
-1. 管理员通过 Auth9 API 为新用户设置临时密码 `Temp123!`（`temporary: true`）
+1. 管理员通过 **Auth9 API** 为新用户设置临时密码 `Temp123!`（`temporary: true`）
 2. 验证 Keycloak 用户的 `requiredActions` 包含 `UPDATE_PASSWORD`
 3. 用户通过 Auth9 登录入口触发 OIDC 流程，使用临时密码登录
 4. Keycloak 强制显示密码修改页面
@@ -260,7 +264,17 @@ GROUP BY event_type;
 
 ### 验证方式
 ```bash
-# 设置临时密码后验证 Keycloak 用户状态
+# 1. 管理员通过 Auth9 API 设置临时密码（不是直接调用 Keycloak）
+ADMIN_TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-access \
+  --tenant-id "$TENANT_ID" --role admin --email admin@auth9.local 2>/dev/null | grep token | awk '{print $2}')
+
+curl -i -X PUT "http://localhost:8080/api/v1/admin/users/{user_id}/password" \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"password": "Temp123!", "temporary": true}'  # pragma: allowlist secret
+# 预期: 200 OK（Auth9 内部临时清除策略后设置密码）
+
+# 2. 验证 Keycloak 用户状态
 KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
   -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
   | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
@@ -276,6 +290,13 @@ curl -s "http://localhost:8081/admin/realms/auth9/users/{keycloak_user_id}" \
 - 步骤 2: Keycloak 用户 `requiredActions` 包含 `UPDATE_PASSWORD`
 - 步骤 3-4: Keycloak OIDC 登录接受临时密码但强制跳转到密码修改页面
 - 步骤 5: 修改成功，`requiredActions` 清空
+
+### 常见测试失败排查
+
+| 症状 | 原因 | 修复 |
+|------|------|------|
+| `invalidPasswordMinLengthMessage` 错误 | 直接调用了 Keycloak `reset-password` 而非 Auth9 API | 使用 `PUT /api/v1/admin/users/{id}/password` |
+| 401 Unauthorized | Token 过期或非管理员 | 重新生成管理员 token |
 
 ### 预期数据状态
 ```sql

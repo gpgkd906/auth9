@@ -431,29 +431,27 @@ export default function UsersPage() {
                 ))}
               </div>
             ) : (
-              <div className="px-4 py-6 text-center text-[var(--text-tertiary)]">
+              <div className="flex flex-col items-center px-4 py-6 text-center text-[var(--text-tertiary)]">
                 <p>No users found</p>
                 {currentSearch && (
-                  <div className="mt-4">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="min-h-11"
-                      onClick={() => {
-                        setSearchInput("");
-                        navigate("/dashboard/users?page=1");
-                      }}
-                    >
-                      Clear Filter
-                    </Button>
-                  </div>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="mt-4 min-h-11"
+                    onClick={() => {
+                      setSearchInput("");
+                      navigate("/dashboard/users?page=1");
+                    }}
+                  >
+                    Clear Filter
+                  </Button>
                 )}
               </div>
             )}
           </div>
           <div className="mt-2 hidden overflow-x-auto rounded-xl border border-[var(--glass-border-subtle)] md:block">
             <table className="min-w-[600px] w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
-              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
+              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px] border-b border-[var(--glass-border-subtle)]">
                 <tr>
                   <th className="px-4 py-3 font-semibold">Email</th>
                   <th className="px-4 py-3 font-semibold">Display Name</th>
@@ -474,7 +472,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-11 w-11 p-0 sm:h-8 sm:w-8">
+                          <Button variant="ghost" className="h-11 w-11 p-0 sm:h-8 sm:w-8 active:scale-95">
                             <span className="sr-only">Open menu</span>
                             <DotsHorizontalIcon className="h-4 w-4" />
                           </Button>
@@ -880,7 +878,7 @@ export default function UsersPage() {
             </div>
 
             {selectedServiceId && (
-              <div className="space-y-3 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
+              <div className="flex flex-col gap-3 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
                 {availableRoles.length === 0 ? (
                   <p className="text-sm text-[var(--text-tertiary)]">No roles defined for this service.</p>
                 ) : (
@@ -888,7 +886,7 @@ export default function UsersPage() {
                     const isAssigned = assignedRoleIds.has(role.id);
                     const wasOriginallyAssigned = allAssignedRoles.some((r: Role) => r.id === role.id);
                     return (
-                      <div key={role.id} className="flex min-h-10 items-center gap-3">
+                      <div key={role.id} className="flex h-10 min-h-[40px] items-center gap-3">
                         <Checkbox
                           id={role.id}
                           checked={isAssigned}

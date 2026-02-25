@@ -189,6 +189,23 @@ snyk container test auth9-core:latest
 - 多阶段构建减少攻击面
 - CI 集成镜像扫描
 
+### 已知基础镜像漏洞（2026-02-25 评估）
+
+以下漏洞存在于 `debian:bookworm-slim` 基础镜像中，**无可用补丁**，属于已知接受风险：
+
+| 库 | CVE | 严重性 | 状态 | 影响评估 |
+|----|-----|--------|------|----------|
+| zlib1g | CVE-2023-45853 | CRITICAL | will_not_fix | 影响 minizip 组件（`zipOpenNewFileInZip4_6`），auth9-core 不创建 ZIP 文件，实际风险低 |
+| libc-bin/libc6 | CVE-2026-0861 | HIGH | affected | glibc memalign 整数溢出，需特定内存分配模式触发 |
+| libldap-2.5-0 | CVE-2023-2953 | HIGH | affected | openldap 空指针解引用，auth9-core 不直接使用 LDAP |
+
+**缓解措施**:
+- Dockerfile 已包含 `apt-get upgrade -y` 确保可用补丁已应用
+- 运行时以非 root 用户（`auth9`）执行
+- auth9-portal 和 auth9-demo 已使用 `node:20-alpine` 基础镜像（更少 CVE）
+
+**后续追踪**: 考虑将 auth9-core 运行时切换到 `gcr.io/distroless/cc-debian12` 以消除非必要系统包。
+
 ---
 
 ## 场景 4：供应链安全

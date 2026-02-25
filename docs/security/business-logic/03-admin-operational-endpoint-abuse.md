@@ -84,8 +84,10 @@ curl -i "http://localhost:8080/api/v1/audit-logs?limit=20" \
 ## 场景 3：普通用户越权读取/处置安全告警
 
 ### 前置条件
-- 普通用户 token：`NORMAL_TOKEN`
+- **普通用户 token `NORMAL_TOKEN`**：必须使用 **非平台管理员邮箱** 生成（如 `member@test.com`），不能使用 `admin@auth9.local` 或其他在 `PLATFORM_ADMIN_EMAILS` 中的邮箱
 - 存在待处理告警 id：`ALERT_ID`
+
+> **⚠️ 常见误报原因**: 如果使用 `admin@auth9.local` 等平台管理员邮箱生成 token，即使角色设为 member，policy 层仍会通过邮箱匹配放行（`is_platform_admin_email` 检查优先于角色检查）。
 
 ### 攻击目标
 验证普通用户是否可访问 `GET /api/v1/security/alerts` 和 `POST /api/v1/security/alerts/{id}/resolve`。
@@ -100,24 +102,44 @@ curl -i "http://localhost:8080/api/v1/audit-logs?limit=20" \
 
 ### 验证方法
 ```bash
+# 1. 生成普通用户 token (确保使用非管理员邮箱)
+NORMAL_TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-access \
+  --tenant-id "$TENANT_ID" --role member --email member@test.com 2>/dev/null | grep token | awk '{print $2}')
+
+# 2. 请求告警列表
 curl -i "http://localhost:8080/api/v1/security/alerts?page=1&per_page=20" \
   -H "Authorization: Bearer $NORMAL_TOKEN"
+# 预期: 403 Forbidden
 
+# 3. 尝试处置告警
 curl -i -X POST "http://localhost:8080/api/v1/security/alerts/$ALERT_ID/resolve" \
   -H "Authorization: Bearer $NORMAL_TOKEN"
+# 预期: 403 Forbidden
 ```
 
-### 修复建议
-- 告警查看与处置拆分权限：`security.alert.read` / `security.alert.resolve`。
+### 安全防护层
+本端点已实现以下防护：
+1. **JWT middleware**: 路由在 `protected_routes` 中，要求有效的 Bearer token
+2. **Policy layer**: `enforce(SecurityAlertRead/Resolve)` → `require_platform_admin()` 校验邮箱是否在 `PLATFORM_ADMIN_EMAILS` 列表中
+
+### 常见测试失败排查
+
+| 症状 | 原因 | 修复 |
+|------|------|------|
+| 普通用户返回 200 | Token 使用了平台管理员邮箱 | 确保 `--email` 参数使用非管理员邮箱 |
+| 返回 401 | Token 过期或签名无效 | 重新生成 token |
 
 ---
 
 ## 场景 4：普通用户跨租户切换服务启停
 
 ### 前置条件
-- 普通用户 token：`NORMAL_TOKEN`
+- **`NORMAL_TOKEN` 必须是 Tenant Access Token**，且所属租户 ≠ `OTHER_TENANT_ID`
 - 非所属租户 id：`OTHER_TENANT_ID`
 - 全局服务 id：`GLOBAL_SERVICE_ID`
+
+> **Token 生成要点**: 使用 `.claude/skills/tools/gen-test-tokens.js` 生成 Tenant Access Token。
+> 确保 token 的 `tenant_id` claim 与 `OTHER_TENANT_ID` **不同**，否则测试的不是跨租户场景。
 
 ### 攻击目标
 验证普通用户是否可调用 `POST /api/v1/tenants/{tenant_id}/services` 修改他租户服务状态。
@@ -127,16 +149,31 @@ curl -i -X POST "http://localhost:8080/api/v1/security/alerts/$ALERT_ID/resolve"
 2. 查询 `tenant_services` 是否发生写入。
 
 ### 预期安全行为
-- 返回 `403 Forbidden`
+- 返回 `403 Forbidden`（消息: "Cannot access another tenant"）
 - `tenant_services` 不发生新增/更新
+
+### 安全防护层
+本端点已实现以下防护：
+1. **Policy layer**: `enforce(TenantServiceWrite, Tenant(tenant_id))` → `require_tenant_admin_or_permission()` 校验 `token_tenant_id == tenant_id`
+2. 跨租户请求在 policy 层即被拒绝，不会到达数据库操作
 
 ### 验证方法
 ```bash
+# 1. 生成攻击者 token (tenant A 的普通成员)
+ATTACKER_TENANT_ID="<攻击者所属的 tenant ID>"
+NORMAL_TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-access \
+  --tenant-id "$ATTACKER_TENANT_ID" --role member 2>/dev/null | grep token | awk '{print $2}')
+
+# 2. 用攻击者 token 尝试修改 victim tenant 的服务
+OTHER_TENANT_ID="<目标 tenant ID, 与 ATTACKER_TENANT_ID 不同>"
 curl -i -X POST "http://localhost:8080/api/v1/tenants/$OTHER_TENANT_ID/services" \
   -H "Authorization: Bearer $NORMAL_TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"service_id":"'$GLOBAL_SERVICE_ID'","enabled":false}'
 
+# 预期: 403 "Cannot access another tenant"
+
+# 3. 验证数据库未被修改
 mysql -h 127.0.0.1 -P 4000 -u root -D auth9 -e "
 SELECT tenant_id, service_id, enabled
 FROM tenant_services
@@ -144,17 +181,23 @@ WHERE tenant_id='$OTHER_TENANT_ID' AND service_id='$GLOBAL_SERVICE_ID';
 "
 ```
 
-### 修复建议
-- 强制校验调用者与 `tenant_id` 关系（owner/admin/member 权限矩阵）。
+### 常见误报
+
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| 返回 200 而非 403 | Token 的 `tenant_id` 与 `OTHER_TENANT_ID` 相同（实际测试的是同租户操作） | 确保 token 属于不同租户 |
+| 返回 200 且数据变更 | Token 持有者是目标租户的 admin 或拥有 `tenant_service:write` 权限 | 使用 member 角色且无特殊权限的 token |
 
 ---
 
 ## 场景 5：普通用户跨租户篡改 Webhook 配置
 
 ### 前置条件
-- 普通用户 token：`NORMAL_TOKEN`
+- **`NORMAL_TOKEN` 必须是 Tenant Access Token**，且所属租户 ≠ `OTHER_TENANT_ID`
 - 非所属租户 id：`OTHER_TENANT_ID`
 - 该租户 webhook id：`WEBHOOK_ID`
+
+> **Token 生成要点**: 同场景 4，确保 token 的 `tenant_id` claim 与 `OTHER_TENANT_ID` **不同**。
 
 ### 攻击目标
 验证普通用户是否可操作 `PUT/DELETE /api/v1/tenants/{tenant_id}/webhooks/{id}` 和 `POST .../regenerate-secret`。
@@ -165,11 +208,17 @@ WHERE tenant_id='$OTHER_TENANT_ID' AND service_id='$GLOBAL_SERVICE_ID';
 3. 尝试重置 webhook secret。
 
 ### 预期安全行为
-- 所有请求返回 `403`（或 `404` 且不暴露资源存在性）
+- 所有请求返回 `403`（消息: "Cannot access another tenant"）
 - 配置不被篡改、secret 不被轮换
+
+### 安全防护层
+本端点已实现以下防护：
+1. **Policy layer**: `enforce(WebhookWrite, Tenant(tenant_id))` → `require_tenant_admin_or_permission()` 校验 `token_tenant_id == tenant_id`
+2. **Handler layer**: 额外检查 `existing.tenant_id != path_tenant_id` 防御同租户越权
 
 ### 验证方法
 ```bash
+# 使用与场景 4 相同方式生成跨租户 token
 curl -i -X PUT "http://localhost:8080/api/v1/tenants/$OTHER_TENANT_ID/webhooks/$WEBHOOK_ID" \
   -H "Authorization: Bearer $NORMAL_TOKEN" \
   -H "Content-Type: application/json" \
@@ -180,10 +229,16 @@ curl -i -X POST "http://localhost:8080/api/v1/tenants/$OTHER_TENANT_ID/webhooks/
 
 curl -i -X DELETE "http://localhost:8080/api/v1/tenants/$OTHER_TENANT_ID/webhooks/$WEBHOOK_ID" \
   -H "Authorization: Bearer $NORMAL_TOKEN"
+
+# 预期: 所有请求返回 403 "Cannot access another tenant"
 ```
 
-### 修复建议
-- Webhook 端点必须绑定租户权限检查，且写操作记录审计日志。
+### 常见误报
+
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| 返回 200 而非 403 | Token 的 `tenant_id` 与 `OTHER_TENANT_ID` 相同 | 确保 token 属于不同租户 |
+| PUT 返回 403 但 DELETE 返回 200 | 不应发生；两者均有 policy + handler 双重检查 | 检查 token 是否过期后重新生成 |
 
 ---
 

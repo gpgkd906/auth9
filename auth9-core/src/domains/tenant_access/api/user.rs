@@ -134,8 +134,11 @@ pub async fn list<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     // Platform admin check applies to both Identity and TenantAccess tokens
     if is_platform_admin_with_db(&state, &auth).await {
-        // Platform admin: if tenant_id is specified, scope to that tenant
-        if let Some(tenant_id) = query.tenant_id {
+        // Determine effective tenant scope: explicit query param > token's tenant_id (for TenantAccess)
+        let effective_tenant_id = query.tenant_id.or(auth.tenant_id);
+
+        // Platform admin with tenant scope: list only that tenant's users
+        if let Some(tenant_id) = effective_tenant_id {
             let users = state
                 .user_service()
                 .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
@@ -148,7 +151,7 @@ pub async fn list<S: HasServices>(
                 total,
             )));
         }
-        // Platform admin: can list all users (with optional search)
+        // Platform admin without tenant scope (Identity token, no query param): list all users
         let (users, total) = if let Some(ref search) = query.search {
             if !search.is_empty() {
                 state

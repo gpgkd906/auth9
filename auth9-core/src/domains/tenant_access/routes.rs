@@ -16,7 +16,7 @@ where
         )
         .route(
             "/api/v1/users",
-            get(tenant_access_api::user::list::<S>).post(tenant_access_api::user::create::<S>),
+            post(tenant_access_api::user::create::<S>),
         )
 }
 
@@ -25,6 +25,10 @@ where
     S: TenantAccessContext,
 {
     Router::new()
+        .route(
+            "/api/v1/users",
+            get(tenant_access_api::user::list::<S>),
+        )
         .route(
             "/api/v1/organizations",
             post(tenant_access_api::organization::create_organization::<S>),

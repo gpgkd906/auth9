@@ -1,7 +1,9 @@
 //! Core SCIM service - orchestrates user/group CRUD operations
 
 use crate::domain::scim::*;
-use crate::domain::{AssignRolesInput, CreateUserInput, StringUuid, UpdateUserInput, User};
+use crate::domain::{
+    AddUserToTenantInput, AssignRolesInput, CreateUserInput, StringUuid, UpdateUserInput, User,
+};
 use crate::error::{AppError, Result};
 use crate::keycloak::KeycloakClient;
 use crate::repository::scim_group_mapping::ScimGroupRoleMappingRepository;
@@ -97,6 +99,17 @@ where
                 )
                 .await?;
 
+            // Ensure user is associated with the SCIM connector's tenant
+            // (ignore conflict if already a member)
+            let _ = self
+                .user_repo
+                .add_to_tenant(&AddUserToTenantInput {
+                    user_id: *existing.id,
+                    tenant_id: *ctx.tenant_id,
+                    role_in_tenant: "member".to_string(),
+                })
+                .await;
+
             self.log_operation(
                 ctx,
                 "create",
@@ -157,6 +170,15 @@ where
         // Set SCIM fields
         self.user_repo
             .update_scim_fields(user.id, fields.external_id.clone(), Some(ctx.connector_id))
+            .await?;
+
+        // Associate user with the SCIM connector's tenant
+        self.user_repo
+            .add_to_tenant(&AddUserToTenantInput {
+                user_id: *user.id,
+                tenant_id: *ctx.tenant_id,
+                role_in_tenant: "member".to_string(),
+            })
             .await?;
 
         // Handle active=false → lock the user

@@ -1,4 +1,4 @@
-import { Auth9HttpClient } from './packages/core/dist/index.js';
+import { Auth9HttpClient } from '../../sdk/packages/core/dist/index.js';
 
 async function testScenario4() {
   console.log('=== 场景4：异步Token Provider ===');

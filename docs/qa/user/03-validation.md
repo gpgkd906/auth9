@@ -32,15 +32,17 @@ SELECT COUNT(*) FROM tenant_users WHERE user_id = '{user_id}' AND tenant_id = '{
 
 ### 初始状态
 - 用户 `{user_id}` 在租户 `{tenant_id}` 中的角色为 `member`
+- **必须通过 API 添加用户到租户**（不可直接 SQL INSERT），确保 `tenant_users.id` 为合法 UUID
 
 ### 目的
 验证租户角色修改功能
 
 ### 测试操作流程
-1. 打开用户的租户管理界面
-2. 找到目标租户
-3. 修改角色为 `admin`
-4. 保存
+1. **前置操作**：通过 API 将用户添加到租户（参考场景 1 或直接调用 `POST /api/v1/users/{user_id}/tenants` with `{"tenant_id": "{tenant_id}", "role_in_tenant": "member"}`）
+2. 打开用户的租户管理界面
+3. 找到目标租户
+4. 修改角色为 `admin`
+5. 保存
 
 ### 预期结果
 - 显示更新成功
@@ -51,6 +53,13 @@ SELECT COUNT(*) FROM tenant_users WHERE user_id = '{user_id}' AND tenant_id = '{
 SELECT role_in_tenant FROM tenant_users WHERE user_id = '{user_id}' AND tenant_id = '{tenant_id}';
 -- 预期: admin
 ```
+
+### 常见问题排查
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| `ColumnDecode` UUID 解析错误 | `tenant_users.id` 包含非 UUID 值（如以 `t`/`u` 等非十六进制字符开头的手动插入 ID） | 删除该行，通过 API 重新添加用户到租户 |
+| 404 User-tenant relationship not found | 用户尚未加入租户 | 先执行前置操作（步骤 1） |
 
 ---
 
@@ -91,6 +100,12 @@ INSERT INTO tenants (id, name, slug, settings, status) VALUES
 -- 准备测试用户
 INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled) VALUES
 ('bbbb1111-1111-1111-1111-111111111111', 'kc-user-1', 'existing@example.com', '已存在用户', false);
+
+-- 准备 tenant_users（场景 2 前置数据）
+-- ⚠️ ID 必须是合法 UUID 格式（仅包含 0-9 和 a-f），不可使用 t/u 等非十六进制字符
+-- 推荐通过 API 创建，以下 SQL 仅供紧急直接插入使用：
+INSERT INTO tenant_users (id, tenant_id, user_id, role_in_tenant, joined_at) VALUES
+('cccc1111-1111-1111-1111-111111111111', 'aaaa1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', 'member', NOW());
 
 -- 清理
 DELETE FROM tenant_users WHERE user_id LIKE 'bbbb%';

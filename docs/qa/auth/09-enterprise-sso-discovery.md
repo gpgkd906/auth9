@@ -143,12 +143,40 @@ SELECT enabled FROM enterprise_sso_connectors WHERE alias = '{connector_alias}' 
 验证 discovery 的输入校验（邮箱必填且格式正确）
 
 ### 测试操作流程
-1. 调用 `POST /demo/enterprise/discovery`，请求体传空邮箱：`{"email":""}`
-2. 调用 `POST /demo/enterprise/discovery`，请求体传非法邮箱：`{"email":"not-an-email"}`
+
+> **注意**: Demo 代理 (`/demo/enterprise/discovery`) 有自身的空邮箱前置校验，返回 `400 missing_email`。
+> 如需验证 Core 的 `validator` 校验行为（422），请直连 Core 接口。
+
+**方式 A — 直连 Core（推荐）**:
+1. 调用 Core 接口传空邮箱：
+```bash
+curl -i -X POST 'http://localhost:8080/api/v1/enterprise-sso/discovery?response_type=code&client_id=auth9-portal&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=openid%20email%20profile&state=test&nonce=test' \
+  -H 'Content-Type: application/json' \
+  -d '{"email":""}'
+```
+2. 调用 Core 接口传非法邮箱：
+```bash
+curl -i -X POST 'http://localhost:8080/api/v1/enterprise-sso/discovery?response_type=code&client_id=auth9-portal&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=openid%20email%20profile&state=test&nonce=test' \
+  -H 'Content-Type: application/json' \
+  -d '{"email":"not-an-email"}'
+```
+
+**方式 B — 通过 Demo 代理**:
+1. 调用 `POST http://localhost:3002/demo/enterprise/discovery`，请求体传空邮箱：`{"email":""}`
+2. 调用 `POST http://localhost:3002/demo/enterprise/discovery`，请求体传非法邮箱：`{"email":"not-an-email"}`
 
 ### 预期结果
-- HTTP 状态码为 `422`
-- 错误类型为验证错误（`validation`）
+
+| 方式 | 空邮箱 | 非法邮箱 |
+|------|--------|----------|
+| Core 直连 | `422` validation 错误 | `422` validation 错误 |
+| Demo 代理 | `400` missing_email（代理前置校验） | `422` validation 错误（透传 Core 响应） |
+
+### 常见误报
+
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| 空邮箱返回 400 而非 422 | 通过 Demo 代理测试，代理自身校验在前 | 直连 Core 接口验证 |
 
 ### 预期数据状态
 ```sql

@@ -194,8 +194,10 @@ fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
         // Platform admin endpoints use identity tokens (admin email check in handler)
         || path.starts_with("/api/v1/system/")
         || path.starts_with("/api/v1/security/")
-        // Tenant create (POST) and delete (DELETE) require platform admin Identity token;
-        // GET/PUT tenant operations require Tenant Access Token.
+        // Tenant list (GET /api/v1/tenants) allowed for Identity Token — handler returns
+        // only user's own memberships via resolve_tenant_list_mode_with_state.
+        // Tenant create (POST) and delete (DELETE) require platform admin Identity token.
+        || (path == "/api/v1/tenants" && *method == Method::GET)
         || (path.starts_with("/api/v1/tenants")
             && (*method == Method::POST || *method == Method::DELETE))
         // Invitation management (resend, revoke, get by ID)
@@ -498,8 +500,10 @@ mod tests {
         assert!(is_identity_token_path_allowed("/api/v1/tenants", &Method::POST));
         assert!(is_identity_token_path_allowed("/api/v1/tenants/some-uuid", &Method::DELETE));
 
-        // GET/PUT tenant operations require Tenant Access Token
-        assert!(!is_identity_token_path_allowed("/api/v1/tenants", &Method::GET));
+        // GET /api/v1/tenants (list) is allowed — handler filters to user's memberships
+        assert!(is_identity_token_path_allowed("/api/v1/tenants", &Method::GET));
+
+        // GET/PUT on specific tenant or sub-resources require Tenant Access Token
         assert!(!is_identity_token_path_allowed("/api/v1/tenants/some-uuid", &Method::GET));
         assert!(!is_identity_token_path_allowed("/api/v1/tenants/some-uuid", &Method::PUT));
         assert!(!is_identity_token_path_allowed(

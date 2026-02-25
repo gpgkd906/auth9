@@ -49,6 +49,7 @@ function generateToken(type, { tenantId, userId }) {
                 sub: ADMIN_USER_ID,
                 email: "admin@auth9.local",
                 name: "Platform Admin",
+                token_type: "identity",
                 iss: issuer,
                 aud: "auth9",
                 iat: now,
@@ -63,6 +64,7 @@ function generateToken(type, { tenantId, userId }) {
                 sub: userId || NON_ADMIN_USER_ID,
                 email: "regular-user@example.com",
                 name: "Regular User",
+                token_type: "identity",
                 iss: issuer,
                 aud: "auth9",
                 iat: now,
@@ -120,7 +122,7 @@ function generateToken(type, { tenantId, userId }) {
             process.exit(1);
     }
 
-    const token = jwt.sign(payload, privateKey, { algorithm: 'RS256' });
+    const token = jwt.sign(payload, privateKey, { algorithm: 'RS256', keyid: 'auth9-current' });
     return token;
 }
 

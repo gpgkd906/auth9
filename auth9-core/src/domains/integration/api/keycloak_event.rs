@@ -440,6 +440,16 @@ pub async fn process_keycloak_event<
         None
     };
 
+    // Resolve tenant_id from user's tenant memberships
+    let tenant_id = if let Some(uid) = user_id {
+        match state.user_service().get_user_tenants(uid).await {
+            Ok(tenants) if !tenants.is_empty() => Some(tenants[0].tenant_id),
+            _ => None,
+        }
+    } else {
+        None
+    };
+
     let email = event
         .details
         .email
@@ -457,7 +467,7 @@ pub async fn process_keycloak_event<
     let input = CreateLoginEventInput {
         user_id,
         email: email.clone(),
-        tenant_id: None,
+        tenant_id,
         event_type: login_event_type.clone(),
         ip_address: ip_address.clone(),
         user_agent: headers
@@ -515,7 +525,7 @@ pub async fn process_keycloak_event<
                 let locked_input = CreateLoginEventInput {
                     user_id,
                     email: email.clone(),
-                    tenant_id: None,
+                    tenant_id,
                     event_type: LoginEventType::Locked,
                     ip_address: ip_address.clone(),
                     user_agent: None,

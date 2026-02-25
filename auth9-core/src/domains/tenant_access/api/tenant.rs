@@ -209,13 +209,14 @@ pub async fn create<S: HasServices>(
 }
 
 /// Update tenant
-/// Verifies the user has access to this tenant
+/// Requires tenant admin/owner role or platform admin
 #[utoipa::path(
     put,
     path = "/api/v1/tenants/{id}",
     tag = "Tenant Access",
     responses(
         (status = 200, description = "Success"),
+        (status = 403, description = "Forbidden"),
         (status = 404, description = "Not found")
     )
 )]
@@ -226,8 +227,16 @@ pub async fn update<S: HasServices>(
     Path(id): Path<Uuid>,
     Json(input): Json<UpdateTenantInput>,
 ) -> Result<impl IntoResponse> {
-    // Check tenant access before updating
-    check_tenant_access(&state, &headers, &auth, id).await?;
+    // Require admin/owner role for tenant updates (not just membership)
+    policy::enforce_with_state(
+        &state,
+        &auth,
+        &PolicyInput {
+            action: PolicyAction::TenantOwner,
+            scope: ResourceScope::Tenant(StringUuid::from(id)),
+        },
+    )
+    .await?;
 
     let id = StringUuid::from(id);
     let before = state.tenant_service().get(id).await?;

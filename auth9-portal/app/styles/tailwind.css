@@ -609,6 +609,11 @@
     transition: all 0.2s ease;
   }
 
+  .theme-btn:focus-visible {
+    outline: 2px solid var(--accent-blue);
+    outline-offset: 2px;
+  }
+
   .theme-btn:hover {
     color: var(--text-primary);
     background: var(--sidebar-item-hover);
