@@ -452,7 +452,7 @@ collect_portal_url() {
     fi
 
     # Auto-derive WEBAUTHN_RP_ID from Portal URL (registrable domain)
-    # e.g. https://auth9.gitski.work → gitski.work
+    # e.g. https://auth9.example.com → example.com
     local portal_host=$(echo "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]}" | sed -E 's|https?://||' | sed 's|/.*||' | sed 's|:.*||')
     # Extract registrable domain (last two parts)
     local rp_id=$(echo "$portal_host" | awk -F. '{if(NF>=2) print $(NF-1)"."$NF; else print $0}')
@@ -985,10 +985,67 @@ extract_client_secret() {
     fi
 }
 
+apply_keycloak_configmap() {
+    # Extract hostname from KEYCLOAK_PUBLIC_URL (strip https:// prefix)
+    local keycloak_public_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
+    local kc_hostname="${keycloak_public_url#https://}"
+    kc_hostname="${kc_hostname#http://}"
+
+    cat <<EOF | kubectl apply -f -
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: keycloak-config
+  namespace: $NAMESPACE
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: auth-engine
+    app.kubernetes.io/part-of: auth9
+data:
+  KC_DB: postgres
+  KC_DB_URL_HOST: keycloak-postgres
+  KC_DB_URL_PORT: "5432"
+  KC_DB_URL_DATABASE: keycloak
+  KC_HTTP_ENABLED: "true"
+  KC_HOSTNAME: "$kc_hostname"
+  KC_HOSTNAME_STRICT: "false"
+  KC_HEALTH_ENABLED: "true"
+  KC_METRICS_ENABLED: "true"
+  KC_PROXY_HEADERS: xforwarded
+  KC_SPI_THEME_LOGIN_DEFAULT: auth9
+  KC_SPI_THEME_EMAIL_DEFAULT: keycloak
+  KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
+  AUTH9_API_URL: http://auth9-core:8080
+  KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
+  KC_LOG_LEVEL: INFO
+  KC_CACHE: ispn
+  KC_CACHE_STACK: kubernetes
+  JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-headless.auth9.svc.cluster.local"
+EOF
+
+    if [ $? -eq 0 ]; then
+        print_success "Keycloak ConfigMap 已应用 (KC_HOSTNAME=$kc_hostname)"
+    else
+        print_error "应用 Keycloak ConfigMap 失败"
+        return 1
+    fi
+}
+
 deploy_infrastructure() {
     if [ -z "$DRY_RUN" ]; then
         print_info "正在部署 keycloak..."
-        kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
+        if [ "$INTERACTIVE" = "true" ]; then
+            # Interactive mode: apply keycloak-config dynamically (with correct KC_HOSTNAME),
+            # then apply remaining keycloak resources individually to avoid overwriting
+            apply_keycloak_configmap
+            for f in "$K8S_DIR/keycloak/"*.yaml; do
+                [ "$(basename "$f")" = "configmap.yaml" ] && continue
+                [[ "$(basename "$f")" == *.example* ]] && continue
+                kubectl apply -f "$f"
+            done
+        else
+            kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
+        fi
 
         print_info "正在部署 redis..."
         kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN

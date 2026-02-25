@@ -636,7 +636,8 @@ impl KeycloakSeeder {
 
         // Set password via reset-password endpoint (must be called before password policy is applied)
         if let Ok(Some((user_uuid, _))) = self.get_admin_user_keycloak_id().await {
-            self.reset_admin_password(token, &user_uuid).await?;
+            self.reset_admin_password(token, &user_uuid, Some(&password))
+                .await?;
         }
 
         Ok(Some(password))
@@ -791,7 +792,7 @@ impl KeycloakSeeder {
                 self.update_admin_email(&token, &user_uuid, &current_email)
                     .await?;
                 // Reset password to ensure it matches AUTH9_ADMIN_PASSWORD
-                self.reset_admin_password(&token, &user_uuid).await?;
+                self.reset_admin_password(&token, &user_uuid, None).await?;
                 // Clear brute force status so lockout protection is active
                 self.clear_brute_force_status(&token, &user_uuid).await?;
             }
@@ -821,9 +822,23 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Reset admin user password to the configured AUTH9_ADMIN_PASSWORD value.
-    async fn reset_admin_password(&self, token: &str, user_uuid: &str) -> anyhow::Result<()> {
-        let password = get_admin_password();
+    /// Reset admin user password.
+    /// Accepts an explicit password to avoid regenerating a different random password
+    /// when AUTH9_ADMIN_PASSWORD is not set.
+    async fn reset_admin_password(
+        &self,
+        token: &str,
+        user_uuid: &str,
+        password: Option<&str>,
+    ) -> anyhow::Result<()> {
+        let owned_password;
+        let password = match password {
+            Some(p) => p,
+            None => {
+                owned_password = get_admin_password();
+                &owned_password
+            }
+        };
         let url = format!(
             "{}/admin/realms/{}/users/{}/reset-password",
             self.config.url, self.config.realm, user_uuid
