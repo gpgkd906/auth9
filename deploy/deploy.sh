@@ -451,6 +451,14 @@ collect_portal_url() {
         CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$current"
     fi
 
+    # Auto-derive WEBAUTHN_RP_ID from Portal URL (registrable domain)
+    # e.g. https://auth9.gitski.work → gitski.work
+    local portal_host=$(echo "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]}" | sed -E 's|https?://||' | sed 's|/.*||' | sed 's|:.*||')
+    # Extract registrable domain (last two parts)
+    local rp_id=$(echo "$portal_host" | awk -F. '{if(NF>=2) print $(NF-1)"."$NF; else print $0}')
+    CONFIGMAP_VALUES[WEBAUTHN_RP_ID]="$rp_id"
+    print_info "WEBAUTHN_RP_ID 自动设置为: $rp_id"
+
     print_success "Auth9 Portal URL 已配置"
 }
 
@@ -498,6 +506,8 @@ generate_secrets() {
     if [ -z "${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}" ]; then
         AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]=$(openssl rand -hex 32)
     fi
+    # Sync webhook HMAC secret to keycloak-secrets (must match auth9-secrets)
+    KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]="${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}"
 
     # GRPC_API_KEYS
     if [ -z "${AUTH9_SECRETS[GRPC_API_KEYS]}" ]; then
@@ -648,6 +658,7 @@ data:
   AUTH9_CORE_PUBLIC_URL: "${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
   AUTH9_PORTAL_URL: "${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
   AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
+  ENVIRONMENT: "production"
   NODE_ENV: "production"
   OTEL_METRICS_ENABLED: "true"
   OTEL_TRACING_ENABLED: "true"
@@ -681,13 +692,14 @@ run_interactive_setup() {
     # Detect auth9-secrets
     detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
-        "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" \
+        "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" "PASSWORD_RESET_HMAC_KEY" \
         "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
         "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
 
     # Detect keycloak-secrets
     detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
-        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" || true
+        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" \
+        "KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET" || true
 
     # Detect ConfigMap
     detect_existing_configmap || true
@@ -761,7 +773,6 @@ deploy_auth9() {
     print_progress "1/11" "创建命名空间和服务账户"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
-    kubectl apply -f "$K8S_DIR/ghcr-secret.yaml" $DRY_RUN
 
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
@@ -838,6 +849,7 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
         echo "      --from-literal=SETTINGS_ENCRYPTION_KEY='...' \\"
+        echo "      --from-literal=PASSWORD_RESET_HMAC_KEY='...' \\"
         echo "      --from-literal=KEYCLOAK_WEBHOOK_SECRET='...' \\"
         echo "      --from-literal=GRPC_API_KEYS='...' \\"
         echo "      -n $NAMESPACE"

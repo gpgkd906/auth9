@@ -33,7 +33,7 @@ data:
   AUTH9_API_URL: http://auth9-core:8080
 
   # Keycloak event listener: ext-event-http (p2-inc/keycloak-events) pushes events to auth9-core webhook.
-  # The seeder configures the listener and target URI automatically when KEYCLOAK_WEBHOOK_SECRET is set.
+  KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
 
   # Logging
   KC_LOG_LEVEL: INFO

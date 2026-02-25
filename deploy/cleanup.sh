@@ -310,8 +310,6 @@ spec:
   template:
     spec:
       restartPolicy: Never
-      imagePullSecrets:
-        - name: ghcr-secret
       containers:
         - name: auth9-reset
           image: ghcr.io/gpgkd906/auth9-core:latest
@@ -376,7 +374,7 @@ interactive_delete_secrets() {
     echo "    - DATABASE_URL（数据库连接字符串）"
     echo "    - REDIS_URL"
     echo "    - JWT_SECRET、JWT_PRIVATE_KEY、JWT_PUBLIC_KEY"
-    echo "    - SESSION_SECRET、SETTINGS_ENCRYPTION_KEY"
+    echo "    - SESSION_SECRET、SETTINGS_ENCRYPTION_KEY、PASSWORD_RESET_HMAC_KEY"
     echo "    - KEYCLOAK_URL、KEYCLOAK_ADMIN、KEYCLOAK_ADMIN_PASSWORD"
     echo "    - KEYCLOAK_ADMIN_CLIENT_SECRET"
     echo "    - GRPC_API_KEYS"
@@ -391,7 +389,6 @@ interactive_delete_secrets() {
         print_info "正在删除密钥..."
         kubectl delete secret auth9-secrets -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete secret keycloak-secrets -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete secret ghcr-secret -n "$NAMESPACE" --ignore-not-found=true
         print_success "密钥已删除"
     else
         print_info "保留密钥"

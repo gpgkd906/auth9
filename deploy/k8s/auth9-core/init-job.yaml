@@ -18,8 +18,6 @@ spec:
         app.kubernetes.io/part-of: auth9
     spec:
       serviceAccountName: auth9
-      imagePullSecrets:
-        - name: ghcr-secret
       restartPolicy: Never
       securityContext:
         runAsNonRoot: true
