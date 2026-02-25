@@ -224,6 +224,7 @@ docker logs auth9-core 2>&1 | grep -i "REDACTED\|<REDACTED>"
 ### 前置条件
 - 了解 `SecurityDetectionService` 的检测阈值
 - 能够模拟各类攻击模式
+- **auth9-core 已启动且 `KEYCLOAK_EVENT_SOURCE=redis_stream`**（Docker 默认值）。auth9-core 启动时自动创建 Redis Stream consumer group (`XGROUP CREATE ... MKSTREAM`)，无需手动创建。如果看到 `NOGROUP` 错误，说明 auth9-core 尚未启动或未使用 `redis_stream` 模式。
 
 ### 攻击目标
 验证安全检测与告警系统是否正确识别攻击行为

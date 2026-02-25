@@ -29,21 +29,41 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL
 
 ---
 
-## 场景 2：Token 刷新
+## 场景 2：Token 刷新（Keycloak OIDC Refresh Token）
 
 ### 初始状态
-- 持有即将过期的 Access Token
-- 持有有效的 Refresh Token
+- 用户已通过 OIDC 登录流程获取 Identity Token
+- 持有 Keycloak 签发的 Refresh Token（从 `/api/v1/auth/token` 的 `grant_type=authorization_code` 响应中获得）
+
+### 重要说明
+- **本场景测试的是 Keycloak OIDC Refresh Token**，用于刷新 Identity Token 会话。
+- **不要**使用 gRPC `ExchangeToken` 返回的 Auth9 签发 Refresh Token——该 Token 用于 Tenant Access Token 刷新，属于独立功能（当前仅实现了创建，消费端尚未实现）。
+- Keycloak Refresh Token 来自 OIDC 登录流程，Auth9 Refresh Token 来自 gRPC Token Exchange 流程，两者不可互换。
 
 ### 目的
-验证 Token 刷新流程
+验证使用 Keycloak OIDC Refresh Token 刷新 Identity Token 的流程
 
 ### 测试操作流程
-1. 使用 Refresh Token 请求新的 Access Token
+1. 通过 Portal 完成 OIDC 登录，获取 `refresh_token`（Keycloak 签发）
+2. 使用 Keycloak refresh token 调用刷新接口：
+   ```bash
+   curl -X POST http://localhost:8080/api/v1/auth/token \
+     -H "Content-Type: application/x-www-form-urlencoded" \
+     -d "grant_type=refresh_token&refresh_token={keycloak_refresh_token}&client_id=auth9-portal"
+   ```
+3. 检查返回的新 Identity Token
 
 ### 预期结果
-- 获得新的 Access Token
-- Refresh Token 可能被轮换
+- 获得新的 Identity Token（Auth9 签发的 JWT）
+- Keycloak Refresh Token 可能被轮换（取决于 Keycloak 配置）
+- 会话 Session 保持不变
+
+### 故障排查
+
+| 症状 | 原因 | 解决方案 |
+|------|------|---------|
+| Keycloak 返回 400 错误 | 使用了 Auth9 gRPC 签发的 refresh token | 使用 OIDC 登录流程返回的 Keycloak refresh token |
+| gRPC `RefreshToken` 方法不存在 | Auth9 gRPC refresh token 消费端未实现 | 这是已知限制，gRPC refresh token 功能仅完成创建，尚无消费接口 |
 
 ---
 

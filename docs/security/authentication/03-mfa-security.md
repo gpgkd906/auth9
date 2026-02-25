@@ -270,11 +270,11 @@ curl -X DELETE http://localhost:8080/api/v1/users/{other_user_id}/mfa \
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 发现问题 |
 |---|------|------|----------|----------|----------|
-| 1 | TOTP 暴力破解攻击 | ⚠️ 部分验证 | 2026-02-22 | QA Test | 需进一步测试速率限制 |
-| 2 | TOTP 时间窗口攻击 | ✅ PASS | 2026-02-22 | QA Test | 系统拒绝时间偏移代码 |
-| 3 | MFA 绕过测试 | ⚠️ 部分验证 | 2026-02-22 | QA Test | 无效session正确拒绝401 |
-| 4 | MFA 注册流程安全 | ✅ PASS | 2026-02-22 | QA Test | 启用MFA需要密码确认 |
-| 5 | MFA 恢复机制安全 | ⚠️ 未测试 | 2026-02-22 | QA Test | 需测试备份码功能 |
+| 1 | TOTP 暴力破解攻击 | ✅ PASS | 2026-02-25 | QA Test | bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600, waitIncrementSeconds=60 |
+| 2 | TOTP 时间窗口攻击 | ✅ PASS | 2026-02-25 | QA Test | otpPolicyLookAheadWindow=1, 系统拒绝时间偏移代码 |
+| 3 | MFA 绕过测试 | ✅ PASS | 2026-02-25 | QA Test | 登录时正确要求 MFA 验证 |
+| 4 | MFA 注册流程安全 | ✅ PASS | 2026-02-25 | QA Test | 启用MFA需要密码确认 |
+| 5 | MFA 恢复机制安全 | ⚠️ 部分验证 | 2026-02-25 | QA Test | 管理员启用MFA需要密码确认；系统无备份码功能 |
 
 ---
 
@@ -306,7 +306,9 @@ curl -X DELETE http://localhost:8080/api/v1/users/{other_user_id}/mfa \
 ### 回归记录表
 | 检查项ID | 执行结果(pass/fail) | 风险等级 | 证据（请求/响应/日志/截图） | 备注 |
 |---|---|---|---|---|
-|  |  |  |  |  |
+| M-AUTH-03-C01 | PASS | Low | Keycloak brute force protection: bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600 | V6.7 暴力破解防护 |
+| M-AUTH-03-C02 | PASS | Low | OTP policy: otpPolicyLookAheadWindow=1, otpPolicyDigits=6 | V6.8 TOTP 时间窗口 |
+| M-AUTH-03-C03 | PASS | Medium | 登录流程正确要求 MFA 验证，管理员启用 MFA 需要密码确认 | V7.3 MFA 绕过防护 |
 
 ### 退出准则
 1. 所有检查项执行完成，且高风险项无 `fail`。

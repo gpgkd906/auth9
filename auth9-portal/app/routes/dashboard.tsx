@@ -175,9 +175,8 @@ export default function Dashboard() {
       {/* Sidebar - Floating Glass Card */}
       <aside
         className={cn(
-          "sidebar z-50",
-          "fixed -translate-x-full lg:translate-x-0",
-          isSidebarOpen && "translate-x-0"
+          "sidebar",
+          isSidebarOpen && "open"
         )}
       >
         {/* Logo & Theme Toggle */}

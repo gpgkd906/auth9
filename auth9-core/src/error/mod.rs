@@ -72,12 +72,24 @@ impl IntoResponse for AppError {
             AppError::Validation(msg) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "validation", msg.clone())
             }
-            AppError::Database(e) => {
+            AppError::Database(ref e) => {
+                // Map duplicate entry errors (MySQL 1062 / SQLSTATE 23000) to 409 Conflict
+                if let sqlx::Error::Database(ref db_err) = e {
+                    let is_duplicate = db_err.code().as_deref() == Some("23000")
+                        || db_err.code().as_deref() == Some("1062")
+                        || db_err.message().contains("Duplicate entry");
+                    if is_duplicate {
+                        return AppError::Conflict(
+                            "Resource already exists".to_string(),
+                        )
+                        .into_response();
+                    }
+                }
                 tracing::error!("Database error: {:?}", e);
                 (
                     StatusCode::INTERNAL_SERVER_ERROR,
                     "database_error",
-                    format!("Database error: {}", e),
+                    "A database error occurred".to_string(),
                 )
             }
             AppError::Redis(e) => {

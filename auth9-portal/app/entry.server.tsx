@@ -13,7 +13,7 @@ function generateNonce(): string {
   return crypto.randomBytes(16).toString("base64");
 }
 
-function setSecurityHeaders(headers: Headers, nonce: string): void {
+function setSecurityHeaders(headers: Headers, nonce: string, request?: Request): void {
   // Prevent browser caching of authenticated pages (mitigates bfcache leaking sensitive data)
   headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
   headers.set("Pragma", "no-cache");
@@ -45,8 +45,14 @@ function setSecurityHeaders(headers: Headers, nonce: string): void {
       "form-action 'self'",
     ].join("; ")
   );
-  // HTTP Strict Transport Security
-  headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  // HTTP Strict Transport Security - only set when served over HTTPS
+  const isHttps = request
+    ? request.headers.get("X-Forwarded-Proto") === "https" ||
+      new URL(request.url).protocol === "https:"
+    : false;
+  if (isHttps) {
+    headers.set("Strict-Transport-Security", "max-age=31536000; includeSubDomains");
+  }
 }
 
 export default function handleRequest(
@@ -95,7 +101,7 @@ function handleBotRequest(
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
-          setSecurityHeaders(responseHeaders, nonce);
+          setSecurityHeaders(responseHeaders, nonce, request);
 
           resolve(
             new Response(stream, {
@@ -143,7 +149,7 @@ function handleBrowserRequest(
           const stream = createReadableStreamFromReadable(body);
 
           responseHeaders.set("Content-Type", "text/html");
-          setSecurityHeaders(responseHeaders, nonce);
+          setSecurityHeaders(responseHeaders, nonce, request);
 
           resolve(
             new Response(stream, {

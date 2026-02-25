@@ -576,6 +576,8 @@ impl CacheManager {
         // SET key "1" NX EX ttl — returns Some("OK") if key was newly set, None if existed.
         // Use Option<String> instead of bool: redis SET NX returns OK (success) or nil (key
         // exists), and the redis crate's bool parsing of nil is unreliable across versions.
+        // Propagate errors (instead of swallowing with unwrap_or) so the caller can fall
+        // back to in-memory dedup when Redis is unavailable.
         let result: Option<String> = redis::cmd("SET")
             .arg(&key)
             .arg("1")
@@ -584,7 +586,7 @@ impl CacheManager {
             .arg(ttl_secs)
             .query_async(&mut conn)
             .await
-            .unwrap_or(None);
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Redis SETNX failed: {}", e)))?;
         let is_new = result.is_some();
         Ok(!is_new)
     }

@@ -124,6 +124,13 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 ### 初始状态
 - 用户启用了 MFA
 
+### 前置条件
+- **Keycloak 事件桥接已部署**：MFA 失败事件由 Keycloak 产生，需通过事件桥接（Redis Stream 或 Webhook）传递给 auth9-core 才能写入 `login_events` 表。
+  - Redis Stream 模式：需要 Keycloak EventListener SPI 或日志转发器将事件写入 `auth9:keycloak:events`
+  - Webhook 模式：需要 Keycloak 配置 Webhook event listener 推送到 `POST /api/v1/keycloak/events`
+- **注意**：auth9-core 的 OIDC 回调仅记录**成功登录**事件（`record_successful_login`）。失败事件（密码错误、MFA 失败）发生在 Keycloak 侧，回调不会被触发，因此必须依赖事件桥接。
+- 如果事件桥接未部署，本场景的 UI 行为测试仍然有效，但 `login_events` 数据库断言将不适用。
+
 ### 目的
 验证 MFA 验证失败处理
 
@@ -136,11 +143,19 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 - 显示 MFA 验证失败错误
 - 登录失败
 
-### 预期数据状态
+### 预期数据状态（需事件桥接）
 ```sql
 SELECT event_type, failure_reason FROM login_events WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 -- 预期: event_type = 'failed_mfa'
+-- ⚠️ 仅在 Keycloak 事件桥接已部署时有效
 ```
+
+### 故障排查
+
+| 症状 | 原因 | 解决方案 |
+|------|------|---------|
+| UI 显示 MFA 错误但 `login_events` 无新记录 | Keycloak 事件桥接未部署 | 部署 EventListener SPI 或配置 Webhook，参考 `docs/qa/integration/11-keycloak26-event-stream.md` |
+| auth9-core 日志无 "Recorded login event" | Redis Stream consumer 未收到消息 | 检查 `KEYCLOAK_EVENT_SOURCE` 配置，确认 Keycloak 是否产生事件到 Redis |
 
 ---
 

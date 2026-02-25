@@ -103,7 +103,7 @@ SELECT event_type FROM login_events WHERE user_id = '{user_id}' ORDER BY created
 1. 从同一 IP 模拟对 5 个以上不同账户的登录失败事件：
 
 ```bash
-SECRET="dev-webhook-secret"
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 for i in $(seq 1 6); do
   BODY="{\"type\":\"LOGIN_ERROR\",\"realmId\":\"auth9\",\"userId\":\"spray-user-$i\",\"error\":\"invalid_user_credentials\",\"ipAddress\":\"10.99.99.99\",\"details\":{\"username\":\"spray-target-$i@example.com\"}}"
   SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)

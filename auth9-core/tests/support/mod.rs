@@ -545,6 +545,64 @@ impl UserRepository for TestUserRepository {
             .collect())
     }
 
+    async fn search_tenant_users(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<User>> {
+        let tenant_users = self.tenant_users.read().await;
+        let users = self.users.read().await;
+        let user_ids: Vec<StringUuid> = tenant_users
+            .iter()
+            .filter(|tu| tu.tenant_id == tenant_id)
+            .map(|tu| tu.user_id)
+            .collect();
+        let query_lower = query.to_lowercase();
+        Ok(users
+            .iter()
+            .filter(|u| {
+                user_ids.contains(&u.id)
+                    && (u.email.to_lowercase().contains(&query_lower)
+                        || u.display_name
+                            .as_ref()
+                            .map(|n| n.to_lowercase().contains(&query_lower))
+                            .unwrap_or(false))
+            })
+            .skip(offset as usize)
+            .take(limit as usize)
+            .cloned()
+            .collect())
+    }
+
+    async fn search_tenant_users_count(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+    ) -> Result<i64> {
+        let tenant_users = self.tenant_users.read().await;
+        let users = self.users.read().await;
+        let user_ids: Vec<StringUuid> = tenant_users
+            .iter()
+            .filter(|tu| tu.tenant_id == tenant_id)
+            .map(|tu| tu.user_id)
+            .collect();
+        let query_lower = query.to_lowercase();
+        let count = users
+            .iter()
+            .filter(|u| {
+                user_ids.contains(&u.id)
+                    && (u.email.to_lowercase().contains(&query_lower)
+                        || u.display_name
+                            .as_ref()
+                            .map(|n| n.to_lowercase().contains(&query_lower))
+                            .unwrap_or(false))
+            })
+            .count();
+        Ok(count as i64)
+    }
+
     async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
         let tenant_users = self.tenant_users.read().await;
         Ok(tenant_users

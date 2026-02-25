@@ -130,7 +130,7 @@ export default function TenantsIndexPage() {
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-1">
+        <div className="space-y-2">
           <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Tenants</h1>
           <p className="text-sm text-[var(--text-secondary)]">Manage tenant lifecycle and settings</p>
         </div>
@@ -256,8 +256,8 @@ export default function TenantsIndexPage() {
             </Form>
           </div>
         </CardHeader>
-        <div className="px-6 pb-6">
-          <div className="mt-6 space-y-3 md:hidden">
+        <div className="px-6 pb-6 pt-6">
+          <div className="space-y-3 md:hidden">
             {data.data.map((tenant) => (
               <div
                 key={tenant.id}
@@ -318,7 +318,7 @@ export default function TenantsIndexPage() {
             )}
           </div>
 
-          <div className="mt-6 hidden overflow-hidden rounded-xl border border-[var(--glass-border-subtle)] md:block">
+          <div className="hidden overflow-hidden rounded-xl border border-[var(--glass-border-subtle)] md:block">
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>

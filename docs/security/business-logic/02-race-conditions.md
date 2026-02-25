@@ -136,11 +136,15 @@ seq 1 20 | parallel -j20 \
 # 预期: 1
 ```
 
-### 修复建议
-- `tenant_users` 表使用 `UNIQUE INDEX (user_id, tenant_id)`
-- 邀请接受使用数据库事务
-- 接受前使用 `SELECT ... FOR UPDATE` 锁定邀请记录
-- 依赖唯一约束作为最终防线
+### 现有防护
+- `tenant_users` 表已有 `UNIQUE KEY uk_tenant_user (tenant_id, user_id)` 唯一约束（见 `migrations/20240101000003_create_tenant_users.sql`）
+- `mark_accepted` 使用原子更新 `UPDATE ... WHERE status = 'pending'` 确保仅一次接受成功
+- 数据库唯一约束错误 (MySQL 1062) 已全局映射为 409 Conflict
+
+### 验证重点
+- 并发接受后仅产生 1 条 `tenant_user` 记录
+- 失败请求返回 409 Conflict（而非 500）
+- 邀请状态为 `accepted`
 
 ---
 

@@ -237,6 +237,8 @@ SQL 验证是关键。AI 不只是检查 UI 是否显示"成功"——它会直�
 
 想试试看？clone 这个项目，然后在项目下执行 `scripts/run-qa-tests.sh`，agent 会自动启动环境，然后开始执行 SDLC。当然你可以先 review 一下这个脚本，这是个好习惯。
 
+或者，启动 opencode（或者 claude-code），然后告诉你的 agent：`执行所有 QA/安全/UIUX 测试`——然后你就可以看看 agent 会开始做什么事了。对了，gemini 的效果其实也不错。
+
 整条流水线开源：[github.com/gpgkd906/auth9](https://github.com/gpgkd906/auth9)
 
 这套方法论不是身份认证平台专用的。它是一种思考 AI 主导开发的方式：**不要只用 AI 更快地写代码——用它闭合"规划、测试、修复、部署"的循环。**

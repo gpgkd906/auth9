@@ -473,6 +473,25 @@ impl<
             .await
     }
 
+    pub async fn search_tenant_users(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+        page: i64,
+        per_page: i64,
+    ) -> Result<(Vec<User>, i64)> {
+        let offset = (page - 1) * per_page;
+        let users = self
+            .repo
+            .search_tenant_users(tenant_id, query, offset, per_page)
+            .await?;
+        let total = self
+            .repo
+            .search_tenant_users_count(tenant_id, query)
+            .await?;
+        Ok((users, total))
+    }
+
     pub async fn get_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
         self.repo.find_user_tenants(user_id).await
     }

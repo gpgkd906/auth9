@@ -1,61 +1,69 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useSyncExternalStore } from "react";
 
 export type Theme = "light" | "dark";
 
 const STORAGE_KEY = "auth9-theme";
 
-function getInitialTheme(): Theme {
-  // Server-side or initial render: return light as default
-  if (typeof window === "undefined") {
-    return "light";
-  }
+// Read the current theme from the DOM (set by theme-init.js before React hydrates)
+function getSnapshot(): Theme {
+  const attr = document.documentElement.getAttribute("data-theme");
+  return attr === "dark" ? "dark" : "light";
+}
 
-  // Check localStorage first
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "dark" || stored === "light") {
-    return stored;
-  }
-
-  // Fall back to system preference
-  if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    return "dark";
-  }
-
+function getServerSnapshot(): Theme {
   return "light";
 }
 
+// Notify subscribers when theme changes
+let listeners: Array<() => void> = [];
+
+function subscribe(listener: () => void) {
+  listeners = [...listeners, listener];
+  return () => {
+    listeners = listeners.filter((l) => l !== listener);
+  };
+}
+
+function emitChange() {
+  for (const listener of listeners) {
+    listener();
+  }
+}
+
+function applyTheme(newTheme: Theme) {
+  if (newTheme === "dark") {
+    document.documentElement.setAttribute("data-theme", "dark");
+  } else {
+    document.documentElement.removeAttribute("data-theme");
+  }
+}
+
 export function useTheme() {
-  const [theme, setThemeState] = useState<Theme>(getInitialTheme);
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
-  // Sync theme with DOM and localStorage
   const setTheme = useCallback((newTheme: Theme) => {
-    setThemeState(newTheme);
+    if (typeof window === "undefined") return;
 
-    if (typeof window !== "undefined") {
-      localStorage.setItem(STORAGE_KEY, newTheme);
-
-      if (newTheme === "dark") {
-        document.documentElement.setAttribute("data-theme", "dark");
-      } else {
-        document.documentElement.removeAttribute("data-theme");
-      }
-    }
+    localStorage.setItem(STORAGE_KEY, newTheme);
+    applyTheme(newTheme);
+    emitChange();
   }, []);
 
-  // Toggle between light and dark
   const toggleTheme = useCallback(() => {
-    setTheme(theme === "light" ? "dark" : "light");
-  }, [theme, setTheme]);
+    const current = getSnapshot();
+    setTheme(current === "light" ? "dark" : "light");
+  }, [setTheme]);
 
-  // Initialize theme on mount (handles hydration mismatch)
+  // On mount, sync localStorage → DOM (in production theme-init.js does this,
+  // but this handles cases where theme-init.js hasn't run, e.g. tests)
   useEffect(() => {
-    const initialTheme = getInitialTheme();
-    setThemeState(initialTheme);
-
-    if (initialTheme === "dark") {
-      document.documentElement.setAttribute("data-theme", "dark");
-    } else {
-      document.documentElement.removeAttribute("data-theme");
+    const stored = localStorage.getItem(STORAGE_KEY);
+    if (stored === "dark" || stored === "light") {
+      const current = getSnapshot();
+      if (current !== stored) {
+        applyTheme(stored);
+        emitChange();
+      }
     }
   }, []);
 
@@ -64,7 +72,6 @@ export function useTheme() {
     const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
 
     const handleChange = (e: MediaQueryListEvent) => {
-      // Only auto-switch if user hasn't explicitly set a preference
       const stored = localStorage.getItem(STORAGE_KEY);
       if (!stored) {
         setTheme(e.matches ? "dark" : "light");

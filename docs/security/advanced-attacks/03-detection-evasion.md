@@ -31,7 +31,7 @@ Auth9 采用 **Headless Keycloak 架构**，登录认证由 Keycloak 处理，�
 
 ```bash
 # 环境变量：Keycloak webhook 签名密钥（本地开发默认值）
-WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}"
+WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
 # 辅助函数：发送带 HMAC 签名的 Keycloak 事件
 send_signed_event() {
@@ -75,7 +75,7 @@ send_keycloak_login_failure() {
 ### 前置条件
 - 测试账户（Keycloak 中已存在）
 - 了解检测阈值（5 次 / 10 分钟）
-- KEYCLOAK_WEBHOOK_SECRET 未设置（本地开发环境默认）或已知
+- **KEYCLOAK_WEBHOOK_SECRET 必须与 auth9-core 一致**（Docker 默认值：`dev-webhook-secret-change-in-production`）
 
 ### 攻击目标
 验证检测阈值的精确性和边界条件

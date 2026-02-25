@@ -10,6 +10,8 @@ Auth9 is two things at once: a self-hosted identity and access management platfo
 
 **Want to try it?** Clone the repo and run `scripts/run-qa-tests.sh` — the agent will spin up the environment and start executing the SDLC. (Review the script first — good practice.)
 
+Alternatively, start opencode (or claude-code), then tell your agent: `execute all QA/security/UIUX tests` — and watch what happens. By the way, Gemini works well too.
+
 ---
 
 ## The Experiment

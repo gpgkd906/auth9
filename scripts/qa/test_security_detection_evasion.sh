@@ -6,7 +6,7 @@ set -e
 
 # Configuration
 API_BASE="http://localhost:8080"
-WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret}"
+WEBHOOK_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 TOKEN=$(.claude/skills/tools/gen-admin-token.sh 2>/dev/null)
 
 if [ -z "$TOKEN" ]; then
@@ -48,7 +48,7 @@ send_login_success() {
 # Helper function: Get security alerts
 get_alerts() {
   curl -s -H "Authorization: Bearer $TOKEN" \
-    "$API_BASE/api/v1/security/alerts" | jq -r '.total // 0'
+    "$API_BASE/api/v1/security/alerts" | jq -r '.pagination.total // 0'
 }
 
 # Helper function: Get alerts for specific email

@@ -62,3 +62,8 @@
 ### 预期视觉效果
 - **高度对齐**: 即使有的服务描述很长，有的很短，同一行的卡片底部按钮必须在同一水平高度对齐（使用 `flex-col` 和 `mt-auto`）。
 - **文字截断**: 当服务名称超长时，应使用省略号（`truncate`）而非撑破卡片高度或导致布局错乱。
+
+### 验证方法
+- **目标元素**: 服务名称使用 `<p>` 标签（非 `<h3>`），带有 `truncate text-base font-semibold` 类名。
+- **检查方式**: 在 DevTools 中选中服务名称的 `<p>` 元素，确认 `text-overflow: ellipsis`、`overflow: hidden`、`white-space: nowrap` 三个计算样式均已生效。
+- **父容器**: 父 `<div>` 需要 `min-w-0 flex-1` 类名，以确保 flex 子项中 truncate 正常工作。

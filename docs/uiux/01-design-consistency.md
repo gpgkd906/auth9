@@ -76,20 +76,21 @@ console.log(styles.boxShadow);
 
 ### 初始状态
 - 已登录 Dashboard
-- 侧边栏可见（桌面端）
+- 侧边栏可见（**桌面端，视窗宽度 ≥ 1024px**）
 
 ### 目的
 验证侧边栏应用了更强的模糊效果（40px blur）
 
 ### 测试操作流程
-1. 检查左侧导航栏
-2. 观察背景透视效果
-3. 检查导航项的悬停和激活状态
+1. **确保浏览器宽度 ≥ 1024px**（侧边栏在桌面端为浮动卡片样式，移动端为全宽抽屉）
+2. 检查左侧导航栏
+3. 观察背景透视效果
+4. 检查导航项的悬停和激活状态
 
 ### 预期视觉效果
-**侧边栏容器**：
+**侧边栏容器**（桌面端 ≥ 1024px）：
 - `backdrop-filter: blur(40px) saturate(180%)`（比卡片更强）
-- 圆角 24px（比卡片更圆润）
+- 圆角 24px（比卡片更圆润）；**移动端 / 平板端（< 1024px）为 0px，因全宽抽屉布局**
 - 底部右侧有圆角处理
 - 与页面主背景有清晰视觉分离
 
@@ -106,8 +107,8 @@ const styles = getComputedStyle(sidebar);
 console.log(styles.backdropFilter); 
 // 预期: blur(40px) saturate(180%)
 
-console.log(styles.borderRadius); 
-// 预期: 24px
+console.log(styles.borderRadius);
+// 预期: 24px（仅桌面端 ≥ 1024px；移动端为 0px）
 
 // 检查激活项样式
 const activeItem = document.querySelector('.sidebar-item.active');

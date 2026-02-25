@@ -84,7 +84,7 @@ Expected output for admin user:
 ### Key Facts
 
 - **Endpoint**: `POST http://localhost:8080/api/v1/keycloak/events`
-- **Webhook secret**: `dev-webhook-secret` (from `docker-compose.yml` env `KEYCLOAK_WEBHOOK_SECRET`)
+- **Webhook secret**: `dev-webhook-secret-change-in-production` (from `docker-compose.yml` env `KEYCLOAK_WEBHOOK_SECRET`)
 - **Signature header**: `x-keycloak-signature: sha256=<hex>`
 - **HMAC algorithm**: HMAC-SHA256
 - **Field names in JSON**: camelCase (e.g. `credentialType`, `authMethod`, `ipAddress`)
@@ -93,7 +93,7 @@ Expected output for admin user:
 
 ```bash
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-000000000001","error":"invalid_user_credentials","time":1704067200000,"details":{"username":"testuser","email":"testuser@example.com","credentialType":"otp"}}'
-SECRET="dev-webhook-secret"
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
@@ -106,7 +106,7 @@ curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak
 
 ```bash
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-000000000002","error":"invalid_user_credentials","time":1704067200000,"details":{"username":"testuser","email":"testuser@example.com"}}'
-SECRET="dev-webhook-secret"
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
@@ -119,7 +119,7 @@ curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak
 
 ```bash
 BODY='{"type":"LOGIN","realmId":"auth9","userId":"00000000-0000-0000-0000-000000000003","time":1704067200000,"details":{"username":"testuser","email":"testuser@example.com"}}'
-SECRET="dev-webhook-secret"
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIGNATURE=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \

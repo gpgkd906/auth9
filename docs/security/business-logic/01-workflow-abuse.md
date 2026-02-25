@@ -109,6 +109,14 @@ grpcurl $PROTO_FLAGS \
 # 预期: UNAUTHENTICATED - Invalid token signature
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| 跨租户交换返回成功（非 PERMISSION_DENIED） | 用户实际上**已是目标租户的成员**（种子数据可能将 admin 加入所有租户） | **必须先查询 DB 确认**：`SELECT * FROM tenant_users WHERE user_id = '{ID}' AND tenant_id = '{目标ID}'` 应返回空 |
+| 跨租户交换返回成功 | 使用了平台管理员的 Identity Token | 平台管理员可能被自动加入了多个租户，改用仅属于单一租户的普通用户 |
+| gRPC 连接失败 | 未使用客户端证书或 API Key | Docker 中 gRPC 通过 mTLS 代理，需要 `-cert`/`-key`/`-cacert` 参数及 `x-api-key` header |
+
 ### 修复建议
 - Token Exchange 前严格验证 Identity Token 签名
 - 查询数据库确认用户-租户关联

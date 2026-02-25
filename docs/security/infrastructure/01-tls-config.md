@@ -73,6 +73,16 @@ openssl s_client -connect auth9.example.com:443 -tls1_3
 ./testssl.sh auth9.example.com
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| TLS 1.0/1.1 显示为 ACCEPTED | 测试对象不是 nginx TLS 终端（连接了内部 plaintext 端口） | Docker 环境中 gRPC 通过 `auth9-grpc-tls` nginx 容器暴露 50051 端口，确认测试 `localhost:50051`（nginx 代理），而非直接连接容器内部端口 |
+| TLS 1.0/1.1 显示为 ACCEPTED | 从 Docker 容器内部测试，绕过了 nginx 代理 | 从宿主机测试 `localhost:50051`，不要从 Docker 内部直连 `auth9-core:50051` |
+| 本地 openssl 不支持 `-tls1` 选项 | macOS/Linux 新版 OpenSSL 已移除 TLS 1.0 支持 | 使用 `nmap --script ssl-enum-ciphers` 或 `testssl.sh` 替代 |
+
+> **注意**: Docker 部署中 auth9-core 的 gRPC 端口（50051）为 plaintext（`expose` 仅供内部），TLS 终止由 `auth9-grpc-tls` nginx 容器完成。nginx 配置文件 `deploy/nginx/grpc-tls-nginx.conf` 中已设置 `ssl_protocols TLSv1.2 TLSv1.3;`。
+
 ### 修复建议
 - Nginx: `ssl_protocols TLSv1.2 TLSv1.3;`
 - 禁用所有旧版本
@@ -233,7 +243,10 @@ add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; prelo
 
 ## 场景 5：内部服务通信安全
 
+> **注意：本场景仅适用于生产/Kubernetes 环境。** 本地 Docker 开发环境有意使用明文连接（Redis `redis://`、TiDB `mysql://`、Keycloak `SSL_REQUIRED=none`），这是预期行为，不构成安全缺陷。docker-compose.yml 中已标注生产环境应启用 TLS。
+
 ### 前置条件
+- **生产或预发布环境**（非本地 Docker 开发环境）
 - 集群内部访问
 
 ### 攻击目标

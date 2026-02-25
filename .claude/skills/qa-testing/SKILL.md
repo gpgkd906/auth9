@@ -407,7 +407,7 @@ PLATFORM_TENANT_ID=$(mysql -u root -h 127.0.0.1 -P 4000 auth9 -N -e \
 
 ```bash
 BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"00000000-0000-0000-0000-000000000001","error":"invalid_user_credentials","time":1704067200000,"details":{"username":"test","email":"test@example.com","credentialType":"otp"}}'
-SECRET="dev-webhook-secret"
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
 SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
 
 curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \

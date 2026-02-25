@@ -44,6 +44,14 @@ curl -i -X POST "http://localhost:8080/api/v1/tenants/{TENANT_ID}/abac/policies"
   -d '{"change_note":"attack","policy":{"rules":[]}}'
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| 返回 200 而非 403 | Token 包含 `abac:write`/`abac:*`/`rbac:write`/`rbac:*` 权限 | 确认 Token 不含上述权限，使用仅有 `user:read` 等非 ABAC 权限的成员 Token |
+| 返回 200 而非 403 | Token 中 roles 包含 `admin` 或 `owner` | Admin/Owner 角色有 ABAC 写权限，改用普通 `member` 角色 Token |
+| 返回 200 而非 403 | 使用了 Auth9 Platform 的 admin token | 平台管理员有全局权限，改用非平台租户的普通成员 Token |
+
 ---
 
 ## 场景 2：跨租户策略篡改
@@ -158,6 +166,14 @@ curl -i -X POST "http://localhost:8080/api/v1/tenants/{TENANT_ID}/abac/simulate"
   -H "Content-Type: application/json" \
   -d '{"simulation":{"action":"user_manage","resource_type":"tenant"}}'
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| 返回 200 而非 403 | Token 包含 `abac:read`/`abac:write`/`abac:*`/`rbac:*` 权限 | 确认 Token 不含上述权限 |
+| 返回 200 而非 403 | Token 中 roles 包含 `admin` 或 `owner` | Simulate 接口需要 `abac:read` 或 admin 角色；改用无 ABAC 权限的普通 `member` |
+| 返回 200 而非 403 | 使用了 Auth9 Platform 的 admin token | 平台管理员有全局权限，改用非平台租户的普通成员 Token |
 
 ---
 

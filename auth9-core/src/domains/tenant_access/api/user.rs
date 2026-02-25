@@ -139,11 +139,28 @@ pub async fn list<S: HasServices>(
 
         // Platform admin with tenant scope: list only that tenant's users
         if let Some(tenant_id) = effective_tenant_id {
-            let users = state
-                .user_service()
-                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                .await?;
-            let total = users.len() as i64;
+            let (users, total) = if let Some(ref search) = query.search {
+                if !search.is_empty() {
+                    state
+                        .user_service()
+                        .search_tenant_users(StringUuid::from(tenant_id), search, query.page, query.per_page)
+                        .await?
+                } else {
+                    let users = state
+                        .user_service()
+                        .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+                        .await?;
+                    let total = users.len() as i64;
+                    (users, total)
+                }
+            } else {
+                let users = state
+                    .user_service()
+                    .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+                    .await?;
+                let total = users.len() as i64;
+                (users, total)
+            };
             return Ok(Json(PaginatedResponse::new(
                 with_tenant_context(users, Some(tenant_id)),
                 query.page,
@@ -191,11 +208,28 @@ pub async fn list<S: HasServices>(
         },
     )
     .await?;
-    let users = state
-        .user_service()
-        .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-        .await?;
-    let total = users.len() as i64;
+    let (users, total) = if let Some(ref search) = query.search {
+        if !search.is_empty() {
+            state
+                .user_service()
+                .search_tenant_users(StringUuid::from(tenant_id), search, query.page, query.per_page)
+                .await?
+        } else {
+            let users = state
+                .user_service()
+                .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+                .await?;
+            let total = users.len() as i64;
+            (users, total)
+        }
+    } else {
+        let users = state
+            .user_service()
+            .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
+            .await?;
+        let total = users.len() as i64;
+        (users, total)
+    };
     Ok(Json(PaginatedResponse::new(
         with_tenant_context(users, Some(tenant_id)),
         query.page,

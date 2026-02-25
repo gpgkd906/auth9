@@ -237,6 +237,8 @@ If AI-native SDLC can produce a polished IAM platform, it can work for most appl
 
 Want to try it? Clone the repo and run `scripts/run-qa-tests.sh` — the agent will spin up the environment and start executing the SDLC. Of course, you should review the script first (good practice).
 
+Alternatively, start opencode (or claude-code), then tell your agent: `execute all QA/security/UIUX tests` — and watch what happens. By the way, Gemini works well too.
+
 The entire pipeline is open source: [github.com/gpgkd906/auth9](https://github.com/gpgkd906/auth9)
 
 The methodology isn't specific to identity platforms. It's a way of thinking about AI-led development: **don't just use AI to write code faster — use it to close the loop between planning, testing, fixing, and deploying.**

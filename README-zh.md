@@ -10,6 +10,8 @@ Auth9 同时代表了两样东西：一个自托管的身份认证和访问管�
 
 **想试试看？** clone 这个项目，然后在项目下执行 `scripts/run-qa-tests.sh`，agent 会自动启动环境，然后开始执行 SDLC。（当然你可以先 review 一下这个脚本，这是个好习惯。）
 
+或者，启动 opencode（或者 claude-code），然后告诉你的 agent：`执行所有 QA/安全/UIUX 测试`——然后你就可以看看 agent 会开始做什么事了。对了，gemini 的效果其实也不错。
+
 ---
 
 ## 实验初衷

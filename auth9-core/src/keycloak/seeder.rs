@@ -6,6 +6,7 @@
 use anyhow::Context;
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
+use std::collections::HashMap;
 use std::env;
 use tracing::{info, warn};
 
@@ -102,6 +103,32 @@ fn build_redirect_uris(core_public_url: Option<&str>, portal_url: Option<&str>) 
     }
 
     uris
+}
+
+/// Build post_logout_redirect_uris attribute for Keycloak client.
+///
+/// Keycloak requires this attribute to be set on the client for the
+/// `post_logout_redirect_uri` parameter to be accepted during OIDC logout.
+/// Without it, Keycloak ignores the redirect and doesn't fully clear session cookies.
+fn build_portal_logout_attributes(portal_url: Option<&str>) -> Option<HashMap<String, String>> {
+    let mut uris = vec![
+        "http://localhost:3000".to_string(),
+        "http://localhost:3000/*".to_string(),
+        "http://127.0.0.1:3000".to_string(),
+        "http://127.0.0.1:3000/*".to_string(),
+    ];
+
+    if let Some(url) = portal_url {
+        uris.push(url.to_string());
+        uris.push(format!("{}/*", url));
+    }
+
+    let mut attrs = HashMap::new();
+    attrs.insert(
+        "post.logout.redirect.uris".to_string(),
+        uris.join("##"),
+    );
+    Some(attrs)
 }
 
 /// Build comprehensive web origins list
@@ -852,7 +879,7 @@ impl KeycloakSeeder {
                 self.config.core_public_url.as_deref(),
                 self.config.portal_url.as_deref(),
             ),
-            attributes: None,
+            attributes: build_portal_logout_attributes(self.config.portal_url.as_deref()),
             public_client: false, // Confidential client - Keycloak will generate a secret
             secret: None,
         };
@@ -948,7 +975,7 @@ impl KeycloakSeeder {
                 self.config.core_public_url.as_deref(),
                 self.config.portal_url.as_deref(),
             ),
-            attributes: existing_client.attributes,
+            attributes: build_portal_logout_attributes(self.config.portal_url.as_deref()),
             public_client: false,
             secret: existing_client.secret,
         };

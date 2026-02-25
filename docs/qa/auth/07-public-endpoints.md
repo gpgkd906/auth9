@@ -131,26 +131,49 @@
 - Redis 缓存可用
 
 ### 目的
-验证 GetUserRoles 正确返回用户角色，并验证缓存行为
+验证 GetUserRoles 正确返回用户角色，并验证角色变更后缓存失效机制
+
+### 重要说明：正确的 API 端点
+- **角色分配**: `POST /api/v1/rbac/assign`（body 包含 `user_id`, `tenant_id`, `role_ids`）
+- **角色移除**: `DELETE /api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}`
+- **查询用户角色**: `GET /api/v1/users/{user_id}/tenants/{tenant_id}/roles`
+- **⚠️ 不存在** `/api/v1/tenant-users/{id}/roles` 端点，请勿使用
 
 ### 测试操作流程
 1. 首次调用 gRPC GetUserRoles：
-   ```protobuf
-   GetUserRolesRequest {
-     user_id: "{user_id}"
-     tenant_id: "{tenant_id}"
-     service_id: "{service_id}"
-   }
+   ```bash
+   grpcurl -plaintext -d '{
+     "user_id": "{user_id}",
+     "tenant_id": "{tenant_id}",
+     "service_id": "{service_id}"
+   }' localhost:50051 auth9.TokenExchange/GetUserRoles
    ```
 2. 记录返回的角色和权限
-3. 通过 API 给用户新增一个角色 `admin`
-4. 立即再次调用 GetUserRoles
-5. 等待缓存失效后再次调用
+3. 通过 REST API 给用户新增角色 `admin`（需要 Tenant Access Token）：
+   ```bash
+   curl -X POST http://localhost:8080/api/v1/rbac/assign \
+     -H "Content-Type: application/json" \
+     -H "Authorization: Bearer {tenant_access_token}" \
+     -d '{
+       "user_id": "{user_id}",
+       "tenant_id": "{tenant_id}",
+       "role_ids": ["{admin_role_id}"]
+     }'
+   ```
+4. 立即再次调用 GetUserRoles（同步骤 1）
+5. 如果步骤 4 返回旧数据，等待缓存 TTL（默认 5 分钟）后再次调用
+6. （可选）测试角色移除和缓存失效：
+   ```bash
+   curl -X DELETE http://localhost:8080/api/v1/users/{user_id}/tenants/{tenant_id}/roles/{admin_role_id} \
+     -H "Authorization: Bearer {tenant_access_token}"
+   ```
+7. 再次调用 GetUserRoles 确认角色已移除
 
 ### 预期结果
 - 步骤 1：返回角色 `editor` 及其关联权限
-- 步骤 4：可能仍返回旧角色（缓存未失效）
-- 步骤 5：返回更新后的角色列表（包含 `editor` 和 `admin`）
+- 步骤 4：角色分配操作会主动失效缓存，应返回包含 `editor` 和 `admin` 的更新角色列表
+- 步骤 5：如步骤 4 命中旧缓存，缓存 TTL 过期后应返回最新数据
+- 步骤 7：角色移除操作会主动失效缓存（`invalidate_user_roles_for_tenant`），应仅返回 `editor`
 
 ### 预期数据状态
 ```sql
@@ -158,13 +181,22 @@ SELECT r.name FROM user_tenant_roles utr
 JOIN roles r ON r.id = utr.role_id
 JOIN tenant_users tu ON tu.id = utr.tenant_user_id
 WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
--- 预期: editor, admin
+-- 步骤 3 后预期: editor, admin
+-- 步骤 6 后预期: editor
 ```
 
 ```bash
 # 检查 Redis 缓存
 redis-cli KEYS "auth9:user_roles:*"
 ```
+
+### 故障排查
+
+| 症状 | 原因 | 解决方案 |
+|------|------|---------|
+| 角色移除后 GetUserRoles 仍返回旧角色 | 使用了错误的 API 端点（如 `POST /tenant-users/...`） | 使用 `DELETE /api/v1/users/{user_id}/tenants/{tenant_id}/roles/{role_id}` |
+| 角色分配返回 404 | 使用了错误的端点或 HTTP 方法 | 使用 `POST /api/v1/rbac/assign` 分配角色 |
+| 缓存未失效 | Redis 连接问题 | 检查 auth9-core 日志中的 Redis 错误，确认 Redis 可达 |
 
 ---
 

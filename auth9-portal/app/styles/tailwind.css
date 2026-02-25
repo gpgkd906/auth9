@@ -207,10 +207,10 @@
     touch-action: manipulation;
   }
 
-  /* Focus styles */
-  :focus-visible {
-    outline: 2px solid var(--accent-blue);
-    outline-offset: 2px;
+  /* Focus styles - use !important to override Tailwind Preflight resets */
+  *:focus-visible {
+    outline: 2px solid var(--accent-blue) !important;
+    outline-offset: 2px !important;
   }
 
   /* Scrollbar styling */
@@ -322,6 +322,12 @@
     flex-direction: column;
     box-shadow: 0 0 40px var(--glass-shadow);
     transition: background 0.3s ease, border-color 0.3s ease, translate 0.3s ease-in-out;
+    translate: -100% 0;
+    border-radius: 0;
+  }
+
+  .sidebar.open {
+    translate: 0 0;
   }
 
   @media (max-width: 767px) {
@@ -333,7 +339,10 @@
 
   @media (min-width: 1024px) {
     .sidebar {
-      inset: 16px auto 16px 16px;
+      top: 16px;
+      bottom: 16px;
+      left: 16px;
+      translate: 0 0;
       border: 1px solid var(--sidebar-border);
       border-radius: 24px;
     }
@@ -606,7 +615,7 @@
     background: transparent;
     color: var(--text-tertiary);
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: background 0.2s ease, color 0.2s ease;
   }
 
   .theme-btn:focus-visible {

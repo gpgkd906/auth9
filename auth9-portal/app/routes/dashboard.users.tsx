@@ -371,8 +371,8 @@ export default function UsersPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="mb-1 text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
-          <p className="mt-1 text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
+          <h1 className="mb-2 text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
+          <p className="text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
         </div>
         <Button onClick={() => setCreatingUser(true)} className="w-full min-h-11 sm:w-auto sm:min-h-10">+ Create User</Button>
       </div>
@@ -661,9 +661,9 @@ export default function UsersPage() {
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Tenant (optional)</Label>
-              <Select name="tenant_id">
-                <SelectTrigger>
+              <Label id="create-tenant-label">Tenant (optional)</Label>
+              <Select name="tenant_id" aria-labelledby="create-tenant-label">
+                <SelectTrigger aria-labelledby="create-tenant-label">
                   <SelectValue placeholder="No tenant (platform user)" />
                 </SelectTrigger>
                 <SelectContent>
@@ -767,9 +767,9 @@ export default function UsersPage() {
                 <input type="hidden" name="intent" value="add_to_tenant" />
                 <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
                 <div className="flex-1 space-y-2">
-                  <Label>Tenant</Label>
-                  <Select name="tenant_id">
-                    <SelectTrigger>
+                  <Label id="add-tenant-label">Tenant</Label>
+                  <Select name="tenant_id" aria-labelledby="add-tenant-label">
+                    <SelectTrigger aria-labelledby="add-tenant-label">
                       <SelectValue placeholder="Select tenant" />
                     </SelectTrigger>
                     <SelectContent>
@@ -782,9 +782,9 @@ export default function UsersPage() {
                   </Select>
                 </div>
                 <div className="w-32 space-y-2">
-                  <Label>Role</Label>
-                  <Select name="role_in_tenant" defaultValue="member">
-                    <SelectTrigger>
+                  <Label id="add-role-label">Role</Label>
+                  <Select name="role_in_tenant" defaultValue="member" aria-labelledby="add-role-label">
+                    <SelectTrigger aria-labelledby="add-role-label">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
@@ -864,9 +864,9 @@ export default function UsersPage() {
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label>Service</Label>
-              <Select onValueChange={setSelectedServiceId}>
-                <SelectTrigger>
+              <Label id="role-service-label">Service</Label>
+              <Select onValueChange={setSelectedServiceId} aria-labelledby="role-service-label">
+                <SelectTrigger aria-labelledby="role-service-label">
                   <SelectValue placeholder="Select Service" />
                 </SelectTrigger>
                 <SelectContent>

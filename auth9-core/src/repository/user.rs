@@ -38,6 +38,18 @@ pub trait UserRepository: Send + Sync {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<User>>;
+    async fn search_tenant_users(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<User>>;
+    async fn search_tenant_users_count(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+    ) -> Result<i64>;
     async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>>;
 
     /// Find user's tenants with tenant data (for API responses)
@@ -394,6 +406,53 @@ impl UserRepository for UserRepositoryImpl {
         .await?;
 
         Ok(users)
+    }
+
+    async fn search_tenant_users(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+        offset: i64,
+        limit: i64,
+    ) -> Result<Vec<User>> {
+        let pattern = format!("%{}%", query);
+        let users = sqlx::query_as::<_, User>(
+            r#"
+            SELECT u.id, u.keycloak_id, u.scim_external_id, u.scim_provisioned_by, u.email, u.display_name, u.avatar_url, u.mfa_enabled, u.password_changed_at, u.locked_until, u.created_at, u.updated_at
+            FROM users u
+            INNER JOIN tenant_users tu ON u.id = tu.user_id
+            WHERE tu.tenant_id = ? AND (u.email LIKE ? OR u.display_name LIKE ?)
+            ORDER BY tu.joined_at DESC
+            LIMIT ? OFFSET ?
+            "#,
+        )
+        .bind(tenant_id)
+        .bind(&pattern)
+        .bind(&pattern)
+        .bind(limit)
+        .bind(offset)
+        .fetch_all(&self.pool)
+        .await?;
+
+        Ok(users)
+    }
+
+    async fn search_tenant_users_count(
+        &self,
+        tenant_id: StringUuid,
+        query: &str,
+    ) -> Result<i64> {
+        let pattern = format!("%{}%", query);
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM users u INNER JOIN tenant_users tu ON u.id = tu.user_id WHERE tu.tenant_id = ? AND (u.email LIKE ? OR u.display_name LIKE ?)",
+        )
+        .bind(tenant_id)
+        .bind(&pattern)
+        .bind(&pattern)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.0)
     }
 
     async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>> {
