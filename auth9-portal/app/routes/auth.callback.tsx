@@ -19,7 +19,7 @@ function parseOAuthState(stateParam: string | null): { inviteToken?: string } {
 
 export async function loader({ request }: LoaderFunctionArgs) {
     const url = new URL(request.url);
-    const portalOrigin = url.origin;
+    const portalOrigin = process.env.AUTH9_PORTAL_URL || url.origin;
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
     const error = url.searchParams.get("error");

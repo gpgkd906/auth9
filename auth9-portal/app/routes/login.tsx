@@ -15,7 +15,7 @@ export const meta: MetaFunction = () => {
 
 function buildAuthorizeParams(requestUrl: URL) {
   const corePublicUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
-  const portalUrl = requestUrl.origin;
+  const portalUrl = process.env.AUTH9_PORTAL_URL || requestUrl.origin;
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   const redirectUri = `${portalUrl}/auth/callback`;
 
