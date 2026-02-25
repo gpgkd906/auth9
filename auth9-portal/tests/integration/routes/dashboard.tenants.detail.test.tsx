@@ -317,7 +317,8 @@ describe("Tenant Detail Page", () => {
 
       await waitFor(() => {
         expect(screen.getByText("Status")).toBeInTheDocument();
-        expect(screen.getByText("active")).toBeInTheDocument();
+        // Select component may render "Active" in multiple elements
+        expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
       });
     });
 

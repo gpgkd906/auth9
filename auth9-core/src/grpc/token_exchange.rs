@@ -37,6 +37,7 @@ impl GrpcRateLimiter {
     }
 
     /// Check and record a request. Returns `Ok(())` if allowed, `Err(Status)` if rate-limited.
+    #[allow(clippy::result_large_err)]
     pub fn check(&self, key: &str) -> Result<(), Status> {
         if self.max_requests == 0 {
             return Ok(()); // disabled

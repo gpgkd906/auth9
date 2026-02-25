@@ -2,10 +2,10 @@
 # Multi-stage build for minimal image size
 
 # ==================== Chef Stage ====================
-FROM rust:1.93-bookworm AS chef
+FROM lukemathwalker/cargo-chef:latest-rust-1.93-bookworm AS chef
 
-# Install cargo-chef
-RUN cargo install cargo-chef
+# Install protobuf compiler (shared by planner and builder)
+RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 
@@ -17,9 +17,6 @@ RUN cargo chef prepare --recipe-path recipe.json
 
 # ==================== Builder Stage ====================
 FROM chef AS builder
-
-# Install protobuf compiler
-RUN apt-get update && apt-get install -y protobuf-compiler && rm -rf /var/lib/apt/lists/*
 
 # Build dependencies using cargo-chef (mount cache survives --no-cache rebuilds)
 COPY --from=planner /app/recipe.json recipe.json

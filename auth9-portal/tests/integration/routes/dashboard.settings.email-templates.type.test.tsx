@@ -800,9 +800,9 @@ describe("Email Template Editor Page", () => {
     });
 
     const response = await action({ request, params: { type: "invitation" }, context: {} });
-    const body = await (response as Response).json();
 
-    expect(body).toEqual({ error: "Invalid intent" });
+    // action returns a plain object { error: "Invalid intent" }
+    expect(response).toEqual({ error: "Invalid intent" });
   });
 
   it("displays test email success message in component", async () => {

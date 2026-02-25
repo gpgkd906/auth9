@@ -81,9 +81,10 @@ describe("Tenants Page", () => {
 
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
+        // Both mobile and desktop views render, so use getAllByText
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
-            expect(screen.getByText("Globex")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Globex").length).toBeGreaterThan(0);
         });
     });
 
@@ -127,8 +128,9 @@ describe("Tenants Page", () => {
 
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
+        // Both mobile and desktop views show empty state
         await waitFor(() => {
-            expect(screen.getByText("No tenants found")).toBeInTheDocument();
+            expect(screen.getAllByText("No tenants found").length).toBeGreaterThan(0);
         });
     });
 
@@ -209,11 +211,12 @@ describe("Tenants Page", () => {
 
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
+        // Desktop table has headers; mobile cards also have "Status" labels
         await waitFor(() => {
-            expect(screen.getByText("Name")).toBeInTheDocument();
-            expect(screen.getByText("Slug")).toBeInTheDocument();
-            expect(screen.getByText("Status")).toBeInTheDocument();
-            expect(screen.getByText("Updated")).toBeInTheDocument();
+            expect(screen.getAllByText("Name").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Slug").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Status").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Updated").length).toBeGreaterThan(0);
         });
     });
 
@@ -252,9 +255,10 @@ describe("Tenants Page", () => {
 
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
+        // Both mobile and desktop views render status text
         await waitFor(() => {
-            expect(screen.getByText("active")).toBeInTheDocument();
-            expect(screen.getByText("inactive")).toBeInTheDocument();
+            expect(screen.getAllByText("active").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("inactive").length).toBeGreaterThan(0);
         });
     });
 
@@ -289,13 +293,17 @@ describe("Tenants Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("Logo Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Logo Corp").length).toBeGreaterThan(0);
         });
 
-        // Find the img element within the tenant link
-        const link = screen.getByText("Logo Corp").closest("a");
-        const img = link?.querySelector("img");
-        expect(img).toBeTruthy();
+        // Find the img element - desktop view renders logo inside an <a> link
+        const allLinks = screen.getAllByText("Logo Corp")
+            .map((el) => el.closest("a"))
+            .filter(Boolean);
+        // Find the link that contains an img (desktop table view)
+        const linkWithImg = allLinks.find((a) => a?.querySelector("img"));
+        expect(linkWithImg).toBeTruthy();
+        const img = linkWithImg?.querySelector("img");
         expect(img?.getAttribute("src")).toBe("https://example.com/logo.png");
     });
 
@@ -348,16 +356,17 @@ describe("Tenants Page", () => {
 
         // Wait for tenant list to load
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Click the dropdown menu button (first one for Acme Corp)
         const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
         await user.click(menuButtons[0]);
 
-        // Click Edit option
-        const editOption = await screen.findByText("Edit");
-        await user.click(editOption);
+        // Click Edit option in the dropdown menu (use menuitem role to target dropdown)
+        const editOptions = await screen.findAllByText("Edit");
+        const dropdownEdit = editOptions.find((el) => el.closest("[role='menuitem']"));
+        await user.click(dropdownEdit!);
 
         // Verify edit dialog opens with tenant data
         expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -384,14 +393,15 @@ describe("Tenants Page", () => {
 
         // Wait for tenant list
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Open dropdown and click Edit
         const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
         await user.click(menuButtons[0]);
-        const editOption = await screen.findByText("Edit");
-        await user.click(editOption);
+        const editOptions = await screen.findAllByText("Edit");
+        const dropdownEdit = editOptions.find((el) => el.closest("[role='menuitem']"));
+        await user.click(dropdownEdit!);
 
         // Verify dialog is open
         expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -423,7 +433,7 @@ describe("Tenants Page", () => {
 
         // Wait for tenant list
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Open dropdown and click Delete
@@ -457,7 +467,7 @@ describe("Tenants Page", () => {
 
         // Wait for tenant list
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Open dropdown and click Delete
@@ -479,7 +489,7 @@ describe("Tenants Page", () => {
         await waitFor(() => {
             expect(screen.queryByTestId("confirm-dialog-title")).not.toBeInTheDocument();
         });
-        expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+        expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
     });
 
     it("submits delete when confirmed in confirmation dialog", async () => {
@@ -507,7 +517,7 @@ describe("Tenants Page", () => {
 
         // Wait for tenant list
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Open dropdown and click Delete
@@ -547,7 +557,7 @@ describe("Tenants Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Type in search input
@@ -591,7 +601,7 @@ describe("Tenants Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         expect(screen.queryByText("Clear")).not.toBeInTheDocument();
@@ -633,20 +643,20 @@ describe("Tenants Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getAllByText("Acme Corp").length).toBeGreaterThan(0);
         });
 
         // Open dropdown menu for first tenant
         const menuButtons = await screen.findAllByRole("button", { name: /open menu/i });
         await user.click(menuButtons[0]);
 
-        // Verify all menu items are present
+        // Verify all menu items are present (some may appear in both mobile/desktop views)
         await waitFor(() => {
             expect(screen.getByText("Actions")).toBeInTheDocument();
-            expect(screen.getByText("Edit")).toBeInTheDocument();
-            expect(screen.getByText("Invitations")).toBeInTheDocument();
+            expect(screen.getAllByText("Edit").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Invitations").length).toBeGreaterThan(0);
             expect(screen.getByText("Webhooks")).toBeInTheDocument();
-            expect(screen.getByText("Delete")).toBeInTheDocument();
+            expect(screen.getAllByText("Delete").length).toBeGreaterThan(0);
         });
     });
 
@@ -732,7 +742,8 @@ describe("Tenants Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/tenants"]} />);
 
         await waitFor(() => {
-            const link = screen.getByText("Acme Corp").closest("a");
+            const elements = screen.getAllByText("Acme Corp");
+            const link = elements.find((el) => el.closest("a"))?.closest("a");
             expect(link).toHaveAttribute("href", "/dashboard/tenants/1");
         });
     });

@@ -250,6 +250,7 @@ impl JwtManager {
         )
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub fn create_tenant_access_token_with_session(
         &self,
         user_id: Uuid,
