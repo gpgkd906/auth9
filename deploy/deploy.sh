@@ -499,12 +499,6 @@ generate_secrets() {
         AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]=$(openssl rand -hex 32)
     fi
 
-    # Keycloak event source (webhook mode, using ext-event-http SPI)
-    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_SOURCE]="webhook"
-    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_KEY]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_KEY]="auth9:keycloak:events"
-    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_GROUP]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_GROUP]="auth9-core"
-    [ -z "${AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_CONSUMER]}" ] && AUTH9_SECRETS[KEYCLOAK_EVENT_STREAM_CONSUMER]="auth9-core-1"
-
     # GRPC_API_KEYS
     if [ -z "${AUTH9_SECRETS[GRPC_API_KEYS]}" ]; then
         AUTH9_SECRETS[GRPC_API_KEYS]=$(openssl rand -base64 32)
@@ -689,8 +683,7 @@ run_interactive_setup() {
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
         "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" \
         "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
-        "KEYCLOAK_EVENT_SOURCE" "KEYCLOAK_EVENT_STREAM_KEY" "KEYCLOAK_EVENT_STREAM_GROUP" \
-        "KEYCLOAK_EVENT_STREAM_CONSUMER" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
+        "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
 
     # Detect keycloak-secrets
     detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
@@ -845,10 +838,7 @@ check_secrets_non_interactive() {
         echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
         echo "      --from-literal=SETTINGS_ENCRYPTION_KEY='...' \\"
-        echo "      --from-literal=KEYCLOAK_EVENT_SOURCE='redis_stream' \\"
-        echo "      --from-literal=KEYCLOAK_EVENT_STREAM_KEY='auth9:keycloak:events' \\"
-        echo "      --from-literal=KEYCLOAK_EVENT_STREAM_GROUP='auth9-core' \\"
-        echo "      --from-literal=KEYCLOAK_EVENT_STREAM_CONSUMER='auth9-core-1' \\"
+        echo "      --from-literal=KEYCLOAK_WEBHOOK_SECRET='...' \\"
         echo "      --from-literal=GRPC_API_KEYS='...' \\"
         echo "      -n $NAMESPACE"
         echo ""

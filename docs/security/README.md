@@ -357,6 +357,7 @@ cargo run --bin seed-data -- --dataset=security-vulnerable --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-02-25 | 2.6.2 | 恢复 ext-event-http SPI 插件作为默认事件桥接，测试脚本从 Redis Stream 注入切换回 Webhook 注入 |
 | 2026-02-21 | 2.6.1 | 同步 Keycloak 26 重构后的事件链路：日志与监控测试默认从 Webhook 注入切换为 Redis Stream 注入，避免安全测试脚本与现网事件接入路径不一致 |
 | 2026-02-18 | 2.6.0 | 将 `docs/security/asvs-5.0/` 的 5 份治理文件折叠为 `README + 单文件矩阵` 模式；统一入口为 `asvs5-matrix.md`，降低安全测试 Agent 的文档分叉与执行混乱 |
 | 2026-02-18 | 2.5.0 | 新增 4 份矩阵测试文档补齐 Backlog 空缺任务（#7/#15/#16/#18）；任务分解实现 #1~#20 全覆盖，支持按矩阵文档持续回归 |

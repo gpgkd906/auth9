@@ -1,22 +1,19 @@
-# 集成测试 - Keycloak 26 事件流（Redis Stream）回归
+# 集成测试 - Keycloak 26 事件桥接回归
 
-**模块**: 集成测试  
-**测试范围**: Keycloak 26 升级、登录事件 Redis Stream 接入、兼容回退路径  
-**场景数**: 5  
+**模块**: 集成测试
+**测试范围**: Keycloak 26 升级、登录事件 Webhook 接入（ext-event-http SPI）
+**场景数**: 4
 **优先级**: 高
 
 ---
 
 ## 背景说明
 
-重构后，Auth9 登录事件链路默认从「Keycloak SPI Webhook 推送」切换为「Redis Stream 拉取消费」：
+Auth9 登录事件链路使用 Webhook 模式：
 
-1. Keycloak 26 负责认证与事件产出（事件监听器使用 `jboss-logging`）
-2. 事件采集器将事件写入 Redis Stream（默认 `auth9:keycloak:events`）
-3. auth9-core 后台消费者读取 Stream 并写入 `login_events`、触发 `security_alerts`
-
-兼容说明：
-- `POST /api/v1/keycloak/events` 仍保留用于回归与兜底，不再是默认主链路。
+1. Keycloak 26 负责认证与事件产出（事件监听器使用 `jboss-logging` + `ext-event-http`）
+2. `ext-event-http` SPI 插件（p2-inc/keycloak-events v0.51）将事件实时推送到 auth9-core 的 `POST /api/v1/keycloak/events`
+3. auth9-core 接收事件后写入 `login_events`、触发 `security_alerts`
 
 ---
 
@@ -49,24 +46,21 @@
 
 ---
 
-## 场景 2：Redis Stream 事件写入与消费成功
+## 场景 2：Webhook 事件推送与处理成功
 
 ### 初始状态
-- auth9-core 以 `KEYCLOAK_EVENT_SOURCE=redis_stream` 启动
-- Redis 可用
+- Keycloak ext-event-http SPI 已加载（`keycloak-events-*.jar` 在 providers 中）
+- seeder 已配置 `ext-event-http` 监听器（`KEYCLOAK_WEBHOOK_SECRET` 已设置）
 
 ### 目的
-验证 Stream 事件可被后台消费者处理并写入登录事件表。
+验证 Keycloak 通过 ext-event-http 推送的事件可被 auth9-core 正确处理并写入登录事件表。
 
 ### 测试操作流程
-1. 写入一条登录成功事件到 Stream：
-   ```bash
-   redis-cli XADD auth9:keycloak:events * payload '{"type":"LOGIN","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"192.168.1.100","time":'"$(($(date +%s)*1000))"',"details":{"username":"john","email":"john@example.com"}}'
-   ```
-2. 等待 1-3 秒后查询数据库。
+1. 通过 Portal 执行一次失败登录（输入错误密码）
+2. 等待 2-3 秒后查询数据库
 
 ### 预期结果
-- `login_events` 新增 `event_type='success'` 记录
+- `login_events` 新增 `event_type='failed_password'` 记录
 
 ### 预期数据状态
 ```sql
@@ -141,46 +135,11 @@ WHERE email = 'old@example.com'
 
 ---
 
-## 场景 5：Webhook 兼容回退链路可用
-
-### 初始状态
-- `/api/v1/keycloak/events` 兼容端点可访问
-
-### 目的
-验证在重构后，Webhook 兼容入口仍可用于回归/应急。
-
-### 测试操作流程
-1. 直接调用兼容端点发送事件：
-   ```bash
-   curl -s -o /dev/null -w "%{http_code}\n" \
-     -X POST http://localhost:8080/api/v1/keycloak/events \
-     -H "Content-Type: application/json" \
-     -d '{"id":"evt-webhook-fallback-001","type":"IDENTITY_PROVIDER_LOGIN","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"10.0.0.5","time":'"$(($(date +%s)*1000))"',"details":{"username":"social-user","email":"social@example.com","identityProvider":"google"}}'
-   ```
-2. 查询登录事件类型。
-
-### 预期结果
-- 接口返回 `204`
-- 记录写入成功，`event_type='social'`
-
-### 预期数据状态
-```sql
-SELECT event_type, email
-FROM login_events
-WHERE email = 'social@example.com'
-ORDER BY created_at DESC
-LIMIT 1;
--- 预期: event_type='social'
-```
-
----
-
 ## 检查清单
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
 | 1 | Keycloak 26 基础健康与参数兼容性 | ☐ | | | |
-| 2 | Redis Stream 事件写入与消费成功 | ☐ | | | |
+| 2 | Webhook 事件推送与处理成功 | ☐ | | | |
 | 3 | 重复事件去重（基于 event id） | ☐ | | | |
 | 4 | 过期事件拒绝（时间窗防重放） | ☐ | | | |
-| 5 | Webhook 兼容回退链路可用 | ☐ | | | |

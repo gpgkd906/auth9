@@ -341,14 +341,6 @@ pub struct KeycloakConfig {
     /// Webhook secret for verifying Keycloak event webhook signatures (HMAC-SHA256)
     /// Required in production to prevent spoofed events
     pub webhook_secret: Option<String>,
-    /// Event ingestion source: "webhook" or "redis_stream"
-    pub event_source: String,
-    /// Redis stream key used when event_source=redis_stream
-    pub event_stream_key: String,
-    /// Redis stream consumer group used when event_source=redis_stream
-    pub event_stream_group: String,
-    /// Redis stream consumer name used when event_source=redis_stream
-    pub event_stream_consumer: String,
 }
 
 impl fmt::Debug for KeycloakConfig {
@@ -366,10 +358,6 @@ impl fmt::Debug for KeycloakConfig {
                 "webhook_secret",
                 &self.webhook_secret.as_ref().map(|_| "<REDACTED>"),
             )
-            .field("event_source", &self.event_source)
-            .field("event_stream_key", &self.event_stream_key)
-            .field("event_stream_group", &self.event_stream_group)
-            .field("event_stream_consumer", &self.event_stream_consumer)
             .finish()
     }
 }
@@ -506,14 +494,12 @@ impl Config {
                     "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"
                 );
             }
-            if self.keycloak.event_source == "webhook" && self.keycloak.webhook_secret.is_none() {
+            if self.keycloak.webhook_secret.is_none() {
                 anyhow::bail!(
-                    "KEYCLOAK_EVENT_SOURCE=webhook requires KEYCLOAK_WEBHOOK_SECRET in production"
+                    "KEYCLOAK_WEBHOOK_SECRET is required in production"
                 );
             }
-        } else if self.keycloak.event_source == "webhook" && self.keycloak.webhook_secret.is_none()
-        {
-            // Non-production: warn if webhook secret is missing
+        } else if self.keycloak.webhook_secret.is_none() {
             tracing::warn!(
                 "Keycloak webhook secret is not configured (KEYCLOAK_WEBHOOK_SECRET); \
                  webhook signature verification is disabled"
@@ -629,14 +615,6 @@ impl Config {
 
                 // Webhook secret for Keycloak event verification
                 let webhook_secret = env::var("KEYCLOAK_WEBHOOK_SECRET").ok();
-                let event_source = env::var("KEYCLOAK_EVENT_SOURCE")
-                    .unwrap_or_else(|_| "redis_stream".to_string());
-                let event_stream_key = env::var("KEYCLOAK_EVENT_STREAM_KEY")
-                    .unwrap_or_else(|_| "auth9:keycloak:events".to_string());
-                let event_stream_group = env::var("KEYCLOAK_EVENT_STREAM_GROUP")
-                    .unwrap_or_else(|_| "auth9-core".to_string());
-                let event_stream_consumer = env::var("KEYCLOAK_EVENT_STREAM_CONSUMER")
-                    .unwrap_or_else(|_| "auth9-core-1".to_string());
 
                 KeycloakConfig {
                     url,
@@ -652,10 +630,6 @@ impl Config {
                     core_public_url,
                     portal_url,
                     webhook_secret,
-                    event_source,
-                    event_stream_key,
-                    event_stream_group,
-                    event_stream_consumer,
                 }
             },
             grpc_security: GrpcSecurityConfig {
@@ -881,10 +855,6 @@ mod tests {
                 core_public_url: None,
                 portal_url: None,
                 webhook_secret: None,
-                event_source: "redis_stream".to_string(),
-                event_stream_key: "auth9:keycloak:events".to_string(),
-                event_stream_group: "auth9-core".to_string(),
-                event_stream_consumer: "auth9-core-1".to_string(),
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
@@ -1076,10 +1046,6 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
-            event_source: "redis_stream".to_string(),
-            event_stream_key: "auth9:keycloak:events".to_string(),
-            event_stream_group: "auth9-core".to_string(),
-            event_stream_consumer: "auth9-core-1".to_string(),
         };
         let kc2 = kc.clone();
 
@@ -1100,10 +1066,6 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
-            event_source: "redis_stream".to_string(),
-            event_stream_key: "auth9:keycloak:events".to_string(),
-            event_stream_group: "auth9-core".to_string(),
-            event_stream_consumer: "auth9-core-1".to_string(),
         };
         let debug_str = format!("{:?}", kc);
 
@@ -1126,10 +1088,6 @@ mod tests {
                 core_public_url: None,
                 portal_url: None,
                 webhook_secret: None,
-                event_source: "redis_stream".to_string(),
-                event_stream_key: "auth9:keycloak:events".to_string(),
-                event_stream_group: "auth9-core".to_string(),
-                event_stream_consumer: "auth9-core-1".to_string(),
             };
             assert_eq!(kc.ssl_required, *opt);
         }
@@ -1172,10 +1130,6 @@ mod tests {
                 core_public_url: None,
                 portal_url: None,
                 webhook_secret: Some("production-webhook-secret".to_string()),
-                event_source: "redis_stream".to_string(),
-                event_stream_key: "auth9:keycloak:events".to_string(),
-                event_stream_group: "auth9-core".to_string(),
-                event_stream_consumer: "auth9-core-1".to_string(),
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
@@ -1760,7 +1714,7 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_security_production_allows_missing_webhook_secret() {
+    fn test_validate_security_production_rejects_missing_webhook_secret() {
         let mut config = test_config();
         config.environment = ENV_PRODUCTION.to_string();
         config.grpc_security.auth_mode = "api_key".to_string();
@@ -1769,7 +1723,11 @@ mod tests {
         config.keycloak.webhook_secret = None; // Missing in production
 
         let result = config.validate_security();
-        assert!(result.is_ok());
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("KEYCLOAK_WEBHOOK_SECRET is required in production"));
     }
 
     #[test]
@@ -1837,10 +1795,6 @@ mod tests {
                 core_public_url: None,
                 portal_url: None,
                 webhook_secret: Some("webhook-secret-key".to_string()),
-                event_source: "redis_stream".to_string(),
-                event_stream_key: "auth9:keycloak:events".to_string(),
-                event_stream_group: "auth9-core".to_string(),
-                event_stream_consumer: "auth9-core-1".to_string(),
             },
             grpc_security: GrpcSecurityConfig {
                 auth_mode: "api_key".to_string(),

@@ -170,8 +170,8 @@ ORDER BY created_at DESC LIMIT 1;
 
 > **架构说明**: Auth9 采用 Headless Keycloak 架构，账户锁定由 Keycloak 的 Brute Force
 > Protection 执行。Auth9 负责将 `lockout_threshold` 和 `lockout_duration_mins` 同步到
-> Keycloak realm 设置。登录事件默认通过 Redis Stream 异步传递到 auth9-core 消费链路，
-> 再触发安全检测（兼容 webhook 入口用于回归）。
+> Keycloak realm 设置。登录事件通过 ext-event-http SPI 插件以 Webhook 方式推送到 auth9-core，
+> 再触发安全检测。
 
 ### 初始状态
 - 租户密码策略：
@@ -350,7 +350,7 @@ Auth9 不存储密码历史（无 password_history 表）。
 1. **Headless Keycloak 架构**：Auth9 不直接处理用户名/密码登录，所有认证通过 Keycloak OIDC 流程。`/api/v1/auth/token` 仅支持 `authorization_code`、`client_credentials`、`refresh_token` grant types，不支持 `password` grant
 2. **密码策略同步**：Auth9 配置的策略通过 `KeycloakSyncService` 同步到 Keycloak realm，包括密码复杂度、年龄限制、历史记录和暴力破解防护
 3. **密码设置方式**：使用 Keycloak 用户更新 API（GET-merge-PUT）设置密码，绕过 Keycloak 23.x `reset-password` 端点的已知 bug
-4. **登录事件来源**：登录事件默认通过 Redis Stream 异步传递到 auth9-core，而非在 auth9 token 端点直接记录
+4. **登录事件来源**：登录事件通过 Keycloak ext-event-http SPI Webhook 推送到 auth9-core，而非在 auth9 token 端点直接记录
 5. **向后兼容**：现有用户的密码可能不符合新策略，但不强制立即修改
 6. **审计合规**：所有密码修改操作必须记录到 `audit_logs`
 

@@ -25,10 +25,6 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
-      KEYCLOAK_EVENT_SOURCE: ${KEYCLOAK_EVENT_SOURCE:-redis_stream}
-      KEYCLOAK_EVENT_STREAM_KEY: ${KEYCLOAK_EVENT_STREAM_KEY:-auth9:keycloak:events}
-      KEYCLOAK_EVENT_STREAM_GROUP: ${KEYCLOAK_EVENT_STREAM_GROUP:-auth9-core}
-      KEYCLOAK_EVENT_STREAM_CONSUMER: ${KEYCLOAK_EVENT_STREAM_CONSUMER:-auth9-core-1}
       AUTH9_ADMIN_PASSWORD: SecurePass123!  # Fixed password for local development (must meet 12-char policy)
       DEV_SMTP_HOST: mailpit  # Enable dev email config seeding
       # Password Reset Security
@@ -79,10 +75,6 @@ services:
       KEYCLOAK_ADMIN_PASSWORD: admin
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
-      KEYCLOAK_EVENT_SOURCE: ${KEYCLOAK_EVENT_SOURCE:-redis_stream}
-      KEYCLOAK_EVENT_STREAM_KEY: ${KEYCLOAK_EVENT_STREAM_KEY:-auth9:keycloak:events}
-      KEYCLOAK_EVENT_STREAM_GROUP: ${KEYCLOAK_EVENT_STREAM_GROUP:-auth9-core}
-      KEYCLOAK_EVENT_STREAM_CONSUMER: ${KEYCLOAK_EVENT_STREAM_CONSUMER:-auth9-core-1}
       # Settings encryption key for sensitive data (generate with: openssl rand -base64 32)
       SETTINGS_ENCRYPTION_KEY: ${SETTINGS_ENCRYPTION_KEY:?SETTINGS_ENCRYPTION_KEY must be set in .env}
       # SMTP configuration for email sending (invitations, password reset, etc.)

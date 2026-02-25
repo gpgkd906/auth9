@@ -9,8 +9,8 @@
 
 ## 背景说明
 
-Auth9 当前默认事件主链路为 Redis Stream 消费（见 `integration/11-keycloak26-event-stream.md`）。
-本文档用于验证兼容入口 `POST /api/v1/keycloak/events` 在回归/应急场景下仍可正确处理事件。
+Auth9 当前默认事件主链路为 Webhook 推送：Keycloak ext-event-http SPI 插件将事件推送到 `POST /api/v1/keycloak/events`。
+本文档用于验证该端点的事件接收、签名验证、事件映射和安全检测联动功能。
 
 ### 事件类型映射
 
@@ -24,7 +24,7 @@ Auth9 当前默认事件主链路为 Redis Stream 消费（见 `integration/11-k
 | `USER_DISABLED_BY_TEMPORARY_LOCKOUT` | `Locked` | 暴力破解锁定 |
 | `LOGOUT` / `REGISTER` / `REFRESH_TOKEN` | 忽略 | 非登录事件 |
 
-### 签名验证（仅在 `KEYCLOAK_EVENT_SOURCE=webhook` 且配置 secret 时生效）
+### 签名验证（配置 `KEYCLOAK_WEBHOOK_SECRET` 时生效）
 使用 HMAC-SHA256 签名，头部：`X-Keycloak-Signature: sha256=<hex>`
 
 ---

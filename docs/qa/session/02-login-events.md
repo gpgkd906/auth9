@@ -11,11 +11,8 @@
 Auth9 采用 Headless Keycloak 架构，登录事件的产生和记录涉及两个系统：
 
 1. **登录操作发生在 Keycloak** → 测试可通过 Auth9 登录入口触发 OIDC 流程（底层由 Keycloak 执行用户名/密码与 MFA 验证）
-2. **事件通过 Redis Stream 异步传递** → Keycloak 事件先进入 `auth9:keycloak:events`，由 auth9-core 后台消费者拉取处理
-3. **Auth9 Core 记录和分析** → Auth9 消费事件后写入 `login_events` 表，并触发安全检测（如暴力破解告警）
-
-兼容说明：
-- `POST /api/v1/keycloak/events` 作为兼容入口仍可用于回归测试，但不再是默认主链路。
+2. **事件通过 Webhook 推送** → Keycloak ext-event-http SPI 插件（p2-inc/keycloak-events）将事件实时推送到 auth9-core 的 `POST /api/v1/keycloak/events` 端点
+3. **Auth9 Core 记录和分析** → Auth9 接收事件后写入 `login_events` 表，并触发安全检测（如暴力破解告警）
 
 **关键点**：Auth9 不直接处理用户名/密码验证，所有认证均通过 Keycloak OIDC 流程完成。本文档不要求必须手工访问 Keycloak 登录页 URL。
 
@@ -81,8 +78,8 @@ WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 
 ### 初始状态
 - 用户使用错误密码登录
-- **Redis Stream 消费者已启动**（auth9-core 启动时自动启动，需配置 `KEYCLOAK_EVENT_SOURCE=redis_stream`）
-- **Keycloak 事件 SPI 已正常工作**（默认 Docker Compose 已包含配置）
+- **Keycloak ext-event-http SPI 已部署**（`keycloak-events-*.jar` 在 providers 目录中）
+- **seeder 已配置 ext-event-http 监听器**（`KEYCLOAK_WEBHOOK_SECRET` 已设置）
 
 ### 目的
 验证失败登录事件被正确记录
@@ -90,7 +87,7 @@ WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 ### 测试操作流程
 1. 用户通过 Portal 登录页输入错误密码
 2. 登录失败
-3. **等待 2-3 秒**（事件通过 Redis Stream 异步传递）
+3. **等待 2-3 秒**（事件通过 Webhook 异步推送）
 4. 查询数据库
 
 ### 预期结果
@@ -108,9 +105,9 @@ WHERE email = 'user@example.com' ORDER BY created_at DESC LIMIT 1;
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| 事件未记录 | Redis Stream 消费者未启动 | 检查 auth9-core 日志中是否有 `Starting Keycloak event stream consumer` |
-| 事件未记录 | Keycloak 未推送事件到 Redis | 执行 `redis-cli XLEN auth9:keycloak:events` 检查流中是否有数据 |
-| 事件延迟 | 异步消费有延迟 | 等待 3-5 秒后再查询 |
+| 事件未记录 | ext-event-http SPI 未加载 | 检查 `docker exec auth9-keycloak ls /opt/keycloak/providers/` 确认 JAR 存在 |
+| 事件未记录 | Webhook 未到达 auth9-core | 检查 `KEYCLOAK_WEBHOOK_SECRET` 配置，确认 Keycloak realm Events → Event Listeners 包含 `ext-event-http` |
+| 事件延迟 | Webhook 推送有短暂延迟 | 等待 3-5 秒后再查询 |
 
 ---
 

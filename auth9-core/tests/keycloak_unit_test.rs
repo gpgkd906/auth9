@@ -18,10 +18,6 @@ fn create_test_config(base_url: &str) -> KeycloakConfig {
         core_public_url: None,
         portal_url: None,
         webhook_secret: None,
-        event_source: "redis_stream".to_string(),
-        event_stream_key: "auth9:keycloak:events".to_string(),
-        event_stream_group: "auth9-core".to_string(),
-        event_stream_consumer: "auth9-core-1".to_string(),
     }
 }
 
@@ -1017,10 +1013,6 @@ async fn test_backward_compatibility_without_client_secret() {
         core_public_url: None,
         portal_url: None,
         webhook_secret: None,
-        event_source: "redis_stream".to_string(),
-        event_stream_key: "auth9:keycloak:events".to_string(),
-        event_stream_group: "auth9-core".to_string(),
-        event_stream_consumer: "auth9-core-1".to_string(),
     };
 
     // Mock token endpoint - should NOT receive client_secret parameter
@@ -1081,10 +1073,6 @@ fn create_seeder_config(base_url: &str) -> KeycloakConfig {
         core_public_url: None,
         portal_url: None,
         webhook_secret: None,
-        event_source: "redis_stream".to_string(),
-        event_stream_key: "auth9:keycloak:events".to_string(),
-        event_stream_group: "auth9-core".to_string(),
-        event_stream_consumer: "auth9-core-1".to_string(),
     }
 }
 
