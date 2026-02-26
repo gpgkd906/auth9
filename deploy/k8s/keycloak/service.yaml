@@ -17,6 +17,27 @@ spec:
       targetPort: 8080
       protocol: TCP
 ---
+# Public-facing service: routes through nginx sidecar which blocks /admin and /metrics.
+# Point cloudflared tunnel to this service instead of 'keycloak'.
+apiVersion: v1
+kind: Service
+metadata:
+  name: keycloak-public
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: keycloak
+    app.kubernetes.io/component: auth-engine
+    app.kubernetes.io/part-of: auth9
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: keycloak
+  ports:
+    - name: http
+      port: 8080
+      targetPort: 8081  # nginx sidecar port
+      protocol: TCP
+---
 # Headless Service for JGroups cluster discovery (DNS_PING)
 # This allows Keycloak pods to discover each other via DNS
 apiVersion: v1

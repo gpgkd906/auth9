@@ -72,6 +72,46 @@ spec:
               drop:
                 - ALL
       containers:
+        # nginx gateway sidecar: blocks /admin and /metrics from public access
+        - name: nginx-gw
+          image: nginxinc/nginx-unprivileged:1.27-alpine
+          ports:
+            - name: http-public
+              containerPort: 8081
+              protocol: TCP
+          volumeMounts:
+            - name: nginx-gw-config
+              mountPath: /etc/nginx/conf.d
+              readOnly: true
+            - name: nginx-gw-tmp
+              mountPath: /tmp
+          resources:
+            requests:
+              cpu: 50m
+              memory: 32Mi
+            limits:
+              cpu: 200m
+              memory: 64Mi
+          livenessProbe:
+            httpGet:
+              path: /health/live
+              port: http-public
+            initialDelaySeconds: 70
+            periodSeconds: 30
+            timeoutSeconds: 5
+          readinessProbe:
+            httpGet:
+              path: /health/ready
+              port: http-public
+            initialDelaySeconds: 40
+            periodSeconds: 10
+            timeoutSeconds: 5
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: false
+            capabilities:
+              drop:
+                - ALL
         - name: keycloak
           image: quay.io/keycloak/keycloak:26.3.3
           imagePullPolicy: IfNotPresent
@@ -139,6 +179,11 @@ spec:
                 - ALL
       volumes:
         - name: providers-volume
+          emptyDir: {}
+        - name: nginx-gw-config
+          configMap:
+            name: keycloak-nginx-gw
+        - name: nginx-gw-tmp
           emptyDir: {}
       affinity:
         podAntiAffinity:
