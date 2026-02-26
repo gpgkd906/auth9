@@ -452,12 +452,15 @@ collect_admin_email() {
     if [ -n "${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}" ]; then
         echo "  当前: ${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}"
         if confirm_action "  保留现有管理员邮箱？"; then
+            # Sync to PLATFORM_ADMIN_EMAILS even when keeping existing value
+            CONFIGMAP_VALUES[PLATFORM_ADMIN_EMAILS]="${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}"
             return 0
         fi
     fi
 
     local email=$(prompt_user "  管理员邮箱" "admin@auth9.local")
     AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]="$email"
+    CONFIGMAP_VALUES[PLATFORM_ADMIN_EMAILS]="$email"
     print_success "AUTH9_ADMIN_EMAIL 已配置"
 }
 
