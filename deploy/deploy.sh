@@ -971,9 +971,9 @@ extract_client_secret() {
 }
 
 apply_keycloak_configmap() {
-    # Use full KEYCLOAK_PUBLIC_URL as KC_HOSTNAME_URL (including https://).
-    # This ensures token issuer is always the public HTTPS URL, regardless of
-    # whether requests come from browser (via cloudflared) or auth9-core (internal).
+    # Keycloak 26+ accepts a full URL in KC_HOSTNAME, fixing the token issuer to
+    # the public HTTPS URL regardless of request origin (browser via cloudflared
+    # or auth9-core via internal K8s DNS).
     local keycloak_public_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
 
     cat <<EOF | kubectl apply -f -
@@ -992,8 +992,7 @@ data:
   KC_DB_URL_PORT: "5432"
   KC_DB_URL_DATABASE: keycloak
   KC_HTTP_ENABLED: "true"
-  KC_HOSTNAME_URL: "$keycloak_public_url"
-  KC_HOSTNAME_STRICT: "false"
+  KC_HOSTNAME: "$keycloak_public_url"
   KC_HEALTH_ENABLED: "true"
   KC_METRICS_ENABLED: "true"
   KC_PROXY_HEADERS: xforwarded
@@ -1009,7 +1008,7 @@ data:
 EOF
 
     if [ $? -eq 0 ]; then
-        print_success "Keycloak ConfigMap 已应用 (KC_HOSTNAME_URL=$keycloak_public_url)"
+        print_success "Keycloak ConfigMap 已应用 (KC_HOSTNAME=$keycloak_public_url)"
     else
         print_error "应用 Keycloak ConfigMap 失败"
         return 1

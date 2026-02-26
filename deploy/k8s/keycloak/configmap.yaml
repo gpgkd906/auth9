@@ -16,12 +16,11 @@ data:
 
   # Server configuration
   KC_HTTP_ENABLED: "true"
-  # KC_HOSTNAME_URL sets the full base URL for Keycloak's issuer and frontend URLs.
-  # This ensures the token issuer is always the public HTTPS URL, regardless of
-  # whether requests arrive via cloudflared (browser) or internal K8s DNS (auth9-core).
-  # Without this, internal requests get http://host:8080 as issuer, causing mismatch.
-  KC_HOSTNAME_URL: "https://idp.auth9.example.com"
-  KC_HOSTNAME_STRICT: "false"
+  # KC_HOSTNAME accepts a full URL in Keycloak 26+, fixing the token issuer to
+  # the public HTTPS URL regardless of request origin (browser via cloudflared
+  # or auth9-core via internal K8s DNS). Without this, internal requests produce
+  # http://keycloak:8080 as issuer, mismatching browser-issued tokens.
+  KC_HOSTNAME: "https://idp.auth9.example.com"
   KC_HEALTH_ENABLED: "true"
   KC_METRICS_ENABLED: "true"
   KC_PROXY_HEADERS: xforwarded
