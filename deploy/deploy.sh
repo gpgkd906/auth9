@@ -910,15 +910,16 @@ extract_client_secret() {
 
         # Extract admin credentials if present
         if echo "$init_logs" | grep -q "AUTH9_ADMIN_USERNAME="; then
-            AUTH9_ADMIN_USERNAME=$(echo "$init_logs" | grep "AUTH9_ADMIN_USERNAME=" | sed 's/.*AUTH9_ADMIN_USERNAME=//' | head -1)
-            AUTH9_ADMIN_PASSWORD=$(echo "$init_logs" | grep "AUTH9_ADMIN_PASSWORD=" | sed 's/.*AUTH9_ADMIN_PASSWORD=//' | head -1)
+            AUTH9_ADMIN_USERNAME=$(echo "$init_logs" | grep "AUTH9_ADMIN_USERNAME=" | sed 's/.*AUTH9_ADMIN_USERNAME=//' | sed 's/[",}.].*//' | head -1)
+            AUTH9_ADMIN_PASSWORD=$(echo "$init_logs" | grep "AUTH9_ADMIN_PASSWORD=" | sed 's/.*AUTH9_ADMIN_PASSWORD=//' | sed 's/[",}.].*//' | head -1)
             if [ -n "$AUTH9_ADMIN_PASSWORD" ]; then
                 print_success "已提取管理员凭据"
             fi
         fi
 
         if echo "$init_logs" | grep -q "KEYCLOAK_ADMIN_CLIENT_SECRET"; then
-            local client_secret=$(echo "$init_logs" | grep "KEYCLOAK_ADMIN_CLIENT_SECRET=" | sed 's/.*KEYCLOAK_ADMIN_CLIENT_SECRET=//' | head -1)
+            # Extract secret value, stripping any JSON log wrapping (e.g. trailing ","target":...})
+            local client_secret=$(echo "$init_logs" | grep "KEYCLOAK_ADMIN_CLIENT_SECRET=" | sed 's/.*KEYCLOAK_ADMIN_CLIENT_SECRET=//' | sed 's/[",}.].*//' | head -1)
 
             if [ -n "$client_secret" ]; then
                 print_success "已提取客户端密钥: ${client_secret:0:8}..."

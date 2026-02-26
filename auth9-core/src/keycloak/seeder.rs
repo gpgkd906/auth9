@@ -1409,8 +1409,9 @@ impl KeycloakSeeder {
             match self.get_admin_client_secret_in_realm(token, realm).await {
                 Ok(secret) => {
                     info!("auth9-admin client created in realm '{}'!", realm);
-                    info!("Copy this secret to your secrets configuration:");
-                    info!("   KEYCLOAK_ADMIN_CLIENT_SECRET={}", secret);
+                    // Use println! (not info!) so deploy.sh can parse the value
+                    // without JSON log wrapping interfering with extraction.
+                    println!("KEYCLOAK_ADMIN_CLIENT_SECRET={}", secret);
                 }
                 Err(e) => {
                     warn!("Client created but failed to retrieve secret: {}", e);
