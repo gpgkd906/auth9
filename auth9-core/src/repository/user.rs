@@ -45,6 +45,7 @@ pub trait UserRepository: Send + Sync {
         offset: i64,
         limit: i64,
     ) -> Result<Vec<User>>;
+    async fn count_tenant_users(&self, tenant_id: StringUuid) -> Result<i64>;
     async fn search_tenant_users_count(
         &self,
         tenant_id: StringUuid,
@@ -435,6 +436,17 @@ impl UserRepository for UserRepositoryImpl {
         .await?;
 
         Ok(users)
+    }
+
+    async fn count_tenant_users(&self, tenant_id: StringUuid) -> Result<i64> {
+        let row: (i64,) = sqlx::query_as(
+            "SELECT COUNT(*) FROM tenant_users WHERE tenant_id = ?",
+        )
+        .bind(tenant_id)
+        .fetch_one(&self.pool)
+        .await?;
+
+        Ok(row.0)
     }
 
     async fn search_tenant_users_count(

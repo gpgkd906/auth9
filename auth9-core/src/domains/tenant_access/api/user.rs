@@ -102,6 +102,44 @@ async fn require_actual_tenant_owner<S: HasServices>(
     .await
 }
 
+/// Verify target user belongs to the caller's tenant (for TenantAccess tokens).
+/// Platform admins bypass this check. Identity tokens are handled by the policy layer.
+async fn ensure_user_in_caller_tenant<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    target_user_id: Uuid,
+) -> Result<()> {
+    // Only enforce for TenantAccess tokens (Identity tokens have separate handling in policy)
+    let tenant_id = match auth.token_type {
+        TokenType::TenantAccess => match auth.tenant_id {
+            Some(tid) => tid,
+            None => return Ok(()), // Shouldn't happen, but don't block
+        },
+        _ => return Ok(()),
+    };
+
+    // Platform admins can access any user
+    if is_platform_admin_with_db(state, auth).await {
+        return Ok(());
+    }
+
+    // Check if target user is a member of the caller's tenant
+    let target_tenants = state
+        .user_service()
+        .get_user_tenants(StringUuid::from(target_user_id))
+        .await?;
+    let is_in_tenant = target_tenants
+        .iter()
+        .any(|tu| *tu.tenant_id == tenant_id);
+    if !is_in_tenant {
+        return Err(AppError::NotFound(format!(
+            "User {} not found",
+            target_user_id
+        )));
+    }
+    Ok(())
+}
+
 /// Check if user can manage users within a tenant
 /// Platform admin can always manage, tenant admin with appropriate role can manage their tenant
 fn require_user_management_permission(config: &Config, auth: &AuthUser) -> Result<()> {
@@ -146,20 +184,16 @@ pub async fn list<S: HasServices>(
                         .search_tenant_users(StringUuid::from(tenant_id), search, query.page, query.per_page)
                         .await?
                 } else {
-                    let users = state
+                    state
                         .user_service()
                         .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                        .await?;
-                    let total = users.len() as i64;
-                    (users, total)
+                        .await?
                 }
             } else {
-                let users = state
+                state
                     .user_service()
                     .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                    .await?;
-                let total = users.len() as i64;
-                (users, total)
+                    .await?
             };
             return Ok(Json(PaginatedResponse::new(
                 with_tenant_context(users, Some(tenant_id)),
@@ -215,20 +249,16 @@ pub async fn list<S: HasServices>(
                 .search_tenant_users(StringUuid::from(tenant_id), search, query.page, query.per_page)
                 .await?
         } else {
-            let users = state
+            state
                 .user_service()
                 .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-                .await?;
-            let total = users.len() as i64;
-            (users, total)
+                .await?
         }
     } else {
-        let users = state
+        state
             .user_service()
             .list_tenant_users(StringUuid::from(tenant_id), query.page, query.per_page)
-            .await?;
-        let total = users.len() as i64;
-        (users, total)
+            .await?
     };
     Ok(Json(PaginatedResponse::new(
         with_tenant_context(users, Some(tenant_id)),
@@ -265,6 +295,8 @@ pub async fn get<S: HasServices>(
             },
         )
         .await?;
+        // Cross-tenant IDOR prevention: verify target user is in caller's tenant
+        ensure_user_in_caller_tenant(&state, &auth, id).await?;
     }
 
     let id = StringUuid::from(id);
@@ -512,6 +544,8 @@ pub async fn update<S: HasServices>(
     // Admin update: require platform admin or tenant admin
     if auth.user_id != id {
         require_user_management_permission(state.config(), &auth)?;
+        // Cross-tenant IDOR prevention: verify target user is in caller's tenant
+        ensure_user_in_caller_tenant(&state, &auth, id).await?;
     }
 
     let id = StringUuid::from(id);
@@ -567,6 +601,8 @@ pub async fn delete<S: HasServices>(
 ) -> Result<impl IntoResponse> {
     // Check authorization: require platform admin or tenant admin
     require_user_management_permission(state.config(), &auth)?;
+    // Cross-tenant IDOR prevention: verify target user is in caller's tenant
+    ensure_user_in_caller_tenant(&state, &auth, id).await?;
 
     let id = StringUuid::from(id);
     let before = state.user_service().get(id).await?;
@@ -973,7 +1009,7 @@ pub async fn list_by_tenant<S: HasServices>(
     .await?;
 
     let tenant_id = StringUuid::from(tenant_id);
-    let users = state
+    let (users, _total) = state
         .user_service()
         .list_tenant_users(tenant_id, pagination.page, pagination.per_page)
         .await?;

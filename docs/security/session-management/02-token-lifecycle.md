@@ -211,13 +211,15 @@ docker exec auth9-redis redis-cli KEYS "auth9:token_blacklist:*"
 
 ---
 
-## 场景 4：Token 范围限制
+## 场景 4：Token 范围限制（路线图 — 当前使用 RBAC 替代）
+
+> **状态**: Auth9 当前使用 **RBAC（角色 + 权限）** 而非 OAuth scope 进行访问控制。Token 中包含 `roles` 和 `permissions` 字段，不包含 `scope` 字段。这是架构设计决策，不是缺陷。以下测试步骤仅在未来实现 OAuth scope 时适用。
 
 ### 前置条件
-- 不同 scope 的 Token
+- 不同 scope 的 Token（**当前未实现**，Auth9 使用 roles/permissions）
 
 ### 攻击目标
-验证 Token scope 是否正确限制
+验证 Token scope 是否正确限制（**当前通过 RBAC 实现等价功能**）
 
 ### 攻击步骤
 1. 获取限制 scope 的 Token

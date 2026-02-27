@@ -230,7 +230,7 @@ export default function BrandingSettingsPage() {
 
               {/* Logo Preview */}
               {logoUrl && (
-                <div className="mt-4 p-4 bg-[var(--sidebar-item-hover)] rounded-lg">
+                <div className="mt-4 p-4 bg-[var(--sidebar-item-hover)] rounded-lg min-w-[200px]">
                   <p className="text-sm text-[var(--text-secondary)] mb-2">Logo Preview:</p>
                   <img
                     src={logoUrl}
@@ -393,7 +393,7 @@ export default function BrandingSettingsPage() {
             </div>
 
             {/* Action Buttons */}
-            <div className="flex flex-wrap items-center gap-3 border-t pt-4">
+            <div className="flex flex-wrap items-center gap-3 border-t pt-4 md:static sticky bottom-0 bg-[var(--surface-primary)] pb-4 -mb-4 z-10">
               <Button type="submit" name="intent" value="save" disabled={isSubmitting && currentIntent === "save"}>
                 {isSubmitting && currentIntent === "save" ? "Saving..." : "Save Changes"}
               </Button>

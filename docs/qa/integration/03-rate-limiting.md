@@ -9,12 +9,15 @@
 
 ## 背景说明
 
-Auth9 实现了基于 Redis 的滑动窗口限流中间件，支持：
+Auth9 实现了基于 Redis 的滑动窗口限流中间件，支持三种限流维度：
 
-- **按 IP 地址限流**：未携带 `x-tenant-id` 时使用客户端 IP
-- **按租户限流**：携带 `x-tenant-id` 时按租户维度限流
+- **按用户限流**：携带 Identity Token 时，按 `user_id` 维度限流
+- **按租户+客户端限流**：携带 Tenant Access Token 时，按 `tenant_id` + `client_id` 维度限流
+- **按 IP 地址限流**：未认证请求使用客户端 IP
 - **按端点配置**：不同 API 端点可配置不同的限流规则
 - **租户倍率**：特定租户可配置限流倍率（如 Premium 租户 2x）
+
+> **注意**: 限流维度取决于认证状态，而非 `x-tenant-id` 头。已认证请求按用户/租户维度限流，未认证请求按 IP 限流。
 
 ### 限流响应
 - 状态码：`429 Too Many Requests`
@@ -107,23 +110,24 @@ Auth9 实现了基于 Redis 的滑动窗口限流中间件，支持：
 
 ---
 
-## 场景 4：不同 IP 的限流独立
+## 场景 4：不同 IP 的限流独立（未认证请求）
 
 ### 初始状态
-- 限流按 IP 地址区分
+- 限流功能已启用
 - 准备两个不同的来源 IP
+- **必须使用未认证请求**（如 `/health` 端点），已认证请求按 user_id/tenant_id 限流而非 IP
 
 ### 目的
-验证不同 IP 地址的限流计数器独立
+验证未认证请求中，不同 IP 地址的限流计数器独立
 
 ### 测试操作流程
-1. 使用 IP-A（通过 `X-Forwarded-For` 模拟）发送请求直到触发限流：
+1. 使用 IP-A（通过 `X-Forwarded-For` 模拟）发送**未认证**请求直到触发限流：
    ```bash
-   curl -H "X-Forwarded-For: 10.0.0.1" http://localhost:8080/api/v1/tenants
+   curl -H "X-Forwarded-For: 10.0.0.1" http://localhost:8080/health
    ```
 2. 使用 IP-B 发送请求：
    ```bash
-   curl -H "X-Forwarded-For: 10.0.0.2" http://localhost:8080/api/v1/tenants
+   curl -H "X-Forwarded-For: 10.0.0.2" http://localhost:8080/health
    ```
 
 ### 预期结果
@@ -139,6 +143,13 @@ redis-cli KEYS "auth9:ratelimit:ip:10.0.0.1:*"
 redis-cli KEYS "auth9:ratelimit:ip:10.0.0.2:*"
 # 预期: 存在
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| 已认证请求的 Redis key 为 `auth9:ratelimit:user:{user_id}:...` 而非 IP | 已认证请求按 user_id 维度限流（设计如此） | 使用未认证端点（如 `/health`）测试 IP 独立限流 |
+| 不同 IP 的已认证请求共享限流计数 | 同一 user_id 的请求共享限流计数（设计如此） | 预期行为：同一用户不同 IP 共享限流 |
 
 ---
 

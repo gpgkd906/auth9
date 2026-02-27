@@ -292,10 +292,17 @@ console.log('Role:', themeToggle.getAttribute('role'));
 console.log('Tabindex:', themeToggle.getAttribute('tabindex'));
 
 // 验证焦点样式
-themeToggle.focus();
-const focusStyles = getComputedStyle(themeToggle, ':focus-visible');
-console.log('Focus outline:', focusStyles.outline);
-console.log('Outline offset:', focusStyles.outlineOffset);
+// 注意: JS 的 element.focus() 不会触发 :focus-visible 状态，
+// 必须使用 Tab 键盘导航才能触发 :focus-visible 样式。
+// 正确方式：通过 Playwright 或手动按 Tab 键聚焦后，再检查 computed style。
+// 错误方式：themeToggle.focus() 后检查 — 这只触发 :focus，不触发 :focus-visible。
+// await page.keyboard.press('Tab'); // Playwright 方式
+// 然后检查 document.activeElement 的 computed outline
+const focused = document.activeElement;
+if (focused?.classList.contains('theme-btn')) {
+  console.log('Focus outline:', getComputedStyle(focused).outline);
+  console.log('Outline offset:', getComputedStyle(focused).outlineOffset);
+}
 ```
 
 **Lighthouse 可访问性测试**：

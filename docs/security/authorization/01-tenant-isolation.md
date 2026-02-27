@@ -273,10 +273,13 @@ curl -s -o /dev/null -w "%{http_code}" \
 # 预期: 201 Created
 
 # 租户管理员尝试访问系统设置
+# ⚠️ 必须使用非平台管理员的租户管理员 Token
+# DB 型管理员（auth9-platform 租户 admin 角色）可通过任何 Token 类型访问系统设置，返回 200（设计行为）
 curl -s -o /dev/null -w "%{http_code}" \
   -H "Authorization: Bearer $TENANT_ADMIN_TOKEN" \
   http://localhost:8080/api/v1/system/email
-# 预期: 403
+# 预期: 403（仅当用户不是 DB 型管理员时）
+# ⚠️ 如果返回 200: 检查该用户是否在 auth9-platform 租户中有 admin 角色
 ```
 
 ### 修复建议

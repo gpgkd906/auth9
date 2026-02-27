@@ -576,6 +576,15 @@ impl UserRepository for TestUserRepository {
             .collect())
     }
 
+    async fn count_tenant_users(&self, tenant_id: StringUuid) -> Result<i64> {
+        let tenant_users = self.tenant_users.read().await;
+        let count = tenant_users
+            .iter()
+            .filter(|tu| tu.tenant_id == tenant_id)
+            .count();
+        Ok(count as i64)
+    }
+
     async fn search_tenant_users_count(
         &self,
         tenant_id: StringUuid,

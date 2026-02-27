@@ -131,24 +131,53 @@ WHERE category = 'email' AND setting_key = 'provider_config';
 
 ### 初始状态
 - 管理员已登录
-- 已配置有效的邮件服务商
+- 已配置有效的邮件服务商（如 SMTP → mailpit:1025，TLS 关闭）
+- **前提**：先执行场景 3 确认「Test Connection」成功
 
 ### 目的
 验证测试邮件发送功能
 
+> **注意**：本系统有两个独立的邮件测试功能，请勿混淆：
+> | 按钮 | API 端点 | 作用 |
+> |------|---------|------|
+> | **Test Connection** | `POST /api/v1/system/email/test` | 仅验证 SMTP 凭据和连接 |
+> | **Send Test Email** | `POST /api/v1/system/email/send-test` | 实际发送测试邮件 |
+
 ### 测试操作流程
 1. 进入「设置」→「邮件设置」
-2. 点击「Send Test Email」按钮
+2. 点击「Send Test Email」按钮（**不是** Test Connection）
 3. 在弹窗中输入：`test@example.com`
 4. 点击「Send Test Email」
+5. **弹窗会自动关闭**，成功/失败消息显示在页面主体区域（非弹窗内）
 
 ### 预期结果
-- 显示「Test email sent to test@example.com」
+- 页面顶部显示「Test email sent to test@example.com」（绿色文字）
 - 收件箱收到测试邮件
 - 邮件发件人显示配置的 From Name 和 From Email
 
 ### 预期数据状态
 无数据库变更
+
+### 手动 API 验证
+```bash
+# 注意：必须使用 /send-test 端点（不是 /test）
+curl -X POST "http://localhost:8080/api/v1/system/email/send-test" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"to_email":"test@example.com"}'
+# 预期: {"success": true, "message": "Test email sent to test@example.com", "message_id": "..."}
+
+# 检查 Mailpit 收件箱
+curl "http://localhost:8025/api/v1/search?query=to:test@example.com"
+# 预期: messages_count >= 1
+```
+
+### 常见误报原因
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 调用 API 返回 "Connection successful" 但无邮件 | 误用了 `/api/v1/system/email/test`（连接测试端点） | 使用 `/api/v1/system/email/send-test` |
+| 弹窗关闭后看不到反馈 | 成功消息显示在页面主体，非弹窗内 | 关闭弹窗后查看页面顶部区域 |
+| Mailpit 无邮件 | SMTP 配置 host 应为 `mailpit`（Docker 网络）或 `localhost`（宿主机） | 确认 SMTP host 配置正确 |
 
 ---
 

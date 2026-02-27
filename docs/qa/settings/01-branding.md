@@ -181,10 +181,28 @@ WHERE category = 'branding' AND setting_key = 'config';
 - 访问 `http://localhost:8081/realms/auth9/protocol/openid-connect/auth?...`
 - 页面应显示注册链接
 
+> **重要**：验证 Keycloak realm 状态时，**必须从 Docker 网络内部**发起请求，因为 Keycloak 设置了 `sslRequired: external`，从宿主机通过 HTTP 访问 Keycloak Admin API 会返回 401。
+>
+> ```bash
+> # 正确方式：从 Docker 内部验证（通过 auth9-core 容器）
+> KC_TOKEN=$(docker exec auth9-core curl -s -X POST \
+>   "http://keycloak:8080/realms/master/protocol/openid-connect/token" \
+>   -d "client_id=admin-cli" -d "username=admin" -d "password=admin" \
+>   -d "grant_type=password" | jq -r '.access_token')
+>
+> docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
+>   -H "Authorization: Bearer $KC_TOKEN" | jq '{registrationAllowed}'
+> # 预期: {"registrationAllowed": true}
+>
+> # 错误方式（会返回 401）：
+> # curl -s "http://localhost:8081/admin/realms/auth9" ...
+> ```
+
 ### 故障排查
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
+| 从宿主机 `curl localhost:8081/admin/...` 返回 401 | Keycloak `sslRequired: external` 阻止外部 HTTP 请求 | 使用 `docker exec auth9-core curl http://keycloak:8080/admin/...` 从 Docker 内部验证 |
 | DB 中 `allow_registration = true` 但 Keycloak `registrationAllowed` 未变 | Keycloak 同步是异步 fire-and-forget，可能因 Keycloak 暂时不可达而静默失败 | 检查 auth9-core 日志中 `Failed to sync realm settings to Keycloak` 错误；确认 Keycloak 容器健康后重新保存设置 |
 | 保存后 Keycloak 返回 401/403 | Keycloak admin token 过期或权限不足 | 重启 auth9-core 刷新 admin token |
 | 登录页未显示注册链接 | 浏览器缓存或 Keycloak theme 缓存 | 清除浏览器缓存，或重启 Keycloak 容器清除 theme 缓存 |

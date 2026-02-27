@@ -157,8 +157,12 @@ sleep 5
 - 队列/异步处理
 
 ### 验证方法
+
+> **⚠️ Token 类型说明**: 以下测试中的 `$TOKEN` 必须是 **Tenant Access Token**（通过 token exchange 获取），不能是 Identity Token 或 admin token。使用错误的 token 类型会导致 403 权限错误（而非限流测试目标的 429）。
+> 获取方法: 先用 Identity Token 调用 `POST /api/v1/auth/tenant-token` 交换 Tenant Access Token。
+
 ```bash
-# 复杂搜索
+# 复杂搜索（需 Tenant Access Token）
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users?search=a*&include=roles,permissions,tenants"
 # 预期: 限制 include 深度
@@ -176,6 +180,13 @@ for i in {1..10}; do
 done
 # 预期: 限制并发或排队
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| 返回 403 而非 429 | 使用了 Identity Token 或 admin token（权限不足） | 使用 Tenant Access Token（通过 token exchange 获取） |
+| 返回 401 | Token 过期或无效 | 重新获取有效 Token |
 
 ### 修复建议
 - 查询超时限制 (30秒)

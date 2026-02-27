@@ -62,16 +62,16 @@
 - 点击后侧边栏从左侧滑入（overlay）
 
 #### 移动端（< 768px）
-- 侧边栏通过 `transform: translateX(-100%)` 隐藏（**非** `display: none`，以支持滑入动画）
+- 侧边栏通过 CSS `translate` 属性隐藏：`translate: -100% 0`（**非** `display: none`，以支持滑入动画）
 - 汉堡菜单按钮必须可见
 - 点击后全屏侧边栏（`width: 100vw`，覆盖整个视口）
 - 背景遮罩（半透明黑色，`bg-black/50`）
 - 点击遮罩关闭侧边栏
 
 #### 动画效果
-- 侧边栏滑入：`transform: translateX(-100%)` → `translateX(0)`
+- 侧边栏滑入：`translate: -100% 0` → `translate: 0 0`（通过添加/移除 `.open` CSS 类控制）
 - 时长：300ms
-- 缓动：`cubic-bezier(0.4, 0, 0.2, 1)`
+- 缓动：`ease-in-out`
 - 遮罩淡入：`opacity: 0` → `opacity: 1`
 
 ### 验证工具
@@ -89,7 +89,12 @@
 
 #### JavaScript 检查
 
-> **注意**：侧边栏在移动端/平板端使用 `transform: translateX(-100%)` 隐藏（非 `display: none`），以支持平滑滑入动画。验证隐藏状态时应检查 `transform` 属性，而非 `display` 或 `visibility`。
+> **注意**：侧边栏使用 CSS `translate` 属性（**非** `transform`）实现隐藏/显示动画。验证隐藏状态时应检查 `translate` 属性，而非 `transform`、`display` 或 `visibility`。
+>
+> CSS 实现方式：
+> - 默认：`.sidebar { translate: -100% 0; }` — 隐藏
+> - 打开：`.sidebar.open { translate: 0 0; }` — 显示
+> - 桌面端：`@media (min-width: 1024px) { .sidebar { translate: 0 0; } }` — 始终显示
 
 ```javascript
 // 检查侧边栏状态
@@ -98,18 +103,20 @@ const sidebarStyles = getComputedStyle(sidebar);
 const windowWidth = window.innerWidth;
 
 console.log(`Window width: ${windowWidth}px`);
-console.log('Sidebar transform:', sidebarStyles.transform);
+// 注意：必须检查 translate 属性（非 transform）
+console.log('Sidebar translate:', sidebarStyles.translate);
+console.log('Sidebar has .open class:', sidebar.classList.contains('open'));
 console.log('Sidebar width:', sidebarStyles.width);
 
 // 检查断点行为
 if (windowWidth >= 1024) {
-  // 桌面端: transform 应为 none 或 translateX(0)
-  console.log('Desktop mode: Sidebar should be visible (transform: none)');
+  // 桌面端: translate 应为 "0px 0px" 或 "none"（始终可见）
+  console.log('Desktop mode: Sidebar should be visible (translate: 0 0)');
 } else {
-  // 移动端/平板端: 默认隐藏 (translateX(-100%))，打开时 translateX(0)
-  const isHidden = sidebarStyles.transform.includes('matrix') &&
-    sidebarStyles.transform !== 'none';
-  console.log('Mobile/Tablet mode: Sidebar hidden via transform:', isHidden);
+  // 移动端/平板端: 默认隐藏 (translate: -100% 0)，.open 时 translate: 0 0
+  const isHidden = !sidebar.classList.contains('open');
+  console.log('Mobile/Tablet mode: Sidebar hidden:', isHidden);
+  console.log('Sidebar translate value:', sidebarStyles.translate);
   if (windowWidth < 768) {
     console.log('Mobile: Sidebar should be full-width (100vw) when opened');
   }

@@ -466,11 +466,14 @@ impl<
         tenant_id: StringUuid,
         page: i64,
         per_page: i64,
-    ) -> Result<Vec<User>> {
+    ) -> Result<(Vec<User>, i64)> {
         let offset = (page - 1) * per_page;
-        self.repo
+        let users = self
+            .repo
             .find_tenant_users(tenant_id, offset, per_page)
-            .await
+            .await?;
+        let total = self.repo.count_tenant_users(tenant_id).await?;
+        Ok((users, total))
     }
 
     pub async fn search_tenant_users(
@@ -1249,12 +1252,16 @@ mod tests {
                     },
                 ])
             });
+        mock.expect_count_tenant_users()
+            .returning(|_| Ok(2));
 
         let service = create_test_service(mock);
 
         let result = service.list_tenant_users(tenant_id, 1, 10).await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().len(), 2);
+        let (users, total) = result.unwrap();
+        assert_eq!(users.len(), 2);
+        assert_eq!(total, 2);
     }
 
     #[tokio::test]

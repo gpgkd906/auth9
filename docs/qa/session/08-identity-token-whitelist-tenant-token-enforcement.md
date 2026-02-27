@@ -11,8 +11,10 @@
 
 本次会话安全收敛后，服务端对 Identity Token 的使用范围进行了限制：
 
-1. Identity Token 仅允许访问最小白名单接口（如 `/api/v1/auth/*`、`/api/v1/users/me/tenants`）
-2. tenant 业务接口（如 `/api/v1/tenants`、`/api/v1/tenants/{id}/*`）要求 Tenant Access Token
+1. Identity Token 仅允许访问最小白名单接口（如 `/api/v1/auth/*`、`/api/v1/users/me/tenants`、`GET /api/v1/tenants`）
+2. tenant 业务接口（如 `/api/v1/tenants/{id}`、`/api/v1/tenants/{id}/*`）要求 Tenant Access Token
+
+> **注意**: `GET /api/v1/tenants`（租户列表）是白名单接口，Identity Token 可以访问。Handler 会根据 token 类型自动过滤结果：Identity Token 仅返回用户自己的租户成员关系（通过 `resolve_tenant_list_mode_with_state` 策略）。这是设计行为，用于支持登录后的租户选择流程。
 3. Portal 切换 tenant 时会触发 `POST /api/v1/auth/tenant-token` 重新交换 token
 
 该文档用于验证“会话态 + token 类型 + 路由策略”三者一致性。
@@ -57,23 +59,40 @@ curl -i "http://localhost:8080/api/v1/auth/userinfo" \
 验证非白名单 tenant 路由不再接受 Identity Token
 
 ### 测试操作流程
-1. 调用 `GET /api/v1/tenants`：
+1. 调用 `GET /api/v1/tenants`（**白名单接口，预期成功**）：
 
 ```bash
 curl -i "http://localhost:8080/api/v1/tenants" \
   -H "Authorization: Bearer {identity_token}"
 ```
 
-2. 调用 `GET /api/v1/tenants/{tenant_id}`：
+2. 调用 `GET /api/v1/tenants/{tenant_id}`（**非白名单接口，预期拒绝**）：
 
 ```bash
 curl -i "http://localhost:8080/api/v1/tenants/{tenant_id}" \
   -H "Authorization: Bearer {identity_token}"
 ```
 
+3. 调用 `PUT /api/v1/tenants/{tenant_id}`（**非白名单接口，预期拒绝**）：
+
+```bash
+curl -i -X PUT "http://localhost:8080/api/v1/tenants/{tenant_id}" \
+  -H "Authorization: Bearer {identity_token}" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"test"}'
+```
+
 ### 预期结果
-- 请求返回 `403 FORBIDDEN`
-- 错误语义明确提示需使用 Tenant Token（或先完成 tenant token exchange）
+- **步骤 1**: `GET /api/v1/tenants` 返回 `200 OK`，且仅返回当前用户的租户成员关系（非全量租户列表）
+- **步骤 2**: `GET /api/v1/tenants/{tenant_id}` 返回 `403 FORBIDDEN`，提示 `"Identity token is only allowed for tenant selection and exchange"`
+- **步骤 3**: `PUT /api/v1/tenants/{tenant_id}` 返回 `403 FORBIDDEN`
+
+### 常见误报
+
+| 症状 | 原因 | 结论 |
+|------|------|------|
+| `GET /api/v1/tenants` 返回 200 | 该接口是白名单接口，Identity Token 允许访问 | **非漏洞** — 设计行为，用于租户选择 |
+| 平台管理员 `GET /api/v1/tenants` 返回全部租户 | 平台管理员拥有全局绕过 | 使用非平台管理员用户验证过滤效果 |
 
 ---
 

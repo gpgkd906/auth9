@@ -89,6 +89,8 @@ curl -I -c - http://localhost:3000/login
 
 ### 前置条件
 - 能够设置 Cookie
+- **Docker 环境已完全启动**（Keycloak、auth9-core、auth9-portal 均健康运行）
+- **必须能够完成 OIDC 登录流程**（如 Keycloak 登录失败，请先执行 `./scripts/reset-docker.sh` 重建环境）
 
 ### 攻击目标
 验证是否存在 Session 固定漏洞

@@ -44,7 +44,7 @@ Token 格式：`scim_{base64_44chars}`，存储时使用 SHA-256 hash，API 仅�
 
 ### 初始状态
 - 已有 Tenant 和 Enterprise SSO Connector
-- 已获取 Admin JWT Token
+- **已获取 Tenant Access Token**（非 Identity Token）。使用 `gen_tenant_access_token.js` 生成，需指定 tenant_id 和 user_id。Identity Token 仅允许 POST/DELETE 到 `/api/v1/tenants/*`，**不允许 GET 子资源**。
 
 ### 目的
 验证通过管理 API 成功创建 SCIM Bearer Token，返回完整 token（仅展示一次）和 token 元数据
@@ -124,6 +124,7 @@ WHERE connector_id = '{connector_id}' AND description = 'Permanent token';
 
 ### 初始状态
 - 场景 1、2 已创建两个 Token
+- **必须使用 Tenant Access Token**（Identity Token 对此 GET 端点返回 403）
 
 ### 目的
 验证列出指定 Connector 下所有 Token，响应不包含 token_hash
@@ -132,9 +133,18 @@ WHERE connector_id = '{connector_id}' AND description = 'Permanent token';
 
 **API 测试**:
 ```bash
+# 生成 Tenant Access Token（注意：不能使用 gen-admin-token.sh，那个生成的是 Identity Token）
+TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js $USER_ID $TENANT_ID)
+
 curl -s "http://localhost:8080/api/v1/tenants/$TENANT_ID/sso/connectors/$CONNECTOR_ID/scim/tokens" \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| 403 "Identity token is only allowed for tenant selection and exchange" | 使用了 Identity Token 而非 Tenant Access Token | 使用 `gen_tenant_access_token.js` 生成 Tenant Access Token |
 
 ### 预期结果
 - HTTP 200

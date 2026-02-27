@@ -239,6 +239,15 @@ curl -I http://auth9.example.com
 add_header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload" always;
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决方法 |
+|------|------|---------|
+| Keycloak HTTP 端口 (8081) 返回 HSTS 头 | Keycloak 26.x 原生在所有响应中添加 HSTS 头，与协议无关 | 这是 Keycloak 内部行为，**非 Auth9 配置问题**。浏览器会忽略 HTTP 上的 HSTS 头，无安全影响。本场景应在生产 HTTPS 端点上验证 |
+| 本地 Docker 环境无 HTTPS 端点 | 本地开发使用 HTTP | HSTS 测试仅适用于**生产环境**（有 TLS 终止的 Nginx/Cloudflare），本地 Docker 环境跳过此场景 |
+
+> **注意**: Auth9 Core 的 HSTS 实现（`security_headers.rs`）默认 `hsts_https_only=true`，仅在 HTTPS 请求上返回 HSTS 头。Keycloak 的 HSTS 行为由 Keycloak 自身控制，非 Auth9 可配置。
+
 ---
 
 ## 场景 5：内部服务通信安全

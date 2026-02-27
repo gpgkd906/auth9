@@ -87,9 +87,10 @@ async fn test_list_tenant_users_success() {
     }
 
     let service = builder.build_user_service();
-    let users = service.list_tenant_users(tenant_id, 1, 10).await.unwrap();
+    let (users, total) = service.list_tenant_users(tenant_id, 1, 10).await.unwrap();
 
     assert_eq!(users.len(), 2);
+    assert_eq!(total, 2);
 }
 
 #[tokio::test]
@@ -97,11 +98,12 @@ async fn test_list_tenant_users_empty() {
     let builder = TestServicesBuilder::new();
     let service = builder.build_user_service();
 
-    let users = service
+    let (users, total) = service
         .list_tenant_users(StringUuid::new_v4(), 1, 10)
         .await
         .unwrap();
     assert!(users.is_empty());
+    assert_eq!(total, 0);
 }
 
 // ============================================================================

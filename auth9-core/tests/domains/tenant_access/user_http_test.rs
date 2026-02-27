@@ -979,8 +979,20 @@ async fn test_get_user_tenant_access_with_admin_role() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let other_user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
     let user = create_test_user(Some(other_user_id));
     state.user_repo.add_user(user).await;
+    // Add the target user to the same tenant as the caller's token
+    state
+        .user_repo
+        .add_tenant_user(TenantUser {
+            id: auth9_core::domain::StringUuid::new_v4(),
+            user_id: auth9_core::domain::StringUuid::from(other_user_id),
+            tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+            role_in_tenant: "member".to_string(),
+            joined_at: chrono::Utc::now(),
+        })
+        .await;
 
     // TenantAccess with admin role
     let jwt_manager = crate::support::create_test_jwt_manager();
@@ -988,7 +1000,7 @@ async fn test_get_user_tenant_access_with_admin_role() {
         .create_tenant_access_token(
             Uuid::new_v4(),
             "admin@test.com",
-            Uuid::new_v4(),
+            tenant_id,
             "my-service",
             vec!["admin".to_string()],
             vec![],
@@ -1002,6 +1014,50 @@ async fn test_get_user_tenant_access_with_admin_role() {
 
     assert_eq!(status, StatusCode::OK);
     assert!(body.is_some());
+}
+
+#[tokio::test]
+async fn test_get_user_cross_tenant_returns_404() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let other_user_id = Uuid::new_v4();
+    let user = create_test_user(Some(other_user_id));
+    state.user_repo.add_user(user).await;
+    // User belongs to tenant-A
+    let tenant_a = Uuid::new_v4();
+    state
+        .user_repo
+        .add_tenant_user(TenantUser {
+            id: auth9_core::domain::StringUuid::new_v4(),
+            user_id: auth9_core::domain::StringUuid::from(other_user_id),
+            tenant_id: auth9_core::domain::StringUuid::from(tenant_a),
+            role_in_tenant: "member".to_string(),
+            joined_at: chrono::Utc::now(),
+        })
+        .await;
+
+    // Caller's token is for tenant-B (different tenant)
+    let tenant_b = Uuid::new_v4();
+    let jwt_manager = crate::support::create_test_jwt_manager();
+    let token = jwt_manager
+        .create_tenant_access_token(
+            Uuid::new_v4(),
+            "admin@test.com",
+            tenant_b,
+            "my-service",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let app = build_test_router(state);
+
+    let (status, _body): (StatusCode, Option<serde_json::Value>) =
+        get_json_with_auth(&app, &format!("/api/v1/users/{}", other_user_id), &token).await;
+
+    // Cross-tenant access should be denied (returns 404 to avoid leaking info)
+    assert_eq!(status, StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]
@@ -1253,9 +1309,21 @@ async fn test_tenant_access_with_user_write_permission_can_delete() {
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let user_id = Uuid::new_v4();
+    let tenant_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
     user.keycloak_id = keycloak_user_id.to_string();
     state.user_repo.add_user(user).await;
+    // Add the target user to the same tenant as the caller's token
+    state
+        .user_repo
+        .add_tenant_user(TenantUser {
+            id: auth9_core::domain::StringUuid::new_v4(),
+            user_id: auth9_core::domain::StringUuid::from(user_id),
+            tenant_id: auth9_core::domain::StringUuid::from(tenant_id),
+            role_in_tenant: "member".to_string(),
+            joined_at: chrono::Utc::now(),
+        })
+        .await;
 
     // TenantAccess with user:delete permission (not admin role)
     let jwt_manager = crate::support::create_test_jwt_manager();
@@ -1263,7 +1331,7 @@ async fn test_tenant_access_with_user_write_permission_can_delete() {
         .create_tenant_access_token(
             Uuid::new_v4(),
             "permuser@test.com",
-            Uuid::new_v4(),
+            tenant_id,
             "my-service",
             vec!["member".to_string()],
             vec!["user:delete".to_string()],

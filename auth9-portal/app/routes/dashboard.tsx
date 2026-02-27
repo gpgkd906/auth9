@@ -27,29 +27,33 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   // Get user's tenants for org switcher
   let tenants: TenantUserWithTenant[] = [];
+  let tenantsLoadFailed = false;
   try {
     const serviceId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
     const res = await userApi.getMyTenants(session.accessToken, serviceId);
     tenants = res.data;
   } catch {
-    // fallback to empty
+    // API may be down — don't redirect to onboard on network errors
+    tenantsLoadFailed = true;
   }
 
-  // No tenants -> redirect to onboard
-  if (tenants.length === 0) {
+  // Only redirect to onboard if we successfully loaded tenants and got zero
+  if (!tenantsLoadFailed && tenants.length === 0) {
     throw redirect("/onboard");
   }
 
   // Determine active tenant
   let activeTenantId = session.activeTenantId;
-  const validTenant = tenants.find((t) => t.tenant_id === activeTenantId);
   const responseHeaders: [string, string][] = [];
 
-  if (!validTenant) {
-    activeTenantId = tenants[0].tenant_id;
-    // Update session with the active tenant
-    const updatedSession = { ...session, activeTenantId };
-    responseHeaders.push(["Set-Cookie", await commitSession(updatedSession)]);
+  if (tenants.length > 0) {
+    const validTenant = tenants.find((t) => t.tenant_id === activeTenantId);
+    if (!validTenant) {
+      activeTenantId = tenants[0].tenant_id;
+      // Update session with the active tenant
+      const updatedSession = { ...session, activeTenantId };
+      responseHeaders.push(["Set-Cookie", await commitSession(updatedSession)]);
+    }
   }
 
   // Add refresh headers if session was refreshed

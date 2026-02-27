@@ -176,9 +176,11 @@ headers.forEach((th, index) => {
 });
 
 // 验证间距
-const pageTitle = document.querySelector('h1');
-const titleMargin = getComputedStyle(pageTitle).marginBottom;
-console.log('Title bottom margin:', titleMargin); // 应为 24px
+// 注意: 24px 间距由父容器 space-y-6 提供，作用于标题容器（非 h1 元素本身）。
+// 应检查标题区域的父 div 的 margin-bottom，而非 h1 的 margin-bottom。
+const titleContainer = document.querySelector('h1')?.closest('div')?.parentElement;
+const titleMargin = getComputedStyle(titleContainer).marginBottom;
+console.log('Title container margin-bottom:', titleMargin); // 应为 24px (来自 space-y-6)
 ```
 
 ---

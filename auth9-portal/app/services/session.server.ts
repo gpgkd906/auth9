@@ -206,7 +206,19 @@ async function ensureTenantSession(
     return { session, updated: false };
   }
   const exchanged = await exchangeTenantToken(session, session.activeTenantId);
-  return { session: exchanged, updated: !!exchanged };
+  if (!exchanged) {
+    // Clear stale tenant from session - tenant may be inactive or unavailable
+    return {
+      session: {
+        ...session,
+        activeTenantId: undefined,
+        tenantAccessToken: undefined,
+        tenantExpiresAt: undefined,
+      },
+      updated: true,
+    };
+  }
+  return { session: exchanged, updated: true };
 }
 
 export async function getAccessToken(request: Request): Promise<string | null> {
@@ -218,8 +230,8 @@ export async function getAccessToken(request: Request): Promise<string | null> {
   const tenantResult = await ensureTenantSession(identityResult.session);
   const finalSession = tenantResult.session || identityResult.session;
 
-  if (finalSession.activeTenantId) {
-    return finalSession.tenantAccessToken || null;
+  if (finalSession.activeTenantId && finalSession.tenantAccessToken) {
+    return finalSession.tenantAccessToken;
   }
   return finalSession.identityAccessToken || null;
 }
@@ -245,8 +257,8 @@ export async function getAccessTokenWithUpdate(
 
   const tenantResult = await ensureTenantSession(identityResult.session);
   const finalSession = tenantResult.session || identityResult.session;
-  const token = finalSession.activeTenantId
-    ? finalSession.tenantAccessToken || null
+  const token = finalSession.activeTenantId && finalSession.tenantAccessToken
+    ? finalSession.tenantAccessToken
     : finalSession.identityAccessToken || null;
 
   if (identityResult.updated || tenantResult.updated) {
