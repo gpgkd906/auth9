@@ -31,11 +31,7 @@ function emitChange() {
 }
 
 function applyTheme(newTheme: Theme) {
-  if (newTheme === "dark") {
-    document.documentElement.setAttribute("data-theme", "dark");
-  } else {
-    document.documentElement.removeAttribute("data-theme");
-  }
+  document.documentElement.setAttribute("data-theme", newTheme);
 }
 
 export function useTheme() {

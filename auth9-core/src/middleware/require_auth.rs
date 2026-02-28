@@ -189,6 +189,7 @@ fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
         || path == "/api/v1/users/me/tenants"
         || path == "/api/v1/organizations"
         || path == "/api/v1/users/me"
+        || path.starts_with("/api/v1/users/me/password")
         || path.starts_with("/api/v1/users/me/sessions")
         || path.starts_with("/api/v1/users/me/passkeys")
         // Platform admin endpoints use identity tokens (admin email check in handler)

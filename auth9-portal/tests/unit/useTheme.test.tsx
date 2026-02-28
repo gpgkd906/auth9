@@ -38,7 +38,7 @@ describe("useTheme", () => {
     expect(document.documentElement.getAttribute("data-theme")).toBe("dark");
   });
 
-  it("setTheme to light removes data-theme attribute", () => {
+  it("setTheme to light sets data-theme to light", () => {
     document.documentElement.setAttribute("data-theme", "dark");
     const { result } = renderHook(() => useTheme());
 
@@ -47,7 +47,7 @@ describe("useTheme", () => {
     });
 
     expect(result.current.theme).toBe("light");
-    expect(document.documentElement.getAttribute("data-theme")).toBeNull();
+    expect(document.documentElement.getAttribute("data-theme")).toBe("light");
   });
 
   it("toggleTheme switches between light and dark", () => {

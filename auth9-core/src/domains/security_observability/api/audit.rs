@@ -40,8 +40,8 @@ pub async fn list<S: HasServices>(
     let logs = state.audit_repo().find_with_actor(&query).await?;
     let total = state.audit_repo().count(&query).await?;
 
-    let page = calculate_page(query.offset, query.limit);
-    let per_page = query.limit.unwrap_or(50);
+    let per_page = query.limit.unwrap_or(50).min(crate::api::MAX_PER_PAGE);
+    let page = calculate_page(query.offset, Some(per_page));
 
     Ok(Json(PaginatedResponse::new(logs, page, per_page, total)))
 }

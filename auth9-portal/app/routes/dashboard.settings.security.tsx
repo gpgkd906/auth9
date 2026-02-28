@@ -315,9 +315,11 @@ export default function SecuritySettingsPage() {
                   </div>
                 )}
 
-                <Button type="submit" disabled={isSubmitting}>
-                  {isSubmitting ? "Saving..." : "Save policy"}
-                </Button>
+                <div className="flex flex-wrap items-center gap-3 border-t pt-4 md:static sticky bottom-0 bg-[var(--bg-secondary)] pb-4 -mb-4 z-10">
+                  <Button type="submit" disabled={isSubmitting}>
+                    {isSubmitting ? "Saving..." : "Save policy"}
+                  </Button>
+                </div>
               </Form>
             )}
           </div>

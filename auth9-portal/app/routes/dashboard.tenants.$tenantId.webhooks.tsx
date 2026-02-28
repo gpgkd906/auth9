@@ -24,6 +24,8 @@ import {
   TrashIcon,
   RocketIcon,
   ReloadIcon,
+  CopyIcon,
+  CheckIcon,
 } from "@radix-ui/react-icons";
 
 const WEBHOOK_EVENTS = [
@@ -75,8 +77,8 @@ export async function action({ request, params }: ActionFunctionArgs) {
         events: JSON.parse(formData.get("events") as string || "[]"),
         enabled: formData.get("enabled") === "true",
       };
-      await webhookApi.create(tenantId, input, accessToken || undefined);
-      return { success: true, message: "Webhook created" };
+      const result = await webhookApi.create(tenantId, input, accessToken || undefined);
+      return { success: true, message: "Webhook created", createdSecret: result.data.secret };
     }
 
     if (intent === "update") {
@@ -133,6 +135,8 @@ export default function WebhooksPage() {
 
   const [showDialog, setShowDialog] = useState(false);
   const [editingWebhook, setEditingWebhook] = useState<Webhook | null>(null);
+  const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [secretCopied, setSecretCopied] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     url: "",
@@ -151,13 +155,20 @@ export default function WebhooksPage() {
     }
   }, [navigation.state, showDialog, editingWebhook]);
 
-  // Close dialog on success only if the submission came from the dialog
+  // Handle dialog success: show secret for create, close for edit
   useEffect(() => {
     if (actionData?.success && dialogSubmitting.current) {
       dialogSubmitting.current = false;
-      setShowDialog(false);
-      setEditingWebhook(null);
-      resetForm();
+      if (actionData.createdSecret) {
+        // Show the generated secret instead of closing
+        setCreatedSecret(actionData.createdSecret);
+        setSecretCopied(false);
+        resetForm();
+      } else {
+        setShowDialog(false);
+        setEditingWebhook(null);
+        resetForm();
+      }
     }
   }, [actionData]);
 
@@ -232,6 +243,14 @@ export default function WebhooksPage() {
       {actionData?.success && actionData.message && (
         <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
           {actionData.message}
+          {actionData.newSecret && (
+            <div className="mt-2 flex items-center gap-2">
+              <span className="text-[var(--text-primary)]">New Secret:</span>
+              <code className="bg-[var(--bg-secondary)] px-2 py-1 rounded text-xs font-mono break-all select-all text-[var(--text-primary)]">
+                {actionData.newSecret}
+              </code>
+            </div>
+          )}
         </div>
       )}
 
@@ -353,9 +372,66 @@ export default function WebhooksPage() {
         </CardContent>
       </Card>
 
+      {/* Secret Display Dialog */}
+      <Dialog
+        open={!!createdSecret}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreatedSecret(null);
+            setShowDialog(false);
+          }
+        }}
+      >
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Webhook Created</DialogTitle>
+            <DialogDescription>
+              Your webhook has been created. Copy the signing secret below — it will not be shown again.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <Label>Signing Secret</Label>
+            <div className="flex items-center gap-2">
+              <code className="flex-1 bg-[var(--bg-secondary)] px-3 py-2 rounded-md text-sm font-mono break-all select-all">
+                {createdSecret}
+              </code>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(createdSecret || "");
+                  setSecretCopied(true);
+                  setTimeout(() => setSecretCopied(false), 2000);
+                }}
+              >
+                {secretCopied ? (
+                  <CheckIcon className="h-4 w-4 text-[var(--accent-green)]" />
+                ) : (
+                  <CopyIcon className="h-4 w-4" />
+                )}
+              </Button>
+            </div>
+            <p className="text-xs text-[var(--text-secondary)]">
+              Store this secret securely. You will need it to verify webhook signatures.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button
+              onClick={() => {
+                setCreatedSecret(null);
+                setShowDialog(false);
+              }}
+            >
+              Done
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
       {/* Create/Edit Dialog */}
       <Dialog
-        open={showDialog || !!editingWebhook}
+        open={(showDialog || !!editingWebhook) && !createdSecret}
         onOpenChange={(open) => {
           if (!open) {
             setShowDialog(false);

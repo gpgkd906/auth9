@@ -55,14 +55,20 @@
 ### 测试操作流程
 1. 进入「设置」→「身份提供商」
 2. 点击「Add provider」
-3. 选择「Google」类型
-4. 填写配置：
-   - Alias：`google`
+3. **点击「Google」类型卡片**（卡片应高亮为蓝色边框，表示已选中）
+4. **确认配置表单出现**（Alias、Display Name、Client ID、Client Secret 字段应在选中后立即显示）
+5. 填写配置：
+   - Alias：`google`（选中 Google 后自动填充）
    - Display Name：`Sign in with Google`
    - Client ID：`your-google-client-id`
    - Client Secret：`your-google-client-secret`
    - 启用开关：开启
-5. 点击「Add provider」
+6. 点击「Add provider」
+
+> **故障排除**: 如果选中 Google 后配置表单未出现，请尝试：
+> 1. 关闭对话框后重新打开（确保状态被重置）
+> 2. 刷新页面后重试
+> 3. 检查浏览器控制台是否有 JavaScript 错误
 
 ### 预期结果
 - 显示「Identity provider created」提示

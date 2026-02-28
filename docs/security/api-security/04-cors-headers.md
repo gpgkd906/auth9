@@ -161,19 +161,28 @@ curl -I http://localhost:3000 | grep -i content-security-policy
 
 # 预期 CSP 指令:
 # default-src 'self';
-# script-src 'self';
+# script-src 'self' 'nonce-...';  # nonce-based CSP for React hydration
 # style-src 'self' 'unsafe-inline';  # React 可能需要
 # img-src 'self' data: https:;
-# connect-src 'self' http://localhost:8080;
+# connect-src 'self' http://localhost:* https://localhost:* ws://localhost:*;
 # frame-ancestors 'none';
 # form-action 'self';
 # base-uri 'self';
+```
 
-# 浏览器测试
-# 1. 打开开发者工具 Console
-# 2. 尝试执行: eval("alert('XSS')")
-# 3. 观察是否被 CSP 阻止
+**CSP 头验证（推荐方法）**:
+```bash
+# 验证 script-src 不包含 unsafe-eval
+CSP=$(curl -sI http://localhost:3000 | grep -i content-security-policy)
+echo "$CSP" | grep -q "unsafe-eval" && echo "FAIL: unsafe-eval found" || echo "PASS: no unsafe-eval"
 
+# 验证 script-src 使用 nonce（不允许任意内联脚本）
+echo "$CSP" | grep -q "nonce-" && echo "PASS: nonce-based CSP" || echo "WARN: no nonce found"
+```
+
+> **注意**: 不要在浏览器 DevTools Console 中测试 `eval()`。大多数浏览器（Chrome, Firefox）的 DevTools Console 运行在特殊执行上下文中，**不受 CSP 限制**。在 Console 中执行 `eval()` 成功并不代表 CSP 配置有误。正确的测试方法是直接检查 CSP 头中 `script-src` 是否包含 `'unsafe-eval'`。
+
+```bash
 # CSP 报告
 # 检查 report-uri 或 report-to 配置
 ```

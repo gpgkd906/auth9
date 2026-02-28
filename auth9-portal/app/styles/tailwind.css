@@ -6,7 +6,8 @@
 /* ================================================
    LIGHT MODE (Default)
    ================================================ */
-:root {
+:root,
+[data-theme="light"] {
   /* Background colors */
   --bg-primary: #F2F2F7;
   --bg-secondary: #FFFFFF;
@@ -29,8 +30,8 @@
   --text-inverse: #FFFFFF;
 
   /* Accent colors */
-  --accent-blue: #007AFF;
-  --accent-blue-light: rgba(0, 122, 255, 0.12);
+  --accent-blue: #0066CC;
+  --accent-blue-light: rgba(0, 102, 204, 0.12);
   --accent-green: #34C759;
   --accent-green-light: rgba(52, 199, 89, 0.12);
   --accent-orange: #FF9500;
@@ -87,8 +88,9 @@
   --text-tertiary: #636366;
   --text-inverse: #000000;
 
-  /* Accent colors remain vibrant, but light versions are stronger */
-  --accent-blue-light: rgba(0, 122, 255, 0.2);
+  /* Accent colors - brighter for dark backgrounds (WCAG AA compliant) */
+  --accent-blue: #4DA3FF;
+  --accent-blue-light: rgba(77, 163, 255, 0.2);
   --accent-green-light: rgba(52, 199, 89, 0.2);
   --accent-orange-light: rgba(255, 149, 0, 0.2);
   --accent-red-light: rgba(255, 59, 48, 0.2);
@@ -477,7 +479,7 @@
   /* Main Content Layout */
   .main-content {
     min-height: 100vh;
-    padding: 20px 12px;
+    padding: 20px 16px;
     transition: margin-left 0.3s ease;
   }
 

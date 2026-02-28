@@ -178,6 +178,7 @@ export default function Dashboard() {
 
       {/* Sidebar - Floating Glass Card */}
       <aside
+        aria-label="Sidebar navigation"
         className={cn(
           "sidebar",
           isSidebarOpen && "open"

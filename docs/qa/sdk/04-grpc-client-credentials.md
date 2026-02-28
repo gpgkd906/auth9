@@ -131,6 +131,7 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 
 ### 初始状态
 - 用户在租户中已分配角色和权限
+- **重要**: 用户必须在 `user_tenant_roles` 表中有显式 RBAC 角色分配（不是仅在 `tenant_users.role_in_tenant` 中有成员角色）。`GetUserRoles` 仅查询 `user_tenant_roles` JOIN `roles` 表，不读取 `tenant_users.role_in_tenant` 字段。
 
 ### 目的
 验证 GetUserRoles API 返回的角色和权限与数据库一致

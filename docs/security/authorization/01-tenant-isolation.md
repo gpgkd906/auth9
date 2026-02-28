@@ -192,10 +192,18 @@ WHERE user_id NOT IN (
 
 ### 验证方法
 ```bash
+# ⚠️ 必须使用非平台管理员用户的 Token！
+# 使用 gen-test-tokens.js 的 tenant-access 类型（email 为 regular-user@example.com）
+# 严禁使用 tenant-owner 类型（email 为 admin@auth9.local，会触发平台管理员绕过）
+TOKEN_A=$(node .claude/skills/tools/gen-test-tokens.js tenant-access --tenant-id "<租户1_ID>")
+
+# 创建测试服务在另一个租户
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e "INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at) VALUES ('99999999-9999-9999-9999-999999999999', '<租户2_ID>', 'Cross-Tenant Test Service', 'http://localhost:9999', '[]', '[]', 'active', NOW(), NOW());"
+
 # 访问其他租户的服务
-curl -H "Authorization: Bearer $TOKEN_A" \
-  http://localhost:8080/api/v1/services/{tenant_2_service_id}
-# 预期: 403 或 404
+curl -s -w "\nHTTP: %{http_code}" -H "Authorization: Bearer $TOKEN_A" \
+  http://localhost:8080/api/v1/services/99999999-9999-9999-9999-999999999999
+# 预期: 403 Forbidden
 
 # 尝试为其他租户用户分配角色
 curl -X POST -H "Authorization: Bearer $TOKEN_A" \
@@ -206,7 +214,17 @@ curl -X POST -H "Authorization: Bearer $TOKEN_A" \
     "role_id": "'$ROLE_ID'"
   }'
 # 预期: 400 "User not in tenant"
+
+# 清理测试数据
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e "DELETE FROM services WHERE id = '99999999-9999-9999-9999-999999999999';"
 ```
+
+### 常见误报
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 跨租户请求返回 200 而非 403 | 使用了 `tenant-owner` token 类型（email 为 `admin@auth9.local`，是平台管理员） | 使用 `tenant-access` token 类型（email 为 `regular-user@example.com`） |
+| Token 的 user_id 是管理员 ID | DB 查询发现该 user_id 在 auth9-platform 租户有 admin 角色，触发平台管理员绕过 | Token 的 user_id 也不能使用管理员用户的 ID |
 
 ### 修复建议
 - 资源访问先查询归属租户

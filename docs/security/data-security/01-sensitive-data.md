@@ -266,7 +266,13 @@ curl http://localhost:3000/app/routes/_index.tsx
 ### 预期安全行为
 - 隐藏服务器版本
 - 移除 X-Powered-By
-- API 文档需要认证
+- **生产环境**: API 文档返回 404（已禁用）
+- **开发环境**: API 文档公开访问（`/swagger-ui`, `/redoc`），属于设计行为
+
+> **⚠️ 环境差异说明**: OpenAPI/Swagger 文档仅在非生产环境启用。
+> `build_openapi_routes()` 在 `ENVIRONMENT=production` 时返回空路由（404）。
+> 开发环境中 `/swagger-ui`、`/redoc`、`/api-docs/openapi.json` 公开可用，是标准开发实践，不构成安全漏洞。
+> **测试此场景时，必须针对生产环境配置验证文档端点返回 404。**
 
 ### 验证方法
 ```bash
@@ -277,11 +283,14 @@ curl -I http://localhost:8080/api/v1/health
 # X-Powered-By: 应该不存在
 # X-AspNet-Version: 应该不存在
 
-# OpenAPI 文档
-curl http://localhost:8080/swagger.json
-curl http://localhost:8080/openapi.yaml
-curl http://localhost:8080/api-docs
-# 预期: 404 或需要认证
+# OpenAPI 文档 (开发环境 — 公开可用，属于设计行为)
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/swagger-ui/
+# 开发环境预期: 200（非安全问题）
+
+# OpenAPI 文档 (生产环境验证 — 需设置 ENVIRONMENT=production)
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/swagger-ui/
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/api-docs/openapi.json
+# 生产环境预期: 404
 
 # 健康检查详情
 curl http://localhost:8080/health | jq .
@@ -292,9 +301,16 @@ curl http://localhost:8080/nonexistent
 # 检查 404 页面是否泄露服务器信息
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| Swagger UI 返回 200 | 在开发环境中测试（`ENVIRONMENT` 非 `production`） | 生产环境验证时需设置 `ENVIRONMENT=production` |
+| OpenAPI JSON 可下载 | 同上，开发环境中 API 文档公开可用是设计行为 | 确认生产环境返回 404 即可 |
+
 ### 修复建议
 - 移除版本信息头
-- API 文档需要认证
+- 确认生产环境 API 文档已禁用（当前已通过 `ENVIRONMENT=production` 实现）
 - 健康检查返回简单状态
 - 自定义错误页面
 

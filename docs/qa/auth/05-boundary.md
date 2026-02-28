@@ -58,10 +58,20 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL
 - Keycloak Refresh Token 可能被轮换（取决于 Keycloak 配置）
 - 会话 Session 保持不变
 
+### 如何获取 Keycloak Refresh Token
+
+> **重要**: 不能使用 Keycloak admin-cli 获取的 refresh token。admin-cli 生成的 token 绑定到 `admin-cli` 客户端，
+> 与 `auth9-portal` 客户端不匹配，Keycloak 会拒绝并返回 `"Token client and authorized client don't match"`。
+
+获取正确 refresh token 的方法：
+1. **通过浏览器完成 Portal OIDC 登录**，在浏览器 DevTools Network 面板中抓取 `/api/v1/auth/token` 响应中的 `refresh_token`
+2. 该 token 由 Keycloak 签发，绑定到 `auth9-portal` 客户端，才能正确用于刷新
+
 ### 故障排查
 
 | 症状 | 原因 | 解决方案 |
 |------|------|---------|
+| Keycloak 返回 400 `Token client and authorized client don't match` | 使用了 admin-cli 或其他客户端的 refresh token | **必须**使用 Portal OIDC 登录流程返回的 Keycloak refresh token |
 | Keycloak 返回 400 错误 | 使用了 Auth9 gRPC 签发的 refresh token | 使用 OIDC 登录流程返回的 Keycloak refresh token |
 | gRPC `RefreshToken` 方法不存在 | Auth9 gRPC refresh token 消费端未实现 | 这是已知限制，gRPC refresh token 功能仅完成创建，尚无消费接口 |
 

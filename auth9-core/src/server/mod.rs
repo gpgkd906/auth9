@@ -1333,7 +1333,10 @@ where
         )
         // 5. Request ID + HTTP Metrics - record request count/duration/in-flight
         .layer(crate::middleware::metrics::ObservabilityLayer)
-        // 6. Request timeout - return 408 if handler exceeds limit (prevents slow-loris)
+        // 6. Request timeout - return 408 if handler processing exceeds limit
+        //    NOTE: This only limits handler execution time, NOT header/body read time.
+        //    Slowloris protection (header read timeout) is handled at the infrastructure
+        //    level (reverse proxy / ingress controller).
         .layer(TimeoutLayer::with_status_code(
             axum::http::StatusCode::REQUEST_TIMEOUT,
             request_timeout,

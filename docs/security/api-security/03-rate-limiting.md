@@ -98,37 +98,55 @@ curl -i \
 3. 检查服务器响应
 
 ### 预期安全行为
-- 连接超时 (30-60秒)
-- 请求头/体大小限制
-- 并发连接限制
+- 请求处理超时 (30 秒，由 `TimeoutLayer` 实现)
+- 请求体大小限制 (2MB，由 `DefaultBodyLimit` 实现)
+- 并发请求限制 (1024，由 `concurrency_limit` 实现)
+- **Slowloris 防护（请求头读取超时）由基础设施层提供**（反向代理 / Ingress Controller）
+
+> **⚠️ 架构说明**: Slowloris 防护（HTTP 请求头读取超时）是基础设施层职责。
+> `axum::serve()` 的 `TimeoutLayer` 仅限制 handler 执行时间，**不能**限制客户端发送请求头的时间。
+>
+> 在生产部署中，auth9-core 运行在 Kubernetes Ingress Controller 后方，
+> Ingress Controller 提供 `client_header_timeout`、`proxy_read_timeout` 等保护。
+>
+> **在本地 Docker Compose 开发环境中直接对 auth9-core 端口测试 Slowloris 是预期会"通过"（不超时）的，
+> 因为开发环境不部署反向代理。这不代表生产环境存在漏洞。**
 
 ### 验证方法
 ```bash
-# Slowloris 测试 (需要工具)
-# 使用 slowhttptest
-slowhttptest -c 1000 -H -g -o slowloris \
-  -i 10 -r 200 -t GET \
-  -u http://localhost:8080/api/v1/users
+# 应用层已有的防护验证
+# 1. 请求处理超时 (30s) - TimeoutLayer
+# 如果 handler 阻塞超过 30s，返回 408
 
-# 手动慢速请求
-# 1. 建立连接
-exec 3<>/dev/tcp/localhost/8080
-# 2. 缓慢发送
-echo -ne "GET /api/v1/users HTTP/1.1\r\n" >&3
-sleep 5
-echo -ne "Host: localhost\r\n" >&3
-sleep 5
-# ... 观察是否超时断开
+# 2. 请求体大小限制 (2MB) - DefaultBodyLimit
+dd if=/dev/zero bs=1M count=3 | curl -X POST -H "Content-Type: application/octet-stream" \
+  --data-binary @- http://localhost:8080/api/v1/users
+# 预期: 413 Payload Too Large
 
-# 检查服务器配置
-# Nginx/反向代理的超时设置
+# 3. 并发限制 (1024) - concurrency_limit
+hey -n 2000 -c 1100 http://localhost:8080/api/v1/health
+# 预期: 部分请求返回 503
+
+# Slowloris 测试 (仅在有反向代理的环境中验证)
+# 生产环境需通过 Ingress Controller 验证:
+# - client_header_timeout: 10-30s
+# - proxy_read_timeout: 30-60s
+# - limit_conn: 单 IP 连接数限制
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 慢速发送请求头后服务器仍正常响应 | 在本地 Docker 环境直接测试，无反向代理 | Slowloris 防护由生产环境 Ingress Controller 提供，本地不适用 |
+| `TimeoutLayer` 未阻止慢速请求头 | `TimeoutLayer` 仅限制 handler 处理时间 | 设计行为，头部读取超时由基础设施层负责 |
+
 ### 修复建议
-- 请求头超时: 10-30 秒
-- 请求体超时: 30-60 秒
-- 单 IP 最大连接数限制
-- 使用反向代理防护
+- ✅ 请求处理超时: 30 秒（已实现，`TimeoutLayer`）
+- ✅ 请求体大小限制: 2MB（已实现，`DefaultBodyLimit`）
+- ✅ 并发请求限制: 1024（已实现，`concurrency_limit`）
+- 生产部署: 确认 Ingress Controller 配置了 `client_header_timeout` (10-30 秒)
+- 生产部署: 确认 Ingress Controller 配置了单 IP 连接数限制
 
 ---
 
@@ -167,10 +185,10 @@ curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users?search=a*&include=roles,permissions,tenants"
 # 预期: 限制 include 深度
 
-# 大量导出
+# 大量导出（limit 会被自动 cap 到 100）
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/audit-logs?limit=100000&export=csv"
-# 预期: 限制数量或异步处理
+  "http://localhost:8080/api/v1/audit-logs?limit=100000"
+# 预期: per_page 被 cap 到 100，返回最多 100 条记录
 
 # 并发批量操作
 for i in {1..10}; do

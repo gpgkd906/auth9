@@ -159,33 +159,40 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 - 用户收到通知 (可选)
 
 ### 验证方法
+
+**方法 A: 通过 Portal UI 测试**
+1. 以管理员 (admin@auth9.local) 登录 Portal
+2. 导航到 Users 页面
+3. 点击目标用户行的 "Open menu" 按钮
+4. 点击 "Force Logout" 菜单项
+5. 在确认对话框中点击 "Force Logout"
+6. 预期: UI 操作成功完成，无错误提示
+
+**方法 B: 通过 API 测试**
 ```bash
-# 用户登录
-curl -c user.txt -X POST http://localhost:3000/login \
-  -d '{"username":"victim","password":"pass123"}'
+# 生成管理员 Token
+ADMIN_TOKEN=$(node .claude/skills/tools/gen-test-tokens.js platform-admin)
 
-# 验证用户 Session 有效
-curl -b user.txt http://localhost:3000/dashboard
-# 预期: 200
+# 查找目标用户 ID
+USER_ID=$(mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM users WHERE email != 'admin@auth9.local' LIMIT 1;")
 
-# 管理员强制登出
-curl -X POST -H "Authorization: Bearer $ADMIN_TOKEN" \
-  http://localhost:8080/api/v1/users/{victim_id}/sessions/revoke-all
+# 管理员强制登出 (正确的 API 端点)
+curl -s -w "\nHTTP: %{http_code}" -X POST \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  http://localhost:8080/api/v1/admin/users/${USER_ID}/logout
+# 预期: 200 {"data":{"revoked_count": N}}
 
-# 用户尝试访问
-curl -b user.txt http://localhost:3000/dashboard
-# 预期: 重定向到登录
-
-# 检查数据库
-SELECT * FROM sessions WHERE user_id = 'victim_id' AND revoked_at IS NULL;
-# 预期: 无记录
+# 检查数据库 - 所有 Session 应已撤销
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
+  "SELECT id, revoked_at FROM sessions WHERE user_id = '${USER_ID}' AND revoked_at IS NULL;"
+# 预期: 空结果 (无活跃 Session)
 ```
 
 ### 修复建议
-- 仅管理员可强制登出
-- 记录审计日志
+- ✅ 仅管理员可强制登出 (已实现，`SessionForceLogout` 策略)
+- ✅ 记录审计日志 (已实现)
 - 可选: 通知被踢用户
-- 立即生效无延迟
+- ✅ 立即生效无延迟 (已实现，Token 黑名单)
 
 ---
 

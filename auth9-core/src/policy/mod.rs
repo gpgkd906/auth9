@@ -436,11 +436,21 @@ async fn require_user_tenant_read_with_state<S: HasServices>(
             "Service client tokens cannot access user management endpoints".to_string(),
         )),
         TokenType::TenantAccess => {
-            if auth.tenant_id == Some(*tenant_id) {
+            if auth.tenant_id != Some(*tenant_id) {
+                return Err(AppError::Forbidden(
+                    "Access denied: you can only list users in your own tenant".to_string(),
+                ));
+            }
+            let has_admin_role = auth.roles.iter().any(|r| r == "admin" || r == "owner");
+            let has_permission = auth
+                .permissions
+                .iter()
+                .any(|p| p == "user:read" || p == "user:*");
+            if has_admin_role || has_permission {
                 Ok(())
             } else {
                 Err(AppError::Forbidden(
-                    "Access denied: you can only list users in your own tenant".to_string(),
+                    "Admin role or user:read permission required to list users".to_string(),
                 ))
             }
         }
