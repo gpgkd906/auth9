@@ -137,15 +137,17 @@ fn build_context(auth: &AuthUser, input: &PolicyInput) -> HashMap<String, Value>
 }
 
 fn matches_action(rule_actions: &[String], action_key: &str) -> bool {
-    rule_actions
-        .iter()
-        .any(|a| a == "*" || a.eq_ignore_ascii_case(action_key))
+    rule_actions.is_empty()
+        || rule_actions
+            .iter()
+            .any(|a| a == "*" || a.eq_ignore_ascii_case(action_key))
 }
 
 fn matches_resource_type(rule_resource_types: &[String], resource_type: &str) -> bool {
-    rule_resource_types
-        .iter()
-        .any(|t| t == "*" || t.eq_ignore_ascii_case(resource_type))
+    rule_resource_types.is_empty()
+        || rule_resource_types
+            .iter()
+            .any(|t| t == "*" || t.eq_ignore_ascii_case(resource_type))
 }
 
 pub fn simulate_document(

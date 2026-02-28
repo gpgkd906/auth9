@@ -42,6 +42,7 @@ Auth9 是多租户系统，核心隔离要求：
 | Token 邮箱非管理员，但仍绕过隔离 | Token 的 `sub`（user_id）复用了管理员用户的 ID，DB 查询发现该 user_id 在 auth9-platform 租户中有 admin 角色 | **Token 的 user_id 也不能使用管理员用户的 ID**。使用随机 UUID 或非管理员用户的真实 ID |
 | Token 无 tenant_id 却能访问租户数据 | Identity Token 被平台管理员绕过识别 | 确认测试账号不在 `PLATFORM_ADMIN_EMAILS` 列表中 |
 | 租户管理员能执行平台操作 | 该用户同时是平台管理员 | 检查 `PLATFORM_ADMIN_EMAILS` 配置，确保测试用户不在其中 |
+| **`gen-test-tokens.js tenant-owner` 生成的 token 可访问系统设置** | **`tenant-owner` 类型硬编码使用 `admin@auth9.local` 邮箱**（平台管理员），返回 200 是正确行为 | **测试非管理员场景时，使用 `tenant-access` 类型**（邮箱为 `regular-user@example.com`），而非 `tenant-owner` |
 
 ---
 

@@ -9,27 +9,40 @@
 ## 场景 1：Webhook 失败重试
 
 ### 初始状态
-- 存在启用的 Webhook
-- 目标服务器暂时不可用
+- 存在启用的 Webhook，URL 指向不可达地址（如 `http://192.0.2.1:9999/hook` TEST-NET-1）
+- 目标服务器不可用
 
 ### 目的
-验证 Webhook 失败后的重试机制
+验证 Webhook 失败后 failure_count 是否增加
 
 ### 测试操作流程
-1. 关闭目标服务器
-2. 触发 Webhook 事件
-3. 观察重试行为
+1. 创建 Webhook 并设置 URL 为不可达地址
+2. **通过 UI 的 "Test" 按钮或 API `POST /api/v1/tenants/{id}/webhooks/{id}/test` 触发**
+3. 等待请求超时（可能需要 10-30 秒）
+4. 检查数据库 failure_count
+
+> **⚠️ Test 按钮会更新 failure_count**。代码中 `webhook_service.test()` 调用 `webhook_repo.update_triggered(id, result.success)`，失败时 `failure_count = failure_count + 1`。如果 failure_count 未增加，可能是：
+> - Webhook URL 实际可达（检查 URL 是否有误）
+> - 请求仍在超时等待中（需等待更长时间）
+> - 使用了 localhost 地址，容器内可能解析到容器自身
 
 ### 预期结果
-- 首次发送失败
-- 系统按照重试策略进行重试
+- 发送失败
 - failure_count 增加
 
 ### 预期数据状态
 ```sql
-SELECT failure_count FROM webhooks WHERE id = '{webhook_id}';
--- 预期: failure_count > 0
+SELECT failure_count, last_triggered_at FROM webhooks WHERE id = '{webhook_id}';
+-- 预期: failure_count > 0, last_triggered_at IS NOT NULL
 ```
+
+### 故障排除
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| failure_count = 0 且 last_triggered_at = NULL | Test 按钮请求可能仍在超时中 | 使用更快超时的不可达地址，或等待更长时间后再查询 |
+| failure_count = 0 但 last_triggered_at 有值 | Webhook 发送成功（URL 可达） | 确认 URL 指向不可达地址（推荐 `http://192.0.2.1:9999/hook`） |
+| UI 无错误提示 | Test 按钮的 UI 反馈可能不显示错误详情 | 通过数据库或 API 查看 failure_count |
 
 ---
 

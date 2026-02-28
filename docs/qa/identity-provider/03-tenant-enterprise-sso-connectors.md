@@ -184,6 +184,9 @@ SELECT domain FROM enterprise_sso_domains WHERE connector_id = '{connector_id}';
 -- 预期: 仅 1 行且 domain = '{new_domain}'
 ```
 
+### Troubleshooting
+If the enabled toggle appears not to persist, verify the frontend correctly sends the `enabled` field in the PATCH/PUT request body. The backend properly binds `enabled` in the UPDATE SQL.
+
 ---
 
 ## 场景 5：测试连接与删除连接器

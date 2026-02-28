@@ -75,8 +75,9 @@ docker exec auth9-core env | grep KEYCLOAK_WEBHOOK_SECRET
 # 设置 webhook secret（与 docker-compose.yml 一致）
 export KEYCLOAK_WEBHOOK_SECRET="dev-webhook-secret-change-in-production"
 
-# Keycloak 事件 payload
-EVENT='{"type":"LOGIN","realmId":"auth9","userId":"test-user","time":1706000000}'
+# Keycloak 事件 payload（time 字段为毫秒时间戳）
+CURRENT_TIME_MILLIS=$(($(date +%s) * 1000))
+EVENT="{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"userId\":\"test-user\",\"time\":${CURRENT_TIME_MILLIS}}"
 
 # 注意: 正确的端点是 /api/v1/keycloak/events（不是 /api/v1/webhooks/keycloak）
 # 注意: 签名头是 X-Keycloak-Signature（不是 X-Webhook-Secret）
@@ -193,9 +194,9 @@ PYEOF
 # 重要: 必须先定义 EVENT，再计算签名（顺序不可颠倒）
 VALID_SECRET="${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}"
 
-# 使用当前时间戳，确保事件不过期（5 分钟窗口）
-CURRENT_TIME=$(date +%s)
-EVENT="{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"userId\":\"test-user\",\"time\":${CURRENT_TIME},\"id\":\"event-replay-test-123\"}"
+# 使用当前毫秒时间戳，确保事件不过期（5 分钟窗口）
+CURRENT_TIME_MILLIS=$(($(date +%s) * 1000))
+EVENT="{\"type\":\"LOGIN\",\"realmId\":\"auth9\",\"userId\":\"test-user\",\"time\":${CURRENT_TIME_MILLIS},\"id\":\"event-replay-test-123\"}"
 
 # 计算签名（必须在 EVENT 定义之后）
 VALID_SIGNATURE=$(echo -n "$EVENT" | openssl dgst -sha256 -hmac "$VALID_SECRET" | awk '{print $2}')
@@ -216,8 +217,8 @@ curl -s -o /dev/null -w "%{http_code}" \
   -d "$EVENT"
 # 预期: 204 (幂等返回，但不执行业务逻辑 - 日志显示 "Duplicate webhook event detected")
 
-# 发送过期事件（timestamp 很旧，超出 5 分钟窗口）
-OLD_EVENT='{"type":"LOGIN","realmId":"auth9","userId":"test-user","time":1600000000,"id":"event-old"}'
+# 发送过期事件（毫秒时间戳很旧，超出 5 分钟窗口）
+OLD_EVENT='{"type":"LOGIN","realmId":"auth9","userId":"test-user","time":1600000000000,"id":"event-old"}'
 OLD_SIGNATURE=$(echo -n "$OLD_EVENT" | openssl dgst -sha256 -hmac "$VALID_SECRET" | awk '{print $2}')
 curl -s -o /dev/null -w "%{http_code}" \
   -X POST http://localhost:8080/api/v1/keycloak/events \
@@ -236,7 +237,8 @@ curl -s -o /dev/null -w "%{http_code}" \
 | 签名验证未生效（所有请求都返回 204） | `KEYCLOAK_WEBHOOK_SECRET` 未配置 | 在 docker-compose.yml 中设置该环境变量 |
 | 签名不匹配（返回 401） | 测试脚本使用的 secret 与服务端不同（默认值为 `dev-webhook-secret-change-in-production`） | 确认 `VALID_SECRET` 与 docker-compose.yml 中的值一致 |
 | 签名不匹配（返回 401） | 签名计算在 EVENT 定义之前，或 EVENT 包含额外空白 | 先定义 EVENT，再计算签名；使用 `echo -n` 避免尾部换行 |
-| 过期事件未被拒绝 | payload 中的 `time` 字段在 5 分钟窗口内 | 使用明确的旧时间戳（如 `1600000000`） |
+| 过期事件未被拒绝 | payload 中的 `time` 字段在 5 分钟窗口内 | 使用明确的旧毫秒时间戳（如 `1600000000000`） |
+| 所有当前时间戳事件返回 400 "Event timestamp too old" | `time` 字段使用了秒级时间戳（10位），但代码要求毫秒级（13位） | 使用 `$(($(date +%s) * 1000))` 生成毫秒时间戳 |
 
 > **验证去重生效的正确方法**：
 > 1. 发送两次相同请求后，检查 Redis key：`redis-cli GET auth9:webhook_dedup:{event_id}`

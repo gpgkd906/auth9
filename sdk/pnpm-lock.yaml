@@ -27,13 +27,13 @@ importers:
       '@auth9/node':
         specifier: workspace:*
         version: link:../../packages/node
-      express:
-        specifier: ^4.21.0
-        version: 4.22.1
     devDependencies:
       '@types/express':
         specifier: ^5.0.0
         version: 5.0.6
+      express:
+        specifier: ^4.22.1
+        version: 4.22.1
       tsx:
         specifier: ^4.19.0
         version: 4.21.0

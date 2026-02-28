@@ -26,6 +26,8 @@ pub struct AuthUser {
     pub token_type: TokenType,
     /// Tenant ID (only present for TenantAccess tokens)
     pub tenant_id: Option<Uuid>,
+    /// Audience / OAuth client_id the token was issued for
+    pub aud: Option<String>,
     /// Roles (only present for TenantAccess tokens)
     pub roles: Vec<String>,
     /// Permissions (only present for TenantAccess tokens)
@@ -55,6 +57,7 @@ impl AuthUser {
             email: claims.email,
             token_type: TokenType::Identity,
             tenant_id: None,
+            aud: None,
             roles: vec![],
             permissions: vec![],
         })
@@ -75,6 +78,7 @@ impl AuthUser {
             email: claims.email,
             token_type: TokenType::ServiceClient,
             tenant_id,
+            aud: Some(claims.aud),
             roles: vec![],
             permissions: vec![],
         })
@@ -93,6 +97,7 @@ impl AuthUser {
             email: claims.email,
             token_type: TokenType::TenantAccess,
             tenant_id: Some(tenant_id),
+            aud: Some(claims.aud),
             roles: claims.roles,
             permissions: claims.permissions,
         })
@@ -345,6 +350,7 @@ mod tests {
             email: "test@example.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(Uuid::new_v4()),
+            aud: Some("test-client".to_string()),
             roles: vec!["admin".to_string()],
             permissions: vec!["user:read".to_string(), "user:write".to_string()],
         };
@@ -361,6 +367,7 @@ mod tests {
             email: "test@example.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(Uuid::new_v4()),
+            aud: Some("test-client".to_string()),
             roles: vec!["admin".to_string(), "user".to_string()],
             permissions: vec![],
         };
@@ -377,6 +384,7 @@ mod tests {
             email: "test@example.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(Uuid::new_v4()),
+            aud: Some("test-client".to_string()),
             roles: vec![],
             permissions: vec!["user:read".to_string()],
         };
@@ -392,6 +400,7 @@ mod tests {
             email: "test@example.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(Uuid::new_v4()),
+            aud: Some("test-client".to_string()),
             roles: vec![],
             permissions: vec!["user:read".to_string(), "user:write".to_string()],
         };
@@ -454,6 +463,7 @@ mod tests {
             email: "test@example.com".to_string(),
             token_type: TokenType::Identity,
             tenant_id: None,
+            aud: None,
             roles: vec![],
             permissions: vec![],
         };
@@ -470,6 +480,7 @@ mod tests {
             email: "test@example.com".to_string(),
             token_type: TokenType::Identity,
             tenant_id: None,
+            aud: None,
             roles: vec![],
             permissions: vec![],
         };

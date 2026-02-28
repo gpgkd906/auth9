@@ -828,6 +828,7 @@ mod tests {
             email: "admin@platform.com".to_string(),
             token_type: TokenType::Identity,
             tenant_id: None,
+            aud: None,
             roles: vec![],
             permissions: vec![],
         }
@@ -839,6 +840,7 @@ mod tests {
             email: "admin@tenant.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(tenant_id.into()),
+            aud: None,
             roles: vec!["admin".to_string()],
             permissions: vec![],
         }
@@ -850,6 +852,7 @@ mod tests {
             email: "owner@tenant.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(tenant_id.into()),
+            aud: None,
             roles: vec!["owner".to_string()],
             permissions: vec![],
         }
@@ -861,6 +864,7 @@ mod tests {
             email: "user@tenant.com".to_string(),
             token_type: TokenType::TenantAccess,
             tenant_id: Some(tenant_id.into()),
+            aud: None,
             roles: vec!["member".to_string()],
             permissions,
         }
@@ -872,6 +876,7 @@ mod tests {
             email: "client@service.com".to_string(),
             token_type: TokenType::ServiceClient,
             tenant_id: tenant_id.map(|id| id.into()),
+            aud: None,
             roles: vec![],
             permissions: vec![],
         }

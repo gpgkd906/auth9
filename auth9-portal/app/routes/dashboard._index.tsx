@@ -63,7 +63,7 @@ export default function DashboardIndex() {
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} color="blue" delay="delay-1" href="/dashboard/tenants" />
         <StatsCard title="Active Users" value={data.totals.users.toString()} color="purple" delay="delay-2" href="/dashboard/users" />
         <StatsCard title="Services" value={data.totals.services.toString()} color="green" delay="delay-3" href="/dashboard/services" />

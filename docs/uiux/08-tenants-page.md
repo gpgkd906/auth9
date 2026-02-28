@@ -49,8 +49,16 @@
 - **文字对齐**: 标题下方的描述文字 “Manage tenant lifecycle...” 与按钮之间通过 `gap-3`（12px）间距协调。
 
 ### 验证要点
-- 检查标题区域父容器的 `display` 应为 `flex`，`flex-direction` 在 768px 下应为 `column`。
+- **注意**：标题区域的外层容器（包含标题 `div` 和按钮的直接父元素）使用 `flex flex-col`，但标题 `<h1>` 的直接父元素是 `<div className="space-y-2">`（`display: block`）。验证时应检查**外层 flex 容器**，而非标题的直接父元素。
+- 检查包含标题和按钮的**外层容器**的 `display` 应为 `flex`，`flex-direction` 在 768px 下应为 `column`。
 - 按钮换行应由 `flex-col` 驱动，而非宽度约束导致的自然折行。
+
+```javascript
+// 正确的验证方式：选择外层 flex 容器
+const header = document.querySelector('.space-y-6 > .flex');
+console.log('display:', getComputedStyle(header).display); // flex
+console.log('flex-direction:', getComputedStyle(header).flexDirection); // column (< 1024px)
+```
 
 ---
 
@@ -60,8 +68,14 @@
 验证列表转换为卡片（如有）或表格项在移动端的紧凑度。
 
 ### 预期视觉效果
-- **间距**: 租户名称与 Slug 之间的垂直间距应为 4px。
+- **间距**: 租户名称与 Slug 之间的垂直间距应为 4px（`mt-1`）。**注意**：不要与 Slug 下方状态区域的 `mt-3`（12px）混淆。
 - **Status Badge**: 状态标签与文字之间应有 8px 的水平间距，且垂直居中。
+
+```javascript
+// 验证名称-Slug 间距
+const slug = document.querySelector('.md\\:hidden .text-xs.text-\\[var\\(--text-tertiary\\)\\]');
+console.log('Slug margin-top:', getComputedStyle(slug).marginTop); // 4px (mt-1)
+```
 
 ---
 

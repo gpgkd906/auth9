@@ -212,6 +212,8 @@ done
 - 后续请求返回 HTTP 429 Too Many Requests
 - 响应包含 `Retry-After` 头
 
+> **Note**: Auth9 uses a global rate limiter at 100 req/min by default. 10 rapid POST requests will not trigger rate limiting, as they are well within the limit. Expect 429 only when exceeding the global threshold.
+
 ### 2. Action 执行频率限制（如果实现）
 
 **测试方法**:

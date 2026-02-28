@@ -260,14 +260,15 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 ---
 
-## 场景 5：软删除资源访问
+## 场景 5：已删除资源访问
+
+> **⚠️ Auth9 使用硬删除（Hard Delete）而非软删除。** 所有 DELETE 操作直接从数据库移除记录，无 `deleted_at` 字段。这是设计行为，不是安全漏洞。
 
 ### 前置条件
-- 系统使用软删除
-- 存在已软删除的资源
+- 存在可删除的资源（如 service）
 
 ### 攻击目标
-验证是否能访问已删除的资源
+验证删除后是否能继续访问该资源
 
 ### 攻击步骤
 1. 记录将要删除的资源 ID
@@ -276,13 +277,12 @@ curl -H "Authorization: Bearer $TOKEN" \
    - 直接通过 ID 访问
    - 通过搜索/列表
    - 通过关联查询
-4. 检查是否能恢复或访问
+4. 检查是否返回 404
 
 ### 预期安全行为
-- 软删除资源不可访问
+- 已删除资源不可访问（返回 404）
 - 列表不返回已删除资源
-- 关联查询排除已删除
-- 恢复需要特殊权限
+- 关联查询不包含已删除资源
 
 ### 验证方法
 ```bash
@@ -290,26 +290,27 @@ curl -H "Authorization: Bearer $TOKEN" \
 curl -X DELETE -H "Authorization: Bearer $ADMIN_TOKEN" \
   http://localhost:8080/api/v1/services/{id}
 
-# 尝试访问
+# 尝试访问（应返回 404）
 curl -H "Authorization: Bearer $TOKEN" \
   http://localhost:8080/api/v1/services/{id}
 # 预期: 404
 
-# 列表是否包含
+# 列表不应包含已删除资源
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/services?include_deleted=true"
-# 预期: 不支持 include_deleted 或需要特殊权限
+  "http://localhost:8080/api/v1/services"
+# 预期: 不包含已删除资源
 
 # 数据库验证
 SELECT * FROM services WHERE id = '{id}';
-# 应有 deleted_at 字段
+# 预期: 空结果（记录已被硬删除）
 ```
 
-### 修复建议
-- 所有查询默认排除软删除
-- 恢复功能需要管理员权限
-- 定期硬删除过期数据
-- 软删除数据加密或脱敏
+### 常见误报原因
+
+| 症状 | 原因 | 说明 |
+|------|------|------|
+| 数据库中无 `deleted_at` 字段 | Auth9 使用硬删除设计 | 这是 PASS，不是 FAIL。删除操作直接移除记录 |
+| `include_deleted` 参数不生效 | 系统不支持软删除，无此参数 | 不需要此功能 |
 
 ---
 

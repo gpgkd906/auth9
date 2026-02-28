@@ -46,6 +46,8 @@ Auth9 权限层级：
 - 返回 403 Forbidden
 - 记录提权尝试
 
+> **Note**: Admin assigning roles to other users is by design. The security boundary enforced here is self-assignment—users cannot assign roles to themselves. Admins may assign roles (including admin) to other users.
+
 ### 验证方法
 ```bash
 # 普通成员 Token

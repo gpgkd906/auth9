@@ -8,11 +8,11 @@
     "dev": "tsx watch src/server.ts"
   },
   "dependencies": {
-    "@auth9/node": "workspace:*",
-    "express": "^4.21.0"
+    "@auth9/node": "workspace:*"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
+    "express": "^4.22.1",
     "tsx": "^4.19.0"
   }
 }

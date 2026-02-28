@@ -204,9 +204,14 @@ export default function EmailSettingsPage() {
 
   const handleSendTestEmail = () => {
     submit({ intent: "send_test", test_email: testEmail }, { method: "post" });
-    setIsTestEmailOpen(false);
-    setTestEmail("");
   };
+
+  useEffect(() => {
+    if (actionData && "success" in actionData && actionData.success && isTestEmailOpen) {
+      setIsTestEmailOpen(false);
+      setTestEmail("");
+    }
+  }, [actionData]);
 
   return (
     <div className="space-y-6">

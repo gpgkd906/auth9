@@ -163,11 +163,11 @@ gap: 16px;
 **Mobile (< 768px)**：
 ```css
 grid-template-columns: 1fr;
-gap: 12px;
+gap: 12px; /* gap-3 */
 ```
 - 单列布局
 - 卡片占满容器宽度
-- 间距缩小为 12px
+- 间距缩小为 12px（`gap-3`），桌面端/平板端为 16px（`md:gap-4`）
 
 #### 服务列表卡片
 **响应式类名**：

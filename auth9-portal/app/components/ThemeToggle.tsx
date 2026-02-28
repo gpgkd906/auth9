@@ -11,6 +11,7 @@ export function ThemeToggle() {
         onClick={() => setTheme("light")}
         title="Light Mode"
         aria-label="Switch to light mode"
+        role="button"
         data-testid="theme-light"
       >
         <SunIcon />
@@ -20,6 +21,7 @@ export function ThemeToggle() {
         onClick={() => setTheme("dark")}
         title="Dark Mode"
         aria-label="Switch to dark mode"
+        role="button"
         data-testid="theme-dark"
       >
         <MoonIcon />
@@ -30,7 +32,7 @@ export function ThemeToggle() {
 
 function SunIcon() {
   return (
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -43,7 +45,7 @@ function SunIcon() {
 
 function MoonIcon() {
   return (
-    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path
         strokeLinecap="round"
         strokeLinejoin="round"

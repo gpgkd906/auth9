@@ -52,6 +52,16 @@ async fn setup_tenant_and_service(state: &TestAppState, tenant_id: Uuid) -> Uuid
     let service = create_test_service(Some(service_id), Some(tenant_id));
     state.service_repo.add_service(service).await;
 
+    let client = auth9_core::domain::Client {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        service_id: auth9_core::domain::StringUuid::from(service_id),
+        client_id: "test-service-client".to_string(),
+        client_secret_hash: "hash".to_string(), // pragma: allowlist secret
+        name: Some("Test Client".to_string()),
+        created_at: chrono::Utc::now(),
+    };
+    state.service_repo.add_client(client).await;
+
     service_id
 }
 
@@ -1270,6 +1280,122 @@ async fn test_missing_permission_returns_403() {
     .await;
 
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_cross_service_access_returns_403() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let tenant_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+
+    // Service A: the service the action belongs to
+    let service_a_id = setup_tenant_and_service(&state, tenant_id).await;
+
+    // Service B: a different service in the same tenant
+    let service_b_id = Uuid::new_v4();
+    let service_b = create_test_service(Some(service_b_id), Some(tenant_id));
+    state.service_repo.add_service(service_b).await;
+    let client_b = auth9_core::domain::Client {
+        id: auth9_core::domain::StringUuid::new_v4(),
+        service_id: auth9_core::domain::StringUuid::from(service_b_id),
+        client_id: "service-b-client".to_string(),
+        client_secret_hash: "hash".to_string(), // pragma: allowlist secret
+        name: Some("Service B Client".to_string()),
+        created_at: chrono::Utc::now(),
+    };
+    state.service_repo.add_client(client_b).await;
+
+    // Token scoped to Service B
+    let token = state
+        .jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "user@example.com",
+            tenant_id,
+            "service-b-client",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let action = create_action_for_service(tenant_id, service_a_id, "Protected Action");
+    let action_id = action.id;
+    state.action_repo.add_action(action).await;
+
+    let app = build_test_router(state.clone());
+
+    // Attempt to read Service A's action with Service B's token → 403
+    let (status, _): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/actions/{}", service_a_id, action_id),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Attempt to list Service A's actions with Service B's token → 403
+    let (status, _): (StatusCode, Option<serde_json::Value>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/actions", service_a_id),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+
+    // Attempt to create action on Service A with Service B's token → 403
+    let input = CreateActionInput {
+        name: "Malicious Action".to_string(),
+        description: None,
+        trigger_id: "post-login".to_string(),
+        script: "export default async function(ctx) { return ctx; }".to_string(),
+        enabled: true,
+        strict_mode: false,
+        execution_order: 0,
+        timeout_ms: 5000,
+    };
+    let (status, _): (StatusCode, Option<serde_json::Value>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/actions", service_a_id),
+        &input,
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn test_cross_service_access_allowed_for_same_service() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let tenant_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+
+    let service_id = setup_tenant_and_service(&state, tenant_id).await;
+
+    // Token scoped to this service (client_id matches)
+    let token = create_tenant_access_token(
+        &state.jwt_manager,
+        tenant_id,
+        user_id,
+        vec!["admin".to_string()],
+        vec![],
+    );
+
+    let action = create_action_for_service(tenant_id, service_id, "My Action");
+    let action_id = action.id;
+    state.action_repo.add_action(action).await;
+
+    let app = build_test_router(state.clone());
+
+    // Access own service's action → 200
+    let (status, _): (StatusCode, Option<SuccessResponse<Action>>) = get_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/actions/{}", service_id, action_id),
+        &token,
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
 }
 
 #[tokio::test]

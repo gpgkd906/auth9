@@ -375,6 +375,10 @@ pub async fn create<S: HasServices + HasBranding>(
                 },
             )
             .await?;
+            state
+                .tenant_service()
+                .require_active(StringUuid::from(requested))
+                .await?;
         }
     } else {
         // If an Authorization header existed but we couldn't parse a supported token,

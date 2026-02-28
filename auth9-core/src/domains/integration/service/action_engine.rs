@@ -492,6 +492,9 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
     ) -> Result<ActionContext> {
         let start = Instant::now();
         let user_id = context.user.id.parse().ok();
+        let tenant_id = action
+            .tenant_id
+            .or_else(|| context.tenant.id.parse().ok());
 
         match self.execute_action(action, &context).await {
             Ok(modified_context) => {
@@ -502,7 +505,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
-                        action.tenant_id,
+                        tenant_id,
                         action.service_id,
                         trigger_id.to_string(),
                         user_id,
@@ -544,7 +547,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
-                        action.tenant_id,
+                        tenant_id,
                         action.service_id,
                         trigger_id.to_string(),
                         user_id,
@@ -648,15 +651,19 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             let _ = handle_tx.send(isolate_handle.clone());
 
             // Set up near-heap-limit callback to terminate execution on OOM.
-            // Strategy: on first call, terminate execution and allow a small bump
-            // (5MB) so V8 has room to process the termination. On subsequent calls,
-            // keep bumping by 5MB (up to 5 times) so V8 can complete GC and
-            // termination without hitting the fatal OOM handler that aborts the process.
+            // Strategy: on first call, terminate execution and double the limit so V8
+            // has room to process the termination (large single allocations like
+            // `new Array(10M)` can request memory exceeding the current limit in one
+            // shot, so a generous first bump prevents V8 from invoking its fatal OOM
+            // handler which aborts the process). On subsequent calls, bump by 5MB
+            // (up to 5 times) so V8 can complete GC and termination cleanup.
+            const HEAP_BUMP_BYTES: usize = 5 * 1024 * 1024; // 5MB
+            const MAX_HEAP_BUMPS: u32 = 5;
             let heap_handle = isolate_handle;
             let heap_callback_count = Rc::new(std::cell::Cell::new(0u32));
             let heap_callback_count_clone = heap_callback_count.clone();
             let was_oom_inner = was_oom_clone.clone();
-            js_runtime.add_near_heap_limit_callback(move |current_limit, _initial_limit| {
+            js_runtime.add_near_heap_limit_callback(move |current_limit, initial_limit| {
                 let count = heap_callback_count_clone.get();
                 heap_callback_count_clone.set(count + 1);
                 was_oom_inner.store(true, std::sync::atomic::Ordering::Release);
@@ -666,16 +673,11 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                         current_limit / (1024 * 1024)
                     );
                     heap_handle.terminate_execution();
-                    // Allow 3x bump for V8 to complete the current allocation
-                    // and process the termination signal. Large single allocations
-                    // (e.g. new Array(10M)) can request memory exceeding the current
-                    // limit in one shot, so a generous first bump prevents V8 from
-                    // invoking its fatal OOM handler which aborts the process.
-                    current_limit * 3
+                    current_limit + initial_limit
+                } else if count <= MAX_HEAP_BUMPS {
+                    current_limit + HEAP_BUMP_BYTES
                 } else {
-                    // Already terminating — allow proportional bump (50% of current)
-                    // so V8 has room to complete GC and process termination.
-                    current_limit + current_limit / 2
+                    current_limit
                 }
             });
 
@@ -936,6 +938,9 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
     ) -> Result<(ActionContext, i32, Vec<String>)> {
         let start = Instant::now();
         let user_id = context.user.id.parse().ok();
+        let tenant_id = action
+            .tenant_id
+            .or_else(|| context.tenant.id.parse().ok());
 
         match self.execute_action(action, &context).await {
             Ok(modified_context) => {
@@ -946,7 +951,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
-                        action.tenant_id,
+                        tenant_id,
                         action.service_id,
                         "test".to_string(),
                         user_id,
@@ -971,7 +976,7 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     .action_repo
                     .record_execution(
                         action.id,
-                        action.tenant_id,
+                        tenant_id,
                         action.service_id,
                         "test".to_string(),
                         user_id,

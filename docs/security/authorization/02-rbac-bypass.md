@@ -282,6 +282,7 @@ SELECT * FROM user_tenant_roles WHERE tenant_user_id = '...';
 |------|------|------|
 | 撤销角色后旧 Token 仍可用 | JWT 无状态设计，权限在签发时嵌入 | 这是 PASS，不是 FAIL。Token 过期后（≤15min）自动失效 |
 | 重新登录后仍有旧权限 | 使用了缓存的旧 Token | 需要重新执行 Token Exchange 获取新 Token |
+| 非租户成员使用 `gen-test-tokens.js` 生成的 token 可访问租户数据 | 测试工具绕过了 Token Exchange 流程，直接签发 JWT | **Token Exchange 已验证租户成员资格**。生产环境中无法绕过此检查。此工具仅用于测试已知有效 token 的行为，不能用于模拟"非成员获取 token"场景 |
 
 ---
 

@@ -47,6 +47,7 @@ pub async fn create_action<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let action = action_service.create(tenant_id, service_id, input).await?;
@@ -81,6 +82,7 @@ pub async fn list_actions<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
 
@@ -122,6 +124,7 @@ pub async fn get_action<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let action = action_service.get(action_id, service_id).await?;
@@ -157,6 +160,7 @@ pub async fn update_action<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let action = action_service.update(action_id, service_id, input).await?;
@@ -191,6 +195,7 @@ pub async fn delete_action<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     action_service.delete(action_id, service_id).await?;
@@ -233,6 +238,7 @@ pub async fn batch_upsert_actions<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let response = action_service.batch_upsert(tenant_id, service_id, req.actions).await?;
@@ -268,6 +274,7 @@ pub async fn test_action<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let response = action_service
@@ -304,6 +311,7 @@ pub async fn get_action_log<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let execution = action_service.get_execution(log_id, service_id).await?;
@@ -338,6 +346,7 @@ pub async fn query_action_logs<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_id = if let Some(ref id_str) = params.action_id {
         Some(
@@ -404,6 +413,7 @@ pub async fn get_action_stats<S: HasServices>(
             scope: ResourceScope::Tenant(tenant_id),
         },
     )?;
+    ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
     let stats = action_service.get_stats(action_id, service_id).await?;
@@ -441,6 +451,31 @@ async fn resolve_service_tenant<S: HasServices>(
     service
         .tenant_id
         .ok_or_else(|| AppError::NotFound("Service has no associated tenant".to_string()))
+}
+
+/// Verify the caller's token is scoped to the target service.
+/// TenantAccess tokens carry an `aud` (OAuth client_id) that maps to a
+/// specific service; requests targeting a different service are rejected.
+async fn ensure_service_scope<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    target_service_id: StringUuid,
+) -> Result<(), AppError> {
+    if auth.token_type != crate::middleware::auth::TokenType::TenantAccess {
+        return Ok(());
+    }
+    if state.config().is_platform_admin_email(&auth.email) {
+        return Ok(());
+    }
+    if let Some(ref aud) = auth.aud {
+        let token_service = state.client_service().get_by_client_id(aud).await?;
+        if token_service.id != target_service_id {
+            return Err(AppError::Forbidden(
+                "Token is not scoped to the target service".to_string(),
+            ));
+        }
+    }
+    Ok(())
 }
 
 // ============================================================

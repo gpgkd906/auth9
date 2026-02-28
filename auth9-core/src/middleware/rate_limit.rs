@@ -293,16 +293,20 @@ impl RateLimitState {
             "#,
         );
 
-        let result: Vec<i64> = script
-            .key(&redis_key)
-            .arg(window_start as i64)
-            .arg(now as i64)
-            .arg(&request_id)
-            .arg(max_requests as i64)
-            .arg((window_secs + 1) as i64)
-            .invoke_async(&mut conn)
-            .await
-            .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
+        let result: Vec<i64> = tokio::time::timeout(
+            std::time::Duration::from_millis(500),
+            script
+                .key(&redis_key)
+                .arg(window_start as i64)
+                .arg(now as i64)
+                .arg(&request_id)
+                .arg(max_requests as i64)
+                .arg((window_secs + 1) as i64)
+                .invoke_async(&mut conn),
+        )
+        .await
+        .map_err(|_| RateLimitError::RedisError("Redis operation timed out".to_string()))?
+        .map_err(|e| RateLimitError::RedisError(e.to_string()))?;
 
         let allowed = result[0] == 1;
         let current_count = result[1] as u64;

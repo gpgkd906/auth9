@@ -236,6 +236,8 @@ docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
 2. 检查是否强制注销其他会话
 3. 检查密码历史检查
 
+> **Note**: Revoking other sessions after password change depends on Keycloak realm configuration (`revokeRefreshToken`), not auth9-core code. This behavior is configured in Keycloak, not managed by Auth9.
+
 ### 预期安全行为
 - 更改密码需强身份校验（当前密码、有效会话或等效再认证机制）
 - 禁止使用最近 N 个密码

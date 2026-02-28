@@ -1,7 +1,7 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, useSearchParams } from "react-router";
+import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, useSearchParams, useOutletContext } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role } from "~/services/api";
+import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role, type TenantUserWithTenant } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 import { FormattedDate } from "~/components/ui/formatted-date";
@@ -202,6 +202,8 @@ export default function UsersPage() {
   const confirm = useConfirm();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const { activeTenant } = useOutletContext<{ activeTenant?: TenantUserWithTenant }>();
+  const activeTenantId = activeTenant?.tenant_id;
 
   const currentSearch = searchParams.get("search") || "";
   const [searchInput, setSearchInput] = useState(currentSearch);
@@ -662,7 +664,7 @@ export default function UsersPage() {
             </div>
             <div className="space-y-1.5">
               <Label id="create-tenant-label">Tenant (optional)</Label>
-              <Select name="tenant_id" aria-labelledby="create-tenant-label">
+              <Select name="tenant_id" defaultValue={activeTenantId} aria-labelledby="create-tenant-label">
                 <SelectTrigger aria-labelledby="create-tenant-label">
                   <SelectValue placeholder="No tenant (platform user)" />
                 </SelectTrigger>
