@@ -64,6 +64,17 @@
 - **文字截断**: 当服务名称超长时，应使用省略号（`truncate`）而非撑破卡片高度或导致布局错乱。
 
 ### 验证方法
-- **目标元素**: 服务名称使用 `<p>` 标签（非 `<h3>`），带有 `truncate text-base font-semibold` 类名。
+
+**重要**: 页面顶层 `<div>` 使用 `space-y-6` 类做页面元素间距，这是正常的页面布局包裹器。服务卡片的 **网格容器** 在 `<Card>` 内部。
+
+- **网格容器**: 在 `<Card>` 组件的 `px-6 pb-6` 区域内，查找 `grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4` 类的 `<div>` 元素。
+- **卡片布局**: 每个服务卡片使用 `flex flex-col` 弹性布局，底部按钮区域使用 `mt-auto` 确保对齐。
+- **服务名称**: 使用 `<p>` 标签（非 `<h3>`），带有 `truncate text-base font-semibold` 类名。
 - **检查方式**: 在 DevTools 中选中服务名称的 `<p>` 元素，确认 `text-overflow: ellipsis`、`overflow: hidden`、`white-space: nowrap` 三个计算样式均已生效。
 - **父容器**: 父 `<div>` 需要 `min-w-0 flex-1` 类名，以确保 flex 子项中 truncate 正常工作。
+
+#### 常见误报排查
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| 容器 `display: block` + `space-y-6` | 查看了页面顶层包裹器而非网格容器 | 检查 Card 内部的 `grid` 容器 |
+| 未检测到 `flex-col` 和 `mt-auto` | 查看了错误的 DOM 层级 | 检查每个卡片的直接 `<div>` 元素 |

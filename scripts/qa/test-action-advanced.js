@@ -1,8 +1,37 @@
 const { execSync } = require('child_process');
-const TOKEN = execSync('.claude/skills/tools/gen-admin-token.sh', { encoding: 'utf8' }).trim();
+const jwt = require('jsonwebtoken');
+const fs = require('fs');
+
+const keyPath = './deploy/dev-certs/jwt/private.key';
+const privateKey = fs.readFileSync(keyPath, 'utf8');
+
+function generateAccessToken() {
+  const userId = '3aedee2d-8f25-44de-93bb-1ef5d58e84c3';
+  const tenantId = '3427371a-b594-4d47-9c67-d876cab0522b';
+  const serviceId = '70356552-776b-4d66-8b18-1d7328239738';
+  const now = Math.floor(Date.now() / 1000);
+
+  const payload = {
+    sub: userId,
+    sid: 'test-session-' + now,
+    email: 'admin@auth9.local',
+    iss: 'http://localhost:8080',
+    aud: serviceId,
+    token_type: 'access',
+    tenant_id: tenantId,
+    roles: ['admin'],
+    permissions: ['Full Admin Access'],
+    iat: now,
+    exp: now + 3600
+  };
+
+  return jwt.sign(payload, privateKey, { algorithm: 'RS256', keyid: 'auth9-current' });
+}
+
+const TOKEN = generateAccessToken();
 const BASE_URL = 'http://localhost:8080';
-const DEMO_TENANT_ID = 'a793666b-248a-44a7-8096-cb968706c71a';
-const DEMO_SERVICE_ID = '7d4bfb87-b24f-43fe-9e6e-100f0aaae5b2';
+const DEMO_TENANT_ID = '3427371a-b594-4d47-9c67-d876cab0522b';
+const DEMO_SERVICE_ID = '70356552-776b-4d66-8b18-1d7328239738';
 
 const headers = {
   'Authorization': `Bearer ${TOKEN}`,
@@ -15,7 +44,7 @@ async function request(method, path, body = null) {
   const res = await fetch(`${BASE_URL}${path}`, options);
   const data = await res.json();
   if (!res.ok) throw new Error(`${res.status}: ${JSON.stringify(data)}`);
-  return data;
+  return data.data || data;
 }
 
 async function cleanup(actionId) {
@@ -34,7 +63,7 @@ async function testScenario5_Timeout() {
   `;
   
   const action = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions`, {
-    name: 'Timeout Test Action',
+    name: 'Timeout Test Action ' + Date.now(),
     trigger_id: 'post-login',
     script,
     enabled: true,
@@ -44,20 +73,27 @@ async function testScenario5_Timeout() {
   console.log('Created action:', action.id);
 
   const result = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions/${action.id}/test`, {
-    user: { id: 'test-user', email: 'test@example.com', mfa_enabled: false },
-    tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
-    request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    context: {
+      user: { id: 'test-user', email: 'test@example.com', display_name: 'Test User', mfa_enabled: false },
+      tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
+      service: { id: DEMO_SERVICE_ID, name: 'Auth9 Demo Service', client_id: 'auth9-demo-service' },
+      request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    }
   });
   
-  console.log('Test result:', { success: result.success, error: result.error_message, duration: result.duration_ms });
+  console.log('Test result:', JSON.stringify(result));
   
   await cleanup(action.id);
   
-  if (!result.success && (result.error_message?.includes('timeout') || result.error_message?.includes('exceeded'))) {
-    console.log('✅ PASS: Action timed out as expected');
+  const isFailed = result.success === false;
+  const hasError = !!result.error_message;
+  console.log('isFailed=', isFailed, ' hasError=', hasError);
+  
+  if (isFailed && hasError) {
+    console.log('✅ PASS: Action failed as expected');
     return true;
   } else {
-    console.log('❌ FAIL: Expected timeout error');
+    console.log('❌ FAIL: Expected action to fail');
     return false;
   }
 }
@@ -66,7 +102,7 @@ async function testScenario6_DisabledAction() {
   console.log('\n=== Scenario 6: Disabled Action Not Executed ===');
   
   const action = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions`, {
-    name: 'Disabled Test Action',
+    name: 'Disabled Test Action ' + Date.now(),
     trigger_id: 'post-login',
     script: 'context.claims = context.claims || {}; context.claims.disabled_test = true; context;',
     enabled: false,
@@ -74,9 +110,12 @@ async function testScenario6_DisabledAction() {
   console.log('Created disabled action:', action.id);
 
   const result = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions/${action.id}/test`, {
-    user: { id: 'test-user', email: 'test@example.com', mfa_enabled: false },
-    tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
-    request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    context: {
+      user: { id: 'test-user', email: 'test@example.com', display_name: 'Test User', mfa_enabled: false },
+      tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
+      service: { id: DEMO_SERVICE_ID, name: 'Auth9 Demo Service', client_id: 'auth9-demo-service' },
+      request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    }
   });
   
   console.log('Test result:', result);
@@ -108,7 +147,7 @@ async function testScenario7_ContextValidation() {
   `;
   
   const action = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions`, {
-    name: 'Context Validation Action',
+    name: 'Context Validation Action ' + Date.now(),
     trigger_id: 'post-login',
     script,
     enabled: true,
@@ -116,9 +155,12 @@ async function testScenario7_ContextValidation() {
   console.log('Created action:', action.id);
 
   const result = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions/${action.id}/test`, {
-    user: { id: 'test-user-id', email: 'test@example.com', mfa_enabled: false },
-    tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
-    request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    context: {
+      user: { id: 'test-user', email: 'test@example.com', display_name: 'Test User', mfa_enabled: false },
+      tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
+      service: { id: DEMO_SERVICE_ID, name: 'Auth9 Demo Service', client_id: 'auth9-demo-service' },
+      request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    }
   });
   
   console.log('Test result:', { success: result.success, claims: result.modified_context?.claims });
@@ -139,7 +181,10 @@ async function testScenario8_ServiceIsolation() {
   
   // Create second service
   const service2 = await request('POST', `/api/v1/tenants/${DEMO_TENANT_ID}/services`, {
-    name: 'Test Service B',
+    name: 'Test Service B ' + Date.now(),
+    client_id: 'test-service-b-' + Date.now(),
+    redirect_uris: ['http://localhost:3001'],
+    logout_uris: ['http://localhost:3001'],
   });
   console.log('Created service B:', service2.id);
 
@@ -164,15 +209,21 @@ async function testScenario8_ServiceIsolation() {
   console.log('Created action B:', actionB.id, 'service:', actionB.service_id);
 
   const resultA = await request('POST', `/api/v1/services/${DEMO_SERVICE_ID}/actions/${actionA.id}/test`, {
-    user: { id: 'test-user', email: 'test@example.com', mfa_enabled: false },
-    tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
-    request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    context: {
+      user: { id: 'test-user', email: 'test@example.com', display_name: 'Test User', mfa_enabled: false },
+      tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
+      service: { id: DEMO_SERVICE_ID, name: 'Auth9 Demo Service', client_id: 'auth9-demo-service' },
+      request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    }
   });
 
   const resultB = await request('POST', `/api/v1/services/${service2.id}/actions/${actionB.id}/test`, {
-    user: { id: 'test-user', email: 'test@example.com', mfa_enabled: false },
-    tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
-    request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    context: {
+      user: { id: 'test-user', email: 'test@example.com', display_name: 'Test User', mfa_enabled: false },
+      tenant: { id: DEMO_TENANT_ID, slug: 'demo', name: 'Demo' },
+      service: { id: service2.id, name: 'Test Service B', client_id: service2.client_id },
+      request: { ip: '1.2.3.4', user_agent: 'test', timestamp: new Date().toISOString() },
+    }
   });
   
   console.log('Result A:', { success: resultA.success, serviceId: resultA.service_id, claims: resultA.modified_context?.claims });

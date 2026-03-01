@@ -63,7 +63,7 @@ export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
   return (
     <div className="px-3 py-2 mb-1">
       <DropdownMenu>
-        <DropdownMenuTrigger className="w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 min-h-[44px] hover:bg-[var(--surface-secondary)] transition-colors outline-none">
+        <DropdownMenuTrigger aria-label={`Switch organization, current: ${displayName}`} className="w-full flex items-center gap-2 text-sm rounded-lg px-2 py-1.5 min-h-[44px] hover:bg-[var(--surface-secondary)] transition-colors outline-none">
           <div className="w-6 h-6 rounded bg-[var(--accent-blue)] flex items-center justify-center text-white text-xs font-bold flex-shrink-0">
             {displayName.charAt(0).toUpperCase()}
           </div>
@@ -114,7 +114,7 @@ export function OrgSwitcher({ tenants, activeTenantId }: OrgSwitcherProps) {
 
 function ChevronDownIcon({ className }: { className?: string }) {
   return (
-    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+    <svg className={className} fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
     </svg>
   );

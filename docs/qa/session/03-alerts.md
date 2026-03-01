@@ -74,11 +74,33 @@ echo "Target user Keycloak ID: $KC_USER_ID"
 验证暴力破解检测和告警
 
 ### 测试操作流程
-1. 对同一账户连续尝试错误密码 10+ 次
+1. 对同一账户连续尝试错误密码 10+ 次（通过 Keycloak webhook 模拟）
+
+**API 模拟方式**（推荐，可重复执行）：
+```bash
+# 注意: ipAddress 必须在 JSON 顶层，而非 details 内部
+BODY='{"type":"LOGIN_ERROR","realmId":"auth9","userId":"50587266-c621-42d7-9d3d-8fc8e0ed00ef","ipAddress":"192.168.1.100","error":"invalid_user_credentials","time":'$(date +%s000)',"details":{"username":"target","email":"target@example.com","credentialType":"password"}}'
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+for i in $(seq 1 10); do
+  SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+  curl -s -o /dev/null -w "Event $i: HTTP %{http_code}\n" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+    -H "Content-Type: application/json" \
+    -H "x-keycloak-signature: sha256=$SIG" \
+    -d "$BODY"
+done
+```
 
 ### 预期结果
-- 触发暴力破解告警
+- 触发暴力破解告警（IP 级和/或账户级）
 - 告警出现在列表中
+
+### 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| 所有事件返回 204 但无告警 | `ipAddress` 放在 `details` 内部而非 JSON 顶层 | 将 `ipAddress` 移到顶层（与 `type`、`realmId` 同级） |
+| 事件返回 401/403 | HMAC 签名错误或密钥不匹配 | 检查 SECRET 与 Docker 环境的 `WEBHOOK_SECRET` 一致 |
+| 仅触发一次告警 | 10 次事件使用相同 payload 可能被去重 | 每次使用不同的 `time` 值（当前时间戳） |
 
 ### 预期数据状态
 ```sql

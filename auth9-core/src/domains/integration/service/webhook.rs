@@ -407,7 +407,7 @@ async fn deliver_webhook_with_status(
     }
 
     let (status_code, body) = client
-        .post(&webhook.url, headers, payload, Duration::from_secs(30))
+        .post(&webhook.url, headers, payload, Duration::from_secs(15))
         .await
         .map_err(|e| (None, e))?;
 

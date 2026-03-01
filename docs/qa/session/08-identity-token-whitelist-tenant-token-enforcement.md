@@ -152,6 +152,17 @@ curl -i -X POST "http://localhost:8080/api/v1/auth/tenant-token" \
 - 返回 `403 FORBIDDEN`
 - 错误信息指示 service 不属于请求 tenant（或等价语义）
 
+### 注意事项
+
+- **必须使用有明确 `tenant_id` 的服务**。`tenant_id=NULL` 的全局服务（如 `auth9-portal`）是平台级服务，设计上允许被任何租户使用，不适合此测试。
+- 推荐做法：先创建一个属于 tenant_b 的服务，然后用 tenant_a 的身份 exchange 该服务，应返回 403。
+
+### 故障排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| exchange 返回 200 而非 403 | 使用了 `tenant_id=NULL` 的全局服务（如 auth9-portal） | 换用有明确 `tenant_id` 且属于不同租户的服务 |
+
 ---
 
 ## 场景 5：Portal 切换 tenant 后旧 token 不应继续用于新 tenant 资源

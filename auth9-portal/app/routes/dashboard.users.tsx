@@ -798,6 +798,9 @@ export default function UsersPage() {
                 </div>
                 <Button type="submit">Add</Button>
               </Form>
+              {actionData && "error" in actionData && actionData.intent === "add_to_tenant" && (
+                <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
+              )}
             </div>
           </div>
         </DialogContent>

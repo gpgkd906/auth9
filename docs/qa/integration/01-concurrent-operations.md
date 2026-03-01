@@ -106,14 +106,18 @@ WHERE user_id = (SELECT id FROM users WHERE email = 'reset@example.com')
 - 租户中存在角色 `editor`
 - 存在用户 `user@example.com` 在该租户中
 - 准备 10 个并发请求，将同一角色分配给同一用户
+- **已获取 Tenant Access Token**（非 Identity Token）
+
+> **重要**：RBAC API 端点需要 **Tenant Access Token**。Identity Token 仅允许租户选择和 token exchange，使用 Identity Token 调用将返回 403 `"Identity token is only allowed for tenant selection and exchange"`。获取 Tenant Access Token 的方法参见 `scripts/qa/gen-access-token.js`。
 
 ### 目的
 验证系统避免重复分配相同权限
 
 ### 测试操作流程
-1. 使用 k6 发送 10 个并发请求：
+1. 使用 k6 发送 10 个并发请求（使用 **Tenant Access Token**）：
    ```bash
    POST /api/v1/tenants/{tenant_id}/users/{user_id}/roles
+   Authorization: Bearer {tenant_access_token}
    {
      "role_id": "{editor_role_id}"
    }
@@ -202,7 +206,7 @@ export default function() {
   let params = {
     headers: {
       'Content-Type': 'application/json',
-      'Authorization': 'Bearer YOUR_TOKEN',
+      'Authorization': 'Bearer YOUR_TENANT_ACCESS_TOKEN',  // Must be Tenant Access Token, NOT Identity Token
     },
   };
 

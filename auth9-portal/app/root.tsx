@@ -35,14 +35,14 @@ export const meta: MetaFunction = () => {
 export function Layout({ children }: { children: React.ReactNode }) {
   const nonce = useNonce();
   return (
-    <html lang="en" className="h-full">
+    <html lang="en" className="h-full" data-theme="light" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
         <Links />
-        {/* External script to prevent theme flash on page load */}
-        <script src="/theme-init.js" />
+        {/* Blocking script to prevent theme flash on page load */}
+        <script src="/theme-init.js" nonce={nonce} />
       </head>
       <body className="h-full antialiased">
         {children}

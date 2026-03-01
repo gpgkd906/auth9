@@ -159,10 +159,10 @@ export async function action({ request }: ActionFunctionArgs) {
     }
   } catch (error) {
     const message = error instanceof Error ? error.message : "Unknown error";
-    return Response.json({ error: message }, { status: 400 });
+    return { error: message, intent };
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  return { error: "Invalid intent", intent };
 }
 
 export default function RolesPage() {
@@ -593,7 +593,7 @@ export default function RolesPage() {
                 ))}
               </select>
             </div>
-            {actionData && "error" in actionData && (
+            {actionData && "error" in actionData && actionData.intent === "create_role" && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
@@ -641,7 +641,7 @@ export default function RolesPage() {
                 ))}
               </select>
             </div>
-            {actionData && "error" in actionData && (
+            {actionData && "error" in actionData && actionData.intent === "update_role" && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
@@ -679,7 +679,7 @@ export default function RolesPage() {
               <Label htmlFor="create-perm-description">Description</Label>
               <Input id="create-perm-description" name="description" placeholder="Allows reading user information" />
             </div>
-            {actionData && "error" in actionData && (
+            {actionData && "error" in actionData && actionData.intent === "create_permission" && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
@@ -718,14 +718,24 @@ export default function RolesPage() {
                 {managingPermissionsRole?.permissions.map((permission) => {
                   const isAssigned = managingPermissionsRole.rolePermissions.some(p => p.id === permission.id);
                   return (
-                    <label
+                    <div
                       key={permission.id}
+                      role="button"
+                      tabIndex={0}
                       className="flex items-start gap-3 p-3 rounded-lg border border-[var(--glass-border-subtle)] hover:bg-[var(--sidebar-item-hover)] cursor-pointer"
+                      onClick={() => togglePermission(permission.id, isAssigned)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault();
+                          togglePermission(permission.id, isAssigned);
+                        }
+                      }}
                     >
                       <Checkbox
                         checked={isAssigned}
-                        onCheckedChange={() => togglePermission(permission.id, isAssigned)}
+                        onCheckedChange={(checked) => togglePermission(permission.id, checked !== true)}
                         className="mt-0.5"
+                        onClick={(e) => e.stopPropagation()}
                       />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
@@ -741,7 +751,7 @@ export default function RolesPage() {
                       {isAssigned && (
                         <CheckIcon className="h-4 w-4 text-[var(--accent-green)] mt-0.5" />
                       )}
-                    </label>
+                    </div>
                   );
                 })}
               </div>

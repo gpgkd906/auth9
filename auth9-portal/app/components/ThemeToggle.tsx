@@ -11,7 +11,7 @@ export function ThemeToggle() {
         onClick={() => setTheme("light")}
         title="Light Mode"
         aria-label="Switch to light mode"
-        role="button"
+        tabIndex={0}
         data-testid="theme-light"
       >
         <SunIcon />
@@ -21,7 +21,7 @@ export function ThemeToggle() {
         onClick={() => setTheme("dark")}
         title="Dark Mode"
         aria-label="Switch to dark mode"
-        role="button"
+        tabIndex={0}
         data-testid="theme-dark"
       >
         <MoonIcon />

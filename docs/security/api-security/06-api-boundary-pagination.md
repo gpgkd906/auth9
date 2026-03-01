@@ -18,6 +18,8 @@
 ### 攻击目标
 验证批量接口是否存在一次请求触发过大计算或写放大。
 
+> **前置条件 - Token 类型**：本场景需要 **Tenant Access Token**（非 Identity Token）。Identity Token 仅允许租户选择和 token exchange，无法访问服务管理和批量操作端点。获取方式参见 `scripts/qa/gen-access-token.js`。
+
 ## 场景 3：边界条件下限流一致性
 ### 攻击目标
 验证超大分页或批量参数场景下限流仍有效。

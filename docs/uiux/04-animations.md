@@ -230,20 +230,32 @@ animatedElements.forEach((el, index) => {
 ```
 
 #### Animation Inspector
+
+**重要**: `.page-backdrop` 仅在 Dashboard 布局路由（`/dashboard/*`）中渲染。在登录页、首页等非 Dashboard 路由下不存在该元素。
+
 ```javascript
-// 获取动画对象
+// 获取动画对象 — 必须在 /dashboard/* 路由下执行
 const backdrop = document.querySelector('.page-backdrop');
-const animations = backdrop.getAnimations({ subtree: true });
-
-animations.forEach(anim => {
-  console.log('Animation:', anim.animationName);
-  console.log('Duration:', anim.effect.getTiming().duration);
-  console.log('Iterations:', anim.effect.getTiming().iterations);
-  console.log('Current time:', anim.currentTime);
-});
-
-// 预期: backdrop-shift, 20000ms, Infinity, [变化中]
+if (!backdrop) {
+  console.error('ERROR: .page-backdrop not found. Ensure you are on a /dashboard/* route.');
+} else {
+  const animations = backdrop.getAnimations({ subtree: true });
+  animations.forEach(anim => {
+    console.log('Animation:', anim.animationName);
+    console.log('Duration:', anim.effect.getTiming().duration);
+    console.log('Iterations:', anim.effect.getTiming().iterations);
+    console.log('Current time:', anim.currentTime);
+  });
+  // 预期: backdropShift, 20000ms, Infinity, [变化中]
+}
 ```
+
+#### 常见误报排查
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| `querySelector('.page-backdrop')` 返回 null | 未在 Dashboard 路由下执行 | 确保在 `/dashboard` 或其子路由下测试 |
+| 动画元素为 `::before` 伪元素，无法直接 query | 动画在 `.page-backdrop::before` 上 | 使用 `backdrop.getAnimations({ subtree: true })` |
+| 动画名为 `backdropShift` 而非 `backdrop-shift` | CSS keyframes 名称使用 camelCase | 预期 `backdropShift` |
 
 ---
 

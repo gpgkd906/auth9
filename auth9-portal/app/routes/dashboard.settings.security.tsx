@@ -225,13 +225,7 @@ export default function SecuritySettingsPage() {
                 <div className="space-y-2">
                   <h4 className="text-sm font-medium">Character requirements</h4>
                   <div className="grid gap-0 md:grid-cols-2">
-                    <div className="flex h-11 items-center justify-between gap-3">
-                      <Label htmlFor="requireUppercase">Require uppercase</Label>
-                      <input
-                        type="hidden"
-                        name="requireUppercase"
-                        value={policy.require_uppercase ? "true" : "false"}
-                      />
+                    <div className="flex h-11 items-center gap-3">
                       <Switch
                         id="requireUppercase"
                         defaultChecked={policy.require_uppercase}
@@ -242,15 +236,15 @@ export default function SecuritySettingsPage() {
                           if (input) input.value = checked ? "true" : "false";
                         }}
                       />
-                    </div>
-
-                    <div className="flex h-11 items-center justify-between gap-3">
-                      <Label htmlFor="requireLowercase">Require lowercase</Label>
                       <input
                         type="hidden"
-                        name="requireLowercase"
-                        value={policy.require_lowercase ? "true" : "false"}
+                        name="requireUppercase"
+                        value={policy.require_uppercase ? "true" : "false"}
                       />
+                      <Label htmlFor="requireUppercase">Require uppercase</Label>
+                    </div>
+
+                    <div className="flex h-11 items-center gap-3">
                       <Switch
                         id="requireLowercase"
                         defaultChecked={policy.require_lowercase}
@@ -261,15 +255,15 @@ export default function SecuritySettingsPage() {
                           if (input) input.value = checked ? "true" : "false";
                         }}
                       />
-                    </div>
-
-                    <div className="flex h-11 items-center justify-between gap-3">
-                      <Label htmlFor="requireNumbers">Require numbers</Label>
                       <input
                         type="hidden"
-                        name="requireNumbers"
-                        value={policy.require_numbers ? "true" : "false"}
+                        name="requireLowercase"
+                        value={policy.require_lowercase ? "true" : "false"}
                       />
+                      <Label htmlFor="requireLowercase">Require lowercase</Label>
+                    </div>
+
+                    <div className="flex h-11 items-center gap-3">
                       <Switch
                         id="requireNumbers"
                         defaultChecked={policy.require_numbers}
@@ -280,15 +274,15 @@ export default function SecuritySettingsPage() {
                           if (input) input.value = checked ? "true" : "false";
                         }}
                       />
-                    </div>
-
-                    <div className="flex h-11 items-center justify-between gap-3">
-                      <Label htmlFor="requireSymbols">Require symbols</Label>
                       <input
                         type="hidden"
-                        name="requireSymbols"
-                        value={policy.require_symbols ? "true" : "false"}
+                        name="requireNumbers"
+                        value={policy.require_numbers ? "true" : "false"}
                       />
+                      <Label htmlFor="requireNumbers">Require numbers</Label>
+                    </div>
+
+                    <div className="flex h-11 items-center gap-3">
                       <Switch
                         id="requireSymbols"
                         defaultChecked={policy.require_symbols}
@@ -299,6 +293,12 @@ export default function SecuritySettingsPage() {
                           if (input) input.value = checked ? "true" : "false";
                         }}
                       />
+                      <input
+                        type="hidden"
+                        name="requireSymbols"
+                        value={policy.require_symbols ? "true" : "false"}
+                      />
+                      <Label htmlFor="requireSymbols">Require symbols</Label>
                     </div>
                   </div>
                 </div>

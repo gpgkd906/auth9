@@ -72,6 +72,25 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}';
 | 对话框显示 "not found" | 目标用户无 Keycloak 账户 | 确认用户是通过正常注册流程创建的，非直接插入 DB |
 | 对话框关闭但状态未变 | 页面重新加载延迟 | 等待 1-2 秒或手动刷新页面后检查 |
 | 无任何响应 | accessToken 缺失（session 过期） | 重新登录后再试 |
+| API 返回 403 "Identity token is only allowed..." | 手动 API 测试使用了 Identity Token | **必须使用 Tenant Access Token**（`node scripts/qa/gen-access-token.js` 生成） |
+| API 返回 405 Method Not Allowed | 手动 API 测试使用了错误的 HTTP 方法 | **启用 MFA 使用 POST，禁用使用 DELETE**（不是 PUT） |
+
+### 手动 API 测试参考
+
+```bash
+# 启用 MFA (POST, 需要 Tenant Access Token)
+TOKEN=$(node scripts/qa/gen-access-token.js)
+curl -X POST "http://localhost:8080/api/v1/users/{user_id}/mfa" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"confirm_password":"your-admin-password"}'  # pragma: allowlist secret
+
+# 禁用 MFA (DELETE, 需要 Tenant Access Token)
+curl -X DELETE "http://localhost:8080/api/v1/users/{user_id}/mfa" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"confirm_password":"your-admin-password"}'  # pragma: allowlist secret
+```
 
 ### 预期数据状态
 ```sql

@@ -546,11 +546,28 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         Some(cache_manager.clone()),
     ));
 
-    // Load encryption key for settings (optional)
-    let encryption_key = EncryptionKey::from_env().ok();
-    if encryption_key.is_none() {
-        info!("SETTINGS_ENCRYPTION_KEY not set, sensitive settings will not be encrypted");
-    }
+    // Load encryption key for settings (optional, but must be valid if set)
+    let encryption_key = match std::env::var("SETTINGS_ENCRYPTION_KEY") {
+        Ok(encoded) if encoded.is_empty() => {
+            info!("SETTINGS_ENCRYPTION_KEY is empty, sensitive settings will not be encrypted");
+            None
+        }
+        Ok(encoded) => {
+            let key = EncryptionKey::from_base64(&encoded).unwrap_or_else(|e| {
+                panic!(
+                    "SETTINGS_ENCRYPTION_KEY is set but invalid: {e}. \
+                     Key must be exactly 32 bytes, base64-encoded (44 characters). \
+                     Generate one with: openssl rand -base64 32"
+                )
+            });
+            info!("Encryption key loaded, sensitive settings will be encrypted");
+            Some(key)
+        }
+        Err(_) => {
+            info!("SETTINGS_ENCRYPTION_KEY not set, sensitive settings will not be encrypted");
+            None
+        }
+    };
 
     // Create Keycloak sync service (shared between branding and system settings)
     let keycloak_updater: Arc<

@@ -75,6 +75,14 @@
 - 列表中出现 Google 提供商
 - 状态显示为启用
 
+### Troubleshooting
+
+| 现象 | 原因 | 解决方法 |
+|------|------|----------|
+| "Add provider" 按钮无反应 | 未选择 Provider 类型或必填字段未填写时按钮处于 disabled 状态 | 确认已点击 Provider 类型卡片（应显示蓝色高亮边框），并填写 Client ID、Client Secret 等必填字段 |
+| API 返回 403 "Identity token is only allowed..." | 使用了 Identity Token 调用 API | Portal UI 会自动使用正确的 Token；若直接调用 API，需使用 Tenant Access Token |
+| 对话框无任何错误提示 | 后端返回错误但前端可能未正确展示 | 检查浏览器 Network 面板查看 API 响应状态码和内容 |
+
 ### 预期数据状态
 ```sql
 -- Keycloak Admin API 验证

@@ -29,6 +29,7 @@
 
 ### 前置条件
 - HTTP 端点可访问
+- **HSTS 注意事项**：HSTS 头仅在 HTTPS 连接下发送（设计如此）。本地开发环境默认使用 HTTP，因此 HSTS 头不会出现。auth9-core 中 HSTS 在 `ENVIRONMENT=production` 时默认启用，也可通过 `HSTS_ENABLED=true` 强制开启。auth9-portal 中 HSTS 仅在检测到 `X-Forwarded-Proto: https` 或 `https:` URL 时添加。
 
 ### 攻击目标
 验证必需的安全头是否配置

@@ -145,7 +145,7 @@ function CodeBlock({ children, label }: { children: string; label?: string }) {
             <Button
                 variant="ghost"
                 size="icon"
-                className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity text-[#8b949e] hover:text-white hover:bg-[#30363d]"
+                className="absolute top-2 right-2 h-11 w-11 sm:h-7 sm:w-7 opacity-0 group-hover:opacity-100 transition-opacity text-[#8b949e] hover:text-white hover:bg-[#30363d]"
                 onClick={handleCopy}
             >
                 {copied ? <span className="text-xs text-[var(--accent-green)]">&#10003;</span> : <CopyIcon className="h-3.5 w-3.5" />}
@@ -882,7 +882,7 @@ export default function ServiceDetailPage() {
                                                             <Button
                                                                 variant="ghost"
                                                                 size="icon"
-                                                                className="h-6 w-6 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
+                                                                className="h-11 w-11 sm:h-6 sm:w-6 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)]"
                                                                 onClick={() => handleCopy(client.client_id, `client-${client.id}`)}
                                                                 title="Copy Client ID"
                                                             >
