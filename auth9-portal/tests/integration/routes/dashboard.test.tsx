@@ -35,6 +35,12 @@ vi.mock("~/services/session.server", () => ({
     commitSession: vi.fn(),
     setActiveTenant: vi.fn(),
     requireAuthWithUpdate: vi.fn(),
+    requireTenantAuthWithUpdate: vi.fn(),
+    NO_STORE_HEADERS: {
+        "Cache-Control": "no-store, no-cache, must-revalidate, private",
+        Pragma: "no-cache",
+        Expires: "0",
+    },
 }));
 
 const mockUser = {
@@ -102,21 +108,23 @@ function createDashboardStub(currentUser = mockUser) {
 }
 
 // Import mocked modules for setup
-import { requireAuthWithUpdate, commitSession } from "~/services/session.server";
+import { requireTenantAuthWithUpdate } from "~/services/session.server";
 
 describe("Dashboard Layout", () => {
     beforeEach(() => {
         vi.clearAllMocks();
-        vi.mocked(requireAuthWithUpdate).mockResolvedValue({
+        vi.mocked(requireTenantAuthWithUpdate).mockResolvedValue({
             session: {
                 accessToken: "test-token",
+                identityAccessToken: "test-token",
                 refreshToken: "test-refresh-token",
                 idToken: "test-id-token",
                 expiresAt: Date.now() + 3600000,
+                activeTenantId: "tenant-1",
+                tenantAccessToken: "test-tenant-token",
             },
             headers: undefined,
         });
-        vi.mocked(commitSession).mockResolvedValue("mocked-cookie");
         vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: mockTenantData });
     });
 
@@ -177,19 +185,14 @@ describe("Dashboard Layout", () => {
         }
     });
 
-    it("loader redirects to /onboard when user has no tenants", async () => {
+    it("loader returns empty tenants when API returns empty list", async () => {
         vi.mocked(userApi.getMe).mockResolvedValue({ data: mockUser });
         vi.mocked(userApi.getMyTenants).mockResolvedValue({ data: [] });
 
         const request = new Request("http://localhost/dashboard");
-        try {
-            await loader({ request, params: {}, context: {} });
-            expect.fail("Should have thrown redirect");
-        } catch (response) {
-            expect(response).toBeInstanceOf(Response);
-            expect((response as Response).status).toBe(302);
-            expect((response as Response).headers.get("Location")).toBe("/onboard");
-        }
+        const result = await loader({ request, params: {}, context: {} });
+        const data = result instanceof Response ? await result.json() : result;
+        expect(data.tenants).toHaveLength(0);
     });
 
     // ============================================================================
