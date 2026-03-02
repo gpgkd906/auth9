@@ -94,6 +94,13 @@ services:
       ACTION_ALLOWED_DOMAINS: "httpbin.org,api.github.com,jsonplaceholder.typicode.com"
       # Branding - allowed domains for logo/favicon URLs
       BRANDING_ALLOWED_DOMAINS: "cdn.example.com,assets.example.com"
+      # Production Security
+      ENVIRONMENT: production
+      JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: auth9-portal
+      AUTH9_PORTAL_CLIENT_ID: auth9-portal
+      HSTS_ENABLED: "true"
+      HSTS_HTTPS_ONLY: "true"
+      HSTS_TRUST_X_FORWARDED_PROTO: "true"
     depends_on:
       auth9-init:
         condition: service_completed_successfully
