@@ -126,7 +126,9 @@ curl -i http://localhost:8080/api/v1/tenants/{tenant_id}/users \
 ```
 
 ### 预期结果
-- 调用 `/api/v1/tenants` 返回 `200 OK`，**但仅包含用户自己所属的 tenant**（不是全部 tenant）
+- 调用 `/api/v1/tenants` 返回 `200 OK`，**仅包含用户自己所属的 tenant**（`UserMemberships` 模式过滤）
+  > **注意**: 如果测试用户（如 admin）属于所有 tenant，则返回的 tenant 数量等于全部 tenant 数量，这是预期行为。
+  > 验证方法：对比 `/api/v1/tenants` 的返回数量与 `SELECT COUNT(*) FROM tenant_users WHERE user_id = '{user_id}'` 的结果，两者应一致。
 - 调用 `/api/v1/users/me/tenants` 返回 `200 OK`（返回相同数据）
 - 调用 tenant-scope 业务接口（如 `/api/v1/tenants/{id}/users`）返回 `403 FORBIDDEN`（需要 TenantAccess Token）
 

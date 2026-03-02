@@ -43,8 +43,8 @@
 
 ### 预期视觉效果
 **切换按钮外观**：
-- 位置：`fixed top-6 right-6`（右上角）
-- 容器：玻璃效果背景，圆角 12px
+- 位置：侧边栏或导航区域内
+- 容器：`var(--surface-secondary)` 背景 + `var(--glass-border-subtle)` 边框，圆角 8px
 - 两个图标按钮：SunIcon（Light）和 MoonIcon（Dark）
 - 激活状态：蓝色淡背景 + 蓝色图标
 - 非激活状态：透明背景 + 灰色图标

@@ -1,5 +1,5 @@
 // 测试createMockToken功能
-import { createMockToken, createMockAuth9 } from "./sdk/packages/node/dist/testing.js";
+import { createMockToken, createMockAuth9 } from "../../sdk/packages/node/dist/testing.js";
 
 async function testCreateMockToken() {
   console.log("=== 场景3：createMockToken测试 ===\n");

@@ -656,9 +656,10 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
             // `new Array(10M)` can request memory exceeding the current limit in one
             // shot, so a generous first bump prevents V8 from invoking its fatal OOM
             // handler which aborts the process). On subsequent calls, bump by 5MB
-            // (up to 5 times) so V8 can complete GC and termination cleanup.
+            // so V8 can complete GC and termination cleanup.
+            // CRITICAL: The callback MUST always return a value > current_limit,
+            // otherwise V8 invokes its fatal OOM handler which aborts the process.
             const HEAP_BUMP_BYTES: usize = 5 * 1024 * 1024; // 5MB
-            const MAX_HEAP_BUMPS: u32 = 5;
             let heap_handle = isolate_handle;
             let heap_callback_count = Rc::new(std::cell::Cell::new(0u32));
             let heap_callback_count_clone = heap_callback_count.clone();
@@ -674,10 +675,8 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     );
                     heap_handle.terminate_execution();
                     current_limit + initial_limit
-                } else if count <= MAX_HEAP_BUMPS {
-                    current_limit + HEAP_BUMP_BYTES
                 } else {
-                    current_limit
+                    current_limit + HEAP_BUMP_BYTES
                 }
             });
 

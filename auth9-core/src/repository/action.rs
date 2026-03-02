@@ -408,6 +408,9 @@ impl ActionRepository for ActionRepositoryImpl {
         if filter.action_id.is_some() {
             conditions.push("action_id = ?");
         }
+        if filter.trigger_id.is_some() {
+            conditions.push("trigger_id = ?");
+        }
         if filter.user_id.is_some() {
             conditions.push("user_id = ?");
         }
@@ -438,6 +441,9 @@ impl ActionRepository for ActionRepositoryImpl {
 
         if let Some(action_id) = filter.action_id {
             query = query.bind(action_id);
+        }
+        if let Some(ref trigger_id) = filter.trigger_id {
+            query = query.bind(trigger_id);
         }
         if let Some(user_id) = filter.user_id {
             query = query.bind(user_id);
@@ -470,6 +476,9 @@ impl ActionRepository for ActionRepositoryImpl {
         if filter.action_id.is_some() {
             conditions.push("action_id = ?");
         }
+        if filter.trigger_id.is_some() {
+            conditions.push("trigger_id = ?");
+        }
         if filter.user_id.is_some() {
             conditions.push("user_id = ?");
         }
@@ -491,6 +500,9 @@ impl ActionRepository for ActionRepositoryImpl {
 
         if let Some(action_id) = filter.action_id {
             query = query.bind(action_id);
+        }
+        if let Some(ref trigger_id) = filter.trigger_id {
+            query = query.bind(trigger_id);
         }
         if let Some(user_id) = filter.user_id {
             query = query.bind(user_id);

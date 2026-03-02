@@ -254,7 +254,7 @@ curl -b "session_2.txt" http://localhost:3000/dashboard
 ```
 
 ### 修复建议
-- 默认限制 5 个并发 Session
+- 默认限制 10 个并发 Session（`MAX_SESSIONS_PER_USER = 10`）
 - 提供 Session 管理界面
 - 新登录时通知其他 Session
 - 敏感操作可强制单 Session
@@ -280,9 +280,9 @@ curl -b "session_2.txt" http://localhost:3000/dashboard
 | HttpOnly | true | 防止 XSS 窃取 |
 | Secure | true | 仅 HTTPS |
 | SameSite | Strict/Lax | 防止 CSRF |
-| 空闲超时 | 15-30 分钟 | 不活动后过期 |
+| 空闲超时 | 8 小时 (28800s) | Portal session 超时（`session.server.ts`）|
 | 绝对超时 | 8-24 小时 | 最大生存期 |
-| 并发限制 | 5 | 每用户最大 Session |
+| 并发限制 | 10 | 每用户最大 Session（`session.rs:MAX_SESSIONS_PER_USER`）|
 
 ---
 

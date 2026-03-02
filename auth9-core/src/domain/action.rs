@@ -292,6 +292,7 @@ pub struct TestActionResponse {
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 pub struct LogQueryFilter {
     pub action_id: Option<StringUuid>,
+    pub trigger_id: Option<String>,
     pub user_id: Option<StringUuid>,
     pub success: Option<bool>,
     pub from: Option<DateTime<Utc>>,

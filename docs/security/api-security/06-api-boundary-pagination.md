@@ -14,6 +14,8 @@
 ### 攻击目标
 验证 `page/per_page/limit` 超界、负值、非数字时的处理。
 
+> **已实现的防护**: `PaginationQuery` 的 `deserialize_per_page` 会自动将 `per_page` 截断至 `MAX_PER_PAGE`（当前为 100）。`per_page < 1` 会返回验证错误。因此 `per_page=99999999` 会被服务端截断为 100，响应中 `pagination.per_page` 显示为 100。测试时应验证截断行为是否生效，而非期望服务端返回错误。
+
 ## 场景 2：批量请求放大
 ### 攻击目标
 验证批量接口是否存在一次请求触发过大计算或写放大。

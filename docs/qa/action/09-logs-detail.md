@@ -19,9 +19,10 @@
 
 ### 预期结果（Portal UI）
 - 显示完整错误堆栈（如果有）
-- 显示执行上下文快照（如果记录）
 - 显示执行时长
 - 显示用户信息（如果有）
+
+> **注意**: 执行上下文快照（context_snapshot）当前未实现，`action_executions` 表不包含此字段。
 
 ### 预期数据状态
 ```sql
@@ -126,7 +127,9 @@ WHERE TABLE_SCHEMA = 'auth9' AND TABLE_NAME = 'action_executions';
 
 ### 2. 无效筛选参数
 - **操作**: 使用无效的 user_id 或 action_id
-- **预期**: 返回空数组，不报错
+- **预期**:
+  - 无效 `user_id`: 返回空数组（按 user_id 过滤，无匹配记录）
+  - 无效 `action_id`: 返回 `404 Not Found`（系统会验证 action 是否存在且属于当前 service，不存在时返回错误而非空数组）
 
 ### 3. 超大 limit 参数
 - **操作**: `limit=10000`

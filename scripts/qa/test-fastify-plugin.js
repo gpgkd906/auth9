@@ -1,5 +1,5 @@
 // 测试Fastify插件
-import { auth9Plugin } from "./sdk/packages/node/dist/middleware/fastify.js";
+import { auth9Plugin } from "../../sdk/packages/node/dist/middleware/fastify.js";
 
 // 创建模拟的Fastify实例
 class MockFastify {

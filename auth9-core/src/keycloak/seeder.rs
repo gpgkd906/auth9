@@ -822,9 +822,9 @@ impl KeycloakSeeder {
         Ok(())
     }
 
-    /// Reset admin user password.
-    /// Accepts an explicit password to avoid regenerating a different random password
-    /// when AUTH9_ADMIN_PASSWORD is not set.
+    /// Reset admin user password, temporarily clearing password policy if active.
+    /// Keycloak 23's reset-password endpoint returns 400 when a password policy is
+    /// active, so we must temporarily clear it before setting the password.
     async fn reset_admin_password(
         &self,
         token: &str,
@@ -839,6 +839,38 @@ impl KeycloakSeeder {
                 &owned_password
             }
         };
+
+        // Check if realm has an active password policy; if so, temporarily clear it
+        let realm_url = format!("{}/admin/realms/{}", self.config.url, self.config.realm);
+        let realm_response = self
+            .http_client
+            .get(&realm_url)
+            .bearer_auth(token)
+            .send()
+            .await
+            .context("Failed to get realm for password reset")?;
+
+        let original_policy: Option<String> = if realm_response.status().is_success() {
+            let realm: serde_json::Value = realm_response.json().await.unwrap_or_default();
+            realm["passwordPolicy"]
+                .as_str()
+                .filter(|p| !p.is_empty())
+                .map(|p| p.to_string())
+        } else {
+            None
+        };
+
+        if original_policy.is_some() {
+            let clear_body = serde_json::json!({ "passwordPolicy": "" });
+            let _ = self
+                .http_client
+                .put(&realm_url)
+                .bearer_auth(token)
+                .json(&clear_body)
+                .send()
+                .await;
+        }
+
         let url = format!(
             "{}/admin/realms/{}/users/{}/reset-password",
             self.config.url, self.config.realm, user_uuid
@@ -850,7 +882,7 @@ impl KeycloakSeeder {
             "temporary": false,
         });
 
-        let response = self
+        let result = self
             .http_client
             .put(&url)
             .bearer_auth(token)
@@ -859,14 +891,25 @@ impl KeycloakSeeder {
             .await
             .context("Failed to reset admin password")?;
 
-        if response.status().is_success() {
+        // Restore password policy before checking result
+        if let Some(ref policy) = original_policy {
+            let restore_body = serde_json::json!({ "passwordPolicy": policy });
+            let _ = self
+                .http_client
+                .put(&realm_url)
+                .bearer_auth(token)
+                .json(&restore_body)
+                .send()
+                .await;
+        }
+
+        if result.status().is_success() {
             info!("Reset admin user password");
         } else {
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
+            let status = result.status();
+            let body = result.text().await.unwrap_or_default();
             anyhow::bail!(
-                "Failed to reset admin password: {} - {}. \
-                 Ensure this is called BEFORE applying password policy.",
+                "Failed to reset admin password: {} - {}",
                 status,
                 body
             );

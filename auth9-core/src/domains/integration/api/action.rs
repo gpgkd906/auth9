@@ -366,17 +366,19 @@ pub async fn query_action_logs<S: HasServices>(
         None
     };
 
-    let per_page = params.limit.unwrap_or(50) as i64;
+    let capped_limit = params.limit.map(|l| l.min(1000)).unwrap_or(50);
+    let per_page = capped_limit as i64;
     let offset = params.offset.unwrap_or(0) as i64;
     let page = offset / per_page + 1;
 
     let filter = LogQueryFilter {
         action_id,
+        trigger_id: params.trigger_id,
         user_id,
         success: params.success,
         from: params.from,
         to: params.to,
-        limit: params.limit,
+        limit: Some(capped_limit),
         offset: params.offset,
     };
 
@@ -503,6 +505,7 @@ pub struct TestActionRequest {
 #[derive(Debug, Deserialize)]
 pub struct LogQueryParams {
     pub action_id: Option<String>,
+    pub trigger_id: Option<String>,
     pub user_id: Option<String>,
     pub success: Option<bool>,
     pub from: Option<chrono::DateTime<chrono::Utc>>,

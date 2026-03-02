@@ -1,8 +1,8 @@
 // ESM导入测试
-import { Auth9, TokenVerifier } from "./sdk/packages/node/dist/index.js";
-import { auth9Middleware } from "./sdk/packages/node/dist/middleware/express.js";
-import { createMockToken } from "./sdk/packages/node/dist/testing.js";
-import { Auth9HttpClient, toSnakeCase } from "./sdk/packages/core/dist/index.js";
+import { Auth9, TokenVerifier } from "../../sdk/packages/node/dist/index.js";
+import { auth9Middleware } from "../../sdk/packages/node/dist/middleware/express.js";
+import { createMockToken } from "../../sdk/packages/node/dist/testing.js";
+import { Auth9HttpClient, toSnakeCase } from "../../sdk/packages/core/dist/index.js";
 
 console.log("=== ESM导入测试 ===");
 

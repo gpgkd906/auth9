@@ -59,13 +59,24 @@ SELECT last_triggered_at FROM webhooks WHERE id = '{webhook_id}';
 ### 初始状态
 - 存在启用的 Webhook，订阅了 `user.created` 事件
 - 目标服务器准备接收请求
+- **已获取有效的 Tenant Access Token**（Identity Token 无法访问用户创建端点）
 
 ### 目的
 验证用户创建时 Webhook 被正确触发
 
 ### 测试操作流程
-1. 创建新用户
-2. 检查目标服务器收到的请求
+1. 获取 Tenant Access Token（参见 `scripts/qa/gen-access-token.js`）
+2. 通过 API 创建新用户：
+   ```bash
+   curl -s -X POST -H "Authorization: Bearer $ACCESS_TOKEN" \
+     -H "Content-Type: application/json" \
+     http://localhost:8080/api/v1/users \
+     -d '{"email":"webhook-test@example.com","display_name":"Webhook Test","password":"Test123456!"}' # pragma: allowlist secret
+   # 预期: 201 Created
+   ```
+3. 检查目标服务器收到的请求
+
+> **常见失败原因**: 422 Validation Error 通常因为缺少必填字段 `email`、密码不符合策略（需大小写+数字+特殊字符+至少 8 位）、或邮箱格式无效。
 
 ### 预期结果
 - 目标服务器收到 POST 请求

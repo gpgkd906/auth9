@@ -195,6 +195,7 @@ fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
         // Platform admin endpoints use identity tokens (admin email check in handler)
         || path.starts_with("/api/v1/system/")
         || path.starts_with("/api/v1/security/")
+        || path.starts_with("/api/v1/admin/")
         // Tenant list (GET /api/v1/tenants) allowed for Identity Token — handler returns
         // only user's own memberships via resolve_tenant_list_mode_with_state.
         // Tenant create (POST) and delete (DELETE) require platform admin Identity token.

@@ -53,17 +53,21 @@ ORDER BY executed_at DESC LIMIT 1;
 - 存在 Action，但 enabled = false
 
 ### 目的
-验证禁用的 Action 不会执行
+验证禁用的 Action 在生产触发流程中不会执行
 
 ### 测试操作流程
 1. 禁用某个 post-login Action
-2. 登录
+2. **通过登录流程触发**（不是 `/test` 端点）
 3. 验证该 Action 未执行
 
 ### 预期结果
 - 登录成功
 - Token 不包含该 Action 添加的 claims
 - 执行日志中没有该 Action 的新记录
+
+> **注意**: `/test` 端点（`POST /api/v1/services/{service_id}/actions/{action_id}/test`）
+> 是开发者调试工具，**设计上不检查 `enabled` 状态**，即使 Action 被禁用也会执行脚本。
+> 验证禁用行为必须通过实际登录触发流程（trigger）进行。
 
 ### 预期数据状态
 ```sql

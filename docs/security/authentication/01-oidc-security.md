@@ -131,29 +131,36 @@ scope=openid"
 
 ### 预期安全行为
 - 缺少 state 参数应返回错误
-- state 应为随机不可预测值
-- state 应绑定用户会话
+- **服务端生成的 OIDC state nonce（UUID v4）应为随机不可预测值**
+- state 应绑定用户会话（通过 Redis 存储与 GETDEL 消费）
 - 回调时验证 state 一致性
+
+> **实现说明**: Auth9 采用服务端 state 管理模式。客户端传入的 `state` 参数仅作为
+> `original_state` 存入 Redis payload 并在回调后原样回传。实际发送给 Keycloak 的
+> `state` 是服务端生成的 UUID v4 nonce，具备足够的随机性和不可预测性。
+> Redis GETDEL 确保每个 state nonce 只能使用一次（防重放），TTL 为 300 秒。
+> 因此，即使客户端传入可预测的 state 值，也不影响 CSRF 防护的安全性。
 
 ### 验证方法
 ```bash
-# 不带 state 的请求
+# 不带 state 的请求 - 应返回 400
 curl -v "http://localhost:8080/api/v1/auth/authorize?\
 client_id=auth9-portal&\
 redirect_uri=http://localhost:3000/callback&\
 response_type=code&\
 scope=openid"
-# 检查是否强制要求 state
 
-# 检查 state 熵值
-# state 应至少 128 位随机数
+# 验证重定向 URL 中的 state 参数是 UUID v4 格式（服务端生成）
+curl -v "http://localhost:8080/api/v1/auth/authorize?\
+client_id=auth9-portal&\
+redirect_uri=http://localhost:3000/auth/callback&\
+response_type=code&\
+scope=openid&\
+state=test-csrf"
+# 检查 Location header 中 state= 的值为 UUID v4（非客户端传入的值）
+
+# 验证 state 不可重放 - 同一 state 值回调两次应失败
 ```
-
-### 修复建议
-- 强制要求 state 参数
-- 使用 CSPRNG 生成至少 128 位随机值
-- 将 state 与 session 绑定
-- 验证回调时的 state 匹配
 
 ---
 

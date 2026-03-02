@@ -141,15 +141,16 @@ curl -H "Authorization: Bearer $ADMIN_TOKEN" \
 ## 场景 3：强制登出机制
 
 ### 前置条件
-- 管理员权限
+- Platform Admin 权限（`config.platform_admin_emails` 中的邮箱）
 - 目标用户活跃 Session
+- **Token 类型**: Identity Token 或 Tenant Access Token 均可（`/api/v1/admin/` 路径已加入 identity token 白名单）
 
 ### 攻击目标
 验证管理员强制登出功能
 
 ### 攻击步骤
 1. 用户正常登录
-2. 管理员执行强制登出
+2. 管理员使用 Platform Admin token 执行强制登出
 3. 检查用户 Session 状态
 4. 验证用户需要重新登录
 

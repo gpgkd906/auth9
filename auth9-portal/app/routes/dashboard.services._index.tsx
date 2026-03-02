@@ -180,7 +180,7 @@ export default function ServicesPage() {
                 key={service.id}
                 className="h-full rounded-[20px] border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-5 flex flex-col gap-3"
               >
-                <div className="flex items-start justify-between gap-2">
+                <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-base font-semibold text-[var(--text-primary)]" title={service.name}>
                       {service.name}

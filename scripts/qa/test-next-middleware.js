@@ -1,4 +1,4 @@
-import { auth9Middleware } from "./sdk/packages/node/dist/middleware/next.js";
+import { auth9Middleware } from "../../sdk/packages/node/dist/middleware/next.js";
 
 // 模拟TokenVerifier
 class MockTokenVerifier {
@@ -22,7 +22,7 @@ class MockTokenVerifier {
 }
 
 // 替换TokenVerifier
-import { TokenVerifier } from "./sdk/packages/node/dist/index.js";
+import { TokenVerifier } from "../../sdk/packages/node/dist/index.js";
 const originalTokenVerifier = TokenVerifier;
 global.TokenVerifier = MockTokenVerifier;
 
