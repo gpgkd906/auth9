@@ -5,7 +5,7 @@ use crate::cache::CacheOperations;
 use crate::domain::{SessionInfo, StringUuid};
 use crate::error::AppError;
 use crate::middleware::auth::AuthUser;
-use crate::policy::{enforce, PolicyAction, PolicyInput, ResourceScope};
+use crate::policy::{enforce_with_state, PolicyAction, PolicyInput, ResourceScope};
 use crate::state::{HasCache, HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, State},
@@ -106,14 +106,15 @@ pub async fn force_logout_user<S: HasSessionManagement + HasServices + HasCache>
     auth: AuthUser,
     Path(user_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<RevokeSessionsResponse>>, AppError> {
-    enforce(
-        state.config(),
+    enforce_with_state(
+        &state,
         &auth,
         &PolicyInput {
             action: PolicyAction::SessionForceLogout,
             scope: ResourceScope::User(user_id),
         },
-    )?;
+    )
+    .await?;
 
     // Collect active session IDs before revoking so we can blacklist them
     let active_sessions = state
@@ -172,14 +173,15 @@ pub async fn list_user_sessions<S: HasSessionManagement + HasServices>(
     auth: AuthUser,
     Path(user_id): Path<StringUuid>,
 ) -> Result<Json<SuccessResponse<Vec<SessionInfo>>>, AppError> {
-    enforce(
-        state.config(),
+    enforce_with_state(
+        &state,
         &auth,
         &PolicyInput {
             action: PolicyAction::SessionForceLogout,
             scope: ResourceScope::User(user_id),
         },
-    )?;
+    )
+    .await?;
 
     let sessions = state
         .session_service()

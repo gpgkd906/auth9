@@ -139,11 +139,19 @@ impl<
     pub async fn create(&self, keycloak_id: &str, input: CreateUserInput) -> Result<User> {
         input.validate()?;
 
-        // Check for duplicate keycloak_id (not email — multiple IdP users may share an email)
+        // Check for duplicate keycloak_id
         if self.repo.find_by_keycloak_id(keycloak_id).await?.is_some() {
             return Err(AppError::Conflict(format!(
                 "User with keycloak_id '{}' already exists",
                 keycloak_id
+            )));
+        }
+
+        // Check for duplicate email
+        if self.repo.find_by_email(&input.email).await?.is_some() {
+            return Err(AppError::Conflict(format!(
+                "User with email '{}' already exists",
+                input.email
             )));
         }
 
@@ -579,6 +587,10 @@ mod tests {
 
         mock.expect_find_by_keycloak_id()
             .with(eq("kc-123"))
+            .returning(|_| Ok(None));
+
+        mock.expect_find_by_email()
+            .with(eq("test@example.com"))
             .returning(|_| Ok(None));
 
         mock.expect_create().returning(|keycloak_id, input| {

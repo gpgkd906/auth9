@@ -94,7 +94,7 @@ pub async fn require_auth_middleware(
         session_id = Some(claims.sub.clone());
         Some("service_client")
     } else if let Ok(claims) = auth_state.jwt_manager.verify_identity_token(token) {
-        session_id = claims.sid.clone();
+        session_id = claims.sid.clone().or_else(|| Some(claims.sub.clone()));
         Some("identity")
     } else if !auth_state.tenant_access_allowed_audiences.is_empty() {
         if let Ok(claims) = auth_state

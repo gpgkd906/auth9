@@ -2,7 +2,7 @@ import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, useSearchParams, useOutletContext } from "react-router";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role, type TenantUserWithTenant } from "~/services/api";
-import { getAccessToken } from "~/services/session.server";
+import { getAccessToken, getSession, destroySession } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
 import { FormattedDate } from "~/components/ui/formatted-date";
 
@@ -144,6 +144,16 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "force_logout") {
       const id = formData.get("id") as string;
       await sessionApi.forceLogoutUser(id, accessToken || undefined);
+      // Check if admin force-logged out themselves by verifying the token is still valid
+      try {
+        await userApi.getMe(accessToken || undefined);
+      } catch {
+        // Token was revoked (self-logout) — clear session and redirect to login
+        const session = await getSession(request);
+        const cookie = session ? await destroySession(session) : undefined;
+        const { redirect } = await import("react-router");
+        throw redirect("/login", cookie ? { headers: { "Set-Cookie": cookie } } : undefined);
+      }
       return { success: true, intent };
     }
 
@@ -624,7 +634,7 @@ export default function UsersPage() {
           setCreateEmailValue("");
         }
       }}>
-        <DialogContent>
+        <DialogContent aria-modal="true">
           <DialogHeader>
             <DialogTitle>Create User</DialogTitle>
             <DialogDescription>
@@ -644,6 +654,7 @@ export default function UsersPage() {
                 name="email"
                 type="email"
                 required
+                aria-required="true"
                 placeholder="user@example.com"
                 value={createEmailValue}
                 onChange={(e) => {
@@ -674,6 +685,7 @@ export default function UsersPage() {
                 name="password"
                 type="password"
                 required
+                aria-required="true"
                 placeholder="Enter a strong password"
               />
             </div>

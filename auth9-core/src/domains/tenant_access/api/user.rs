@@ -752,6 +752,13 @@ pub async fn update_role_in_tenant<S: HasServices>(
     // Validate role_in_tenant enum
     validate_role_in_tenant(&input.role_in_tenant)?;
 
+    // Prevent self-role-modification: users cannot change their own role
+    if user_id == auth.user_id {
+        return Err(AppError::Forbidden(
+            "Cannot modify your own role in a tenant".to_string(),
+        ));
+    }
+
     // Ownership transfer requires the caller to actually be the tenant owner
     // (platform admin bypass is NOT allowed for ownership changes)
     if input.role_in_tenant == "owner" {

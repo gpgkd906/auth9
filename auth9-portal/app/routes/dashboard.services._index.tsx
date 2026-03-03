@@ -1,6 +1,6 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
-import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon } from "@radix-ui/react-icons";
+import { PlusIcon, DotsHorizontalIcon, Pencil2Icon, TrashIcon, CopyIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -178,7 +178,7 @@ export default function ServicesPage() {
             {data.data.map((service) => (
               <div
                 key={service.id}
-                className="h-full rounded-[20px] border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-5 flex flex-col gap-3"
+                className="h-full liquid-glass p-5 flex flex-col gap-3"
               >
                 <div className="flex items-center justify-between gap-2">
                   <div className="min-w-0 flex-1">
@@ -259,6 +259,16 @@ export default function ServicesPage() {
             {newSecret}
           </div>
           <DialogFooter>
+            <Button
+              variant="outline"
+              className="bg-[var(--glass-bg)]"
+              onClick={() => {
+                if (newSecret) navigator.clipboard.writeText(newSecret);
+              }}
+            >
+              <CopyIcon className="mr-1.5 h-4 w-4" />
+              Copy
+            </Button>
             <Button onClick={() => setNewSecret(null)}>Close</Button>
           </DialogFooter>
         </DialogContent>
