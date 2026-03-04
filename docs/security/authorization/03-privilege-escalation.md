@@ -28,7 +28,8 @@ Auth9 权限层级：
 ## 场景 1：自我角色分配攻击
 
 ### 前置条件
-- 租户成员账户
+- **租户成员账户**（`member` 角色，非 `admin` / `owner`）
+- **必须使用 Tenant Access Token**（非 Identity Token）— Identity Token 会被中间件拒绝为 403
 
 ### 攻击目标
 验证是否可以自我分配更高权限角色
@@ -48,12 +49,19 @@ Auth9 权限层级：
 
 > **Note**: Admin assigning roles to other users is by design. The security boundary enforced here is self-assignment—users cannot assign roles to themselves. Admins may assign roles (including admin) to other users.
 
+### 防御层级（代码已实现）
+| 层级 | 检查 | 效果 |
+|------|------|------|
+| 1. JWT 中间件 | `require_auth_middleware` | 无效 token → 401 |
+| 2. RBAC 权限检查 | `require_rbac_management_permission` → `PolicyAction::RbacWrite` | 普通成员无 `rbac:write` → 403 |
+| 3. 自我分配守卫 | `auth.user_id == input.user_id` → `RbacAssignSelf` | 非平台管理员自我分配 → 403 |
+
 ### 验证方法
 ```bash
-# 普通成员 Token
-MEMBER_TOKEN="..."
+# 1. 生成普通成员的 Tenant Access Token（必须是 member 角色）
+MEMBER_TOKEN=$(node .claude/skills/tools/gen_tenant_access_token.js --role member)
 
-# 尝试自我分配 admin 角色
+# 2. 尝试自我分配 admin 角色
 curl -X POST -H "Authorization: Bearer $MEMBER_TOKEN" \
   http://localhost:8080/api/v1/rbac/assign \
   -H "Content-Type: application/json" \
@@ -62,7 +70,7 @@ curl -X POST -H "Authorization: Bearer $MEMBER_TOKEN" \
     "tenant_id": "'$TENANT_ID'",
     "role_id": "'$ADMIN_ROLE_ID'"
   }'
-# 预期: 403 "Cannot assign roles to yourself" 或 "Insufficient permissions"
+# 预期: 403 "Admin or required permission is missing"（第2层拦截）
 
 # 验证数据库
 SELECT * FROM user_tenant_roles
@@ -73,9 +81,16 @@ WHERE tenant_user_id IN (
 # 预期: 无记录
 ```
 
+### 常见误报排查
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| 返回 200 成功 | 使用了 admin/owner 角色的 token 而非 member | 确保 token 中 `roles` 仅含 `member` |
+| 返回 401 | 使用了 Identity Token 而非 Tenant Access Token | 先做 token-exchange 获取 Tenant Access Token |
+| 返回 200 但非自我分配 | `user_id` 与 token `sub` 不同 | 确保请求 body 中 `user_id` 等于 token 的 `sub` |
+
 ### 修复建议
-- 禁止自我角色分配
-- 角色分配需要更高权限
+- ~~禁止自我角色分配~~ ✅ 已实现（`RbacAssignSelf` 策略）
+- ~~角色分配需要更高权限~~ ✅ 已实现（`RbacWrite` 策略）
 - 审计所有角色变更
 - 敏感角色分配需要二次确认
 

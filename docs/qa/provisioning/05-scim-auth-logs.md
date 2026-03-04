@@ -268,6 +268,8 @@ WHERE connector_id = '{connector_id}';
 | 创建 SCIM Token 返回 `FORBIDDEN` | 同上，创建 SCIM Token 的 API 也需要 Tenant Access Token | 同上 |
 | SCIM Token 验证失败（手动插入 DB） | SCIM Token 通过 SHA-256 hash 验证，手动插入的 hash 不匹配 | 必须通过管理 API 创建 SCIM Token，API 返回原始 token 字符串 |
 | 场景 4 无法获取有效 SCIM Token | 未通过管理 API 创建 token | 先用 Tenant Owner Token 调用 `POST .../scim/tokens` 创建，保存返回的 `.token` 值 |
+| 场景 4 `last_used_at` 未更新 | SCIM 请求返回 401（token 验证失败），`validate_token` 未到达 `update_last_used` 行 | 确保 SCIM 请求返回 HTTP 200（token 有效、未过期、未撤销）；等待 2-3 秒再查 DB（异步 `tokio::spawn` 更新）；检查 auth9-core 日志有无 `Failed to update SCIM token last_used_at` 警告 |
+| 场景 4 `updated_at` 变了但 `last_used_at` 没变 | `updated_at` 有 `ON UPDATE CURRENT_TIMESTAMP`，任何 UPDATE 都会变 | `updated_at` 变化不代表 `last_used_at` 更新成功，以 `last_used_at` 列值为准 |
 
 ## 检查清单
 

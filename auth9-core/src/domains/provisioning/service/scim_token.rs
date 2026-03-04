@@ -91,7 +91,9 @@ impl<R: ScimTokenRepository + 'static> ScimTokenService<R> {
         let repo = self.repo.clone();
         let token_id = token.id;
         tokio::spawn(async move {
-            let _ = repo.update_last_used(token_id).await;
+            if let Err(e) = repo.update_last_used(token_id).await {
+                tracing::warn!(token_id = %token_id, error = %e, "Failed to update SCIM token last_used_at");
+            }
         });
 
         Ok(ScimRequestContext {

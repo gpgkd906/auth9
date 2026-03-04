@@ -747,6 +747,7 @@ export default function UsersPage() {
                       {ut.tenant?.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
                       <span className="font-medium text-[var(--text-primary)]">{ut.tenant?.name ?? "Unknown Tenant"}</span>
                       <Select
+                        key={`${ut.tenant_id}-${ut.role_in_tenant}`}
                         defaultValue={ut.role_in_tenant}
                         onValueChange={(value) => {
                           if (value !== ut.role_in_tenant && managingTenantsUser) {

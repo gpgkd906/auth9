@@ -1,7 +1,7 @@
 const { Auth9HttpClient, NotFoundError, ValidationError, UnauthorizedError } = require('./packages/core/dist/index.cjs');
 
 const TOKEN = process.env.AUTH9_API_KEY;
-const SERVICE_ID = '040502d5-e073-4ba2-ae21-4ca8069f0415';
+const SERVICE_ID = process.env.SERVICE_ID || '3e879f5f-e86e-4c7c-a323-843d287b1adc';
 
 async function testErrors() {
   console.log('=== 场景8：错误处理 - SDK ===');

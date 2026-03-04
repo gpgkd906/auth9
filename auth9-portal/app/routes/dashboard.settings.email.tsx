@@ -206,10 +206,15 @@ export default function EmailSettingsPage() {
     submit({ intent: "send_test", test_email: testEmail }, { method: "post" });
   };
 
+  // Auto-close dialog only for non-send_test success (e.g., save settings)
+  // For send_test, keep the dialog open so the user sees the success message
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success && isTestEmailOpen) {
-      setIsTestEmailOpen(false);
-      setTestEmail("");
+      const isSendTest = actionData.message && String(actionData.message).startsWith("Test email sent");
+      if (!isSendTest) {
+        setIsTestEmailOpen(false);
+        setTestEmail("");
+      }
     }
   }, [actionData]);
 
@@ -566,6 +571,16 @@ export default function EmailSettingsPage() {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
+            {actionData && "success" in actionData && actionData.success && String(actionData.message).startsWith("Test email sent") && (
+              <div className="rounded-lg bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-3 text-sm text-[var(--accent-green)]">
+                {actionData.message}
+              </div>
+            )}
+            {actionData && "error" in actionData && isTestEmailOpen && (
+              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
+                {String(actionData.error)}
+              </div>
+            )}
             <div className="space-y-2">
               <Label htmlFor="test_email_input">Email Address</Label>
               <Input

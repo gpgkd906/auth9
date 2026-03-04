@@ -107,5 +107,5 @@ WHERE d.domain = '{corp_domain}' AND c.enabled = 1;
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | Portal /login 页面通过 UI 输入企业邮箱触发 SSO 发现 | ⏭️ 跳过 | 2026-03-03 | opencode | 环境中无预配置的企业 SSO 连接器 |
-| 2 | Portal /login 页面输入未配置域名邮箱显示错误（UI 回归） | ✅ 通过 | 2026-03-03 | opencode | 防止 auto-redirect 绕过 SSO 入口 |
+| 1 | Portal /login 页面通过 UI 输入企业邮箱触发 SSO 发现 | ✅ 通过 | 2026-03-04 | opencode | 成功跳转到 Keycloak，kc_idp_hint=test-oidc-idp |
+| 2 | Portal /login 页面输入未配置域名邮箱显示错误（UI 回归） | ✅ 通过 | 2026-03-04 | opencode | 防止 auto-redirect 绕过 SSO 入口 |

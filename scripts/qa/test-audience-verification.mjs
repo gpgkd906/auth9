@@ -4,7 +4,7 @@
  * QA Document: docs/qa/sdk/03-token-verification.md
  */
 
-import { TokenVerifier } from "./packages/node/dist/index.js";
+import { TokenVerifier } from "../../sdk/packages/node/dist/index.js";
 import { execSync } from "child_process";
 
 const GREEN = "\x1b[32m";
@@ -89,7 +89,7 @@ async function runTests() {
     // Test 4: Test with tenant access token
     // First get a tenant access token
     const demoTenantId = execSync(
-      `mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants WHERE slug = 'demo';"`
+      `mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants WHERE slug = 'auth9-platform';"`
     ).toString().trim();
 
     const grpcurlCmd = `
@@ -97,7 +97,7 @@ async function runTests() {
       .claude/skills/tools/grpcurl-docker.sh \
         -cacert /certs/ca.crt -cert /certs/client.crt -key /certs/client.key -import-path /proto -proto auth9.proto \
         -H "x-api-key: dev-grpc-api-key" \
-        -d '{"identity_token": "${identityToken}", "tenant_id": "${demoTenantId}", "service_id": "auth9-demo"}' \
+        -d '{"identity_token": "${identityToken}", "tenant_id": "${demoTenantId}", "service_id": "auth9-portal"}' \
         auth9-grpc-tls:50051 auth9.TokenExchange/ExchangeToken
     `;
 
@@ -108,12 +108,12 @@ async function runTests() {
     // Verifier with correct audience for tenant access token
     const tenantVerifier = new TokenVerifier({
       domain: "http://localhost:8080",
-      audience: "auth9-demo",  // Matches tenant token's aud
+      audience: "auth9-portal",  // Matches tenant token's aud
     });
 
     try {
       const tenantResult = await tenantVerifier.verify(tenantAccessToken);
-      if (tenantResult.claims && tenantResult.claims.aud === "auth9-demo") {
+      if (tenantResult.claims && tenantResult.claims.aud === "auth9-portal") {
         pass("Tenant access token verified with correct audience");
       } else {
         fail("Tenant token verification failed");

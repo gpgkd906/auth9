@@ -4,7 +4,7 @@
  * QA Document: docs/qa/sdk/03-token-verification.md
  */
 
-import { TokenVerifier } from "./packages/node/dist/index.js";
+import { TokenVerifier } from "../../sdk/packages/node/dist/index.js";
 import { execSync } from "child_process";
 
 const GREEN = "\x1b[32m";
@@ -31,15 +31,15 @@ const identityToken = execSync("cd /Volumes/Yotta/auth9 && .claude/skills/tools/
   .trim();
 
 async function getTenantAccessToken() {
-  // Get demo tenant ID
+  // Get platform tenant ID
   const demoTenantId = execSync(
-    `mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants WHERE slug = 'demo';"`
+    `mysql -h 127.0.0.1 -P 4000 -u root auth9 -N -e "SELECT id FROM tenants WHERE slug = 'auth9-platform';"`
   )
     .toString()
     .trim();
 
-  // Get demo service client_id
-  const serviceId = "auth9-demo"; // Using demo service
+  // Get platform service client_id
+  const serviceId = "auth9-portal"; // Using platform service
 
   // Use grpcurl to exchange token
   const grpcurlCmd = `
@@ -74,7 +74,7 @@ async function runTests() {
     // Verify with TokenVerifier
     const verifier = new TokenVerifier({
       domain: "http://localhost:8080",
-      audience: "auth9-demo", // Demo service client_id
+      audience: "auth9-portal", // Platform service client_id
     });
 
     const { claims, tokenType } = await verifier.verify(tenantAccessToken);
@@ -85,10 +85,10 @@ async function runTests() {
       fail(`tokenType should be 'tenantAccess', got '${tokenType}'`);
     }
 
-    if (claims.aud === "auth9-demo") {
-      pass("claims.aud === 'auth9-demo'");
+    if (claims.aud === "auth9-portal") {
+      pass("claims.aud === 'auth9-portal'");
     } else {
-      fail(`claims.aud should be 'auth9-demo', got '${claims.aud}'`);
+      fail(`claims.aud should be 'auth9-portal', got '${claims.aud}'`);
     }
 
     if (claims.tenantId && claims.tenantId.length > 0) {

@@ -540,13 +540,25 @@ checkLandmarks();
 ## 常见问题排查
 
 ### 问题 1：焦点指示器不可见
+
+> **重要**: `:focus-visible` 仅在**键盘导航**时触发，鼠标点击不会触发。测试时必须使用 Tab 键聚焦，不能使用鼠标点击后检查样式。
+>
+> 如果通过 `element.focus()` 或鼠标点击后用 `getComputedStyle` 检查 `outlineWidth`，结果为 `0px` 是**正常行为**，不是 bug。
+
+**正确的测试方法**：
+1. 按 Tab 键使焦点移到目标元素
+2. 目视确认蓝色轮廓可见
+3. 或在 DevTools 中强制 `:focus-visible` 伪类再检查样式
+
 **排查**：
 ```javascript
+// ❌ 错误：鼠标点击或 JS focus() 不触发 :focus-visible
 const button = document.querySelector('button');
 button.focus();
-const outline = getComputedStyle(button, ':focus-visible').outline;
-console.log('Focus outline:', outline);
-// 应为 "2px solid rgb(0, 122, 255)"
+getComputedStyle(button).outlineWidth; // "0px" — 这是正常的
+
+// ✅ 正确：用 DevTools 的 "Force element state" 勾选 :focus-visible
+// 或者实际按 Tab 键导航到元素后检查
 ```
 
 ### 问题 2：表单字段无标签
@@ -554,6 +566,12 @@ console.log('Focus outline:', outline);
 - 为每个 `<input>` 添加 `id`
 - 创建 `<label for="id">`
 - 或添加 `aria-label` 属性
+
+### 问题 4：表单验证缺少 ARIA 属性（`aria-invalid`, `aria-errormessage`, `role="alert"`）
+
+> **当前状态**: 表单使用浏览器原生 `required` 验证（HTML5 Constraint Validation API），未添加自定义 ARIA 属性。这是一个**已知增强项**，不是回归缺陷。
+>
+> 浏览器原生验证已提供基本的可访问性支持（屏幕阅读器会读取 `:invalid` 状态和 `validationMessage`）。添加 `aria-invalid`/`aria-errormessage`/`role="alert"` 需要在所有表单组件中实现自定义验证逻辑，属于 WCAG 增强改进。
 
 ### 问题 3：图标按钮无描述
 **修复**：

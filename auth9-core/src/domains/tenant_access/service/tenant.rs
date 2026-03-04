@@ -379,7 +379,14 @@ impl<
                     .map_err(AppError::Database)?;
             }
 
-            // 2. Delete webhooks
+            // 2. Delete tenant_services associations
+            sqlx::query("DELETE FROM tenant_services WHERE tenant_id = ?")
+                .bind(&id_str)
+                .execute(tx.as_mut())
+                .await
+                .map_err(AppError::Database)?;
+
+            // 3. Delete webhooks
             sqlx::query("DELETE FROM webhooks WHERE tenant_id = ?")
                 .bind(&id_str)
                 .execute(tx.as_mut())

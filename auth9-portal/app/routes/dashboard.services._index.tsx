@@ -133,7 +133,7 @@ export default function ServicesPage() {
                   <Input id="create-name" name="name" placeholder="My App" required />
                 </div>
                 <div className="space-y-1.5">
-                  <Label htmlFor="create-client-id">Client ID (Optional)</Label>
+                  <Label htmlFor="create-client-id">Client ID <span className="text-[var(--text-secondary)] text-xs font-normal">(Optional)</span></Label>
                   <Input id="create-client-id" name="client_id" placeholder="my-app-client" />
                 </div>
               </div>

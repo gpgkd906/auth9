@@ -4,7 +4,7 @@
  * QA Document: docs/qa/sdk/03-token-verification.md
  */
 
-import { TokenVerifier, Auth9 } from "./packages/node/dist/index.js";
+import { TokenVerifier, Auth9 } from "../../sdk/packages/node/dist/index.js";
 import { execSync } from "child_process";
 
 const GREEN = "\x1b[32m";
