@@ -1,6 +1,6 @@
 # Auth9
 
-中文 | **[English](README.md)**
+中文 | **[English](README.md)** | **[日本語](README-ja.md)**
 
 **一次实验：AI 原生的软件开发生命周期，能否像人类一样"打磨"软件？**
 

@@ -1,6 +1,6 @@
 # Auth9
 
-**[中文版](README-zh.md)** | English
+**[中文版](README-zh.md)** | **[日本語](README-ja.md)** | English
 
 **An experiment: can AI-native software development lifecycle "polish" software like humans do?**
 
