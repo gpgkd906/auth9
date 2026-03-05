@@ -229,6 +229,17 @@ impl MockKeycloakServer {
             .await;
     }
 
+    /// Mock get user federated identities (returns empty list by default)
+    pub async fn mock_get_user_federated_identities_empty(&self) {
+        Mock::given(method("GET"))
+            .and(path_regex(
+                r"/admin/realms/test/users/[^/]+/federated-identity$",
+            ))
+            .respond_with(ResponseTemplate::new(200).set_body_json(json!([])))
+            .mount(&self.server)
+            .await;
+    }
+
     /// Mock successful federated identity removal
     pub async fn mock_remove_federated_identity_success(&self) {
         Mock::given(method("DELETE"))

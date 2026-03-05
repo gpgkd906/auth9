@@ -1,112 +1,12 @@
-//! User repository
+//! impl UserRepository for UserRepositoryImpl
 
+use super::{UserRepository, UserRepositoryImpl};
 use crate::domain::{
     AddUserToTenantInput, CreateUserInput, StringUuid, TenantInfo, TenantUser,
     TenantUserWithTenant, UpdateUserInput, User,
 };
 use crate::error::{AppError, Result};
 use async_trait::async_trait;
-use sqlx::MySqlPool;
-
-#[cfg_attr(test, mockall::automock)]
-#[async_trait]
-pub trait UserRepository: Send + Sync {
-    async fn create(&self, keycloak_id: &str, input: &CreateUserInput) -> Result<User>;
-    async fn find_by_id(&self, id: StringUuid) -> Result<Option<User>>;
-    async fn find_by_email(&self, email: &str) -> Result<Option<User>>;
-    async fn find_by_keycloak_id(&self, keycloak_id: &str) -> Result<Option<User>>;
-    async fn list(&self, offset: i64, limit: i64) -> Result<Vec<User>>;
-    async fn count(&self) -> Result<i64>;
-    async fn search(&self, query: &str, offset: i64, limit: i64) -> Result<Vec<User>>;
-    async fn search_count(&self, query: &str) -> Result<i64>;
-    async fn update(&self, id: StringUuid, input: &UpdateUserInput) -> Result<User>;
-    async fn update_mfa_enabled(&self, id: StringUuid, enabled: bool) -> Result<User>;
-    async fn delete(&self, id: StringUuid) -> Result<()>;
-
-    // Tenant-User relations
-    async fn add_to_tenant(&self, input: &AddUserToTenantInput) -> Result<TenantUser>;
-    async fn update_role_in_tenant(
-        &self,
-        user_id: StringUuid,
-        tenant_id: StringUuid,
-        role: &str,
-    ) -> Result<TenantUser>;
-    async fn remove_from_tenant(&self, user_id: StringUuid, tenant_id: StringUuid) -> Result<()>;
-    async fn find_tenant_users(
-        &self,
-        tenant_id: StringUuid,
-        offset: i64,
-        limit: i64,
-    ) -> Result<Vec<User>>;
-    async fn search_tenant_users(
-        &self,
-        tenant_id: StringUuid,
-        query: &str,
-        offset: i64,
-        limit: i64,
-    ) -> Result<Vec<User>>;
-    async fn count_tenant_users(&self, tenant_id: StringUuid) -> Result<i64>;
-    async fn search_tenant_users_count(
-        &self,
-        tenant_id: StringUuid,
-        query: &str,
-    ) -> Result<i64>;
-    async fn find_user_tenants(&self, user_id: StringUuid) -> Result<Vec<TenantUser>>;
-
-    /// Find user's tenants with tenant data (for API responses)
-    async fn find_user_tenants_with_tenant(
-        &self,
-        user_id: StringUuid,
-    ) -> Result<Vec<TenantUserWithTenant>>;
-
-    /// Delete all tenant memberships for a user (tenant_users records)
-    async fn delete_all_tenant_memberships(&self, user_id: StringUuid) -> Result<u64>;
-
-    /// List all tenant_user IDs for a user (for cascade delete)
-    async fn list_tenant_user_ids(&self, user_id: StringUuid) -> Result<Vec<StringUuid>>;
-
-    /// List all tenant_user IDs for a tenant (for cascade delete)
-    async fn list_tenant_user_ids_by_tenant(
-        &self,
-        tenant_id: StringUuid,
-    ) -> Result<Vec<StringUuid>>;
-
-    /// Delete all tenant memberships for a tenant
-    async fn delete_tenant_memberships_by_tenant(&self, tenant_id: StringUuid) -> Result<u64>;
-
-    /// Update password_changed_at timestamp
-    async fn update_password_changed_at(&self, id: StringUuid) -> Result<()>;
-
-    /// Update locked_until timestamp (None to unlock)
-    async fn update_locked_until(
-        &self,
-        id: StringUuid,
-        locked_until: Option<chrono::DateTime<chrono::Utc>>,
-    ) -> Result<()>;
-
-    // SCIM provisioning methods
-
-    /// Find user by SCIM external ID
-    async fn find_by_scim_external_id(&self, scim_external_id: String) -> Result<Option<User>>;
-
-    /// Update SCIM tracking fields on a user
-    async fn update_scim_fields(
-        &self,
-        id: StringUuid,
-        scim_external_id: Option<String>,
-        scim_provisioned_by: Option<StringUuid>,
-    ) -> Result<()>;
-}
-
-pub struct UserRepositoryImpl {
-    pool: MySqlPool,
-}
-
-impl UserRepositoryImpl {
-    pub fn new(pool: MySqlPool) -> Self {
-        Self { pool }
-    }
-}
 
 #[async_trait]
 impl UserRepository for UserRepositoryImpl {
@@ -439,21 +339,15 @@ impl UserRepository for UserRepositoryImpl {
     }
 
     async fn count_tenant_users(&self, tenant_id: StringUuid) -> Result<i64> {
-        let row: (i64,) = sqlx::query_as(
-            "SELECT COUNT(*) FROM tenant_users WHERE tenant_id = ?",
-        )
-        .bind(tenant_id)
-        .fetch_one(&self.pool)
-        .await?;
+        let row: (i64,) = sqlx::query_as("SELECT COUNT(*) FROM tenant_users WHERE tenant_id = ?")
+            .bind(tenant_id)
+            .fetch_one(&self.pool)
+            .await?;
 
         Ok(row.0)
     }
 
-    async fn search_tenant_users_count(
-        &self,
-        tenant_id: StringUuid,
-        query: &str,
-    ) -> Result<i64> {
+    async fn search_tenant_users_count(&self, tenant_id: StringUuid, query: &str) -> Result<i64> {
         let pattern = format!("%{}%", query);
         let row: (i64,) = sqlx::query_as(
             "SELECT COUNT(*) FROM users u INNER JOIN tenant_users tu ON u.id = tu.user_id WHERE tu.tenant_id = ? AND (u.email LIKE ? OR u.display_name LIKE ?)",
@@ -656,123 +550,5 @@ impl UserRepository for UserRepositoryImpl {
             return Err(AppError::NotFound(format!("User {} not found", id)));
         }
         Ok(())
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use mockall::predicate::*;
-
-    #[tokio::test]
-    async fn test_mock_user_repository_find_by_id() {
-        let mut mock = MockUserRepository::new();
-        let user = User::default();
-        let user_clone = user.clone();
-        let id = user.id;
-
-        mock.expect_find_by_id()
-            .with(eq(id))
-            .returning(move |_| Ok(Some(user_clone.clone())));
-
-        let result = mock.find_by_id(id).await.unwrap();
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().id, id);
-    }
-
-    #[tokio::test]
-    async fn test_mock_user_repository_find_by_id_not_found() {
-        let mut mock = MockUserRepository::new();
-        let id = StringUuid::new_v4();
-
-        mock.expect_find_by_id()
-            .with(eq(id))
-            .returning(|_| Ok(None));
-
-        let result = mock.find_by_id(id).await.unwrap();
-        assert!(result.is_none());
-    }
-
-    #[tokio::test]
-    async fn test_mock_user_repository_find_by_email() {
-        let mut mock = MockUserRepository::new();
-        let user = User {
-            email: "test@example.com".to_string(),
-            ..Default::default()
-        };
-        let user_clone = user.clone();
-
-        mock.expect_find_by_email()
-            .with(eq("test@example.com"))
-            .returning(move |_| Ok(Some(user_clone.clone())));
-
-        let result = mock.find_by_email("test@example.com").await.unwrap();
-        assert!(result.is_some());
-        assert_eq!(result.unwrap().email, "test@example.com");
-    }
-
-    #[tokio::test]
-    async fn test_mock_user_repository_create() {
-        let mut mock = MockUserRepository::new();
-        let keycloak_id = "kc-123";
-        let input = CreateUserInput {
-            email: "new@example.com".to_string(),
-            display_name: Some("New User".to_string()),
-            avatar_url: None,
-        };
-
-        mock.expect_create().returning(|_, input| {
-            Ok(User {
-                email: input.email.clone(),
-                display_name: input.display_name.clone(),
-                ..Default::default()
-            })
-        });
-
-        let result = mock.create(keycloak_id, &input).await.unwrap();
-        assert_eq!(result.email, "new@example.com");
-        assert_eq!(result.display_name, Some("New User".to_string()));
-    }
-
-    #[tokio::test]
-    async fn test_mock_user_repository_list() {
-        let mut mock = MockUserRepository::new();
-
-        mock.expect_list().with(eq(0), eq(10)).returning(|_, _| {
-            Ok(vec![
-                User {
-                    email: "user1@example.com".to_string(),
-                    ..Default::default()
-                },
-                User {
-                    email: "user2@example.com".to_string(),
-                    ..Default::default()
-                },
-            ])
-        });
-
-        let result = mock.list(0, 10).await.unwrap();
-        assert_eq!(result.len(), 2);
-    }
-
-    #[tokio::test]
-    async fn test_mock_user_repository_count() {
-        let mut mock = MockUserRepository::new();
-
-        mock.expect_count().returning(|| Ok(42));
-
-        let result = mock.count().await.unwrap();
-        assert_eq!(result, 42);
-    }
-
-    #[tokio::test]
-    async fn test_mock_user_repository_delete() {
-        let mut mock = MockUserRepository::new();
-        let id = StringUuid::new_v4();
-
-        mock.expect_delete().with(eq(id)).returning(|_| Ok(()));
-
-        let result = mock.delete(id).await;
-        assert!(result.is_ok());
     }
 }
