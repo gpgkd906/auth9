@@ -472,6 +472,16 @@ async fn ensure_service_scope<S: HasServices>(
         return Ok(());
     }
     if let Some(ref aud) = auth.aud {
+        let portal_client_id = state
+            .config()
+            .portal_client_id
+            .as_deref()
+            .unwrap_or("auth9-portal");
+        // Portal tenant token is used for dashboard management APIs and is expected
+        // to manage different services inside the selected tenant.
+        if aud == portal_client_id {
+            return Ok(());
+        }
         let token_service = state.client_service().get_by_client_id(aud).await?;
         if token_service.id != target_service_id {
             return Err(AppError::Forbidden(

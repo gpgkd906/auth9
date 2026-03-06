@@ -55,6 +55,10 @@ throw new Error("Test error");
 2. 使用测试账号登录：`test@example.com` / `Test123!`
 3. 登录成功后，捕获 Identity Token
 
+> 重要：必须走 Auth9 登录流程（Portal `/login` → Auth9 `/api/v1/auth/authorize`/`callback`）。
+> 不要使用 Keycloak 直连 `grant_type=password` 获取 token 来验证本场景，
+> 否则会绕过 Auth9 的 post-login Action 执行链路并产生误报。
+
 ### 验证方式
 ```bash
 # 解码 JWT Token（从浏览器 DevTools Application > Local Storage 获取）

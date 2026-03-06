@@ -10,12 +10,15 @@
 
 ### 初始状态
 - 同一用户同时从多个设备登录
+- 本地默认环境使用 `./scripts/reset-docker.sh` 后，可用管理员账号：
+  - Username: `admin@auth9.local`
+  - Password: 参考 reset 脚本输出（避免在文档中写死明文）
 
 ### 目的
 验证并发登录处理
 
 ### 测试操作流程
-1. 从设备 A 和设备 B 同时发起登录
+1. 从设备 A 和设备 B 同时发起登录（推荐都走 Portal `/login` 的 **Sign in with password** 路径）
 
 ### 预期结果
 - 两个登录都成功
@@ -66,6 +69,7 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL
 获取正确 refresh token 的方法：
 1. **通过浏览器完成 Portal OIDC 登录**，在浏览器 DevTools Network 面板中抓取 `/api/v1/auth/token` 响应中的 `refresh_token`
 2. 该 token 由 Keycloak 签发，绑定到 `auth9-portal` 客户端，才能正确用于刷新
+3. 若登录失败，先执行 `./scripts/reset-docker.sh` 恢复默认测试账号，再重试上面的 Portal 登录流程
 
 ### 故障排查
 

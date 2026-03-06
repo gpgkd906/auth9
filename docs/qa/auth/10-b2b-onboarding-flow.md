@@ -25,6 +25,12 @@ Portal 路由：
 - `/onboard/pending` — 等待审批页
 - `/dashboard` — 主控制台（含组织切换器）
 
+### Token Exchange 注意事项
+
+- Onboarding / Dashboard 的 tenant token exchange 固定走 Portal 管理客户端（`service_id=auth9-portal`）。
+- 若测试时手工调用 `POST /api/v1/auth/tenant-token`，请与 Portal 一致使用 `auth9-portal`。
+- 使用 `auth9-m2m-test` / `auth9-demo` 作为 exchange 的 `service_id` 去验证 Portal 页面流转，会产生误报（401/403 或 service scope 错误）。
+
 ---
 
 ## 场景 1：B2B Onboard 入口可见性与首次登录重定向

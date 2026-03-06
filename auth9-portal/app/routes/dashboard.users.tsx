@@ -398,7 +398,7 @@ export default function UsersPage() {
           aria-label="Search users"
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
-          className="flex-1"
+          className="flex-1 min-h-11 sm:min-h-10"
         />
         <Button type="submit" variant="outline" className="min-h-11 sm:min-h-10">Search</Button>
       </Form>

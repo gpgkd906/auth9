@@ -500,6 +500,9 @@ impl KeycloakSeeder {
                     "length(12) and upperCase(1) and lowerCase(1) and digits(1) and specialChars(1) and notUsername() and passwordHistory(5) and hashAlgorithm(pbkdf2-sha512) and hashIterations(210000)"
                 ),
             );
+            // Security hardening: rotating refresh tokens ensures password change
+            // and session revocation invalidate previously issued refresh tokens.
+            obj.insert("revokeRefreshToken".to_string(), serde_json::json!(true));
         }
 
         let response = self

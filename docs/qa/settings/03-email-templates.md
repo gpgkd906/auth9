@@ -125,6 +125,14 @@ WHERE template_type = 'invitation';
 - 已配置有效的邮件服务商
 - 正在编辑某个模板
 
+### 执行前自检（必需）
+```sql
+SELECT setting_key, value
+FROM system_settings
+WHERE category = 'email' AND setting_key = 'provider';
+-- 预期: value.type != "none"
+```
+
 ### 目的
 验证使用当前编辑内容发送测试邮件
 
@@ -144,6 +152,13 @@ WHERE template_type = 'invitation';
 
 ### 预期数据状态
 无数据库变更（除非点击保存）
+
+### 常见误报排查
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| `Bad request: Email provider not configured` | 邮件提供商未配置（`value.type = "none"`） | 先到「设置」→「Email Provider」配置 SMTP/邮件服务商，再执行场景 4 |
+| 发送成功但未收到邮件 | 使用了无效收件地址或本地 SMTP 未启动 | 检查收件地址、SMTP 配置与邮件服务日志 |
 
 ---
 

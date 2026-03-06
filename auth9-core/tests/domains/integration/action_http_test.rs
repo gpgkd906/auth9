@@ -121,6 +121,52 @@ async fn test_create_action_returns_200() {
 }
 
 #[tokio::test]
+async fn test_create_action_allows_portal_audience_token_across_services() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+    let tenant_id = Uuid::new_v4();
+    let user_id = Uuid::new_v4();
+
+    let target_service_id = setup_tenant_and_service(&state, tenant_id).await;
+
+    // Simulate dashboard token audience (auth9-portal), which may differ from target service.
+    let token = state
+        .jwt_manager
+        .create_tenant_access_token(
+            user_id,
+            "test@example.com",
+            tenant_id,
+            "auth9-portal",
+            vec!["admin".to_string()],
+            vec![],
+        )
+        .unwrap();
+
+    let input = CreateActionInput {
+        name: "Portal Audience Action".to_string(),
+        description: Some("Created with portal audience token".to_string()),
+        trigger_id: "post-login".to_string(),
+        script: "export default async function(ctx) { return ctx; }".to_string(),
+        enabled: true,
+        strict_mode: false,
+        execution_order: 0,
+        timeout_ms: 5000,
+    };
+
+    let app = build_test_router(state.clone());
+    let (status, body): (StatusCode, Option<SuccessResponse<Action>>) = post_json_with_auth(
+        &app,
+        &format!("/api/v1/services/{}/actions", target_service_id),
+        &input,
+        &token,
+    )
+    .await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+}
+
+#[tokio::test]
 async fn test_create_action_validates_input() {
     let mock_kc = MockKeycloakServer::new().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
