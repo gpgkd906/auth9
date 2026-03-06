@@ -7,6 +7,12 @@ import { serviceApi } from "~/services/api";
 import type { Service } from "~/services/api";
 import { ConfirmProvider } from "~/hooks/useConfirm";
 
+function buildEnglishRequest(url: string, init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", "en-US");
+    return new Request(url, { ...init, headers });
+}
+
 // Mock the APIs
 vi.mock("~/services/api", () => ({
     serviceApi: {
@@ -437,7 +443,7 @@ describe("action", () => {
         for (const [key, value] of Object.entries(data)) {
             formData.append(key, value);
         }
-        return new Request("http://localhost/dashboard/services", { method: "POST", body: formData });
+        return buildEnglishRequest("http://localhost/dashboard/services", { method: "POST", body: formData });
     }
 
     it("creates a service and returns success with secret", async () => {

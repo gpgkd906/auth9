@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import NewActionPage, { loader, action } from "~/routes/dashboard.services.$serviceId.actions.new";
 import { ActionTrigger } from "@auth9/core";
+import { I18nProvider } from "~/i18n";
 
 // Mock the session module
 vi.mock("~/services/session.server", () => ({
@@ -23,6 +24,12 @@ vi.mock("~/lib/auth9-client", () => ({
 
 import { getAccessToken } from "~/services/session.server";
 
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
+
 const mockActionsApi = {
   create: vi.fn(),
 };
@@ -38,12 +45,13 @@ describe("New Action Page", () => {
 
   it("loader fetches available triggers", async () => {
     const response = await loader({
-      request: new Request("http://localhost/dashboard/services/service-1/actions/new"),
+      request: buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/new"),
       params: { serviceId: "service-1" },
       context: {},
     });
 
     expect(response).toEqual({
+      locale: "en-US",
       serviceId: "service-1",
       triggers: Object.values(ActionTrigger),
     });
@@ -52,11 +60,11 @@ describe("New Action Page", () => {
   it("loader throws when serviceId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/services//actions/new"),
+        request: buildEnglishRequest("http://localhost/dashboard/services//actions/new"),
         params: {},
         context: {},
       })
-    ).rejects.toThrow("Service ID is required");
+    ).rejects.toThrow("Service ID required");
   });
 
   // ============================================================================
@@ -67,7 +75,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -87,7 +95,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -122,7 +130,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -142,12 +150,12 @@ describe("New Action Page", () => {
     await user.click(comboboxes[0]);
 
     await waitFor(() => {
-      expect(screen.getByText("Post Login")).toBeInTheDocument();
-      expect(screen.getByText("Pre Registration")).toBeInTheDocument();
-      expect(screen.getByText("Post Registration")).toBeInTheDocument();
-      expect(screen.getByText("Post Password Change")).toBeInTheDocument();
-      expect(screen.getByText("Post Email Verification")).toBeInTheDocument();
-      expect(screen.getByText("Pre Token Refresh")).toBeInTheDocument();
+      expect(screen.getAllByText("Post Login").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Pre Registration").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Post Registration").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Post Password Change").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Post Email Verification").length).toBeGreaterThan(0);
+      expect(screen.getAllByText("Pre Token Refresh").length).toBeGreaterThan(0);
     });
   });
 
@@ -155,7 +163,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -175,7 +183,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -199,7 +207,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -224,7 +232,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -244,7 +252,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -265,7 +273,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -285,7 +293,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -306,7 +314,7 @@ describe("New Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/new",
-        Component: NewActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           triggers: Object.values(ActionTrigger),
@@ -336,7 +344,7 @@ describe("New Action Page", () => {
       for (const [key, value] of Object.entries(data)) {
         formData.append(key, value);
       }
-      return new Request("http://localhost/dashboard/services/service-1/actions/new", {
+      return buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/new", {
         method: "POST",
         body: formData,
       });
@@ -470,3 +478,22 @@ describe("New Action Page", () => {
 
   });
 });
+if (!HTMLElement.prototype.hasPointerCapture) {
+  HTMLElement.prototype.hasPointerCapture = () => false;
+}
+
+if (!HTMLElement.prototype.setPointerCapture) {
+  HTMLElement.prototype.setPointerCapture = () => {};
+}
+
+if (!HTMLElement.prototype.releasePointerCapture) {
+  HTMLElement.prototype.releasePointerCapture = () => {};
+}
+
+function WrappedPage() {
+  return (
+    <I18nProvider locale="en-US">
+      <NewActionPage />
+    </I18nProvider>
+  );
+}

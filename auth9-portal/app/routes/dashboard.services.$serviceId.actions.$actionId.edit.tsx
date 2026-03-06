@@ -7,40 +7,42 @@ import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { Switch } from "~/components/ui/switch";
-import { ActionTrigger } from "@auth9/core";
 import { getAuth9Client, withService, getTriggers } from "~/lib/auth9-client";
 import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { ArrowLeftIcon } from "@radix-ui/react-icons";
 import { useState } from "react";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
+import { getActionContextReference, getActionTriggerLabel } from "~/lib/service-actions";
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  return [{ title: `Edit ${data?.action.name || "Action"} - Auth9` }];
+export const meta: MetaFunction<typeof loader> = ({ data, matches }) => {
+  const locale = resolveMetaLocale(matches);
+  return buildMeta(locale, "serviceActions.editMetaTitle", undefined, {
+    actionName: data?.action.name || translate(locale, "serviceActions.title"),
+  });
 };
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const { serviceId, actionId } = params;
-  if (!serviceId || !actionId) throw new Error("Service ID and Action ID are required");
+  const locale = await resolveLocale(request);
+  if (!serviceId || !actionId) throw new Error(translate(locale, "serviceActions.errors.serviceAndActionIdRequired"));
   const accessToken = await getAccessToken(request);
 
   const client = getAuth9Client(accessToken || undefined);
   const api = withService(client, serviceId);
 
-  const [actionRes, triggersRes] = await Promise.all([
-    api.actions.get(actionId),
-    getTriggers(client),
-  ]);
+  const [actionRes, triggersRes] = await Promise.all([api.actions.get(actionId), getTriggers(client)]);
 
-  return {
-    serviceId,
-    action: actionRes.data,
-    triggers: triggersRes.data,
-  };
+  return { locale, serviceId, action: actionRes.data, triggers: triggersRes.data };
 }
 
 export async function action({ params, request }: ActionFunctionArgs) {
   const { serviceId, actionId } = params;
-  if (!serviceId || !actionId) return Response.json({ error: "IDs required" }, { status: 400 });
+  const locale = await resolveLocale(request);
+  if (!serviceId || !actionId) return Response.json({ error: translate(locale, "serviceActions.errors.idsRequired") }, { status: 400 });
   const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
@@ -56,231 +58,83 @@ export async function action({ params, request }: ActionFunctionArgs) {
     const client = getAuth9Client(accessToken || undefined);
     const api = withService(client, serviceId);
 
-    await api.actions.update(actionId, {
-      name,
-      description: description || undefined,
-      script,
-      enabled,
-      strictMode,
-      executionOrder,
-      timeoutMs,
-    });
-
+    await api.actions.update(actionId, { name, description: description || undefined, script, enabled, strictMode, executionOrder, timeoutMs });
     return redirect(`/dashboard/services/${serviceId}/actions/${actionId}`);
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "serviceActions.errors.unknown");
     return { error: message };
   }
 }
 
-const TRIGGER_LABELS: Record<string, string> = {
-  [ActionTrigger.PostLogin]: "Post Login",
-  [ActionTrigger.PreUserRegistration]: "Pre Registration",
-  [ActionTrigger.PostUserRegistration]: "Post Registration",
-  [ActionTrigger.PostChangePassword]: "Post Password Change",
-  [ActionTrigger.PostEmailVerification]: "Post Email Verification",
-  [ActionTrigger.PreTokenRefresh]: "Pre Token Refresh",
-};
-
 export default function EditActionPage() {
-  const { serviceId, action } = useLoaderData<typeof loader>();
+  const { serviceId, action, locale } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { t, i18n } = useI18n();
+  const effectiveLocale = (locale || i18n.resolvedLanguage || "zh-CN") as "zh-CN" | "en-US";
   const isSubmitting = navigation.state === "submitting";
-
   const [script, setScript] = useState(action.script);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}>
-            <ArrowLeftIcon className="h-4 w-4" />
-          </Link>
+          <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}><ArrowLeftIcon className="h-4 w-4" /></Link>
         </Button>
         <div>
-          <h1 className="text-3xl font-bold">Edit Action</h1>
+          <h1 className="text-3xl font-bold">{t("serviceActions.editTitle")}</h1>
           <p className="text-muted-foreground mt-1">{action.name}</p>
         </div>
       </div>
 
-      {actionData && typeof actionData === "object" && "error" in actionData && (
-        <div className="p-4 bg-destructive/10 text-destructive rounded-md">
-          {String(actionData.error)}
-        </div>
-      )}
+      {actionData && typeof actionData === "object" && "error" in actionData && <div className="p-4 bg-destructive/10 text-destructive rounded-md">{String(actionData.error)}</div>}
 
       <Form method="post" className="space-y-6">
-        {/* Basic Information */}
         <Card>
           <CardHeader>
-            <CardTitle>Basic Information</CardTitle>
-            <CardDescription>
-              Update the basic settings for your action
-            </CardDescription>
+            <CardTitle>{t("serviceActions.basicInformation")}</CardTitle>
+            <CardDescription>{t("serviceActions.updateBasicInformationDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
+            <div className="space-y-2"><Label htmlFor="name">{t("serviceActions.name")} *</Label><Input id="name" name="name" defaultValue={action.name} required /></div>
+            <div className="space-y-2"><Label htmlFor="description">{t("serviceActions.descriptionLabel")}</Label><Input id="description" name="description" defaultValue={action.description || ""} /></div>
             <div className="space-y-2">
-              <Label htmlFor="name">Name *</Label>
-              <Input
-                id="name"
-                name="name"
-                defaultValue={action.name}
-                required
-              />
+              <Label>{t("serviceActions.trigger")}</Label>
+              <div className="p-2 bg-muted rounded-md">{getActionTriggerLabel(effectiveLocale, action.triggerId)}</div>
+              <p className="text-sm text-muted-foreground">{t("serviceActions.triggerImmutable")}</p>
             </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="description">Description</Label>
-              <Input
-                id="description"
-                name="description"
-                defaultValue={action.description || ""}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label>Trigger</Label>
-              <div className="p-2 bg-muted rounded-md">
-                {TRIGGER_LABELS[action.triggerId]}
-              </div>
-              <p className="text-sm text-muted-foreground">
-                Trigger cannot be changed after creation
-              </p>
-            </div>
-
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="execution_order">Execution Order</Label>
-                <Input
-                  id="execution_order"
-                  name="execution_order"
-                  type="number"
-                  defaultValue={action.executionOrder}
-                  min="0"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="timeout_ms">Timeout (ms)</Label>
-                <Input
-                  id="timeout_ms"
-                  name="timeout_ms"
-                  type="number"
-                  defaultValue={action.timeoutMs}
-                  min="100"
-                  max="30000"
-                />
-              </div>
+              <div className="space-y-2"><Label htmlFor="execution_order">{t("serviceActions.executionOrder")}</Label><Input id="execution_order" name="execution_order" type="number" defaultValue={action.executionOrder} min="0" /></div>
+              <div className="space-y-2"><Label htmlFor="timeout_ms">{t("serviceActions.timeout")}</Label><Input id="timeout_ms" name="timeout_ms" type="number" defaultValue={action.timeoutMs} min="100" max="30000" /></div>
             </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch id="enabled" name="enabled" defaultChecked={action.enabled} />
-              <Label htmlFor="enabled">Enabled</Label>
-            </div>
-
-            <div className="flex items-center space-x-2">
-              <Switch id="strict_mode" name="strict_mode" defaultChecked={action.strictMode} />
-              <Label htmlFor="strict_mode">Strict Mode</Label>
-              <span className="text-sm text-muted-foreground">
-                Block authentication flow on action failure
-              </span>
-            </div>
+            <div className="flex items-center space-x-2"><Switch id="enabled" name="enabled" defaultChecked={action.enabled} /><Label htmlFor="enabled">{t("serviceActions.enabled")}</Label></div>
+            <div className="flex items-center space-x-2"><Switch id="strict_mode" name="strict_mode" defaultChecked={action.strictMode} /><Label htmlFor="strict_mode">{t("serviceActions.strictMode")}</Label><span className="text-sm text-muted-foreground">{t("serviceActions.strictModeHint")}</span></div>
           </CardContent>
         </Card>
 
-        {/* Script Editor */}
         <Card>
-          <CardHeader>
-            <CardTitle>Script</CardTitle>
-            <CardDescription>
-              Update the TypeScript code for this action
-            </CardDescription>
-          </CardHeader>
+          <CardHeader><CardTitle>{t("serviceActions.script")}</CardTitle><CardDescription>{t("serviceActions.scriptEditDescription")}</CardDescription></CardHeader>
           <CardContent className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="script">TypeScript Code *</Label>
-              <Textarea
-                id="script"
-                name="script"
-                value={script}
-                onChange={(e) => setScript(e.target.value)}
-                className="font-mono text-sm min-h-[400px]"
-                required
-              />
-            </div>
-
-            {/* Context Reference */}
-            <div className="p-4 bg-muted rounded-md space-y-2">
-              <div className="font-semibold text-sm">Context Structure:</div>
-              <pre className="text-xs overflow-x-auto">
-{`interface ActionContext {
-  user: {
-    id: string;
-    email: string;
-    display_name?: string;
-    mfa_enabled: boolean;
-  };
-  tenant: {
-    id: string;
-    slug: string;
-    name: string;
-  };
-  request: {
-    ip?: string;
-    user_agent?: string;
-    timestamp: string;
-  };
-  claims?: Record<string, unknown>;
-}`}
-              </pre>
-            </div>
+            <div className="space-y-2"><Label htmlFor="script">{t("serviceActions.scriptCode")} *</Label><Textarea id="script" name="script" value={script} onChange={(e) => setScript(e.target.value)} className="font-mono text-sm min-h-[400px]" required /></div>
+            <div className="p-4 bg-muted rounded-md space-y-2"><div className="font-semibold text-sm">{t("serviceActions.contextStructure")}</div><pre className="text-xs overflow-x-auto">{getActionContextReference()}</pre></div>
           </CardContent>
         </Card>
 
-        {/* Execution Stats */}
         <Card>
-          <CardHeader>
-            <CardTitle>Execution Statistics</CardTitle>
-          </CardHeader>
+          <CardHeader><CardTitle>{t("serviceActions.statistics.executionStatistics")}</CardTitle></CardHeader>
           <CardContent>
             <div className="grid grid-cols-3 gap-4 text-sm">
-              <div>
-                <div className="text-muted-foreground mb-1">Total Executions</div>
-                <div className="text-2xl font-bold">{action.executionCount.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1">Errors</div>
-                <div className="text-2xl font-bold text-destructive">{action.errorCount.toLocaleString()}</div>
-              </div>
-              <div>
-                <div className="text-muted-foreground mb-1">Last Executed</div>
-                <div className="text-sm font-semibold">
-                  {action.lastExecutedAt
-                    ? <FormattedDate date={action.lastExecutedAt} />
-                    : "Never"}
-                </div>
-              </div>
+              <div><div className="text-muted-foreground mb-1">{t("serviceActions.statistics.totalExecutions")}</div><div className="text-2xl font-bold">{action.executionCount.toLocaleString()}</div></div>
+              <div><div className="text-muted-foreground mb-1">{t("serviceActions.statistics.errors")}</div><div className="text-2xl font-bold text-destructive">{action.errorCount.toLocaleString()}</div></div>
+              <div><div className="text-muted-foreground mb-1">{t("serviceActions.lastExecuted")}</div><div className="text-sm font-semibold">{action.lastExecutedAt ? <FormattedDate date={action.lastExecutedAt} /> : t("serviceActions.never")}</div></div>
             </div>
-
-            {action.lastError && (
-              <div className="mt-4 p-3 bg-destructive/10 rounded-md">
-                <div className="text-sm font-medium text-destructive mb-1">Last Error</div>
-                <div className="text-sm text-muted-foreground">{action.lastError}</div>
-              </div>
-            )}
+            {action.lastError && <div className="mt-4 p-3 bg-destructive/10 rounded-md"><div className="text-sm font-medium text-destructive mb-1">{t("serviceActions.lastError")}</div><div className="text-sm text-muted-foreground">{action.lastError}</div></div>}
           </CardContent>
         </Card>
 
-        {/* Actions */}
         <div className="flex gap-2">
-          <Button type="submit" disabled={isSubmitting}>
-            {isSubmitting ? "Saving..." : "Save Changes"}
-          </Button>
-          <Button type="button" variant="outline" asChild>
-            <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}>Cancel</Link>
-          </Button>
+          <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("serviceActions.saving") : t("serviceActions.saveChanges")}</Button>
+          <Button type="button" variant="outline" asChild><Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}>{t("common.buttons.cancel")}</Link></Button>
         </div>
       </Form>
     </div>

@@ -11,7 +11,9 @@ vi.mock("~/services/api", () => ({
 
 describe("Audit Logs Page", () => {
     it("meta returns correct title", () => {
-        const result = meta({} as Parameters<typeof meta>[0]);
+        const result = meta({
+            matches: [{ id: "root", data: { locale: "en-US" } }],
+        } as Parameters<typeof meta>[0]);
         expect(result).toEqual([{ title: "Audit Logs - Auth9" }]);
     });
 

@@ -92,6 +92,7 @@ function createFormRequest(data: Record<string, string>): Request {
     return new Request("http://localhost/dashboard/account/identities", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
     });
 }
 
@@ -130,7 +131,9 @@ describe("Account Identities Page", () => {
             ],
         });
 
-        const request = new Request("http://localhost/dashboard/account/identities");
+        const request = new Request("http://localhost/dashboard/account/identities", {
+            headers: { "Accept-Language": "en-US" },
+        });
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({
@@ -149,7 +152,9 @@ describe("Account Identities Page", () => {
         const { getAccessToken } = await import("~/services/session.server");
         vi.mocked(getAccessToken).mockResolvedValueOnce(null);
 
-        const request = new Request("http://localhost/dashboard/account/identities");
+        const request = new Request("http://localhost/dashboard/account/identities", {
+            headers: { "Accept-Language": "en-US" },
+        });
         try {
             await loader({ request, params: {}, context: {} });
             expect.fail("Expected redirect");
@@ -162,7 +167,9 @@ describe("Account Identities Page", () => {
     it("loader returns empty array on error", async () => {
         vi.mocked(identityProviderApi.listMyLinkedIdentities).mockRejectedValue(new Error("fail"));
 
-        const request = new Request("http://localhost/dashboard/account/identities");
+        const request = new Request("http://localhost/dashboard/account/identities", {
+            headers: { "Accept-Language": "en-US" },
+        });
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({

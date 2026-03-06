@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import UsersPage, { loader, action } from "~/routes/dashboard.users";
+import { I18nProvider } from "~/i18n";
 import { userApi, tenantApi, serviceApi, rbacApi, sessionApi } from "~/services/api";
 import { ConfirmProvider } from "~/hooks/useConfirm";
 
@@ -10,6 +11,7 @@ import { ConfirmProvider } from "~/hooks/useConfirm";
 vi.mock("~/services/api", () => ({
     userApi: {
         list: vi.fn(),
+        getMe: vi.fn(),
         create: vi.fn(),
         update: vi.fn(),
         delete: vi.fn(),
@@ -49,10 +51,18 @@ vi.mock("~/services/session.server", () => ({
 
 function WrappedPage() {
     return (
-        <ConfirmProvider>
-            <UsersPage />
-        </ConfirmProvider>
+        <I18nProvider locale="en-US">
+            <ConfirmProvider>
+                <UsersPage />
+            </ConfirmProvider>
+        </I18nProvider>
     );
+}
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", "en-US");
+    return new Request(url, { ...init, headers });
 }
 
 function DashboardLayout() {
@@ -62,6 +72,16 @@ function DashboardLayout() {
 describe("Users Page", () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        vi.mocked(userApi.getMe).mockResolvedValue({
+            data: {
+                id: "u-admin",
+                email: "admin@example.com",
+                display_name: "Admin",
+                mfa_enabled: false,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+            },
+        });
     });
 
     async function openUserActionMenu(
@@ -1558,7 +1578,7 @@ describe("Users Page", () => {
             for (const [key, value] of Object.entries(data)) {
                 formData.append(key, value);
             }
-            return new Request("http://localhost/dashboard/users", {
+            return buildEnglishRequest("http://localhost/dashboard/users", {
                 method: "POST",
                 body: formData,
             });
@@ -1634,7 +1654,7 @@ describe("Users Page", () => {
             formData.append("tenant_id", "t1");
             formData.append("roles", JSON.stringify(["r1", "r2"]));
 
-            const request = new Request("http://localhost/dashboard/users", {
+            const request = buildEnglishRequest("http://localhost/dashboard/users", {
                 method: "POST",
                 body: formData,
             });

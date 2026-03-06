@@ -4,12 +4,18 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useLoaderData,
+  useRouteLoaderData,
   useRouteError,
   isRouteErrorResponse,
 } from "react-router";
-import type { LinksFunction, MetaFunction } from "react-router";
+import type { LinksFunction, LoaderFunctionArgs, MetaFunction } from "react-router";
+import { I18nProvider, type AppLocale } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
 import { ConfirmProvider } from "~/hooks/useConfirm";
 import { useNonce } from "~/hooks/useNonce";
+import { resolveLocale } from "~/services/locale.server";
 import "./styles/tailwind.css";
 
 export const links: LinksFunction = () => [
@@ -25,17 +31,21 @@ export const links: LinksFunction = () => [
   },
 ];
 
-export const meta: MetaFunction = () => {
-  return [
-    { title: "Auth9 - Identity Management" },
-    { name: "description", content: "Modern identity and access management" },
-  ];
+export async function loader({ request }: LoaderFunctionArgs) {
+  const locale = await resolveLocale(request);
+  return { locale };
+}
+
+export const meta: MetaFunction<typeof loader> = ({ matches }) => {
+  const locale = resolveMetaLocale(matches);
+  return buildMeta(locale, "common.meta.appTitle", "common.meta.appDescription");
 };
 
 export function Layout({ children }: { children: React.ReactNode }) {
   const nonce = useNonce();
+  const { locale } = useLoaderData<typeof loader>();
   return (
-    <html lang="en" className="h-full" data-theme="light" suppressHydrationWarning>
+    <html lang={locale} className="h-full" data-theme="light" suppressHydrationWarning>
       <head>
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
@@ -54,15 +64,20 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
+  const { locale } = useLoaderData<typeof loader>() as { locale: AppLocale };
   return (
-    <ConfirmProvider>
-      <Outlet />
-    </ConfirmProvider>
+    <I18nProvider locale={locale}>
+      <ConfirmProvider>
+        <Outlet />
+      </ConfirmProvider>
+    </I18nProvider>
   );
 }
 
 export function ErrorBoundary() {
   const error = useRouteError();
+  const rootData = useRouteLoaderData("root") as { locale?: AppLocale } | undefined;
+  const locale = rootData?.locale || "zh-CN";
 
   if (isRouteErrorResponse(error)) {
     return (
@@ -70,13 +85,15 @@ export function ErrorBoundary() {
         <div className="text-center">
           <h1 className="text-6xl font-bold text-gray-900">{error.status}</h1>
           <p className="mt-4 text-xl text-gray-600">
-            {error.status === 404 ? "Page not found" : "Something went wrong"}
+            {error.status === 404
+              ? translate(locale, "common.errors.pageNotFound")
+              : translate(locale, "common.errors.somethingWentWrong")}
           </p>
           <a
             href="/"
             className="mt-8 inline-block px-6 py-3 bg-apple-blue text-white rounded-apple font-medium hover:bg-blue-600 transition-colors"
           >
-            Go back home
+            {translate(locale, "common.errors.goBackHome")}
           </a>
         </div>
       </div>
@@ -88,13 +105,13 @@ export function ErrorBoundary() {
       <div className="text-center">
         <h1 className="text-6xl font-bold text-gray-900">Error</h1>
         <p className="mt-4 text-xl text-gray-600">
-          Something went wrong. Please try again.
+          {translate(locale, "common.errors.somethingWentWrong")}
         </p>
         <a
           href="/"
           className="mt-8 inline-block px-6 py-3 bg-apple-blue text-white rounded-apple font-medium hover:bg-blue-600 transition-colors"
         >
-          Go back home
+          {translate(locale, "common.errors.goBackHome")}
         </a>
       </div>
     </div>

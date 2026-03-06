@@ -4,6 +4,10 @@ import { Form, useActionData, useLoaderData, useNavigation } from "react-router"
 import { redirect } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { useFormatters } from "~/i18n/format";
+import { useI18n } from "~/i18n";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 import { identityProviderApi, type LinkedIdentity } from "~/services/api";
 import { getAccessToken, requireAuthWithUpdate } from "~/services/session.server";
 import { Cross2Icon } from "@radix-ui/react-icons";
@@ -103,7 +107,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
     return {
       identities: [],
       availableProviders: [],
-      error: "Failed to load linked identities",
+      error: translate(await resolveLocale(request), "accountIdentities.loadError"),
     };
   }
 }
@@ -111,7 +115,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const accessToken = await getAccessToken(request);
   if (!accessToken) {
-    return { error: "Not authenticated" };
+    return { error: translate(await resolveLocale(request), "accountIdentities.notAuthenticated") };
   }
 
   const formData = await request.formData();
@@ -121,14 +125,14 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "link") {
       const providerAlias = String(formData.get("providerAlias") || "").trim();
       if (!providerAlias) {
-        return { error: "Provider alias is required" };
+        return { error: translate(await resolveLocale(request), "accountIdentities.providerAliasRequired") };
       }
 
       const { session, headers } = await requireAuthWithUpdate(request);
       const keycloakLinkToken =
         session.idToken || session.identityAccessToken || session.accessToken;
       if (!keycloakLinkToken) {
-        return { error: "Not authenticated" };
+        return { error: translate(await resolveLocale(request), "accountIdentities.notAuthenticated") };
       }
 
       const linkUrl = buildKeycloakAccountLinkUrl(
@@ -143,14 +147,17 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "unlink") {
       const identityId = formData.get("identityId") as string;
       await identityProviderApi.unlinkIdentity(identityId, accessToken);
-      return { success: true, message: "Identity unlinked successfully" };
+      return { success: true, message: translate(await resolveLocale(request), "accountIdentities.unlinkSuccess") };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Operation failed";
+    const message =
+      error instanceof Error
+        ? error.message
+        : translate(await resolveLocale(request), "accountIdentities.operationFailed");
     return { error: message };
   }
 
-  return { error: "Invalid action" };
+  return { error: translate(await resolveLocale(request), "accountIdentities.invalidAction") };
 }
 
 function getProviderIcon(providerType: string) {
@@ -176,6 +183,8 @@ function getProviderName(providerAlias: string, providerType: string) {
 }
 
 export default function AccountIdentitiesPage() {
+  const { t } = useI18n();
+  const formatters = useFormatters();
   const { identities, availableProviders, error: loadError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -186,20 +195,18 @@ export default function AccountIdentitiesPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Linked Identities</CardTitle>
+          <CardTitle>{t("accountIdentities.title")}</CardTitle>
           <CardDescription>
-            External accounts connected to your Auth9 account. These allow you to sign in
-            using third-party providers.
+            {t("accountIdentities.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           {availableProviders.length > 0 && (
             <div className="mb-6 rounded-lg border border-[var(--border-subtle)] bg-[var(--surface-elevated)] p-4">
               <div className="mb-3">
-                <h3 className="font-medium text-[var(--text-primary)]">Link another identity</h3>
+                <h3 className="font-medium text-[var(--text-primary)]">{t("accountIdentities.linkAnother")}</h3>
                 <p className="text-sm text-[var(--text-secondary)]">
-                  Start a verified provider flow to connect an additional sign-in method to
-                  this account.
+                  {t("accountIdentities.linkAnotherDescription")}
                 </p>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -208,7 +215,9 @@ export default function AccountIdentitiesPage() {
                     <input type="hidden" name="intent" value="link" />
                     <input type="hidden" name="providerAlias" value={provider.alias} />
                     <Button type="submit" variant="outline" size="sm" disabled={isSubmitting}>
-                      Link {getProviderName(provider.display_name || provider.alias, provider.provider_id)}
+                      {t("accountIdentities.linkAction", {
+                        provider: getProviderName(provider.display_name || provider.alias, provider.provider_id),
+                      })}
                     </Button>
                   </Form>
                 ))}
@@ -240,12 +249,12 @@ export default function AccountIdentitiesPage() {
                 <LinkIcon className="h-6 w-6 text-[var(--text-tertiary)]" />
               </div>
               <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
-                No linked identities
+                {t("accountIdentities.noIdentities")}
               </h3>
               <p className="text-[var(--text-secondary)]">
                 {availableProviders.length > 0
-                  ? "You haven't connected any external accounts yet. Use the link actions above to add one now."
-                  : "You haven't connected any external accounts yet. Once a provider is enabled, you can link it here."}
+                  ? t("accountIdentities.noIdentitiesWithProviders")
+                  : t("accountIdentities.noIdentitiesWithoutProviders")}
               </p>
             </div>
           ) : (
@@ -265,7 +274,7 @@ export default function AccountIdentitiesPage() {
                     <div className="text-sm text-[var(--text-secondary)] mt-0.5">
                       {identity.external_email || identity.external_user_id}
                       <span className="text-xs text-[var(--text-tertiary)] ml-2">
-                        Linked {new Date(identity.linked_at).toLocaleDateString()}
+                        {t("accountIdentities.linkedOn", { date: formatters.date(identity.linked_at) })}
                       </span>
                     </div>
                   </div>
@@ -280,7 +289,7 @@ export default function AccountIdentitiesPage() {
                       disabled={isSubmitting}
                     >
                       <Cross2Icon className="h-4 w-4 mr-1" />
-                      Unlink
+                      {t("accountIdentities.unlink")}
                     </Button>
                   </Form>
                 </div>

@@ -5,7 +5,9 @@ import AccountLayout, { meta } from "~/routes/dashboard.account";
 
 describe("Account Layout", () => {
     it("meta returns correct title", () => {
-        const result = meta({} as Parameters<typeof meta>[0]);
+        const result = meta({
+            matches: [{ id: "root", data: { locale: "en-US" } }],
+        } as Parameters<typeof meta>[0]);
         expect(result).toEqual([{ title: "Account - Auth9" }]);
     });
 

@@ -76,6 +76,7 @@ function createFormRequest(data: Record<string, string>): Request {
     return new Request("http://localhost/dashboard/account/sessions", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
     });
 }
 
@@ -93,7 +94,9 @@ describe("Account Sessions Page", () => {
             data: [mockCurrentSession, mockOtherSession],
         });
 
-        const request = new Request("http://localhost/dashboard/account/sessions");
+        const request = new Request("http://localhost/dashboard/account/sessions", {
+            headers: { "Accept-Language": "en-US" },
+        });
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({ sessions: [mockCurrentSession, mockOtherSession] });
@@ -104,7 +107,9 @@ describe("Account Sessions Page", () => {
         const redirectResponse = new Response(null, { status: 302, headers: { Location: "/login" } });
         vi.mocked(requireIdentityAuthWithUpdate).mockRejectedValueOnce(redirectResponse);
 
-        const request = new Request("http://localhost/dashboard/account/sessions");
+        const request = new Request("http://localhost/dashboard/account/sessions", {
+            headers: { "Accept-Language": "en-US" },
+        });
         try {
             await loader({ request, params: {}, context: {} });
             expect.fail("Expected redirect");
@@ -117,7 +122,9 @@ describe("Account Sessions Page", () => {
     it("loader returns empty sessions on error", async () => {
         vi.mocked(sessionApi.listMySessions).mockRejectedValue(new Error("fail"));
 
-        const request = new Request("http://localhost/dashboard/account/sessions");
+        const request = new Request("http://localhost/dashboard/account/sessions", {
+            headers: { "Accept-Language": "en-US" },
+        });
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({ sessions: [], error: "Failed to load sessions" });

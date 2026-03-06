@@ -1,16 +1,18 @@
 import { useTheme } from "~/hooks/useTheme";
+import { useI18n } from "~/i18n";
 import { cn } from "~/lib/utils";
 
 export function ThemeToggle() {
   const { theme, setTheme } = useTheme();
+  const { t } = useI18n();
 
   return (
     <div className="theme-toggle" data-testid="theme-toggle">
       <button
         className={cn("theme-btn", theme === "light" && "active")}
         onClick={() => setTheme("light")}
-        title="Light Mode"
-        aria-label="Switch to light mode"
+        title={t("common.theme.light")}
+        aria-label={t("common.theme.switchToLight")}
         tabIndex={0}
         data-testid="theme-light"
       >
@@ -19,8 +21,8 @@ export function ThemeToggle() {
       <button
         className={cn("theme-btn", theme === "dark" && "active")}
         onClick={() => setTheme("dark")}
-        title="Dark Mode"
-        aria-label="Switch to dark mode"
+        title={t("common.theme.dark")}
+        aria-label={t("common.theme.switchToDark")}
         tabIndex={0}
         data-testid="theme-dark"
       >

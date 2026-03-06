@@ -50,6 +50,7 @@ describe("Invite Accept Page", () => {
       const request = new Request("http://localhost/invite/accept", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: {}, context: {} });
@@ -73,6 +74,7 @@ describe("Invite Accept Page", () => {
       const request = new Request("http://localhost/invite/accept", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const result = await action({ request, params: {}, context: {} });
@@ -101,6 +103,7 @@ describe("Invite Accept Page", () => {
       const request = new Request("http://localhost/invite/accept", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const result = await action({ request, params: {}, context: {} });
@@ -128,6 +131,7 @@ describe("Invite Accept Page", () => {
       const request = new Request("http://localhost/invite/accept", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: {}, context: {} });
@@ -145,6 +149,7 @@ describe("Invite Accept Page", () => {
       const request = new Request("http://localhost/invite/accept", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: {}, context: {} });

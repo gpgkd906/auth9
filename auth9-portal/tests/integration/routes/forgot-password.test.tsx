@@ -99,7 +99,7 @@ describe("Forgot Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Email is required" });
+    expect(response).toEqual({ error: "请输入邮箱地址。" });
   });
 
   it("action returns success on valid email", async () => {
@@ -165,7 +165,7 @@ describe("Forgot Password Page", () => {
     const response = await action({ request, params: {}, context: {} });
 
     expect(passwordApi.forgotPassword).not.toHaveBeenCalled();
-    expect(response).toEqual({ error: "Email is required" });
+    expect(response).toEqual({ error: "请输入邮箱地址。" });
   });
 
   // ============================================================================
@@ -229,7 +229,9 @@ describe("Forgot Password Page", () => {
     });
 
     // The email address should be displayed in the success message
-    expect(screen.getByText("user@domain.com")).toBeInTheDocument();
+    expect(
+      screen.getByText((content) => content.includes("user@domain.com"))
+    ).toBeInTheDocument();
   });
 
   it("success state has try again link", async () => {

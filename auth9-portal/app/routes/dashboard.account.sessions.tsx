@@ -3,6 +3,10 @@ import { requireIdentityAuthWithUpdate } from "~/services/session.server";
 import { redirect, Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { useFormatters } from "~/i18n/format";
+import { useI18n } from "~/i18n";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 import { sessionApi, type SessionInfo } from "~/services/api";
 import {
   DesktopIcon,
@@ -25,7 +29,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
     return data;
   } catch {
-    return { sessions: [], error: "Failed to load sessions" };
+    const locale = await resolveLocale(request);
+    return { sessions: [], error: translate(locale, "account.sessions.loadError") };
   }
 }
 
@@ -49,11 +54,14 @@ export async function action({ request }: ActionFunctionArgs) {
       return redirect("/dashboard/account/sessions");
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Operation failed";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error ? error.message : translate(locale, "account.sessions.operationFailed");
     return { error: message };
   }
 
-  return { error: "Invalid action" };
+  const locale = await resolveLocale(request);
+  return { error: translate(locale, "account.sessions.invalidAction") };
 }
 
 function getDeviceIcon(deviceType?: string) {
@@ -68,7 +76,7 @@ function getDeviceIcon(deviceType?: string) {
   }
 }
 
-function formatDate(dateString: string) {
+function formatRelativeDate(dateString: string, t: ReturnType<typeof useI18n>["t"]) {
   const date = new Date(dateString);
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
@@ -76,14 +84,16 @@ function formatDate(dateString: string) {
   const diffHours = Math.floor(diffMins / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffMins < 1) return "Just now";
-  if (diffMins < 60) return `${diffMins} minutes ago`;
-  if (diffHours < 24) return `${diffHours} hours ago`;
-  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffMins < 1) return t("account.sessions.justNow");
+  if (diffMins < 60) return t("account.sessions.minutesAgo", { count: diffMins });
+  if (diffHours < 24) return t("account.sessions.hoursAgo", { count: diffHours });
+  if (diffDays < 7) return t("account.sessions.daysAgo", { count: diffDays });
   return date.toLocaleDateString();
 }
 
 export default function AccountSessionsPage() {
+  const { t } = useI18n();
+  const formatters = useFormatters();
   const { sessions, error: loadError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -97,9 +107,9 @@ export default function AccountSessionsPage() {
       {/* Current Session */}
       <Card>
         <CardHeader>
-          <CardTitle>Current Session</CardTitle>
+          <CardTitle>{t("account.sessions.currentTitle")}</CardTitle>
           <CardDescription>
-            This is the device you are currently using.
+            {t("account.sessions.currentDescription")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -111,11 +121,11 @@ export default function AccountSessionsPage() {
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">
-                    {currentSession.device_name || "Unknown Device"}
+                    {currentSession.device_name || t("account.sessions.unknownDevice")}
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-[var(--accent-green)] px-2 py-0.5 rounded-full">
                     <CheckCircledIcon className="h-3 w-3" />
-                    Current
+                    {t("account.sessions.current")}
                   </span>
                 </div>
                 <div className="text-sm text-[var(--text-secondary)] mt-1 space-y-0.5">
@@ -127,13 +137,13 @@ export default function AccountSessionsPage() {
                     </div>
                   )}
                   <div>
-                    Last active: {formatDate(currentSession.last_active_at)}
+                    {t("account.sessions.lastActive")}: {formatRelativeDate(currentSession.last_active_at, t)}
                   </div>
                 </div>
               </div>
             </div>
           ) : (
-            <p className="text-[var(--text-secondary)]">Unable to identify current session</p>
+            <p className="text-[var(--text-secondary)]">{t("account.sessions.unknownCurrent")}</p>
           )}
         </CardContent>
       </Card>
@@ -142,9 +152,9 @@ export default function AccountSessionsPage() {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between">
           <div>
-            <CardTitle>Other Sessions</CardTitle>
+            <CardTitle>{t("account.sessions.otherTitle")}</CardTitle>
             <CardDescription>
-              Devices where you are currently signed in.
+              {t("account.sessions.otherDescription")}
             </CardDescription>
           </div>
           {otherSessions.length > 0 && (
@@ -156,7 +166,7 @@ export default function AccountSessionsPage() {
                 size="sm"
                 disabled={isSubmitting}
               >
-                Sign out all
+                {t("account.sessions.signOutAll")}
               </Button>
             </Form>
           )}
@@ -176,7 +186,7 @@ export default function AccountSessionsPage() {
 
           {otherSessions.length === 0 ? (
             <p className="text-[var(--text-secondary)] text-center py-8">
-              No other active sessions
+              {t("account.sessions.noOtherSessions")}
             </p>
           ) : (
             <div className="divide-y">
@@ -190,7 +200,7 @@ export default function AccountSessionsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">
-                      {session.device_name || "Unknown Device"}
+                      {session.device_name || t("account.sessions.unknownDevice")}
                     </div>
                     <div className="text-sm text-[var(--text-secondary)] mt-1 space-y-0.5">
                       {session.ip_address && (
@@ -201,10 +211,10 @@ export default function AccountSessionsPage() {
                         </div>
                       )}
                       <div>
-                        Last active: {formatDate(session.last_active_at)}
+                        {t("account.sessions.lastActive")}: {formatRelativeDate(session.last_active_at, t)}
                       </div>
                       <div className="text-xs text-[var(--text-tertiary)]">
-                        Started: {new Date(session.created_at).toLocaleDateString()}
+                        {t("account.sessions.started")}: {formatters.date(session.created_at)}
                       </div>
                     </div>
                   </div>
@@ -219,7 +229,7 @@ export default function AccountSessionsPage() {
                       disabled={isSubmitting}
                     >
                       <Cross2Icon className="h-4 w-4 mr-1" />
-                      Revoke
+                      {t("account.sessions.revoke")}
                     </Button>
                   </Form>
                 </div>
@@ -232,14 +242,14 @@ export default function AccountSessionsPage() {
       {/* Session Security Tips */}
       <Card>
         <CardHeader>
-          <CardTitle>Security Tips</CardTitle>
+          <CardTitle>{t("account.sessions.securityTips")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="text-sm text-[var(--text-secondary)] space-y-2">
-            <li>• Sign out of sessions you do not recognize</li>
-            <li>• Do not stay signed in on shared or public devices</li>
-            <li>• Enable two-factor authentication for extra security</li>
-            <li>• Use unique, strong passwords for each account</li>
+            <li>• {t("account.sessions.tips.unrecognized")}</li>
+            <li>• {t("account.sessions.tips.sharedDevices")}</li>
+            <li>• {t("account.sessions.tips.mfa")}</li>
+            <li>• {t("account.sessions.tips.passwords")}</li>
           </ul>
         </CardContent>
       </Card>

@@ -2,6 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import SecurityAlertsPage, { loader, action } from "~/routes/dashboard.security.alerts";
+import { I18nProvider } from "~/i18n";
 import { securityAlertApi } from "~/services/api";
 
 // Mock the API
@@ -40,6 +41,20 @@ const mockPagination = {
 };
 
 describe("Security Alerts Page", () => {
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <SecurityAlertsPage />
+      </I18nProvider>
+    );
+  }
+
+  function buildEnglishRequest(url: string, init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", "en-US");
+    return new Request(url, { ...init, headers });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -54,7 +69,7 @@ describe("Security Alerts Page", () => {
       pagination: mockPagination,
     });
 
-    const request = new Request("http://localhost/dashboard/security/alerts");
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toEqual({
@@ -73,7 +88,7 @@ describe("Security Alerts Page", () => {
       pagination: { ...mockPagination, total: 1 },
     });
 
-    const request = new Request("http://localhost/dashboard/security/alerts?unresolved=true");
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts?unresolved=true");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response.unresolvedOnly).toBe(true);
@@ -83,7 +98,7 @@ describe("Security Alerts Page", () => {
   it("loader returns error on API failure", async () => {
     vi.mocked(securityAlertApi.list).mockRejectedValue(new Error("API Error"));
 
-    const request = new Request("http://localhost/dashboard/security/alerts");
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toEqual({
@@ -104,7 +119,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: mockPagination,
@@ -125,7 +140,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: mockPagination,
@@ -153,7 +168,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: mockPagination,
@@ -167,14 +182,14 @@ describe("Security Alerts Page", () => {
     await waitFor(() => {
       expect(screen.getByText("CRITICAL")).toBeInTheDocument();
     });
-    expect(screen.getByText("Brute Force Attack")).toBeInTheDocument();
+    expect(screen.getAllByText("Brute Force Attack").length).toBeGreaterThanOrEqual(1);
   });
 
   it("renders resolve button for unresolved alerts", async () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: mockPagination,
@@ -194,7 +209,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertResolved],
           pagination: mockPagination,
@@ -216,7 +231,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [],
           pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
@@ -237,7 +252,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [],
           pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
@@ -257,7 +272,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [],
           pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
@@ -286,7 +301,7 @@ describe("Security Alerts Page", () => {
     formData.append("intent", "resolve");
     formData.append("alertId", "alert-1");
 
-    const request = new Request("http://localhost/dashboard/security/alerts", {
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts", {
       method: "POST",
       body: formData,
     });
@@ -304,7 +319,7 @@ describe("Security Alerts Page", () => {
     formData.append("intent", "resolve");
     formData.append("alertId", "invalid-id");
 
-    const request = new Request("http://localhost/dashboard/security/alerts", {
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts", {
       method: "POST",
       body: formData,
     });
@@ -318,7 +333,7 @@ describe("Security Alerts Page", () => {
     const formData = new FormData();
     formData.append("intent", "invalid");
 
-    const request = new Request("http://localhost/dashboard/security/alerts", {
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts", {
       method: "POST",
       body: formData,
     });
@@ -335,7 +350,7 @@ describe("Security Alerts Page", () => {
     formData.append("intent", "resolve");
     formData.append("alertId", "alert-1");
 
-    const request = new Request("http://localhost/dashboard/security/alerts", {
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts", {
       method: "POST",
       body: formData,
     });
@@ -362,7 +377,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [highAlert],
           pagination: mockPagination,
@@ -394,7 +409,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [lowAlert],
           pagination: mockPagination,
@@ -428,7 +443,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [unknownAlert],
           pagination: mockPagination,
@@ -453,7 +468,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: { page: 2, per_page: 50, total: 150, total_pages: 3 },
@@ -475,7 +490,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: { page: 1, per_page: 50, total: 100, total_pages: 2 },
@@ -497,7 +512,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [mockAlertCritical],
           pagination: { page: 3, per_page: 50, total: 150, total_pages: 3 },
@@ -523,7 +538,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [],
           pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
@@ -543,7 +558,7 @@ describe("Security Alerts Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/security/alerts",
-        Component: SecurityAlertsPage,
+        Component: WrappedPage,
         loader: () => ({
           alerts: [],
           pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
@@ -565,7 +580,7 @@ describe("Security Alerts Page", () => {
       pagination: { page: 3, per_page: 50, total: 0, total_pages: 0 },
     });
 
-    const request = new Request("http://localhost/dashboard/security/alerts?page=3");
+    const request = buildEnglishRequest("http://localhost/dashboard/security/alerts?page=3");
     await loader({ request, params: {}, context: {} });
 
     expect(securityAlertApi.list).toHaveBeenCalledWith(3, 50, false, undefined, undefined, undefined);

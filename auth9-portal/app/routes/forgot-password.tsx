@@ -1,18 +1,29 @@
-import type { ActionFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, MetaFunction } from "react-router";
 import { Form, useActionData, useNavigation, Link } from "react-router";
 import { useState } from "react";
+import { LanguageSwitcher } from "~/components/LanguageSwitcher";
+import { ThemeToggle } from "~/components/ThemeToggle";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { useI18n } from "~/i18n";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 import { passwordApi } from "~/services/api";
 
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "auth.forgotPassword.metaTitle");
+};
+
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const formData = await request.formData();
   const email = formData.get("email") as string;
 
   if (!email) {
-    return { error: "Email is required" };
+    return { error: translate(locale, "auth.forgotPassword.emailRequired") };
   }
 
   try {
@@ -25,6 +36,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function ForgotPasswordPage() {
+  const { t } = useI18n();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [email, setEmail] = useState("");
@@ -33,26 +45,29 @@ export default function ForgotPasswordPage() {
 
   if (actionData?.success) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 relative">
+        <div className="fixed top-6 right-6 z-20 flex items-center gap-3">
+          <LanguageSwitcher />
+          <ThemeToggle />
+        </div>
         <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <CardTitle>Check your email</CardTitle>
+            <CardTitle>{t("auth.forgotPassword.successTitle")}</CardTitle>
             <CardDescription>
-              If an account exists for <strong>{email}</strong>, we have sent password
-              reset instructions to that address.
+              {t("auth.forgotPassword.successDescription", { email })}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-sm text-gray-600 text-center">
-              Did not receive the email? Check your spam folder or{" "}
+              {t("auth.forgotPassword.successHint")}{" "}
               <Link to="/forgot-password" className="text-blue-600 hover:underline">
-                try again
+                {t("auth.forgotPassword.tryAgain")}
               </Link>
               .
             </p>
             <div className="text-center">
               <Link to="/login">
-                <Button variant="outline">Back to login</Button>
+                <Button variant="outline">{t("common.buttons.backToLogin")}</Button>
               </Link>
             </div>
           </CardContent>
@@ -62,23 +77,25 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
+    <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4 relative">
+      <div className="fixed top-6 right-6 z-20 flex items-center gap-3">
+        <LanguageSwitcher />
+        <ThemeToggle />
+      </div>
       <Card className="w-full max-w-md">
-        <CardHeader className="text-center">
-          <CardTitle>Forgot password?</CardTitle>
-          <CardDescription>
-            Enter your email address and we will send you a link to reset your password.
-          </CardDescription>
+          <CardHeader className="text-center">
+          <CardTitle>{t("auth.forgotPassword.title")}</CardTitle>
+          <CardDescription>{t("auth.forgotPassword.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="email">Email address</Label>
+              <Label htmlFor="email">{t("common.labels.emailAddress")}</Label>
               <Input
                 id="email"
                 name="email"
                 type="email"
-                placeholder="you@example.com"
+                placeholder={t("common.placeholders.email")}
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 required
@@ -93,12 +110,12 @@ export default function ForgotPasswordPage() {
             )}
 
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Sending..." : "Send reset link"}
+              {isSubmitting ? t("common.buttons.sending") : t("common.buttons.sendResetLink")}
             </Button>
 
             <div className="text-center text-sm">
               <Link to="/login" className="text-blue-600 hover:underline">
-                Back to login
+                {t("common.buttons.backToLogin")}
               </Link>
             </div>
           </Form>

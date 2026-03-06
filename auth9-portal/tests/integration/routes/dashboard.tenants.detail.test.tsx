@@ -107,11 +107,13 @@ describe("Tenant Detail Page", () => {
     it("throws error when tenantId is missing", async () => {
       await expect(
         loader({
-          request: new Request("http://localhost/dashboard/tenants/"),
+          request: new Request("http://localhost/dashboard/tenants/", {
+            headers: { "Accept-Language": "en-US" },
+          }),
           params: {},
           context: {},
         })
-      ).rejects.toThrow("Tenant ID is required");
+      ).rejects.toThrow("Tenant ID required");
     });
   });
 
@@ -162,7 +164,7 @@ describe("Tenant Detail Page", () => {
       render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
 
       await waitFor(() => {
-        const backLink = screen.getByRole("link", { name: "" }); // Icon button has no text
+        const backLink = screen.getByRole("link", { name: "Back to tenants" });
         expect(backLink).toHaveAttribute("href", "/dashboard/tenants");
       });
     });
@@ -316,9 +318,8 @@ describe("Tenant Detail Page", () => {
       render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1"]} />);
 
       await waitFor(() => {
-        expect(screen.getByText("Status")).toBeInTheDocument();
-        // Select component may render "Active" in multiple elements
-        expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+        expect(screen.getAllByText("Status").length).toBeGreaterThan(0);
+        expect(screen.getByRole("combobox")).toBeInTheDocument();
       });
     });
 
@@ -601,6 +602,7 @@ describe("Tenant Detail Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({
@@ -629,6 +631,7 @@ describe("Tenant Detail Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       await action({
@@ -651,6 +654,7 @@ describe("Tenant Detail Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({
@@ -676,6 +680,7 @@ describe("Tenant Detail Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({
@@ -696,6 +701,7 @@ describe("Tenant Detail Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({

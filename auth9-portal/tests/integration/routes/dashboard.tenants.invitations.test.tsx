@@ -339,6 +339,7 @@ describe("Invitations Page", () => {
       return new Request("http://localhost/dashboard/tenants/tenant-1/invitations", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
     }
 
@@ -1144,7 +1145,7 @@ describe("Invitations Page", () => {
 
       // After successful resend, the success message should appear
       await waitFor(() => {
-        expect(screen.getByText("Invitation email resent")).toBeInTheDocument();
+        expect(screen.getByText("邀请邮件已重新发送")).toBeInTheDocument();
       });
     });
   });

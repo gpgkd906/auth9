@@ -7,14 +7,21 @@ import { Switch } from "~/components/ui/switch";
 import { redirect } from "react-router";
 import { tenantApi, tenantServiceApi, type ServiceWithStatus } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  return [{ title: `Services - ${data?.tenant.name || "Tenant"} - Auth9` }];
+export const meta: MetaFunction<typeof loader> = ({ data, matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "tenants.services.metaTitle", undefined, {
+    tenantName: data?.tenant.name || translate(resolveMetaLocale(matches), "tenants.title"),
+  });
 };
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const { tenantId } = params;
-  if (!tenantId) throw new Error("Tenant ID is required");
+  const locale = await resolveLocale(request);
+  if (!tenantId) throw new Error(translate(locale, "tenants.errors.tenantIdRequired"));
   const accessToken = await getAccessToken(request);
 
   try {
@@ -34,7 +41,8 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const { tenantId } = params;
-  if (!tenantId) return Response.json({ error: "Tenant ID required" }, { status: 400 });
+  const locale = await resolveLocale(request);
+  if (!tenantId) return Response.json({ error: translate(locale, "tenants.errors.tenantIdRequired") }, { status: 400 });
   const accessToken = await getAccessToken(request);
 
   const formData = await request.formData();
@@ -45,16 +53,31 @@ export async function action({ request, params }: ActionFunctionArgs) {
     const result = await tenantServiceApi.toggleService(tenantId, serviceId, enabled, accessToken || undefined);
     return { success: true, services: result.data };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "tenants.errors.unknown");
     return Response.json({ error: message }, { status: 400 });
   }
 }
 
+function getServiceStatusLabel(status: string, t: ReturnType<typeof useI18n>["t"]) {
+  switch (status) {
+    case "active":
+      return t("tenants.statuses.active");
+    case "inactive":
+      return t("tenants.statuses.inactive");
+    case "suspended":
+      return t("tenants.statuses.suspended");
+    case "pending":
+      return t("tenants.statuses.pending");
+    default:
+      return status;
+  }
+}
+
 function ServiceToggleRow({ service }: { service: ServiceWithStatus }) {
+  const { t } = useI18n();
   const fetcher = useFetcher();
   const isUpdating = fetcher.state !== "idle";
 
-  // Use optimistic UI - show the state we're transitioning to
   const optimisticEnabled = fetcher.formData
     ? fetcher.formData.get("enabled") === "true"
     : service.enabled;
@@ -67,15 +90,13 @@ function ServiceToggleRow({ service }: { service: ServiceWithStatus }) {
         </div>
         <div>
           <h3 className="font-medium text-[var(--text-primary)]">{service.name}</h3>
-          {service.base_url && (
-            <p className="text-sm text-[var(--text-tertiary)]">{service.base_url}</p>
-          )}
+          {service.base_url && <p className="text-sm text-[var(--text-tertiary)]">{service.base_url}</p>}
           <span className={`text-xs px-2 py-0.5 rounded-full ${
             service.status === "active"
               ? "bg-[var(--accent-green)]/20 text-[var(--accent-green)]"
               : "bg-[var(--text-tertiary)]/20 text-[var(--text-tertiary)]"
           }`}>
-            {service.status}
+            {getServiceStatusLabel(service.status, t)}
           </span>
         </div>
       </div>
@@ -84,28 +105,12 @@ function ServiceToggleRow({ service }: { service: ServiceWithStatus }) {
         <input type="hidden" name="enabled" value={(!optimisticEnabled).toString()} />
         <div className="flex items-center gap-3">
           <span className={`text-sm ${optimisticEnabled ? "text-[var(--accent-green)]" : "text-[var(--text-tertiary)]"}`}>
-            {optimisticEnabled ? "Enabled" : "Disabled"}
+            {optimisticEnabled ? t("tenants.services.enabledState") : t("tenants.services.disabledState")}
           </span>
           <Switch
             checked={optimisticEnabled}
             disabled={isUpdating}
             onCheckedChange={() => {
-              // Let the form handle the submission
-              const form = document.createElement("form");
-              form.method = "post";
-              form.style.display = "none";
-
-              const serviceIdInput = document.createElement("input");
-              serviceIdInput.name = "serviceId";
-              serviceIdInput.value = service.id;
-              form.appendChild(serviceIdInput);
-
-              const enabledInput = document.createElement("input");
-              enabledInput.name = "enabled";
-              enabledInput.value = (!optimisticEnabled).toString();
-              form.appendChild(enabledInput);
-
-              // Submit via fetcher
               fetcher.submit(
                 { serviceId: service.id, enabled: (!optimisticEnabled).toString() },
                 { method: "post" }
@@ -119,16 +124,16 @@ function ServiceToggleRow({ service }: { service: ServiceWithStatus }) {
 }
 
 export default function TenantServicesPage() {
+  const { t } = useI18n();
   const { tenant, services } = useLoaderData<typeof loader>();
 
   const enabledCount = services.filter((s) => s.enabled).length;
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center space-x-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to={`/dashboard/tenants/${tenant.id}`}>
+          <Link to={`/dashboard/tenants/${tenant.id}`} aria-label={t("tenants.actions.backToList")}>
             <ArrowLeftIcon className="h-4 w-4" />
           </Link>
         </Button>
@@ -142,59 +147,50 @@ export default function TenantServicesPage() {
           )}
           <div>
             <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">
-              Services for {tenant.name}
+              {t("tenants.services.title", { tenantName: tenant.name })}
             </h1>
-            <p className="text-sm text-[var(--text-secondary)]">
-              Enable or disable global services for this tenant
-            </p>
+            <p className="text-sm text-[var(--text-secondary)]">{t("tenants.services.description")}</p>
           </div>
         </div>
       </div>
 
-      {/* Stats */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-[var(--text-primary)]">{services.length}</div>
-            <div className="text-sm text-[var(--text-secondary)]">Total Services</div>
+            <div className="text-sm text-[var(--text-secondary)]">{t("tenants.services.totalServices")}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-[var(--accent-green)]">{enabledCount}</div>
-            <div className="text-sm text-[var(--text-secondary)]">Enabled</div>
+            <div className="text-sm text-[var(--text-secondary)]">{t("tenants.services.enabled")}</div>
           </CardContent>
         </Card>
         <Card>
           <CardContent className="pt-6">
             <div className="text-2xl font-bold text-[var(--text-tertiary)]">{services.length - enabledCount}</div>
-            <div className="text-sm text-[var(--text-secondary)]">Disabled</div>
+            <div className="text-sm text-[var(--text-secondary)]">{t("tenants.services.disabled")}</div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Services List */}
       <Card>
         <CardHeader>
-          <CardTitle>Global Services</CardTitle>
-          <CardDescription>
-            Toggle services on or off for this tenant. Enabled services can be accessed by users in this tenant.
-          </CardDescription>
+          <CardTitle>{t("tenants.services.globalServices")}</CardTitle>
+          <CardDescription>{t("tenants.services.globalServicesDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="p-0">
           {services.length === 0 ? (
             <div className="p-8 text-center text-[var(--text-tertiary)]">
               <GlobeIcon className="h-12 w-12 mx-auto mb-4 opacity-50" />
-              <p>No global services available</p>
-              <p className="text-sm mt-1">Create services without a tenant_id to make them available here.</p>
+              <p>{t("tenants.services.noServices")}</p>
+              <p className="text-sm mt-1">{t("tenants.services.noServicesDescription")}</p>
             </div>
           ) : (
             <div className="divide-y divide-[var(--border-primary)]">
               {services.map((service) => (
-                <ServiceToggleRow
-                  key={service.id}
-                  service={service}
-                />
+                <ServiceToggleRow key={service.id} service={service} />
               ))}
             </div>
           )}

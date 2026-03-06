@@ -10,6 +10,7 @@ import {
   AlertDialogTitle,
 } from "~/components/ui/alert-dialog";
 import { buttonVariants } from "~/components/ui/button";
+import { useI18n } from "~/i18n";
 
 interface ConfirmOptions {
   title: string;
@@ -24,6 +25,7 @@ type ConfirmFn = (options: ConfirmOptions) => Promise<boolean>;
 const ConfirmContext = createContext<ConfirmFn | null>(null);
 
 export function ConfirmProvider({ children }: { children: React.ReactNode }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [options, setOptions] = useState<ConfirmOptions>({
     title: "",
@@ -51,7 +53,9 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
   };
 
   const defaultLabel =
-    options.variant === "destructive" ? "Delete" : "Continue";
+    options.variant === "destructive"
+      ? t("common.buttons.delete")
+      : t("common.buttons.continue");
 
   return (
     <ConfirmContext.Provider value={confirm}>
@@ -73,7 +77,7 @@ export function ConfirmProvider({ children }: { children: React.ReactNode }) {
               data-testid="confirm-dialog-cancel"
               onClick={handleCancel}
             >
-              {options.cancelLabel || "Cancel"}
+              {options.cancelLabel || t("common.buttons.cancel")}
             </AlertDialogCancel>
             <AlertDialogAction
               data-testid="confirm-dialog-action"

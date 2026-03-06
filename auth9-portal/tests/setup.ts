@@ -1,4 +1,7 @@
 import "@testing-library/jest-dom";
+import i18next from "i18next";
+import { initReactI18next } from "react-i18next";
+import { resources, SUPPORTED_LOCALES } from "~/i18n/resources";
 
 // Note: installGlobals() from @remix-run/node is no longer needed
 // Node.js 20+ has native support for Web APIs like fetch, Request, Response, etc.
@@ -34,3 +37,15 @@ if (typeof window !== "undefined" && !window.PointerEvent) {
   }
   window.PointerEvent = MockPointerEvent as typeof PointerEvent;
 }
+
+const i18nResources = Object.fromEntries(
+  SUPPORTED_LOCALES.map((locale) => [locale, { translation: resources[locale] }])
+);
+
+void i18next.use(initReactI18next).init({
+  lng: "en-US",
+  fallbackLng: "en-US",
+  resources: i18nResources,
+  defaultNS: "translation",
+  interpolation: { escapeValue: false },
+});

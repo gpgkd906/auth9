@@ -15,17 +15,17 @@ describe("formatErrorMessage", () => {
 
   it("maps length error code", () => {
     const result = formatErrorMessage("length");
-    expect(result).toBe("Length must be between 1-63 characters");
+    expect(result).toBe("Length must be between 1 and 63 characters.");
   });
 
   it("maps required error code", () => {
     const result = formatErrorMessage("required");
-    expect(result).toBe("This field is required");
+    expect(result).toBe("This field is required.");
   });
 
   it("maps email error code", () => {
     const result = formatErrorMessage("email");
-    expect(result).toBe("Please enter a valid email address");
+    expect(result).toBe("Please enter a valid email address.");
   });
 
   it("maps 'already exists' error", () => {
@@ -37,14 +37,12 @@ describe("formatErrorMessage", () => {
 
   it("maps 'not found' error", () => {
     const result = formatErrorMessage("Resource not found");
-    expect(result).toBe("The requested resource was not found");
+    expect(result).toBe("The requested resource was not found.");
   });
 
   it("maps conflict error", () => {
     const result = formatErrorMessage("conflict");
-    expect(result).toBe(
-      "A resource with this identifier already exists"
-    );
+    expect(result).toBe("A resource with this identifier already exists.");
   });
 
   it("maps 'duplicate entry' database error", () => {
@@ -74,7 +72,7 @@ describe("formatErrorMessage", () => {
 
   it("extracts email field name with error code", () => {
     const result = formatErrorMessage("email: required");
-    expect(result).toBe("Email: This field is required");
+    expect(result).toBe("Email: This field is required.");
   });
 
   it("extracts name field name with error code", () => {
@@ -86,7 +84,7 @@ describe("formatErrorMessage", () => {
 
   it("capitalizes unknown field names with error code", () => {
     const result = formatErrorMessage("username: required");
-    expect(result).toBe("Username: This field is required");
+    expect(result).toBe("Username: This field is required.");
   });
 
   // ============================================================================
@@ -155,6 +153,6 @@ describe("formatErrorMessage", () => {
 
   it("matches NOT FOUND case-insensitively", () => {
     const result = formatErrorMessage("NOT FOUND");
-    expect(result).toBe("The requested resource was not found");
+    expect(result).toBe("The requested resource was not found.");
   });
 });

@@ -1,15 +1,22 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Form, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
 import { useEffect, useState } from "react";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
 import { passwordApi, tenantApi, type PasswordPolicy, type Tenant } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { resolveLocale } from "~/services/locale.server";
+
+export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "settings.securitySettings.metaTitle");
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const locale = await resolveLocale(request);
   const accessToken = await getAccessToken(request);
   const url = new URL(request.url);
   const tenantId = url.searchParams.get("tenantId");
@@ -23,7 +30,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const tenantsResponse = await tenantApi.list(1, 100, undefined, accessToken || undefined);
       tenants = tenantsResponse.data;
     } catch (error) {
-      tenantsError = error instanceof Error ? error.message : "Failed to load tenants";
+      tenantsError = error instanceof Error ? error.message : translate(locale, "settings.securitySettings.loadTenantsFailed");
     }
   }
 
@@ -35,20 +42,15 @@ export async function loader({ request }: LoaderFunctionArgs) {
       const policyResponse = await passwordApi.getPasswordPolicy(tenantId, accessToken || undefined);
       policy = policyResponse.data;
     } catch (error) {
-      policyError = error instanceof Error ? error.message : "Failed to load password policy";
+      policyError = error instanceof Error ? error.message : translate(locale, "settings.securitySettings.loadPolicyFailed");
     }
   }
 
-  return {
-    tenants,
-    tenantsError,
-    selectedTenantId: tenantId || "",
-    policy,
-    policyError,
-  };
+  return { tenants, tenantsError, selectedTenantId: tenantId || "", policy, policyError };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -69,14 +71,14 @@ export async function action({ request }: ActionFunctionArgs) {
       };
 
       await passwordApi.updatePasswordPolicy(tenantId, policy, accessToken || undefined);
-      return { success: true, message: "Password policy updated" };
+      return { success: true, message: translate(locale, "settings.securitySettings.updated") };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Operation failed";
+    const message = error instanceof Error ? error.message : translate(locale, "settings.securitySettings.operationFailed");
     return { error: message };
   }
 
-  return { error: "Invalid action" };
+  return { error: translate(locale, "settings.securitySettings.invalidAction") };
 }
 
 export default function SecuritySettingsPage() {
@@ -84,22 +86,22 @@ export default function SecuritySettingsPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const policyFetcher = useFetcher<typeof loader>();
-  const loadPolicy = policyFetcher.load;
+  const { t } = useI18n();
 
   const [selectedTenant, setSelectedTenant] = useState<string>(selectedTenantId);
   const [policy, setPolicy] = useState<PasswordPolicy | null>(loadedPolicy);
 
   const isSubmitting = navigation.state === "submitting";
   const loadingPolicy = policyFetcher.state === "loading";
+  const loadPolicy = policyFetcher.load;
 
-  // Load policy through route loader so requests always carry server-side auth token.
   useEffect(() => {
     if (selectedTenant) {
       loadPolicy(`/dashboard/settings/security?tenantId=${encodeURIComponent(selectedTenant)}`);
     } else {
       setPolicy(null);
     }
-  }, [selectedTenant, loadPolicy]);
+  }, [loadPolicy, selectedTenant]);
 
   useEffect(() => {
     if (policyFetcher.data) {
@@ -109,48 +111,26 @@ export default function SecuritySettingsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Password Policy Section (Admin only) */}
       <Card>
         <CardHeader>
-          <CardTitle>Password Policy</CardTitle>
-          <CardDescription>
-            Configure password requirements for tenant users.
-          </CardDescription>
+          <CardTitle>{t("settings.securitySettings.title")}</CardTitle>
+          <CardDescription>{t("settings.securitySettings.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            <div className="space-y-2 max-w-xs">
-              <Label htmlFor="tenantSelect">Select Tenant</Label>
-              <select
-                id="tenantSelect"
-                value={selectedTenant}
-                onChange={(e) => setSelectedTenant(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
-              >
-                <option value="">Select a tenant...</option>
-                {tenants.map((tenant: Tenant) => (
-                  <option key={tenant.id} value={tenant.id}>
-                    {tenant.name}
-                  </option>
+            <div className="max-w-xs space-y-2">
+              <Label htmlFor="tenantSelect">{t("settings.securitySettings.selectTenant")}</Label>
+              <select id="tenantSelect" value={selectedTenant} onChange={(event) => setSelectedTenant(event.target.value)} className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm">
+                <option value="">{t("settings.securitySettings.selectTenantPlaceholder")}</option>
+                {tenants.map((tenant) => (
+                  <option key={tenant.id} value={tenant.id}>{tenant.name}</option>
                 ))}
               </select>
             </div>
 
-            {tenantsError && (
-              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-                {tenantsError}
-              </div>
-            )}
-
-            {loadingPolicy && (
-              <p className="text-sm text-[var(--text-secondary)]">Loading policy...</p>
-            )}
-
-            {selectedTenant && policyError && !policy && (
-              <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-                {policyError}
-              </div>
-            )}
+            {tenantsError && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{tenantsError}</div>}
+            {loadingPolicy && <p className="text-sm text-[var(--text-secondary)]">{t("settings.securitySettings.loadingPolicy")}</p>}
+            {selectedTenant && policyError && !policy && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{policyError}</div>}
 
             {selectedTenant && policy && (
               <Form method="post" className="space-y-6">
@@ -158,167 +138,44 @@ export default function SecuritySettingsPage() {
                 <input type="hidden" name="tenantId" value={selectedTenant} />
 
                 <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="minLength">Minimum length</Label>
-                    <Input
-                      id="minLength"
-                      name="minLength"
-                      type="number"
-                      min={6}
-                      max={128}
-                      defaultValue={policy.min_length}
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="maxAgeDays">Password expiry (days)</Label>
-                    <Input
-                      id="maxAgeDays"
-                      name="maxAgeDays"
-                      type="number"
-                      min={0}
-                      max={365}
-                      defaultValue={policy.max_age_days}
-                    />
-                    <p className="text-xs text-[var(--text-secondary)]">0 = never expires</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="historyCount">Password history</Label>
-                    <Input
-                      id="historyCount"
-                      name="historyCount"
-                      type="number"
-                      min={0}
-                      max={24}
-                      defaultValue={policy.history_count}
-                    />
-                    <p className="text-xs text-[var(--text-secondary)]">Previous passwords to remember</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lockoutThreshold">Lockout after</Label>
-                    <Input
-                      id="lockoutThreshold"
-                      name="lockoutThreshold"
-                      type="number"
-                      min={0}
-                      max={100}
-                      defaultValue={policy.lockout_threshold}
-                    />
-                    <p className="text-xs text-[var(--text-secondary)]">Failed attempts (0 = disabled)</p>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="lockoutDurationMins">Lockout duration (mins)</Label>
-                    <Input
-                      id="lockoutDurationMins"
-                      name="lockoutDurationMins"
-                      type="number"
-                      min={1}
-                      max={1440}
-                      defaultValue={policy.lockout_duration_mins}
-                    />
-                  </div>
+                  <div className="space-y-2"><Label htmlFor="minLength">{t("settings.securitySettings.minimumLength")}</Label><Input id="minLength" name="minLength" type="number" min={6} max={128} defaultValue={policy.min_length} /></div>
+                  <div className="space-y-2"><Label htmlFor="maxAgeDays">{t("settings.securitySettings.passwordExpiryDays")}</Label><Input id="maxAgeDays" name="maxAgeDays" type="number" min={0} max={365} defaultValue={policy.max_age_days} /><p className="text-xs text-[var(--text-secondary)]">{t("settings.securitySettings.passwordExpiryHint")}</p></div>
+                  <div className="space-y-2"><Label htmlFor="historyCount">{t("settings.securitySettings.passwordHistory")}</Label><Input id="historyCount" name="historyCount" type="number" min={0} max={24} defaultValue={policy.history_count} /><p className="text-xs text-[var(--text-secondary)]">{t("settings.securitySettings.passwordHistoryHint")}</p></div>
+                  <div className="space-y-2"><Label htmlFor="lockoutThreshold">{t("settings.securitySettings.lockoutAfter")}</Label><Input id="lockoutThreshold" name="lockoutThreshold" type="number" min={0} max={100} defaultValue={policy.lockout_threshold} /><p className="text-xs text-[var(--text-secondary)]">{t("settings.securitySettings.lockoutAfterHint")}</p></div>
+                  <div className="space-y-2"><Label htmlFor="lockoutDurationMins">{t("settings.securitySettings.lockoutDurationMins")}</Label><Input id="lockoutDurationMins" name="lockoutDurationMins" type="number" min={1} max={1440} defaultValue={policy.lockout_duration_mins} /></div>
                 </div>
 
                 <div className="space-y-2">
-                  <h4 className="text-sm font-medium">Character requirements</h4>
+                  <h4 className="text-sm font-medium">{t("settings.securitySettings.characterRequirements")}</h4>
                   <div className="grid gap-0 md:grid-cols-2">
                     <div className="flex h-11 items-center gap-3">
-                      <Switch
-                        id="requireUppercase"
-                        defaultChecked={policy.require_uppercase}
-                        onCheckedChange={(checked: boolean) => {
-                          const input = document.querySelector(
-                            'input[name="requireUppercase"]'
-                          ) as HTMLInputElement;
-                          if (input) input.value = checked ? "true" : "false";
-                        }}
-                      />
-                      <input
-                        type="hidden"
-                        name="requireUppercase"
-                        value={policy.require_uppercase ? "true" : "false"}
-                      />
-                      <Label htmlFor="requireUppercase">Require uppercase</Label>
+                      <Switch id="requireUppercase" defaultChecked={policy.require_uppercase} onCheckedChange={(checked: boolean) => { const input = document.querySelector('input[name="requireUppercase"]') as HTMLInputElement; if (input) input.value = checked ? "true" : "false"; }} />
+                      <input type="hidden" name="requireUppercase" value={policy.require_uppercase ? "true" : "false"} />
+                      <Label htmlFor="requireUppercase">{t("settings.securitySettings.requireUppercase")}</Label>
                     </div>
-
                     <div className="flex h-11 items-center gap-3">
-                      <Switch
-                        id="requireLowercase"
-                        defaultChecked={policy.require_lowercase}
-                        onCheckedChange={(checked: boolean) => {
-                          const input = document.querySelector(
-                            'input[name="requireLowercase"]'
-                          ) as HTMLInputElement;
-                          if (input) input.value = checked ? "true" : "false";
-                        }}
-                      />
-                      <input
-                        type="hidden"
-                        name="requireLowercase"
-                        value={policy.require_lowercase ? "true" : "false"}
-                      />
-                      <Label htmlFor="requireLowercase">Require lowercase</Label>
+                      <Switch id="requireLowercase" defaultChecked={policy.require_lowercase} onCheckedChange={(checked: boolean) => { const input = document.querySelector('input[name="requireLowercase"]') as HTMLInputElement; if (input) input.value = checked ? "true" : "false"; }} />
+                      <input type="hidden" name="requireLowercase" value={policy.require_lowercase ? "true" : "false"} />
+                      <Label htmlFor="requireLowercase">{t("settings.securitySettings.requireLowercase")}</Label>
                     </div>
-
                     <div className="flex h-11 items-center gap-3">
-                      <Switch
-                        id="requireNumbers"
-                        defaultChecked={policy.require_numbers}
-                        onCheckedChange={(checked: boolean) => {
-                          const input = document.querySelector(
-                            'input[name="requireNumbers"]'
-                          ) as HTMLInputElement;
-                          if (input) input.value = checked ? "true" : "false";
-                        }}
-                      />
-                      <input
-                        type="hidden"
-                        name="requireNumbers"
-                        value={policy.require_numbers ? "true" : "false"}
-                      />
-                      <Label htmlFor="requireNumbers">Require numbers</Label>
+                      <Switch id="requireNumbers" defaultChecked={policy.require_numbers} onCheckedChange={(checked: boolean) => { const input = document.querySelector('input[name="requireNumbers"]') as HTMLInputElement; if (input) input.value = checked ? "true" : "false"; }} />
+                      <input type="hidden" name="requireNumbers" value={policy.require_numbers ? "true" : "false"} />
+                      <Label htmlFor="requireNumbers">{t("settings.securitySettings.requireNumbers")}</Label>
                     </div>
-
                     <div className="flex h-11 items-center gap-3">
-                      <Switch
-                        id="requireSymbols"
-                        defaultChecked={policy.require_symbols}
-                        onCheckedChange={(checked: boolean) => {
-                          const input = document.querySelector(
-                            'input[name="requireSymbols"]'
-                          ) as HTMLInputElement;
-                          if (input) input.value = checked ? "true" : "false";
-                        }}
-                      />
-                      <input
-                        type="hidden"
-                        name="requireSymbols"
-                        value={policy.require_symbols ? "true" : "false"}
-                      />
-                      <Label htmlFor="requireSymbols">Require symbols</Label>
+                      <Switch id="requireSymbols" defaultChecked={policy.require_symbols} onCheckedChange={(checked: boolean) => { const input = document.querySelector('input[name="requireSymbols"]') as HTMLInputElement; if (input) input.value = checked ? "true" : "false"; }} />
+                      <input type="hidden" name="requireSymbols" value={policy.require_symbols ? "true" : "false"} />
+                      <Label htmlFor="requireSymbols">{t("settings.securitySettings.requireSymbols")}</Label>
                     </div>
                   </div>
                 </div>
 
-                {actionData?.error && (
-                  <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-                    {actionData.error}
-                  </div>
-                )}
+                {actionData?.error && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{actionData.error}</div>}
+                {actionData?.success && <div className="rounded-md bg-[var(--accent-green)]/10 p-3 text-sm text-[var(--accent-green)]">{actionData.message}</div>}
 
-                {actionData?.success && (
-                  <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
-                    {actionData.message}
-                  </div>
-                )}
-
-                <div className="flex flex-wrap items-center gap-3 border-t pt-4 md:static sticky bottom-0 bg-[var(--bg-secondary)] pb-4 -mb-4 z-10">
-                  <Button type="submit" disabled={isSubmitting}>
-                    {isSubmitting ? "Saving..." : "Save policy"}
-                  </Button>
+                <div className="sticky bottom-0 z-10 -mb-4 flex flex-wrap items-center gap-3 border-t bg-[var(--bg-secondary)] pb-4 pt-4 md:static">
+                  <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("settings.securitySettings.saving") : t("settings.securitySettings.savePolicy")}</Button>
                 </div>
               </Form>
             )}

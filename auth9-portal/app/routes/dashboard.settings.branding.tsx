@@ -9,8 +9,11 @@ import { Label } from "~/components/ui/label";
 import { Textarea } from "~/components/ui/textarea";
 import { brandingApi, type BrandingConfig } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 
-// Default branding values (should match backend defaults)
 const DEFAULT_BRANDING: BrandingConfig = {
   primary_color: "#007AFF",
   secondary_color: "#5856D6",
@@ -19,8 +22,8 @@ const DEFAULT_BRANDING: BrandingConfig = {
   allow_registration: false,
 };
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Login Branding - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "settings.brandingPage.metaTitle");
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -29,12 +32,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const result = await brandingApi.get(accessToken || undefined);
     return { config: result.data, error: null };
   } catch {
-    // If no config exists yet, return defaults
     return { config: DEFAULT_BRANDING, error: null };
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -54,62 +57,45 @@ export async function action({ request }: ActionFunctionArgs) {
       };
 
       await brandingApi.update(config, accessToken || undefined);
-      return { success: true, message: "Branding settings saved successfully" };
+      return { success: true, message: translate(locale, "settings.brandingPage.successSaved") };
     }
 
     if (intent === "reset") {
       await brandingApi.update(DEFAULT_BRANDING, accessToken || undefined);
-      return { success: true, message: "Branding reset to defaults", reset: true };
+      return { success: true, message: translate(locale, "settings.brandingPage.successReset"), reset: true };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "common.errors.unknown");
     return Response.json({ error: message }, { status: 400 });
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: translate(locale, "tenants.errors.invalidIntent") }, { status: 400 });
 }
 
-// Color picker component
 function ColorPicker({
   id,
   label,
   value,
   onChange,
   defaultValue,
+  srLabel,
 }: {
   id: string;
   label: string;
   value: string;
   onChange: (value: string) => void;
   defaultValue: string;
+  srLabel: string;
 }) {
   return (
     <div className="space-y-2">
       <Label htmlFor={id}>{label}</Label>
       <div className="flex items-center gap-2">
-        <label
-          htmlFor={`${id}_picker`}
-          className="w-10 h-10 rounded-md border border-gray-300 shadow-sm cursor-pointer block"
-          style={{ backgroundColor: value }}
-        >
-          <span className="sr-only">Choose {label}</span>
+        <label htmlFor={`${id}_picker`} className="w-10 h-10 rounded-md border border-gray-300 shadow-sm cursor-pointer block" style={{ backgroundColor: value }}>
+          <span className="sr-only">{srLabel}</span>
         </label>
-        <input
-          type="color"
-          id={`${id}_picker`}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          className="sr-only"
-        />
-        <Input
-          id={id}
-          name={id}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder={defaultValue}
-          className="font-mono uppercase"
-          maxLength={7}
-        />
+        <input type="color" id={`${id}_picker`} value={value} onChange={(e) => onChange(e.target.value)} className="sr-only" />
+        <Input id={id} name={id} value={value} onChange={(e) => onChange(e.target.value)} placeholder={defaultValue} className="font-mono uppercase" maxLength={7} />
       </div>
     </div>
   );
@@ -119,8 +105,8 @@ export default function BrandingSettingsPage() {
   const { config } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
+  const { t } = useI18n();
 
-  // Local state for form fields
   const [logoUrl, setLogoUrl] = useState(config.logo_url || "");
   const [primaryColor, setPrimaryColor] = useState(config.primary_color);
   const [secondaryColor, setSecondaryColor] = useState(config.secondary_color);
@@ -134,7 +120,6 @@ export default function BrandingSettingsPage() {
   const isSubmitting = navigation.state === "submitting";
   const currentIntent = navigation.formData?.get("intent");
 
-  // Reset form when config changes (after reset action)
   useEffect(() => {
     if (actionData && "reset" in actionData && actionData.reset) {
       setLogoUrl("");
@@ -149,7 +134,6 @@ export default function BrandingSettingsPage() {
     }
   }, [actionData]);
 
-  // Check if current config matches defaults
   const isDefault =
     primaryColor === DEFAULT_BRANDING.primary_color &&
     secondaryColor === DEFAULT_BRANDING.secondary_color &&
@@ -171,242 +155,112 @@ export default function BrandingSettingsPage() {
       )}
 
       {actionData && "error" in actionData && (
-        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-          {String(actionData.error)}
-        </div>
+        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">{String(actionData.error)}</div>
       )}
 
       <Card>
         <CardHeader>
-          <CardTitle>Login Page Branding</CardTitle>
-          <CardDescription>
-            Customize the appearance of your login pages. Changes will be applied to all Keycloak login forms.
-          </CardDescription>
+          <CardTitle>{t("settings.brandingPage.title")}</CardTitle>
+          <CardDescription>{t("settings.brandingPage.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-6">
-
-            {/* Company Identity */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Company Identity</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">{t("settings.brandingPage.companyIdentity")}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="company_name">Company Name</Label>
-                  <Input
-                    id="company_name"
-                    name="company_name"
-                    placeholder="Your Company Name"
-                    value={companyName}
-                    onChange={(e) => setCompanyName(e.target.value)}
-                    maxLength={100}
-                  />
-                  <p className="text-xs text-[var(--text-secondary)]">Displayed on the login page</p>
+                  <Label htmlFor="company_name">{t("settings.brandingPage.companyName")}</Label>
+                  <Input id="company_name" name="company_name" placeholder={t("settings.brandingPage.companyNamePlaceholder")} value={companyName} onChange={(e) => setCompanyName(e.target.value)} maxLength={100} />
+                  <p className="text-xs text-[var(--text-secondary)]">{t("settings.brandingPage.companyNameHint")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="logo_url">Logo URL</Label>
-                  <Input
-                    id="logo_url"
-                    name="logo_url"
-                    type="url"
-                    placeholder="https://example.com/logo.png"
-                    value={logoUrl}
-                    onChange={(e) => setLogoUrl(e.target.value)}
-                  />
-                  <p className="text-xs text-[var(--text-secondary)]">Recommended size: 200x50 pixels</p>
+                  <Label htmlFor="logo_url">{t("settings.brandingPage.logoUrl")}</Label>
+                  <Input id="logo_url" name="logo_url" type="url" placeholder={t("settings.brandingPage.logoUrlPlaceholder")} value={logoUrl} onChange={(e) => setLogoUrl(e.target.value)} />
+                  <p className="text-xs text-[var(--text-secondary)]">{t("settings.brandingPage.logoUrlHint")}</p>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="favicon_url">Favicon URL</Label>
-                  <Input
-                    id="favicon_url"
-                    name="favicon_url"
-                    type="url"
-                    placeholder="https://example.com/favicon.ico"
-                    value={faviconUrl}
-                    onChange={(e) => setFaviconUrl(e.target.value)}
-                  />
-                  <p className="text-xs text-[var(--text-secondary)]">Browser tab icon (ICO or PNG)</p>
+                  <Label htmlFor="favicon_url">{t("settings.brandingPage.faviconUrl")}</Label>
+                  <Input id="favicon_url" name="favicon_url" type="url" placeholder={t("settings.brandingPage.faviconUrlPlaceholder")} value={faviconUrl} onChange={(e) => setFaviconUrl(e.target.value)} />
+                  <p className="text-xs text-[var(--text-secondary)]">{t("settings.brandingPage.faviconUrlHint")}</p>
                 </div>
               </div>
 
-              {/* Logo Preview */}
               {logoUrl && (
                 <div className="mt-4 p-4 bg-[var(--sidebar-item-hover)] rounded-lg min-w-[200px]">
-                  <p className="text-sm text-[var(--text-secondary)] mb-2">Logo Preview:</p>
-                  <img
-                    src={logoUrl}
-                    alt="Logo preview"
-                    className="max-h-16 object-contain"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).style.display = "none";
-                    }}
-                  />
+                  <p className="text-sm text-[var(--text-secondary)] mb-2">{t("settings.brandingPage.logoPreview")}</p>
+                  <img src={logoUrl} alt={t("settings.brandingPage.logoPreviewAlt")} className="max-h-16 object-contain" onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }} />
                 </div>
               )}
             </div>
 
-            {/* Login Options */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Login Options</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">{t("settings.brandingPage.loginOptions")}</h3>
               <div className="space-y-1">
                 <div className="flex items-center justify-between min-h-[48px]">
-                  <Label htmlFor="allow_registration">Allow Registration</Label>
+                  <Label htmlFor="allow_registration">{t("settings.brandingPage.allowRegistration")}</Label>
                   <label htmlFor="allow_registration" className="relative inline-flex items-center cursor-pointer shrink-0">
-                    <span className="sr-only">Toggle allow registration</span>
-                    <input
-                      type="checkbox"
-                      id="allow_registration"
-                      name="allow_registration"
-                      value="true"
-                      checked={allowRegistration}
-                      onChange={(e) => setAllowRegistration(e.target.checked)}
-                      className="sr-only peer"
-                    />
+                    <span className="sr-only">{t("settings.brandingPage.toggleAllowRegistration")}</span>
+                    <input type="checkbox" id="allow_registration" name="allow_registration" value="true" checked={allowRegistration} onChange={(e) => setAllowRegistration(e.target.checked)} className="sr-only peer" />
                     <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none peer-focus:ring-4 peer-focus:ring-blue-300 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
                   </label>
                 </div>
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Show &quot;Create account&quot; link on the login page
-                </p>
+                <p className="text-xs text-[var(--text-secondary)]">{t("settings.brandingPage.allowRegistrationHint")}</p>
               </div>
             </div>
 
-            {/* Colors */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Colors</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">{t("settings.brandingPage.colors")}</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <ColorPicker
-                  id="primary_color"
-                  label="Primary Color"
-                  value={primaryColor}
-                  onChange={setPrimaryColor}
-                  defaultValue={DEFAULT_BRANDING.primary_color}
-                />
-                <ColorPicker
-                  id="secondary_color"
-                  label="Secondary Color"
-                  value={secondaryColor}
-                  onChange={setSecondaryColor}
-                  defaultValue={DEFAULT_BRANDING.secondary_color}
-                />
-                <ColorPicker
-                  id="background_color"
-                  label="Background Color"
-                  value={backgroundColor}
-                  onChange={setBackgroundColor}
-                  defaultValue={DEFAULT_BRANDING.background_color}
-                />
-                <ColorPicker
-                  id="text_color"
-                  label="Text Color"
-                  value={textColor}
-                  onChange={setTextColor}
-                  defaultValue={DEFAULT_BRANDING.text_color}
-                />
+                <ColorPicker id="primary_color" label={t("services.branding.primaryColor")} value={primaryColor} onChange={setPrimaryColor} defaultValue={DEFAULT_BRANDING.primary_color} srLabel={t("services.branding.chooseColor", { label: t("services.branding.primaryColor") })} />
+                <ColorPicker id="secondary_color" label={t("services.branding.secondaryColor")} value={secondaryColor} onChange={setSecondaryColor} defaultValue={DEFAULT_BRANDING.secondary_color} srLabel={t("services.branding.chooseColor", { label: t("services.branding.secondaryColor") })} />
+                <ColorPicker id="background_color" label={t("services.branding.backgroundColor")} value={backgroundColor} onChange={setBackgroundColor} defaultValue={DEFAULT_BRANDING.background_color} srLabel={t("services.branding.chooseColor", { label: t("services.branding.backgroundColor") })} />
+                <ColorPicker id="text_color" label={t("services.branding.textColor")} value={textColor} onChange={setTextColor} defaultValue={DEFAULT_BRANDING.text_color} srLabel={t("services.branding.chooseColor", { label: t("services.branding.textColor") })} />
               </div>
             </div>
 
-            {/* Preview */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Preview</h3>
-              <div
-                className="rounded-lg p-0 sm:p-8 flex items-center justify-center min-h-[300px]"
-                style={{ backgroundColor }}
-              >
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">{t("settings.brandingPage.preview")}</h3>
+              <div className="rounded-lg p-0 sm:p-8 flex items-center justify-center min-h-[300px]" style={{ backgroundColor }}>
                 <div className="w-full">
                   <div className="w-full max-w-none sm:max-w-sm bg-white rounded-xl shadow-lg p-6">
                     {logoUrl ? (
-                      <img src={logoUrl} alt="Logo" className="h-10 mx-auto mb-4 object-contain" />
+                      <img src={logoUrl} alt={t("settings.brandingPage.previewLogoAlt")} className="h-10 mx-auto mb-4 object-contain" />
                     ) : companyName ? (
-                      <h2
-                        className="text-xl font-semibold text-center mb-4"
-                        style={{ color: primaryColor }}
-                      >
-                        {companyName}
-                      </h2>
+                      <h2 className="text-xl font-semibold text-center mb-4" style={{ color: primaryColor }}>{companyName}</h2>
                     ) : (
-                      <div
-                        className="h-10 w-32 mx-auto mb-4 rounded"
-                        style={{ backgroundColor: primaryColor, opacity: 0.2 }}
-                      />
+                      <div className="h-10 w-32 mx-auto mb-4 rounded" style={{ backgroundColor: primaryColor, opacity: 0.2 }} />
                     )}
 
                     <div className="space-y-4">
                       <div>
-                        <span
-                          className="block text-sm font-medium mb-1"
-                          style={{ color: textColor }}
-                        >
-                          Email
-                        </span>
-                        <div
-                          className="w-full h-10 rounded-md border"
-                          style={{ borderColor: secondaryColor }}
-                        />
+                        <span className="block text-sm font-medium mb-1" style={{ color: textColor }}>{t("settings.brandingPage.previewEmail")}</span>
+                        <div className="w-full h-10 rounded-md border" style={{ borderColor: secondaryColor }} />
                       </div>
                       <div>
-                        <span
-                          className="block text-sm font-medium mb-1"
-                          style={{ color: textColor }}
-                        >
-                          Password
-                        </span>
-                        <div
-                          className="w-full h-10 rounded-md border"
-                          style={{ borderColor: secondaryColor }}
-                        />
+                        <span className="block text-sm font-medium mb-1" style={{ color: textColor }}>{t("settings.brandingPage.previewPassword")}</span>
+                        <div className="w-full h-10 rounded-md border" style={{ borderColor: secondaryColor }} />
                       </div>
-                      <button
-                        type="button"
-                        className="w-full h-10 rounded-md text-white font-medium"
-                        style={{ backgroundColor: primaryColor }}
-                      >
-                        Sign In
-                      </button>
-                      <p className="text-center text-sm" style={{ color: secondaryColor }}>
-                        Forgot password?
-                      </p>
+                      <button type="button" className="w-full h-10 rounded-md text-white font-medium" style={{ backgroundColor: primaryColor }}>{t("settings.brandingPage.previewSignIn")}</button>
+                      <p className="text-center text-sm" style={{ color: secondaryColor }}>{t("settings.brandingPage.previewForgotPassword")}</p>
                     </div>
                   </div>
                 </div>
               </div>
             </div>
 
-            {/* Custom CSS */}
             <div className="space-y-2">
-              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">
-                Custom CSS
-                <span className="font-normal text-[var(--text-secondary)] ml-2">(Advanced)</span>
-              </h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">{t("settings.brandingPage.customCss")}<span className="font-normal text-[var(--text-secondary)] ml-2">({t("settings.brandingPage.advanced")})</span></h3>
               <div className="space-y-2">
-                <Textarea
-                  id="custom_css"
-                  name="custom_css"
-                  placeholder={`.login-form {\n  border-radius: 16px;\n  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n}`}
-                  value={customCss}
-                  onChange={(e) => setCustomCss(e.target.value)}
-                  className="font-mono text-sm min-h-[120px]"
-                />
-                <p className="text-xs text-[var(--text-secondary)]">
-                  Add custom CSS rules to further customize the login page. Maximum 50KB.
-                </p>
+                <Textarea id="custom_css" name="custom_css" placeholder={t("settings.brandingPage.customCssPlaceholder")} value={customCss} onChange={(e) => setCustomCss(e.target.value)} className="font-mono text-sm min-h-[120px]" />
+                <p className="text-xs text-[var(--text-secondary)]">{t("settings.brandingPage.customCssHint")}</p>
               </div>
             </div>
 
-            {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 border-t pt-4 md:static sticky bottom-0 bg-[var(--surface-primary)] pb-4 -mb-4 z-10">
-              <Button type="submit" name="intent" value="save" disabled={isSubmitting && currentIntent === "save"}>
-                {isSubmitting && currentIntent === "save" ? "Saving..." : "Save Changes"}
-              </Button>
-
-              <Button
-                type="submit"
-                name="intent"
-                value="reset"
-                variant="outline"
-                disabled={isSubmitting || isDefault}
-              >
+              <Button type="submit" name="intent" value="save" disabled={isSubmitting && currentIntent === "save"}>{isSubmitting && currentIntent === "save" ? t("settings.brandingPage.saving") : t("settings.brandingPage.saveChanges")}</Button>
+              <Button type="submit" name="intent" value="reset" variant="outline" disabled={isSubmitting || isDefault}>
                 <ResetIcon className="h-4 w-4 mr-2" />
-                {isSubmitting && currentIntent === "reset" ? "Resetting..." : "Reset to Defaults"}
+                {isSubmitting && currentIntent === "reset" ? t("settings.brandingPage.resetting") : t("settings.brandingPage.resetToDefaults")}
               </Button>
             </div>
           </Form>

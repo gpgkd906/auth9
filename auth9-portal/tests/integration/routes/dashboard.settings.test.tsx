@@ -30,7 +30,9 @@ vi.mock("~/services/session.server", () => ({
 
 describe("Settings Page", () => {
     it("meta returns correct title", () => {
-        const result = meta({} as Parameters<typeof meta>[0]);
+        const result = meta({
+            matches: [{ id: "root", data: { locale: "en-US" } }],
+        } as Parameters<typeof meta>[0]);
         expect(result).toEqual([{ title: "Settings - Auth9" }]);
     });
 
@@ -371,7 +373,11 @@ describe("Settings action", () => {
         for (const [key, value] of Object.entries(data)) {
             formData.append(key, value);
         }
-        return new Request("http://localhost/dashboard/settings", { method: "POST", body: formData });
+        return new Request("http://localhost/dashboard/settings", {
+            method: "POST",
+            body: formData,
+            headers: { "Accept-Language": "en-US" },
+        });
     }
 
     it("updates tenant settings successfully", async () => {

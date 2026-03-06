@@ -139,7 +139,7 @@ describe("Tenants Page", () => {
     // ============================================================================
 
     it("meta returns correct title", () => {
-        const result = meta({} as Parameters<typeof meta>[0]);
+        const result = meta({ matches: [{ id: "root", data: { locale: "en-US" } }] } as Parameters<typeof meta>[0]);
         expect(result).toEqual([{ title: "Tenants - Auth9" }]);
     });
 
@@ -257,8 +257,8 @@ describe("Tenants Page", () => {
 
         // Both mobile and desktop views render status text
         await waitFor(() => {
-            expect(screen.getAllByText("active").length).toBeGreaterThan(0);
-            expect(screen.getAllByText("inactive").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Active").length).toBeGreaterThan(0);
+            expect(screen.getAllByText("Inactive").length).toBeGreaterThan(0);
         });
     });
 
@@ -857,6 +857,7 @@ describe("Tenants Page", () => {
 
         it("returns error for invalid intent", async () => {
             const request = createFormRequest({ intent: "invalid" });
+            request.headers.set("Accept-Language", "en-US");
 
             const response = await action({ request, params: {}, context: {} });
             expect(response).toBeInstanceOf(Response);

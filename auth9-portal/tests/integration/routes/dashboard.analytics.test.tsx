@@ -2,6 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import AnalyticsPage, { loader } from "~/routes/dashboard.analytics";
+import { I18nProvider } from "~/i18n";
 import { analyticsApi } from "~/services/api";
 
 // Mock the API
@@ -52,10 +53,22 @@ const mockStats = {
   },
 };
 
+function buildEnglishRequest(url: string) {
+  return new Request(url, { headers: { "Accept-Language": "en-US" } });
+}
+
 describe("Analytics Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <AnalyticsPage />
+      </I18nProvider>
+    );
+  }
 
   // ============================================================================
   // Loader Tests
@@ -65,7 +78,7 @@ describe("Analytics Page", () => {
     vi.mocked(analyticsApi.getStats).mockResolvedValue({ data: mockStats });
     vi.mocked(analyticsApi.getDailyTrend).mockResolvedValue({ data: mockDailyTrend });
 
-    const request = new Request("http://localhost/dashboard/analytics");
+    const request = buildEnglishRequest("http://localhost/dashboard/analytics");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toMatchObject({
@@ -82,7 +95,7 @@ describe("Analytics Page", () => {
     vi.mocked(analyticsApi.getStats).mockResolvedValue({ data: mockStats });
     vi.mocked(analyticsApi.getDailyTrend).mockResolvedValue({ data: mockDailyTrend });
 
-    const request = new Request("http://localhost/dashboard/analytics?days=30");
+    const request = buildEnglishRequest("http://localhost/dashboard/analytics?days=30");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toMatchObject({
@@ -97,7 +110,7 @@ describe("Analytics Page", () => {
     vi.mocked(analyticsApi.getStats).mockResolvedValue({ data: mockStats });
     vi.mocked(analyticsApi.getDailyTrend).mockResolvedValue({ data: mockDailyTrend });
 
-    const request = new Request("http://localhost/dashboard/analytics?start=2026-01-01&end=2026-01-15");
+    const request = buildEnglishRequest("http://localhost/dashboard/analytics?start=2026-01-01&end=2026-01-15");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toMatchObject({
@@ -114,7 +127,7 @@ describe("Analytics Page", () => {
     vi.mocked(analyticsApi.getStats).mockRejectedValue(new Error("API Error"));
     vi.mocked(analyticsApi.getDailyTrend).mockRejectedValue(new Error("API Error"));
 
-    const request = new Request("http://localhost/dashboard/analytics");
+    const request = buildEnglishRequest("http://localhost/dashboard/analytics");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toMatchObject({
@@ -134,7 +147,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -151,7 +164,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -171,7 +184,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -190,7 +203,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -210,7 +223,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -227,7 +240,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -246,7 +259,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: mockStats, dailyTrend: mockDailyTrend, days: 7, rangeLabel: "Last 7 days" }),
       },
     ]);
@@ -264,7 +277,7 @@ describe("Analytics Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics",
-        Component: AnalyticsPage,
+        Component: WrappedPage,
         loader: () => ({ stats: null, dailyTrend: [], days: 7, rangeLabel: "Last 7 days", error: "Failed to load analytics" }),
       },
     ]);

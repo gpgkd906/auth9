@@ -2,6 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import AbacPoliciesPage, { action, loader } from "~/routes/dashboard.abac";
+import { I18nProvider } from "~/i18n";
 import { abacApi } from "~/services/api";
 import { getAccessToken, getSession } from "~/services/session.server";
 
@@ -22,6 +23,20 @@ vi.mock("~/services/session.server", () => ({
 }));
 
 describe("ABAC Policies Page", () => {
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <AbacPoliciesPage />
+      </I18nProvider>
+    );
+  }
+
+  function buildEnglishRequest(url: string, init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", "en-US");
+    return new Request(url, { ...init, headers });
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(getSession).mockResolvedValue({ activeTenantId: "tenant-1" } as Awaited<ReturnType<typeof getSession>>);
@@ -32,7 +47,7 @@ describe("ABAC Policies Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/abac",
-        Component: AbacPoliciesPage,
+        Component: WrappedPage,
         loader: () => ({
           tenantId: "tenant-1",
           payload: {
@@ -72,7 +87,7 @@ describe("ABAC Policies Page", () => {
       data: { policy_set: null, versions: [] },
     });
 
-    const request = new Request("http://localhost/dashboard/abac");
+    const request = buildEnglishRequest("http://localhost/dashboard/abac");
     const result = await loader({ request, params: {}, context: {} } as never);
 
     expect(abacApi.listPolicies).toHaveBeenCalledWith("tenant-1", "test-token");
@@ -91,7 +106,7 @@ describe("ABAC Policies Page", () => {
     formData.set("intent", "create_draft");
     formData.set("change_note", "first draft");
     formData.set("policy_json", JSON.stringify({ rules: [] }));
-    const request = new Request("http://localhost/dashboard/abac", { method: "POST", body: formData });
+    const request = buildEnglishRequest("http://localhost/dashboard/abac", { method: "POST", body: formData });
 
     const result = await action({ request, params: {}, context: {} } as never);
 
@@ -111,7 +126,7 @@ describe("ABAC Policies Page", () => {
     formData.set("version_id", "v2");
     formData.set("change_note", "update note");
     formData.set("policy_json", JSON.stringify({ rules: [] }));
-    const request = new Request("http://localhost/dashboard/abac", { method: "POST", body: formData });
+    const request = buildEnglishRequest("http://localhost/dashboard/abac", { method: "POST", body: formData });
 
     const result = await action({ request, params: {}, context: {} } as never);
 
@@ -132,7 +147,7 @@ describe("ABAC Policies Page", () => {
     publishForm.set("intent", "publish");
     publishForm.set("version_id", "v3");
     publishForm.set("mode", "shadow");
-    const publishRequest = new Request("http://localhost/dashboard/abac", { method: "POST", body: publishForm });
+    const publishRequest = buildEnglishRequest("http://localhost/dashboard/abac", { method: "POST", body: publishForm });
     const publishResult = await action({ request: publishRequest, params: {}, context: {} } as never);
 
     expect(abacApi.publish).toHaveBeenCalledWith("tenant-1", "v3", "shadow", "test-token");
@@ -142,7 +157,7 @@ describe("ABAC Policies Page", () => {
     rollbackForm.set("intent", "rollback");
     rollbackForm.set("version_id", "v1");
     rollbackForm.set("mode", "enforce");
-    const rollbackRequest = new Request("http://localhost/dashboard/abac", { method: "POST", body: rollbackForm });
+    const rollbackRequest = buildEnglishRequest("http://localhost/dashboard/abac", { method: "POST", body: rollbackForm });
     const rollbackResult = await action({ request: rollbackRequest, params: {}, context: {} } as never);
 
     expect(abacApi.rollback).toHaveBeenCalledWith("tenant-1", "v1", "enforce", "test-token");
@@ -166,7 +181,7 @@ describe("ABAC Policies Page", () => {
     formData.set("sim_resource_json", JSON.stringify({ tenant_id: "tenant-1" }));
     formData.set("sim_request_json", JSON.stringify({ ip: "127.0.0.1" }));
     formData.set("sim_env_json", JSON.stringify({ hour: 20 }));
-    const request = new Request("http://localhost/dashboard/abac", { method: "POST", body: formData });
+    const request = buildEnglishRequest("http://localhost/dashboard/abac", { method: "POST", body: formData });
 
     const result = await action({ request, params: {}, context: {} } as never);
 
@@ -199,7 +214,7 @@ describe("ABAC Policies Page", () => {
   it("action returns 400 when simulation fields are missing", async () => {
     const formData = new FormData();
     formData.set("intent", "simulate");
-    const request = new Request("http://localhost/dashboard/abac", { method: "POST", body: formData });
+    const request = buildEnglishRequest("http://localhost/dashboard/abac", { method: "POST", body: formData });
 
     const result = await action({ request, params: {}, context: {} } as never);
     expect(result).toBeInstanceOf(Response);

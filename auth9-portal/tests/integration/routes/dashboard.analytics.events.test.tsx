@@ -2,6 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import LoginEventsPage, { loader } from "~/routes/dashboard.analytics.events";
+import { I18nProvider } from "~/i18n";
 import { analyticsApi } from "~/services/api";
 
 // Mock the API
@@ -53,10 +54,22 @@ const mockPagination = {
   total_pages: 1,
 };
 
+function buildEnglishRequest(url: string) {
+  return new Request(url, { headers: { "Accept-Language": "en-US" } });
+}
+
 describe("Login Events Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
+
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <LoginEventsPage />
+      </I18nProvider>
+    );
+  }
 
   // ============================================================================
   // Loader Tests
@@ -68,7 +81,7 @@ describe("Login Events Page", () => {
       pagination: mockPagination,
     });
 
-    const request = new Request("http://localhost/dashboard/analytics/events");
+    const request = buildEnglishRequest("http://localhost/dashboard/analytics/events");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toEqual({
@@ -84,7 +97,7 @@ describe("Login Events Page", () => {
       pagination: { ...mockPagination, page: 2 },
     });
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/analytics/events?page=2"
     );
     const response = await loader({ request, params: {}, context: {} });
@@ -96,7 +109,7 @@ describe("Login Events Page", () => {
   it("loader handles API error gracefully", async () => {
     vi.mocked(analyticsApi.listEvents).mockRejectedValue(new Error("API Error"));
 
-    const request = new Request("http://localhost/dashboard/analytics/events");
+    const request = buildEnglishRequest("http://localhost/dashboard/analytics/events");
     const response = await loader({ request, params: {}, context: {} });
 
     expect(response).toEqual({
@@ -114,7 +127,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({ events: mockEvents, pagination: mockPagination }),
       },
     ]);
@@ -133,7 +146,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({ events: mockEvents, pagination: mockPagination }),
       },
     ]);
@@ -149,7 +162,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({ events: mockEvents, pagination: mockPagination }),
       },
     ]);
@@ -169,7 +182,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({ events: mockEvents, pagination: mockPagination }),
       },
     ]);
@@ -187,7 +200,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({ events: mockEvents, pagination: mockPagination }),
       },
     ]);
@@ -204,7 +217,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: [],
           pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
@@ -223,7 +236,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: [],
           pagination: { page: 1, per_page: 20, total: 0, total_pages: 0 },
@@ -243,7 +256,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: mockEvents,
           pagination: { ...mockPagination, total: 150 },
@@ -266,7 +279,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: mockEvents,
           pagination: { page: 2, per_page: 50, total: 150, total_pages: 3 },
@@ -287,7 +300,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: mockEvents,
           pagination: { page: 1, per_page: 50, total: 2, total_pages: 1 },
@@ -321,7 +334,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: [socialEvent],
           pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },
@@ -351,7 +364,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: [lockedEvent],
           pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },
@@ -382,7 +395,7 @@ describe("Login Events Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/analytics/events",
-        Component: LoginEventsPage,
+        Component: WrappedPage,
         loader: () => ({
           events: [mfaFailedEvent],
           pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },

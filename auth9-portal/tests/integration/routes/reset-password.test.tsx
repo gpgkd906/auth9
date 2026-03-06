@@ -26,7 +26,7 @@ describe("Reset Password Page", () => {
 
     const response = await loader({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Invalid or missing reset token" });
+    expect(response).toEqual({ error: "无效或缺失的重置令牌" });
   });
 
   it("loader returns token when present", async () => {
@@ -43,7 +43,7 @@ describe("Reset Password Page", () => {
     const response = await loader({ request, params: {}, context: {} });
 
     // Empty string is falsy, should return error
-    expect(response).toEqual({ error: "Invalid or missing reset token" });
+    expect(response).toEqual({ error: "无效或缺失的重置令牌" });
   });
 
   it("loader preserves full token value with special characters", async () => {
@@ -72,7 +72,7 @@ describe("Reset Password Page", () => {
     render(<RoutesStub initialEntries={["/reset-password"]} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Invalid Link")).toBeInTheDocument();
+      expect(screen.getByText("Invalid link")).toBeInTheDocument();
     });
     expect(screen.getByText("Invalid or missing reset token")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /request new reset link/i })).toBeInTheDocument();
@@ -167,7 +167,7 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Invalid reset token" });
+    expect(response).toEqual({ error: "无效或缺失的重置令牌" });
   });
 
   it("action allows short password and defers policy checks to backend", async () => {
@@ -202,7 +202,7 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Passwords do not match" });
+    expect(response).toEqual({ error: "两次输入的密码不一致。" });
   });
 
   it("action returns success on valid reset", async () => {
@@ -257,7 +257,7 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Failed to reset password" });
+    expect(response).toEqual({ error: "密码重置失败" });
   });
 
   it("action returns error when password is empty", async () => {
@@ -273,7 +273,7 @@ describe("Reset Password Page", () => {
 
     const response = await action({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "Password is required" });
+    expect(response).toEqual({ error: "请输入密码。" });
   });
 
   it("action succeeds with password exactly 8 characters", async () => {
@@ -487,7 +487,7 @@ describe("Reset Password Page", () => {
     render(<RoutesStub initialEntries={["/reset-password"]} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Invalid Link")).toBeInTheDocument();
+      expect(screen.getByText("Invalid link")).toBeInTheDocument();
     });
 
     const requestLink = screen.getByRole("link", { name: /request new reset link/i });

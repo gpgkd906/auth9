@@ -1,12 +1,20 @@
 import { useState } from "react";
-import type { LoaderFunctionArgs } from "react-router";
-import { useLoaderData, Link, redirect, Outlet, useMatch, useNavigate } from "react-router";
+import type { LoaderFunctionArgs, MetaFunction } from "react-router";
+import { Link, Outlet, redirect, useLoaderData, useMatch, useNavigate } from "react-router";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { analyticsApi } from "~/services/api";
 import type { DailyTrendPoint } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { useFormatters } from "~/i18n/format";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
+
+export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "analytics.metaTitle");
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const locale = await resolveLocale(request);
   const accessToken = await getAccessToken(request);
   if (!accessToken) {
     throw redirect("/login");
@@ -23,14 +31,14 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   if (customStart && customEnd) {
     startDate = new Date(customStart).toISOString();
-    endDate = new Date(customEnd + "T23:59:59").toISOString();
+    endDate = new Date(`${customEnd}T23:59:59`).toISOString();
     days = Math.max(1, Math.ceil((new Date(customEnd).getTime() - new Date(customStart).getTime()) / (24 * 60 * 60 * 1000)));
     rangeLabel = `${customStart} - ${customEnd}`;
   } else {
     days = Number(url.searchParams.get("days") || "7");
     endDate = new Date().toISOString();
     startDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString();
-    rangeLabel = `Last ${days} days`;
+    rangeLabel = translate(locale, "analytics.lastDays", { days });
   }
 
   try {
@@ -48,22 +56,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
       rangeLabel,
       customStart,
       customEnd,
-      error: "Failed to load analytics",
+      error: translate(locale, "analytics.loadFailed"),
     };
   }
 }
 
-function StatCard({
-  title,
-  value,
-  subtitle,
-  trend,
-}: {
-  title: string;
-  value: number | string;
-  subtitle?: string;
-  trend?: "up" | "down" | "neutral";
-}) {
+function StatCard({ title, value, subtitle, trend }: { title: string; value: number | string; subtitle?: string; trend?: "up" | "down" | "neutral" }) {
   return (
     <Card>
       <CardContent className="pt-5">
@@ -73,11 +71,7 @@ function StatCard({
           {trend && (
             <span
               className={`text-sm font-medium ${
-                trend === "up"
-                  ? "text-[var(--accent-green)]"
-                  : trend === "down"
-                  ? "text-[var(--accent-red)]"
-                  : "text-[var(--text-secondary)]"
+                trend === "up" ? "text-[var(--accent-green)]" : trend === "down" ? "text-[var(--accent-red)]" : "text-[var(--text-secondary)]"
               }`}
             >
               {trend === "up" ? "↑" : trend === "down" ? "↓" : "→"}
@@ -90,13 +84,7 @@ function StatCard({
   );
 }
 
-function BreakdownCard({
-  title,
-  data,
-}: {
-  title: string;
-  data: Record<string, number>;
-}) {
+function BreakdownCard({ title, data, noDataLabel }: { title: string; data: Record<string, number>; noDataLabel: string }) {
   const entries = Object.entries(data).sort((a, b) => b[1] - a[1]);
   const total = entries.reduce((sum, [, value]) => sum + value, 0);
 
@@ -107,26 +95,19 @@ function BreakdownCard({
       </CardHeader>
       <CardContent>
         {entries.length === 0 ? (
-          <p className="text-[var(--text-secondary)] text-sm">No data available</p>
+          <p className="text-sm text-[var(--text-secondary)]">{noDataLabel}</p>
         ) : (
           <div className="space-y-3">
             {entries.map(([key, value]) => {
               const percentage = total > 0 ? (value / total) * 100 : 0;
               return (
                 <div key={key}>
-                  <div className="flex justify-between text-sm mb-1">
-                    <span className="font-medium capitalize">
-                      {key.replace(/_/g, " ")}
-                    </span>
-                    <span className="text-[var(--text-secondary)]">
-                      {value} ({percentage.toFixed(1)}%)
-                    </span>
+                  <div className="mb-1 flex justify-between text-sm">
+                    <span className="font-medium capitalize">{key.replace(/_/g, " ")}</span>
+                    <span className="text-[var(--text-secondary)]">{value} ({percentage.toFixed(1)}%)</span>
                   </div>
-                  <div className="h-2 bg-[var(--sidebar-item-hover)] rounded-full overflow-hidden">
-                    <div
-                      className="h-full bg-[var(--accent-blue)] rounded-full transition-all"
-                      style={{ width: `${percentage}%` }}
-                    />
+                  <div className="h-2 overflow-hidden rounded-full bg-[var(--sidebar-item-hover)]">
+                    <div className="h-full rounded-full bg-[var(--accent-blue)] transition-all" style={{ width: `${percentage}%` }} />
                   </div>
                 </div>
               );
@@ -139,50 +120,41 @@ function BreakdownCard({
 }
 
 function DailyTrendChart({ data }: { data: DailyTrendPoint[] }) {
+  const { t } = useI18n();
+
   if (data.length === 0) {
     return (
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Daily Login Trend</CardTitle>
+          <CardTitle className="text-lg">{t("analytics.dailyTrend")}</CardTitle>
         </CardHeader>
         <CardContent>
-          <p className="text-[var(--text-secondary)] text-sm">No trend data available</p>
+          <p className="text-sm text-[var(--text-secondary)]">{t("analytics.noTrend")}</p>
         </CardContent>
       </Card>
     );
   }
 
-  const maxTotal = Math.max(...data.map((d) => d.total), 1);
+  const maxTotal = Math.max(...data.map((point) => point.total), 1);
 
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-lg">Daily Login Trend</CardTitle>
+        <CardTitle className="text-lg">{t("analytics.dailyTrend")}</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-end gap-1.5" style={{ height: 160 }}>
           {data.map((point) => {
             const successHeight = (point.successful / maxTotal) * 100;
             const failedHeight = (point.failed / maxTotal) * 100;
-            const dateLabel = point.date.slice(5); // "MM-DD"
+            const dateLabel = point.date.slice(5);
 
             return (
-              <div
-                key={point.date}
-                className="flex-1 flex flex-col items-center gap-1 min-w-0"
-              >
-                <div className="text-xs text-[var(--text-secondary)] tabular-nums">
-                  {point.total}
-                </div>
-                <div
-                  className="w-full flex flex-col justify-end rounded-t"
-                  style={{ height: 120 }}
-                >
+              <div key={point.date} className="flex min-w-0 flex-1 flex-col items-center gap-1">
+                <div className="text-xs tabular-nums text-[var(--text-secondary)]">{point.total}</div>
+                <div className="flex h-[120px] w-full flex-col justify-end rounded-t">
                   {point.failed > 0 && (
-                    <div
-                      className="w-full bg-[var(--accent-red)] rounded-t opacity-80"
-                      style={{ height: `${failedHeight}%`, minHeight: point.failed > 0 ? 2 : 0 }}
-                    />
+                    <div className="w-full rounded-t bg-[var(--accent-red)] opacity-80" style={{ height: `${failedHeight}%`, minHeight: point.failed > 0 ? 2 : 0 }} />
                   )}
                   {point.successful > 0 && (
                     <div
@@ -195,21 +167,19 @@ function DailyTrendChart({ data }: { data: DailyTrendPoint[] }) {
                     />
                   )}
                 </div>
-                <div className="text-[10px] text-[var(--text-secondary)] tabular-nums truncate w-full text-center">
-                  {dateLabel}
-                </div>
+                <div className="w-full truncate text-center text-[10px] tabular-nums text-[var(--text-secondary)]">{dateLabel}</div>
               </div>
             );
           })}
         </div>
-        <div className="flex items-center gap-4 mt-3 text-xs text-[var(--text-secondary)]">
+        <div className="mt-3 flex items-center gap-4 text-xs text-[var(--text-secondary)]">
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[var(--accent-blue)]" />
-            Successful
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[var(--accent-blue)]" />
+            {t("analytics.successfulLegend")}
           </span>
           <span className="flex items-center gap-1">
-            <span className="inline-block w-2.5 h-2.5 rounded-sm bg-[var(--accent-red)] opacity-80" />
-            Failed
+            <span className="inline-block h-2.5 w-2.5 rounded-sm bg-[var(--accent-red)] opacity-80" />
+            {t("analytics.failedLegend")}
           </span>
         </div>
       </CardContent>
@@ -221,18 +191,15 @@ export default function AnalyticsPage() {
   const { stats, dailyTrend, days, rangeLabel, customStart, customEnd, error } = useLoaderData<typeof loader>();
   const isExactMatch = useMatch("/dashboard/analytics");
   const navigate = useNavigate();
-  const [showCustomRange, setShowCustomRange] = useState(!!customStart);
+  const [showCustomRange, setShowCustomRange] = useState(Boolean(customStart));
   const [startInput, setStartInput] = useState(customStart || "");
   const [endInput, setEndInput] = useState(customEnd || "");
+  const { t } = useI18n();
+  const formatters = useFormatters();
 
-  const isCustomRange = !!customStart;
+  const isCustomRange = Boolean(customStart);
+  const successRate = stats && stats.total_logins > 0 ? ((stats.successful_logins / stats.total_logins) * 100).toFixed(1) : "0";
 
-  const successRate =
-    stats && stats.total_logins > 0
-      ? ((stats.successful_logins / stats.total_logins) * 100).toFixed(1)
-      : "0";
-
-  // If we're on a child route (e.g., /dashboard/analytics/events), render the Outlet
   if (!isExactMatch) {
     return <Outlet />;
   }
@@ -245,121 +212,76 @@ export default function AnalyticsPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Analytics</h1>
-          <p className="text-[var(--text-secondary)]">Login activity and statistics</p>
+          <h1 className="text-2xl font-bold">{t("analytics.title")}</h1>
+          <p className="text-[var(--text-secondary)]">{t("analytics.description")}</p>
         </div>
-        <div className="flex gap-2 items-center">
-          {[7, 14, 30, 90].map((d) => (
+        <div className="flex items-center gap-2">
+          {[7, 14, 30, 90].map((value) => (
             <Link
-              key={d}
-              to={`?days=${d}`}
+              key={value}
+              to={`?days=${value}`}
               onClick={() => setShowCustomRange(false)}
-              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                days === d && !isCustomRange
+              className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                days === value && !isCustomRange
                   ? "bg-blue-600 text-white"
                   : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
               }`}
             >
-              {d}d
+              {value}d
             </Link>
           ))}
           <button
             type="button"
             onClick={() => setShowCustomRange(!showCustomRange)}
-            className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-              isCustomRange
-                ? "bg-blue-600 text-white"
-                : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
+            className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+              isCustomRange ? "bg-blue-600 text-white" : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
             }`}
           >
-            Custom
+            {t("analytics.custom")}
           </button>
         </div>
       </div>
 
       {showCustomRange && (
         <div className="flex items-center gap-3">
-          <input
-            type="date"
-            value={startInput}
-            onChange={(e) => setStartInput(e.target.value)}
-            className="px-3 py-1.5 text-sm rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
-          />
-          <span className="text-sm text-[var(--text-secondary)]">to</span>
-          <input
-            type="date"
-            value={endInput}
-            onChange={(e) => setEndInput(e.target.value)}
-            className="px-3 py-1.5 text-sm rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-primary)]"
-          />
-          <button
-            type="button"
-            onClick={handleCustomRangeApply}
-            disabled={!startInput || !endInput}
-            className="px-4 py-1.5 text-sm rounded-md bg-blue-600 text-white disabled:opacity-50 disabled:cursor-not-allowed transition-colors hover:bg-blue-700"
-          >
-            Apply
+          <input type="date" value={startInput} onChange={(event) => setStartInput(event.target.value)} className="rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-1.5 text-sm text-[var(--text-primary)]" />
+          <span className="text-sm text-[var(--text-secondary)]">{t("analytics.to")}</span>
+          <input type="date" value={endInput} onChange={(event) => setEndInput(event.target.value)} className="rounded-md border border-[var(--border-primary)] bg-[var(--bg-primary)] px-3 py-1.5 text-sm text-[var(--text-primary)]" />
+          <button type="button" onClick={handleCustomRangeApply} disabled={!startInput || !endInput} className="rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-50">
+            {t("analytics.apply")}
           </button>
         </div>
       )}
 
-      {error && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{error}</div>
-      )}
+      {error && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{error}</div>}
 
       {stats && (
         <>
-          {/* Key Metrics */}
           <div className="grid gap-4 md:grid-cols-4">
-            <StatCard
-              title="Total Logins"
-              value={stats.total_logins.toLocaleString()}
-              subtitle={rangeLabel}
-            />
-            <StatCard
-              title="Successful"
-              value={stats.successful_logins.toLocaleString()}
-              subtitle={`${successRate}% success rate`}
-              trend="up"
-            />
-            <StatCard
-              title="Failed"
-              value={stats.failed_logins.toLocaleString()}
-              trend={stats.failed_logins > 0 ? "down" : "neutral"}
-            />
-            <StatCard
-              title="Unique Users"
-              value={stats.unique_users.toLocaleString()}
-            />
+            <StatCard title={t("analytics.totalLogins")} value={formatters.number(stats.total_logins)} subtitle={rangeLabel} />
+            <StatCard title={t("analytics.successful")} value={formatters.number(stats.successful_logins)} subtitle={t("analytics.successRate", { rate: successRate })} trend="up" />
+            <StatCard title={t("analytics.failed")} value={formatters.number(stats.failed_logins)} trend={stats.failed_logins > 0 ? "down" : "neutral"} />
+            <StatCard title={t("analytics.uniqueUsers")} value={formatters.number(stats.unique_users)} />
           </div>
 
-          {/* Daily Trend */}
           <DailyTrendChart data={dailyTrend} />
 
-          {/* Breakdowns */}
           <div className="grid gap-6 md:grid-cols-2">
-            <BreakdownCard title="By Event Type" data={stats.by_event_type} />
-            <BreakdownCard title="By Device Type" data={stats.by_device_type} />
+            <BreakdownCard title={t("analytics.byEventType")} data={stats.by_event_type} noDataLabel={t("analytics.noData")} />
+            <BreakdownCard title={t("analytics.byDeviceType")} data={stats.by_device_type} noDataLabel={t("analytics.noData")} />
           </div>
 
-          {/* Quick Links */}
           <Card>
             <CardContent className="pt-5">
               <div className="flex items-center justify-between">
                 <div>
-                  <h3 className="font-medium">View Login Events</h3>
-                  <p className="text-sm text-[var(--text-secondary)]">
-                    See detailed login activity and troubleshoot issues
-                  </p>
+                  <h3 className="font-medium">{t("analytics.viewLoginEvents")}</h3>
+                  <p className="text-sm text-[var(--text-secondary)]">{t("analytics.viewLoginEventsDescription")}</p>
                 </div>
-                <Link
-                  to="/dashboard/analytics/events"
-                  className="px-4 py-2 bg-[var(--sidebar-item-hover)] hover:bg-[var(--sidebar-item-hover)] rounded-md text-sm font-medium transition-colors"
-                >
-                  View events →
+                <Link to="/dashboard/analytics/events" className="rounded-md bg-[var(--sidebar-item-hover)] px-4 py-2 text-sm font-medium transition-colors hover:bg-[var(--sidebar-item-hover)]">
+                  {t("analytics.viewEvents")}
                 </Link>
               </div>
             </CardContent>

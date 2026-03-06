@@ -7,8 +7,8 @@ describe("Landing Page", () => {
   it("meta returns correct title and description", () => {
     const result = meta({} as Parameters<typeof meta>[0]);
     expect(result).toEqual([
-      { title: "Auth9 - Modern Identity Management" },
-      { name: "description", content: "Secure, scalable identity and access management" },
+      { title: "Auth9 - 现代身份管理" },
+      { name: "description", content: "安全、可扩展的身份与访问管理平台" },
     ]);
   });
 
@@ -34,7 +34,7 @@ describe("Landing Page", () => {
 
     await waitFor(() => {
       expect(screen.getByText("Single Sign-On")).toBeInTheDocument();
-      expect(screen.getByText("Multi-Tenant")).toBeInTheDocument();
+      expect(screen.getByText("Multi-tenant")).toBeInTheDocument();
       expect(screen.getByText("Dynamic RBAC")).toBeInTheDocument();
     });
   });
@@ -47,8 +47,8 @@ describe("Landing Page", () => {
     render(<RoutesStub initialEntries={["/"]} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Sign In")).toBeInTheDocument();
-      expect(screen.getByText("Get Started")).toBeInTheDocument();
+      expect(screen.getByText("Sign in")).toBeInTheDocument();
+      expect(screen.getByText("Get started")).toBeInTheDocument();
     });
   });
 });

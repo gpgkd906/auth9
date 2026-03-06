@@ -14,6 +14,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "~/components/ui/dialog";
+import { useI18n } from "~/i18n";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
 import { tenantApi, type Tenant } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 
@@ -57,14 +60,18 @@ export async function action({ request }: ActionFunctionArgs) {
       return { success: true };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error ? error.message : translate(locale, "settings.organization.unknownError");
     return Response.json({ error: message }, { status: 400 });
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  const locale = await resolveLocale(request);
+  return Response.json({ error: translate(locale, "settings.organization.invalidIntent") }, { status: 400 });
 }
 
 export default function OrganizationSettingsPage() {
+  const { t } = useI18n();
   const data = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -82,10 +89,13 @@ export default function OrganizationSettingsPage() {
     <>
       <Card>
         <CardHeader>
-          <CardTitle>Organization Settings</CardTitle>
+          <CardTitle>{t("settings.organization.title")}</CardTitle>
           <CardDescription>
-            {data.pagination.total} tenants • Page {data.pagination.page} of{" "}
-            {data.pagination.total_pages}
+            {t("settings.organization.description", {
+              total: data.pagination.total,
+              page: data.pagination.page,
+              totalPages: data.pagination.total_pages,
+            })}
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
@@ -93,9 +103,9 @@ export default function OrganizationSettingsPage() {
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Tenant</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Branding</th>
+                  <th className="px-4 py-3 font-medium">{t("settings.organization.tenant")}</th>
+                  <th className="px-4 py-3 font-medium">{t("settings.organization.status")}</th>
+                  <th className="px-4 py-3 font-medium">{t("settings.organization.branding")}</th>
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
@@ -109,11 +119,11 @@ export default function OrganizationSettingsPage() {
                       <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">
                         {settings?.branding?.logo_url && (
                           <div className="flex items-center gap-2">
-                            <img src={settings.branding.logo_url} alt="Logo" className="h-6 w-6 object-contain rounded-sm bg-[var(--sidebar-item-hover)]" />
+                            <img src={settings.branding.logo_url} alt={t("settings.organization.logoAlt")} className="h-6 w-6 object-contain rounded-sm bg-[var(--sidebar-item-hover)]" />
                             <span className="truncate max-w-[150px]">{settings.branding.logo_url}</span>
                           </div>
                         )}
-                        {!settings?.branding?.logo_url && <span className="text-[var(--text-tertiary)]">No branding</span>}
+                        {!settings?.branding?.logo_url && <span className="text-[var(--text-tertiary)]">{t("settings.organization.noBranding")}</span>}
                       </td>
                       <td className="px-4 py-3">
                         <Button variant="ghost" size="sm" onClick={() => setEditingTenant(tenant)}>
@@ -126,7 +136,7 @@ export default function OrganizationSettingsPage() {
                 {data.data.length === 0 && (
                   <tr>
                     <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={4}>
-                      No tenant settings found
+                      {t("settings.organization.noSettings")}
                     </td>
                   </tr>
                 )}
@@ -140,9 +150,9 @@ export default function OrganizationSettingsPage() {
       <Dialog open={!!editingTenant} onOpenChange={(open) => !open && setEditingTenant(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Edit Settings: {editingTenant?.name}</DialogTitle>
+            <DialogTitle>{t("settings.organization.editTitle", { name: editingTenant?.name || "" })}</DialogTitle>
             <DialogDescription>
-              Customize appearance and behavior.
+              {t("settings.organization.editDescription")}
             </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
@@ -150,19 +160,19 @@ export default function OrganizationSettingsPage() {
             <input type="hidden" name="id" value={editingTenant?.id || ""} />
 
             <div className="space-y-4">
-              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">Branding</h3>
+              <h3 className="text-sm font-medium text-[var(--text-primary)] border-b pb-2">{t("settings.organization.brandingSection")}</h3>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label htmlFor="branding_logo_url">Logo URL</Label>
+                  <Label htmlFor="branding_logo_url">{t("settings.organization.logoUrl")}</Label>
                   <Input
                     id="branding_logo_url"
                     name="branding_logo_url"
                     defaultValue={(editingTenant?.settings as TenantSettings)?.branding?.logo_url || ""}
-                    placeholder="https://example.com/logo.png"
+                    placeholder={t("settings.organization.logoUrlPlaceholder")}
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="branding_primary_color">Primary Color</Label>
+                  <Label htmlFor="branding_primary_color">{t("settings.organization.primaryColor")}</Label>
                   <div className="flex gap-2">
                     <Input
                       id="branding_primary_color"
@@ -188,10 +198,10 @@ export default function OrganizationSettingsPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingTenant(null)}>
-                Cancel
+                {t("settings.organization.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Changes"}
+                {isSubmitting ? t("settings.organization.saving") : t("settings.organization.save")}
               </Button>
             </DialogFooter>
           </Form>

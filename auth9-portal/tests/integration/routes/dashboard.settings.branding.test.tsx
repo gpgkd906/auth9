@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import BrandingSettingsPage, { loader, action } from "~/routes/dashboard.settings.branding";
+import { I18nProvider } from "~/i18n";
 import { brandingApi } from "~/services/api";
 import type { BrandingConfig } from "~/services/api";
 
@@ -56,13 +57,21 @@ describe("Branding Settings Page", () => {
     vi.clearAllMocks();
   });
 
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <BrandingSettingsPage />
+      </I18nProvider>
+    );
+  }
+
   it("renders branding settings page with default values", async () => {
     vi.mocked(brandingApi.get).mockResolvedValue(mockDefaultBranding);
 
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -84,7 +93,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -108,7 +117,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -130,7 +139,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -155,7 +164,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -179,7 +188,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -204,7 +213,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -228,7 +237,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -252,7 +261,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -272,7 +281,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -292,7 +301,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -310,7 +319,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -328,7 +337,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -347,7 +356,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -366,7 +375,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -385,7 +394,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -407,7 +416,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -436,7 +445,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -454,7 +463,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -479,7 +488,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -620,7 +629,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
         action: () => ({ success: true, message: "Branding reset to defaults", reset: true }),
       },
@@ -650,7 +659,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
         action: () => ({ success: true, message: "Branding settings saved successfully" }),
       },
@@ -677,7 +686,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
         action: () => ({ error: "Failed to save branding" }),
       },
@@ -705,7 +714,7 @@ describe("Branding Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/branding",
-        Component: BrandingSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -741,7 +750,11 @@ describe("Branding action", () => {
     for (const [key, value] of Object.entries(data)) {
       formData.append(key, value);
     }
-    return new Request("http://localhost/dashboard/settings/branding", { method: "POST", body: formData });
+    return new Request("http://localhost/dashboard/settings/branding", {
+      method: "POST",
+      body: formData,
+      headers: { "Accept-Language": "en-US" },
+    });
   }
 
   it("saves branding config successfully", async () => {

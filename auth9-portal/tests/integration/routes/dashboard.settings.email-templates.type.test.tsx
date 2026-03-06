@@ -3,6 +3,7 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import EmailTemplateEditorPage, { loader, action } from "~/routes/dashboard.settings.email-templates.$type";
+import { I18nProvider } from "~/i18n";
 import { emailTemplateApi } from "~/services/api";
 
 // Mock email template API
@@ -29,6 +30,12 @@ vi.mock("~/services/session.server", () => ({
         headers: undefined,
     }),
 }));
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
 
 describe("Email Template Editor Page", () => {
   const mockTemplate = {
@@ -66,13 +73,21 @@ describe("Email Template Editor Page", () => {
     vi.clearAllMocks();
   });
 
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <EmailTemplateEditorPage />
+      </I18nProvider>
+    );
+  }
+
   it("renders template editor with header and back button", async () => {
     vi.mocked(emailTemplateApi.get).mockResolvedValue(mockTemplate);
 
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -92,7 +107,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -112,7 +127,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -134,7 +149,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -152,7 +167,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -172,7 +187,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -191,7 +206,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -211,7 +226,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -234,7 +249,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -252,7 +267,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -272,7 +287,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -288,7 +303,7 @@ describe("Email Template Editor Page", () => {
     fireEvent.click(saveButton);
 
     await waitFor(() => {
-      expect(screen.getByText("Template saved successfully")).toBeInTheDocument();
+      expect(screen.getByText(/Template saved successfully|模板已保存/)).toBeInTheDocument();
     });
   });
 
@@ -299,7 +314,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -325,7 +340,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -358,7 +373,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -391,7 +406,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -444,7 +459,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -469,7 +484,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -500,7 +515,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -532,7 +547,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -567,7 +582,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -610,7 +625,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -653,7 +668,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -676,7 +691,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -707,7 +722,7 @@ describe("Email Template Editor Page", () => {
     formData.append("text_body", "Test");
     formData.append("variables", JSON.stringify({ inviter_name: "John" }));
 
-    const request = new Request("http://localhost/dashboard/settings/email-templates/invitation", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/email-templates/invitation", {
       method: "POST",
       body: formData,
     });
@@ -745,7 +760,7 @@ describe("Email Template Editor Page", () => {
     formData.append("text_body", "Test");
     formData.append("variables", "{}");
 
-    const request = new Request("http://localhost/dashboard/settings/email-templates/invitation", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/email-templates/invitation", {
       method: "POST",
       body: formData,
     });
@@ -772,7 +787,7 @@ describe("Email Template Editor Page", () => {
     formData.append("text_body", "Body");
     // No variables field - should default to empty object
 
-    const request = new Request("http://localhost/dashboard/settings/email-templates/invitation", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/email-templates/invitation", {
       method: "POST",
       body: formData,
     });
@@ -794,7 +809,7 @@ describe("Email Template Editor Page", () => {
     const formData = new FormData();
     formData.append("intent", "unknown");
 
-    const request = new Request("http://localhost/dashboard/settings/email-templates/invitation", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/email-templates/invitation", {
       method: "POST",
       body: formData,
     });
@@ -811,7 +826,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action: async () => {
           return { testEmailSuccess: true, testEmailMessage: "Test email sent to recipient@example.com" };
@@ -839,7 +854,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action: async () => {
           return { testEmailSuccess: false, testEmailError: "SMTP server unreachable" };
@@ -866,7 +881,7 @@ describe("Email Template Editor Page", () => {
     const formData = new FormData();
     formData.append("intent", "reset");
 
-    const request = new Request("http://localhost/dashboard/settings/email-templates/invitation", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/email-templates/invitation", {
       method: "POST",
       body: formData,
     });
@@ -887,7 +902,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },
@@ -923,7 +938,7 @@ describe("Email Template Editor Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates/:type",
-        Component: EmailTemplateEditorPage,
+        Component: WrappedPage,
         loader,
         action,
       },

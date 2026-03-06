@@ -1,27 +1,29 @@
 import type { MetaFunction } from "react-router";
 import { Link, Outlet, useLocation } from "react-router";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { cn } from "~/lib/utils";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Account - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "account.metaTitle");
 };
-
-const accountNav = [
-  { name: "Profile", href: "/dashboard/account", description: "Your personal information" },
-  { name: "Security", href: "/dashboard/account/security", description: "Change your password" },
-  { name: "Passkeys", href: "/dashboard/account/passkeys", description: "Passwordless authentication" },
-  { name: "Sessions", href: "/dashboard/account/sessions", description: "Active sessions" },
-  { name: "Linked Identities", href: "/dashboard/account/identities", description: "Connected accounts" },
-];
 
 export default function AccountLayout() {
   const location = useLocation();
+  const { t } = useI18n();
+  const accountNav = [
+    { name: t("account.nav.profile"), href: "/dashboard/account", description: t("account.navDescriptions.profile") },
+    { name: t("account.nav.security"), href: "/dashboard/account/security", description: t("account.navDescriptions.security") },
+    { name: t("account.nav.passkeys"), href: "/dashboard/account/passkeys", description: t("account.navDescriptions.passkeys") },
+    { name: t("account.nav.sessions"), href: "/dashboard/account/sessions", description: t("account.navDescriptions.sessions") },
+    { name: t("account.nav.identities"), href: "/dashboard/account/identities", description: t("account.navDescriptions.identities") },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Account</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Manage your personal account settings</p>
+        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("account.title")}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">{t("account.description")}</p>
       </div>
 
       <div className="flex gap-6">

@@ -4,13 +4,18 @@ import { Link, Outlet, useLocation, useLoaderData, redirect } from "react-router
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
+import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { OrgSwitcher } from "~/components/OrgSwitcher";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { useI18n } from "~/i18n";
 import { requireTenantAuthWithUpdate, trySetActiveTenant, NO_STORE_HEADERS } from "~/services/session.server";
 import { userApi, type User, type TenantUserWithTenant } from "~/services/api";
 
-export const meta: MetaFunction<typeof loader> = ({ data }) => {
-  const tenantName = data?.activeTenant?.tenant?.name || "Dashboard";
-  return [{ title: `${tenantName} - Auth9` }];
+export const meta: MetaFunction<typeof loader> = ({ data, matches }) => {
+  const locale = resolveMetaLocale(matches);
+  const tenantName = data?.activeTenant?.tenant?.name || translate(locale, "dashboard.fallbackTitle");
+  return buildMeta(locale, "dashboard.metaTitle", undefined, { tenantName });
 };
 
 // Protect all dashboard routes - requires authenticated user with active tenant token.
@@ -76,20 +81,8 @@ export async function action({ request }: ActionFunctionArgs) {
   return null;
 }
 
-const navigation = [
-  { name: "Overview", href: "/dashboard", icon: HomeIcon },
-  { name: "Tenants", href: "/dashboard/tenants", icon: BuildingIcon },
-  { name: "Users", href: "/dashboard/users", icon: UsersIcon },
-  { name: "Services", href: "/dashboard/services", icon: ServerIcon },
-  { name: "Roles", href: "/dashboard/roles", icon: ShieldIcon },
-  { name: "ABAC Policies", href: "/dashboard/abac", icon: SlidersIcon },
-  { name: "Analytics", href: "/dashboard/analytics", icon: ChartIcon },
-  { name: "Security", href: "/dashboard/security/alerts", icon: LockIcon },
-  { name: "Audit Logs", href: "/dashboard/audit-logs", icon: ClipboardIcon },
-  { name: "Settings", href: "/dashboard/settings", icon: SettingsIcon },
-];
-
 export default function Dashboard() {
+  const { t } = useI18n();
   const location = useLocation();
   const { currentUser, tenants, activeTenant, activeTenantId } = useLoaderData<typeof loader>() as {
     currentUser: User | null;
@@ -99,7 +92,20 @@ export default function Dashboard() {
   };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
 
-  const displayName = currentUser?.display_name || currentUser?.email || "User";
+  const navigation = [
+    { name: t("dashboard.nav.overview"), href: "/dashboard", icon: HomeIcon },
+    { name: t("dashboard.nav.tenants"), href: "/dashboard/tenants", icon: BuildingIcon },
+    { name: t("dashboard.nav.users"), href: "/dashboard/users", icon: UsersIcon },
+    { name: t("dashboard.nav.services"), href: "/dashboard/services", icon: ServerIcon },
+    { name: t("dashboard.nav.roles"), href: "/dashboard/roles", icon: ShieldIcon },
+    { name: t("dashboard.nav.abac"), href: "/dashboard/abac", icon: SlidersIcon },
+    { name: t("dashboard.nav.analytics"), href: "/dashboard/analytics", icon: ChartIcon },
+    { name: t("dashboard.nav.security"), href: "/dashboard/security/alerts", icon: LockIcon },
+    { name: t("dashboard.nav.auditLogs"), href: "/dashboard/audit-logs", icon: ClipboardIcon },
+    { name: t("dashboard.nav.settings"), href: "/dashboard/settings", icon: SettingsIcon },
+  ];
+
+  const displayName = currentUser?.display_name || currentUser?.email || t("dashboard.userFallback");
   const email = currentUser?.email || "";
   const avatarUrl = currentUser?.avatar_url || "";
   const initials = displayName
@@ -116,14 +122,14 @@ export default function Dashboard() {
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus:z-[100] focus:px-4 focus:py-2 focus:bg-[var(--accent-blue)] focus:text-white focus:rounded-lg focus:shadow-lg focus:ring-2 focus:ring-[var(--accent-blue)] focus:ring-offset-2"
       >
-        Skip to main content
+        {t("common.navigation.skipToMain")}
       </a>
 
       {/* Dynamic Background */}
       <div className="page-backdrop" />
 
       {/* Mobile Header */}
-      <header aria-label="Mobile header" className="lg:hidden fixed top-0 left-0 right-0 h-16 z-[60] px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
+      <header aria-label={t("common.navigation.mobileHeader")} className="lg:hidden fixed top-0 left-0 right-0 h-16 z-[60] px-4 flex items-center justify-between bg-[var(--glass-bg)] backdrop-blur-md border-b border-[var(--glass-border-subtle)]">
         <Link to="/dashboard" className="flex items-center gap-2">
           <div className="logo-icon w-8 h-8 text-sm">A9</div>
           <span className="logo-text text-lg">Auth9</span>
@@ -131,7 +137,7 @@ export default function Dashboard() {
         <button
           onClick={() => setIsSidebarOpen(!isSidebarOpen)}
           className="h-11 w-11 inline-flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--glass-border-subtle)] transition-colors"
-          aria-label={isSidebarOpen ? "Close sidebar" : "Open sidebar"}
+          aria-label={isSidebarOpen ? t("common.navigation.closeSidebar") : t("common.navigation.openSidebar")}
         >
           {isSidebarOpen ? (
             <XIcon className="w-6 h-6" />
@@ -151,7 +157,7 @@ export default function Dashboard() {
 
       {/* Sidebar - Floating Glass Card */}
       <aside
-        aria-label="Sidebar navigation"
+        aria-label={t("common.navigation.sidebar")}
         className={cn(
           "sidebar",
           isSidebarOpen && "open"
@@ -163,16 +169,19 @@ export default function Dashboard() {
             <div className="logo-icon">A9</div>
             <span className="logo-text">Auth9</span>
           </Link>
-          <ThemeToggle />
+          <div className="flex items-center gap-2">
+            <LanguageSwitcher />
+            <ThemeToggle />
+          </div>
         </div>
 
         {/* Org Switcher */}
         <OrgSwitcher tenants={tenants} activeTenantId={activeTenantId} />
 
         {/* Navigation */}
-        <nav className="sidebar-nav" aria-label="Main navigation">
+        <nav className="sidebar-nav" aria-label={t("common.navigation.mainNavigation")}>
           <div className="nav-section">
-            <div className="nav-section-title">Main</div>
+            <div className="nav-section-title">{t("dashboard.nav.main")}</div>
             {navigation.slice(0, 4).map((item) => {
               const isActive = location.pathname === item.href ||
                 (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
@@ -196,7 +205,7 @@ export default function Dashboard() {
           </div>
 
           <div className="nav-section">
-            <div className="nav-section-title">Security</div>
+            <div className="nav-section-title">{t("dashboard.nav.securityGroup")}</div>
             {navigation.slice(4, 9).map((item) => {
               const isActive = location.pathname === item.href ||
                 (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
@@ -220,7 +229,7 @@ export default function Dashboard() {
           </div>
 
           <div className="nav-section">
-            <div className="nav-section-title">System</div>
+            <div className="nav-section-title">{t("dashboard.nav.system")}</div>
             {navigation.slice(9).map((item) => {
               const isActive = location.pathname === item.href ||
                 (item.href !== "/dashboard" && location.pathname.startsWith(item.href));
@@ -264,7 +273,7 @@ export default function Dashboard() {
             <Link
               to="/logout"
               className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-secondary)] transition-colors"
-              title="Sign out"
+              title={t("common.buttons.signOut")}
             >
               <LogOutIcon className="w-4 h-4" />
             </Link>
@@ -273,13 +282,13 @@ export default function Dashboard() {
       </aside>
 
       {/* Main content */}
-      <main id="main-content" aria-label="Main content" className="main-content pt-20 lg:pt-0" tabIndex={-1}>
+      <main id="main-content" aria-label={t("common.navigation.mainContent")} className="main-content pt-20 lg:pt-0" tabIndex={-1}>
         <div className="content-wrapper">
           <Outlet context={{ activeTenant, tenants, currentUser }} />
         </div>
       </main>
       <footer role="contentinfo" className="sr-only">
-        Auth9 Dashboard Footer
+        Auth9 dashboard footer
       </footer>
     </div>
   );

@@ -1,29 +1,23 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, Link, useSearchParams } from "react-router";
-import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "react-router";
+import { CheckCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
 import { Button } from "~/components/ui/button";
-import { securityAlertApi, type SecurityAlert, type AlertSeverity, type SecurityAlertType } from "~/services/api";
+import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
+import { useFormatters } from "~/i18n/format";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
+import { securityAlertApi, type AlertSeverity, type SecurityAlert, type SecurityAlertType } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
-import {
-  ExclamationTriangleIcon,
-  CheckCircledIcon,
-} from "@radix-ui/react-icons";
 
-const SEVERITY_OPTIONS: { value: AlertSeverity; label: string }[] = [
-  { value: "critical", label: "Critical" },
-  { value: "high", label: "High" },
-  { value: "medium", label: "Medium" },
-  { value: "low", label: "Low" },
-];
+export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "securityAlerts.metaTitle");
 
-const ALERT_TYPE_OPTIONS: { value: SecurityAlertType; label: string }[] = [
-  { value: "brute_force", label: "Brute Force" },
-  { value: "new_device", label: "New Device" },
-  { value: "impossible_travel", label: "Impossible Travel" },
-  { value: "suspicious_ip", label: "Suspicious IP" },
-];
+const SEVERITY_OPTIONS: AlertSeverity[] = ["critical", "high", "medium", "low"];
+const ALERT_TYPE_OPTIONS: SecurityAlertType[] = ["brute_force", "new_device", "impossible_travel", "suspicious_ip"];
 
 export async function loader({ request }: LoaderFunctionArgs) {
+  const locale = await resolveLocale(request);
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const unresolvedOnly = url.searchParams.get("unresolved") === "true";
@@ -33,8 +27,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   try {
     const response = await securityAlertApi.list(
-      page, 50, unresolvedOnly, accessToken || undefined,
-      severity || undefined, alertType || undefined,
+      page,
+      50,
+      unresolvedOnly,
+      accessToken || undefined,
+      severity || undefined,
+      alertType || undefined,
     );
     return { alerts: response.data, pagination: response.pagination, unresolvedOnly, severity, alertType };
   } catch {
@@ -44,12 +42,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
       unresolvedOnly,
       severity,
       alertType,
-      error: "Failed to load security alerts",
+      error: translate(locale, "securityAlerts.loadFailed"),
     };
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   const accessToken = await getAccessToken(request);
@@ -58,14 +57,14 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "resolve") {
       const alertId = formData.get("alertId") as string;
       await securityAlertApi.resolve(alertId, accessToken || undefined);
-      return { success: true, message: "Alert resolved" };
+      return { success: true, message: translate(locale, "securityAlerts.resolved") };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Operation failed";
+    const message = error instanceof Error ? error.message : translate(locale, "securityAlerts.operationFailed");
     return { error: message };
   }
 
-  return { error: "Invalid action" };
+  return { error: translate(locale, "securityAlerts.invalidAction") };
 }
 
 function getSeverityColor(severity: AlertSeverity) {
@@ -95,26 +94,6 @@ function getSeverityIcon(severity: AlertSeverity) {
   }
 }
 
-function getAlertTypeLabel(type: string) {
-  switch (type) {
-    case "brute_force":
-      return "Brute Force Attack";
-    case "new_device":
-      return "New Device Login";
-    case "impossible_travel":
-      return "Impossible Travel";
-    case "suspicious_ip":
-      return "Suspicious IP";
-    default:
-      return type.replace(/_/g, " ");
-  }
-}
-
-function formatDate(dateString: string) {
-  const date = new Date(dateString);
-  return date.toLocaleString();
-}
-
 function buildFilterUrl(params: Record<string, string | null>) {
   const search = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
@@ -129,15 +108,14 @@ export default function SecurityAlertsPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [searchParams] = useSearchParams();
+  const { t } = useI18n();
+  const formatters = useFormatters();
 
   const isSubmitting = navigation.state === "submitting";
-
-  const unresolvedCount = alerts.filter((a: SecurityAlert) => !a.resolved_at).length;
-
+  const unresolvedCount = alerts.filter((alert: SecurityAlert) => !alert.resolved_at).length;
   const currentSeverity = searchParams.get("severity");
   const currentAlertType = searchParams.get("alert_type");
 
-  // Build base params preserving existing filters
   function filterUrl(overrides: Record<string, string | null>) {
     const base: Record<string, string | null> = {
       unresolved: unresolvedOnly ? "true" : null,
@@ -147,15 +125,26 @@ export default function SecurityAlertsPage() {
     return buildFilterUrl({ ...base, ...overrides, page: null });
   }
 
+  function severityLabel(severity: string) {
+    if (SEVERITY_OPTIONS.includes(severity as AlertSeverity)) {
+      return t(`securityAlerts.severities.${severity as AlertSeverity}` as const);
+    }
+    return severity;
+  }
+
+  function alertTypeLabel(type: string) {
+    if (ALERT_TYPE_OPTIONS.includes(type as SecurityAlertType)) {
+      return t(`securityAlerts.types.${type as SecurityAlertType}` as const);
+    }
+    return type.replace(/_/g, " ");
+  }
+
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Security Alerts</h1>
-          <p className="text-[var(--text-secondary)]">
-            Monitor and respond to security threats
-          </p>
+          <h1 className="text-2xl font-bold">{t("securityAlerts.title")}</h1>
+          <p className="text-[var(--text-secondary)]">{t("securityAlerts.description")}</p>
         </div>
         <div className="flex gap-2">
           <Link
@@ -166,7 +155,7 @@ export default function SecurityAlertsPage() {
                 : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
             }`}
           >
-            All
+            {t("securityAlerts.all")}
           </Link>
           <Link
             to={filterUrl({ unresolved: "true" })}
@@ -176,16 +165,14 @@ export default function SecurityAlertsPage() {
                 : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
             }`}
           >
-            Unresolved ({unresolvedCount})
+            {t("securityAlerts.unresolved", { count: unresolvedCount })}
           </Link>
         </div>
       </div>
 
-      {/* Filters */}
       <div className="flex gap-4 flex-wrap">
-        {/* Severity Filter */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--text-secondary)]">Severity:</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t("securityAlerts.severity")}</span>
           <div className="flex gap-1">
             <Link
               to={filterUrl({ severity: null })}
@@ -195,27 +182,26 @@ export default function SecurityAlertsPage() {
                   : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
               }`}
             >
-              All
+              {t("securityAlerts.all")}
             </Link>
-            {SEVERITY_OPTIONS.map((opt) => (
+            {SEVERITY_OPTIONS.map((value) => (
               <Link
-                key={opt.value}
-                to={filterUrl({ severity: currentSeverity === opt.value ? null : opt.value })}
+                key={value}
+                to={filterUrl({ severity: currentSeverity === value ? null : value })}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
-                  currentSeverity === opt.value
+                  currentSeverity === value
                     ? "bg-blue-600 text-white"
                     : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
                 }`}
               >
-                {opt.label}
+                {severityLabel(value)}
               </Link>
             ))}
           </div>
         </div>
 
-        {/* Alert Type Filter */}
         <div className="flex items-center gap-2">
-          <span className="text-sm text-[var(--text-secondary)]">Type:</span>
+          <span className="text-sm text-[var(--text-secondary)]">{t("securityAlerts.type")}</span>
           <div className="flex gap-1">
             <Link
               to={filterUrl({ alert_type: null })}
@@ -225,49 +211,35 @@ export default function SecurityAlertsPage() {
                   : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
               }`}
             >
-              All
+              {t("securityAlerts.all")}
             </Link>
-            {ALERT_TYPE_OPTIONS.map((opt) => (
+            {ALERT_TYPE_OPTIONS.map((value) => (
               <Link
-                key={opt.value}
-                to={filterUrl({ alert_type: currentAlertType === opt.value ? null : opt.value })}
+                key={value}
+                to={filterUrl({ alert_type: currentAlertType === value ? null : value })}
                 className={`px-2 py-1 text-xs rounded transition-colors ${
-                  currentAlertType === opt.value
+                  currentAlertType === value
                     ? "bg-blue-600 text-white"
                     : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
                 }`}
               >
-                {opt.label}
+                {alertTypeLabel(value)}
               </Link>
             ))}
           </div>
         </div>
       </div>
 
-      {/* Messages */}
-      {error && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{error}</div>
-      )}
+      {error && <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{error}</div>}
+      {actionData?.error && <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{actionData.error}</div>}
+      {actionData?.success && <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">{actionData.message}</div>}
 
-      {actionData?.error && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-          {actionData.error}
-        </div>
-      )}
-
-      {actionData?.success && (
-        <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
-          {actionData.message}
-        </div>
-      )}
-
-      {/* Alerts List */}
       <Card>
         <CardHeader>
           <CardTitle className="text-lg">
-            Alerts
+            {t("securityAlerts.alertsTitle")}
             <span className="ml-2 text-sm font-normal text-[var(--text-secondary)]">
-              {pagination.total.toLocaleString()} total
+              {t("securityAlerts.total", { count: pagination.total })}
             </span>
           </CardTitle>
         </CardHeader>
@@ -275,50 +247,33 @@ export default function SecurityAlertsPage() {
           {alerts.length === 0 ? (
             <div className="text-center py-12">
               <CheckCircledIcon className="h-12 w-12 text-[var(--accent-green)] mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
-                All clear!
-              </h3>
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">{t("securityAlerts.allClear")}</h3>
               <p className="text-[var(--text-secondary)]">
-                {unresolvedOnly
-                  ? "No unresolved security alerts."
-                  : "No security alerts found."}
+                {unresolvedOnly ? t("securityAlerts.noUnresolved") : t("securityAlerts.noAlerts")}
               </p>
             </div>
           ) : (
             <div className="space-y-4">
               {alerts.map((alert: SecurityAlert) => (
-                <div
-                  key={alert.id}
-                  className={`border rounded-lg p-4 ${
-                    alert.resolved_at ? "opacity-60" : ""
-                  }`}
-                >
+                <div key={alert.id} className={`border rounded-lg p-4 ${alert.resolved_at ? "opacity-60" : ""}`}>
                   <div className="flex items-start gap-4">
-                    <div className="flex-shrink-0 mt-0.5">
-                      {getSeverityIcon(alert.severity)}
-                    </div>
+                    <div className="flex-shrink-0 mt-0.5">{getSeverityIcon(alert.severity)}</div>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
-                        <span
-                          className={`px-2 py-0.5 text-xs font-medium rounded border ${getSeverityColor(
-                            alert.severity
-                          )}`}
-                        >
-                          {alert.severity.toUpperCase()}
+                        <span className={`px-2 py-0.5 text-xs font-medium rounded border ${getSeverityColor(alert.severity)}`}>
+                          {severityLabel(alert.severity).toUpperCase()}
                         </span>
-                        <span className="font-medium">
-                          {getAlertTypeLabel(alert.alert_type)}
-                        </span>
+                        <span className="font-medium">{alertTypeLabel(alert.alert_type)}</span>
                         {alert.resolved_at && (
                           <span className="inline-flex items-center gap-1 text-xs text-[var(--accent-green)]">
                             <CheckCircledIcon className="h-3 w-3" />
-                            Resolved
+                            {t("securityAlerts.resolvedBadge")}
                           </span>
                         )}
                       </div>
                       <div className="text-sm text-[var(--text-secondary)] mb-2" suppressHydrationWarning>
-                        {formatDate(alert.created_at)}
-                        {alert.user_id && ` • User: ${alert.user_id.slice(0, 8)}...`}
+                        {formatters.dateTime(alert.created_at)}
+                        {alert.user_id && ` • ${t("securityAlerts.user")}: ${alert.user_id.slice(0, 8)}...`}
                       </div>
                       {alert.details && (
                         <div className="text-sm bg-[var(--sidebar-item-hover)] p-2 rounded mt-2">
@@ -332,14 +287,9 @@ export default function SecurityAlertsPage() {
                       <Form method="post">
                         <input type="hidden" name="intent" value="resolve" />
                         <input type="hidden" name="alertId" value={alert.id} />
-                        <Button
-                          type="submit"
-                          variant="outline"
-                          size="sm"
-                          disabled={isSubmitting}
-                        >
+                        <Button type="submit" variant="outline" size="sm" disabled={isSubmitting}>
                           <CheckCircledIcon className="h-4 w-4 mr-1" />
-                          Resolve
+                          {t("securityAlerts.resolve")}
                         </Button>
                       </Form>
                     )}
@@ -349,29 +299,20 @@ export default function SecurityAlertsPage() {
             </div>
           )}
 
-          {/* Pagination */}
           {pagination.total_pages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t">
               <div className="text-sm text-[var(--text-secondary)]">
-                Page {pagination.page} of {pagination.total_pages}
+                {t("securityAlerts.pageOf", { page: pagination.page, totalPages: pagination.total_pages })}
               </div>
               <div className="flex gap-2">
                 {pagination.page > 1 && (
-                  <Link
-                    to={filterUrl({ page: String(pagination.page - 1) })}
-                  >
-                    <Button variant="outline" size="sm">
-                      Previous
-                    </Button>
+                  <Link to={filterUrl({ page: String(pagination.page - 1) })}>
+                    <Button variant="outline" size="sm">{t("securityAlerts.previous")}</Button>
                   </Link>
                 )}
                 {pagination.page < pagination.total_pages && (
-                  <Link
-                    to={filterUrl({ page: String(pagination.page + 1) })}
-                  >
-                    <Button variant="outline" size="sm">
-                      Next
-                    </Button>
+                  <Link to={filterUrl({ page: String(pagination.page + 1) })}>
+                    <Button variant="outline" size="sm">{t("securityAlerts.next")}</Button>
                   </Link>
                 )}
               </div>
@@ -380,18 +321,17 @@ export default function SecurityAlertsPage() {
         </CardContent>
       </Card>
 
-      {/* Security Recommendations */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Security Recommendations</CardTitle>
+          <CardTitle className="text-lg">{t("securityAlerts.recommendationsTitle")}</CardTitle>
         </CardHeader>
         <CardContent>
           <ul className="text-sm text-[var(--text-secondary)] space-y-2">
-            <li>• Review and resolve critical alerts within 24 hours</li>
-            <li>• Enable MFA for all admin accounts</li>
-            <li>• Configure rate limiting to prevent brute force attacks</li>
-            <li>• Set up webhooks to receive real-time security notifications</li>
-            <li>• Regularly review user sessions and revoke suspicious ones</li>
+            <li>• {t("securityAlerts.recommendations.reviewCritical")}</li>
+            <li>• {t("securityAlerts.recommendations.enableMfa")}</li>
+            <li>• {t("securityAlerts.recommendations.configureRateLimit")}</li>
+            <li>• {t("securityAlerts.recommendations.setupWebhooks")}</li>
+            <li>• {t("securityAlerts.recommendations.reviewSessions")}</li>
           </ul>
         </CardContent>
       </Card>

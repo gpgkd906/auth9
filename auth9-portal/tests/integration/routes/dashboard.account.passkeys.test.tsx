@@ -54,6 +54,7 @@ function createFormRequest(data: Record<string, string>): Request {
     return new Request("http://localhost/dashboard/account/passkeys", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
     });
 }
 
@@ -69,7 +70,9 @@ describe("Account Passkeys Page", () => {
     it("loader returns passkeys from API", async () => {
         vi.mocked(webauthnApi.listPasskeys).mockResolvedValue({ data: mockPasskeys });
 
-        const request = new Request("http://localhost/dashboard/account/passkeys");
+        const request = new Request("http://localhost/dashboard/account/passkeys", {
+            headers: { "Accept-Language": "en-US" },
+        });
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({
@@ -83,7 +86,9 @@ describe("Account Passkeys Page", () => {
     it("loader returns empty array on error", async () => {
         vi.mocked(webauthnApi.listPasskeys).mockRejectedValue(new Error("fail"));
 
-        const request = new Request("http://localhost/dashboard/account/passkeys");
+        const request = new Request("http://localhost/dashboard/account/passkeys", {
+            headers: { "Accept-Language": "en-US" },
+        });
         const result = await loader({ request, params: {}, context: {} });
 
         expect(result).toEqual({
@@ -186,8 +191,12 @@ describe("Account Passkeys Page", () => {
 
         render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
 
-        expect(await screen.findByText("No passkeys yet")).toBeInTheDocument();
-        expect(screen.getByText("Add a passkey to sign in faster and more securely.")).toBeInTheDocument();
+        expect(await screen.findAllByText("Your Passkeys")).toHaveLength(2);
+        expect(
+            screen.getAllByText(
+                "Passkeys are a secure, passwordless way to sign in using your device's biometrics (fingerprint, face) or screen lock."
+            )
+        ).toHaveLength(2);
         expect(screen.getByRole("button", { name: /Add your first passkey/i })).toBeInTheDocument();
     });
 
@@ -201,7 +210,7 @@ describe("Account Passkeys Page", () => {
         ]);
 
         render(<RoutesStub initialEntries={["/dashboard/account/passkeys"]} />);
-        expect(await screen.findByRole("button", { name: /Remove/i })).toBeInTheDocument();
+        expect(await screen.findByRole("button", { name: /Delete/i })).toBeInTheDocument();
     });
 
     it("renders about passkeys info section", async () => {

@@ -4,6 +4,7 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import EditActionPage, { loader, action } from "~/routes/dashboard.services.$serviceId.actions.$actionId.edit";
 import { ActionTrigger } from "@auth9/core";
+import { I18nProvider } from "~/i18n";
 
 // Mock the session module
 vi.mock("~/services/session.server", () => ({
@@ -22,6 +23,12 @@ vi.mock("~/lib/auth9-client", () => ({
 }));
 
 import { getAccessToken } from "~/services/session.server";
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
 
 const mockActionsApi = {
   get: vi.fn(),
@@ -60,12 +67,13 @@ describe("Edit Action Page", () => {
     mockActionsApi.get.mockResolvedValue({ data: mockAction });
 
     const response = await loader({
-      request: new Request("http://localhost/dashboard/services/service-1/actions/action-1/edit"),
+      request: buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/action-1/edit"),
       params: { serviceId: "service-1", actionId: "action-1" },
       context: {},
     });
 
     expect(response).toEqual({
+      locale: "en-US",
       serviceId: "service-1",
       action: mockAction,
       triggers: Object.values(ActionTrigger),
@@ -76,7 +84,7 @@ describe("Edit Action Page", () => {
   it("loader throws when serviceId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/services//actions/action-1/edit"),
+        request: buildEnglishRequest("http://localhost/dashboard/services//actions/action-1/edit"),
         params: { actionId: "action-1" },
         context: {},
       })
@@ -86,7 +94,7 @@ describe("Edit Action Page", () => {
   it("loader throws when actionId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/services/service-1/actions//edit"),
+        request: buildEnglishRequest("http://localhost/dashboard/services/service-1/actions//edit"),
         params: { serviceId: "service-1" },
         context: {},
       })
@@ -101,7 +109,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -122,7 +130,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -161,7 +169,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -182,7 +190,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -209,7 +217,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: actionWithError,
@@ -234,7 +242,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -255,7 +263,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -276,7 +284,7 @@ describe("Edit Action Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId/edit",
-        Component: EditActionPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -329,7 +337,7 @@ describe("Edit Action Page", () => {
       for (const [key, value] of Object.entries(data)) {
         formData.append(key, value);
       }
-      return new Request("http://localhost/dashboard/services/service-1/actions/action-1/edit", {
+      return buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/action-1/edit", {
         method: "POST",
         body: formData,
       });
@@ -506,3 +514,10 @@ describe("Edit Action Page", () => {
     });
   });
 });
+function WrappedPage() {
+  return (
+    <I18nProvider locale="en-US">
+      <EditActionPage />
+    </I18nProvider>
+  );
+}

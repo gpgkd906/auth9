@@ -4,6 +4,13 @@ import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import ActionDetailPage, { loader } from "~/routes/dashboard.services.$serviceId.actions.$actionId._index";
 import { ActionTrigger } from "@auth9/core";
+import { I18nProvider } from "~/i18n";
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
 
 // Mock the session module
 vi.mock("~/services/session.server", () => ({
@@ -77,6 +84,14 @@ const mockStats = {
   last24hCount: 25,
 };
 
+function WrappedPage() {
+  return (
+    <I18nProvider locale="en-US">
+      <ActionDetailPage />
+    </I18nProvider>
+  );
+}
+
 describe("Action Detail Page", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -92,12 +107,13 @@ describe("Action Detail Page", () => {
     mockActionsApi.stats.mockResolvedValue({ data: mockStats });
 
     const response = await loader({
-      request: new Request("http://localhost/dashboard/services/service-1/actions/action-1"),
+      request: buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/action-1"),
       params: { serviceId: "service-1", actionId: "action-1" },
       context: {},
     });
 
     expect(response).toEqual({
+      locale: "en-US",
       serviceId: "service-1",
       action: mockAction,
       logs: mockLogs,
@@ -114,7 +130,7 @@ describe("Action Detail Page", () => {
     mockActionsApi.stats.mockRejectedValue(new Error("Stats not available"));
 
     const response = await loader({
-      request: new Request("http://localhost/dashboard/services/service-1/actions/action-1"),
+      request: buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/action-1"),
       params: { serviceId: "service-1", actionId: "action-1" },
       context: {},
     });
@@ -125,7 +141,7 @@ describe("Action Detail Page", () => {
   it("loader throws when serviceId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/services//actions/action-1"),
+        request: buildEnglishRequest("http://localhost/dashboard/services//actions/action-1"),
         params: { actionId: "action-1" },
         context: {},
       })
@@ -135,7 +151,7 @@ describe("Action Detail Page", () => {
   it("loader throws when actionId is missing", async () => {
     await expect(
       loader({
-        request: new Request("http://localhost/dashboard/services/service-1/actions/"),
+        request: buildEnglishRequest("http://localhost/dashboard/services/service-1/actions/"),
         params: { serviceId: "service-1" },
         context: {},
       })
@@ -150,7 +166,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -166,14 +182,14 @@ describe("Action Detail Page", () => {
       expect(screen.getByText("Add Custom Claims")).toBeInTheDocument();
     });
     expect(screen.getByText("Enabled")).toBeInTheDocument();
-    expect(screen.getByText("Post Login")).toBeInTheDocument();
+    expect(screen.getAllByText("Post Login").length).toBeGreaterThan(0);
   });
 
   it("renders action description", async () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -194,7 +210,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -217,7 +233,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -246,7 +262,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -269,7 +285,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -291,7 +307,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -313,7 +329,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -346,7 +362,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -378,7 +394,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -411,7 +427,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -440,7 +456,7 @@ describe("Action Detail Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/services/:serviceId/actions/:actionId",
-        Component: ActionDetailPage,
+        Component: WrappedPage,
         loader: () => ({
           serviceId: "service-1",
           action: mockAction,
@@ -478,7 +494,7 @@ describe("Action Detail Page", () => {
     });
     expect(screen.getByText("log-2")).toBeInTheDocument();
     expect(screen.getByText("Trigger:")).toBeInTheDocument();
-    expect(screen.getByText("post-login")).toBeInTheDocument();
+    expect(screen.getAllByText("Post Login").length).toBeGreaterThan(0);
     expect(screen.getByText("Error Message")).toBeInTheDocument();
   });
 

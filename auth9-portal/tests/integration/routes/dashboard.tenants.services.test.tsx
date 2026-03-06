@@ -106,11 +106,13 @@ describe("Tenant Services Page", () => {
     it("throws error when tenantId is missing", async () => {
       await expect(
         loader({
-          request: new Request("http://localhost/dashboard/tenants//services"),
+          request: new Request("http://localhost/dashboard/tenants//services", {
+            headers: { "Accept-Language": "en-US" },
+          }),
           params: {},
           context: {},
         })
-      ).rejects.toThrow("Tenant ID is required");
+      ).rejects.toThrow("Tenant ID required");
     });
   });
 
@@ -174,7 +176,7 @@ describe("Tenant Services Page", () => {
       render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/services"]} />);
 
       await waitFor(() => {
-        const backLink = screen.getByRole("link", { name: "" }); // Icon button
+        const backLink = screen.getByRole("link", { name: "Back to tenants" });
         expect(backLink).toHaveAttribute("href", "/dashboard/tenants/tenant-1");
       });
     });
@@ -361,9 +363,9 @@ describe("Tenant Services Page", () => {
       render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/services"]} />);
 
       await waitFor(() => {
-        const activeBadges = screen.getAllByText("active");
+        const activeBadges = screen.getAllByText("Active");
         expect(activeBadges.length).toBe(2);
-        expect(screen.getByText("inactive")).toBeInTheDocument();
+        expect(screen.getByText("Inactive")).toBeInTheDocument();
       });
     });
 
@@ -547,6 +549,7 @@ describe("Tenant Services Page", () => {
       const request = new Request("http://localhost/dashboard/tenants//services", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({

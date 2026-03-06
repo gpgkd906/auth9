@@ -2,6 +2,7 @@ import { createRoutesStub } from "react-router";
 import { render, screen, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import EmailTemplatesPage, { loader } from "~/routes/dashboard.settings.email-templates._index";
+import { I18nProvider } from "~/i18n";
 import { emailTemplateApi } from "~/services/api";
 
 // Mock email template API
@@ -16,6 +17,14 @@ vi.mock("~/services/api", () => ({
 }));
 
 describe("Email Templates Page", () => {
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <EmailTemplatesPage />
+      </I18nProvider>
+    );
+  }
+
   const mockTemplates = {
     data: [
       {
@@ -87,7 +96,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -106,7 +115,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -127,7 +136,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -146,7 +155,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -165,7 +174,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -184,7 +193,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -202,7 +211,7 @@ describe("Email Templates Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email-templates",
-        Component: EmailTemplatesPage,
+        Component: WrappedPage,
         loader,
       },
     ]);

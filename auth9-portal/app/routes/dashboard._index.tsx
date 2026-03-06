@@ -1,6 +1,7 @@
 import { useLoaderData, redirect, Link, useOutletContext } from "react-router";
 import type { LoaderFunctionArgs } from "react-router";
 import { ArrowRightIcon, PlusIcon } from "@radix-ui/react-icons";
+import { useI18n } from "~/i18n";
 import { getAccessToken } from "~/services/session.server";
 import { Card, CardContent, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
@@ -50,38 +51,39 @@ type OutletContext = {
 };
 
 export default function DashboardIndex() {
+  const { t } = useI18n();
   const data = useLoaderData<typeof loader>();
   const { activeTenant } = useOutletContext<OutletContext>();
-  const tenantName = activeTenant?.tenant?.name || "Dashboard";
+  const tenantName = activeTenant?.tenant?.name || t("dashboardHome.tenantFallback");
 
   return (
     <div className="space-y-6">
       <div className="animate-fade-in-up">
         <h1 className="mb-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{tenantName}</h1>
         <p className="mb-6 text-[15px] text-[var(--text-secondary)]">
-          Welcome to {tenantName}. Here&apos;s an overview of your identity service.
+          {t("dashboardHome.welcome", { tenantName })}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-        <StatsCard title="Total Tenants" value={data.totals.tenants.toString()} color="blue" delay="delay-1" href="/dashboard/tenants" />
-        <StatsCard title="Active Users" value={data.totals.users.toString()} color="purple" delay="delay-2" href="/dashboard/users" />
-        <StatsCard title="Services" value={data.totals.services.toString()} color="green" delay="delay-3" href="/dashboard/services" />
-        <StatsCard title="Audit Events" value={data.audits.length.toString()} color="cyan" delay="delay-4" href="/dashboard/audit-logs" />
+        <StatsCard title={t("dashboardHome.stats.totalTenants")} value={data.totals.tenants.toString()} color="blue" delay="delay-1" href="/dashboard/tenants" />
+        <StatsCard title={t("dashboardHome.stats.activeUsers")} value={data.totals.users.toString()} color="purple" delay="delay-2" href="/dashboard/users" />
+        <StatsCard title={t("dashboardHome.stats.services")} value={data.totals.services.toString()} color="green" delay="delay-3" href="/dashboard/services" />
+        <StatsCard title={t("dashboardHome.stats.auditEvents")} value={data.audits.length.toString()} color="cyan" delay="delay-4" href="/dashboard/audit-logs" />
       </div>
 
       {data.totals.tenants === 0 && (
         <Card className="animate-fade-in-up delay-5">
           <CardContent className="p-6 md:p-8">
             <div className="mx-auto max-w-2xl rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] px-5 py-6 text-center md:px-8 md:py-7">
-              <h2 className="text-lg font-semibold text-[var(--text-primary)]">Start by creating your first tenant</h2>
+              <h2 className="text-lg font-semibold text-[var(--text-primary)]">{t("dashboardHome.emptyTitle")}</h2>
               <p className="mt-2 text-sm leading-relaxed text-[var(--text-secondary)]">
-                Tenants isolate identities and policies for each environment or customer. Create one to unlock the rest of the dashboard workflow.
+                {t("dashboardHome.emptyDescription")}
               </p>
               <Button asChild className="mt-5 h-11 w-full !flex px-4 md:h-10 md:w-auto">
                 <Link to="/dashboard/tenants/new">
                   <PlusIcon className="mr-2 h-4 w-4" />
-                  开始创建
+                  {t("dashboardHome.emptyAction")}
                 </Link>
               </Button>
             </div>
@@ -91,7 +93,7 @@ export default function DashboardIndex() {
 
       <Card className="animate-fade-in-up delay-6">
         <CardHeader>
-          <CardTitle>Recent Activity</CardTitle>
+          <CardTitle>{t("dashboardHome.recentActivity")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-0">
@@ -113,7 +115,7 @@ export default function DashboardIndex() {
             ))}
             {data.audits.length === 0 && (
               <div className="py-6 text-center text-sm text-[var(--text-tertiary)]">
-                No recent activity
+                {t("dashboardHome.noRecentActivity")}
               </div>
             )}
           </div>
@@ -136,6 +138,7 @@ function StatsCard({
   delay: string;
   href: string;
 }) {
+  const { t } = useI18n();
   const colorClasses = {
     blue: "from-[var(--accent-blue)]/20 to-transparent",
     purple: "from-[var(--accent-purple)]/20 to-transparent",
@@ -151,7 +154,7 @@ function StatsCard({
         <p className="mt-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{value}</p>
         <Button asChild variant="outline" size="sm" className="mt-4 -mx-5 -mb-5 h-11 w-[calc(100%+2.5rem)] rounded-t-none !flex justify-between px-4 text-xs sm:mt-3 sm:mx-0 sm:mb-0 sm:h-8 sm:w-auto sm:rounded-md sm:gap-1 sm:px-3 sm:justify-center relative">
           <Link to={href}>
-            View details
+            {t("dashboardHome.viewDetails")}
             <ArrowRightIcon className="h-3.5 w-3.5" />
           </Link>
         </Button>

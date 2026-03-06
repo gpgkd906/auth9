@@ -1,4 +1,4 @@
-import type { ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
@@ -27,6 +27,11 @@ import {
   CopyIcon,
   CheckIcon,
 } from "@radix-ui/react-icons";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
+import { useFormatters } from "~/i18n/format";
 
 const WEBHOOK_EVENTS = [
   { id: "login.success", label: "Login Success" },
@@ -41,15 +46,19 @@ const WEBHOOK_EVENTS = [
   { id: "security.alert", label: "Security Alert" },
 ];
 
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "tenants.webhooks.metaTitle");
+};
+
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const { tenantId } = params;
+  const locale = await resolveLocale(request);
   if (!tenantId) {
-    return { webhooks: [], error: "Tenant ID is required" };
+    return { webhooks: [], error: translate(locale, "tenants.errors.tenantIdRequired") };
   }
 
   try {
     const accessToken = await getAccessToken(request);
-    // Validate tenant exists first
     await tenantApi.get(tenantId, accessToken || undefined);
     const response = await webhookApi.list(tenantId, accessToken || undefined);
     return { webhooks: response.data, tenantId };
@@ -60,8 +69,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
 export async function action({ request, params }: ActionFunctionArgs) {
   const { tenantId } = params;
+  const locale = await resolveLocale(request);
   if (!tenantId) {
-    return { error: "Tenant ID is required" };
+    return { error: translate(locale, "tenants.errors.tenantIdRequired") };
   }
   const accessToken = await getAccessToken(request);
 
@@ -74,11 +84,15 @@ export async function action({ request, params }: ActionFunctionArgs) {
         name: formData.get("name") as string,
         url: formData.get("url") as string,
         secret: (formData.get("secret") as string) || undefined,
-        events: JSON.parse(formData.get("events") as string || "[]"),
+        events: JSON.parse((formData.get("events") as string) || "[]"),
         enabled: formData.get("enabled") === "true",
       };
       const result = await webhookApi.create(tenantId, input, accessToken || undefined);
-      return { success: true, message: "Webhook created", createdSecret: result.data.secret };
+      return {
+        success: true,
+        message: translate(locale, "tenants.webhooks.created"),
+        createdSecret: result.data.secret,
+      };
     }
 
     if (intent === "update") {
@@ -87,23 +101,27 @@ export async function action({ request, params }: ActionFunctionArgs) {
         name: formData.get("name") as string,
         url: formData.get("url") as string,
         secret: (formData.get("secret") as string) || undefined,
-        events: JSON.parse(formData.get("events") as string || "[]"),
+        events: JSON.parse((formData.get("events") as string) || "[]"),
         enabled: formData.get("enabled") === "true",
       };
       await webhookApi.update(tenantId, id, input, accessToken || undefined);
-      return { success: true, message: "Webhook updated" };
+      return { success: true, message: translate(locale, "tenants.webhooks.updated") };
     }
 
     if (intent === "delete") {
       const id = formData.get("id") as string;
       await webhookApi.delete(tenantId, id, accessToken || undefined);
-      return { success: true, message: "Webhook deleted" };
+      return { success: true, message: translate(locale, "tenants.webhooks.deleted") };
     }
 
     if (intent === "regenerate_secret") {
       const id = formData.get("id") as string;
       const result = await webhookApi.regenerateSecret(tenantId, id, accessToken || undefined);
-      return { success: true, message: "Secret regenerated", newSecret: result.data.secret };
+      return {
+        success: true,
+        message: translate(locale, "tenants.webhooks.secretRegenerated"),
+        newSecret: result.data.secret,
+      };
     }
 
     if (intent === "test") {
@@ -112,21 +130,25 @@ export async function action({ request, params }: ActionFunctionArgs) {
       if (result.data.success) {
         return {
           success: true,
-          message: `Test successful (${result.data.status_code}, ${result.data.response_time_ms}ms)`,
+          message: translate(locale, "tenants.webhooks.testSuccess", {
+            statusCode: result.data.status_code,
+            responseTime: result.data.response_time_ms,
+          }),
         };
-      } else {
-        return { error: `Test failed: ${result.data.error}` };
       }
+      return { error: translate(locale, "tenants.webhooks.testFailed", { error: result.data.error }) };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Operation failed";
+    const message = error instanceof Error ? error.message : translate(locale, "tenants.webhooks.operationFailed");
     return { error: message };
   }
 
-  return { error: "Invalid action" };
+  return { error: translate(locale, "tenants.webhooks.invalidAction") };
 }
 
 export default function WebhooksPage() {
+  const { t } = useI18n();
+  const formatters = useFormatters();
   const { webhooks, error: loadError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -148,19 +170,16 @@ export default function WebhooksPage() {
   const isSubmitting = navigation.state === "submitting";
   const dialogSubmitting = useRef(false);
 
-  // Track when a form is submitted from within the dialog
   useEffect(() => {
     if (navigation.state === "submitting" && (showDialog || editingWebhook)) {
       dialogSubmitting.current = true;
     }
   }, [navigation.state, showDialog, editingWebhook]);
 
-  // Handle dialog success: show secret for create, close for edit
   useEffect(() => {
     if (actionData?.success && dialogSubmitting.current) {
       dialogSubmitting.current = false;
       if (actionData.createdSecret) {
-        // Show the generated secret instead of closing
         setCreatedSecret(actionData.createdSecret);
         setSecretCopied(false);
         resetForm();
@@ -173,13 +192,7 @@ export default function WebhooksPage() {
   }, [actionData]);
 
   function resetForm() {
-    setFormData({
-      name: "",
-      url: "",
-      secret: "",
-      events: [],
-      enabled: true,
-    });
+    setFormData({ name: "", url: "", secret: "", events: [], enabled: true });
   }
 
   function openEditDialog(webhook: Webhook) {
@@ -209,43 +222,29 @@ export default function WebhooksPage() {
 
   return (
     <div className="space-y-6">
-      {/* Header */}
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Webhooks</CardTitle>
-              <CardDescription>
-                Receive real-time notifications for events in your application.
-              </CardDescription>
+              <CardTitle>{t("tenants.webhooks.title")}</CardTitle>
+              <CardDescription>{t("tenants.webhooks.description")}</CardDescription>
             </div>
             <Button onClick={openCreateDialog}>
               <PlusIcon className="h-4 w-4 mr-2" />
-              Add webhook
+              {t("tenants.webhooks.addWebhook")}
             </Button>
           </div>
         </CardHeader>
       </Card>
 
-      {/* Messages */}
-      {loadError && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-          {loadError}
-        </div>
-      )}
-
-      {actionData?.error && (
-        <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-          {actionData.error}
-        </div>
-      )}
-
+      {loadError && <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{loadError}</div>}
+      {actionData?.error && <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">{actionData.error}</div>}
       {actionData?.success && actionData.message && (
         <div className="text-sm text-[var(--accent-green)] bg-[var(--accent-green)]/10 p-3 rounded-md">
           {actionData.message}
           {actionData.newSecret && (
             <div className="mt-2 flex items-center gap-2">
-              <span className="text-[var(--text-primary)]">New Secret:</span>
+              <span className="text-[var(--text-primary)]">{t("tenants.webhooks.newSecret")}</span>
               <code className="bg-[var(--bg-secondary)] px-2 py-1 rounded text-xs font-mono break-all select-all text-[var(--text-primary)]">
                 {actionData.newSecret}
               </code>
@@ -254,93 +253,67 @@ export default function WebhooksPage() {
         </div>
       )}
 
-      {/* Webhooks List */}
       <Card>
         <CardContent className="pt-6">
           {webhooks.length === 0 ? (
             <div className="text-center py-12">
               <RocketIcon className="h-12 w-12 text-gray-300 mx-auto mb-4" />
-              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
-                No webhooks configured
-              </h3>
-              <p className="text-[var(--text-secondary)] mb-4">
-                Add a webhook to receive real-time event notifications.
-              </p>
+              <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">{t("tenants.webhooks.emptyTitle")}</h3>
+              <p className="text-[var(--text-secondary)] mb-4">{t("tenants.webhooks.emptyDescription")}</p>
               <Button onClick={openCreateDialog}>
                 <PlusIcon className="h-4 w-4 mr-2" />
-                Add your first webhook
+                {t("tenants.webhooks.addFirstWebhook")}
               </Button>
             </div>
           ) : (
             <div className="divide-y">
               {webhooks.map((webhook: Webhook) => (
-                <div
-                  key={webhook.id}
-                  className="flex items-center gap-4 py-4 first:pt-0 last:pb-0"
-                >
-                  <div
-                    className={`w-3 h-3 rounded-full ${
-                      webhook.enabled ? "bg-[var(--accent-green)]/100" : "bg-gray-300"
-                    }`}
-                  />
+                <div key={webhook.id} className="flex items-center gap-4 py-4 first:pt-0 last:pb-0">
+                  <div className={`w-3 h-3 rounded-full ${webhook.enabled ? "bg-[var(--accent-green)]/100" : "bg-gray-300"}`} />
                   <div className="flex-1 min-w-0">
                     <div className="font-medium">{webhook.name}</div>
-                    <div className="text-sm text-[var(--text-secondary)] truncate">
-                      {webhook.url}
-                    </div>
+                    <div className="text-sm text-[var(--text-secondary)] truncate">{webhook.url}</div>
                     <div className="text-xs text-[var(--text-tertiary)] mt-1" suppressHydrationWarning>
-                      {webhook.events.length} events •{" "}
+                      {t("tenants.webhooks.list.eventCount", { count: webhook.events.length })} •{" "}
                       {webhook.failure_count > 0 && (
                         <span className="text-[var(--accent-red)]">
-                          {webhook.failure_count} failures •{" "}
+                          {t("tenants.webhooks.list.failures", { count: webhook.failure_count })} •{" "}
                         </span>
                       )}
                       {webhook.last_triggered_at
-                        ? `Last triggered: ${new Date(
-                            webhook.last_triggered_at
-                          ).toLocaleString()}`
-                        : "Never triggered"}
+                        ? t("tenants.webhooks.list.lastTriggered", {
+                            date: formatters.dateTime(webhook.last_triggered_at),
+                          })
+                        : t("tenants.webhooks.list.neverTriggered")}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
                     <Form method="post">
                       <input type="hidden" name="intent" value="test" />
                       <input type="hidden" name="id" value={webhook.id} />
-                      <Button
-                        type="submit"
-                        variant="outline"
-                        size="sm"
-                        disabled={isSubmitting || !webhook.enabled}
-                      >
-                        Test
+                      <Button type="submit" variant="outline" size="sm" disabled={isSubmitting || !webhook.enabled}>
+                        {t("tenants.webhooks.test")}
                       </Button>
                     </Form>
                     <Button
                       variant="ghost"
                       size="sm"
-                      title="Regenerate Secret"
+                      title={t("tenants.webhooks.list.regenerateSecret")}
                       disabled={isSubmitting}
                       onClick={async () => {
                         const ok = await confirm({
-                          title: "Regenerate Secret",
-                          description: "Are you sure? The old secret will be invalidated immediately.",
+                          title: t("tenants.webhooks.list.regenerateTitle"),
+                          description: t("tenants.webhooks.list.regenerateDescription"),
                           variant: "destructive",
                         });
                         if (ok) {
-                          submit(
-                            { intent: "regenerate_secret", id: webhook.id },
-                            { method: "post" }
-                          );
+                          submit({ intent: "regenerate_secret", id: webhook.id }, { method: "post" });
                         }
                       }}
                     >
                       <ReloadIcon className="h-4 w-4" />
                     </Button>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => openEditDialog(webhook)}
-                    >
+                    <Button variant="ghost" size="sm" onClick={() => openEditDialog(webhook)}>
                       <Pencil2Icon className="h-4 w-4" />
                     </Button>
                     <Button
@@ -350,15 +323,12 @@ export default function WebhooksPage() {
                       disabled={isSubmitting}
                       onClick={async () => {
                         const ok = await confirm({
-                          title: "Delete Webhook",
-                          description: "Are you sure you want to delete this webhook? This action cannot be undone.",
+                          title: t("tenants.webhooks.list.deleteTitle"),
+                          description: t("tenants.webhooks.list.deleteDescription"),
                           variant: "destructive",
                         });
                         if (ok) {
-                          submit(
-                            { intent: "delete", id: webhook.id },
-                            { method: "post" }
-                          );
+                          submit({ intent: "delete", id: webhook.id }, { method: "post" });
                         }
                       }}
                     >
@@ -372,29 +342,21 @@ export default function WebhooksPage() {
         </CardContent>
       </Card>
 
-      {/* Secret Display Dialog */}
-      <Dialog
-        open={!!createdSecret}
-        onOpenChange={(open) => {
-          if (!open) {
-            setCreatedSecret(null);
-            setShowDialog(false);
-          }
-        }}
-      >
+      <Dialog open={!!createdSecret} onOpenChange={(open) => {
+        if (!open) {
+          setCreatedSecret(null);
+          setShowDialog(false);
+        }
+      }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>Webhook Created</DialogTitle>
-            <DialogDescription>
-              Your webhook has been created. Copy the signing secret below — it will not be shown again.
-            </DialogDescription>
+            <DialogTitle>{t("tenants.webhooks.createdDialog.title")}</DialogTitle>
+            <DialogDescription>{t("tenants.webhooks.createdDialog.description")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-3">
-            <Label>Signing Secret</Label>
+            <Label>{t("tenants.webhooks.createdDialog.signingSecret")}</Label>
             <div className="flex items-center gap-2">
-              <code className="flex-1 bg-[var(--bg-secondary)] px-3 py-2 rounded-md text-sm font-mono break-all select-all">
-                {createdSecret}
-              </code>
+              <code className="flex-1 bg-[var(--bg-secondary)] px-3 py-2 rounded-md text-sm font-mono break-all select-all">{createdSecret}</code>
               <Button
                 type="button"
                 variant="outline"
@@ -405,133 +367,65 @@ export default function WebhooksPage() {
                   setTimeout(() => setSecretCopied(false), 2000);
                 }}
               >
-                {secretCopied ? (
-                  <CheckIcon className="h-4 w-4 text-[var(--accent-green)]" />
-                ) : (
-                  <CopyIcon className="h-4 w-4" />
-                )}
+                {secretCopied ? <CheckIcon className="h-4 w-4 text-[var(--accent-green)]" /> : <CopyIcon className="h-4 w-4" />}
               </Button>
             </div>
-            <p className="text-xs text-[var(--text-secondary)]">
-              Store this secret securely. You will need it to verify webhook signatures.
-            </p>
+            <p className="text-xs text-[var(--text-secondary)]">{t("tenants.webhooks.createdDialog.help")}</p>
           </div>
           <DialogFooter>
-            <Button
-              onClick={() => {
-                setCreatedSecret(null);
-                setShowDialog(false);
-              }}
-            >
-              Done
+            <Button onClick={() => {
+              setCreatedSecret(null);
+              setShowDialog(false);
+            }}>
+              {t("tenants.webhooks.createdDialog.done")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Create/Edit Dialog */}
-      <Dialog
-        open={(showDialog || !!editingWebhook) && !createdSecret}
-        onOpenChange={(open) => {
-          if (!open) {
-            setShowDialog(false);
-            setEditingWebhook(null);
-            resetForm();
-          }
-        }}
-      >
+      <Dialog open={(showDialog || !!editingWebhook) && !createdSecret} onOpenChange={(open) => {
+        if (!open) {
+          setShowDialog(false);
+          setEditingWebhook(null);
+          resetForm();
+        }
+      }}>
         <DialogContent className="max-w-lg">
           <DialogHeader>
-            <DialogTitle>
-              {editingWebhook ? "Edit Webhook" : "Add Webhook"}
-            </DialogTitle>
+            <DialogTitle>{editingWebhook ? t("tenants.webhooks.dialog.editTitle") : t("tenants.webhooks.dialog.createTitle")}</DialogTitle>
             <DialogDescription>
-              {editingWebhook
-                ? "Update the webhook configuration."
-                : "Configure a new webhook endpoint."}
+              {editingWebhook ? t("tenants.webhooks.dialog.editDescription") : t("tenants.webhooks.dialog.createDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <Form method="post" className="space-y-4">
-            <input
-              type="hidden"
-              name="intent"
-              value={editingWebhook ? "update" : "create"}
-            />
-            {editingWebhook && (
-              <input type="hidden" name="id" value={editingWebhook.id} />
-            )}
-            <input
-              type="hidden"
-              name="events"
-              value={JSON.stringify(formData.events)}
-            />
-            <input
-              type="hidden"
-              name="enabled"
-              value={formData.enabled ? "true" : "false"}
-            />
+            <input type="hidden" name="intent" value={editingWebhook ? "update" : "create"} />
+            {editingWebhook && <input type="hidden" name="id" value={editingWebhook.id} />}
+            <input type="hidden" name="events" value={JSON.stringify(formData.events)} />
+            <input type="hidden" name="enabled" value={formData.enabled ? "true" : "false"} />
 
             <div className="space-y-2">
-              <Label htmlFor="name">Name</Label>
-              <Input
-                id="name"
-                name="name"
-                value={formData.name}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, name: e.target.value }))
-                }
-                placeholder="My Webhook"
-                required
-              />
+              <Label htmlFor="name">{t("tenants.webhooks.dialog.name")}</Label>
+              <Input id="name" name="name" value={formData.name} onChange={(e) => setFormData((prev) => ({ ...prev, name: e.target.value }))} placeholder={t("tenants.webhooks.dialog.placeholderName")} required />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="url">Endpoint URL</Label>
-              <Input
-                id="url"
-                name="url"
-                type="url"
-                value={formData.url}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, url: e.target.value }))
-                }
-                placeholder="https://example.com/webhook"
-                required
-              />
+              <Label htmlFor="url">{t("tenants.webhooks.dialog.endpointUrl")}</Label>
+              <Input id="url" name="url" type="url" value={formData.url} onChange={(e) => setFormData((prev) => ({ ...prev, url: e.target.value }))} placeholder={t("tenants.webhooks.dialog.placeholderUrl")} required />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="secret">Secret (optional)</Label>
-              <Input
-                id="secret"
-                name="secret"
-                type="password"
-                value={formData.secret}
-                onChange={(e) =>
-                  setFormData((prev) => ({ ...prev, secret: e.target.value }))
-                }
-                placeholder="For HMAC signature verification"
-              />
-              <p className="text-xs text-[var(--text-secondary)]">
-                Used to sign webhook payloads for verification.
-              </p>
+              <Label htmlFor="secret">{t("tenants.webhooks.dialog.secret")}</Label>
+              <Input id="secret" name="secret" type="password" value={formData.secret} onChange={(e) => setFormData((prev) => ({ ...prev, secret: e.target.value }))} placeholder={t("tenants.webhooks.dialog.placeholderSecret")} />
+              <p className="text-xs text-[var(--text-secondary)]">{t("tenants.webhooks.dialog.secretHelp")}</p>
             </div>
 
             <div className="space-y-2">
-              <Label>Events</Label>
+              <Label>{t("tenants.webhooks.dialog.events")}</Label>
               <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto border rounded-md p-3">
                 {WEBHOOK_EVENTS.map((event) => (
-                  <label
-                    key={event.id}
-                    className="flex items-center gap-2 text-sm cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={formData.events.includes(event.id)}
-                      onChange={() => toggleEvent(event.id)}
-                      className="rounded border-gray-300"
-                    />
+                  <label key={event.id} className="flex items-center gap-2 text-sm cursor-pointer">
+                    <input type="checkbox" checked={formData.events.includes(event.id)} onChange={() => toggleEvent(event.id)} className="rounded border-gray-300" />
                     {event.label}
                   </label>
                 ))}
@@ -539,37 +433,24 @@ export default function WebhooksPage() {
             </div>
 
             <div className="flex items-center justify-between">
-              <Label htmlFor="enabled">Enabled</Label>
-              <Switch
-                id="enabled"
-                checked={formData.enabled}
-                onCheckedChange={(checked: boolean) =>
-                  setFormData((prev) => ({ ...prev, enabled: checked }))
-                }
-              />
+              <Label htmlFor="enabled">{t("tenants.webhooks.dialog.enabled")}</Label>
+              <Switch id="enabled" checked={formData.enabled} onCheckedChange={(checked: boolean) => setFormData((prev) => ({ ...prev, enabled: checked }))} />
             </div>
 
             <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => {
-                  setShowDialog(false);
-                  setEditingWebhook(null);
-                  resetForm();
-                }}
-              >
-                Cancel
+              <Button type="button" variant="outline" onClick={() => {
+                setShowDialog(false);
+                setEditingWebhook(null);
+                resetForm();
+              }}>
+                {t("common.buttons.cancel")}
               </Button>
-              <Button
-                type="submit"
-                disabled={isSubmitting || formData.events.length === 0}
-              >
+              <Button type="submit" disabled={isSubmitting || formData.events.length === 0}>
                 {isSubmitting
-                  ? "Saving..."
+                  ? t("tenants.webhooks.dialog.saving")
                   : editingWebhook
-                  ? "Save changes"
-                  : "Add webhook"}
+                  ? t("tenants.webhooks.dialog.save")
+                  : t("tenants.webhooks.dialog.add")}
               </Button>
             </DialogFooter>
           </Form>

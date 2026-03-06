@@ -3,6 +3,10 @@ import { Form, useActionData, useLoaderData, useNavigation, useRevalidator } fro
 import { useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
+import { useFormatters } from "~/i18n/format";
+import { useI18n } from "~/i18n";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 import { webauthnApi, type WebAuthnCredential } from "~/services/api";
 import { LockClosedIcon, TrashIcon, PlusIcon } from "@radix-ui/react-icons";
 import { requireIdentityAuthWithUpdate } from "~/services/session.server";
@@ -19,7 +23,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
     return data;
   } catch {
-    return { passkeys: [] as WebAuthnCredential[], accessToken: "", apiBaseUrl, error: "Failed to load passkeys" };
+    const locale = await resolveLocale(request);
+    return {
+      passkeys: [] as WebAuthnCredential[],
+      accessToken: "",
+      apiBaseUrl,
+      error: translate(locale, "accountPasskeys.loadError"),
+    };
   }
 }
 
@@ -33,34 +43,38 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "delete") {
       const credentialId = formData.get("credentialId") as string;
       await webauthnApi.deletePasskey(credentialId, accessToken || "");
-      const data = { success: true as const, message: "Passkey deleted", error: undefined as string | undefined };
+      const locale = await resolveLocale(request);
+      const data = {
+        success: true as const,
+        message: translate(locale, "accountPasskeys.deleted"),
+        error: undefined as string | undefined,
+      };
       if (headers) {
         return Response.json(data, { headers });
       }
       return data;
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Operation failed";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error ? error.message : translate(locale, "accountPasskeys.operationFailed");
     return { success: undefined as true | undefined, message: undefined as string | undefined, error: message };
   }
 
-  return { success: undefined as true | undefined, message: undefined as string | undefined, error: "Invalid action" };
+  const locale = await resolveLocale(request);
+  return {
+    success: undefined as true | undefined,
+    message: undefined as string | undefined,
+    error: translate(locale, "accountPasskeys.invalidAction"),
+  };
 }
 
-function formatDate(dateString: string) {
-  return new Date(dateString).toLocaleDateString("en-US", {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
-}
-
-function getCredentialTypeLabel(type: string) {
+function getCredentialTypeLabel(type: string, t: ReturnType<typeof useI18n>["t"]) {
   switch (type) {
     case "webauthn-passwordless":
-      return "Passwordless";
+      return t("accountPasskeys.passwordless");
     case "webauthn":
-      return "Two-Factor";
+      return t("accountPasskeys.twoFactor");
     default:
       return type;
   }
@@ -117,6 +131,8 @@ function toCreationOptions(options: Record<string, unknown>): PublicKeyCredentia
 }
 
 export default function AccountPasskeysPage() {
+  const { t } = useI18n();
+  const formatters = useFormatters();
   const { passkeys, accessToken, apiBaseUrl, error: loadError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -147,8 +163,8 @@ export default function AccountPasskeysPage() {
       );
 
       if (!startResponse.ok) {
-        const err = await startResponse.json().catch(() => ({ message: "Failed to start registration" }));
-        throw new Error(err.message || "Failed to start registration");
+        const err = await startResponse.json().catch(() => ({ message: t("accountPasskeys.startFailed") }));
+        throw new Error(err.message || t("accountPasskeys.startFailed"));
       }
 
       const creationOptions = await startResponse.json();
@@ -163,7 +179,7 @@ export default function AccountPasskeysPage() {
       ]);
 
       if (!credential) {
-        throw new Error("Registration was cancelled");
+        throw new Error(t("accountPasskeys.cancelled"));
       }
 
       // 3. Send result to backend
@@ -192,23 +208,23 @@ export default function AccountPasskeysPage() {
         }
       );
       if (!completeResponse.ok) {
-        const err = await completeResponse.json().catch(() => ({ message: "Failed to complete registration" }));
-        throw new Error(err.message || "Failed to complete registration");
+        const err = await completeResponse.json().catch(() => ({ message: t("accountPasskeys.completeFailed") }));
+        throw new Error(err.message || t("accountPasskeys.completeFailed"));
       }
 
-      setClientSuccess("Passkey registered successfully!");
+      setClientSuccess(t("accountPasskeys.registered"));
       revalidator.revalidate();
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotAllowedError") {
-        setClientError("Registration was cancelled or timed out.");
+        setClientError(t("accountPasskeys.cancelled"));
       } else {
-        const message = error instanceof Error ? error.message : "Registration failed";
+        const message = error instanceof Error ? error.message : t("accountPasskeys.registrationFailed");
         setClientError(message);
       }
     } finally {
       setRegistering(false);
     }
-  }, [accessToken, apiBaseUrl, revalidator]);
+  }, [accessToken, apiBaseUrl, revalidator, t]);
 
   return (
     <div className="space-y-6">
@@ -217,15 +233,14 @@ export default function AccountPasskeysPage() {
         <CardHeader>
           <div className="flex items-center justify-between">
             <div>
-              <CardTitle>Passkeys</CardTitle>
+              <CardTitle>{t("accountPasskeys.title")}</CardTitle>
               <CardDescription>
-                Passkeys are a secure, passwordless way to sign in using your device&apos;s
-                biometrics (fingerprint, face) or screen lock.
+                {t("accountPasskeys.description")}
               </CardDescription>
             </div>
             <Button onClick={handleRegisterPasskey} disabled={registering || isSubmitting}>
               <PlusIcon className="h-4 w-4 mr-2" />
-              {registering ? "Registering..." : "Add passkey"}
+              {registering ? t("accountPasskeys.registering") : t("accountPasskeys.add")}
             </Button>
           </div>
         </CardHeader>
@@ -265,7 +280,7 @@ export default function AccountPasskeysPage() {
       {/* Passkeys List */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">Your Passkeys</CardTitle>
+          <CardTitle className="text-lg">{t("accountPasskeys.yourPasskeys")}</CardTitle>
         </CardHeader>
         <CardContent>
           {passkeys.length === 0 ? (
@@ -274,14 +289,14 @@ export default function AccountPasskeysPage() {
                 <LockClosedIcon className="h-6 w-6 text-[var(--text-tertiary)]" />
               </div>
               <h3 className="text-lg font-medium text-[var(--text-primary)] mb-2">
-                No passkeys yet
+                {t("accountPasskeys.yourPasskeys")}
               </h3>
               <p className="text-[var(--text-secondary)] mb-4">
-                Add a passkey to sign in faster and more securely.
+                {t("accountPasskeys.description")}
               </p>
               <Button onClick={handleRegisterPasskey} disabled={registering || isSubmitting}>
                 <PlusIcon className="h-4 w-4 mr-2" />
-                {registering ? "Registering..." : "Add your first passkey"}
+                {registering ? t("accountPasskeys.registering") : t("accountPasskeys.addFirst")}
               </Button>
             </div>
           ) : (
@@ -296,13 +311,13 @@ export default function AccountPasskeysPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium">
-                      {passkey.user_label || "Passkey"}
+                      {passkey.user_label || t("accountPasskeys.passkeyFallback")}
                     </div>
                     <div className="text-sm text-[var(--text-secondary)] mt-0.5">
                       <span className="inline-block bg-[var(--sidebar-item-hover)] px-2 py-0.5 rounded text-xs mr-2">
-                        {getCredentialTypeLabel(passkey.credential_type)}
+                        {getCredentialTypeLabel(passkey.credential_type, t)}
                       </span>
-                      Added {formatDate(passkey.created_at)}
+                      {t("account.sessions.started")} {formatters.date(passkey.created_at)}
                     </div>
                   </div>
                   <Form method="post">
@@ -316,7 +331,7 @@ export default function AccountPasskeysPage() {
                       disabled={isSubmitting}
                     >
                       <TrashIcon className="h-4 w-4 mr-1" />
-                      Remove
+                      {t("common.buttons.delete")}
                     </Button>
                   </Form>
                 </div>
@@ -329,7 +344,7 @@ export default function AccountPasskeysPage() {
       {/* Info Card */}
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg">About Passkeys</CardTitle>
+          <CardTitle className="text-lg">{t("accountPasskeys.about")}</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="space-y-4 text-sm text-[var(--text-secondary)]">
@@ -338,8 +353,8 @@ export default function AccountPasskeysPage() {
                 <span className="text-[var(--accent-green)] font-bold">1</span>
               </div>
               <div>
-                <h4 className="font-medium text-[var(--text-primary)]">More secure</h4>
-                <p>Passkeys are resistant to phishing and cannot be stolen like passwords.</p>
+                <h4 className="font-medium text-[var(--text-primary)]">{t("accountPasskeys.secureTitle")}</h4>
+                <p>{t("accountPasskeys.secureDescription")}</p>
               </div>
             </div>
             <div className="flex gap-3">
@@ -347,8 +362,8 @@ export default function AccountPasskeysPage() {
                 <span className="text-[var(--accent-green)] font-bold">2</span>
               </div>
               <div>
-                <h4 className="font-medium text-[var(--text-primary)]">Fast & easy</h4>
-                <p>Sign in with a quick touch or glance using your device&apos;s biometrics.</p>
+                <h4 className="font-medium text-[var(--text-primary)]">{t("accountPasskeys.fastTitle")}</h4>
+                <p>{t("accountPasskeys.fastDescription")}</p>
               </div>
             </div>
             <div className="flex gap-3">
@@ -356,8 +371,8 @@ export default function AccountPasskeysPage() {
                 <span className="text-[var(--accent-green)] font-bold">3</span>
               </div>
               <div>
-                <h4 className="font-medium text-[var(--text-primary)]">Works everywhere</h4>
-                <p>Passkeys sync across your devices when signed into the same account.</p>
+                <h4 className="font-medium text-[var(--text-primary)]">{t("accountPasskeys.everywhereTitle")}</h4>
+                <p>{t("accountPasskeys.everywhereDescription")}</p>
               </div>
             </div>
           </div>

@@ -6,6 +6,7 @@ import IdentityProvidersPage, {
   loader,
   action,
 } from "~/routes/dashboard.settings.identity-providers";
+import { I18nProvider } from "~/i18n";
 import { identityProviderApi } from "~/services/api";
 
 // Mock the API
@@ -17,6 +18,12 @@ vi.mock("~/services/api", () => ({
     delete: vi.fn(),
   },
 }));
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
 
 const mockProviders = [
   {
@@ -40,6 +47,14 @@ const mockProviders = [
 ];
 
 describe("Identity Providers Page", () => {
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <IdentityProvidersPage />
+      </I18nProvider>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(identityProviderApi.list).mockResolvedValue({
@@ -52,7 +67,7 @@ describe("Identity Providers Page", () => {
   // ============================================================================
 
   it("loader returns providers list", async () => {
-    const response = await loader({ request: new Request("http://localhost"), params: {}, context: {} });
+    const response = await loader({ request: buildEnglishRequest("http://localhost"), params: {}, context: {} });
 
     expect(response).toEqual({ providers: mockProviders });
     expect(identityProviderApi.list).toHaveBeenCalled();
@@ -63,7 +78,7 @@ describe("Identity Providers Page", () => {
       new Error("API Error")
     );
 
-    const response = await loader({ request: new Request("http://localhost"), params: {}, context: {} });
+    const response = await loader({ request: buildEnglishRequest("http://localhost"), params: {}, context: {} });
 
     expect(response).toEqual({
       providers: [],
@@ -86,7 +101,7 @@ describe("Identity Providers Page", () => {
     formData.append("clientId", "my-client-id");
     formData.append("clientSecret", "my-secret");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -111,7 +126,7 @@ describe("Identity Providers Page", () => {
     formData.append("displayName", "Google SSO");
     formData.append("enabled", "true");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -134,7 +149,7 @@ describe("Identity Providers Page", () => {
     formData.append("intent", "delete");
     formData.append("alias", "google");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -160,7 +175,7 @@ describe("Identity Providers Page", () => {
     formData.append("providerId", "google");
     formData.append("displayName", "Google");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -180,7 +195,7 @@ describe("Identity Providers Page", () => {
     formData.append("alias", "google");
     formData.append("enabled", "false");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -201,7 +216,7 @@ describe("Identity Providers Page", () => {
     const formData = new FormData();
     formData.append("intent", "invalid");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -223,7 +238,7 @@ describe("Identity Providers Page", () => {
     formData.append("alias", "google");
     formData.append("enabled", "true");
 
-    const request = new Request(
+    const request = buildEnglishRequest(
       "http://localhost/dashboard/settings/identity-providers",
       {
         method: "POST",
@@ -243,7 +258,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: mockProviders }),
       },
     ]);
@@ -261,7 +276,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: [] }),
       },
     ]);
@@ -279,7 +294,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: mockProviders }),
       },
     ]);
@@ -298,7 +313,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: mockProviders }),
       },
     ]);
@@ -318,7 +333,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: [] }),
       },
     ]);
@@ -338,7 +353,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({
           providers: [],
           error: "Failed to load identity providers",
@@ -361,7 +376,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: mockProviders }),
       },
     ]);
@@ -389,7 +404,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: [customProvider] }),
       },
     ]);
@@ -410,7 +425,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: mockProviders }),
         action: () => ({ error: "Something went wrong" }),
       },
@@ -440,7 +455,7 @@ describe("Identity Providers Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/identity-providers",
-        Component: IdentityProvidersPage,
+        Component: WrappedPage,
         loader: () => ({ providers: mockProviders }),
         action: () => ({ success: true, message: "Identity provider created" }),
       },
@@ -475,7 +490,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -504,7 +519,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -530,7 +545,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -560,7 +575,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -596,7 +611,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -630,7 +645,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -664,7 +679,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -704,7 +719,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -740,7 +755,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -783,7 +798,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -810,7 +825,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -855,7 +870,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -886,7 +901,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -940,7 +955,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
           action,
         },
@@ -988,7 +1003,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -1050,7 +1065,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -1091,7 +1106,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -1138,7 +1153,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -1172,7 +1187,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -1222,7 +1237,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [completeProvider] }),
           action,
         },
@@ -1270,7 +1285,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -1317,7 +1332,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
           action,
         },
@@ -1355,7 +1370,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -1396,7 +1411,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -1443,7 +1458,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -1497,7 +1512,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -1546,7 +1561,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: [] }),
         },
       ]);
@@ -1578,7 +1593,7 @@ describe("Identity Providers Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/identity-providers",
-          Component: IdentityProvidersPage,
+          Component: WrappedPage,
           loader: () => ({ providers: mockProviders }),
         },
       ]);
@@ -1639,7 +1654,7 @@ describe("Identity Providers Page", () => {
       );
 
       const response = await action({ request, params: {}, context: {} });
-      expect(response).toEqual({ error: "Operation failed" });
+      expect(response).toEqual({ error: "操作失败" });
     });
 
     it("action handles delete API error", async () => {

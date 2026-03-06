@@ -30,7 +30,9 @@ vi.mock("~/services/api", () => ({
 
 describe("Login Page", () => {
     it("meta returns correct title", () => {
-        const result = meta({} as Parameters<typeof meta>[0]);
+        const result = meta({
+            matches: [{ id: "root", data: { locale: "en-US" } }],
+        } as Parameters<typeof meta>[0]);
         expect(result).toEqual([{ title: "Sign In - Auth9" }]);
     });
 
@@ -46,6 +48,7 @@ describe("Login Page", () => {
             error: null,
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            locale: "zh-CN",
         });
     });
 
@@ -57,6 +60,7 @@ describe("Login Page", () => {
             error: "access_denied",
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            locale: "zh-CN",
         });
     });
 
@@ -68,6 +72,7 @@ describe("Login Page", () => {
             error: "server_error",
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            locale: "zh-CN",
         });
     });
 
@@ -90,6 +95,7 @@ describe("Login Page", () => {
             error: null,
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: true,
+            locale: "zh-CN",
         });
     });
 
@@ -131,7 +137,7 @@ describe("Login Page", () => {
         });
 
         const response = await action({ request, params: {}, context: {} });
-        expect(response).toEqual({ error: "Email is required for enterprise SSO discovery" });
+        expect(response).toEqual({ error: "企业 SSO 发现需要邮箱地址。" });
     });
 
     // ============================================================================
@@ -169,7 +175,7 @@ describe("Login Page", () => {
 
         const response = await action({ request, params: {}, context: {} });
 
-        expect(response).toEqual({ error: "Missing access token" });
+        expect(response).toEqual({ error: "缺少访问令牌" });
     });
 
     it("action calculates correct expiresAt timestamp", async () => {
@@ -224,7 +230,7 @@ describe("Login Page", () => {
 
         render(<RoutesStub initialEntries={["/login?error=access_denied"]} />);
 
-        expect(await screen.findByText("Sign In Failed")).toBeInTheDocument();
+        expect(await screen.findByText("Sign in failed")).toBeInTheDocument();
         expect(screen.getByText(/Access was denied/)).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /continue with enterprise sso/i })).toBeInTheDocument();
         expect(screen.getByRole("button", { name: /sign in with passkey/i })).toBeInTheDocument();
@@ -243,7 +249,7 @@ describe("Login Page", () => {
 
         render(<RoutesStub initialEntries={["/login?error=server_error"]} />);
 
-        expect(await screen.findByText("Sign In Failed")).toBeInTheDocument();
+        expect(await screen.findByText("Sign in failed")).toBeInTheDocument();
         expect(screen.getByText(/An error occurred during sign in: server_error/)).toBeInTheDocument();
     });
 
@@ -309,6 +315,7 @@ describe("Login Page", () => {
             error: null,
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            locale: "zh-CN",
         });
     });
 });

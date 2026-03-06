@@ -194,7 +194,7 @@ describe("Register Page", () => {
         const data = await response.json();
 
         expect(response.status).toBe(400);
-        expect(data.error).toBe("Email and password are required");
+        expect(data.error).toBe("邮箱和密码为必填项。");
     });
 
     it("action returns error when password is missing", async () => {
@@ -206,7 +206,7 @@ describe("Register Page", () => {
         const data = await response.json();
 
         expect(response.status).toBe(400);
-        expect(data.error).toBe("Email and password are required");
+        expect(data.error).toBe("邮箱和密码为必填项。");
     });
 
     it("action creates user and redirects on success", async () => {
@@ -265,7 +265,7 @@ describe("Register Page", () => {
         const data = await response.json();
 
         expect(response.status).toBe(400);
-        expect(data.error).toBe("Registration failed");
+        expect(data.error).toBe("注册失败");
     });
 
     it("action creates user without display_name when not provided", async () => {
@@ -303,7 +303,7 @@ describe("Register Page", () => {
         const data = await response.json();
 
         expect(response.status).toBe(400);
-        expect(data.error).toBe("Email and password are required");
+        expect(data.error).toBe("邮箱和密码为必填项。");
     });
 
     it("sign in link navigates to login page", async () => {
@@ -321,4 +321,3 @@ describe("Register Page", () => {
         expect(signInLink).toHaveAttribute("href", "/login");
     });
 });
-

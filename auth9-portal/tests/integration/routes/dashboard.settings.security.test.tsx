@@ -6,6 +6,7 @@ import SecuritySettingsPage, {
   loader,
   action,
 } from "~/routes/dashboard.settings.security";
+import { I18nProvider } from "~/i18n";
 import { passwordApi, tenantApi } from "~/services/api";
 
 // Mock the API
@@ -32,6 +33,12 @@ vi.mock("~/services/session.server", () => ({
     }),
 }));
 
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
+
 const mockTenants = [
   { id: "tenant-1", name: "Acme Corp", slug: "acme" },
   { id: "tenant-2", name: "Beta Inc", slug: "beta" },
@@ -50,6 +57,14 @@ const mockPolicy = {
 };
 
 describe("Security Settings Page", () => {
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <SecuritySettingsPage />
+      </I18nProvider>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.mocked(tenantApi.list).mockResolvedValue({ data: mockTenants });
@@ -63,7 +78,7 @@ describe("Security Settings Page", () => {
   // ============================================================================
 
   it("loader returns tenants list", async () => {
-    const response = await loader({ request: new Request("http://localhost"), params: {}, context: {} });
+    const response = await loader({ request: buildEnglishRequest("http://localhost"), params: {}, context: {} });
 
     expect(response).toEqual({
       tenants: mockTenants,
@@ -95,7 +110,7 @@ describe("Security Settings Page", () => {
     formData.append("lockoutThreshold", "5");
     formData.append("lockoutDurationMins", "30");
 
-    const request = new Request("http://localhost/dashboard/settings/security", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/security", {
       method: "POST",
       body: formData,
     });
@@ -112,7 +127,7 @@ describe("Security Settings Page", () => {
     const formData = new FormData();
     formData.append("intent", "invalid");
 
-    const request = new Request("http://localhost/dashboard/settings/security", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/security", {
       method: "POST",
       body: formData,
     });
@@ -129,7 +144,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -148,7 +163,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -185,7 +200,7 @@ describe("Security Settings Page", () => {
     formData.append("lockoutThreshold", "5");
     formData.append("lockoutDurationMins", "15");
 
-    const request = new Request("http://localhost/dashboard/settings/security", {
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/security", {
       method: "POST",
       body: formData,
     });
@@ -204,7 +219,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -249,7 +264,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -289,7 +304,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -330,7 +345,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -372,7 +387,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -407,7 +422,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -444,7 +459,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -507,7 +522,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -549,7 +564,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
         action: async ({ request }) => {
           const formData = await request.formData();
@@ -597,7 +612,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -635,7 +650,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -672,7 +687,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -709,7 +724,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -746,7 +761,7 @@ describe("Security Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/security",
-        Component: SecuritySettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);

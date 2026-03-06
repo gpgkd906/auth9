@@ -1,28 +1,30 @@
 import type { MetaFunction } from "react-router";
 import { Link, Outlet, useLocation } from "react-router";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { cn } from "~/lib/utils";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Settings - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "settings.metaTitle");
 };
-
-const settingsNav = [
-  { name: "Organization", href: "/dashboard/settings", description: "Tenant branding settings" },
-  { name: "Login Branding", href: "/dashboard/settings/branding", description: "Customize login pages" },
-  { name: "Email Provider", href: "/dashboard/settings/email", description: "Email delivery configuration" },
-  { name: "Email Templates", href: "/dashboard/settings/email-templates", description: "Customize email content" },
-  { name: "Password Policy", href: "/dashboard/settings/security", description: "Password requirements" },
-  { name: "Identity Providers", href: "/dashboard/settings/identity-providers", description: "Social login and SSO" },
-];
 
 export default function SettingsLayout() {
   const location = useLocation();
+  const { t } = useI18n();
+  const settingsNav = [
+    { name: t("settings.nav.organization"), href: "/dashboard/settings", description: t("settings.navDescriptions.organization") },
+    { name: t("settings.nav.branding"), href: "/dashboard/settings/branding", description: t("settings.navDescriptions.branding") },
+    { name: t("settings.nav.email"), href: "/dashboard/settings/email", description: t("settings.navDescriptions.email") },
+    { name: t("settings.nav.emailTemplates"), href: "/dashboard/settings/email-templates", description: t("settings.navDescriptions.emailTemplates") },
+    { name: t("settings.nav.security"), href: "/dashboard/settings/security", description: t("settings.navDescriptions.security") },
+    { name: t("settings.nav.identityProviders"), href: "/dashboard/settings/identity-providers", description: t("settings.navDescriptions.identityProviders") },
+  ];
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Settings</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Manage system and organization preferences</p>
+        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("settings.title")}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">{t("settings.description")}</p>
       </div>
 
       <div className="flex flex-col gap-4 md:flex-row md:gap-6">

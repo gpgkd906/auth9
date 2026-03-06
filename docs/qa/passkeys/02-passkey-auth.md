@@ -7,6 +7,8 @@
 
 ---
 
+> **语言说明**: Portal 默认语言为 `zh-CN`。如需按英文按钮/标题执行本用例，请先在页面右上角切换到 `English`，或预置 `auth9_locale=en-US` cookie。若未切换，测试时应以中文文案为准。
+
 ## 背景说明
 
 登录页面新增「Sign in with passkey」按钮，与 SSO 登录并列。用户可使用已注册的 Passkey 进行 discoverable authentication（浏览器自动展示可用 Passkey 列表），无需输入用户名/密码。

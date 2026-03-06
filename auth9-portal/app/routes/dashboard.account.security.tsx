@@ -4,6 +4,9 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { useI18n } from "~/i18n";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 import { passwordApi } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 
@@ -14,24 +17,30 @@ export async function action({ request }: ActionFunctionArgs) {
   const confirmPassword = formData.get("confirmPassword") as string;
 
   if (!currentPassword || !newPassword || !confirmPassword) {
-    return { error: "All password fields are required" };
+    const locale = await resolveLocale(request);
+    return { error: translate(locale, "account.security.required") };
   }
 
   if (newPassword !== confirmPassword) {
-    return { error: "New passwords do not match" };
+    const locale = await resolveLocale(request);
+    return { error: translate(locale, "account.security.mismatch") };
   }
 
   try {
     const accessToken = await getAccessToken(request) || "";
     await passwordApi.changePassword(currentPassword, newPassword, accessToken);
-    return { success: true, message: "Password changed successfully" };
+    const locale = await resolveLocale(request);
+    return { success: true, message: translate(locale, "account.security.success") };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to change password";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error ? error.message : translate(locale, "account.security.failed");
     return { error: message };
   }
 }
 
 export default function AccountSecurityPage() {
+  const { t } = useI18n();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
 
@@ -41,15 +50,15 @@ export default function AccountSecurityPage() {
     <div className="space-y-6">
       <Card>
         <CardHeader>
-          <CardTitle>Change Password</CardTitle>
+          <CardTitle>{t("account.security.title")}</CardTitle>
           <CardDescription>
-            Update your account password. You will need to enter your current password.
+            {t("account.security.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-4 max-w-md" noValidate>
             <div className="space-y-2">
-              <Label htmlFor="currentPassword">Current password</Label>
+              <Label htmlFor="currentPassword">{t("account.security.currentPassword")}</Label>
               <Input
                 id="currentPassword"
                 name="currentPassword"
@@ -58,17 +67,17 @@ export default function AccountSecurityPage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="newPassword">New password</Label>
+              <Label htmlFor="newPassword">{t("account.security.newPassword")}</Label>
               <Input
                 id="newPassword"
                 name="newPassword"
                 type="password"
               />
-              <p className="text-xs text-[var(--text-secondary)]">Must be at least 12 characters with uppercase, lowercase, numbers, and symbols</p>
+              <p className="text-xs text-[var(--text-secondary)]">{t("auth.resetPassword.passwordHint")}</p>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm new password</Label>
+              <Label htmlFor="confirmPassword">{t("account.security.confirmPassword")}</Label>
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
@@ -89,7 +98,7 @@ export default function AccountSecurityPage() {
             )}
 
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Changing..." : "Change password"}
+              {isSubmitting ? t("account.security.changing") : t("account.security.change")}
             </Button>
           </Form>
         </CardContent>

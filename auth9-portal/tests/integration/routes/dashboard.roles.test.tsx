@@ -3,6 +3,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import RolesPage, { action } from "~/routes/dashboard.roles";
+import { I18nProvider } from "~/i18n";
 import { rbacApi } from "~/services/api";
 import { ConfirmProvider } from "~/hooks/useConfirm";
 import { getAccessToken } from "~/services/session.server";
@@ -41,10 +42,18 @@ vi.mock("~/services/session.server", () => ({
 
 function WrappedPage() {
     return (
-        <ConfirmProvider>
-            <RolesPage />
-        </ConfirmProvider>
+        <I18nProvider locale="en-US">
+            <ConfirmProvider>
+                <RolesPage />
+            </ConfirmProvider>
+        </I18nProvider>
     );
+}
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", "en-US");
+    return new Request(url, { ...init, headers });
 }
 
 describe("Roles Page", () => {
@@ -1900,7 +1909,7 @@ describe("Roles Page", () => {
             for (const [key, value] of Object.entries(data)) {
                 formData.append(key, value);
             }
-            return new Request("http://localhost/dashboard/roles", {
+            return buildEnglishRequest("http://localhost/dashboard/roles", {
                 method: "POST",
                 body: formData,
             });

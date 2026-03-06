@@ -3,6 +3,7 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import EmailSettingsPage, { loader, action, meta } from "~/routes/dashboard.settings.email";
+import { I18nProvider } from "~/i18n";
 import { systemApi } from "~/services/api";
 import type { EmailProviderConfig } from "~/services/api";
 
@@ -42,13 +43,27 @@ vi.mock("~/services/session.server", () => ({
     }),
 }));
 
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+  const headers = new Headers(init?.headers);
+  headers.set("Accept-Language", "en-US");
+  return new Request(url, { ...init, headers });
+}
 describe("Email Settings Page", () => {
+  function WrappedPage() {
+    return (
+      <I18nProvider locale="en-US">
+        <EmailSettingsPage />
+      </I18nProvider>
+    );
+  }
+
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("meta returns correct page title", () => {
-    const result = meta({} as Parameters<typeof meta>[0]);
+    const result = meta({ matches: [{ id: "root", data: { locale: "en-US" } }] } as unknown as Parameters<typeof meta>[0]);
     expect(result).toEqual([{ title: "Email Settings - Auth9" }]);
   });
 
@@ -88,7 +103,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -107,7 +122,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -132,7 +147,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -154,7 +169,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -174,7 +189,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -194,7 +209,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -232,7 +247,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -272,7 +287,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -293,7 +308,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -312,7 +327,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -331,7 +346,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -350,7 +365,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -375,7 +390,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -395,7 +410,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -414,7 +429,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -446,7 +461,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -484,7 +499,7 @@ describe("Email Settings Page", () => {
       formData.append("from_email", "noreply@example.com");
       formData.append("from_name", "Auth9");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -521,7 +536,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "save");
       formData.append("provider_type", "none");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -557,7 +572,7 @@ describe("Email Settings Page", () => {
       formData.append("from_name", "Auth9");
       formData.append("configuration_set", "my-set");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -601,7 +616,7 @@ describe("Email Settings Page", () => {
       formData.append("from_email", "a@b.com");
       formData.append("from_name", "Auth9");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -630,7 +645,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "save");
       formData.append("provider_type", "invalid_provider");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -650,7 +665,7 @@ describe("Email Settings Page", () => {
       const formData = new FormData();
       formData.append("intent", "test_connection");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -672,7 +687,7 @@ describe("Email Settings Page", () => {
       const formData = new FormData();
       formData.append("intent", "test_connection");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -693,7 +708,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "send_test");
       formData.append("test_email", "test@example.com");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -714,7 +729,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "send_test");
       formData.append("test_email", "not-an-email");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -735,7 +750,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "send_test");
       formData.append("test_email", "test@example.com");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -750,7 +765,7 @@ describe("Email Settings Page", () => {
       const formData = new FormData();
       formData.append("intent", "invalid");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -770,7 +785,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "save");
       formData.append("provider_type", "none");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -788,7 +803,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "save");
       formData.append("provider_type", "none");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -796,7 +811,7 @@ describe("Email Settings Page", () => {
       const response = await action({ request, params: {}, context: {} });
       expect(response).toBeInstanceOf(Response);
       const json = await (response as Response).json();
-      expect(json).toEqual({ error: "Unknown error" });
+      expect(json).toEqual({ error: "Something went wrong. Please try again." });
     });
 
     it("saves SMTP config with use_tls off when checkbox not checked", async () => {
@@ -817,7 +832,7 @@ describe("Email Settings Page", () => {
       formData.append("from_email", "noreply@example.com");
       // No use_tls field means it's not checked
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -859,7 +874,7 @@ describe("Email Settings Page", () => {
       formData.append("from_name", "");
       formData.append("configuration_set", "");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -886,7 +901,7 @@ describe("Email Settings Page", () => {
       formData.append("intent", "send_test");
       formData.append("test_email", "");
 
-      const request = new Request("http://localhost/dashboard/settings/email", {
+      const request = buildEnglishRequest("http://localhost/dashboard/settings/email", {
         method: "POST",
         body: formData,
       });
@@ -910,7 +925,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -943,7 +958,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -971,7 +986,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -999,7 +1014,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1031,7 +1046,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1060,7 +1075,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1095,7 +1110,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1131,7 +1146,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1159,7 +1174,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1194,7 +1209,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1224,7 +1239,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
         },
       ]);
@@ -1264,7 +1279,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
           action: async ({ request }) => {
             const formData = await request.formData();
@@ -1295,7 +1310,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
           action: async ({ request }) => {
             const formData = await request.formData();
@@ -1345,7 +1360,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
           action: () => ({
             success: true,
@@ -1374,7 +1389,7 @@ describe("Email Settings Page", () => {
       const RoutesStub = createRoutesStub([
         {
           path: "/dashboard/settings/email",
-          Component: EmailSettingsPage,
+          Component: WrappedPage,
           loader,
           action: () => ({ error: "Something went wrong" }),
         },
@@ -1422,7 +1437,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -1461,7 +1476,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);
@@ -1502,7 +1517,7 @@ describe("Email Settings Page", () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/settings/email",
-        Component: EmailSettingsPage,
+        Component: WrappedPage,
         loader,
       },
     ]);

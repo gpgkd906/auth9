@@ -97,14 +97,16 @@ describe("Webhooks Page", () => {
 
   it("loader returns error when tenantId is missing", async () => {
     const response = await loader({
-      request: new Request("http://localhost/dashboard/tenants//webhooks"),
+      request: new Request("http://localhost/dashboard/tenants//webhooks", {
+        headers: { "Accept-Language": "en-US" },
+      }),
       params: {},
       context: {},
     });
 
     expect(response).toEqual({
       webhooks: [],
-      error: "Tenant ID is required",
+      error: "Tenant ID required",
     });
   });
 
@@ -1042,6 +1044,7 @@ describe("Webhooks Page", () => {
       return new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
     }
 
@@ -1063,6 +1066,7 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
@@ -1094,6 +1098,7 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
@@ -1119,6 +1124,7 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
@@ -1166,6 +1172,7 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
@@ -1199,6 +1206,7 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });
@@ -1352,11 +1360,12 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants//webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: {}, context: {} });
 
-      expect(response).toEqual({ error: "Tenant ID is required" });
+      expect(response).toEqual({ error: "Tenant ID required" });
     });
 
     it("returns error for invalid intent", async () => {
@@ -1372,6 +1381,7 @@ describe("Webhooks Page", () => {
       const request = new Request("http://localhost/dashboard/tenants/tenant-1/webhooks", {
         method: "POST",
         body: formData,
+        headers: { "Accept-Language": "en-US" },
       });
 
       const response = await action({ request, params: { tenantId: "tenant-1" }, context: {} });

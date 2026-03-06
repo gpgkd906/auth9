@@ -3,11 +3,15 @@ import { redirect, useFetcher, useLoaderData, useNavigation } from "react-router
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
 import { requireIdentityAuthWithUpdate, setActiveTenant } from "~/services/session.server";
 import { type TenantUserWithTenant, userApi } from "~/services/api";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Select Tenant - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "tenantSelect.metaTitle");
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -52,7 +56,8 @@ export async function action({ request }: ActionFunctionArgs) {
   const formData = await request.formData();
   const tenantId = String(formData.get("tenantId") || "").trim();
   if (!tenantId) {
-    return { error: "Please select a tenant" };
+    const locale = await resolveLocale(request);
+    return { error: translate(locale, "tenantSelect.selectRequired") };
   }
 
   const cookie = await setActiveTenant(request, tenantId);
@@ -62,6 +67,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function TenantSelectPage() {
+  const { t } = useI18n();
   const { tenants, activeTenantId, error } = useLoaderData<typeof loader>() as {
     tenants: TenantUserWithTenant[];
     activeTenantId?: string;
@@ -97,13 +103,13 @@ export default function TenantSelectPage() {
       <div className="page-backdrop" />
       <Card className="w-full max-w-lg relative z-10 animate-fade-in-up">
         <CardHeader>
-          <CardTitle>Select your tenant</CardTitle>
-          <CardDescription>Choose which organization context to enter.</CardDescription>
+          <CardTitle>{t("tenantSelect.selectTitle")}</CardTitle>
+          <CardDescription>{t("tenantSelect.selectDescription")}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <Input
             type="text"
-            placeholder="Search tenants..."
+            placeholder={t("tenantSelect.searchPlaceholder")}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="w-full"
@@ -114,7 +120,7 @@ export default function TenantSelectPage() {
           >
             {filteredTenants.length === 0 ? (
               <p className="text-sm text-[var(--text-tertiary)] text-center py-4">
-                No tenants found
+                {t("tenantSelect.noTenants")}
               </p>
             ) : (
               filteredTenants.map((tenant) => (
@@ -143,7 +149,7 @@ export default function TenantSelectPage() {
                     <div className="font-medium truncate">
                       {tenant.tenant.name}
                       {tenant.tenant_id === activeTenantId && (
-                        <span className="ml-2 text-xs opacity-75">(current)</span>
+                        <span className="ml-2 text-xs opacity-75">({t("tenantSelect.current")})</span>
                       )}
                     </div>
                     <div
@@ -160,14 +166,22 @@ export default function TenantSelectPage() {
           </div>
           {filteredTenants.length > 0 && (
             <p className="text-xs text-[var(--text-tertiary)] text-center">
-              {filteredTenants.length} of {tenants.length} tenants
-              {searchQuery && ` (filtered from "${searchQuery}")`}
+              {searchQuery
+                ? t("tenantSelect.countFiltered", {
+                    filtered: filteredTenants.length,
+                    total: tenants.length,
+                    query: searchQuery,
+                  })
+                : t("tenantSelect.count", {
+                    filtered: filteredTenants.length,
+                    total: tenants.length,
+                  })}
             </p>
           )}
           {(error || fetcher.data?.error) && (
             <p className="text-sm text-[var(--accent-red)]">
               {error === "tenant_exchange_failed"
-                ? "Failed to access this tenant. Please try again or contact support."
+                ? t("tenantSelect.accessFailed")
                 : String(error || fetcher.data?.error)}
             </p>
           )}

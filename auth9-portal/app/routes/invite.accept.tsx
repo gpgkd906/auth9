@@ -4,10 +4,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/com
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
 import { invitationApi } from "~/services/api";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Accept Invitation - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "invite.metaTitle");
 };
 
 interface LoaderData {
@@ -28,7 +32,8 @@ export async function action({ request }: ActionFunctionArgs) {
   const password = (formData.get("password") as string | null) || undefined;
 
   if (!token) {
-    return Response.json({ error: "Invitation token is missing" }, { status: 400 });
+    const locale = await resolveLocale(request);
+    return Response.json({ error: translate(locale, "invite.missingToken") }, { status: 400 });
   }
 
   try {
@@ -41,12 +46,15 @@ export async function action({ request }: ActionFunctionArgs) {
 
     return { success: true, invitation: response.data };
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error ? error.message : translate(locale, "invite.unknownError");
     return Response.json({ error: message }, { status: 400 });
   }
 }
 
 export default function InviteAcceptPage() {
+  const { t } = useI18n();
   const { token } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -58,12 +66,12 @@ export default function InviteAcceptPage() {
         <div className="page-backdrop" />
         <Card className="w-full max-w-md relative z-10">
           <CardHeader className="text-center">
-            <CardTitle>Invalid Invitation</CardTitle>
-            <CardDescription>The invitation link is missing or malformed.</CardDescription>
+            <CardTitle>{t("invite.invalidTitle")}</CardTitle>
+            <CardDescription>{t("invite.invalidDescription")}</CardDescription>
           </CardHeader>
           <CardContent className="text-center">
             <Link to="/login" className="text-[var(--accent-blue)] hover:underline text-sm">
-              Go to login
+              {t("invite.goToLogin")}
             </Link>
           </CardContent>
         </Card>
@@ -77,9 +85,9 @@ export default function InviteAcceptPage() {
 
       <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
         <CardHeader className="text-center">
-          <CardTitle>Accept Invitation</CardTitle>
+          <CardTitle>{t("invite.title")}</CardTitle>
           <CardDescription>
-            Create your account or confirm your details to join the tenant.
+            {t("invite.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -87,20 +95,20 @@ export default function InviteAcceptPage() {
             <input type="hidden" name="token" value={token} />
 
             <div className="space-y-2">
-              <Label htmlFor="email">Email (optional)</Label>
-              <Input id="email" name="email" type="email" placeholder="you@example.com" />
+              <Label htmlFor="email">{t("invite.emailOptional")}</Label>
+              <Input id="email" name="email" type="email" placeholder={t("invite.emailPlaceholder")} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="display_name">Display Name</Label>
-              <Input id="display_name" name="display_name" placeholder="Your name" />
+              <Label htmlFor="display_name">{t("invite.displayName")}</Label>
+              <Input id="display_name" name="display_name" placeholder={t("invite.displayNamePlaceholder")} />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
-              <Input id="password" name="password" type="password" placeholder="Create a password" />
+              <Label htmlFor="password">{t("invite.password")}</Label>
+              <Input id="password" name="password" type="password" placeholder={t("invite.passwordPlaceholder")} />
               <p className="text-xs text-[var(--text-tertiary)]">
-                If you already have an account, you can leave this blank.
+                {t("invite.passwordHint")}
               </p>
             </div>
 
@@ -110,19 +118,19 @@ export default function InviteAcceptPage() {
 
             {actionData && "success" in actionData && actionData.success && (
               <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-3 text-sm text-[var(--accent-green)]">
-                Invitation accepted successfully. You can now sign in.
+                {t("invite.accepted")}
               </div>
             )}
 
             <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? "Submitting..." : "Accept Invitation"}
+              {isSubmitting ? t("invite.submitting") : t("invite.accept")}
             </Button>
           </Form>
 
           <div className="mt-6 text-center text-sm text-[var(--text-tertiary)]">
-            Already have an account?{" "}
+            {t("invite.existingAccount")}{" "}
             <Link to={`/login?invite_token=${encodeURIComponent(token)}`} className="text-[var(--accent-blue)] hover:underline font-medium">
-              Sign in
+              {t("invite.signIn")}
             </Link>
           </div>
         </CardContent>

@@ -37,6 +37,7 @@
 | [09-users-page.md](./09-users-page.md) | 用户目录、角色分配弹窗 | 6 |
 | [10-services-page.md](./10-services-page.md) | 服务管理、密钥显示适配、Actions/Branding Tab 布局 | 6 |
 | [11-settings-page.md](./11-settings-page.md) | 系统设置、子导航体验 | 5 |
+| [12-i18n-localization.md](./12-i18n-localization.md) | 国际化切换、首屏协商、格式化一致性 | 5 |
 
 ---
 
@@ -47,8 +48,8 @@
 | 视觉设计 | 3 | 13 |
 | 交互体验 | 2 | 9 |
 | 可访问性 | 1 | 5 |
-| 页面专项 | 5 | 27 |
-| **总计** | **11** | **54** |
+| 页面专项 | 6 | 32 |
+| **总计** | **12** | **59** |
 
 ---
 
@@ -216,5 +217,6 @@ box-shadow: 0 8px 32px var(--glass-shadow),
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-07 | 1.2.0 | 新增 Portal 国际化与本地化 UI/UX 测试文档（`12-i18n-localization.md`），覆盖语言切换入口、SSR 首屏协商、格式化一致性、表单本地化；并同步修正文档中的语言相关说明；共 12 个文档 59 个场景 |
 | 2026-02-21 | 1.1.0 | Services 页面新增 Actions/Branding Tab 布局场景（`10-services-page.md`）；共 11 个文档 54 个场景 |
 | 2026-02-06 | 1.0.0 | 初始版本：6 个文档，27 个 UI/UX 测试场景 |

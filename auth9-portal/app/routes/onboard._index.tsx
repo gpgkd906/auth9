@@ -5,11 +5,14 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
 import { requireAuthWithUpdate, commitSession, setActiveTenant } from "~/services/session.server";
 import { organizationApi } from "~/services/api";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Create Organization - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "onboarding.createMetaTitle");
 };
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -25,7 +28,8 @@ export async function action({ request }: ActionFunctionArgs) {
   const domain = (formData.get("domain") as string || "").trim();
 
   if (!name || !slug || !domain) {
-    return { error: "All fields are required" };
+    const locale = await resolveLocale(request);
+    return { error: locale === "zh-CN" ? "所有字段均为必填项" : "All fields are required" };
   }
 
   try {
@@ -49,7 +53,13 @@ export async function action({ request }: ActionFunctionArgs) {
       headers: { "Set-Cookie": tenantCookie },
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Failed to create organization";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error
+        ? error.message
+        : locale === "zh-CN"
+          ? "创建组织失败"
+          : "Failed to create organization";
     return { error: message };
   }
 }
@@ -63,6 +73,7 @@ function slugify(text: string): string {
 }
 
 export default function OnboardIndex() {
+  const { t } = useI18n();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
@@ -81,32 +92,32 @@ export default function OnboardIndex() {
     <Card className="w-full max-w-lg relative z-10 animate-fade-in-up">
       <CardHeader className="text-center">
         <div className="logo-icon mx-auto mb-4">A9</div>
-        <CardTitle className="text-2xl">Create your organization</CardTitle>
+        <CardTitle className="text-2xl">{t("onboarding.createTitle")}</CardTitle>
         <CardDescription>
-          Set up your organization to start managing users and access.
+          {t("onboarding.createDescription")}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <Form method="post" className="space-y-4">
           <div className="space-y-2">
-            <Label htmlFor="name">Organization name</Label>
+            <Label htmlFor="name">{t("onboarding.organizationName")}</Label>
             <Input
               id="name"
               name="name"
               required
-              placeholder="Acme Corporation"
+              placeholder={t("onboarding.organizationNamePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="slug">Slug</Label>
+            <Label htmlFor="slug">{t("onboarding.slug")}</Label>
             <Input
               id="slug"
               name="slug"
               required
-              placeholder="acme-corp"
+              placeholder={t("onboarding.slugPlaceholder")}
               value={slug}
               onChange={(e) => {
                 setSlug(e.target.value);
@@ -114,20 +125,20 @@ export default function OnboardIndex() {
               }}
             />
             <p className="text-xs text-[var(--text-tertiary)]">
-              URL-friendly identifier (lowercase, hyphens only)
+              {t("onboarding.slugHint")}
             </p>
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="domain">Email domain</Label>
+            <Label htmlFor="domain">{t("onboarding.emailDomain")}</Label>
             <Input
               id="domain"
               name="domain"
               required
-              placeholder="acme.com"
+              placeholder={t("onboarding.emailDomainPlaceholder")}
             />
             <p className="text-xs text-[var(--text-tertiary)]">
-              Users with this email domain will be auto-verified
+              {t("onboarding.emailDomainHint")}
             </p>
           </div>
 
@@ -136,7 +147,7 @@ export default function OnboardIndex() {
           )}
 
           <Button type="submit" className="w-full" disabled={isSubmitting}>
-            {isSubmitting ? "Creating..." : "Create organization"}
+            {isSubmitting ? t("onboarding.creating") : t("onboarding.create")}
           </Button>
         </Form>
 
@@ -145,7 +156,7 @@ export default function OnboardIndex() {
             to="/logout"
             className="text-sm text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] transition-colors"
           >
-            Sign out
+            {t("onboarding.signOut")}
           </Link>
         </div>
       </CardContent>

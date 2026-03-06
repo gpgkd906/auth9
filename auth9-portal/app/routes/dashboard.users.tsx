@@ -50,10 +50,12 @@ import { useEffect, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Checkbox } from "~/components/ui/checkbox";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Users - Auth9" }];
-};
+export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "usersPage.metaTitle");
 
 export function HydrateFallback() {
   return null;
@@ -74,6 +76,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   const accessToken = await getAccessToken(request);
@@ -199,11 +202,11 @@ export async function action({ request }: ActionFunctionArgs) {
     }
 
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "usersPage.unknownError");
     return { error: message, intent };
   }
 
-  return { error: "Invalid intent", intent };
+  return { error: translate(locale, "usersPage.invalidIntent"), intent };
 }
 
 export default function UsersPage() {
@@ -215,6 +218,7 @@ export default function UsersPage() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { activeTenant } = useOutletContext<{ activeTenant?: TenantUserWithTenant }>();
+  const { t } = useI18n();
   const activeTenantId = activeTenant?.tenant_id;
 
   const currentSearch = searchParams.get("search") || "";
@@ -230,11 +234,11 @@ export default function UsersPage() {
 
   const validateEmail = (email: string): boolean => {
     if (!email) {
-      setCreateEmailError("Email is required");
+      setCreateEmailError(t("usersPage.emailRequired"));
       return false;
     }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setCreateEmailError("Please enter a valid email address");
+      setCreateEmailError(t("usersPage.emailInvalid"));
       return false;
     }
     setCreateEmailError(null);
@@ -385,30 +389,33 @@ export default function UsersPage() {
 
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="mb-2 text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Users</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Manage users and tenant assignments</p>
+          <h1 className="mb-2 text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("usersPage.title")}</h1>
+          <p className="text-sm text-[var(--text-secondary)]">{t("usersPage.description")}</p>
         </div>
-        <Button onClick={() => setCreatingUser(true)} className="w-full min-h-11 sm:w-auto sm:min-h-10">+ Create User</Button>
+        <Button onClick={() => setCreatingUser(true)} className="w-full min-h-11 sm:w-auto sm:min-h-10">+ {t("usersPage.createUser")}</Button>
       </div>
 
       <Form onSubmit={handleSearchSubmit} className="flex gap-2">
         <Input
           type="text"
-          placeholder="Search by email or name..."
-          aria-label="Search users"
+          placeholder={t("usersPage.searchPlaceholder")}
+          aria-label={t("usersPage.searchAria")}
           value={searchInput}
           onChange={(e) => setSearchInput(e.target.value)}
           className="flex-1 min-h-11 sm:min-h-10"
         />
-        <Button type="submit" variant="outline" className="min-h-11 sm:min-h-10">Search</Button>
+        <Button type="submit" variant="outline" className="min-h-11 sm:min-h-10">{t("usersPage.search")}</Button>
       </Form>
 
       <Card>
         <CardHeader>
-          <CardTitle>User Directory</CardTitle>
+          <CardTitle>{t("usersPage.userDirectory")}</CardTitle>
           <CardDescription>
-            {users.pagination.total} users • Page {users.pagination.page} of{" "}
-            {users.pagination.total_pages}
+            {t("usersPage.pagination", {
+              count: users.pagination.total,
+              page: users.pagination.page,
+              totalPages: users.pagination.total_pages,
+            })}
           </CardDescription>
         </CardHeader>
         <div className="px-6 pb-6">
@@ -419,10 +426,10 @@ export default function UsersPage() {
                   <div key={user.id} className="rounded-lg border border-[var(--glass-border-subtle)] bg-[var(--sidebar-item-hover)]/20 p-3">
                     <div className="space-y-1 text-sm">
                       <p className="font-semibold text-[var(--text-primary)] break-all">{user.email}</p>
-                      <p className="text-[var(--text-secondary)]">Name: {user.display_name || "-"}</p>
-                      <p className="text-[var(--text-secondary)]">MFA: {user.mfa_enabled ? "Enabled" : "Disabled"}</p>
+                      <p className="text-[var(--text-secondary)]">{t("usersPage.name")}: {user.display_name || "-"}</p>
+                      <p className="text-[var(--text-secondary)]">{t("usersPage.mfa")}: {user.mfa_enabled ? t("usersPage.enabled") : t("usersPage.disabled")}</p>
                       <p className="text-[var(--text-tertiary)] text-xs">
-                        Updated: <FormattedDate date={user.updated_at} />
+                        {t("usersPage.updated")}: <FormattedDate date={user.updated_at} />
                       </p>
                     </div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
@@ -431,14 +438,14 @@ export default function UsersPage() {
                         className="w-full min-h-11 text-[13px]"
                         onClick={() => setManagingTenantsUser(user)}
                       >
-                        Manage Tenants
+                        {t("usersPage.manageTenants")}
                       </Button>
                       <Button
                         variant="secondary"
                         className="w-full min-h-11 text-[13px]"
                         onClick={() => setEditingUser(user)}
                       >
-                        Edit
+                        {t("usersPage.edit")}
                       </Button>
                     </div>
                   </div>
@@ -446,7 +453,7 @@ export default function UsersPage() {
               </div>
             ) : (
               <div className="flex flex-col items-center px-4 py-6 text-center text-[var(--text-tertiary)]">
-                <p>No users found</p>
+                <p>{t("usersPage.noUsersFound")}</p>
                 {currentSearch && (
                   <Button
                     type="button"
@@ -457,7 +464,7 @@ export default function UsersPage() {
                       navigate("/dashboard/users?page=1");
                     }}
                   >
-                    Clear Filter
+                    {t("usersPage.clearFilter")}
                   </Button>
                 )}
               </div>
@@ -467,10 +474,10 @@ export default function UsersPage() {
             <table className="min-w-[600px] w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px] border-b border-[var(--glass-border-subtle)]">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Email</th>
-                  <th className="px-4 py-3 font-semibold">Display Name</th>
-                  <th className="px-4 py-3 font-semibold">MFA</th>
-                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold">{t("usersPage.email")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("usersPage.displayName")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("usersPage.mfa")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("usersPage.updated")}</th>
                   <th className="px-4 py-3 font-semibold w-10"></th>
                 </tr>
               </thead>
@@ -488,7 +495,7 @@ export default function UsersPage() {
                     <td className="px-4 py-3">{user.display_name || "-"}</td>
                     <td className="px-4 py-3">
                       <Badge variant={user.mfa_enabled ? "success" : "secondary"}>
-                        {user.mfa_enabled ? "Enabled" : "Disabled"}
+                        {user.mfa_enabled ? t("usersPage.enabled") : t("usersPage.disabled")}
                       </Badge>
                     </td>
                     <td className="px-4 py-3">
@@ -498,17 +505,17 @@ export default function UsersPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-11 w-11 p-0 sm:h-8 sm:w-8 active:scale-95">
-                            <span className="sr-only">Open menu</span>
+                            <span className="sr-only">{t("usersPage.openMenu")}</span>
                             <DotsHorizontalIcon className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel>{t("usersPage.actions")}</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => setEditingUser(user)}>
-                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Edit User
+                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.editUser")}
                           </DropdownMenuItem>
                           <DropdownMenuItem onClick={() => setManagingTenantsUser(user)}>
-                            <PersonIcon className="mr-2 h-3.5 w-3.5" /> Manage Tenants
+                            <PersonIcon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.manageTenants")}
                           </DropdownMenuItem>
                           {user.mfa_enabled ? (
                             <DropdownMenuItem
@@ -518,7 +525,7 @@ export default function UsersPage() {
                                 setMfaError(null);
                               }}
                             >
-                              Disable MFA
+                              {t("usersPage.disableMfa")}
                             </DropdownMenuItem>
                           ) : (
                             <DropdownMenuItem
@@ -528,30 +535,30 @@ export default function UsersPage() {
                                 setMfaError(null);
                               }}
                             >
-                              Enable MFA
+                              {t("usersPage.enableMfa")}
                             </DropdownMenuItem>
                           )}
                           <DropdownMenuItem
                             onClick={async () => {
                               const ok = await confirm({
-                                title: "Force Logout",
-                                description: "Force logout this user from all active sessions?",
-                                confirmLabel: "Force Logout",
+                                title: t("usersPage.forceLogoutTitle"),
+                                description: t("usersPage.forceLogoutDescription"),
+                                confirmLabel: t("usersPage.forceLogoutConfirm"),
                               });
                               if (ok) {
                                 submit({ intent: "force_logout", id: user.id }, { method: "post" });
                               }
                             }}
                           >
-                            <ExitIcon className="mr-2 h-3.5 w-3.5" /> Force Logout
+                            <ExitIcon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.forceLogout")}
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
                           <DropdownMenuItem
                             className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
                             onClick={async () => {
                               const ok = await confirm({
-                                title: "Delete User",
-                                description: "Are you sure you want to delete this user? This action cannot be undone.",
+                                title: t("usersPage.deleteUserTitle"),
+                                description: t("usersPage.deleteUserDescription"),
                                 variant: "destructive",
                               });
                               if (ok) {
@@ -559,7 +566,7 @@ export default function UsersPage() {
                               }
                             }}
                           >
-                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
+                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> {t("common.buttons.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -570,7 +577,7 @@ export default function UsersPage() {
                   <tr>
                     <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
                       <div className="flex flex-col items-center">
-                        <p>No users found</p>
+                        <p>{t("usersPage.noUsersFound")}</p>
                         {currentSearch && (
                           <Button
                             type="button"
@@ -581,7 +588,7 @@ export default function UsersPage() {
                               navigate("/dashboard/users?page=1");
                             }}
                           >
-                            Clear Filter
+                            {t("usersPage.clearFilter")}
                           </Button>
                         )}
                       </div>
@@ -598,16 +605,16 @@ export default function UsersPage() {
       <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit User</DialogTitle>
+            <DialogTitle>{t("usersPage.editUserTitle")}</DialogTitle>
             <DialogDescription>
-              Update the user&apos;s profile details.
+              {t("usersPage.editUserDescription")}
             </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update_user" />
             <input type="hidden" name="id" value={editingUser?.id || ""} />
             <div className="space-y-1.5">
-              <Label htmlFor="edit-name">Display Name</Label>
+              <Label htmlFor="edit-name">{t("usersPage.displayName")}</Label>
               <Input
                 id="edit-name"
                 name="display_name"
@@ -616,10 +623,10 @@ export default function UsersPage() {
             </div>
             <DialogFooter>
               <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setEditingUser(null)}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                Save Changes
+                {t("usersPage.saveChanges")}
               </Button>
             </DialogFooter>
           </Form>
@@ -636,9 +643,9 @@ export default function UsersPage() {
       }}>
         <DialogContent aria-modal="true">
           <DialogHeader>
-            <DialogTitle>Create User</DialogTitle>
+            <DialogTitle>{t("usersPage.createUserTitle")}</DialogTitle>
             <DialogDescription>
-              Create a new user account.
+              {t("usersPage.createUserDescription")}
             </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4" onSubmit={(e) => {
@@ -648,14 +655,14 @@ export default function UsersPage() {
           }}>
             <input type="hidden" name="intent" value="create_user" />
             <div className="space-y-1.5">
-              <Label htmlFor="create-email">Email *</Label>
+              <Label htmlFor="create-email">{t("usersPage.emailRequiredLabel")}</Label>
               <Input
                 id="create-email"
                 name="email"
                 type="email"
                 required
                 aria-required="true"
-                placeholder="user@example.com"
+                placeholder={t("usersPage.emailPlaceholder")}
                 value={createEmailValue}
                 onChange={(e) => {
                   setCreateEmailValue(e.target.value);
@@ -671,29 +678,29 @@ export default function UsersPage() {
               )}
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="create-name">Display Name</Label>
+              <Label htmlFor="create-name">{t("usersPage.displayName")}</Label>
               <Input
                 id="create-name"
                 name="display_name"
-                placeholder="John Doe"
+                placeholder={t("usersPage.displayNamePlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label htmlFor="create-password">Password *</Label>
+              <Label htmlFor="create-password">{t("usersPage.passwordRequiredLabel")}</Label>
               <Input
                 id="create-password"
                 name="password"
                 type="password"
                 required
                 aria-required="true"
-                placeholder="Enter a strong password"
+                placeholder={t("usersPage.passwordPlaceholder")}
               />
             </div>
             <div className="space-y-1.5">
-              <Label id="create-tenant-label">Tenant (optional)</Label>
+              <Label id="create-tenant-label">{t("usersPage.tenantOptional")}</Label>
               <Select name="tenant_id" defaultValue={activeTenantId} aria-labelledby="create-tenant-label">
                 <SelectTrigger aria-labelledby="create-tenant-label">
-                  <SelectValue placeholder="No tenant (platform user)" />
+                  <SelectValue placeholder={t("usersPage.noTenant")} />
                 </SelectTrigger>
                 <SelectContent>
                   {tenants.data.map((t: Tenant) => (
@@ -711,10 +718,10 @@ export default function UsersPage() {
                 setCreateEmailError(null);
                 setCreateEmailValue("");
               }}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                Create User
+                {t("usersPage.createUserSubmit")}
               </Button>
             </DialogFooter>
           </Form>
@@ -725,27 +732,27 @@ export default function UsersPage() {
       <Dialog open={!!managingTenantsUser} onOpenChange={(open) => !open && setManagingTenantsUser(null)}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Manage Tenants for {managingTenantsUser?.email}</DialogTitle>
+            <DialogTitle>{t("usersPage.manageTenantsTitle", { email: managingTenantsUser?.email || "" })}</DialogTitle>
             <DialogDescription>
-              Assign user to tenants and manage roles.
+              {t("usersPage.manageTenantsDescription")}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-6">
             <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4">
-              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">Joined Tenants</h4>
+              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">{t("usersPage.joinedTenants")}</h4>
               <div className="space-y-2">
                 {loadingTenants && (
-                  <p className="text-sm text-[var(--text-tertiary)]">Loading tenant information...</p>
+                  <p className="text-sm text-[var(--text-tertiary)]">{t("usersPage.loadingTenants")}</p>
                 )}
                 {tenantsError && (
-                  <p className="text-sm text-[var(--accent-red)]">Error loading tenants: {tenantsError}</p>
+                  <p className="text-sm text-[var(--accent-red)]">{t("usersPage.loadingTenantsError", { error: tenantsError })}</p>
                 )}
                 {!loadingTenants && userTenants.map((ut: UserTenant) => (
                   <div key={ut.tenant_id} className="flex items-center justify-between rounded-lg bg-[var(--sidebar-item-hover)] p-2 text-sm">
                     <div className="flex items-center gap-2">
                       {ut.tenant?.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
-                      <span className="font-medium text-[var(--text-primary)]">{ut.tenant?.name ?? "Unknown Tenant"}</span>
+                      <span className="font-medium text-[var(--text-primary)]">{ut.tenant?.name ?? t("usersPage.unknownTenant")}</span>
                       <Select
                         key={`${ut.tenant_id}-${ut.role_in_tenant}`}
                         defaultValue={ut.role_in_tenant}
@@ -767,40 +774,40 @@ export default function UsersPage() {
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="member">Member</SelectItem>
-                          <SelectItem value="admin">Admin</SelectItem>
+                          <SelectItem value="member">{t("usersPage.member")}</SelectItem>
+                          <SelectItem value="admin">{t("usersPage.admin")}</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
                     <div className="flex gap-2">
                       <Button size="sm" variant="outline" onClick={() => managingTenantsUser && ut.tenant && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })} disabled={!ut.tenant}>
-                        <GearIcon className="mr-2 h-3.5 w-3.5" /> Roles
+                        <GearIcon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.roles")}
                       </Button>
                       <Form method="post" className="inline">
                         <input type="hidden" name="intent" value="remove_from_tenant" />
                         <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
                         <input type="hidden" name="tenant_id" value={ut.tenant_id} />
                         <Button size="sm" variant="ghost" className="text-[var(--accent-red)] hover:text-[var(--accent-red)]">
-                          Remove
+                          {t("usersPage.remove")}
                         </Button>
                       </Form>
                     </div>
                   </div>
                 ))}
-                {!loadingTenants && !tenantsError && userTenants.length === 0 && <p className="text-sm text-[var(--text-tertiary)]">Not a member of any tenant.</p>}
+                {!loadingTenants && !tenantsError && userTenants.length === 0 && <p className="text-sm text-[var(--text-tertiary)]">{t("usersPage.notMemberOfAnyTenant")}</p>}
               </div>
             </div>
 
             <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4 bg-[var(--sidebar-item-hover)]/50">
-              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">Add to Tenant</h4>
+              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">{t("usersPage.addToTenant")}</h4>
               <Form method="post" className="flex gap-4 items-end">
                 <input type="hidden" name="intent" value="add_to_tenant" />
                 <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
                 <div className="flex-1 space-y-2">
-                  <Label id="add-tenant-label">Tenant</Label>
+                  <Label id="add-tenant-label">{t("usersPage.tenant")}</Label>
                   <Select name="tenant_id" aria-labelledby="add-tenant-label">
                     <SelectTrigger aria-labelledby="add-tenant-label">
-                      <SelectValue placeholder="Select tenant" />
+                      <SelectValue placeholder={t("usersPage.selectTenant")} />
                     </SelectTrigger>
                     <SelectContent>
                       {tenants.data
@@ -812,19 +819,19 @@ export default function UsersPage() {
                   </Select>
                 </div>
                 <div className="w-32 space-y-2">
-                  <Label id="add-role-label">Role</Label>
+                  <Label id="add-role-label">{t("usersPage.role")}</Label>
                   <Select name="role_in_tenant" defaultValue="member" aria-labelledby="add-role-label">
                     <SelectTrigger aria-labelledby="add-role-label">
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="member">Member</SelectItem>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="viewer">Viewer</SelectItem>
+                      <SelectItem value="member">{t("usersPage.member")}</SelectItem>
+                      <SelectItem value="admin">{t("usersPage.admin")}</SelectItem>
+                      <SelectItem value="viewer">{t("usersPage.viewer")}</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
-                <Button type="submit">Add</Button>
+                <Button type="submit">{t("usersPage.add")}</Button>
               </Form>
               {actionData && "error" in actionData && actionData.intent === "add_to_tenant" && (
                 <p className="text-sm text-[var(--accent-red)]">{formatErrorMessage(String(actionData.error))}</p>
@@ -844,9 +851,12 @@ export default function UsersPage() {
       }}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{mfaAction?.action === "enable" ? "Enable" : "Disable"} MFA</DialogTitle>
+            <DialogTitle>{mfaAction?.action === "enable" ? t("usersPage.enableMfaTitle") : t("usersPage.disableMfaTitle")}</DialogTitle>
             <DialogDescription>
-              Enter your password to confirm {mfaAction?.action === "enable" ? "enabling" : "disabling"} MFA for {mfaAction?.user.email}.
+              {t("usersPage.mfaDescription", {
+                action: mfaAction?.action === "enable" ? t("usersPage.enabling") : t("usersPage.disabling"),
+                email: mfaAction?.user.email || "",
+              })}
             </DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4" onSubmit={() => {
@@ -855,13 +865,13 @@ export default function UsersPage() {
             <input type="hidden" name="intent" value={mfaAction?.action === "enable" ? "enable_mfa" : "disable_mfa"} />
             <input type="hidden" name="id" value={mfaAction?.user.id || ""} />
             <div className="space-y-1.5">
-              <Label htmlFor="mfa-confirm-password">Your Password</Label>
+              <Label htmlFor="mfa-confirm-password">{t("usersPage.yourPassword")}</Label>
               <Input
                 id="mfa-confirm-password"
                 name="confirm_password"
                 type="password"
                 required
-                placeholder="Enter your password to confirm"
+                placeholder={t("usersPage.passwordConfirmPlaceholder")}
                 value={mfaPassword}
                 onChange={(e) => setMfaPassword(e.target.value)}
               />
@@ -875,10 +885,10 @@ export default function UsersPage() {
                 setMfaPassword("");
                 setMfaError(null);
               }}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting || !mfaPassword}>
-                {mfaAction?.action === "enable" ? "Enable MFA" : "Disable MFA"}
+                {mfaAction?.action === "enable" ? t("usersPage.enableMfa") : t("usersPage.disableMfa")}
               </Button>
             </DialogFooter>
           </Form>
@@ -889,18 +899,18 @@ export default function UsersPage() {
       <Dialog open={!!managingRoles} onOpenChange={(open) => !open && setManagingRoles(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Assign Roles</DialogTitle>
+            <DialogTitle>{t("usersPage.assignRolesTitle")}</DialogTitle>
             <DialogDescription>
-              Assign roles in {managingRoles?.tenant.name}.
+              {t("usersPage.assignRolesDescription", { tenant: managingRoles?.tenant.name || "" })}
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label id="role-service-label">Service</Label>
+              <Label id="role-service-label">{t("usersPage.service")}</Label>
               <Select onValueChange={setSelectedServiceId} aria-labelledby="role-service-label">
                 <SelectTrigger aria-labelledby="role-service-label">
-                  <SelectValue placeholder="Select Service" />
+                  <SelectValue placeholder={t("usersPage.selectService")} />
                 </SelectTrigger>
                 <SelectContent>
                   {services.data.map((s: Service) => (
@@ -913,7 +923,7 @@ export default function UsersPage() {
             {selectedServiceId && (
               <div className="flex flex-col gap-3 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
                 {availableRoles.length === 0 ? (
-                  <p className="text-sm text-[var(--text-tertiary)]">No roles defined for this service.</p>
+                  <p className="text-sm text-[var(--text-tertiary)]">{t("usersPage.noRolesDefined")}</p>
                 ) : (
                   availableRoles.map((role: Role) => {
                     const isAssigned = assignedRoleIds.has(role.id);
@@ -962,10 +972,10 @@ export default function UsersPage() {
 
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setManagingRoles(null)}>
-              Done
+              {t("usersPage.done")}
             </Button>
             <Button onClick={handleAssignRoles} disabled={isSubmitting || !selectedServiceId}>
-              Save Roles
+              {t("usersPage.saveRoles")}
             </Button>
           </DialogFooter>
         </DialogContent>

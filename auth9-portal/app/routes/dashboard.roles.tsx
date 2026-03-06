@@ -27,15 +27,17 @@ import {
 } from "~/components/ui/dropdown-menu";
 import { rbacApi, serviceApi, type Role, type Permission, type RoleWithPermissions } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
 
 // Extended role type with service_id for editing
 interface EditableRole extends Role {
   service_id: string;
 }
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Roles & Permissions - Auth9" }];
-};
+export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "rolesPage.metaTitle");
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
@@ -72,6 +74,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -158,11 +161,11 @@ export async function action({ request }: ActionFunctionArgs) {
       return { success: true, role: result.data };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "rolesPage.unknownError");
     return { error: message, intent };
   }
 
-  return { error: "Invalid intent", intent };
+  return { error: translate(locale, "rolesPage.invalidIntent"), intent };
 }
 
 export default function RolesPage() {
@@ -172,6 +175,7 @@ export default function RolesPage() {
   const submit = useSubmit();
   const confirm = useConfirm();
   const revalidator = useRevalidator();
+  const { t } = useI18n();
 
   // Role state
   const [createRoleServiceId, setCreateRoleServiceId] = useState<string | null>(null);
@@ -286,24 +290,24 @@ export default function RolesPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Roles & Permissions</h1>
-        <p className="text-sm text-[var(--text-secondary)]">Manage roles, permissions, and role hierarchy per service</p>
+        <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("rolesPage.title")}</h1>
+        <p className="text-sm text-[var(--text-secondary)]">{t("rolesPage.description")}</p>
       </div>
 
       <Tabs defaultValue="roles" className="w-full">
         <TabsList>
-          <TabsTrigger value="roles">Roles</TabsTrigger>
-          <TabsTrigger value="permissions">Permissions</TabsTrigger>
-          <TabsTrigger value="hierarchy">Hierarchy</TabsTrigger>
+          <TabsTrigger value="roles">{t("rolesPage.tabs.roles")}</TabsTrigger>
+          <TabsTrigger value="permissions">{t("rolesPage.tabs.permissions")}</TabsTrigger>
+          <TabsTrigger value="hierarchy">{t("rolesPage.tabs.hierarchy")}</TabsTrigger>
         </TabsList>
 
         {/* Roles Tab */}
         <TabsContent value="roles">
           <Card>
             <CardHeader>
-              <CardTitle>Role Management</CardTitle>
+              <CardTitle>{t("rolesPage.rolesCardTitle")}</CardTitle>
               <CardDescription>
-                {data.pagination.total} services • Create and manage roles for each service
+                {t("rolesPage.rolesCardDescription", { count: data.pagination.total })}
               </CardDescription>
             </CardHeader>
             <div className="px-6 pb-6 space-y-6">
@@ -317,7 +321,7 @@ export default function RolesPage() {
                       {entry.service.name}
                     </div>
                     <Button size="sm" variant="outline" onClick={() => setCreateRoleServiceId(entry.service.id)}>
-                      <PlusIcon className="mr-2 h-3.5 w-3.5" /> Add Role
+                      <PlusIcon className="mr-2 h-3.5 w-3.5" /> {t("rolesPage.addRole")}
                     </Button>
                   </div>
 
@@ -331,7 +335,7 @@ export default function RolesPage() {
                           )}
                           {role.parent_role_id && (
                             <span className="ml-2 text-xs text-[var(--accent-blue)]">
-                              (inherits from {entry.roles.find(r => r.id === role.parent_role_id)?.name || "parent"})
+                              ({t("rolesPage.inheritsFrom", { name: entry.roles.find(r => r.id === role.parent_role_id)?.name || t("rolesPage.parentFallback") })})
                             </span>
                           )}
                         </div>
@@ -342,27 +346,27 @@ export default function RolesPage() {
                             onClick={() => openManagePermissions({ ...role, service_id: entry.service.id }, entry.permissions)}
                           >
                             <GearIcon className="mr-1 h-3.5 w-3.5" />
-                            Permissions
+                            {t("rolesPage.managePermissions")}
                           </Button>
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild>
                               <Button variant="ghost" className="h-11 w-11 min-h-[44px] min-w-[44px] p-0">
-                                <span className="sr-only">Open menu</span>
+                                <span className="sr-only">{t("rolesPage.openMenu")}</span>
                                 <DotsHorizontalIcon className="h-3.5 w-3.5" />
                               </Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="end">
-                              <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                              <DropdownMenuLabel>{t("rolesPage.actions")}</DropdownMenuLabel>
                               <DropdownMenuItem onClick={() => setEditingRole({ ...role, service_id: entry.service.id })}>
-                                <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Edit
+                                <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> {t("rolesPage.edit")}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                               <DropdownMenuItem
                                 className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
                                 onClick={async () => {
                                   const ok = await confirm({
-                                    title: "Delete Role",
-                                    description: "Are you sure you want to delete this role?",
+                                    title: t("rolesPage.deleteRoleTitle"),
+                                    description: t("rolesPage.deleteRoleDescription"),
                                     variant: "destructive",
                                   });
                                   if (ok) {
@@ -374,7 +378,7 @@ export default function RolesPage() {
                                   }
                                 }}
                               >
-                                <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
+                                <TrashIcon className="mr-2 h-3.5 w-3.5" /> {t("common.buttons.delete")}
                               </DropdownMenuItem>
                             </DropdownMenuContent>
                           </DropdownMenu>
@@ -383,14 +387,14 @@ export default function RolesPage() {
                     ))}
                     {entry.roles.length === 0 && (
                       <div className="py-4 text-center text-xs text-[var(--text-secondary)]">
-                        No roles created yet for this service
+                        {t("rolesPage.noRolesForService")}
                       </div>
                     )}
                   </div>
                 </div>
               ))}
               {data.entries.length === 0 && (
-                <div className="py-8 text-center text-sm text-[var(--text-secondary)]">No services found</div>
+                <div className="py-8 text-center text-sm text-[var(--text-secondary)]">{t("rolesPage.noServicesFound")}</div>
               )}
             </div>
           </Card>
@@ -400,9 +404,9 @@ export default function RolesPage() {
         <TabsContent value="permissions">
           <Card>
             <CardHeader>
-              <CardTitle>Permission Management</CardTitle>
+              <CardTitle>{t("rolesPage.permissionsCardTitle")}</CardTitle>
               <CardDescription>
-                Create and manage permissions for each service
+                {t("rolesPage.permissionsCardDescription")}
               </CardDescription>
             </CardHeader>
             <div className="px-6 pb-6 space-y-6">
@@ -416,7 +420,7 @@ export default function RolesPage() {
                       {entry.service.name}
                     </div>
                     <Button size="sm" variant="outline" onClick={() => setCreatePermissionServiceId(entry.service.id)}>
-                      <PlusIcon className="mr-2 h-3.5 w-3.5" /> Add Permission
+                      <PlusIcon className="mr-2 h-3.5 w-3.5" /> {t("rolesPage.addPermission")}
                     </Button>
                   </div>
 
@@ -424,10 +428,10 @@ export default function RolesPage() {
                     <table className="w-full text-sm">
                       <thead className="bg-[var(--sidebar-item-hover)]">
                         <tr>
-                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">Code</th>
-                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">Name</th>
-                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">Description</th>
-                          <th className="px-4 py-2 text-right font-medium text-[var(--text-secondary)]">Actions</th>
+                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">{t("rolesPage.code")}</th>
+                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">{t("rolesPage.name")}</th>
+                          <th className="px-4 py-2 text-left font-medium text-[var(--text-secondary)]">{t("rolesPage.descriptionLabel")}</th>
+                          <th className="px-4 py-2 text-right font-medium text-[var(--text-secondary)]">{t("rolesPage.actions")}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-[var(--glass-border-subtle)]">
@@ -443,8 +447,8 @@ export default function RolesPage() {
                                 className="text-[var(--accent-red)] hover:text-[var(--accent-red)] h-7 px-2"
                                 onClick={async () => {
                                   const ok = await confirm({
-                                    title: "Delete Permission",
-                                    description: "Are you sure you want to delete this permission?",
+                                    title: t("rolesPage.deletePermissionTitle"),
+                                    description: t("rolesPage.deletePermissionDescription"),
                                     variant: "destructive",
                                   });
                                   if (ok) {
@@ -464,7 +468,7 @@ export default function RolesPage() {
                     </table>
                     {entry.permissions.length === 0 && (
                       <div className="py-4 text-center text-xs text-[var(--text-secondary)]">
-                        No permissions created yet for this service
+                        {t("rolesPage.noPermissionsForService")}
                       </div>
                     )}
                   </div>
@@ -478,9 +482,9 @@ export default function RolesPage() {
         <TabsContent value="hierarchy">
           <Card>
             <CardHeader>
-              <CardTitle>Role Hierarchy</CardTitle>
+              <CardTitle>{t("rolesPage.hierarchyCardTitle")}</CardTitle>
               <CardDescription>
-                View role inheritance structure for each service
+                {t("rolesPage.hierarchyCardDescription")}
               </CardDescription>
             </CardHeader>
             <div className="px-6 pb-6 space-y-6">
@@ -506,14 +510,14 @@ export default function RolesPage() {
                           {role.parent_role_id && (() => {
                             const parent = entry.roles.find(r => r.id === role.parent_role_id);
                             return parent ? (
-                              <span className="text-[var(--text-secondary)] text-xs italic">inherits from {parent.name}</span>
+                              <span className="text-[var(--text-secondary)] text-xs italic">{t("rolesPage.inheritsFrom", { name: parent.name })}</span>
                             ) : null;
                           })()}
                           {role.description && (
                             <span className="text-[var(--text-secondary)] text-xs">({role.description})</span>
                           )}
                           <span className="text-[var(--text-secondary)] text-xs px-1.5 py-0.5 rounded-full bg-[var(--glass-bg-subtle)]">
-                            {entry.rolePermissionCounts[role.id] ?? 0} permission{(entry.rolePermissionCounts[role.id] ?? 0) !== 1 ? 's' : ''}
+                            {t("rolesPage.permissionCount", { count: entry.rolePermissionCounts[role.id] ?? 0 })}
                           </span>
                         </div>
                       </div>
@@ -536,14 +540,14 @@ export default function RolesPage() {
                         rootRoles.map(role => renderRoleTree(role))
                       ) : (
                         <div className="py-4 text-center text-xs text-[var(--text-secondary)]">
-                          No roles defined for this service
+                          {t("rolesPage.noRolesDefined")}
                         </div>
                       )}
                     </div>
 
                     {childRoles.filter(r => !entry.roles.some(p => p.id === r.parent_role_id)).length > 0 && (
                       <div className="mt-4 pt-4 border-t border-[var(--glass-border-subtle)]">
-                        <div className="text-xs text-[var(--accent-orange)] mb-2">Orphaned Roles (invalid parent):</div>
+                        <div className="text-xs text-[var(--accent-orange)] mb-2">{t("rolesPage.orphanedRoles")}</div>
                         {childRoles
                           .filter(r => !entry.roles.some(p => p.id === r.parent_role_id))
                           .map(role => (
@@ -566,28 +570,28 @@ export default function RolesPage() {
       <Dialog open={!!createRoleServiceId} onOpenChange={(open) => !open && setCreateRoleServiceId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Role</DialogTitle>
-            <DialogDescription>Add a new role to this service.</DialogDescription>
+            <DialogTitle>{t("rolesPage.createRoleTitle")}</DialogTitle>
+            <DialogDescription>{t("rolesPage.createRoleDescription")}</DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="create_role" />
             <input type="hidden" name="service_id" value={createRoleServiceId || ""} />
             <div className="space-y-2">
-              <Label htmlFor="create-name">Role Name</Label>
-              <Input id="create-name" name="name" placeholder="admin" required />
+              <Label htmlFor="create-name">{t("rolesPage.roleName")}</Label>
+              <Input id="create-name" name="name" placeholder={t("rolesPage.roleNamePlaceholder")} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-description">Description</Label>
-              <Input id="create-description" name="description" placeholder="Administrator role with full access" />
+              <Label htmlFor="create-description">{t("rolesPage.descriptionLabel")}</Label>
+              <Input id="create-description" name="description" placeholder={t("rolesPage.roleDescriptionPlaceholder")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-parent">Parent Role (Optional)</Label>
+              <Label htmlFor="create-parent">{t("rolesPage.parentRoleOptional")}</Label>
               <select
                 id="create-parent"
                 name="parent_role_id"
                 className="w-full px-3 py-2 border border-[var(--glass-border-subtle)] rounded-md text-sm"
               >
-                <option value="">No parent (root role)</option>
+                <option value="">{t("rolesPage.noParentRole")}</option>
                 {createRoleServiceId && getParentRoleOptions(createRoleServiceId).map(role => (
                   <option key={role.id} value={role.id}>{role.name}</option>
                 ))}
@@ -598,10 +602,10 @@ export default function RolesPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreateRoleServiceId(null)}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create"}
+                {isSubmitting ? t("rolesPage.creating") : t("rolesPage.create")}
               </Button>
             </DialogFooter>
           </Form>
@@ -612,30 +616,30 @@ export default function RolesPage() {
       <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Role</DialogTitle>
-            <DialogDescription>Update role details.</DialogDescription>
+            <DialogTitle>{t("rolesPage.editRoleTitle")}</DialogTitle>
+            <DialogDescription>{t("rolesPage.editRoleDescription")}</DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update_role" />
             <input type="hidden" name="service_id" value={editingRole?.service_id || ""} />
             <input type="hidden" name="role_id" value={editingRole?.id || ""} />
             <div className="space-y-2">
-              <Label htmlFor="edit-name">Role Name</Label>
+              <Label htmlFor="edit-name">{t("rolesPage.roleName")}</Label>
               <Input id="edit-name" name="name" defaultValue={editingRole?.name} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-description">Description</Label>
+              <Label htmlFor="edit-description">{t("rolesPage.descriptionLabel")}</Label>
               <Input id="edit-description" name="description" defaultValue={editingRole?.description} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-parent">Parent Role (Optional)</Label>
+              <Label htmlFor="edit-parent">{t("rolesPage.parentRoleOptional")}</Label>
               <select
                 id="edit-parent"
                 name="parent_role_id"
                 defaultValue={editingRole?.parent_role_id || ""}
                 className="w-full px-3 py-2 border border-[var(--glass-border-subtle)] rounded-md text-sm"
               >
-                <option value="">No parent (root role)</option>
+                <option value="">{t("rolesPage.noParentRole")}</option>
                 {editingRole && getParentRoleOptions(editingRole.service_id, editingRole.id).map(role => (
                   <option key={role.id} value={role.id}>{role.name}</option>
                 ))}
@@ -646,10 +650,10 @@ export default function RolesPage() {
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setEditingRole(null)}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Changes"}
+                {isSubmitting ? t("rolesPage.saving") : t("rolesPage.saveChanges")}
               </Button>
             </DialogFooter>
           </Form>
@@ -660,34 +664,34 @@ export default function RolesPage() {
       <Dialog open={!!createPermissionServiceId} onOpenChange={(open) => !open && setCreatePermissionServiceId(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Create Permission</DialogTitle>
-            <DialogDescription>Add a new permission to this service.</DialogDescription>
+            <DialogTitle>{t("rolesPage.createPermissionTitle")}</DialogTitle>
+            <DialogDescription>{t("rolesPage.createPermissionDescription")}</DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="create_permission" />
             <input type="hidden" name="service_id" value={createPermissionServiceId || ""} />
             <div className="space-y-2">
-              <Label htmlFor="create-perm-code">Permission Code</Label>
-              <Input id="create-perm-code" name="code" placeholder="user:read" required />
-              <p className="text-xs text-[var(--text-secondary)]">Use format like &quot;resource:action&quot; (e.g., user:read, post:write)</p>
+              <Label htmlFor="create-perm-code">{t("rolesPage.permissionCode")}</Label>
+              <Input id="create-perm-code" name="code" placeholder={t("rolesPage.permissionCodePlaceholder")} required />
+              <p className="text-xs text-[var(--text-secondary)]">{t("rolesPage.permissionCodeHint")}</p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-perm-name">Display Name</Label>
-              <Input id="create-perm-name" name="name" placeholder="Read Users" required />
+              <Label htmlFor="create-perm-name">{t("rolesPage.displayName")}</Label>
+              <Input id="create-perm-name" name="name" placeholder={t("rolesPage.permissionNamePlaceholder")} required />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-perm-description">Description</Label>
-              <Input id="create-perm-description" name="description" placeholder="Allows reading user information" />
+              <Label htmlFor="create-perm-description">{t("rolesPage.descriptionLabel")}</Label>
+              <Input id="create-perm-description" name="description" placeholder={t("rolesPage.permissionDescriptionPlaceholder")} />
             </div>
             {actionData && "error" in actionData && actionData.intent === "create_permission" && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" onClick={() => setCreatePermissionServiceId(null)}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Creating..." : "Create"}
+                {isSubmitting ? t("rolesPage.creating") : t("rolesPage.create")}
               </Button>
             </DialogFooter>
           </Form>
@@ -701,17 +705,17 @@ export default function RolesPage() {
       >
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>Manage Permissions</DialogTitle>
+            <DialogTitle>{t("rolesPage.managePermissionsTitle")}</DialogTitle>
             <DialogDescription>
-              Assign permissions to role: <strong>{managingPermissionsRole?.role.name}</strong>
+              {t("rolesPage.managePermissionsDescription", { name: managingPermissionsRole?.role.name || "" })}
             </DialogDescription>
           </DialogHeader>
           <div className="max-h-[400px] overflow-y-auto">
             {managingPermissionsRole?.permissions.length === 0 ? (
               <div className="py-8 text-center text-sm text-[var(--text-secondary)]">
-                No permissions defined for this service.
+                {t("rolesPage.noPermissionsDefined")}
                 <br />
-                Create permissions in the Permissions tab first.
+                {t("rolesPage.createPermissionsFirst")}
               </div>
             ) : (
               <div className="space-y-2">
@@ -759,7 +763,7 @@ export default function RolesPage() {
           </div>
           <DialogFooter>
             <Button variant="outline" onClick={() => setManagingPermissionsRole(null)}>
-              Done
+              {t("rolesPage.done")}
             </Button>
           </DialogFooter>
         </DialogContent>

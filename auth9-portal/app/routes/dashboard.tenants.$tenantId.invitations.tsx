@@ -34,11 +34,15 @@ import {
 } from "~/components/ui/select";
 import { redirect } from "react-router";
 import { invitationApi, tenantApi, tenantServiceApi, rbacApi, type Invitation, type Role, type Tenant, type InvitationStatusFilter } from "~/services/api";
-import { formatDateTime } from "~/lib/utils";
 import { getAccessToken } from "~/services/session.server";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
+import { useFormatters } from "~/i18n/format";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Invitations - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "tenants.invitations.metaTitle");
 };
 
 interface LoaderData {
@@ -57,12 +61,12 @@ interface LoaderData {
 
 export async function loader({ params, request }: LoaderFunctionArgs) {
   const tenantId = params.tenantId;
+  const locale = await resolveLocale(request);
   if (!tenantId) {
-    throw new Response("Tenant ID required", { status: 400 });
+    throw new Response(translate(locale, "tenants.errors.tenantIdRequired"), { status: 400 });
   }
 
   const accessToken = await getAccessToken(request);
-
   const url = new URL(request.url);
   const page = Number(url.searchParams.get("page") || "1");
   const perPage = Number(url.searchParams.get("perPage") || "20");
@@ -72,14 +76,12 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
     : undefined;
 
   try {
-    // Fetch tenant, invitations, and enabled services in parallel
     const [tenantResult, invitationsResult, servicesResult] = await Promise.all([
       tenantApi.get(tenantId, accessToken || undefined),
       invitationApi.list(tenantId, page, perPage, status, accessToken || undefined),
-      tenantServiceApi.getEnabledServices(tenantId, accessToken || undefined), // Get enabled services for this tenant
+      tenantServiceApi.getEnabledServices(tenantId, accessToken || undefined),
     ]);
 
-    // Fetch roles for each service
     const rolesPromises = servicesResult.data.map(async (service) => {
       const rolesResult = await rbacApi.listRoles(service.id, accessToken || undefined);
       return {
@@ -106,8 +108,9 @@ export async function loader({ params, request }: LoaderFunctionArgs) {
 
 export async function action({ params, request }: ActionFunctionArgs) {
   const tenantId = params.tenantId;
+  const locale = await resolveLocale(request);
   if (!tenantId) {
-    throw new Response("Tenant ID required", { status: 400 });
+    throw new Response(translate(locale, "tenants.errors.tenantIdRequired"), { status: 400 });
   }
 
   const formData = await request.formData();
@@ -115,15 +118,13 @@ export async function action({ params, request }: ActionFunctionArgs) {
   const accessToken = await getAccessToken(request);
 
   if (!accessToken) {
-    return Response.json({ error: "Authentication required" }, { status: 401 });
+    return Response.json({ error: translate(locale, "tenants.invitations.authRequired") }, { status: 401 });
   }
 
   try {
     if (intent === "create") {
       const email = formData.get("email") as string;
       const expiresInHours = parseInt(formData.get("expires_in_hours") as string, 10) || 72;
-
-      // Get selected role IDs from form
       const roleIds: string[] = [];
       for (const [key, value] of formData.entries()) {
         if (key.startsWith("role_") && value === "on") {
@@ -132,15 +133,10 @@ export async function action({ params, request }: ActionFunctionArgs) {
       }
 
       if (roleIds.length === 0) {
-        return Response.json({ error: "At least one role must be selected" }, { status: 400 });
+        return Response.json({ error: translate(locale, "tenants.invitations.roleRequired") }, { status: 400 });
       }
 
-      await invitationApi.create(tenantId, {
-        email,
-        role_ids: roleIds,
-        expires_in_hours: expiresInHours,
-      }, accessToken);
-
+      await invitationApi.create(tenantId, { email, role_ids: roleIds, expires_in_hours: expiresInHours }, accessToken);
       return { success: true };
     }
 
@@ -153,7 +149,7 @@ export async function action({ params, request }: ActionFunctionArgs) {
     if (intent === "resend") {
       const id = formData.get("id") as string;
       await invitationApi.resend(id, accessToken);
-      return { success: true, message: "Invitation email resent" };
+      return { success: true, message: translate(locale, "tenants.invitations.resent") };
     }
 
     if (intent === "delete") {
@@ -162,14 +158,14 @@ export async function action({ params, request }: ActionFunctionArgs) {
       return { success: true };
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "tenants.errors.unknown");
     return Response.json({ error: message }, { status: 400 });
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: translate(locale, "tenants.errors.invalidIntent") }, { status: 400 });
 }
 
-function getStatusBadge(status: Invitation["status"]) {
+function getStatusBadge(status: Invitation["status"], t: ReturnType<typeof useI18n>["t"]) {
   const styles = {
     pending: "bg-yellow-50 text-yellow-700 border-yellow-200",
     accepted: "bg-[var(--accent-green)]/10 text-[var(--accent-green)] border-[var(--accent-green)]/20",
@@ -177,21 +173,31 @@ function getStatusBadge(status: Invitation["status"]) {
     revoked: "bg-red-50 text-red-700 border-red-200",
   };
 
-  const labels = {
-    pending: "Pending",
-    accepted: "Accepted",
-    expired: "Expired",
-    revoked: "Revoked",
-  };
-
   return (
     <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border ${styles[status]}`}>
-      {labels[status]}
+      {getInvitationStatusLabel(status, t)}
     </span>
   );
 }
 
+function getInvitationStatusLabel(status: Invitation["status"], t: ReturnType<typeof useI18n>["t"]) {
+  switch (status) {
+    case "pending":
+      return t("tenants.statuses.pending");
+    case "accepted":
+      return "Accepted";
+    case "expired":
+      return "Expired";
+    case "revoked":
+      return "Revoked";
+    default:
+      return status;
+  }
+}
+
 export default function InvitationsPage() {
+  const { t } = useI18n();
+  const formatters = useFormatters();
   const { tenant, invitations, pagination, roles, servicesCount, status } = useLoaderData<LoaderData>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -205,7 +211,6 @@ export default function InvitationsPage() {
 
   const isSubmitting = navigation.state === "submitting";
 
-  // Close dialog on success
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
       setIsCreateOpen(false);
@@ -216,49 +221,35 @@ export default function InvitationsPage() {
   const handleRoleToggle = (roleId: string) => {
     setSelectedRoles((prev) => {
       const next = new Set(prev);
-      if (next.has(roleId)) {
-        next.delete(roleId);
-      } else {
-        next.add(roleId);
-      }
+      if (next.has(roleId)) next.delete(roleId); else next.add(roleId);
       return next;
     });
   };
 
   const handleDelete = async (id: string) => {
     const ok = await confirm({
-      title: "Delete Invitation",
-      description: "Are you sure you want to delete this invitation?",
+      title: t("tenants.invitations.deleteTitle"),
+      description: t("tenants.invitations.deleteDescription"),
       variant: "destructive",
     });
-    if (ok) {
-      submit({ intent: "delete", id }, { method: "post" });
-    }
+    if (ok) submit({ intent: "delete", id }, { method: "post" });
   };
 
   const handleRevoke = async (id: string) => {
     const ok = await confirm({
-      title: "Revoke Invitation",
-      description: "Are you sure you want to revoke this invitation?",
-      confirmLabel: "Revoke",
+      title: t("tenants.invitations.revokeTitle"),
+      description: t("tenants.invitations.revokeDescription"),
+      confirmLabel: t("tenants.invitations.revokeConfirm"),
       variant: "destructive",
     });
-    if (ok) {
-      submit({ intent: "revoke", id }, { method: "post" });
-    }
+    if (ok) submit({ intent: "revoke", id }, { method: "post" });
   };
 
-  const handleResend = (id: string) => {
-    submit({ intent: "resend", id }, { method: "post" });
-  };
+  const handleResend = (id: string) => submit({ intent: "resend", id }, { method: "post" });
 
   const handleStatusChange = (value: string) => {
     const nextParams = new URLSearchParams(searchParams);
-    if (value === "all") {
-      nextParams.delete("status");
-    } else {
-      nextParams.set("status", value);
-    }
+    if (value === "all") nextParams.delete("status"); else nextParams.set("status", value);
     nextParams.delete("page");
     submit(nextParams, { method: "get" });
   };
@@ -266,9 +257,7 @@ export default function InvitationsPage() {
   const buildPageLink = (page: number) => {
     const nextParams = new URLSearchParams();
     nextParams.set("page", page.toString());
-    if (status !== "all") {
-      nextParams.set("status", status);
-    }
+    if (status !== "all") nextParams.set("status", status);
     return `/dashboard/tenants/${params.tenantId}/invitations?${nextParams.toString()}`;
   };
 
@@ -277,98 +266,67 @@ export default function InvitationsPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <Link
-              to="/dashboard/tenants"
-              className="text-[var(--text-secondary)] hover:text-[var(--text-secondary)] transition-colors"
-            >
+            <Link to="/dashboard/tenants" className="text-[var(--text-secondary)] hover:text-[var(--text-secondary)] transition-colors" aria-label={t("tenants.actions.backToList")}>
               <ArrowLeftIcon className="h-5 w-5" />
             </Link>
-            <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Invitations</h1>
+            <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("tenants.invitations.title")}</h1>
           </div>
-          <p className="text-sm text-[var(--text-secondary)] ml-8">
-            Manage user invitations for <span className="font-medium">{tenant.name}</span>
-          </p>
+          <p className="text-sm text-[var(--text-secondary)] ml-8">{t("tenants.invitations.description", { tenantName: tenant.name })}</p>
         </div>
 
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button>
-              <PlusIcon className="mr-2 h-4 w-4" /> Invite User
+              <PlusIcon className="mr-2 h-4 w-4" /> {t("tenants.invitations.inviteUser")}
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-lg">
             <DialogHeader>
-              <DialogTitle>Invite User</DialogTitle>
-              <DialogDescription>
-                Send an invitation email to join {tenant.name}
-              </DialogDescription>
+              <DialogTitle>{t("tenants.invitations.dialogTitle")}</DialogTitle>
+              <DialogDescription>{t("tenants.invitations.dialogDescription", { tenantName: tenant.name })}</DialogDescription>
             </DialogHeader>
             <Form method="post" className="space-y-4">
               <input type="hidden" name="intent" value="create" />
 
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="user@example.com"
-                  required
-                />
+                <Label htmlFor="email">{t("tenants.invitations.emailAddress")}</Label>
+                <Input id="email" name="email" type="email" placeholder={t("tenants.invitations.emailPlaceholder")} required />
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="expires_in_hours">Expires In</Label>
+                <Label htmlFor="expires_in_hours">{t("tenants.invitations.expiresIn")}</Label>
                 <Select name="expires_in_hours" defaultValue="72">
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select expiration" />
-                  </SelectTrigger>
+                  <SelectTrigger><SelectValue placeholder={t("tenants.invitations.selectExpiration")} /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="24">24 hours</SelectItem>
-                    <SelectItem value="48">48 hours</SelectItem>
-                    <SelectItem value="72">72 hours (default)</SelectItem>
-                    <SelectItem value="168">7 days</SelectItem>
+                    <SelectItem value="24">{t("tenants.invitations.expiration24h")}</SelectItem>
+                    <SelectItem value="48">{t("tenants.invitations.expiration48h")}</SelectItem>
+                    <SelectItem value="72">{t("tenants.invitations.expiration72h")}</SelectItem>
+                    <SelectItem value="168">{t("tenants.invitations.expiration7d")}</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div className="space-y-3">
-                <Label>Assign Roles</Label>
+                <Label>{t("tenants.invitations.assignRoles")}</Label>
                 {roles.length === 0 ? (
                   <p className="text-sm text-[var(--text-secondary)]">
-                    {servicesCount === 0
-                      ? "No services configured for this tenant. Please create a service first."
-                      : "Services exist but no roles are defined. Please create roles for your services first."}
+                    {servicesCount === 0 ? t("tenants.invitations.noServices") : t("tenants.invitations.noRoles")}
                   </p>
                 ) : (
                   <div className="space-y-4 max-h-60 overflow-y-auto border rounded-md p-3">
                     {roles.map((serviceGroup) => (
                       <div key={serviceGroup.serviceId}>
-                        <p className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider mb-2">
-                          {serviceGroup.serviceName}
-                        </p>
+                        <p className="text-xs font-medium text-[var(--text-secondary)] uppercase tracking-wider mb-2">{serviceGroup.serviceName}</p>
                         {serviceGroup.roles.length === 0 ? (
-                          <p className="text-sm text-[var(--text-tertiary)] italic">No roles defined</p>
+                          <p className="text-sm text-[var(--text-tertiary)] italic">{t("tenants.invitations.noRolesDefined")}</p>
                         ) : (
                           <div className="space-y-2">
                             {serviceGroup.roles.map((role) => (
                               <div key={role.id} className="flex items-center space-x-2">
-                                <Checkbox
-                                  id={`role_${role.id}`}
-                                  name={`role_${role.id}`}
-                                  checked={selectedRoles.has(role.id)}
-                                  onCheckedChange={() => handleRoleToggle(role.id)}
-                                />
-                                <Label
-                                  htmlFor={`role_${role.id}`}
-                                  className="font-normal cursor-pointer flex-1"
-                                >
+                                <Checkbox id={`role_${role.id}`} name={`role_${role.id}`} checked={selectedRoles.has(role.id)} onCheckedChange={() => handleRoleToggle(role.id)} />
+                                <Label htmlFor={`role_${role.id}`} className="font-normal cursor-pointer flex-1">
                                   <span className="font-medium">{role.name}</span>
-                                  {role.description && (
-                                    <span className="text-[var(--text-secondary)] text-sm ml-2">
-                                      - {role.description}
-                                    </span>
-                                  )}
+                                  {role.description && <span className="text-[var(--text-secondary)] text-sm ml-2">- {role.description}</span>}
                                 </Label>
                               </div>
                             ))}
@@ -380,16 +338,12 @@ export default function InvitationsPage() {
                 )}
               </div>
 
-              {actionData && "error" in actionData && (
-                <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
-              )}
+              {actionData && "error" in actionData && <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>}
 
               <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>
-                  Cancel
-                </Button>
+                <Button type="button" variant="outline" onClick={() => setIsCreateOpen(false)}>{t("tenants.invitations.cancel")}</Button>
                 <Button type="submit" disabled={isSubmitting || selectedRoles.size === 0}>
-                  {isSubmitting ? "Sending..." : "Send Invitation"}
+                  {isSubmitting ? t("tenants.invitations.sending") : t("tenants.invitations.sendInvitation")}
                 </Button>
               </DialogFooter>
             </Form>
@@ -398,27 +352,21 @@ export default function InvitationsPage() {
       </div>
 
       {actionData && "success" in actionData && actionData.success && "message" in actionData && (
-        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">
-          {(actionData as { success: boolean; message: string }).message}
-        </div>
+        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">{(actionData as { success: boolean; message: string }).message}</div>
       )}
 
       <Card>
         <CardHeader className="gap-4 sm:flex sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <CardTitle>Pending & Past Invitations</CardTitle>
-            <CardDescription>
-              {pagination.total} invitations • Page {pagination.page} of {pagination.total_pages}
-            </CardDescription>
+            <CardTitle>{t("tenants.invitations.listTitle")}</CardTitle>
+            <CardDescription>{t("tenants.invitations.listDescription", { total: pagination.total, page: pagination.page, totalPages: pagination.total_pages })}</CardDescription>
           </div>
           <div className="w-full sm:w-56">
-            <Label className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">Status Filter</Label>
+            <Label className="text-xs uppercase tracking-wide text-[var(--text-secondary)]">{t("tenants.invitations.statusFilter")}</Label>
             <Select value={status} onValueChange={handleStatusChange}>
-              <SelectTrigger className="mt-2">
-                <SelectValue placeholder="All statuses" />
-              </SelectTrigger>
+              <SelectTrigger className="mt-2"><SelectValue placeholder={t("tenants.invitations.allStatuses")} /></SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">All</SelectItem>
+                <SelectItem value="all">{t("tenants.invitations.allStatuses")}</SelectItem>
                 <SelectItem value="pending">Pending</SelectItem>
                 <SelectItem value="accepted">Accepted</SelectItem>
                 <SelectItem value="expired">Expired</SelectItem>
@@ -432,58 +380,45 @@ export default function InvitationsPage() {
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Status</th>
-                  <th className="px-4 py-3 font-medium">Roles</th>
-                  <th className="px-4 py-3 font-medium">Expires At</th>
-                  <th className="px-4 py-3 font-medium">Created</th>
+                  <th className="px-4 py-3 font-medium">{t("tenants.invitations.email")}</th>
+                  <th className="px-4 py-3 font-medium">{t("tenants.invitations.status")}</th>
+                  <th className="px-4 py-3 font-medium">{t("tenants.invitations.roles")}</th>
+                  <th className="px-4 py-3 font-medium">{t("tenants.invitations.expiresAt")}</th>
+                  <th className="px-4 py-3 font-medium">{t("tenants.invitations.created")}</th>
                   <th className="px-4 py-3 font-medium w-10"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--glass-border-subtle)]">
                 {invitations.map((invitation) => (
                   <tr key={invitation.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
-                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">
-                      {invitation.email}
-                    </td>
-                    <td className="px-4 py-3">
-                      {getStatusBadge(invitation.status)}
-                    </td>
-                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">
-                      {invitation.role_ids.length} role{invitation.role_ids.length !== 1 ? "s" : ""}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">
-                      {formatDateTime(invitation.expires_at)}
-                    </td>
-                    <td className="px-4 py-3 text-[var(--text-secondary)]">
-                      {formatDateTime(invitation.created_at)}
-                    </td>
+                    <td className="px-4 py-3 font-medium text-[var(--text-primary)]">{invitation.email}</td>
+                    <td className="px-4 py-3">{getStatusBadge(invitation.status, t)}</td>
+                    <td className="px-4 py-3 text-xs text-[var(--text-secondary)]">{t("tenants.invitations.roleCount", { count: invitation.role_ids.length })}</td>
+                    <td className="px-4 py-3 text-[var(--text-secondary)]">{formatters.dateTime(invitation.expires_at)}</td>
+                    <td className="px-4 py-3 text-[var(--text-secondary)]">{formatters.dateTime(invitation.created_at)}</td>
                     <td className="px-4 py-3">
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
+                            <span className="sr-only">{t("tenants.actions.openMenu")}</span>
                             <DotsHorizontalIcon className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel>{t("tenants.invitations.menuActions")}</DropdownMenuLabel>
                           {invitation.status === "pending" && (
                             <>
                               <DropdownMenuItem onClick={() => handleResend(invitation.id)}>
-                                <ReloadIcon className="mr-2 h-3.5 w-3.5" /> Resend Email
+                                <ReloadIcon className="mr-2 h-3.5 w-3.5" /> {t("tenants.invitations.resendEmail")}
                               </DropdownMenuItem>
                               <DropdownMenuItem onClick={() => handleRevoke(invitation.id)}>
-                                <Cross2Icon className="mr-2 h-3.5 w-3.5" /> Revoke
+                                <Cross2Icon className="mr-2 h-3.5 w-3.5" /> {t("tenants.invitations.revoke")}
                               </DropdownMenuItem>
                               <DropdownMenuSeparator />
                             </>
                           )}
-                          <DropdownMenuItem
-                            className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
-                            onClick={() => handleDelete(invitation.id)}
-                          >
-                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
+                          <DropdownMenuItem className="text-[var(--accent-red)] focus:text-[var(--accent-red)]" onClick={() => handleDelete(invitation.id)}>
+                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> {t("tenants.invitations.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -492,28 +427,17 @@ export default function InvitationsPage() {
                 ))}
                 {invitations.length === 0 && (
                   <tr>
-                    <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={6}>
-                      No invitations found. Click &quot;Invite User&quot; to send an invitation.
-                    </td>
+                    <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={6}>{t("tenants.invitations.noInvitations")}</td>
                   </tr>
                 )}
               </tbody>
             </table>
           </div>
 
-          {/* Pagination */}
           {pagination.total_pages > 1 && (
             <div className="flex items-center justify-center gap-2 mt-4">
               {Array.from({ length: pagination.total_pages }, (_, i) => i + 1).map((page) => (
-                <Link
-                  key={page}
-                  to={buildPageLink(page)}
-                  className={`px-3 py-1 text-sm rounded-md ${
-                    page === pagination.page
-                      ? "bg-apple-blue text-white"
-                      : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
-                  }`}
-                >
+                <Link key={page} to={buildPageLink(page)} className={`px-3 py-1 text-sm rounded-md ${page === pagination.page ? "bg-apple-blue text-white" : "bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"}`}>
                   {page}
                 </Link>
               ))}

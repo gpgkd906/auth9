@@ -134,7 +134,7 @@ describe("Dashboard Layout", () => {
 
     it("meta returns correct title", () => {
         const result = meta({} as Parameters<typeof meta>[0]);
-        expect(result).toEqual([{ title: "Dashboard - Auth9" }]);
+        expect(result).toEqual([{ title: "控制台 - Auth9" }]);
     });
 
     // ============================================================================

@@ -1,3 +1,5 @@
+import { useFormatters } from "~/i18n/format";
+
 /**
  * Client-safe date formatting component.
  *
@@ -9,14 +11,14 @@
 export function FormattedDate({
   date,
   className,
+  options,
 }: {
   date: string | Date;
   className?: string;
+  options?: Intl.DateTimeFormatOptions;
 }) {
-  const formatted =
-    date instanceof Date
-      ? date.toLocaleString()
-      : new Date(date).toLocaleString();
+  const { dateTime } = useFormatters();
+  const formatted = dateTime(date, options);
 
   return (
     <span className={className} suppressHydrationWarning>

@@ -5,6 +5,10 @@ import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
+import { useFormatters } from "~/i18n/format";
+import { useI18n } from "~/i18n";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 import { userApi } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { redirect } from "react-router";
@@ -21,7 +25,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
   } catch (error) {
     // Network errors (backend down) - show error on page instead of crashing
     if (error instanceof TypeError && error.message.includes("fetch")) {
-      return { user: null, error: "Unable to connect to the server. Please try again later." };
+      const locale = await resolveLocale(request);
+      return { user: null, error: translate(locale, "account.profile.serverUnavailable") };
     }
     throw redirect("/login");
   }
@@ -30,7 +35,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 export async function action({ request }: ActionFunctionArgs) {
   const accessToken = await getAccessToken(request);
   if (!accessToken) {
-    return { error: "Not authenticated" };
+    const locale = await resolveLocale(request);
+    return { error: translate(locale, "account.profile.notAuthenticated") };
   }
 
   const formData = await request.formData();
@@ -45,17 +51,23 @@ export async function action({ request }: ActionFunctionArgs) {
       },
       accessToken
     );
-    return { success: true, message: "Profile updated successfully" };
+    const locale = await resolveLocale(request);
+    return { success: true, message: translate(locale, "account.profile.updated") };
   } catch (error) {
     if (error instanceof TypeError && error.message.includes("fetch")) {
-      return { error: "Unable to connect to the server. Please try again later." };
+      const locale = await resolveLocale(request);
+      return { error: translate(locale, "account.profile.serverUnavailable") };
     }
-    const message = error instanceof Error ? error.message : "Failed to update profile";
+    const locale = await resolveLocale(request);
+    const message =
+      error instanceof Error ? error.message : translate(locale, "account.profile.updateFailed");
     return { error: message };
   }
 }
 
 export default function AccountProfilePage() {
+  const { t } = useI18n();
+  const formatters = useFormatters();
   const { user, error: loaderError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -67,11 +79,11 @@ export default function AccountProfilePage() {
       <div className="space-y-6">
         <Card>
           <CardHeader>
-            <CardTitle>Profile</CardTitle>
+            <CardTitle>{t("account.profile.title")}</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md">
-              {loaderError || "Failed to load profile. Please try again later."}
+              {loaderError || t("account.profile.loadError")}
             </div>
           </CardContent>
         </Card>
@@ -92,9 +104,9 @@ export default function AccountProfilePage() {
       {/* Profile Card */}
       <Card>
         <CardHeader>
-          <CardTitle>Profile</CardTitle>
+          <CardTitle>{t("account.profile.title")}</CardTitle>
           <CardDescription>
-            Your personal information. This is how others see you on the platform.
+            {t("account.profile.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -116,51 +128,51 @@ export default function AccountProfilePage() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="display_name">Display name</Label>
+              <Label htmlFor="display_name">{t("account.profile.displayName")}</Label>
               <Input
                 id="display_name"
                 name="display_name"
                 defaultValue={displayName}
-                placeholder="Enter your display name"
+                placeholder={t("account.profile.displayNamePlaceholder")}
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="avatar_url">Avatar URL</Label>
+              <Label htmlFor="avatar_url">{t("account.profile.avatarUrl")}</Label>
               <Input
                 id="avatar_url"
                 name="avatar_url"
                 defaultValue={user.avatar_url || ""}
-                placeholder="https://example.com/avatar.png"
+                placeholder={t("account.profile.avatarUrlPlaceholder")}
               />
               <p className="text-xs text-[var(--text-secondary)]">
-                URL to your profile picture
+                {t("account.profile.avatarHint")}
               </p>
             </div>
 
             <div className="space-y-2">
-              <Label>Email</Label>
+              <Label>{t("account.profile.email")}</Label>
               <Input
                 value={user.email}
                 disabled
                 className="opacity-60"
               />
               <p className="text-xs text-[var(--text-secondary)]">
-                Email cannot be changed here
+                {t("account.profile.emailHint")}
               </p>
             </div>
 
             <div className="flex items-center gap-4 text-sm">
               <div>
-                <span className="text-[var(--text-secondary)]">MFA: </span>
+                <span className="text-[var(--text-secondary)]">{t("account.profile.mfa")}: </span>
                 <span className={user.mfa_enabled ? "text-[var(--accent-green)]" : "text-[var(--text-tertiary)]"}>
-                  {user.mfa_enabled ? "Enabled" : "Disabled"}
+                  {user.mfa_enabled ? t("account.profile.enabled") : t("account.profile.disabled")}
                 </span>
               </div>
               <div>
-                <span className="text-[var(--text-secondary)]">Joined: </span>
+                <span className="text-[var(--text-secondary)]">{t("account.profile.joined")}: </span>
                 <span className="text-[var(--text-primary)]">
-                  {new Date(user.created_at).toLocaleDateString()}
+                  {formatters.date(user.created_at)}
                 </span>
               </div>
             </div>
@@ -178,7 +190,7 @@ export default function AccountProfilePage() {
             )}
 
             <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "Saving..." : "Save changes"}
+              {isSubmitting ? t("account.profile.saving") : t("account.profile.save")}
             </Button>
           </Form>
         </CardContent>

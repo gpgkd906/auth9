@@ -28,7 +28,11 @@ function createFormRequest(url: string, data: Record<string, string>): Request {
     for (const [key, value] of Object.entries(data)) {
         formData.append(key, value);
     }
-    return new Request(url, { method: "POST", body: formData });
+    return new Request(url, {
+        method: "POST",
+        body: formData,
+        headers: { "Accept-Language": "en-US" },
+    });
 }
 
 describe("Account Security Page", () => {

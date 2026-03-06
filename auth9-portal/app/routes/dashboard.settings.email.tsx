@@ -1,80 +1,65 @@
-import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
+import { Checkbox } from "~/components/ui/checkbox";
 import { Button } from "~/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
-import { Checkbox } from "~/components/ui/checkbox";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "~/components/ui/alert-dialog";
-import { systemApi, type EmailProviderConfig } from "~/services/api";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
+import { useI18n } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { translate } from "~/i18n/translate";
+import { resolveLocale } from "~/services/locale.server";
 import { getAccessToken } from "~/services/session.server";
+import { systemApi, type EmailProviderConfig } from "~/services/api";
 
-// Helper to get provider display info
-function getProviderInfo(config: EmailProviderConfig): { name: string; details: string } | null {
+function getProviderLabel(locale: string, type: string) {
+  switch (type) {
+    case "none":
+      return translate(locale as never, "settings.emailSettings.none");
+    case "smtp":
+      return translate(locale as never, "settings.emailSettings.smtp");
+    case "ses":
+      return translate(locale as never, "settings.emailSettings.ses");
+    case "oracle":
+      return translate(locale as never, "settings.emailSettings.oracle");
+    default:
+      return type;
+  }
+}
+
+function getProviderInfo(locale: string, config: EmailProviderConfig): { name: string; details: string } | null {
   switch (config.type) {
     case "smtp":
-      return { name: "SMTP", details: `${config.host}:${config.port}` };
+      return { name: getProviderLabel(locale, "smtp"), details: `${config.host}:${config.port}` };
     case "ses":
-      return { name: "AWS SES", details: `Region: ${config.region}` };
+      return { name: getProviderLabel(locale, "ses"), details: `Region: ${config.region}` };
     case "oracle":
-      return { name: "Oracle Email Delivery", details: config.smtp_endpoint };
+      return { name: getProviderLabel(locale, "oracle"), details: config.smtp_endpoint };
     default:
       return null;
   }
 }
 
-const PROVIDER_LABELS: Record<string, string> = {
-  none: "None (Email disabled)",
-  smtp: "SMTP",
-  ses: "AWS SES",
-  oracle: "Oracle Email Delivery",
-};
-
-export const meta: MetaFunction = () => {
-  return [{ title: "Email Settings - Auth9" }];
-};
+export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "settings.emailSettings.metaTitle");
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const accessToken = await getAccessToken(request);
   try {
     const result = await systemApi.getEmailSettings(accessToken || undefined);
-    // The API returns { data: { category, setting_key, value, ... } }
-    // The actual config is in result.data.value
     const config = result.data.value as EmailProviderConfig;
     return { config, error: null };
   } catch {
-    // If no config exists yet, return none
     return { config: { type: "none" } as EmailProviderConfig, error: null };
   }
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const accessToken = await getAccessToken(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
@@ -82,7 +67,6 @@ export async function action({ request }: ActionFunctionArgs) {
   try {
     if (intent === "save") {
       const providerType = formData.get("provider_type") as string;
-
       let config: EmailProviderConfig;
 
       if (providerType === "none") {
@@ -119,40 +103,38 @@ export async function action({ request }: ActionFunctionArgs) {
           from_name: (formData.get("from_name") as string) || undefined,
         };
       } else {
-        return Response.json({ error: "Invalid provider type" }, { status: 400 });
+        return Response.json({ error: translate(locale, "settings.emailSettings.invalidProviderType") }, { status: 400 });
       }
 
       await systemApi.updateEmailSettings(config, accessToken || undefined);
-      return { success: true, message: "Email settings saved successfully" };
+      return { success: true, message: translate(locale, "settings.emailSettings.saved") };
     }
 
     if (intent === "test_connection") {
       const result = await systemApi.testEmailConnection(accessToken || undefined);
       if (result.success) {
-        return { success: true, message: "Connection test successful" };
-      } else {
-        return Response.json({ error: result.message }, { status: 400 });
+        return { success: true, message: translate(locale, "settings.emailSettings.connectionTestSuccess") };
       }
+      return Response.json({ error: result.message }, { status: 400 });
     }
 
     if (intent === "send_test") {
       const toEmail = formData.get("test_email") as string;
       if (!toEmail || !toEmail.includes("@")) {
-        return Response.json({ error: "Please enter a valid email address" }, { status: 400 });
+        return Response.json({ error: translate(locale, "settings.emailSettings.invalidEmail") }, { status: 400 });
       }
       const result = await systemApi.sendTestEmail(toEmail, accessToken || undefined);
       if (result.success) {
         return { success: true, message: `Test email sent to ${toEmail}` };
-      } else {
-        return Response.json({ error: result.message }, { status: 400 });
       }
+      return Response.json({ error: result.message }, { status: 400 });
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "common.errors.unknown");
     return Response.json({ error: message }, { status: 400 });
   }
 
-  return Response.json({ error: "Invalid intent" }, { status: 400 });
+  return Response.json({ error: translate(locale, "settings.emailSettings.invalidIntent") }, { status: 400 });
 }
 
 export default function EmailSettingsPage() {
@@ -160,6 +142,7 @@ export default function EmailSettingsPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
+  const { t, i18n } = useI18n();
 
   const [providerType, setProviderType] = useState<string>(config.type);
   const [isTestEmailOpen, setIsTestEmailOpen] = useState(false);
@@ -168,22 +151,18 @@ export default function EmailSettingsPage() {
 
   const isSubmitting = navigation.state === "submitting";
   const currentIntent = navigation.formData?.get("intent");
-
-  // Get current provider info for status display
-  const currentProviderInfo = getProviderInfo(config);
+  const currentProviderInfo = getProviderInfo(i18n.language, config);
   const isConfigured = config.type !== "none";
 
-  // Reset provider type when config changes (after successful save)
   useEffect(() => {
     setProviderType(config.type);
   }, [config.type]);
 
-  const handleProviderChange = (newType: string) => {
-    // If switching from a configured provider to a different type, show warning
-    if (isConfigured && newType !== config.type && newType !== "none") {
-      setPendingProviderType(newType);
+  const handleProviderChange = (nextType: string) => {
+    if (isConfigured && nextType !== config.type && nextType !== "none") {
+      setPendingProviderType(nextType);
     } else {
-      setProviderType(newType);
+      setProviderType(nextType);
     }
   };
 
@@ -206,8 +185,6 @@ export default function EmailSettingsPage() {
     submit({ intent: "send_test", test_email: testEmail }, { method: "post" });
   };
 
-  // Auto-close dialog only for non-send_test success (e.g., save settings)
-  // For send_test, keep the dialog open so the user sees the success message
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success && isTestEmailOpen) {
       const isSendTest = actionData.message && String(actionData.message).startsWith("Test email sent");
@@ -216,344 +193,118 @@ export default function EmailSettingsPage() {
         setTestEmail("");
       }
     }
-  }, [actionData]);
+  }, [actionData, isTestEmailOpen]);
 
   return (
     <div className="space-y-6">
       {actionData && "success" in actionData && actionData.success && (
-        <div className="rounded-xl bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-4 text-sm text-[var(--accent-green)]">
-          {actionData.message}
-        </div>
+        <div className="rounded-xl border border-[var(--accent-green)]/20 bg-[var(--accent-green)]/10 p-4 text-sm text-[var(--accent-green)]">{actionData.message}</div>
       )}
 
       {actionData && "error" in actionData && (
-        <div className="rounded-xl bg-red-50 border border-red-200 p-4 text-sm text-red-700">
-          {String(actionData.error)}
-        </div>
+        <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{String(actionData.error)}</div>
       )}
 
-      {/* Current Status Card */}
       <Card className={isConfigured ? "border-[var(--accent-green)]/20 bg-[var(--accent-green)]/5" : "border-yellow-200 bg-yellow-50/50"}>
         <CardContent className="pt-6">
           <div className="flex items-center gap-3">
-            {isConfigured ? (
-              <CheckCircledIcon className="h-5 w-5 text-[var(--accent-green)]" />
-            ) : (
-              <CrossCircledIcon className="h-5 w-5 text-yellow-600" />
-            )}
+            {isConfigured ? <CheckCircledIcon className="h-5 w-5 text-[var(--accent-green)]" /> : <CrossCircledIcon className="h-5 w-5 text-yellow-600" />}
             <div>
-              <p className="text-sm font-medium text-[var(--text-primary)]">
-                {isConfigured ? "Email Provider Active" : "Email Provider Not Configured"}
-              </p>
+              <p className="text-sm font-medium text-[var(--text-primary)]">{isConfigured ? t("settings.emailSettings.statusConfigured") : t("settings.emailSettings.statusNotConfigured")}</p>
               {currentProviderInfo ? (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  Using <span className="font-medium">{currentProviderInfo.name}</span> ({currentProviderInfo.details})
-                </p>
+                <p className="text-sm text-[var(--text-secondary)]">{t("settings.emailSettings.statusUsing", { name: currentProviderInfo.name, details: currentProviderInfo.details })}</p>
               ) : (
-                <p className="text-sm text-[var(--text-secondary)]">
-                  System emails are disabled. Configure a provider below to enable email functionality.
-                </p>
+                <p className="text-sm text-[var(--text-secondary)]">{t("settings.emailSettings.statusDisabled")}</p>
               )}
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Info Banner */}
-      <div className="rounded-xl bg-blue-50 border border-blue-200 p-4 text-sm text-blue-700 flex items-start gap-3">
-        <ExclamationTriangleIcon className="h-5 w-5 flex-shrink-0 mt-0.5" />
+      <div className="flex items-start gap-3 rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-700">
+        <ExclamationTriangleIcon className="mt-0.5 h-5 w-5 flex-shrink-0" />
         <div>
-          <p className="font-medium">Single Provider Configuration</p>
-          <p className="mt-1">
-            The system supports one email provider at a time. Switching to a different provider type will replace the current configuration.
-          </p>
+          <p className="font-medium">{t("settings.emailSettings.infoTitle")}</p>
+          <p className="mt-1">{t("settings.emailSettings.infoDescription")}</p>
         </div>
       </div>
 
       <Card>
         <CardHeader>
-          <CardTitle>Email Provider Configuration</CardTitle>
-          <CardDescription>
-            Select and configure your email provider. Sensitive fields like passwords are stored encrypted.
-          </CardDescription>
+          <CardTitle>{t("settings.emailSettings.title")}</CardTitle>
+          <CardDescription>{t("settings.emailSettings.description")}</CardDescription>
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-6">
             <input type="hidden" name="intent" value="save" />
 
             <div className="space-y-2">
-              <Label htmlFor="provider_type">Provider Type</Label>
-              <Select
-                name="provider_type"
-                value={providerType}
-                onValueChange={handleProviderChange}
-              >
+              <Label htmlFor="provider_type">{t("settings.emailSettings.providerType")}</Label>
+              <Select name="provider_type" value={providerType} onValueChange={handleProviderChange}>
                 <SelectTrigger className="w-full max-w-xs">
-                  <SelectValue placeholder="Select a provider" />
+                  <SelectValue placeholder={t("settings.emailSettings.selectProvider")} />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="none">None (Email disabled)</SelectItem>
-                  <SelectItem value="smtp">SMTP</SelectItem>
-                  <SelectItem value="ses">AWS SES</SelectItem>
-                  <SelectItem value="oracle">Oracle Email Delivery</SelectItem>
+                  <SelectItem value="none">{t("settings.emailSettings.none")}</SelectItem>
+                  <SelectItem value="smtp">{t("settings.emailSettings.smtp")}</SelectItem>
+                  <SelectItem value="ses">{t("settings.emailSettings.ses")}</SelectItem>
+                  <SelectItem value="oracle">{t("settings.emailSettings.oracle")}</SelectItem>
                 </SelectContent>
               </Select>
               {providerType !== config.type && providerType !== "none" && config.type !== "none" && (
-                <p className="text-xs text-amber-600 mt-1">
-                  Saving will replace your current {PROVIDER_LABELS[config.type]} configuration.
-                </p>
+                <p className="mt-1 text-xs text-amber-600">{t("settings.emailSettings.replacementWarning", { provider: getProviderLabel(i18n.language, config.type) })}</p>
               )}
             </div>
 
-            {/* SMTP Configuration */}
             {providerType === "smtp" && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="text-sm font-medium text-[var(--text-primary)]">SMTP Configuration</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="host">Server Host</Label>
-                    <Input
-                      id="host"
-                      name="host"
-                      placeholder="smtp.example.com"
-                      defaultValue={config.type === "smtp" ? config.host : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="port">Port</Label>
-                    <Input
-                      id="port"
-                      name="port"
-                      type="number"
-                      placeholder="587"
-                      defaultValue={config.type === "smtp" ? config.port : 587}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="username">Username</Label>
-                    <Input
-                      id="username"
-                      name="username"
-                      placeholder="username"
-                      defaultValue={config.type === "smtp" ? config.username || "" : ""}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      name="password"
-                      type="password"
-                      placeholder={config.type === "smtp" && config.password ? "***" : "Enter password"}
-                      defaultValue=""
-                    />
-                    {config.type === "smtp" && config.password && (
-                      <p className="text-xs text-[var(--text-secondary)]">Leave blank to keep existing password</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="from_email">From Email</Label>
-                    <Input
-                      id="from_email"
-                      name="from_email"
-                      type="email"
-                      placeholder="noreply@example.com"
-                      defaultValue={config.type === "smtp" ? config.from_email : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="from_name">From Name</Label>
-                    <Input
-                      id="from_name"
-                      name="from_name"
-                      placeholder="Auth9"
-                      defaultValue={config.type === "smtp" ? config.from_name || "" : ""}
-                    />
-                  </div>
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">{t("settings.emailSettings.smtpConfiguration")}</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2"><Label htmlFor="host">{t("settings.emailSettings.serverHost")}</Label><Input id="host" name="host" placeholder={t("settings.emailSettings.serverHostPlaceholder")} defaultValue={config.type === "smtp" ? config.host : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="port">{t("settings.emailSettings.port")}</Label><Input id="port" name="port" type="number" placeholder={t("settings.emailSettings.portPlaceholder")} defaultValue={config.type === "smtp" ? config.port : 587} required /></div>
+                  <div className="space-y-2"><Label htmlFor="username">{t("settings.emailSettings.username")}</Label><Input id="username" name="username" placeholder={t("settings.emailSettings.usernamePlaceholder")} defaultValue={config.type === "smtp" ? config.username || "" : ""} /></div>
+                  <div className="space-y-2"><Label htmlFor="password">{t("settings.emailSettings.password")}</Label><Input id="password" name="password" type="password" placeholder={config.type === "smtp" && config.password ? "***" : t("settings.emailSettings.passwordPlaceholder")} defaultValue="" />{config.type === "smtp" && config.password && <p className="text-xs text-[var(--text-secondary)]">{t("settings.emailSettings.leavePasswordBlank")}</p>}</div>
+                  <div className="space-y-2"><Label htmlFor="from_email">{t("settings.emailSettings.fromEmail")}</Label><Input id="from_email" name="from_email" type="email" placeholder={t("settings.emailSettings.fromEmailPlaceholder")} defaultValue={config.type === "smtp" ? config.from_email : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="from_name">{t("settings.emailSettings.fromName")}</Label><Input id="from_name" name="from_name" placeholder={t("settings.emailSettings.fromNamePlaceholder")} defaultValue={config.type === "smtp" ? config.from_name || "" : ""} /></div>
                 </div>
-                <div className="flex items-center space-x-2">
-                  <Checkbox
-                    id="use_tls"
-                    name="use_tls"
-                    defaultChecked={config.type === "smtp" ? config.use_tls : true}
-                  />
-                  <Label htmlFor="use_tls" className="font-normal cursor-pointer">
-                    Use TLS encryption
-                  </Label>
-                </div>
+                <div className="flex items-center space-x-2"><Checkbox id="use_tls" name="use_tls" defaultChecked={config.type === "smtp" ? config.use_tls : true} /><Label htmlFor="use_tls" className="cursor-pointer font-normal">{t("settings.emailSettings.useTls")}</Label></div>
               </div>
             )}
 
-            {/* AWS SES Configuration */}
             {providerType === "ses" && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="text-sm font-medium text-[var(--text-primary)]">AWS SES Configuration</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="region">AWS Region</Label>
-                    <Input
-                      id="region"
-                      name="region"
-                      placeholder="us-east-1"
-                      defaultValue={config.type === "ses" ? config.region : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="access_key_id">Access Key ID</Label>
-                    <Input
-                      id="access_key_id"
-                      name="access_key_id"
-                      placeholder="AKIA..."
-                      defaultValue={config.type === "ses" ? config.access_key_id || "" : ""}
-                    />
-                    <p className="text-xs text-[var(--text-secondary)]">Optional if using IAM role</p>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="secret_access_key">Secret Access Key</Label>
-                    <Input
-                      id="secret_access_key"
-                      name="secret_access_key"
-                      type="password"
-                      placeholder={config.type === "ses" && config.secret_access_key ? "***" : "Enter secret key"}
-                      defaultValue=""
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="configuration_set">Configuration Set</Label>
-                    <Input
-                      id="configuration_set"
-                      name="configuration_set"
-                      placeholder="Optional"
-                      defaultValue={config.type === "ses" ? config.configuration_set || "" : ""}
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="from_email">From Email</Label>
-                    <Input
-                      id="from_email"
-                      name="from_email"
-                      type="email"
-                      placeholder="noreply@example.com"
-                      defaultValue={config.type === "ses" ? config.from_email : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="from_name">From Name</Label>
-                    <Input
-                      id="from_name"
-                      name="from_name"
-                      placeholder="Auth9"
-                      defaultValue={config.type === "ses" ? config.from_name || "" : ""}
-                    />
-                  </div>
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">{t("settings.emailSettings.sesConfiguration")}</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2"><Label htmlFor="region">{t("settings.emailSettings.awsRegion")}</Label><Input id="region" name="region" placeholder={t("settings.emailSettings.awsRegionPlaceholder")} defaultValue={config.type === "ses" ? config.region : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="access_key_id">{t("settings.emailSettings.accessKeyId")}</Label><Input id="access_key_id" name="access_key_id" placeholder={t("settings.emailSettings.accessKeyIdPlaceholder")} defaultValue={config.type === "ses" ? config.access_key_id || "" : ""} /><p className="text-xs text-[var(--text-secondary)]">{t("settings.emailSettings.optionalIfIam")}</p></div>
+                  <div className="space-y-2"><Label htmlFor="secret_access_key">{t("settings.emailSettings.secretAccessKey")}</Label><Input id="secret_access_key" name="secret_access_key" type="password" placeholder={config.type === "ses" && config.secret_access_key ? "***" : t("settings.emailSettings.secretAccessKeyPlaceholder")} defaultValue="" /></div>
+                  <div className="space-y-2"><Label htmlFor="configuration_set">{t("settings.emailSettings.configurationSet")}</Label><Input id="configuration_set" name="configuration_set" placeholder={t("settings.emailSettings.configurationSetPlaceholder")} defaultValue={config.type === "ses" ? config.configuration_set || "" : ""} /></div>
+                  <div className="space-y-2"><Label htmlFor="from_email">{t("settings.emailSettings.fromEmail")}</Label><Input id="from_email" name="from_email" type="email" placeholder={t("settings.emailSettings.fromEmailPlaceholder")} defaultValue={config.type === "ses" ? config.from_email : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="from_name">{t("settings.emailSettings.fromName")}</Label><Input id="from_name" name="from_name" placeholder={t("settings.emailSettings.fromNamePlaceholder")} defaultValue={config.type === "ses" ? config.from_name || "" : ""} /></div>
                 </div>
               </div>
             )}
 
-            {/* Oracle Email Delivery Configuration */}
             {providerType === "oracle" && (
               <div className="space-y-4 border-t pt-4">
-                <h3 className="text-sm font-medium text-[var(--text-primary)]">Oracle Email Delivery Configuration</h3>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="smtp_endpoint">SMTP Endpoint</Label>
-                    <Input
-                      id="smtp_endpoint"
-                      name="smtp_endpoint"
-                      placeholder="smtp.us-ashburn-1.oraclecloud.com"
-                      defaultValue={config.type === "oracle" ? config.smtp_endpoint : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="port">Port</Label>
-                    <Input
-                      id="port"
-                      name="port"
-                      type="number"
-                      placeholder="587"
-                      defaultValue={config.type === "oracle" ? config.port : 587}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="username">SMTP Username</Label>
-                    <Input
-                      id="username"
-                      name="username"
-                      placeholder="ocid1.user..."
-                      defaultValue={config.type === "oracle" ? config.username : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="password">SMTP Password</Label>
-                    <Input
-                      id="password"
-                      name="password"
-                      type="password"
-                      placeholder={config.type === "oracle" && config.password ? "***" : "Enter password"}
-                      defaultValue=""
-                      required={config.type !== "oracle"}
-                    />
-                    {config.type === "oracle" && config.password && (
-                      <p className="text-xs text-[var(--text-secondary)]">Leave blank to keep existing password</p>
-                    )}
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="from_email">From Email</Label>
-                    <Input
-                      id="from_email"
-                      name="from_email"
-                      type="email"
-                      placeholder="noreply@example.com"
-                      defaultValue={config.type === "oracle" ? config.from_email : ""}
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="from_name">From Name</Label>
-                    <Input
-                      id="from_name"
-                      name="from_name"
-                      placeholder="Auth9"
-                      defaultValue={config.type === "oracle" ? config.from_name || "" : ""}
-                    />
-                  </div>
+                <h3 className="text-sm font-medium text-[var(--text-primary)]">{t("settings.emailSettings.oracleConfiguration")}</h3>
+                <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                  <div className="space-y-2"><Label htmlFor="smtp_endpoint">{t("settings.emailSettings.smtpEndpoint")}</Label><Input id="smtp_endpoint" name="smtp_endpoint" placeholder={t("settings.emailSettings.smtpEndpointPlaceholder")} defaultValue={config.type === "oracle" ? config.smtp_endpoint : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="port">{t("settings.emailSettings.port")}</Label><Input id="port" name="port" type="number" placeholder={t("settings.emailSettings.portPlaceholder")} defaultValue={config.type === "oracle" ? config.port : 587} required /></div>
+                  <div className="space-y-2"><Label htmlFor="username">{t("settings.emailSettings.smtpUsername")}</Label><Input id="username" name="username" placeholder={t("settings.emailSettings.smtpUsernamePlaceholder")} defaultValue={config.type === "oracle" ? config.username : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="password">{t("settings.emailSettings.smtpPassword")}</Label><Input id="password" name="password" type="password" placeholder={config.type === "oracle" && config.password ? "***" : t("settings.emailSettings.passwordPlaceholder")} defaultValue="" required={config.type !== "oracle"} />{config.type === "oracle" && config.password && <p className="text-xs text-[var(--text-secondary)]">{t("settings.emailSettings.leavePasswordBlank")}</p>}</div>
+                  <div className="space-y-2"><Label htmlFor="from_email">{t("settings.emailSettings.fromEmail")}</Label><Input id="from_email" name="from_email" type="email" placeholder={t("settings.emailSettings.fromEmailPlaceholder")} defaultValue={config.type === "oracle" ? config.from_email : ""} required /></div>
+                  <div className="space-y-2"><Label htmlFor="from_name">{t("settings.emailSettings.fromName")}</Label><Input id="from_name" name="from_name" placeholder={t("settings.emailSettings.fromNamePlaceholder")} defaultValue={config.type === "oracle" ? config.from_name || "" : ""} /></div>
                 </div>
               </div>
             )}
 
-            {/* Action Buttons */}
             <div className="flex flex-wrap items-center gap-3 border-t pt-4">
-              <Button type="submit" disabled={isSubmitting && currentIntent === "save"}>
-                {isSubmitting && currentIntent === "save" ? "Saving..." : "Save Settings"}
-              </Button>
-
+              <Button type="submit" disabled={isSubmitting && currentIntent === "save"}>{isSubmitting && currentIntent === "save" ? t("settings.emailSettings.saving") : t("settings.emailSettings.saveSettings")}</Button>
               {providerType !== "none" && (
                 <>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={handleTestConnection}
-                    disabled={isSubmitting}
-                  >
-                    {isSubmitting && currentIntent === "test_connection" ? "Testing..." : "Test Connection"}
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setIsTestEmailOpen(true)}
-                    disabled={isSubmitting}
-                  >
-                    Send Test Email
-                  </Button>
+                  <Button type="button" variant="outline" onClick={handleTestConnection} disabled={isSubmitting}>{isSubmitting && currentIntent === "test_connection" ? t("settings.emailSettings.testing") : t("settings.emailSettings.testConnection")}</Button>
+                  <Button type="button" variant="outline" onClick={() => setIsTestEmailOpen(true)} disabled={isSubmitting}>{t("settings.emailSettings.sendTestEmail")}</Button>
                 </>
               )}
             </div>
@@ -561,69 +312,45 @@ export default function EmailSettingsPage() {
         </CardContent>
       </Card>
 
-      {/* Test Email Dialog */}
       <Dialog open={isTestEmailOpen} onOpenChange={setIsTestEmailOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Send Test Email</DialogTitle>
-            <DialogDescription>
-              Enter an email address to receive a test email and verify your configuration.
-            </DialogDescription>
+            <DialogTitle>{t("settings.emailSettings.dialogTitle")}</DialogTitle>
+            <DialogDescription>{t("settings.emailSettings.dialogDescription")}</DialogDescription>
           </DialogHeader>
           <div className="space-y-4">
             {actionData && "success" in actionData && actionData.success && String(actionData.message).startsWith("Test email sent") && (
-              <div className="rounded-lg bg-[var(--accent-green)]/10 border border-[var(--accent-green)]/20 p-3 text-sm text-[var(--accent-green)]">
-                {actionData.message}
-              </div>
+              <div className="rounded-lg border border-[var(--accent-green)]/20 bg-[var(--accent-green)]/10 p-3 text-sm text-[var(--accent-green)]">{actionData.message}</div>
             )}
             {actionData && "error" in actionData && isTestEmailOpen && (
-              <div className="rounded-lg bg-red-50 border border-red-200 p-3 text-sm text-red-700">
-                {String(actionData.error)}
-              </div>
+              <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700">{String(actionData.error)}</div>
             )}
             <div className="space-y-2">
-              <Label htmlFor="test_email_input">Email Address</Label>
-              <Input
-                id="test_email_input"
-                type="email"
-                placeholder="your@email.com"
-                value={testEmail}
-                onChange={(e) => setTestEmail(e.target.value)}
-              />
+              <Label htmlFor="test_email_input">{t("settings.emailSettings.emailAddress")}</Label>
+              <Input id="test_email_input" type="email" placeholder={t("settings.emailSettings.testEmailPlaceholder")} value={testEmail} onChange={(event) => setTestEmail(event.target.value)} />
             </div>
           </div>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setIsTestEmailOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              onClick={handleSendTestEmail}
-              disabled={!testEmail.includes("@") || isSubmitting}
-            >
-              Send Test Email
-            </Button>
+            <Button type="button" variant="outline" onClick={() => setIsTestEmailOpen(false)}>{t("common.buttons.cancel")}</Button>
+            <Button type="button" onClick={handleSendTestEmail} disabled={!testEmail.includes("@") || isSubmitting}>{t("settings.emailSettings.sendTestEmail")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* Provider Switch Confirmation Dialog */}
       <AlertDialog open={pendingProviderType !== null} onOpenChange={(open) => !open && cancelProviderSwitch()}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Switch Email Provider?</AlertDialogTitle>
+            <AlertDialogTitle>{t("settings.emailSettings.switchProviderTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              You are about to switch from <strong>{PROVIDER_LABELS[config.type]}</strong> to{" "}
-              <strong>{pendingProviderType ? PROVIDER_LABELS[pendingProviderType] : ""}</strong>.
-              <br /><br />
-              Your current configuration will be replaced when you save. This action cannot be undone.
+              {t("settings.emailSettings.switchProviderDescription", {
+                current: getProviderLabel(i18n.language, config.type),
+                next: pendingProviderType ? getProviderLabel(i18n.language, pendingProviderType) : "",
+              })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={cancelProviderSwitch}>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={confirmProviderSwitch}>
-              Switch Provider
-            </AlertDialogAction>
+            <AlertDialogCancel onClick={cancelProviderSwitch}>{t("common.buttons.cancel")}</AlertDialogCancel>
+            <AlertDialogAction onClick={confirmProviderSwitch}>{t("settings.emailSettings.switchProvider")}</AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>

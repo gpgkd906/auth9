@@ -29,8 +29,8 @@ describe("Landing Page", () => {
 
         render(<RoutesStub initialEntries={["/"]} />);
 
-        expect(screen.getByText("Sign In")).toBeInTheDocument();
-        expect(screen.getByText("Get Started")).toBeInTheDocument();
+        expect(screen.getByText("Sign in")).toBeInTheDocument();
+        expect(screen.getByText("Get started")).toBeInTheDocument();
     });
 
     it("renders feature cards", async () => {
@@ -44,7 +44,7 @@ describe("Landing Page", () => {
         render(<RoutesStub initialEntries={["/"]} />);
 
         expect(screen.getByText("Single Sign-On")).toBeInTheDocument();
-        expect(screen.getByText("Multi-Tenant")).toBeInTheDocument();
+        expect(screen.getByText("Multi-tenant")).toBeInTheDocument();
         expect(screen.getByText("Dynamic RBAC")).toBeInTheDocument();
     });
 
@@ -58,8 +58,8 @@ describe("Landing Page", () => {
 
         render(<RoutesStub initialEntries={["/"]} />);
 
-        expect(screen.getByText("Start Free Trial")).toBeInTheDocument();
-        expect(screen.getByText("Read Documentation")).toBeInTheDocument();
+        expect(screen.getByText("Start free trial")).toBeInTheDocument();
+        expect(screen.getByText("Read documentation")).toBeInTheDocument();
     });
 
     it("renders footer with links", async () => {

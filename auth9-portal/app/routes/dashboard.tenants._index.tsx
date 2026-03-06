@@ -28,9 +28,13 @@ import {
 import { tenantApi, type Tenant } from "~/services/api";
 import { getAccessTokenWithUpdate } from "~/services/session.server";
 import { formatErrorMessage } from "~/lib/error-messages";
+import { useI18n, useLocale } from "~/i18n";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { resolveLocale } from "~/services/locale.server";
+import { translate } from "~/i18n/translate";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Tenants - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "tenants.metaTitle");
 };
 
 export async function loader({ request }: LoaderFunctionArgs) {
@@ -49,6 +53,7 @@ export async function loader({ request }: LoaderFunctionArgs) {
 }
 
 export async function action({ request }: ActionFunctionArgs) {
+  const locale = await resolveLocale(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
   const { token: accessToken, headers } = await getAccessTokenWithUpdate(request);
@@ -94,14 +99,20 @@ export async function action({ request }: ActionFunctionArgs) {
       return returnSuccess();
     }
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Unknown error";
+    const message = error instanceof Error ? error.message : translate(locale, "tenants.errors.unknown");
     return returnError(message);
   }
 
-  return returnError("Invalid intent");
+  return returnError(translate(locale, "tenants.errors.invalidIntent"));
+}
+
+function getStatusLabel(status: Tenant["status"], t: ReturnType<typeof useI18n>["t"]) {
+  return t(`tenants.statuses.${status}`);
 }
 
 export default function TenantsIndexPage() {
+  const { t } = useI18n();
+  const { locale } = useLocale();
   const data = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
@@ -119,7 +130,6 @@ export default function TenantsIndexPage() {
     ? String(actionData.error)
     : null;
 
-  // Close dialogs on success
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
       setIsCreateOpen(false);
@@ -131,67 +141,65 @@ export default function TenantsIndexPage() {
     <div className="space-y-6">
       <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
         <div className="space-y-2">
-          <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">Tenants</h1>
-          <p className="text-sm text-[var(--text-secondary)]">Manage tenant lifecycle and settings</p>
+          <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("tenants.title")}</h1>
+          <p className="text-sm text-[var(--text-secondary)]">{t("tenants.description")}</p>
         </div>
         <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
           <DialogTrigger asChild>
             <Button className="relative left-1/2 w-screen -translate-x-1/2 lg:static lg:w-auto lg:translate-x-0">
-              <PlusIcon className="mr-2 h-4 w-4" /> Create Tenant
+              <PlusIcon className="mr-2 h-4 w-4" /> {t("tenants.actions.create")}
             </Button>
           </DialogTrigger>
           <DialogContent aria-modal="true">
             <DialogHeader>
-              <DialogTitle>Create Tenant</DialogTitle>
-              <DialogDescription>
-                Add a new tenant to the system. Slug must be unique.
-              </DialogDescription>
+              <DialogTitle>{t("tenants.createTitle")}</DialogTitle>
+              <DialogDescription>{t("tenants.createDescription")}</DialogDescription>
             </DialogHeader>
             <Form method="post" className="space-y-4">
               <input type="hidden" name="intent" value="create" />
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="create-name">Name</Label>
+                <Label htmlFor="create-name">{t("tenants.fields.name")}</Label>
                 <Input
                   id="create-name"
                   name="name"
-                  placeholder="Acme Corp"
+                  placeholder={t("tenants.placeholders.name")}
                   required
                   aria-required="true"
                   aria-describedby={createError ? "create-name-help create-tenant-form-error" : "create-name-help"}
                   aria-invalid={createError ? true : undefined}
                   aria-errormessage={createError ? "create-tenant-form-error" : undefined}
                 />
-                <p id="create-name-help" className="text-xs text-[var(--text-tertiary)]">A friendly name for your tenant</p>
+                <p id="create-name-help" className="text-xs text-[var(--text-tertiary)]">{t("tenants.help.name")}</p>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="create-slug">Slug</Label>
+                <Label htmlFor="create-slug">{t("tenants.fields.slug")}</Label>
                 <Input
                   id="create-slug"
                   name="slug"
-                  placeholder="acme"
+                  placeholder={t("tenants.placeholders.slug")}
                   required
                   aria-required="true"
                   aria-describedby={createError ? "create-slug-help create-tenant-form-error" : "create-slug-help"}
                   aria-invalid={createError ? true : undefined}
                   aria-errormessage={createError ? "create-tenant-form-error" : undefined}
                 />
-                <p id="create-slug-help" className="text-xs text-[var(--text-tertiary)]">Unique identifier used in URLs (lowercase, no spaces)</p>
+                <p id="create-slug-help" className="text-xs text-[var(--text-tertiary)]">{t("tenants.help.slug")}</p>
               </div>
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="create-logo">Logo URL</Label>
+                <Label htmlFor="create-logo">{t("tenants.fields.logoUrl")}</Label>
                 <Input
                   id="create-logo"
                   name="logo_url"
-                  placeholder="https://..."
+                  placeholder={t("tenants.placeholders.logoUrl")}
                   aria-describedby={createError ? "create-logo-help create-tenant-form-error" : "create-logo-help"}
                   aria-invalid={createError ? true : undefined}
                   aria-errormessage={createError ? "create-tenant-form-error" : undefined}
                 />
-                <p id="create-logo-help" className="text-xs text-[var(--text-tertiary)]">Optional URL to your organization logo</p>
+                <p id="create-logo-help" className="text-xs text-[var(--text-tertiary)]">{t("tenants.help.logoUrl")}</p>
               </div>
               {createError && (
                 <p id="create-tenant-form-error" className="text-sm text-[var(--accent-red)]">
-                  {formatErrorMessage(createError)}
+                  {formatErrorMessage(createError, locale)}
                 </p>
               )}
               <DialogFooter className="-mx-6 sm:mx-0">
@@ -201,10 +209,10 @@ export default function TenantsIndexPage() {
                   className="w-full bg-[var(--glass-bg)] sm:w-auto"
                   onClick={() => setIsCreateOpen(false)}
                 >
-                  Cancel
+                  {t("common.buttons.cancel")}
                 </Button>
                 <Button type="submit" className="w-full sm:w-auto" disabled={isSubmitting}>
-                  {isSubmitting ? "Creating..." : "Create"}
+                  {isSubmitting ? t("tenants.actions.creating") : t("tenants.actions.createSubmit")}
                 </Button>
               </DialogFooter>
             </Form>
@@ -216,10 +224,13 @@ export default function TenantsIndexPage() {
         <CardHeader className="pb-4">
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
             <div>
-              <CardTitle>Tenant List</CardTitle>
+              <CardTitle>{t("tenants.listTitle")}</CardTitle>
               <CardDescription>
-                {data.pagination.total} tenants • Page {data.pagination.page} of{" "}
-                {data.pagination.total_pages}
+                {t("tenants.listDescription", {
+                  total: data.pagination.total,
+                  page: data.pagination.page,
+                  totalPages: data.pagination.total_pages,
+                })}
               </CardDescription>
             </div>
             <Form method="get" className="flex flex-col md:flex-row items-stretch md:items-center gap-2 w-full md:w-auto">
@@ -227,8 +238,8 @@ export default function TenantsIndexPage() {
                 <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--text-tertiary)]" />
                 <Input
                   name="search"
-                  placeholder="Search tenants..."
-                  aria-label="Search tenants"
+                  placeholder={t("tenants.placeholders.search")}
+                  aria-label={t("tenants.placeholders.search")}
                   value={searchValue}
                   onChange={(e) => setSearchValue(e.target.value)}
                   className="w-full md:w-[200px] pl-8"
@@ -236,7 +247,7 @@ export default function TenantsIndexPage() {
               </div>
               <div className="flex gap-2 w-full md:w-auto">
                 <Button type="submit" variant="outline" className="bg-[var(--glass-bg)] flex-1 md:flex-none" size="default">
-                  Search
+                  {t("tenants.actions.search")}
                 </Button>
                 {data.search && (
                   <Button
@@ -249,7 +260,7 @@ export default function TenantsIndexPage() {
                       window.location.href = "/dashboard/tenants";
                     }}
                   >
-                    Clear
+                    {t("tenants.actions.clear")}
                   </Button>
                 )}
               </div>
@@ -268,13 +279,13 @@ export default function TenantsIndexPage() {
                   <p className="mt-1 text-xs text-[var(--text-tertiary)]">{tenant.slug}</p>
                 </Link>
                 <div className="mt-3 flex items-center gap-2">
-                  <span className="text-xs text-[var(--text-tertiary)]">Status</span>
+                  <span className="text-xs text-[var(--text-tertiary)]">{t("tenants.fields.status")}</span>
                   <span className="inline-flex items-center rounded-full bg-[var(--accent-blue)]/10 px-2 py-1 text-[11px] font-medium text-[var(--accent-blue)] capitalize">
-                    {tenant.status}
+                    {getStatusLabel(tenant.status, t)}
                   </span>
                 </div>
                 <p className="mt-2 text-xs text-[var(--text-tertiary)]">
-                  Updated <FormattedDate date={tenant.updated_at} />
+                  {t("tenants.fields.updated")} <FormattedDate date={tenant.updated_at} />
                 </p>
                 <div className="mt-4 flex items-center gap-2">
                   <Button
@@ -285,10 +296,10 @@ export default function TenantsIndexPage() {
                     onClick={() => setEditingTenant(tenant)}
                   >
                     <Pencil2Icon className="mr-2 h-3.5 w-3.5" />
-                    Edit
+                    {t("tenants.actions.edit")}
                   </Button>
                   <Button asChild variant="outline" size="sm" className="h-11 flex-1">
-                    <Link to={`/dashboard/tenants/${tenant.id}/invitations`}>Invitations</Link>
+                    <Link to={`/dashboard/tenants/${tenant.id}/invitations`}>{t("tenants.actions.invitations")}</Link>
                   </Button>
                   <Button
                     type="button"
@@ -297,8 +308,8 @@ export default function TenantsIndexPage() {
                     className="h-11"
                     onClick={async () => {
                       const ok = await confirm({
-                        title: "Delete Tenant",
-                        description: "Are you sure you want to delete this tenant?",
+                        title: t("tenants.delete.title"),
+                        description: t("tenants.delete.description"),
                         variant: "destructive",
                       });
                       if (ok) {
@@ -313,7 +324,7 @@ export default function TenantsIndexPage() {
             ))}
             {data.data.length === 0 && (
               <div className="rounded-xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] px-4 py-6 text-center text-[var(--text-tertiary)]">
-                No tenants found
+                {t("tenants.empty")}
               </div>
             )}
           </div>
@@ -322,10 +333,10 @@ export default function TenantsIndexPage() {
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px]">
                 <tr>
-                  <th className="px-4 py-3 font-semibold">Name</th>
-                  <th className="px-4 py-3 font-semibold">Slug</th>
-                  <th className="px-4 py-3 font-semibold">Status</th>
-                  <th className="px-4 py-3 font-semibold">Updated</th>
+                  <th className="px-4 py-3 font-semibold">{t("tenants.fields.name")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("tenants.fields.slug")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("tenants.fields.status")}</th>
+                  <th className="px-4 py-3 font-semibold">{t("tenants.fields.updated")}</th>
                   <th className="px-4 py-3 font-semibold w-10"></th>
                 </tr>
               </thead>
@@ -344,7 +355,7 @@ export default function TenantsIndexPage() {
                       </Link>
                     </td>
                     <td className="px-4 py-3">{tenant.slug}</td>
-                    <td className="px-4 py-3 capitalize">{tenant.status}</td>
+                    <td className="px-4 py-3 capitalize">{getStatusLabel(tenant.status, t)}</td>
                     <td className="px-4 py-3">
                       <FormattedDate date={tenant.updated_at} />
                     </td>
@@ -352,23 +363,23 @@ export default function TenantsIndexPage() {
                       <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                           <Button variant="ghost" className="h-8 w-8 p-0">
-                            <span className="sr-only">Open menu</span>
+                            <span className="sr-only">{t("tenants.actions.openMenu")}</span>
                             <DotsHorizontalIcon className="h-4 w-4" />
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                          <DropdownMenuLabel>{t("tenants.menu.actions")}</DropdownMenuLabel>
                           <DropdownMenuItem onClick={() => setEditingTenant(tenant)}>
-                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> Edit
+                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> {t("tenants.actions.edit")}
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <Link to={`/dashboard/tenants/${tenant.id}/invitations`}>
-                              <EnvelopeClosedIcon className="mr-2 h-3.5 w-3.5" /> Invitations
+                              <EnvelopeClosedIcon className="mr-2 h-3.5 w-3.5" /> {t("tenants.actions.invitations")}
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuItem asChild>
                             <Link to={`/dashboard/tenants/${tenant.id}/webhooks`}>
-                              <Link2Icon className="mr-2 h-3.5 w-3.5" /> Webhooks
+                              <Link2Icon className="mr-2 h-3.5 w-3.5" /> {t("tenants.actions.webhooks")}
                             </Link>
                           </DropdownMenuItem>
                           <DropdownMenuSeparator />
@@ -376,8 +387,8 @@ export default function TenantsIndexPage() {
                             className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
                             onClick={async () => {
                               const ok = await confirm({
-                                title: "Delete Tenant",
-                                description: "Are you sure you want to delete this tenant?",
+                                title: t("tenants.delete.title"),
+                                description: t("tenants.delete.description"),
                                 variant: "destructive",
                               });
                               if (ok) {
@@ -385,7 +396,7 @@ export default function TenantsIndexPage() {
                               }
                             }}
                           >
-                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> Delete
+                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> {t("common.buttons.delete")}
                           </DropdownMenuItem>
                         </DropdownMenuContent>
                       </DropdownMenu>
@@ -395,7 +406,7 @@ export default function TenantsIndexPage() {
                 {data.data.length === 0 && (
                   <tr>
                     <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
-                      No tenants found
+                      {t("tenants.empty")}
                     </td>
                   </tr>
                 )}
@@ -403,24 +414,23 @@ export default function TenantsIndexPage() {
             </table>
           </div>
 
-          {/* Pagination */}
           {data.pagination.total_pages > 1 && (
             <div className="flex items-center justify-between mt-4 pt-4 border-t border-[var(--glass-border-subtle)]">
               <div className="text-sm text-[var(--text-secondary)]">
-                Page {data.pagination.page} of {data.pagination.total_pages}
+                {t("tenants.pagination.page", { page: data.pagination.page, totalPages: data.pagination.total_pages })}
               </div>
               <div className="flex gap-2">
                 {data.pagination.page > 1 && (
                   <Link to={`?page=${data.pagination.page - 1}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`}>
                     <Button variant="outline" size="sm" className="bg-[var(--glass-bg)]">
-                      Previous
+                      {t("tenants.pagination.previous")}
                     </Button>
                   </Link>
                 )}
                 {data.pagination.page < data.pagination.total_pages && (
                   <Link to={`?page=${data.pagination.page + 1}${data.search ? `&search=${encodeURIComponent(data.search)}` : ""}`}>
                     <Button variant="outline" size="sm" className="bg-[var(--glass-bg)]">
-                      Next
+                      {t("tenants.pagination.next")}
                     </Button>
                   </Link>
                 )}
@@ -430,20 +440,17 @@ export default function TenantsIndexPage() {
         </div>
       </Card>
 
-      {/* Edit Dialog */}
       <Dialog open={!!editingTenant} onOpenChange={(open) => !open && setEditingTenant(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit Tenant</DialogTitle>
-            <DialogDescription>
-              Update tenant details.
-            </DialogDescription>
+            <DialogTitle>{t("tenants.editTitle")}</DialogTitle>
+            <DialogDescription>{t("tenants.editDescription")}</DialogDescription>
           </DialogHeader>
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="update" />
             <input type="hidden" name="id" value={editingTenant?.id || ""} />
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-name">Name</Label>
+              <Label htmlFor="edit-name">{t("tenants.fields.name")}</Label>
               <Input
                 id="edit-name"
                 name="name"
@@ -455,7 +462,7 @@ export default function TenantsIndexPage() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-slug">Slug</Label>
+              <Label htmlFor="edit-slug">{t("tenants.fields.slug")}</Label>
               <Input
                 id="edit-slug"
                 name="slug"
@@ -467,7 +474,7 @@ export default function TenantsIndexPage() {
               />
             </div>
             <div className="flex flex-col gap-1.5">
-              <Label htmlFor="edit-logo">Logo URL</Label>
+              <Label htmlFor="edit-logo">{t("tenants.fields.logoUrl")}</Label>
               <Input
                 id="edit-logo"
                 name="logo_url"
@@ -478,15 +485,15 @@ export default function TenantsIndexPage() {
             </div>
             {updateError && (
               <p id="edit-tenant-form-error" className="text-sm text-[var(--accent-red)]">
-                {formatErrorMessage(updateError)}
+                {formatErrorMessage(updateError, locale)}
               </p>
             )}
             <DialogFooter>
               <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setEditingTenant(null)}>
-                Cancel
+                {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
-                {isSubmitting ? "Saving..." : "Save Changes"}
+                {isSubmitting ? t("tenants.actions.saving") : t("tenants.actions.save")}
               </Button>
             </DialogFooter>
           </Form>

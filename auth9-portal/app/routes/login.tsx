@@ -4,13 +4,18 @@ import { useState, useCallback } from "react";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
+import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { ThemeToggle } from "~/components/ThemeToggle";
+import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
+import { useI18n } from "~/i18n";
+import { translate } from "~/i18n/translate";
 import { LockClosedIcon } from "@radix-ui/react-icons";
+import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
 import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
 
-export const meta: MetaFunction = () => {
-  return [{ title: "Sign In - Auth9" }];
+export const meta: MetaFunction = ({ matches }) => {
+  return buildMeta(resolveMetaLocale(matches), "auth.login.metaTitle");
 };
 
 function buildAuthorizeParams(requestUrl: URL) {
@@ -38,6 +43,7 @@ function buildAuthorizeParams(requestUrl: URL) {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const url = new URL(request.url);
+  const locale = await resolveLocale(request);
   const error = url.searchParams.get("error");
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
@@ -50,11 +56,12 @@ export async function loader({ request }: LoaderFunctionArgs) {
     // Default closed if branding cannot be loaded.
   }
 
-  return { error, apiBaseUrl, allowRegistration };
+  return { error, apiBaseUrl, allowRegistration, locale };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const url = new URL(request.url);
+  const locale = await resolveLocale(request);
   const formData = await request.formData();
   const intent = formData.get("intent");
 
@@ -64,7 +71,7 @@ export async function action({ request }: ActionFunctionArgs) {
     const expiresIn = parseInt(formData.get("expiresIn") as string || "3600", 10);
 
     if (!accessToken) {
-      return { error: "Missing access token" };
+      return { error: translate(locale, "auth.login.missingAccessToken") };
     }
 
     const session = {
@@ -86,7 +93,7 @@ export async function action({ request }: ActionFunctionArgs) {
   if (intent === "sso-login") {
     const email = String(formData.get("email") || "").trim();
     if (!email) {
-      return { error: "Email is required for enterprise SSO discovery" };
+      return { error: translate(locale, "auth.login.ssoEmailRequired") };
     }
 
     const auth = buildAuthorizeParams(url);
@@ -97,7 +104,7 @@ export async function action({ request }: ActionFunctionArgs) {
         headers: { "Set-Cookie": oauthCookie },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Enterprise SSO discovery failed";
+      const message = error instanceof Error ? error.message : translate(locale, "auth.login.authFailed");
       return { error: message };
     }
   }
@@ -119,7 +126,7 @@ export async function action({ request }: ActionFunctionArgs) {
     });
   }
 
-  return { error: "Invalid action" };
+  return { error: translate(locale, "auth.login.invalidAction") };
 }
 
 // ==================== Base64URL Helpers ====================
@@ -170,10 +177,12 @@ export default function Login() {
     error: string | null;
     apiBaseUrl: string;
     allowRegistration: boolean;
+    locale: string;
   };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const { t } = useI18n();
 
   const [authenticating, setAuthenticating] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -192,8 +201,8 @@ export default function Login() {
         }
       );
       if (!startResponse.ok) {
-        const err = await startResponse.json().catch(() => ({ message: "Failed to start authentication" }));
-        throw new Error(err.message || "Failed to start authentication");
+        const err = await startResponse.json().catch(() => ({ message: t("auth.login.authStartFailed") }));
+        throw new Error(err.message || t("auth.login.authStartFailed"));
       }
       const startResult = await startResponse.json();
       const { challenge_id, public_key } = startResult;
@@ -205,7 +214,7 @@ export default function Login() {
       const credential = await navigator.credentials.get({ publicKey: options });
 
       if (!credential) {
-        throw new Error("Authentication was cancelled");
+        throw new Error(t("auth.login.authCancelled"));
       }
 
       // 3. Send result to backend and get token
@@ -235,8 +244,8 @@ export default function Login() {
         }
       );
       if (!completeResponse.ok) {
-        const err = await completeResponse.json().catch(() => ({ message: "Authentication failed" }));
-        throw new Error(err.message || "Authentication failed");
+        const err = await completeResponse.json().catch(() => ({ message: t("auth.login.authFailed") }));
+        throw new Error(err.message || t("auth.login.authFailed"));
       }
       const tokenResult = await completeResponse.json();
 
@@ -264,19 +273,20 @@ export default function Login() {
       form.submit();
     } catch (error) {
       if (error instanceof DOMException && error.name === "NotAllowedError") {
-        setPasskeyError("Authentication was cancelled or timed out.");
+        setPasskeyError(t("auth.login.passkeyCancelled"));
       } else {
-        const message = error instanceof Error ? error.message : "Authentication failed";
+        const message = error instanceof Error ? error.message : t("auth.login.authFailed");
         setPasskeyError(message);
       }
       setAuthenticating(false);
     }
-  }, [data.apiBaseUrl]);
+  }, [data.apiBaseUrl, t]);
 
   return (
     <>
       {/* Theme Toggle */}
-      <div className="fixed top-6 right-6 z-20">
+      <div className="fixed top-6 right-6 z-20 flex items-center gap-3">
+        <LanguageSwitcher />
         <ThemeToggle />
       </div>
 
@@ -288,14 +298,14 @@ export default function Login() {
           <CardHeader className="text-center">
             <div className="logo-icon mx-auto mb-4">A9</div>
             <CardTitle className="text-2xl">
-              {data.error ? "Sign In Failed" : "Sign In"}
+              {data.error ? t("auth.login.failedTitle") : t("auth.login.title")}
             </CardTitle>
             <CardDescription>
               {data.error === "access_denied"
-                ? "Access was denied. Please try again or contact your administrator."
+                ? t("auth.login.accessDenied")
                 : data.error
-                  ? `An error occurred during sign in: ${data.error}`
-                  : "Choose how you want to sign in"}
+                  ? t("auth.login.genericError", { error: data.error })
+                  : t("auth.login.chooseMethod")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -307,11 +317,11 @@ export default function Login() {
                   type="email"
                   name="email"
                   required
-                  placeholder="you@company.com"
+                  placeholder={t("common.placeholders.companyEmail")}
                   className="mb-3"
                 />
                 <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? "Finding your SSO..." : "Continue with Enterprise SSO"}
+                  {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
                 </Button>
               </Form>
 
@@ -328,7 +338,7 @@ export default function Login() {
                   <span className="w-full border-t" />
                 </div>
                 <div className="relative flex justify-center text-xs uppercase">
-                  <span className="bg-[var(--card-bg)] px-2 text-[var(--text-tertiary)]">or</span>
+                  <span className="bg-[var(--card-bg)] px-2 text-[var(--text-tertiary)]">{t("auth.login.or")}</span>
                 </div>
               </div>
 
@@ -336,7 +346,7 @@ export default function Login() {
               <Form method="post">
                 <input type="hidden" name="intent" value="password-login" />
                 <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? "Redirecting..." : "Sign in with password"}
+                  {isSubmitting ? t("auth.login.redirecting") : t("auth.login.passwordButton")}
                 </Button>
               </Form>
 
@@ -348,7 +358,7 @@ export default function Login() {
                 disabled={authenticating || isSubmitting}
               >
                 <LockClosedIcon className="h-4 w-4 mr-2" />
-                {authenticating ? "Verifying..." : "Sign in with passkey"}
+                {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
               </Button>
 
               {/* Error Messages */}
@@ -360,11 +370,11 @@ export default function Login() {
 
               <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)] pt-1">
                 <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
-                  Forgot password?
+                  {t("auth.login.forgotPassword")}
                 </Link>
                 {data.allowRegistration ? (
                   <Link to="/register" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
-                    Create account
+                    {t("auth.login.createAccount")}
                   </Link>
                 ) : (
                   <span />

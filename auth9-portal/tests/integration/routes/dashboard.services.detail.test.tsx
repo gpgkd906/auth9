@@ -5,6 +5,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import ServiceDetailPage, { loader, action, meta } from "~/routes/dashboard.services.$id";
 import { serviceApi } from "~/services/api";
 import { ConfirmProvider } from "~/hooks/useConfirm";
+import { I18nProvider } from "~/i18n";
+
+function buildEnglishRequest(url: string, init?: RequestInit) {
+    const headers = new Headers(init?.headers);
+    headers.set("Accept-Language", "en-US");
+    return new Request(url, { ...init, headers });
+}
 
 // Mock the APIs
 vi.mock("~/services/api", () => ({
@@ -44,8 +51,11 @@ vi.mock("~/services/session.server", () => ({
 
 describe("meta", () => {
     it("returns the correct page title", () => {
-        const result = meta({} as Parameters<typeof meta>[0]);
-        expect(result).toEqual([{ title: "Service Details - Auth9" }]);
+        const result = meta({
+            data: { service: { name: "My App" } },
+            matches: [{ id: "root", data: { locale: "en-US" } }],
+        } as unknown as Parameters<typeof meta>[0]);
+        expect(result).toEqual([{ title: "My App - Service Details - Auth9" }]);
     });
 });
 
@@ -73,9 +83,11 @@ describe("Service Detail Page", () => {
 
     function WrappedPage() {
         return (
-            <ConfirmProvider>
-                <ServiceDetailPage />
-            </ConfirmProvider>
+            <I18nProvider locale="en-US">
+                <ConfirmProvider>
+                    <ServiceDetailPage />
+                </ConfirmProvider>
+            </I18nProvider>
         );
     }
 
@@ -498,7 +510,7 @@ describe("action", () => {
         for (const [key, value] of Object.entries(data)) {
             formData.append(key, value);
         }
-        return new Request("http://localhost/dashboard/services/s1", { method: "POST", body: formData });
+        return buildEnglishRequest("http://localhost/dashboard/services/s1", { method: "POST", body: formData });
     }
 
     it("returns error when service ID is missing", async () => {
