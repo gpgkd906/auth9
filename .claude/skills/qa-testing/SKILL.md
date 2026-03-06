@@ -11,7 +11,28 @@ Execute scenario-based manual QA testing for Auth9 using Playwright browser auto
 
 1. **Docker services running**: auth9-core, auth9-portal, auth9-keycloak, auth9-tidb, auth9-redis
 2. **Service URLs**: Portal (3000), Auth9 Core (8080), Keycloak (8081)
-3. **Credentials**: Portal Admin `admin / SecurePass123!`, Keycloak Admin `admin / admin`
+3. **Credentials**:
+   - Portal Admin: use the account printed by `./scripts/reset-docker.sh` (avoid hard-coding in docs/skills)
+   - Keycloak Admin: `admin / admin` (local default)
+
+## Evidence Artifact Hygiene (MUST FOLLOW)
+
+To prevent repository-root pollution during QA:
+
+1. Create a dated evidence directory before testing:
+```bash
+DATE=$(date +%F)
+EVIDENCE_DIR="artifacts/qa/${DATE}"
+mkdir -p "$EVIDENCE_DIR"
+```
+2. Save all screenshots, dumps, exports, and temporary QA files under `$EVIDENCE_DIR` (or its subfolders).
+3. **Never** write QA artifacts (`*.png`, `*.jpg`, `*.json`, ad-hoc logs) to repository root.
+4. New helper scripts must live in `scripts/qa/`, not root.
+5. If an artifact is referenced by a ticket, store it under:
+   - `artifacts/qa/{date}/tickets/{ticket_filename_without_ext}/`
+6. After QA run:
+   - keep only evidence linked by active tickets;
+   - move unrelated leftovers from root into `artifacts/qa/{date}/` immediately.
 
 ## API Token Generation (IMPORTANT - Read First)
 
@@ -86,6 +107,7 @@ Note: Rate limiting is active on some endpoints (e.g., forgot-password: 5 req/mi
    d. If FAIL → Immediately create ticket in docs/ticket/ (DO NOT defer)
    e. Report scenario result (PASS/FAIL) before moving to next
 4. Report final summary to user
+5. Run workspace hygiene check (no QA artifacts in repository root)
 ```
 
 **Ticket creation rule**: Create the ticket the moment a scenario is confirmed as FAIL — before starting the next scenario. This ensures no failure is lost if the session is interrupted, and gives the user real-time visibility into issues as they surface.
@@ -148,6 +170,12 @@ playwright-cli snapshot
 playwright-cli close
 ```
 
+If screenshots are required for evidence, always save into `$EVIDENCE_DIR`:
+```bash
+# Example only; keep filenames scenario-oriented
+playwright-cli screenshot "$EVIDENCE_DIR/scenario-01-login.png"
+```
+
 **Rules**:
 - Always `playwright-cli snapshot` before interactions to get element refs
 - Use snapshots (not screenshots) to verify UI state
@@ -192,6 +220,8 @@ This ensures:
 - No failures are lost if the session is interrupted or context is compressed
 - User has real-time visibility into each issue as it surfaces
 - Ticket evidence is freshest at the moment of failure (logs, DB state haven't been polluted by subsequent tests)
+
+When attaching evidence in ticket markdown, use paths under `artifacts/qa/{date}/...` only.
 
 #### UIUX Visibility / Accessibility Ticket Rule
 
