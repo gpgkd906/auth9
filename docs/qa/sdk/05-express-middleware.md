@@ -249,8 +249,8 @@ Express 中间件提供三个功能：
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 成功认证 req.auth 注入 | ☐ | | | |
-| 2 | 认证失败 | ☐ | | | |
-| 3 | Optional 模式 | ☐ | | | |
-| 4 | requirePermission | ☐ | | | |
-| 5 | requireRole 与 AuthInfo helpers | ☐ | | | |
+| 1 | 成功认证 req.auth 注入 | ✅ | 2026-03-07 | Codex | 8/8 通过 |
+| 2 | 认证失败 | ✅ | 2026-03-07 | Codex | 4/4 通过 |
+| 3 | Optional 模式 | ✅ | 2026-03-07 | Codex | 3/3 通过 |
+| 4 | requirePermission | ✅ | 2026-03-07 | Codex | 4/4 通过 |
+| 5 | requireRole 与 AuthInfo helpers | ✅ | 2026-03-07 | Codex | 11/11 通过 |
