@@ -20,10 +20,20 @@ function normalizeLocale(input: string | null | undefined): AppLocale | null {
   return null;
 }
 
+function readCookieValue(cookieHeader: string | null, name: string) {
+  if (!cookieHeader) return null;
+  const cookies = cookieHeader.split(/;\s*/);
+  for (const cookie of cookies) {
+    const [rawName, ...rest] = cookie.split("=");
+    if (rawName !== name) continue;
+    return decodeURIComponent(rest.join("="));
+  }
+  return null;
+}
+
 export async function resolveLocale(request: Request): Promise<AppLocale> {
   const cookieHeader = request.headers.get("Cookie");
-  const cookieValue = await localeCookie.parse(cookieHeader);
-  const localeFromCookie = normalizeLocale(typeof cookieValue === "string" ? cookieValue : null);
+  const localeFromCookie = normalizeLocale(readCookieValue(cookieHeader, LOCALE_COOKIE_NAME));
   if (localeFromCookie) return localeFromCookie;
 
   const acceptLanguage = request.headers.get("Accept-Language") || "";

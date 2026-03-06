@@ -162,8 +162,45 @@ console.log(document.documentElement.lang);
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 登录页语言入口可见且可切换 | ☐ | | | |
-| 2 | 首屏语言协商无闪烁 | ☐ | | | |
-| 3 | Dashboard 全局控件与导航语言一致 | ☐ | | | |
-| 4 | 日期、数字与状态格式随语言变化 | ☐ | | | |
-| 5 | 表单输入与错误提示本地化完整性 | ☐ | | | |
+| 1 | 登录页语言入口可见且可切换 | 通过 | 2026-03-07 | Codex | 浏览器实测，英文切换后 reload 保持英文 |
+| 2 | 首屏语言协商无闪烁 | 通过 | 2026-03-07 | Codex | `curl` 实测 `Accept-Language: en-US` 返回 `<html lang="en-US">`，`zh-CN` 返回 `<html lang="zh-CN">`；浏览器未出现 hydration mismatch |
+| 3 | Dashboard 全局控件与导航语言一致 | 通过 | 2026-03-07 | Codex | `/dashboard` 英文壳层、侧栏、顶部控件与页面内容一致，reload 后保持英文 |
+| 4 | 日期、数字与状态格式随语言变化 | 通过 | 2026-03-07 | Codex | Dashboard 最近活动时间在英文下显示为 `Mar 7, 2026, 2:49 AM`，与 `lang=en-US` 一致 |
+| 5 | 表单输入与错误提示本地化完整性 | 通过 | 2026-03-07 | Codex | `Settings / Identity Providers` 与 `Settings / Email` 占位符在英文下正确显示 |
+
+---
+
+## 本轮实测记录（2026-03-07）
+
+### 实际环境
+- Portal: `http://localhost:3000`
+- 登录方式: 本地真实浏览器 + 实际后端 / Keycloak
+- 附加验证: `curl` 直接检查 SSR HTML 首屏输出
+
+### 关键结论
+1. 语言持久化已修复
+   - 登录页切换到 `English` 后刷新，页面保持英文
+   - Dashboard 切换到 `English` 后刷新，侧栏、标题、日期格式保持英文
+2. SSR 语言协商生效
+   - `Accept-Language: en-US` 首屏直接输出英文 HTML
+   - `Accept-Language: zh-CN` 首屏直接输出中文 HTML
+3. 表单本地化已覆盖到实际可输入字段
+   - Identity Providers OIDC 新建弹窗英文占位符：
+     - `e.g., google-enterprise`
+     - `e.g., Sign in with Google`
+     - `OAuth Client ID`
+     - `OAuth Client Secret`
+     - `https://provider.com/oauth/authorize`
+     - `https://provider.com/oauth/token`
+   - Email Settings 英文占位符：
+     - `smtp.example.com`
+     - `username`
+     - `Enter password`
+     - `noreply@example.com`
+
+### 非阻塞观察
+- 浏览器控制台未出现 hydration mismatch
+- 仍有若干与 i18n 无关的表单可访问性提示：
+  - 部分输入缺少 `id/name`
+  - 部分输入缺少 `autocomplete`
+  这些不影响本轮国际化验收，但应单独纳入 a11y 收敛

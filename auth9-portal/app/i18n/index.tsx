@@ -85,7 +85,6 @@ export function I18nProvider({
 
   useEffect(() => {
     void instance.changeLanguage(locale);
-    writeLocaleCookie(locale);
     notifyLocaleListeners();
   }, [instance, locale]);
 
