@@ -132,6 +132,14 @@ export default {
       authStartFailed: "認証の開始に失敗しました",
       invalidAction: "無効なアクション",
       missingAccessToken: "アクセストークンがありません",
+      oauthErrors: {
+        accessDenied: "アクセスが拒否されました。もう一度お試しいただくか、管理者にお問い合わせください。",
+        stateMismatch: "サインインセッションの有効期限が切れました。もう一度お試しください。",
+        tokenExchangeFailed: "サインインを完了できませんでした。もう一度お試しください。",
+        callbackException: "サインイン中に予期しないエラーが発生しました。もう一度お試しください。",
+        invalidGrant: "サインインセッションの有効期限が切れたか無効です。もう一度お試しください。",
+        unknown: "サインイン中にエラーが発生しました。もう一度お試しください。",
+      },
     },
     register: {
       metaTitle: "サインアップ - Auth9",
@@ -311,10 +319,13 @@ export default {
     sessionExpired: "セッションの有効期限が切れました。再度ログインしてください。",
     authServiceError: "認証サービスが一時的に利用できません。しばらくしてから再度お試しください。",
     rateLimited: "リクエストが多すぎます。しばらく待ってから再度お試しください。",
+    serviceUnavailable: "サービスが一時的に利用できません。しばらくしてから再度お試しください。",
     unknown: "エラーが発生しました。再度お試しください。",
   },
   validation: {
     required: "この項目は必須です。", email: "有効なメールアドレスを入力してください。", slug: "スラッグは小文字、数字、ハイフンのみ使用できます。先頭または末尾にハイフンは使えません。", length: "長さは1〜63文字である必要があります。", alreadyExists: "この値はすでに存在します。別の値を使用してください。", notFound: "リクエストされたリソースが見つかりません。", conflict: "この識別子のリソースはすでに存在します。", duplicateEntry: "この名前はすでに存在します。別の名前を使用してください。",
+    ssrfBlocked: "指定されたURLは許可されていません。",
+    internalIpBlocked: "指定されたURLは内部アドレスを指しており、許可されていません。",
     fields: { slug: "スラッグ", name: "名前", email: "メール", logo_url: "ロゴURL" },
   },
 } as const;

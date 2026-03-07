@@ -132,6 +132,14 @@ export default {
       authStartFailed: "无法开始认证",
       invalidAction: "无效操作",
       missingAccessToken: "缺少访问令牌",
+      oauthErrors: {
+        accessDenied: "访问被拒绝，请重试或联系管理员。",
+        stateMismatch: "登录会话已过期，请重新登录。",
+        tokenExchangeFailed: "登录未能完成，请重试。",
+        callbackException: "登录过程中发生意外错误，请重试。",
+        invalidGrant: "登录会话已过期或无效，请重新登录。",
+        unknown: "登录过程中发生错误，请重试。",
+      },
     },
     register: {
       metaTitle: "注册 - Auth9",
@@ -1494,6 +1502,7 @@ export default {
     sessionExpired: "您的会话已过期，请重新登录。",
     authServiceError: "认证服务暂时不可用，请稍后重试。",
     rateLimited: "请求过于频繁，请稍后再试。",
+    serviceUnavailable: "服务暂时不可用，请稍后重试。",
     unknown: "发生未知错误，请重试。",
   },
   validation: {
@@ -1505,6 +1514,8 @@ export default {
     notFound: "请求的资源不存在。",
     conflict: "具有相同标识的资源已存在。",
     duplicateEntry: "该名称已存在，请使用其他名称。",
+    ssrfBlocked: "提供的 URL 不被允许。",
+    internalIpBlocked: "提供的 URL 指向内部地址，不被允许。",
     fields: {
       slug: "Slug",
       name: "名称",

@@ -19,6 +19,7 @@ const API_ERROR_CODE_MAP: Record<string, string> = {
   unsupported_media_type: "apiErrors.badRequest",
   client_error: "apiErrors.badRequest",
   validation_error: "apiErrors.badRequest",
+  service_unavailable: "apiErrors.serviceUnavailable",
 };
 
 /**
@@ -63,6 +64,9 @@ const ERROR_MESSAGES: Record<string, string> = {
   // Database errors
   "duplicate entry": "validation.duplicateEntry",
   "1062": "validation.duplicateEntry",
+  // SSRF protection
+  ssrf_blocked: "validation.ssrfBlocked",
+  internal_ip_blocked: "validation.internalIpBlocked",
 };
 
 // Field name translations
@@ -127,6 +131,28 @@ export function formatErrorMessage(
   }
 
   return rawMessage;
+}
+
+const OAUTH_ERROR_MAP: Record<string, string> = {
+  access_denied: "auth.login.oauthErrors.accessDenied",
+  state_mismatch: "auth.login.oauthErrors.stateMismatch",
+  token_exchange_failed: "auth.login.oauthErrors.tokenExchangeFailed",
+  callback_exception: "auth.login.oauthErrors.callbackException",
+  invalid_grant: "auth.login.oauthErrors.invalidGrant",
+};
+
+/**
+ * Maps an OAuth/OIDC callback error code to a localized, user-friendly string.
+ */
+export function mapOAuthError(
+  errorCode: string,
+  locale: AppLocale = "en-US"
+): string {
+  const i18nKey = OAUTH_ERROR_MAP[errorCode];
+  if (i18nKey) {
+    return translate(locale, i18nKey);
+  }
+  return translate(locale, "auth.login.oauthErrors.unknown");
 }
 
 function capitalize(str: string): string {

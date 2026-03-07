@@ -132,6 +132,14 @@ export default {
       authStartFailed: "Failed to start authentication",
       invalidAction: "Invalid action",
       missingAccessToken: "Missing access token",
+      oauthErrors: {
+        accessDenied: "Access was denied. Please try again or contact your administrator.",
+        stateMismatch: "Your sign-in session has expired. Please try again.",
+        tokenExchangeFailed: "Sign in could not be completed. Please try again.",
+        callbackException: "An unexpected error occurred during sign in. Please try again.",
+        invalidGrant: "Your sign-in session has expired or is invalid. Please try again.",
+        unknown: "An error occurred during sign in. Please try again.",
+      },
     },
     register: {
       metaTitle: "Sign Up - Auth9",
@@ -1502,6 +1510,7 @@ export default {
     authServiceError:
       "The authentication service is temporarily unavailable. Please try again later.",
     rateLimited: "Too many requests. Please wait a moment and try again.",
+    serviceUnavailable: "The service is temporarily unavailable. Please try again later.",
     unknown: "Something went wrong. Please try again.",
   },
   validation: {
@@ -1514,6 +1523,8 @@ export default {
     notFound: "The requested resource was not found.",
     conflict: "A resource with this identifier already exists.",
     duplicateEntry: "This name already exists. Please use a different one.",
+    ssrfBlocked: "The provided URL is not allowed.",
+    internalIpBlocked: "The provided URL points to an internal address and is not allowed.",
     fields: {
       slug: "Slug",
       name: "Name",

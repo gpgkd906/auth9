@@ -9,7 +9,7 @@ import { ThemeToggle } from "~/components/ThemeToggle";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { useI18n } from "~/i18n";
 import { translate } from "~/i18n/translate";
-import { mapApiError } from "~/lib/error-messages";
+import { mapApiError, mapOAuthError } from "~/lib/error-messages";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
@@ -310,11 +310,9 @@ export default function Login() {
               {data.error ? t("auth.login.failedTitle") : t("auth.login.title")}
             </CardTitle>
             <CardDescription>
-              {data.error === "access_denied"
-                ? t("auth.login.accessDenied")
-                : data.error
-                  ? t("auth.login.genericError", { error: data.error })
-                  : t("auth.login.chooseMethod")}
+              {data.error
+                ? mapOAuthError(data.error, data.locale as AppLocale)
+                : t("auth.login.chooseMethod")}
             </CardDescription>
           </CardHeader>
           <CardContent>
@@ -334,9 +332,6 @@ export default function Login() {
                 </Button>
               </Form>
 
-              {data.error && (
-                <p className="text-sm text-[var(--accent-red)]">{data.error}</p>
-              )}
               {actionData?.error && (
                 <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
               )}
