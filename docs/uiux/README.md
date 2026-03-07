@@ -29,7 +29,7 @@
 |------|------|--------|
 | [06-accessibility.md](./06-accessibility.md) | WCAG 合规性、键盘导航、屏幕阅读器 | 5 |
 
-### 页面专项 (5 个文档, 25 个场景)
+### 页面专项 (9 个文档, 43 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [07-dashboard-page.md](./07-dashboard-page.md) | 概览页统计、动态列表 | 5 |
@@ -38,6 +38,10 @@
 | [10-services-page.md](./10-services-page.md) | 服务管理、密钥显示适配、Actions/Branding Tab 布局 | 6 |
 | [11-settings-page.md](./11-settings-page.md) | 系统设置、子导航体验 | 5 |
 | [12-i18n-localization.md](./12-i18n-localization.md) | 国际化切换、首屏协商、格式化一致性 | 5 |
+| [13-landing-page-interactions.md](./13-landing-page-interactions.md) | Landing 页卡片悬停效果、Navbar 控件可点击性、入场动画 | 4 |
+| [14-global-controls-placement.md](./14-global-controls-placement.md) | 主题/语言切换控件在 Landing 和 Dashboard 中的无重叠布局 | 5 |
+| [15-error-message-ux.md](./15-error-message-ux.md) | 错误消息人类可读性、表单内联错误、Toast 通知友好性 | 5 |
+| [16-keycloak-theme-i18n.md](./16-keycloak-theme-i18n.md) | Keycloak 认证页 i18n 文案覆盖、语言参数透传 | 4 |
 
 ---
 
@@ -48,8 +52,8 @@
 | 视觉设计 | 3 | 13 |
 | 交互体验 | 2 | 9 |
 | 可访问性 | 1 | 5 |
-| 页面专项 | 6 | 32 |
-| **总计** | **12** | **59** |
+| 页面专项 | 10 | 50 |
+| **总计** | **16** | **77** |
 
 ---
 
@@ -217,6 +221,7 @@ box-shadow: 0 8px 32px var(--glass-shadow),
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-07 | 1.3.0 | 新增 4 个缺陷回归专项 UI/UX 测试文档：Landing 页卡片交互（`13`）、全局控件布局无重叠（`14`）、错误消息用户体验（`15`）、Keycloak 主题 i18n（`16`）；共 16 个文档 77 个场景 |
 | 2026-03-07 | 1.2.0 | 新增 Portal 国际化与本地化 UI/UX 测试文档（`12-i18n-localization.md`），覆盖语言切换入口、SSR 首屏协商、格式化一致性、表单本地化；并同步修正文档中的语言相关说明；共 12 个文档 59 个场景 |
 | 2026-02-21 | 1.1.0 | Services 页面新增 Actions/Branding Tab 布局场景（`10-services-page.md`）；共 11 个文档 54 个场景 |
 | 2026-02-06 | 1.0.0 | 初始版本：6 个文档，27 个 UI/UX 测试场景 |
