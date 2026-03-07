@@ -118,24 +118,41 @@ SELECT COUNT(*) FROM sessions WHERE user_id = '{user_id}' AND revoked_at IS NULL
 
 ## 测试数据准备
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式（如 `UUID()`），否则会导致 API 调用时 `ColumnDecode` 错误。
+
 ```sql
 -- 准备测试用户（应通过 Auth9 正常注册流程或受控测试脚本创建对应底层认证主体）
+SET @user_auth_1 = UUID();
+SET @user_auth_2 = UUID();
+SET @tenant_auth = UUID();
+SET @tu_auth = UUID();
+
 INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled) VALUES
-('user-auth-1111-1111-111111111111', 'kc-auth-1', 'auth-test@example.com', 'Auth Test', false),
-('user-auth-2222-2222-222222222222', 'kc-auth-2', 'mfa-test@example.com', 'MFA Test', true);
+(@user_auth_1, 'kc-auth-1', 'auth-test@example.com', 'Auth Test', false),
+(@user_auth_2, 'kc-auth-2', 'mfa-test@example.com', 'MFA Test', true);
 
 -- 准备测试租户
 INSERT INTO tenants (id, name, slug, settings, status) VALUES
-('tenant-auth-1111-1111-111111111111', 'Auth Test Tenant', 'auth-test', '{}', 'active');
+(@tenant_auth, 'Auth Test Tenant', 'auth-test', '{}', 'active');
 
 -- 用户加入租户
 INSERT INTO tenant_users (id, tenant_id, user_id, role_in_tenant) VALUES
-('tu-auth-1111-1111-111111111111', 'tenant-auth-1111-1111-111111111111', 'user-auth-1111-1111-111111111111', 'member');
+(@tu_auth, @tenant_auth, @user_auth_1, 'member');
 
 -- 清理
-DELETE FROM tenant_users WHERE id LIKE 'tu-auth-%';
-DELETE FROM tenants WHERE id LIKE 'tenant-auth-%';
-DELETE FROM users WHERE id LIKE 'user-auth-%';
+DELETE FROM tenant_users WHERE tenant_id = @tenant_auth;
+DELETE FROM tenants WHERE id = @tenant_auth;
+DELETE FROM users WHERE id IN (@user_auth_1, @user_auth_2);
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+-- 检查是否存在非 UUID 格式的 id（应返回 0）
+SELECT COUNT(*) AS non_uuid_count FROM users
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND email IN ('auth-test@example.com', 'mfa-test@example.com');
+-- 预期: 0。如果 > 0，删除非 UUID 记录并使用 UUID() 重新插入
 ```
 
 ---

@@ -115,7 +115,16 @@ WHERE user_id = (SELECT id FROM users WHERE email = 'reset@example.com')
 - 准备 10 个并发请求，将同一角色分配给同一用户
 - **已获取 Tenant Access Token**（非 Identity Token）
 
-> **重要**：RBAC API 端点需要 **Tenant Access Token**。Identity Token 仅允许租户选择和 token exchange，使用 Identity Token 调用将返回 403 `"Identity token is only allowed for tenant selection and exchange"`。获取 Tenant Access Token 的方法参见 `scripts/qa/gen-access-token.js`。
+### 步骤 0: 验证 Token 类型
+
+```bash
+echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
+# 必须包含: "token_type": "access", "tenant_id": "<非空>"
+# 如果是 Identity Token (无 tenant_id)，使用以下命令重新生成:
+# TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+```
+
+> Identity Token 仅允许租户选择和 token exchange，使用 Identity Token 调用 RBAC API 将返回 403。
 
 ### 目的
 验证系统避免重复分配相同权限

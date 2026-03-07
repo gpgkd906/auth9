@@ -139,6 +139,8 @@ SELECT COUNT(*) FROM tenants WHERE slug IN ('TestCompany', 'test@company', '-tes
 
 ## 测试数据准备 SQL
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式，否则会导致 `ColumnDecode` 错误。
+
 ```sql
 -- 准备测试租户
 INSERT INTO tenants (id, name, slug, settings, status) VALUES
@@ -148,6 +150,15 @@ INSERT INTO tenants (id, name, slug, settings, status) VALUES
 
 -- 清理
 DELETE FROM tenants WHERE slug IN ('acme', 'beta', 'acme-labs', 'test-company');
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+SELECT COUNT(*) AS non_uuid_count FROM tenants
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND slug IN ('acme', 'beta', 'acme-labs');
+-- 预期: 0
 ```
 
 ---

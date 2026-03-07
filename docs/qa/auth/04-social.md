@@ -19,11 +19,21 @@ Auth9 采用 Headless Keycloak 架构，社交登录通过 Auth9 登录入口触
 
 > **注意**：社交登录按钮不在 Portal `/login` 页面上，而是在 Auth9 品牌认证页上。QA 需要先点击「Sign in with password」进入托管认证页才能看到社交登录选项。
 
-> **⚠️ 环境前置条件**：场景 1-3 **需要预先在 Auth9 中配置 Identity Provider**（如 Google、GitHub）。本地开发 Docker 环境默认不包含 IdP 配置。如果认证页未显示社交登录按钮，请先完成以下配置：
-> 1. 进入 Auth9 Portal 「设置」→「身份提供商」
-> 2. 从团队统一密钥源（推荐 Vault）读取 Google OAuth Client ID/Secret，再添加 Google IdP
-> 3. 从团队统一密钥源（推荐 Vault）读取 GitHub OAuth App Client ID/Secret，再添加 GitHub IdP
-> 4. 如果没有真实的 OAuth credentials，场景 1-3 应标记为 **SKIP（环境未配置）** 而非 FAILED
+### 步骤 0: 验证 Identity Provider 已配置（场景 1-3 前置）
+
+本地开发 Docker 环境默认不包含 IdP 配置。执行场景 1-3 前必须验证：
+
+```bash
+# 检查是否已配置 Identity Provider
+TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+curl -s http://localhost:8080/api/v1/identity-providers \
+  -H "Authorization: Bearer $TOKEN" | jq '.[].alias'
+# 必须输出至少一个 provider（如 "google", "github"）
+# 如果输出为空数组 []，按以下步骤配置:
+# 1. 进入 Auth9 Portal「设置」→「身份提供商」
+# 2. 从团队统一密钥源（推荐 Vault）读取 OAuth Client ID/Secret，添加 IdP
+# 如果没有真实的 OAuth credentials，场景 1-3 应标记为 SKIP（环境未配置）而非 FAILED
+```
 
 > **回归测试约定**：OAuth 凭据和测试账号凭据应保存在团队密钥系统（推荐 Vault）中。当前建议的标准命名为：
 > - `secret/auth9-github-oauth`：保存 GitHub OAuth `client_id` / `client_secret`

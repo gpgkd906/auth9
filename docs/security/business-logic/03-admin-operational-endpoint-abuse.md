@@ -138,8 +138,19 @@ curl -i -X POST "http://localhost:8080/api/v1/security/alerts/$ALERT_ID/resolve"
 - 非所属租户 id：`OTHER_TENANT_ID`
 - 全局服务 id：`GLOBAL_SERVICE_ID`
 
-> **Token 生成要点**: 使用 `.claude/skills/tools/gen-test-tokens.js` 生成 Tenant Access Token。
-> 确保 token 的 `tenant_id` claim 与 `OTHER_TENANT_ID` **不同**，否则测试的不是跨租户场景。
+### 步骤 0: 验证 Token 类型与租户归属
+
+```bash
+echo $NORMAL_TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id, email}'
+# 必须满足:
+# 1. "token_type": "access"（Tenant Access Token，非 Identity Token）
+# 2. "tenant_id" 与 OTHER_TENANT_ID 不同（否则测试的不是跨租户场景）
+# 3. "email" 不在 PLATFORM_ADMIN_EMAILS 中（否则 policy 层会放行）
+
+# 生成命令:
+# NORMAL_TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-access \
+#   --tenant-id "$ATTACKER_TENANT_ID" --role member 2>/dev/null | grep token | awk '{print $2}')
+```
 
 ### 攻击目标
 验证普通用户是否可调用 `POST /api/v1/tenants/{tenant_id}/services` 修改他租户服务状态。
@@ -197,7 +208,12 @@ WHERE tenant_id='$OTHER_TENANT_ID' AND service_id='$GLOBAL_SERVICE_ID';
 - 非所属租户 id：`OTHER_TENANT_ID`
 - 该租户 webhook id：`WEBHOOK_ID`
 
-> **Token 生成要点**: 同场景 4，确保 token 的 `tenant_id` claim 与 `OTHER_TENANT_ID` **不同**。
+### 步骤 0: 验证 Token 类型与租户归属
+
+```bash
+echo $NORMAL_TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id, email}'
+# 同场景 4 要求: token_type=access, tenant_id≠OTHER_TENANT_ID, email 非管理员
+```
 
 ### 攻击目标
 验证普通用户是否可操作 `PUT/DELETE /api/v1/tenants/{tenant_id}/webhooks/{id}` 和 `POST .../regenerate-secret`。
@@ -241,7 +257,7 @@ curl -i -X DELETE "http://localhost:8080/api/v1/tenants/$OTHER_TENANT_ID/webhook
 | 返回 200 而非 403 | **使用了 Platform Admin 的 Identity Token** 而非普通用户的 Tenant Access Token | Platform Admin 在 policy 层有跨租户 bypass，这是设计行为。**必须使用非管理员邮箱的 Tenant Access Token** 进行测试 |
 | PUT 返回 403 但 DELETE 返回 200 | 不应发生；两者均有 policy + handler 双重检查 | 检查 token 是否过期后重新生成 |
 
-> **⚠️ 关键提醒**: 本场景测试的是 **普通用户** 的跨租户越权，**不是** Platform Admin 的跨租户访问。Platform Admin（`is_platform_admin_email` 匹配的邮箱）拥有跨租户管理权限，这是设计行为。测试时务必使用 `gen-test-tokens.js tenant-access` 生成非管理员邮箱的 token。
+> 本场景测试的是 **普通用户** 的跨租户越权，不是 Platform Admin 的跨租户访问。Platform Admin 拥有跨租户管理权限，这是设计行为。
 
 ---
 

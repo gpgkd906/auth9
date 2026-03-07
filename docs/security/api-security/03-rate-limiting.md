@@ -176,8 +176,16 @@ hey -n 2000 -c 1100 http://localhost:8080/api/v1/health
 
 ### 验证方法
 
-> **⚠️ Token 类型说明**: 以下测试中的 `$TOKEN` 必须是 **Tenant Access Token**（通过 token exchange 获取），不能是 Identity Token 或 admin token。使用错误的 token 类型会导致 403 权限错误（而非限流测试目标的 429）。
-> 获取方法: 先用 Identity Token 调用 `POST /api/v1/auth/tenant-token` 交换 Tenant Access Token。
+#### 步骤 0: 验证 Token 类型
+
+```bash
+echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
+# 必须包含: "token_type": "access", "tenant_id": "<非空>"
+# 如果是 Identity Token (无 tenant_id)，通过 token exchange 获取:
+# 先用 Identity Token 调用 POST /api/v1/auth/tenant-token 交换 Tenant Access Token
+```
+
+> 使用错误的 token 类型会导致 403 权限错误（而非限流测试目标的 429）。
 
 ```bash
 # 复杂搜索（需 Tenant Access Token）

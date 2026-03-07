@@ -56,12 +56,16 @@ docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
    # 或者：如果基础栈已运行，强制重建 auth9-core
    docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d --force-recreate auth9-core
    ```
-   > **注意**：如果 auth9-core 已通过 `docker-compose -f docker-compose.yml up -d` 启动，直接叠加可观测性 Compose 可能**不会重建 auth9-core**，导致 `OTEL_METRICS_ENABLED`、`LOG_FORMAT` 等环境变量未注入。必须使用 `--force-recreate` 或先 `down` 再 `up`。
-2. 等待服务就绪（约 30 秒），检查容器状态：
+2. **验证 auth9-core 已使用可观测性配置重建**（如果基础栈已运行，直接叠加 Compose 不会重建容器，导致环境变量缺失）：
+   ```bash
+   docker inspect auth9-core --format '{{range .Config.Env}}{{println .}}{{end}}' | grep OTEL_METRICS_ENABLED
+   # 如果无输出，执行: docker-compose ... up -d --force-recreate auth9-core
+   ```
+3. 等待服务就绪（约 30 秒），检查容器状态：
    ```bash
    docker-compose -f docker-compose.yml -f docker-compose.observability.yml ps
    ```
-3. **验证 auth9-core 环境变量已注入**：
+4. **验证 auth9-core 环境变量已注入**：
    ```bash
    docker inspect auth9-core --format '{{range .Config.Env}}{{println .}}{{end}}' | grep -E 'OTEL|LOG_FORMAT|METRICS_TOKEN'
    # 预期输出:
@@ -70,7 +74,7 @@ docker-compose -f docker-compose.yml -f docker-compose.observability.yml up -d
    # LOG_FORMAT=json
    # METRICS_TOKEN=dev-metrics-token
    ```
-4. 验证各服务可访问：
+5. 验证各服务可访问：
    ```bash
    curl -s http://localhost:9090/-/ready       # Prometheus
    curl -s http://localhost:3001/api/health     # Grafana

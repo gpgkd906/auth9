@@ -157,25 +157,41 @@ WHERE alert_type = 'suspicious_ip' ORDER BY created_at DESC LIMIT 1;
 
 ## 测试数据准备 SQL
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式（如 `UUID()`），否则会导致 API 调用时 `ColumnDecode` 错误。
+
 ```sql
+SET @user_sess = UUID();
+SET @sess_1 = UUID();
+SET @sess_2 = UUID();
+SET @alert_1 = UUID();
+
 -- 准备测试用户
 INSERT INTO users (id, keycloak_id, email, display_name) VALUES
-('user-sess-1111-1111-111111111111', 'kc-sess-1', 'session-test@example.com', 'Session Test');
+(@user_sess, 'kc-sess-1', 'session-test@example.com', 'Session Test');
 
 -- 准备测试会话
 INSERT INTO sessions (id, user_id, device_type, ip_address, location, last_active_at) VALUES
-('sess-1111-1111-1111-111111111111', 'user-sess-1111-1111-111111111111', 'desktop', '192.168.1.1', 'Beijing', NOW()),
-('sess-2222-2222-2222-222222222222', 'user-sess-1111-1111-111111111111', 'mobile', '192.168.1.2', 'Shanghai', DATE_SUB(NOW(), INTERVAL 1 HOUR));
+(@sess_1, @user_sess, 'desktop', '192.168.1.1', 'Beijing', NOW()),
+(@sess_2, @user_sess, 'mobile', '192.168.1.2', 'Shanghai', DATE_SUB(NOW(), INTERVAL 1 HOUR));
 
 -- 准备测试安全告警
 INSERT INTO security_alerts (id, user_id, alert_type, severity, details, created_at) VALUES
-('alert-1111-1111-1111-111111111111', 'user-sess-1111-1111-111111111111', 'brute_force', 'high',
- '{"attempts": 10}', NOW());
+(@alert_1, @user_sess, 'brute_force', 'high', '{"attempts": 10}', NOW());
 
 -- 清理
-DELETE FROM security_alerts WHERE id LIKE 'alert-%';
-DELETE FROM sessions WHERE id LIKE 'sess-%';
-DELETE FROM users WHERE id LIKE 'user-sess-%';
+DELETE FROM security_alerts WHERE user_id = @user_sess;
+DELETE FROM sessions WHERE user_id = @user_sess;
+DELETE FROM users WHERE id = @user_sess;
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+-- 检查是否存在非 UUID 格式的 id（应返回 0）
+SELECT COUNT(*) AS non_uuid_count FROM sessions
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND user_id IN (SELECT id FROM users WHERE email = 'session-test@example.com');
+-- 预期: 0。如果 > 0，删除非 UUID 记录并使用 UUID() 重新插入
 ```
 
 ---

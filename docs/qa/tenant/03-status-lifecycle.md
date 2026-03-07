@@ -198,6 +198,8 @@ SELECT status FROM tenants WHERE id = '{tenant_id}';
 
 ## 测试数据准备 SQL
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式，否则会导致 `ColumnDecode` 错误。
+
 ```sql
 -- 创建测试租户（状态为 active）
 INSERT INTO tenants (id, name, slug, status, settings, created_at, updated_at)
@@ -223,6 +225,15 @@ VALUES (
 
 -- 清理
 DELETE FROM tenants WHERE slug = 'status-test';
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+SELECT COUNT(*) AS non_uuid_count FROM tenants
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND slug = 'status-test';
+-- 预期: 0
 ```
 
 ---

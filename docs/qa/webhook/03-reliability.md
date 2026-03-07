@@ -115,23 +115,37 @@ SELECT secret FROM webhooks WHERE id = '{webhook_id}';
 
 ## 测试数据准备 SQL
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式（如 `UUID()`），否则会导致 API 调用时 `ColumnDecode` 错误。
+
 ```sql
+SET @tenant_wh = UUID();
+SET @wh_1 = UUID();
+SET @wh_2 = UUID();
+
 -- 准备测试租户
 INSERT INTO tenants (id, name, slug, settings, status) VALUES
-('tenant-wh-1111-1111-111111111111', 'Webhook Test', 'webhook-test', '{}', 'active');
+(@tenant_wh, 'Webhook Test', 'webhook-test', '{}', 'active');
 
 -- 准备测试 Webhooks
 INSERT INTO webhooks (id, tenant_id, name, url, secret, events, enabled, failure_count) VALUES
-('wh-1111-1111-1111-111111111111', 'tenant-wh-1111-1111-111111111111',
- 'User Events', 'https://httpbin.org/post', 'secret-123',
+(@wh_1, @tenant_wh, 'User Events', 'https://httpbin.org/post', 'secret-123',
  '["user.created","user.updated"]', true, 0),
-('wh-2222-2222-2222-222222222222', 'tenant-wh-1111-1111-111111111111',
- 'Failed Webhook', 'https://httpbin.org/post', 'secret-456',
+(@wh_2, @tenant_wh, 'Failed Webhook', 'https://httpbin.org/post', 'secret-456',
  '["user.created"]', false, 10);
 
 -- 清理
-DELETE FROM webhooks WHERE id LIKE 'wh-%';
-DELETE FROM tenants WHERE id LIKE 'tenant-wh-%';
+DELETE FROM webhooks WHERE tenant_id = @tenant_wh;
+DELETE FROM tenants WHERE id = @tenant_wh;
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+-- 检查是否存在非 UUID 格式的 id（应返回 0）
+SELECT COUNT(*) AS non_uuid_count FROM webhooks
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND tenant_id IN (SELECT id FROM tenants WHERE slug = 'webhook-test');
+-- 预期: 0。如果 > 0，删除非 UUID 记录并使用 UUID() 重新插入
 ```
 
 ---

@@ -25,7 +25,17 @@ Auth9 通过 Keycloak 支持多种 MFA 方式：
 ### 前置条件
 - 启用了 TOTP 的用户账户
 - 已知用户名和密码
-- **环境必须已执行 `auth9-core init`**（seeder 会配置 Keycloak realm 的 bruteForceProtected=true, failureFactor=5, maxDeltaTimeSeconds=600, waitIncrementSeconds=60）
+
+### 步骤 0: 验证 Keycloak Brute Force 防护已配置
+
+```bash
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "client_id=admin-cli&grant_type=password&username=admin&password=admin" | jq -r '.access_token')
+curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" | \
+  jq '{bruteForceProtected, failureFactor, maxDeltaTimeSeconds, waitIncrementSeconds}'
+# 必须输出: bruteForceProtected=true, failureFactor=5
+# 如果 bruteForceProtected 为 null/false，执行 ./scripts/reset-docker.sh 重建环境
+```
 
 ### 攻击目标
 验证 TOTP 验证是否存在暴力破解风险

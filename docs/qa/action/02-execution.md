@@ -8,14 +8,20 @@
 
 ## 前置条件
 
-### **关键条件：用户必须有租户成员身份**
+### 步骤 0: 验证用户租户成员身份
 
-> **Post-login Actions 仅在以下条件同时满足时执行**：
-> 1. Action 绑定到一个 **有 `tenant_id` 的 Service**（非跨租户 Service）
-> 2. 或者 Action 绑定到跨租户 Service，但 **用户至少属于一个租户**
->
-> 如果 Service 没有 `tenant_id` 且用户没有任何租户成员身份，post-login Actions 将被**静默跳过**（不会报错，也不会有执行记录）。
-> 这是系统设计行为，不是 bug。
+Post-login Actions 仅在用户有租户成员身份时执行。执行测试前必须验证：
+
+```sql
+-- 检查测试用户是否属于至少一个租户（必须 > 0）
+SELECT COUNT(*) AS tenant_count
+FROM tenant_users tu
+WHERE tu.user_id = (SELECT id FROM users WHERE email = 'test@example.com');
+-- 预期: > 0
+-- 如果为 0，需先将用户添加到租户: POST /api/v1/tenants/{id}/users
+```
+
+> 如果 Service 没有 `tenant_id` 且用户没有任何租户成员身份，post-login Actions 将被静默跳过（不会报错，也不会有执行记录）。这是系统设计行为，不是 bug。
 
 ### 测试用户准备
 ```sql
@@ -71,9 +77,16 @@ throw new Error("Test error");
 2. 使用测试账号登录：`test@example.com` / `Test123!`
 3. 登录成功后，捕获 Identity Token
 
-> 重要：必须走 Auth9 登录流程（Portal `/login` → Auth9 `/api/v1/auth/authorize`/`callback`）。
-> 不要使用 Keycloak 直连 `grant_type=password` 获取 token 来验证本场景，
-> 否则会绕过 Auth9 的 post-login Action 执行链路并产生误报。
+#### 步骤 0b: 确认使用正确的登录流程
+
+必须通过 Auth9 Portal 登录流程触发 post-login Action：
+
+```
+正确路径: Portal /login → Auth9 /api/v1/auth/authorize → Keycloak → callback → Action 执行
+错误路径: 直接调用 Keycloak grant_type=password（会绕过 Action 执行链路）
+```
+
+> Keycloak 直连获取的 token 不会触发 Auth9 的 post-login Action，使用此方式测试会产生误报。
 
 ### 验证方式
 ```bash

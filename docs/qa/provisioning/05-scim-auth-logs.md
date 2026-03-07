@@ -107,11 +107,16 @@ curl -s "http://localhost:8080/api/v1/scim/v2/Users" \
 
 ### 测试操作流程
 
-> **重要**: 创建 SCIM Token 使用的是管理 API (`/api/v1/tenants/*`)，需要 **Tenant Access Token**，
-> 不能使用 Identity Token。使用 `gen-test-tokens.js tenant-owner` 生成：
-> ```bash
-> TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
-> ```
+#### 步骤 0: 验证 Token 类型
+
+```bash
+echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
+# 必须包含: "token_type": "access", "tenant_id": "<非空>"
+# 如果是 Identity Token (无 tenant_id)，使用以下命令重新生成:
+# TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+```
+
+> 创建 SCIM Token 使用的是管理 API (`/api/v1/tenants/*`)，需要 Tenant Access Token，不能使用 Identity Token。
 
 **API 测试**:
 ```bash
@@ -195,7 +200,16 @@ SELECT last_used_at FROM scim_tokens WHERE id = '{scim_token_id}';
 
 ### 初始状态
 - 前序场景已产生多条 SCIM 操作日志
-- **已有 Tenant Access Token（非 Identity Token）**
+- **已获取 Tenant Access Token**（非 Identity Token）
+
+### 步骤 0: 验证 Token 类型
+
+```bash
+echo $TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{token_type, tenant_id}'
+# 必须包含: "token_type": "access", "tenant_id": "<非空>"
+# 如果是 Identity Token (无 tenant_id)，使用以下命令重新生成:
+# TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-owner --tenant-id $TENANT_ID)
+```
 
 ### 目的
 验证管理 API 能分页查询 SCIM 操作审计日志

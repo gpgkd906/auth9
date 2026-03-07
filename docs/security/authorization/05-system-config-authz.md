@@ -245,7 +245,19 @@ curl -sS -i -X PUT "http://localhost:8080/api/v1/tenants/$TENANT_ID/password-pol
 | Service Client Token 调用返回 200 | 同上，使用了管理员 user_id | 使用 `gen-test-tokens.js service-client`（不带 `--user-id`）|
 | 所有请求返回 401 | Token 过期、签名密钥不匹配、或 audience 不在允许列表 | 重新生成 Token，确认 JWT 私钥与服务端一致 |
 
-> **⚠️ 关键提醒**：`gen-test-tokens.js` 的 `--user-id` 参数会覆盖默认安全 ID。如果传入的 user_id 对应数据库中的平台管理员（如 `admin@auth9.local` 的 user_id），即使 Token 中的 email 不是管理员邮箱，`is_platform_admin_with_db()` 仍会通过 DB 查询判定为平台管理员。**测试越权场景时，严禁使用 `--user-id` 传入管理员用户的 ID**。
+### 步骤 0: 验证 Token 中的 user_id 非管理员
+
+```bash
+# 检查 token 中的 sub (user_id) 是否为非管理员
+echo $TENANT_MEMBER_ACCESS_TOKEN | cut -d. -f2 | base64 -d 2>/dev/null | jq '{sub, email, token_type}'
+# sub 必须是非管理员用户的 ID
+# email 必须不在 PLATFORM_ADMIN_EMAILS 列表中
+
+# 使用 gen-test-tokens.js 时，不要传 --user-id 参数（默认使用安全的非管理员 ID）:
+# TOKEN=$(node .claude/skills/tools/gen-test-tokens.js tenant-access --tenant-id $TENANT_ID)
+```
+
+> `gen-test-tokens.js` 的 `--user-id` 参数会覆盖默认安全 ID。如果传入管理员 user_id，`is_platform_admin_with_db()` 仍会通过 DB 查询判定为平台管理员。测试越权场景时，严禁使用 `--user-id` 传入管理员用户的 ID。
 
 ---
 

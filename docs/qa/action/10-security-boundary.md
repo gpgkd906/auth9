@@ -44,14 +44,29 @@ ORDER BY executed_at DESC LIMIT 1;
 Service A 的 Action 尝试访问 Service B 的数据
 
 ### 准备数据
+
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式（如 `UUID()`），否则会导致 `ColumnDecode` 错误。
+
 ```sql
--- 创建两个 Service
+-- 创建两个 Service（id 必须为 UUID 格式）
+SET @service_a_id = UUID();
+SET @service_b_id = UUID();
+
 INSERT INTO services (id, slug, name) VALUES
-  ('service-a-id', 'service-a', 'Service A'),
-  ('service-b-id', 'service-b', 'Service B');
+  (@service_a_id, 'service-a', 'Service A'),
+  (@service_b_id, 'service-b', 'Service B');
 
 -- Service A 创建 Action
 -- Service B 创建用户
+```
+
+#### 步骤 0: 验证测试数据完整性
+
+```sql
+SELECT COUNT(*) AS non_uuid_count FROM services
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND slug IN ('service-a', 'service-b');
+-- 预期: 0
 ```
 
 ### 测试 Action 脚本（Service A）
@@ -79,20 +94,20 @@ context;
 ```bash
 # 解码 Token
 echo $TOKEN | cut -d. -f2 | base64 -d | jq '.service_id'
-# 预期: "service-a-id"（未被篡改）
+# 预期: Service A 的 UUID（与 @service_a_id 一致，未被篡改）
 ```
 
 ### 预期数据状态
 ```sql
--- 验证执行日志的 Service ID
+-- 验证执行日志的 Service ID（替换 {service_a_id} 为实际 UUID）
 SELECT service_id FROM action_executions
 WHERE action_id = '{service_a_action_id}'
 ORDER BY executed_at DESC LIMIT 1;
--- 预期: service_id = 'service-a-id'
+-- 预期: service_id = '{service_a_id}'（Service A 的 UUID）
 
--- 验证 Service B 的数据未被访问
+-- 验证 Service B 的数据未被访问（替换 {service_b_id} 为实际 UUID）
 SELECT COUNT(*) FROM action_executions
-WHERE action_id IN (SELECT id FROM actions WHERE service_id = 'service-b-id')
+WHERE action_id IN (SELECT id FROM actions WHERE service_id = '{service_b_id}')
   AND executed_at > NOW() - INTERVAL 1 MINUTE;
 -- 预期: COUNT = 0（Service B 的 Actions 未被触发）
 ```

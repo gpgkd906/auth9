@@ -91,6 +91,8 @@ SELECT role_in_tenant FROM tenant_users WHERE user_id = '{user_id}' AND tenant_i
 
 ## 测试数据准备 SQL
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式（仅包含 0-9 和 a-f），否则会导致 `ColumnDecode` 错误。推荐通过 API 创建，以下 SQL 仅供紧急直接插入使用。
+
 ```sql
 -- 准备测试租户
 INSERT INTO tenants (id, name, slug, settings, status) VALUES
@@ -102,8 +104,6 @@ INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled) VALUES
 ('bbbb1111-1111-1111-1111-111111111111', 'kc-user-1', 'existing@example.com', '已存在用户', false);
 
 -- 准备 tenant_users（场景 2 前置数据）
--- ⚠️ ID 必须是合法 UUID 格式（仅包含 0-9 和 a-f），不可使用 t/u 等非十六进制字符
--- 推荐通过 API 创建，以下 SQL 仅供紧急直接插入使用：
 INSERT INTO tenant_users (id, tenant_id, user_id, role_in_tenant, joined_at) VALUES
 ('cccc1111-1111-1111-1111-111111111111', 'aaaa1111-1111-1111-1111-111111111111', 'bbbb1111-1111-1111-1111-111111111111', 'member', NOW());
 
@@ -111,6 +111,15 @@ INSERT INTO tenant_users (id, tenant_id, user_id, role_in_tenant, joined_at) VAL
 DELETE FROM tenant_users WHERE user_id LIKE 'bbbb%';
 DELETE FROM users WHERE id LIKE 'bbbb%';
 DELETE FROM tenants WHERE id LIKE 'aaaa%';
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+SELECT COUNT(*) AS non_uuid_count FROM users
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND email = 'existing@example.com';
+-- 预期: 0。如果 > 0，删除非 UUID 记录并使用合法 UUID 重新插入
 ```
 
 ---

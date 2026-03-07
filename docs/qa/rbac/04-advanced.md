@@ -114,6 +114,8 @@ WHERE r.service_id != p.service_id;
 
 ## 测试数据准备 SQL
 
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式，否则会导致 `ColumnDecode` 错误。
+
 ```sql
 -- 准备测试服务
 INSERT INTO services (id, name, redirect_uris, logout_uris, status) VALUES
@@ -135,6 +137,15 @@ DELETE FROM user_tenant_roles WHERE role_id IN ('44444444-4444-4444-8444-4444444
 DELETE FROM roles WHERE service_id = '11111111-1111-4111-8111-111111111111';
 DELETE FROM permissions WHERE service_id = '11111111-1111-4111-8111-111111111111';
 DELETE FROM services WHERE id = '11111111-1111-4111-8111-111111111111';
+```
+
+### 步骤 0: 验证测试数据完整性
+
+```sql
+SELECT COUNT(*) AS non_uuid_count FROM services
+WHERE id NOT REGEXP '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+  AND name = 'Test Service';
+-- 预期: 0
 ```
 
 ---
