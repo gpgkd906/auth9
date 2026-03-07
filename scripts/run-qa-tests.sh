@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Run QA tests for each document in docs/qa/ and docs/security/ using opencode
+# Run QA tests for each document in docs/qa/, docs/security/, docs/uiux/.
+# Supports two execution paths:
+#   FAST PATH: docs with a matching test script in scripts/qa/auto/ run directly
+#   AGENT PATH: docs without scripts are tested via an AI agent
 set -euo pipefail
 
 # Ensure child processes are killed when script is interrupted
@@ -24,8 +27,9 @@ YELLOW='\033[0;33m'
 CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
-# Timeout: 30 minutes per agent run
-AGENT_TIMEOUT=1800
+# Timeouts
+AGENT_TIMEOUT=1800   # 30 minutes per agent run
+SCRIPT_TIMEOUT=300   # 5 minutes per script run
 if command -v gtimeout &>/dev/null; then
     TIMEOUT_CMD="gtimeout"
 elif command -v timeout &>/dev/null; then
@@ -123,14 +127,116 @@ for file, status in data.get('results', {}).items():
     return 0
 }
 
+# ---------------------------------------------------------------------------
+# FAST PATH: resolve and run pre-built test scripts
+# ---------------------------------------------------------------------------
+script_passed=0
+script_failed=0
+
+# Resolve a test script path for a given doc.
+# 1) For docs/qa/*: look up test_script in _manifest.yaml
+# 2) Fallback for any doc: derive path scripts/qa/auto/{dir-parts}.sh
+# Returns the script path on stdout (empty if none found).
+resolve_test_script() {
+    local rel_path="$1"
+    local script_path=""
+
+    # Strategy 1: manifest lookup (docs/qa/ only)
+    if [[ "$rel_path" == docs/qa/* ]]; then
+        local doc_id="${rel_path#docs/qa/}"
+        doc_id="${doc_id%.md}"
+        script_path=$(python3 -c "
+import sys
+try:
+    import yaml
+except ImportError:
+    sys.exit(0)
+try:
+    with open('$PROJECT_ROOT/docs/qa/_manifest.yaml') as f:
+        data = yaml.safe_load(f)
+    for doc in data.get('documents', []):
+        if doc.get('id') == sys.argv[1]:
+            print(doc.get('test_script', ''))
+            break
+except Exception:
+    pass
+" "$doc_id" 2>/dev/null || true)
+    fi
+
+    # Strategy 2: convention-based derivation
+    if [[ -z "$script_path" ]]; then
+        local base="${rel_path#docs/qa/}"
+        if [[ "$base" == "$rel_path" ]]; then
+            base="${rel_path#docs/}"
+        fi
+        base="${base%.md}"
+        base="${base//\//-}"
+        local candidate="scripts/qa/auto/${base}.sh"
+        if [[ -f "$PROJECT_ROOT/$candidate" ]]; then
+            script_path="$candidate"
+        fi
+    fi
+
+    echo "$script_path"
+}
+
+# Execute a test script and parse JSONL summary output.
+# Returns 0 on all-pass, 1 on any failure, 124 on timeout.
+run_test_script() {
+    local script_path="$1"
+    local abs_script="$PROJECT_ROOT/$script_path"
+    local output_file
+    output_file=$(mktemp)
+
+    local t=()
+    if [[ -n "${TIMEOUT_CMD:-}" ]]; then
+        t=("$TIMEOUT_CMD" "$SCRIPT_TIMEOUT")
+    fi
+
+    echo -e "${YELLOW}> [FAST] bash ${script_path}${NC}"
+    local exit_code=0
+    "${t[@]}" bash "$abs_script" > "$output_file" 2>&1 || exit_code=$?
+
+    # Parse JSONL summary (last line with type=summary)
+    local summary_line
+    summary_line=$(grep '"type":"summary"' "$output_file" | tail -1 || true)
+
+    if [[ -n "$summary_line" ]]; then
+        local s_passed s_failed s_total
+        s_passed=$(echo "$summary_line" | python3 -c "import json,sys; print(json.load(sys.stdin)['passed'])" 2>/dev/null || echo 0)
+        s_failed=$(echo "$summary_line" | python3 -c "import json,sys; print(json.load(sys.stdin)['failed'])" 2>/dev/null || echo 0)
+        s_total=$(echo "$summary_line" | python3 -c "import json,sys; print(json.load(sys.stdin)['total'])" 2>/dev/null || echo 0)
+        script_passed=$((script_passed + s_passed))
+        script_failed=$((script_failed + s_failed))
+        echo -e "  Scenarios: ${s_total} total, ${GREEN}${s_passed} passed${NC}, ${RED}${s_failed} failed${NC}"
+    fi
+
+    # On failure, save full output for debugging
+    if [[ $exit_code -ne 0 ]]; then
+        local date_dir="$PROJECT_ROOT/artifacts/qa/$(date +%F)"
+        mkdir -p "$date_dir"
+        local log_name="${script_path##*/}"
+        log_name="${log_name%.sh}.jsonl"
+        cp "$output_file" "$date_dir/$log_name"
+        echo -e "  ${YELLOW}Full output saved: artifacts/qa/$(date +%F)/$log_name${NC}"
+    fi
+
+    rm -f "$output_file"
+    return $exit_code
+}
+
 if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
-    echo "Usage: $0 [--agent <mode>] [--only-security|--only-uiux] [--resume] [cli-options]"
+    echo "Usage: $0 [--agent <mode>] [--only-security|--only-uiux] [--no-scripts] [--resume] [cli-options]"
     echo ""
-    echo "Default: run all QA docs (docs/qa/, docs/security/, docs/uiux/) via minimax agent."
+    echo "Default: run all QA docs (docs/qa/, docs/security/, docs/uiux/)."
+    echo "Docs with pre-built scripts in scripts/qa/auto/ run directly (FAST PATH)."
+    echo "Docs without scripts are tested via an AI agent (AGENT PATH)."
+    echo ""
     echo "  --agent <mode>       Agent mode: 'minimax' (default), 'opencode', 'gemini', 'kimi',"
     echo "                       'big-pickle', 'glm-air', 'glm-5', 'gpt-oss', 'kilo-minimax', 'qwen3-coder'"
     echo "  --only-security      Run only security test documents (docs/security/)"
     echo "  --only-uiux          Run only UI/UX test documents (docs/uiux/)"
+    echo "  --no-scripts         Disable FAST PATH (always use agent)"
     echo "  --resume             Resume from last interrupted run"
     exit 0
 fi
@@ -139,6 +245,7 @@ fi
 AGENT_MODE="minimax"
 ONLY_MODE=""  # empty = all, 'security' = only security, 'uiux' = only uiux
 RESUME=false
+USE_SCRIPTS=true
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --agent)
@@ -151,6 +258,10 @@ while [[ $# -gt 0 ]]; do
             ;;
         --only-uiux)
             ONLY_MODE="uiux"
+            shift
+            ;;
+        --no-scripts)
+            USE_SCRIPTS=false
             shift
             ;;
         --resume)
@@ -304,7 +415,19 @@ for ((i=0; i<${#qa_files[@]}; i++)); do
     echo -e "${CYAN}[$(( i + 1 ))/${#qa_files[@]}] Processing: ${rel_path}${NC}"
     echo -e "${CYAN}----------------------------------------${NC}"
 
-    run_agent "$rel_path" && exit_code=0 || exit_code=$?
+    # Try FAST PATH: run pre-built test script directly
+    test_script=""
+    if [[ "$USE_SCRIPTS" == true ]]; then
+        test_script=$(resolve_test_script "$rel_path")
+    fi
+
+    exit_code=0
+    if [[ -n "$test_script" && -f "$PROJECT_ROOT/$test_script" ]]; then
+        run_test_script "$test_script" && exit_code=0 || exit_code=$?
+    else
+        run_agent "$rel_path" && exit_code=0 || exit_code=$?
+    fi
+
     if [[ $exit_code -eq 0 ]]; then
         passed=$((passed + 1))
         completed_results["$rel_path"]="passed"
@@ -313,7 +436,11 @@ for ((i=0; i<${#qa_files[@]}; i++)); do
         failed=$((failed + 1))
         failed_files+=("$rel_path (TIMEOUT)")
         completed_results["$rel_path"]="timeout"
-        echo -e "${RED}✗ TIMEOUT: ${rel_path} (exceeded 30 minutes)${NC}"
+        if [[ -n "$test_script" ]]; then
+            echo -e "${RED}✗ TIMEOUT: ${rel_path} (script exceeded 5 minutes)${NC}"
+        else
+            echo -e "${RED}✗ TIMEOUT: ${rel_path} (agent exceeded 30 minutes)${NC}"
+        fi
     else
         failed=$((failed + 1))
         failed_files+=("$rel_path")
@@ -332,9 +459,13 @@ done
 echo -e "${CYAN}========================================${NC}"
 echo -e "${CYAN}  Summary${NC}"
 echo -e "${CYAN}========================================${NC}"
-echo -e "Total:  $total"
+echo -e "Total docs:  $total"
 echo -e "${GREEN}Passed: $passed${NC}"
 echo -e "${RED}Failed: $failed${NC}"
+if [[ "$script_passed" -gt 0 || "$script_failed" -gt 0 ]]; then
+    echo -e ""
+    echo -e "Script scenarios: ${GREEN}${script_passed} passed${NC}, ${RED}${script_failed} failed${NC}"
+fi
 
 if [[ ${#failed_files[@]} -gt 0 ]]; then
     echo ""

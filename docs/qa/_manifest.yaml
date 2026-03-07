@@ -33,6 +33,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/action-04-security.sh
   - id: action/05-api-sdk
     path: docs/qa/action/05-api-sdk.md
     module: action
@@ -41,6 +42,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/action-05-api-sdk.sh
   - id: action/06-async-fetch
     path: docs/qa/action/06-async-fetch.md
     module: action
@@ -49,6 +51,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-06
+    test_script: scripts/qa/auto/action-06-async-fetch.sh
   - id: action/07-crud-advanced
     path: docs/qa/action/07-crud-advanced.md
     module: action
@@ -65,6 +68,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/action-08-execution-advanced.sh
   - id: action/09-logs-detail
     path: docs/qa/action/09-logs-detail.md
     module: action
@@ -81,6 +85,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/action-10-security-boundary.sh
   - id: action/11-security-attack-defense
     path: docs/qa/action/11-security-attack-defense.md
     module: action
@@ -89,6 +94,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/action-11-security-attack-defense.sh
   - id: action/12-api-sdk-advanced
     path: docs/qa/action/12-api-sdk-advanced.md
     module: action
@@ -97,6 +103,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/action-12-api-sdk-advanced.sh
   - id: analytics/01-overview
     path: docs/qa/analytics/01-overview.md
     module: analytics
@@ -113,6 +120,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/analytics-02-events.sh
   - id: audit/01-audit-logs
     path: docs/qa/audit/01-audit-logs.md
     module: audit
@@ -137,6 +145,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/auth-02-token-exchange.sh
   - id: auth/03-password
     path: docs/qa/auth/03-password.md
     module: auth
@@ -145,6 +154,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/auth-03-password.sh
   - id: auth/04-social
     path: docs/qa/auth/04-social.md
     module: auth
@@ -161,6 +171,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-06
+    test_script: scripts/qa/auto/auth-05-boundary.sh
   - id: auth/06-client-credentials
     path: docs/qa/auth/06-client-credentials.md
     module: auth
@@ -169,6 +180,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/auth-06-client-credentials.sh
   - id: auth/07-public-endpoints
     path: docs/qa/auth/07-public-endpoints.md
     module: auth
@@ -177,6 +189,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/auth-07-public-endpoints.sh
   - id: auth/08-demo-auth-flow
     path: docs/qa/auth/08-demo-auth-flow.md
     module: auth
@@ -249,6 +262,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/identity-provider-03-tenant-enterprise-sso-connectors.sh
   - id: integration/01-concurrent-operations
     path: docs/qa/integration/01-concurrent-operations.md
     module: integration
@@ -257,6 +271,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-01-concurrent-operations.sh
   - id: integration/02-password-policy
     path: docs/qa/integration/02-password-policy.md
     module: integration
@@ -265,6 +280,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-02-password-policy.sh
   - id: integration/03-rate-limiting
     path: docs/qa/integration/03-rate-limiting.md
     module: integration
@@ -273,6 +289,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-03-rate-limiting.sh
   - id: integration/04-health-check
     path: docs/qa/integration/04-health-check.md
     module: integration
@@ -281,6 +298,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-04-health-check.sh
   - id: integration/05-keycloak-events
     path: docs/qa/integration/05-keycloak-events.md
     module: integration
@@ -289,6 +307,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-05-keycloak-events.sh
   - id: integration/06-init-seed-data
     path: docs/qa/integration/06-init-seed-data.md
     module: integration
@@ -305,6 +324,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-07-observability-metrics.sh
   - id: integration/08-observability-stack
     path: docs/qa/integration/08-observability-stack.md
     module: integration
@@ -313,6 +333,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-08-observability-stack.sh
   - id: integration/09-security-hardening-config
     path: docs/qa/integration/09-security-hardening-config.md
     module: integration
@@ -321,6 +342,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-09-security-hardening-config.sh
   - id: integration/10-security-hardening-p2
     path: docs/qa/integration/10-security-hardening-p2.md
     module: integration
@@ -329,6 +351,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-10-security-hardening-p2.sh
   - id: integration/11-keycloak26-event-stream
     path: docs/qa/integration/11-keycloak26-event-stream.md
     module: integration
@@ -337,6 +360,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/integration-11-keycloak26-event-stream.sh
   - id: invitation/01-create-send
     path: docs/qa/invitation/01-create-send.md
     module: invitation
@@ -345,6 +369,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/invitation-01-create-send.sh
   - id: invitation/02-accept
     path: docs/qa/invitation/02-accept.md
     module: invitation
@@ -353,6 +378,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/invitation-02-accept.sh
   - id: invitation/03-manage
     path: docs/qa/invitation/03-manage.md
     module: invitation
@@ -361,6 +387,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/invitation-03-manage.sh
   - id: passkeys/01-passkeys
     path: docs/qa/passkeys/01-passkeys.md
     module: passkeys
@@ -393,6 +420,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/provisioning-01-scim-token-management.sh
   - id: provisioning/02-scim-user-crud
     path: docs/qa/provisioning/02-scim-user-crud.md
     module: provisioning
@@ -401,6 +429,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/provisioning-02-scim-user-crud.sh
   - id: rbac/01-permission
     path: docs/qa/rbac/01-permission.md
     module: rbac
@@ -409,6 +438,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/rbac-01-permission.sh
   - id: rbac/02-role
     path: docs/qa/rbac/02-role.md
     module: rbac
@@ -425,6 +455,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/rbac-03-assignment.sh
   - id: rbac/04-advanced
     path: docs/qa/rbac/04-advanced.md
     module: rbac
@@ -433,6 +464,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/rbac-04-advanced.sh
   - id: rbac/05-abac-policy-management
     path: docs/qa/rbac/05-abac-policy-management.md
     module: rbac
@@ -441,6 +473,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/rbac-05-abac-policy-management.sh
   - id: sdk/01-core-types-utils
     path: docs/qa/sdk/01-core-types-utils.md
     module: sdk
@@ -449,6 +482,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/sdk-01-core-types-utils.sh
   - id: sdk/02-http-client
     path: docs/qa/sdk/02-http-client.md
     module: sdk
@@ -457,6 +491,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/sdk-02-http-client.sh
   - id: sdk/03-token-verification
     path: docs/qa/sdk/03-token-verification.md
     module: sdk
@@ -465,6 +500,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/sdk-03-token-verification.sh
   - id: sdk/04-grpc-client-credentials
     path: docs/qa/sdk/04-grpc-client-credentials.md
     module: sdk
@@ -473,6 +509,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/sdk-04-grpc-client-credentials.sh
   - id: sdk/05-express-middleware
     path: docs/qa/sdk/05-express-middleware.md
     module: sdk
@@ -481,6 +518,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/sdk-05-express-middleware.sh
   - id: sdk/06-middleware-testing
     path: docs/qa/sdk/06-middleware-testing.md
     module: sdk
@@ -489,6 +527,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/sdk-06-middleware-testing.sh
   - id: service/01-service-crud
     path: docs/qa/service/01-service-crud.md
     module: service
@@ -513,6 +552,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/service-03-oidc.sh
   - id: service/04-tenant-service-toggle
     path: docs/qa/service/04-tenant-service-toggle.md
     module: service
@@ -521,6 +561,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/service-04-tenant-service-toggle.sh
   - id: service/05-integration-info
     path: docs/qa/service/05-integration-info.md
     module: service
@@ -545,6 +586,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-01-session.sh
   - id: session/02-login-events
     path: docs/qa/session/02-login-events.md
     module: session
@@ -553,6 +595,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-02-login-events.sh
   - id: session/03-alerts
     path: docs/qa/session/03-alerts.md
     module: session
@@ -561,6 +604,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-03-alerts.sh
   - id: session/04-boundary
     path: docs/qa/session/04-boundary.md
     module: session
@@ -569,6 +613,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-04-boundary.sh
   - id: session/05-auth-security-regression
     path: docs/qa/session/05-auth-security-regression.md
     module: session
@@ -577,6 +622,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-05-auth-security-regression.sh
   - id: session/06-token-blacklist-failsafe
     path: docs/qa/session/06-token-blacklist-failsafe.md
     module: session
@@ -585,6 +631,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-06-token-blacklist-failsafe.sh
   - id: session/07-oauth-state-csrf
     path: docs/qa/session/07-oauth-state-csrf.md
     module: session
@@ -593,6 +640,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-07-oauth-state-csrf.sh
   - id: session/08-identity-token-whitelist-tenant-token-enforcement
     path: docs/qa/session/08-identity-token-whitelist-tenant-token-enforcement.md
     module: session
@@ -601,6 +649,7 @@ documents:
     has_entry_visibility: true
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/session-08-identity-token-whitelist.sh
   - id: settings/01-branding
     path: docs/qa/settings/01-branding.md
     module: settings
@@ -641,6 +690,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/tenant-02-list-settings.sh
   - id: tenant/03-status-lifecycle
     path: docs/qa/tenant/03-status-lifecycle.md
     module: tenant
@@ -649,6 +699,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-06
+    test_script: scripts/qa/auto/tenant-03-status-lifecycle.sh
   - id: tenant/04-b2b-org-creation
     path: docs/qa/tenant/04-b2b-org-creation.md
     module: tenant
@@ -657,6 +708,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/tenant-04-b2b-org-creation.sh
   - id: user/01-crud
     path: docs/qa/user/01-crud.md
     module: user
@@ -665,6 +717,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/user-01-crud.sh
   - id: user/02-advanced
     path: docs/qa/user/02-advanced.md
     module: user
@@ -673,6 +726,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/user-02-advanced.sh
   - id: user/03-validation
     path: docs/qa/user/03-validation.md
     module: user
@@ -681,6 +735,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/user-03-validation.sh
   - id: user/04-account-profile
     path: docs/qa/user/04-account-profile.md
     module: user
@@ -729,6 +784,7 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/webhook-03-reliability.sh
   - id: webhook/04-boundary
     path: docs/qa/webhook/04-boundary.md
     module: webhook
@@ -737,3 +793,4 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-02-21
+    test_script: scripts/qa/auto/webhook-04-boundary.sh

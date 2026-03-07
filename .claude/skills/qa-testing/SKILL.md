@@ -93,6 +93,22 @@ Note: Rate limiting is active on some endpoints (e.g., forgot-password: 5 req/mi
 - **Create in `scripts/qa/`**: When a new test script is needed, always place it under `scripts/qa/` — never in the project root or other ad-hoc locations.
 - **Naming convention**: Follow the existing patterns — e.g., `test-{feature}.{js,mjs,py,sh}` or `{feature}_test.py`.
 
+### Automated QA Scripts (`scripts/qa/auto/`)
+
+自动化测试脚本位于 `scripts/qa/auto/`，每个脚本对应一个 QA 文档。在执行 QA 测试时：
+
+1. **先查阅脚本对齐指南** `docs/qa/_script-alignment.md`，了解脚本当前状态
+2. **已通过脚本（38 个）**：可直接运行加速测试
+3. **需对齐脚本（56 个）**：分三类处理：
+   - **数据依赖（11 个）**：Agent 先完成前置数据准备（创建 Client、Connector、邀请等），再运行脚本
+   - **深度逻辑（18 个）**：Agent 需根据实际 API 行为调整脚本的端点路径、请求格式或断言值
+   - **安全检查差异（27 个）**：Agent 需考虑限流影响（添加延迟）、Content-Type 差异、权限模型差异等
+
+**环境变量注入**：Agent 可通过环境变量为脚本提供前置数据：
+```bash
+QA_TENANT_ID="xxx" QA_SERVICE_ID="yyy" QA_TOKEN="zzz" bash scripts/qa/auto/xxx.sh
+```
+
 ## Workflow
 
 **IMPORTANT: This skill is strictly for testing and reporting. NEVER attempt to fix, patch, or modify any source code during QA testing. If a test fails, create a ticket immediately and move on to the next scenario.**
@@ -466,3 +482,43 @@ curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak
 - **Keycloak 23**: `reset-password` endpoint returns 400 when password policy is active (no detailed error)
 - **Workaround**: Use seeded admin user (`admin / SecurePass123!`) or create users without passwords
 - **Realm update**: Partial PUT may fail; use GET-merge-PUT pattern for safe updates
+
+## Script-Assisted Testing (FAST PATH)
+
+Some QA documents have pre-built executable test scripts in `scripts/qa/auto/`. These scripts encode all API calls, assertions, and DB validations so you do NOT need to construct curl commands manually.
+
+### How to detect
+
+Check the QA document's corresponding entry in `docs/qa/_manifest.yaml` for a `test_script` field:
+```yaml
+- id: integration/04-health-check
+  test_script: scripts/qa/auto/integration-04-health-check.sh
+```
+
+Or check if a matching script exists by convention:
+```bash
+# For docs/qa/auth/07-public-endpoints.md -> scripts/qa/auto/auth-07-public-endpoints.sh
+ls scripts/qa/auto/auth-07-public-endpoints.sh
+```
+
+### Workflow when a test script exists
+
+1. **Run the script**: `bash scripts/qa/auto/xxx.sh 2>/tmp/qa-stderr.log`
+2. **Read JSONL output** — each line is a structured result:
+   - `{"type":"scenario","id":1,"title":"...","status":"PASS",...}` — scenario result
+   - `{"type":"assert","status":"FAIL","label":"...","expected":"...","actual":"..."}` — assertion detail
+   - `{"type":"summary","total":5,"passed":4,"failed":1,...}` — final summary
+3. **For PASS scenarios**: report and move on
+4. **For FAIL scenarios**: read the stderr log + Docker logs, then create a ticket as usual
+5. **Do NOT re-construct curl commands** that the script already covers
+
+### Workflow when NO test script exists
+
+Follow the standard manual testing workflow described above (construct curl/browser steps from the QA doc).
+
+### Script library reference
+
+Scripts use shared libraries in `scripts/qa/lib/`:
+- `lib/assert.sh` — `assert_eq`, `assert_http_status`, `assert_json_field`, `assert_db`, etc.
+- `lib/setup.sh` — `gen_admin_token`, `gen_tenant_token`, `api_get`, `api_post`, `db_query`, etc.
+- `lib/runner.sh` — `scenario` registration, timing, JSONL output, `run_all` execution

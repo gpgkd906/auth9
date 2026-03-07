@@ -14,6 +14,7 @@
 
 - 规范文件: [docs/qa/_standards.md](./_standards.md)
 - 清单真值: [docs/qa/_manifest.yaml](./_manifest.yaml)
+- 脚本对齐指南: [docs/qa/_script-alignment.md](./_script-alignment.md)
 - 校验脚本: `./scripts/qa-doc-lint.sh`
 - 周期执行入口: `./scripts/run-weekly-qa-governance.sh`
 
@@ -364,6 +365,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-07 | 5.4.0 | **新增自动化脚本对齐指南**（`_script-alignment.md`）：93 个自动化测试脚本中 38 个通过、11 个已删除（SDK/gRPC/端点不存在）、56 个需 QA Agent 对齐（数据依赖 11 个、深度逻辑 18 个、安全检查差异 27 个）；脚本支持 `QA_TENANT_ID`/`QA_SERVICE_ID`/`QA_TOKEN` 环境变量注入 |
 | 2026-02-22 | 5.3.0 | **新增 SCIM 2.0 Provisioning 测试文档**：覆盖 SCIM Bearer Token 管理（`provisioning/01`）、用户 CRUD（`provisioning/02`）、组 CRUD 与 Group-Role 映射（`provisioning/03`）、Bulk 批量操作与 Discovery 端点（`provisioning/04`）、鉴权安全与审计日志（`provisioning/05`）；跨文档影响：更新 `webhook/02-trigger.md` 新增 6 个 SCIM 事件类型、`identity-provider/03` 补充 SCIM Token 管理端点引用；共 94 个文档 444 个场景 |
 | 2026-02-22 | 5.2.1 | 新增仓库级周期治理入口脚本 `scripts/run-weekly-qa-governance.sh`（扩展审计 + 严格 lint + 日志落盘），并在 README 文档治理章节补充定期执行建议 |
 | 2026-02-21 | 5.2.0 | 第二阶段文档治理完成：将超长文档拆分为 `action/07~12` 与 `auth/12`，使既有超限文档全部收敛到每文档 ≤5 场景；`action/01~05`、`auth/09` 改为基础/进阶分层；索引同步为 91 个文档、429 个场景 |
