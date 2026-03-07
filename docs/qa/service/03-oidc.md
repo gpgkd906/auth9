@@ -133,21 +133,31 @@ SELECT id, client_id, name FROM clients WHERE service_id = '{service_id}';
 
 ## 测试数据准备 SQL
 
-```sql
--- 准备测试服务
-INSERT INTO services (id, name, base_url, redirect_uris, logout_uris, status) VALUES
-('svc-test-1111-1111-111111111111', 'Test Service', 'https://test.example.com',
- '["https://test.example.com/callback"]', '["https://test.example.com/logout"]', 'active');
+> **重要**: 所有 `id` 字段必须使用标准 UUID 格式（如 `UUID()`），否则会导致 `ColumnDecode` 错误。
+> 系统使用 `StringUuid` 类型解析 `id` 列，非 UUID 格式的值会导致 500 错误。
 
--- 准备测试客户端
-INSERT INTO clients (id, service_id, client_id, client_secret_hash, name) VALUES
-('client-1111-1111-1111-111111111111', 'svc-test-1111-1111-111111111111', 'existing-client',
- '$argon2id$...', 'Test Client');
+```sql
+-- 准备测试服务（id 必须为 UUID 格式）
+INSERT INTO services (id, tenant_id, name, base_url, redirect_uris, logout_uris, status, created_at, updated_at) VALUES
+(UUID(), (SELECT id FROM tenants WHERE slug = 'demo' LIMIT 1), 'Test Service', 'https://test.example.com',
+ '["https://test.example.com/callback"]', '["https://test.example.com/logout"]', 'active', NOW(), NOW());
+
+-- 查询刚创建的服务 id
+SET @test_service_id = (SELECT id FROM services WHERE name = 'Test Service' LIMIT 1);
+
+-- 准备测试客户端（id 必须为 UUID 格式）
+INSERT INTO clients (id, service_id, client_id, client_secret_hash, name, created_at, updated_at) VALUES
+(UUID(), @test_service_id, 'existing-client',
+ '$argon2id$v=19$m=65536,t=3,p=4$dummy$dummyhash', 'Test Client', NOW(), NOW());
 
 -- 清理
-DELETE FROM clients WHERE id LIKE 'client-%';
-DELETE FROM services WHERE id LIKE 'svc-test-%';
+DELETE FROM clients WHERE service_id = @test_service_id;
+DELETE FROM services WHERE id = @test_service_id;
 ```
+
+| 常见错误 | 症状 | 原因 | 修复方法 |
+|---------|------|------|---------|
+| `ColumnDecode` UUID 解析错误 | 500 Internal Server Error | `services.id` 或 `clients.id` 包含非 UUID 值 | 使用 `UUID()` 生成 ID，删除非 UUID 行后重新插入 |
 
 ---
 

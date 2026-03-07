@@ -205,6 +205,7 @@ docker exec auth9-redis redis-cli KEYS "auth9:token_blacklist:*"
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
 | 登出后 Token 仍有效 (200) | 使用了 GET /logout（仅重定向） | 改用 POST /api/v1/auth/logout 并携带 Bearer Token |
+| 登出后 Token 仍有效 (200) | **使用了非 OIDC 流程获取的 Token**（如 gen_tenant_access_token 脚本生成的 admin token）。这些 Token 没有 `sid` 字段，无法被黑名单机制吊销 | **必须**通过 Portal OIDC 登录流程获取 Identity Token，再通过 Token Exchange 获取 Tenant Access Token。确认 Token 包含 `sid` 字段：`echo $TOKEN \| cut -d. -f2 \| base64 -d \| jq .sid` |
 | Tenant Access Token 登出后仍有效 | Token 缺少 sid 字段（旧版本 Token） | 重新通过 Token Exchange 获取新 Token（新版本包含 sid） |
 | 登出返回 401 | Token 已过期 | 使用有效的 Identity Token 登出 |
 | Redis 503 错误 | Redis 不可用（fail-closed 设计） | 检查 Redis 容器健康状态 |

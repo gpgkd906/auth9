@@ -8,11 +8,27 @@
 
 ## 前置条件
 
+### **关键条件：用户必须有租户成员身份**
+
+> **Post-login Actions 仅在以下条件同时满足时执行**：
+> 1. Action 绑定到一个 **有 `tenant_id` 的 Service**（非跨租户 Service）
+> 2. 或者 Action 绑定到跨租户 Service，但 **用户至少属于一个租户**
+>
+> 如果 Service 没有 `tenant_id` 且用户没有任何租户成员身份，post-login Actions 将被**静默跳过**（不会报错，也不会有执行记录）。
+> 这是系统设计行为，不是 bug。
+
 ### 测试用户准备
 ```sql
 -- 确保存在测试用户
 SELECT id, email, display_name FROM users WHERE email = 'test@example.com';
 -- 如不存在，通过注册流程创建
+
+-- **重要**: 确保用户已加入至少一个租户
+SELECT tu.id, tu.tenant_id, t.name
+FROM tenant_users tu
+JOIN tenants t ON t.id = tu.tenant_id
+WHERE tu.user_id = (SELECT id FROM users WHERE email = 'test@example.com');
+-- 如果为空，需要先将用户添加到租户
 ```
 
 ### 测试 Action 准备
