@@ -374,6 +374,7 @@ pub async fn query_action_logs<S: HasServices>(
     let page = offset / per_page + 1;
 
     let filter = LogQueryFilter {
+        service_id: None,
         action_id,
         trigger_id: params.trigger_id,
         user_id,

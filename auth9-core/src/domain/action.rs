@@ -291,6 +291,7 @@ pub struct TestActionResponse {
 /// Log query filter
 #[derive(Debug, Clone, Default, Deserialize, ToSchema)]
 pub struct LogQueryFilter {
+    pub service_id: Option<StringUuid>,
     pub action_id: Option<StringUuid>,
     pub trigger_id: Option<String>,
     pub user_id: Option<StringUuid>,
@@ -622,6 +623,7 @@ mod tests {
     #[test]
     fn test_log_query_filter_default() {
         let filter = LogQueryFilter::default();
+        assert!(filter.service_id.is_none());
         assert!(filter.action_id.is_none());
         assert!(filter.user_id.is_none());
         assert!(filter.success.is_none());

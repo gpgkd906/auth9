@@ -336,12 +336,14 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     pub async fn query_logs(
         &self,
         service_id: StringUuid,
-        filter: LogQueryFilter,
+        mut filter: LogQueryFilter,
     ) -> Result<(Vec<ActionExecution>, i64)> {
         // If action_id is specified, verify it belongs to service
         if let Some(action_id) = filter.action_id {
             let _action = self.get(action_id, service_id).await?;
         }
+
+        filter.service_id = Some(service_id);
 
         let logs = self.action_repo.query_logs(&filter).await?;
         let total = self.action_repo.count_logs(&filter).await?;
@@ -1032,9 +1034,14 @@ mod tests {
 
         let mut mock = MockActionRepository::new();
         let executions_clone = executions.clone();
+        let expected_sid = service_id;
         mock.expect_query_logs()
+            .withf(move |f| f.service_id == Some(expected_sid))
             .returning(move |_| Ok(executions_clone.clone()));
-        mock.expect_count_logs().returning(|_| Ok(1));
+        let expected_sid2 = service_id;
+        mock.expect_count_logs()
+            .withf(move |f| f.service_id == Some(expected_sid2))
+            .returning(|_| Ok(1));
 
         let service = ActionService::new(Arc::new(mock), None);
         let filter = LogQueryFilter::default();

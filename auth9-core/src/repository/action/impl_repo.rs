@@ -343,6 +343,9 @@ impl ActionRepository for ActionRepositoryImpl {
         );
 
         let mut conditions = Vec::new();
+        if filter.service_id.is_some() {
+            conditions.push("service_id = ?");
+        }
         if filter.action_id.is_some() {
             conditions.push("action_id = ?");
         }
@@ -377,6 +380,9 @@ impl ActionRepository for ActionRepositoryImpl {
 
         let mut query = sqlx::query_as::<_, ActionExecution>(&query_str);
 
+        if let Some(service_id) = filter.service_id {
+            query = query.bind(service_id);
+        }
         if let Some(action_id) = filter.action_id {
             query = query.bind(action_id);
         }
@@ -417,6 +423,9 @@ impl ActionRepository for ActionRepositoryImpl {
         );
 
         let mut conditions = Vec::new();
+        if filter.service_id.is_some() {
+            conditions.push("service_id = ?");
+        }
         if filter.action_id.is_some() {
             conditions.push("action_id = ?");
         }
@@ -442,6 +451,9 @@ impl ActionRepository for ActionRepositoryImpl {
 
         let mut query = sqlx::query_scalar::<_, i64>(&query_str);
 
+        if let Some(service_id) = filter.service_id {
+            query = query.bind(service_id);
+        }
         if let Some(action_id) = filter.action_id {
             query = query.bind(action_id);
         }
