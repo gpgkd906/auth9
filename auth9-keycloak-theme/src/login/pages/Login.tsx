@@ -48,7 +48,7 @@ export default function Login(
       : msgStr("email");
 
   return (
-    <PageLayout>
+    <PageLayout lightModeLabel={msgStr("lightMode")} darkModeLabel={msgStr("darkMode")}>
       <GlassCard>
         {/* Header with Logo */}
         <div className="login-header">
@@ -155,7 +155,7 @@ export default function Login(
         {/* Social Providers */}
         <SocialProviders
           providers={social?.providers ?? []}
-          dividerText={msgStr("identity-provider-login-label") || "Or continue with"}
+          dividerText={msgStr("identity-provider-login-label") || msgStr("orContinueWith")}
         />
 
         {/* Registration Link */}

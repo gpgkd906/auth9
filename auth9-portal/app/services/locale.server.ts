@@ -17,6 +17,7 @@ function normalizeLocale(input: string | null | undefined): AppLocale | null {
   const lower = input.toLowerCase();
   if (lower.startsWith("zh")) return "zh-CN";
   if (lower.startsWith("en")) return "en-US";
+  if (lower.startsWith("ja")) return "ja";
   return null;
 }
 

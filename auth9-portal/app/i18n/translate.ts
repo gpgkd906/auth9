@@ -28,6 +28,12 @@ export function translate(locale: AppLocale, key: string, values?: Values): stri
   return interpolate(message, values);
 }
 
+const LOCALE_DISPLAY_NAMES: Record<AppLocale, string> = {
+  "zh-CN": "简体中文",
+  "en-US": "English",
+  ja: "日本語",
+};
+
 export function getLocaleDisplayName(locale: AppLocale): string {
-  return locale === "zh-CN" ? "简体中文" : "English";
+  return LOCALE_DISPLAY_NAMES[locale];
 }

@@ -3,19 +3,21 @@ import type { Theme } from "../hooks/useTheme";
 interface ThemeToggleProps {
   theme: Theme;
   onToggle: () => void;
+  lightLabel?: string;
+  darkLabel?: string;
 }
 
 /**
  * Light/dark mode toggle button with Sun/Moon icons.
  */
-export function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
+export function ThemeToggle({ theme, onToggle, lightLabel = "Light mode", darkLabel = "Dark mode" }: ThemeToggleProps) {
   return (
     <div className="theme-toggle">
       <button
         type="button"
         className={`theme-toggle-btn ${theme === "light" ? "active" : ""}`}
         onClick={() => theme !== "light" && onToggle()}
-        aria-label="Light mode"
+        aria-label={lightLabel}
       >
         <SunIcon />
       </button>
@@ -23,7 +25,7 @@ export function ThemeToggle({ theme, onToggle }: ThemeToggleProps) {
         type="button"
         className={`theme-toggle-btn ${theme === "dark" ? "active" : ""}`}
         onClick={() => theme !== "dark" && onToggle()}
-        aria-label="Dark mode"
+        aria-label={darkLabel}
       >
         <MoonIcon />
       </button>

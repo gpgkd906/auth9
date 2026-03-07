@@ -24,6 +24,7 @@ export function LanguageSwitcher() {
       >
         <option value="zh-CN">{t("common.language.zhCN")}</option>
         <option value="en-US">{t("common.language.enUS")}</option>
+        <option value="ja">{t("common.language.ja")}</option>
       </select>
     </label>
   );

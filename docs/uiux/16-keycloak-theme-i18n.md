@@ -1,7 +1,7 @@
 # UI/UX 测试 - Keycloak 主题国际化（i18n）
 
 **模块**: 认证流程 / 国际化
-**测试范围**: Keycloak 自定义主题在 zh-CN / en-US 下的文案正确性、语言参数透传、认证页品牌一致性
+**测试范围**: Keycloak 自定义主题在 zh-CN / en-US / ja 下的文案正确性、语言参数透传、认证页品牌一致性
 **场景数**: 4
 **关联 Ticket**: `docs/ticket/keycloak-theme_i18n-not-implemented_scenario1_20260307_162702.md`
 
@@ -11,17 +11,19 @@
 
 Auth9 使用自定义 Keycloak 主题（`auth9-keycloak-theme`）接管 Keycloak 的认证页面（登录、注册、MFA、错误页等）。
 
-**当前已知缺陷**：
-- Keycloak 主题未实现 i18n，所有认证页文案固定为单一语言（英文）
-- 用户在 Portal 中切换语言后，跳转到 Keycloak 认证页时，语言不跟随切换
+**已修复**（2026-03-07）：
+- Keycloak 主题已实现 i18n（Keycloakify `withCustomTranslations` 支持 `en` / `zh-CN` / `ja`）
+- Portal 认证跳转已附加 `ui_locales` 参数，Keycloak 认证页跟随 Portal 语言切换
+- 所有硬编码文案已替换为 i18n 调用（`msgStr()`）
 
 **Keycloak i18n 机制**：
-- 主题目录 `messages/messages_{locale}.properties` 文件定义每种语言的文案
-- `theme.properties` 中声明 `locales=en,zh-CN`
-- 通过 URL 参数 `ui_locales=zh-CN` 或 `Accept-Language` 控制语言
+- 通过 Keycloakify `i18nBuilder.withCustomTranslations` 定义自定义 key 翻译（`en` / `zh-CN` / `ja`）
+- 内置 Keycloak message key 由 Keycloak 自身 i18n 处理
+- 通过 URL 参数 `ui_locales` 控制语言
 
-**Auth9 语言透传机制**（Fix 后应实现）：
-- Portal 发起认证跳转时，在 Keycloak 授权 URL 中附加 `ui_locales={current_locale}` 参数
+**Auth9 语言透传机制**：
+- Portal 发起认证跳转时，在 Keycloak 授权 URL 中附加 `ui_locales={mapped_locale}` 参数
+- 映射规则：`en-US` → `en`，`zh-CN` → `zh-CN`，`ja` → `ja`
 
 ---
 
@@ -41,12 +43,19 @@ Auth9 使用自定义 Keycloak 主题（`auth9-keycloak-theme`）接管 Keycloak
 4. 返回 Portal，将语言切换为「English」
 5. 再次点击「Sign in with password」跳转到认证页
 6. 观察认证页文案是否变更为英文
+7. 返回 Portal，将语言切换为「日本語」
+8. 再次点击「パスワードでサインイン」跳转到认证页
+9. 观察认证页文案是否变更为日语
 
 ### 预期视觉效果
 - **中文状态下**：认证页标题、输入框 placeholder、按钮、错误提示均为中文
   - 例：「登录」「请输入邮箱」「继续」「忘记密码？」
 - **英文状态下**：相同元素均为英文
   - 例：「Sign In」「Enter your email」「Continue」「Forgot password?」
+- **日语状态下**：相同元素均为日语
+  - 例：主题切换按钮 aria-label 为「ライトモード」「ダークモード」
+  - 社交登录分隔文案为「または以下で続ける」
+  - 返回登录链接为「← ログインに戻る」
 - 认证页保持 Auth9 品牌样式（不暴露 Keycloak 默认 UI）
 
 ### 验证工具（在认证页运行）
@@ -79,10 +88,15 @@ console.log('Email placeholder:', document.querySelector('[type="email"]')?.plac
    - 「忘记密码」链接
    - 「注册」链接（如有）
    - 社交登录按钮（如「使用 GitHub 登录」）
+   - 主题切换按钮 aria-label（「浅色模式」/「深色模式」）
+   - 社交登录分隔文案（「或使用以下方式继续」）
 3. 故意输入错误密码，触发错误提示
 4. 检查错误提示是否为中文
+5. 切换到日语，重复步骤 1-4，验证自定义 key 为日语
 
 ### 预期视觉效果
+
+**中文文案覆盖**：
 
 | 区域 | 预期中文内容 |
 |------|------------|
@@ -92,10 +106,22 @@ console.log('Email placeholder:', document.querySelector('[type="email"]')?.plac
 | 提交按钮 | 「登录」 |
 | 忘记密码 | 「忘记密码？」 |
 | 登录失败提示 | 「用户名或密码错误」 |
+| 社交登录分隔 | 「或使用以下方式继续」 |
+| 主题切换 | aria-label: 「浅色模式」/「深色模式」 |
+
+**日语文案覆盖（自定义 key）**：
+
+| 区域 | 预期日语内容 |
+|------|------------|
+| 返回登录链接 | 「← ログインに戻る」 |
+| OTP 设备选择 | 「OTPデバイスを選択」 |
+| 社交登录分隔 | 「または以下で続ける」 |
+| 已有账户提示 | 「アカウントをお持ちですか？」 |
+| 主题切换 | aria-label: 「ライトモード」/「ダークモード」 |
 
 **禁止出现**：
-- ❌ 原始 i18n key（如 `loginTitleHtml`、`doLogIn`）
-- ❌ 英文 fallback（如 `Sign In`、`Password`）
+- ❌ 原始 i18n key（如 `loginTitleHtml`、`doLogIn`、`selectOtpDevice`）
+- ❌ 语言不匹配的 fallback（如中文模式下出现英文 `Sign In`，日语模式下出现中文文案）
 - ❌ 空白文字区域（key 未翻译导致显示空字符串）
 
 ### 验证工具
@@ -114,7 +140,7 @@ if (matches) {
 ## 场景 3：错误页面与 MFA 页面的语言一致性
 
 ### 初始状态
-- Portal 分别设置为中文和英文
+- Portal 分别设置为中文、英文和日语
 - 可触发 MFA（如账号已启用 TOTP）
 
 ### 目的
@@ -122,16 +148,18 @@ if (matches) {
 
 ### 测试操作流程
 1. 使用已启用 MFA 的账号，在中文 Portal 下触发 MFA 流程
-2. 观察 MFA 页面（输入 OTP 码的页面）的文案语言
+2. 观察 MFA 页面（输入 OTP 码的页面）的文案语言，特别是 OTP 设备选择标签
 3. 在 Portal 设置英文，重复触发 MFA 流程
-4. 在认证页输入错误密码 N 次，触发账号锁定或限流提示页
-5. 观察这些附加页面的文案语言
+4. 在 Portal 设置日语，重复触发 MFA 流程
+5. 在认证页输入错误密码 N 次，触发账号锁定或限流提示页
+6. 观察这些附加页面在三种语言下的文案
 
 ### 预期视觉效果
-- **MFA 页（中文）**：「请输入验证器 App 中显示的验证码」「验证」
-- **MFA 页（英文）**：「Enter the verification code from your authenticator app」「Verify」
-- **错误/限流页（中文）**：「您的账号已被临时锁定，请稍后再试」
-- **错误/限流页（英文）**：「Your account has been temporarily locked. Please try again later.」
+- **MFA 页（中文）**：OTP 选择标签「选择验证设备」、验证按钮「验证」
+- **MFA 页（英文）**：OTP 选择标签「Select OTP Device」
+- **MFA 页（日语）**：OTP 选择标签「OTPデバイスを選択」
+- **密码重置页**：返回登录链接在日语下为「← ログインに戻る」
+- **错误/限流页**：三种语言下均显示对应翻译
 
 所有 Keycloak 托管页面保持 Auth9 品牌样式，不泄漏 Keycloak 默认 UI。
 
@@ -140,10 +168,10 @@ if (matches) {
 ## 场景 4：ui_locales 参数透传回归验证
 
 ### 初始状态
-- Portal 分别切换语言为中文 / 英文
+- Portal 分别切换语言为中文 / 英文 / 日语
 
 ### 目的
-验证 Portal 在发起 Keycloak 认证跳转时，正确将当前语言作为 `ui_locales` 参数附加到授权 URL，Keycloak 据此渲染对应语言。
+验证 Portal 在发起 Keycloak 认证跳转时，正确将当前语言作为 `ui_locales` 参数附加到授权 URL，Keycloak 据此渲染对应语言。含企业 SSO 发现请求的透传验证。
 
 > ⚠️ **回归验证**: 此场景是 Keycloak i18n 实现的核心技术验证，修复后必须通过。
 
@@ -151,24 +179,28 @@ if (matches) {
 1. 设置 Portal 语言为「English」
 2. 在 Portal 点击「Sign in with password」
 3. 在跳转到 Keycloak 之前（可通过 DevTools Network 或 URL 观察），检查请求 URL
-4. 确认 URL 中包含 `ui_locales=en` 或 `ui_locales=en-US`
+4. 确认 URL 中包含 `ui_locales=en`（注意映射：`en-US` → `en`）
 5. 切换到中文，重复上述步骤，确认 URL 包含 `ui_locales=zh-CN`
+6. 切换到日语，重复上述步骤，确认 URL 包含 `ui_locales=ja`
+7. 使用企业 SSO 登录入口，确认 SSO 发现请求也携带 `ui_locales` 参数
 
 ### 预期结果
 
 **Network 请求（跳转前的 Authorization URL）**：
 ```
-https://auth.example.com/realms/auth9/protocol/openid-connect/auth?
-  client_id=...
-  &redirect_uri=...
-  &ui_locales=en-US    ← 应在英文 Portal 下出现
+# 英文 Portal：en-US 映射为 en
+ui_locales=en
+
+# 中文 Portal
+ui_locales=zh-CN
+
+# 日语 Portal
+ui_locales=ja
 ```
 
+**企业 SSO 发现请求**：
 ```
-https://auth.example.com/realms/auth9/protocol/openid-connect/auth?
-  client_id=...
-  &redirect_uri=...
-  &ui_locales=zh-CN    ← 应在中文 Portal 下出现
+GET /api/v1/enterprise-sso/discovery?...&ui_locales=ja
 ```
 
 ### 验证工具
@@ -191,10 +223,10 @@ if (loginBtn) {
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | 语言入口可见性 — 认证页语言跟随切换（入口可见性）| ☐ | | | |
-| 2 | 中文下认证页完整文案覆盖（回归 Ticket #4）| ☐ | | | **已知 Bug 回归项，必测** |
-| 3 | MFA 页与错误页语言一致性 | ☐ | | | 需有启用 MFA 的测试账号 |
-| 4 | ui_locales 参数透传回归验证（回归 Ticket #4）| ☐ | | | **已知 Bug 回归项，必测** |
+| 1 | 语言入口可见性 — 认证页三语跟随切换 | ☐ | | | 需验证日语跳转后文案正确 |
+| 2 | 三语下认证页完整文案覆盖 | ☐ | | | 含自定义 key 日语验证 |
+| 3 | MFA 页与错误页三语一致性 | ☐ | | | 需有启用 MFA 的测试账号 |
+| 4 | ui_locales 三语参数透传 + 企业 SSO | ☐ | | | 含映射验证 en-US→en |
 
 ---
 

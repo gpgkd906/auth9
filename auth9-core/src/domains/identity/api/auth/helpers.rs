@@ -41,6 +41,7 @@ pub struct KeycloakAuthUrlParams<'a> {
     pub nonce: Option<&'a str>,
     pub connector_alias: Option<&'a str>,
     pub kc_action: Option<&'a str>,
+    pub ui_locales: Option<&'a str>,
 }
 
 /// Build Keycloak authorization URL
@@ -66,6 +67,9 @@ pub fn build_keycloak_auth_url(params: &KeycloakAuthUrlParams) -> Result<String>
         }
         if let Some(action) = params.kc_action {
             pairs.append_pair("kc_action", action);
+        }
+        if let Some(locales) = params.ui_locales {
+            pairs.append_pair("ui_locales", locales);
         }
     }
 
@@ -305,6 +309,7 @@ mod tests {
             nonce: None,
             connector_alias: None,
             kc_action: None,
+            ui_locales: None,
         })
         .unwrap();
 
@@ -328,6 +333,7 @@ mod tests {
             nonce: Some("my-nonce"),
             connector_alias: None,
             kc_action: None,
+            ui_locales: None,
         })
         .unwrap();
 
@@ -347,11 +353,52 @@ mod tests {
             nonce: None,
             connector_alias: Some("github"),
             kc_action: Some("idp_link:github"),
+            ui_locales: None,
         })
         .unwrap();
 
         assert!(url.contains("kc_idp_hint=github"));
         assert!(url.contains("kc_action=idp_link%3Agithub"));
+    }
+
+    #[test]
+    fn test_build_keycloak_auth_url_with_ui_locales() {
+        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+            keycloak_public_url: "https://keycloak.example.com",
+            realm: "test",
+            response_type: "code",
+            client_id: "client",
+            callback_url: "https://app.com/cb",
+            scope: "openid",
+            encoded_state: "state",
+            nonce: None,
+            connector_alias: None,
+            kc_action: None,
+            ui_locales: Some("zh-CN"),
+        })
+        .unwrap();
+
+        assert!(url.contains("ui_locales=zh-CN"));
+    }
+
+    #[test]
+    fn test_build_keycloak_auth_url_without_ui_locales() {
+        let url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
+            keycloak_public_url: "https://keycloak.example.com",
+            realm: "test",
+            response_type: "code",
+            client_id: "client",
+            callback_url: "https://app.com/cb",
+            scope: "openid",
+            encoded_state: "state",
+            nonce: None,
+            connector_alias: None,
+            kc_action: None,
+            ui_locales: None,
+        })
+        .unwrap();
+
+        assert!(!url.contains("ui_locales"));
     }
 
     #[test]
@@ -467,6 +514,7 @@ mod tests {
             nonce: Some("nonce with spaces"),
             connector_alias: None,
             kc_action: None,
+            ui_locales: None,
         })
         .unwrap();
 

@@ -1,0 +1,308 @@
+export default {
+  common: {
+    appName: "Auth9",
+    buttons: {
+      signIn: "サインイン",
+      signOut: "サインアウト",
+      signUp: "サインアップ",
+      createAccount: "アカウント作成",
+      creating: "作成中...",
+      continue: "続ける",
+      cancel: "キャンセル",
+      delete: "削除",
+      backToLogin: "ログインに戻る",
+      sendResetLink: "リセットリンクを送信",
+      sending: "送信中...",
+      requestNewResetLink: "新しいリセットリンクをリクエスト",
+      resetPassword: "パスワードをリセット", // pragma: allowlist secret
+      resetting: "リセット中...",
+      copy: "コピー",
+      copyField: "{{field}}をコピー",
+    },
+    labels: {
+      email: "メールアドレス",
+      emailAddress: "メールアドレス",
+      password: "パスワード", // pragma: allowlist secret
+      displayName: "表示名",
+      newPassword: "新しいパスワード", // pragma: allowlist secret
+      confirmPassword: "パスワード確認", // pragma: allowlist secret
+    },
+    placeholders: {
+      email: "you@example.com",
+      companyEmail: "you@company.com",
+      displayName: "Jane Doe",
+      passwordMasked: "••••••••",
+      newPassword: "新しいパスワードを入力", // pragma: allowlist secret
+      confirmNewPassword: "新しいパスワードを確認", // pragma: allowlist secret
+    },
+    actions: {
+      tryAgain: "再試行",
+    },
+    language: {
+      zhCN: "简体中文",
+      enUS: "English",
+      ja: "日本語",
+      switcherLabel: "言語を切り替え",
+    },
+    theme: {
+      light: "ライトモード",
+      dark: "ダークモード",
+      switchToLight: "ライトモードに切り替え",
+      switchToDark: "ダークモードに切り替え",
+    },
+    errors: {
+      unknown: "問題が発生しました。もう一度お試しください。",
+      pageNotFound: "ページが見つかりません",
+      somethingWentWrong: "問題が発生しました。もう一度お試しください。",
+      goBackHome: "ホームに戻る",
+    },
+    org: {
+      selectOrganization: "組織を選択",
+      createNewOrganization: "新しい組織を作成",
+      switchOrganization: "組織を切り替え（現在: {{name}}）",
+      switchFailed: "テナントの切り替えに失敗しました。もう一度お試しください。",
+    },
+    navigation: {
+      skipToMain: "メインコンテンツへスキップ",
+      mobileHeader: "モバイルヘッダー",
+      sidebar: "サイドバーナビゲーション",
+      mainNavigation: "メインナビゲーション",
+      mainContent: "メインコンテンツ",
+      openSidebar: "サイドバーを開く",
+      closeSidebar: "サイドバーを閉じる",
+    },
+    meta: {
+      appTitle: "Auth9 - アイデンティティ管理",
+      appDescription: "モダンなアイデンティティとアクセス管理",
+    },
+  },
+  home: {
+    meta: {
+      title: "Auth9 - モダンなアイデンティティ管理",
+      description: "セキュアでスケーラブルなアイデンティティとアクセス管理",
+    },
+    nav: {
+      signIn: "サインイン",
+      getStarted: "はじめる",
+    },
+    hero: {
+      titleLine1: "アイデンティティ管理を",
+      titleLine2: "シンプルに",
+      description:
+        "アプリケーション向けのセキュアでスケーラブルな認証・認可。マルチテナント、SSO、動的RBACを標準でサポート。",
+      startTrial: "無料トライアルを開始",
+      readDocs: "ドキュメントを読む",
+    },
+    features: {
+      ssoTitle: "シングルサインオン",
+      ssoDescription: "すべてのアプリケーションで1回のログイン。OIDC、SAMLなどをサポート。",
+      tenantTitle: "マルチテナント",
+      tenantDescription: "SaaS向けに設計。組織ごとの柔軟な設定でテナントを分離。",
+      rbacTitle: "動的RBAC",
+      rbacDescription: "ロール、権限、継承によるきめ細かいアクセス制御。",
+    },
+    footer: {
+      copyright: "© 2024 Auth9. All rights reserved.",
+      privacy: "プライバシー",
+      terms: "利用規約",
+    },
+  },
+  auth: {
+    login: {
+      metaTitle: "サインイン - Auth9",
+      title: "サインイン",
+      failedTitle: "サインインに失敗しました",
+      description: "サインイン方法を選択してください",
+      accessDenied: "アクセスが拒否されました。もう一度お試しいただくか、管理者にお問い合わせください。",
+      genericError: "サインイン中にエラーが発生しました: {{error}}",
+      ssoButton: "Enterprise SSOで続ける",
+      ssoFinding: "SSOを検索中...",
+      passwordButton: "パスワードでサインイン", // pragma: allowlist secret
+      redirecting: "リダイレクト中...",
+      passkeyButton: "パスキーでサインイン",
+      verifying: "確認中...",
+      forgotPassword: "パスワードをお忘れですか？", // pragma: allowlist secret
+      createAccount: "アカウント作成",
+      or: "または",
+      chooseMethod: "サインイン方法を選択してください",
+      ssoEmailRequired: "Enterprise SSOの検出にはメールアドレスが必要です。",
+      passkeyCancelled: "認証がキャンセルされたか、タイムアウトしました。",
+      authCancelled: "認証がキャンセルされました",
+      authFailed: "認証に失敗しました",
+      authStartFailed: "認証の開始に失敗しました",
+      invalidAction: "無効なアクション",
+      missingAccessToken: "アクセストークンがありません",
+    },
+    register: {
+      metaTitle: "サインアップ - Auth9",
+      title: "アカウントを作成",
+      description: "Auth9でアイデンティティ管理を始めましょう",
+      submit: "アカウント作成",
+      footerPrefix: "すでにアカウントをお持ちですか？",
+      footerAction: "サインイン",
+      validationRequired: "メールアドレスとパスワードは必須です。",
+      failed: "登録に失敗しました",
+    },
+    forgotPassword: {
+      metaTitle: "パスワードをお忘れですか - Auth9",
+      title: "パスワードをお忘れですか？",
+      description: "メールアドレスを入力すると、パスワードリセット用のリンクをお送りします。",
+      successTitle: "メールを確認してください",
+      successDescription:
+        "{{email}}のアカウントが存在する場合、パスワードリセットの手順をそのアドレスに送信しました。",
+      successHint: "メールが届いていませんか？迷惑メールフォルダを確認するか、",
+      tryAgain: "再試行",
+      emailRequired: "メールアドレスは必須です。",
+    },
+    resetPassword: {
+      metaTitle: "パスワードをリセット - Auth9",
+      invalidToken: "無効またはリセットトークンがありません",
+      invalidTitle: "無効なリンク",
+      successTitle: "パスワードのリセットが完了しました",
+      successDescription: "パスワードが更新されました。新しいパスワードでサインインできます。",
+      title: "新しいパスワードを設定",
+      description: "新しいパスワードを以下に入力してください。",
+      passwordHint: "大文字、小文字、数字、記号を含む12文字以上である必要があります", // pragma: allowlist secret
+      passwordRequired: "パスワードは必須です。", // pragma: allowlist secret
+      passwordMismatch: "パスワードが一致しません。", // pragma: allowlist secret
+      failed: "パスワードのリセットに失敗しました",
+    },
+  },
+  dashboard: {
+    metaTitle: "{{tenantName}} - Auth9",
+    fallbackTitle: "ダッシュボード",
+    nav: { overview: "概要", tenants: "テナント", users: "ユーザー", services: "サービス", roles: "ロール", abac: "ABAC Policies", analytics: "分析", security: "セキュリティ", auditLogs: "監査ログ", settings: "設定", main: "メイン", securityGroup: "セキュリティ", system: "システム" },
+    userFallback: "ユーザー",
+  },
+  account: {
+    metaTitle: "アカウント - Auth9",
+    title: "アカウント",
+    description: "個人アカウント設定を管理",
+    nav: { profile: "プロフィール", security: "セキュリティ", passkeys: "パスキー", sessions: "セッション", identities: "リンク済みアカウント" },
+    navDescriptions: { profile: "個人情報", security: "パスワードの変更", passkeys: "パスワードレス認証", sessions: "アクティブなセッション", identities: "接続済みアカウント" },
+    profile: { title: "プロフィール", description: "個人情報。プラットフォーム上で他のユーザーに表示される内容です。", loadError: "プロフィールの読み込みに失敗しました。後でもう一度お試しください。", serverUnavailable: "サーバーに接続できません。後でもう一度お試しください。", notAuthenticated: "認証されていません", updated: "プロフィールを更新しました", updateFailed: "プロフィールの更新に失敗しました", displayName: "表示名", displayNamePlaceholder: "表示名を入力", avatarUrl: "アバターURL", avatarUrlPlaceholder: "https://example.com/avatar.png", avatarHint: "プロフィール画像のURL", email: "メールアドレス", emailHint: "メールアドレスはここでは変更できません", mfa: "MFA", joined: "参加日", enabled: "有効", disabled: "無効", save: "変更を保存", saving: "保存中..." },
+    security: { title: "パスワードの変更", description: "アカウントのパスワードを更新します。現在のパスワードの入力が必要です。", currentPassword: "現在のパスワード", newPassword: "新しいパスワード", confirmPassword: "新しいパスワード（確認）", required: "すべてのパスワード欄を入力してください", mismatch: "新しいパスワードが一致しません", success: "パスワードを変更しました", failed: "パスワードの変更に失敗しました", change: "パスワードを変更", changing: "変更中..." },
+    sessions: { loadError: "セッションの読み込みに失敗しました", operationFailed: "操作に失敗しました", invalidAction: "無効な操作です", justNow: "たった今", minutesAgo: "{{count}}分前", hoursAgo: "{{count}}時間前", daysAgo: "{{count}}日前", currentTitle: "現在のセッション", currentDescription: "現在使用中のデバイスです。", unknownCurrent: "現在のセッションを特定できません", otherTitle: "他のセッション", otherDescription: "現在サインイン中のデバイスです。", signOutAll: "すべてサインアウト", noOtherSessions: "他のアクティブなセッションはありません", unknownDevice: "不明なデバイス", current: "現在", lastActive: "最終アクティブ", started: "開始日時", revoke: "取り消す", securityTips: "セキュリティのヒント", tips: { unrecognized: "心当たりのないセッションはサインアウトしてください", sharedDevices: "共有・公共のデバイスではサインインしたままにしないでください", mfa: "二要素認証を有効にしてセキュリティを強化してください", passwords: "各アカウントで固有の強力なパスワードを使用してください" } },
+  },
+  settings: {
+    metaTitle: "設定 - Auth9",
+    title: "設定",
+    description: "システムと組織の設定を管理",
+    nav: { organization: "組織", branding: "ログインブランディング", email: "メールプロバイダー", emailTemplates: "メールテンプレート", security: "パスワードポリシー", identityProviders: "アイデンティティプロバイダー" },
+    navDescriptions: { organization: "テナントのブランディング設定", branding: "ログインページのカスタマイズ", email: "メール配信設定", emailTemplates: "メール内容のカスタマイズ", security: "パスワード要件", identityProviders: "ソーシャルログインとSSO" },
+    organization: { title: "組織設定", description: "{{total}}件のテナント • {{totalPages}}ページ中{{page}}ページ目", tenant: "テナント", status: "ステータス", branding: "ブランディング", noBranding: "ブランディングなし", noSettings: "テナント設定が見つかりません", editTitle: "設定の編集: {{name}}", editDescription: "外観と動作をカスタマイズします。", brandingSection: "ブランディング", logoUrl: "ロゴURL", logoUrlPlaceholder: "https://example.com/logo.png", primaryColor: "プライマリカラー", cancel: "キャンセル", save: "変更を保存", saving: "保存中...", logoAlt: "ロゴ", unknownError: "不明なエラー", invalidIntent: "無効なインテント" },
+    tabs: { overview: "概要" },
+    brandingPage: { metaTitle: "ログインブランディング - Auth9", successSaved: "ブランディング設定を保存しました", successReset: "ブランディングをデフォルトに戻しました", title: "ログインページのブランディング", description: "ログインページの外観をカスタマイズします。変更はすべてのKeycloakログインフォームに適用されます。", companyIdentity: "企業アイデンティティ", companyName: "企業名", companyNamePlaceholder: "企業名", companyNameHint: "ログインページに表示されます", logoUrl: "ロゴURL", logoUrlPlaceholder: "https://example.com/logo.png", logoUrlHint: "推奨サイズ: 200x50ピクセル", faviconUrl: "ファビコンURL", faviconUrlPlaceholder: "https://example.com/favicon.ico", faviconUrlHint: "ブラウザタブのアイコン（ICOまたはPNG）", logoPreview: "ロゴプレビュー:", logoPreviewAlt: "ロゴプレビュー", loginOptions: "ログインオプション", allowRegistration: "登録を許可", allowRegistrationHint: "ログインページに「アカウント作成」リンクを表示", toggleAllowRegistration: "登録許可の切り替え", colors: "色", preview: "プレビュー", previewLogoAlt: "ロゴ", previewEmail: "メールアドレス", previewPassword: "Password", previewSignIn: "サインイン", previewForgotPassword: "Forgot password?", customCss: "カスタムCSS", advanced: "詳細", customCssPlaceholder: ".login-form {\n  border-radius: 16px;\n  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);\n}", customCssHint: "ログインページをさらにカスタマイズするためのCSSルールを追加します。最大50KB。", saveChanges: "変更を保存", saving: "保存中...", resetToDefaults: "デフォルトに戻す", resetting: "リセット中..." }, // pragma: allowlist secret
+    emailTemplatesPage: { metaTitle: "メールテンプレート - Auth9", loadFailed: "テンプレートの読み込みに失敗しました", title: "メールテンプレート", description: "ユーザーに送信するメールの内容と外観をカスタマイズします。変更はすぐに反映されます。", template: "テンプレート", descriptionColumn: "説明", status: "ステータス", action: "操作", customized: "カスタム", default: "デフォルト", edit: "編集", variablesTitle: "テンプレート変数", variablesDescription: "テンプレートでは{{syntax}}構文を使用します。各テンプレートタイプで利用できる変数があります。", commonVariables: "すべてのテンプレートで利用できる共通変数:", appNameVariable: "アプリケーション名（Auth9）", yearVariable: "現在の年" },
+    emailTemplateEditor: { metaTitle: "{{name}}の編集 - メールテンプレート - Auth9", fallbackName: "テンプレート", typeRequired: "テンプレートタイプが必要です", loadFailed: "テンプレートの読み込みに失敗しました", saved: "テンプレートを保存しました", invalidIntent: "無効なインテント", back: "戻る", resetToDefault: "デフォルトに戻す", resetTitle: "テンプレートをリセットしますか？", resetDescription: "デフォルトのテンプレート内容に戻します。カスタマイズは失われます。", resetConfirm: "テンプレートをリセット", templateContent: "テンプレート内容", templateContentDescription: "件名と本文を編集します。動的な値には{{syntax}}構文を使用します。", subjectLine: "件名", subjectPlaceholder: "メールの件名を入力...", htmlBody: "HTML本文", htmlPlaceholder: "HTMLコンテンツを入力...", textBody: "プレーンテキスト本文", textPlaceholder: "プレーンテキストを入力...", textBodyHint: "HTML非対応のメールクライアントで表示されます", saveTemplate: "テンプレートを保存", saving: "保存中...", preview: "プレビュー", loading: "読み込み中...", sendTestEmail: "テストメールを送信", sendTestTitle: "テストメールを送信", sendTestDescription: "カスタム変数値で現在のテンプレート内容のテストメールを送信します。", recipientEmail: "送信先メールアドレス", recipientPlaceholder: "recipient@example.com", templateVariables: "テンプレート変数", sending: "送信中...", availableVariables: "利用可能な変数", example: "例: {{value}}", previewTitle: "プレビュー", previewDescription: "サンプルデータでプレビュー", subject: "件名", htmlTab: "HTML", textTab: "テキスト", previewFrameTitle: "メールプレビュー" },
+    emailSettings: { metaTitle: "メール設定 - Auth9", invalidProviderType: "無効なプロバイダータイプです", saved: "メール設定を保存しました", connectionTestSuccess: "接続テストに成功しました", invalidEmail: "有効なメールアドレスを入力してください", invalidIntent: "無効なインテント", title: "メールプロバイダー設定", description: "メールプロバイダーを選択して設定します。パスワードなどの機密フィールドは暗号化して保存されます。", statusConfigured: "メールプロバイダー有効", statusNotConfigured: "メールプロバイダー未設定", statusUsing: "{{name}}を使用中（{{details}}）", statusDisabled: "システムメールは無効です。メール機能を有効にするには、以下のプロバイダーを設定してください。", infoTitle: "単一プロバイダー設定", infoDescription: "システムは一度に1つのメールプロバイダーのみをサポートします。別のプロバイダータイプに切り替えると、現在の設定が置き換えられます。", providerType: "プロバイダータイプ", selectProvider: "プロバイダーを選択", none: "なし（メール無効）", smtp: "SMTP", ses: "AWS SES", oracle: "Oracle Email Delivery", replacementWarning: "保存すると現在の{{provider}}設定が置き換えられます。", smtpConfiguration: "SMTP設定", sesConfiguration: "AWS SES設定", oracleConfiguration: "Oracle Email Delivery設定", serverHost: "サーバーホスト", serverHostPlaceholder: "smtp.example.com", port: "ポート", portPlaceholder: "587", username: "ユーザー名", usernamePlaceholder: "username", password: "Password", passwordPlaceholder: "Enter password", fromEmail: "送信元メールアドレス", fromEmailPlaceholder: "noreply@example.com", fromName: "送信元名", fromNamePlaceholder: "Auth9", useTls: "TLS暗号化を使用", awsRegion: "AWSリージョン", awsRegionPlaceholder: "us-east-1", accessKeyId: "Access Key ID", accessKeyIdPlaceholder: "AKIA...", secretAccessKey: "Secret Access Key", secretAccessKeyPlaceholder: "Enter secret key", configurationSet: "Configuration Set", configurationSetPlaceholder: "Optional", optionalIfIam: "IAMロール使用時は任意", smtpEndpoint: "SMTPエンドポイント", smtpEndpointPlaceholder: "smtp.us-ashburn-1.oraclecloud.com", smtpUsername: "SMTPユーザー名", smtpUsernamePlaceholder: "ocid1.user...", smtpPassword: "SMTP Password", leavePasswordBlank: "Leave blank to keep existing password", saveSettings: "設定を保存", saving: "保存中...", testConnection: "接続テスト", testing: "テスト中...", sendTestEmail: "テストメールを送信", dialogTitle: "テストメールを送信", dialogDescription: "テストメールを受信するメールアドレスを入力して、設定を確認します。", emailAddress: "メールアドレス", testEmailPlaceholder: "your@email.com", switchProviderTitle: "メールプロバイダーを切り替えますか？", switchProviderDescription: "{{current}}から{{next}}に切り替えようとしています。保存すると現在の設定が置き換えられます。この操作は取り消せません。", switchProvider: "プロバイダーを切り替え" }, // pragma: allowlist secret
+    identityProvidersPage: { metaTitle: "アイデンティティプロバイダー - Auth9", loadFailed: "アイデンティティプロバイダーの読み込みに失敗しました", created: "アイデンティティプロバイダーを作成しました", updated: "アイデンティティプロバイダーを更新しました", deleted: "アイデンティティプロバイダーを削除しました", operationFailed: "操作に失敗しました", invalidAction: "無効な操作です", title: "アイデンティティプロバイダー", description: "ソーシャルログインとエンタープライズSSOを設定します。", addProvider: "プロバイダーを追加", emptyTitle: "アイデンティティプロバイダーが設定されていません", emptyDescription: "GoogleやGitHubなどのソーシャルログインを追加して、ユーザーのサインインを簡単にします。", addFirst: "最初のプロバイダーを追加", editAria: "プロバイダーを編集", deleteAria: "プロバイダーを削除", dialogCreateTitle: "アイデンティティプロバイダーを追加", dialogEditTitle: "アイデンティティプロバイダーを編集", dialogCreateDescription: "プロバイダータイプを選択して設定します。", dialogEditDescription: "このアイデンティティプロバイダーの設定を更新します。", providerType: "プロバイダータイプ", alias: "エイリアス（識別子）", aliasPlaceholder: "e.g., google-enterprise", aliasExists: "このエイリアスのアイデンティティプロバイダーは既に存在します", displayName: "表示名", displayNamePlaceholder: "e.g., Sign in with Google", clientId: "Client ID", clientIdPlaceholder: "OAuth Client ID", clientSecret: "Client Secret", clientSecretPlaceholder: "OAuth Client Secret", authorizationUrl: "Authorization URL", authorizationUrlPlaceholder: "https://provider.com/oauth/authorize", tokenUrl: "Token URL", tokenUrlPlaceholder: "https://provider.com/oauth/token", entityId: "Entity ID", entityIdPlaceholder: "https://idp.example.com/entity", singleSignOnServiceUrl: "Single Sign-On Service URL", singleSignOnServiceUrlPlaceholder: "https://idp.example.com/sso", signingCertificate: "Signing Certificate", signingCertificatePlaceholder: "-----BEGIN CERTIFICATE-----...", enabled: "有効", saving: "保存中...", saveChanges: "変更を保存", addProviderSubmit: "プロバイダーを追加", templates: { google: "Google", github: "GitHub", microsoft: "Microsoft", oidc: "OpenID Connect", saml: "SAML 2.0" } }, // pragma: allowlist secret
+    securitySettings: { metaTitle: "パスワードポリシー - Auth9", loadTenantsFailed: "テナントの読み込みに失敗しました", loadPolicyFailed: "パスワードポリシーの読み込みに失敗しました", updated: "パスワードポリシーを更新しました", operationFailed: "操作に失敗しました", invalidAction: "無効な操作です", title: "パスワードポリシー", description: "テナントユーザーのパスワード要件を設定します。", selectTenant: "テナントを選択", selectTenantPlaceholder: "テナントを選択...", loadingPolicy: "ポリシーを読み込み中...", minimumLength: "最小文字数", passwordExpiryDays: "パスワード有効期限（日）", passwordExpiryHint: "0 = 無期限", passwordHistory: "パスワード履歴", passwordHistoryHint: "記憶する過去のパスワード数", lockoutAfter: "ロックアウトまでの試行回数", lockoutAfterHint: "失敗回数（0 = 無効）", lockoutDurationMins: "ロックアウト時間（分）", characterRequirements: "文字要件", requireUppercase: "大文字を必須", requireLowercase: "小文字を必須", requireNumbers: "数字を必須", requireSymbols: "記号を必須", savePolicy: "ポリシーを保存", saving: "保存中..." },
+  },
+  tenants: {
+    metaTitle: "テナント - Auth9", title: "テナント", description: "テナントのライフサイクルと設定を管理", createTitle: "テナントを作成", createDescription: "システムに新しいテナントを追加します。Slugは一意である必要があります。", editTitle: "テナントを編集", editDescription: "テナントの詳細を更新します。", listTitle: "テナント一覧", listDescription: "{{total}}件のテナント • {{totalPages}}ページ中{{page}}ページ目",
+    fields: { name: "名前", slug: "Slug", logoUrl: "Logo URL", status: "ステータス", created: "作成日", updated: "更新日" },
+    help: { name: "テナントの表示名", slug: "URLで使用する一意の識別子（小文字、スペースなし）", logoUrl: "組織ロゴのURL（任意）" },
+    placeholders: { name: "Acme Corp", slug: "acme", logoUrl: "https://...", search: "テナントを検索..." },
+    actions: { create: "テナントを作成", createSubmit: "作成", creating: "作成中...", edit: "編集", save: "変更を保存", saving: "保存中...", search: "検索", clear: "クリア", invitations: "招待", webhooks: "Webhooks", services: "Services", enterpriseSso: "Enterprise SSO", openMenu: "メニューを開く", backToList: "テナント一覧に戻る" },
+    delete: { title: "テナントを削除", description: "このテナントを削除してもよろしいですか？" },
+    empty: "テナントが見つかりません",
+    pagination: { page: "{{totalPages}}ページ中{{page}}ページ目", previous: "前へ", next: "次へ" },
+    statuses: { active: "有効", inactive: "無効", suspended: "停止中", pending: "保留中" },
+    detail: { metaTitle: "{{tenantName}} - Auth9", description: "テナントの設定と管理", configurationTitle: "設定", configurationDescription: "このテナントの一般設定", securityTitle: "セキュリティ設定", securityDescription: "このテナントの認証とセキュリティポリシー", requireMfa: "MFAを必須にする", requireMfaDescription: "このテナントの全ユーザーに多要素認証を有効化するよう求めます", quickLinksTitle: "クイックリンク", quickLinksDescription: "テナントリソースを管理", overviewTitle: "概要", overviewDescription: "テナント統計", statusUpdated: "ステータスを更新しました", tenantUpdated: "テナントを更新しました", settingsUpdated: "設定を保存しました", enabledServices: "{{enabled}}/{{total}}件有効", pendingInvitations: "{{count}}件保留中", overviewStats: { users: "ユーザー", globalServices: "グローバルサービス", tenantServices: "テナントサービス", pendingInvitations: "保留中の招待", webhooks: "Webhooks" } },
+    invitations: { metaTitle: "招待 - Auth9", title: "招待", description: "{{tenantName}}のユーザー招待を管理", inviteUser: "ユーザーを招待", dialogTitle: "ユーザーを招待", dialogDescription: "{{tenantName}}への参加招待メールを送信します", emailAddress: "メールアドレス", emailPlaceholder: "user@example.com", expiresIn: "有効期限", selectExpiration: "有効期限を選択", expiration24h: "24時間", expiration48h: "48時間", expiration72h: "72時間（デフォルト）", expiration7d: "7日間", assignRoles: "ロールを割り当て", noServices: "このテナントにサービスが設定されていません。先にサービスを作成してください。", noRoles: "サービスはありますがロールが定義されていません。先にサービスのロールを作成してください。", noRolesDefined: "ロールが定義されていません", cancel: "キャンセル", sending: "送信中...", sendInvitation: "招待を送信", listTitle: "保留中・過去の招待", listDescription: "{{total}}件の招待 • {{totalPages}}ページ中{{page}}ページ目", statusFilter: "ステータスで絞り込み", allStatuses: "すべてのステータス", email: "メール", status: "ステータス", roles: "ロール", expiresAt: "有効期限", created: "作成日", roleCount: "{{count}}件のロール", roleCount_one: "{{count}}件のロール", roleCount_other: "{{count}}件のロール", menuActions: "操作", resendEmail: "メールを再送信", revoke: "取り消す", delete: "削除", noInvitations: "招待が見つかりません。「ユーザーを招待」をクリックして招待を送信してください。", deleteTitle: "招待を削除", deleteDescription: "この招待を削除してもよろしいですか？", revokeTitle: "招待を取り消す", revokeDescription: "この招待を取り消してもよろしいですか？", revokeConfirm: "取り消す", resent: "招待メールを再送信しました", authRequired: "認証が必要です", roleRequired: "少なくとも1つのロールを選択してください" },
+    services: { metaTitle: "Services - {{tenantName}} - Auth9", title: "{{tenantName}}のServices", description: "このテナントのグローバルサービスを有効または無効にします", totalServices: "サービス合計", enabled: "有効", disabled: "無効", globalServices: "グローバルサービス", globalServicesDescription: "このテナントのサービスをオン/オフにします。有効なサービスはこのテナントのユーザーが利用できます。", noServices: "グローバルサービスがありません", noServicesDescription: "tenant_idなしでサービスを作成すると、ここで利用可能になります。", enabledState: "有効", disabledState: "無効" },
+    webhooks: { metaTitle: "Webhooks - Auth9", title: "Webhooks", description: "アプリケーション内のイベントのリアルタイム通知を受け取ります。", addWebhook: "Webhookを追加", emptyTitle: "Webhookが設定されていません", emptyDescription: "リアルタイムイベント通知を受け取るためにWebhookを追加してください。", addFirstWebhook: "最初のWebhookを追加", created: "Webhookを作成しました", updated: "Webhookを更新しました", deleted: "Webhookを削除しました", secretRegenerated: "シークレットを再生成しました", newSecret: "新しいシークレット:", test: "テスト", testSuccess: "テスト成功（{{statusCode}}、{{responseTime}}ms）", testFailed: "テスト失敗: {{error}}", operationFailed: "操作に失敗しました", invalidAction: "無効な操作", dialog: { createTitle: "Webhookを追加", editTitle: "Webhookを編集", createDescription: "新しいWebhookエンドポイントを設定します。", editDescription: "Webhookの設定を更新します。", name: "名前", endpointUrl: "エンドポイントURL", secret: "シークレット（任意）", secretHelp: "検証用のWebhookペイロード署名に使用します。", events: "イベント", enabled: "有効", placeholderName: "My Webhook", placeholderUrl: "https://example.com/webhook", placeholderSecret: "HMAC署名検証用", save: "変更を保存", add: "Webhookを追加", saving: "保存中..." }, createdDialog: { title: "Webhookを作成しました", description: "Webhookが作成されました。以下の署名シークレットをコピーしてください。再度表示されません。", signingSecret: "署名シークレット", help: "このシークレットは安全に保管してください。Webhook署名の検証に必要です。", done: "完了" }, list: { eventCount: "{{count}}件のイベント", eventCount_one: "{{count}}件のイベント", failures: "{{count}}件の失敗", failures_one: "{{count}}件の失敗", neverTriggered: "未トリガー", lastTriggered: "最終トリガー: {{date}}", regenerateSecret: "シークレットを再生成", regenerateTitle: "シークレットを再生成", regenerateDescription: "よろしいですか？古いシークレットは即座に無効になります。", deleteTitle: "Webhookを削除", deleteDescription: "このWebhookを削除してもよろしいですか？この操作は取り消せません。" } },
+    sso: { metaTitle: "Enterprise SSO - {{tenantName}} - Auth9", title: "{{tenantName}}のEnterprise SSO", description: "テナントスコープのEnterprise SAML/OIDCコネクタを設定します。", createTitle: "コネクタを作成", createDescription: "カンマ区切りのドメインを使用します。SAMLの場合は、Entity ID、SSO URL、証明書を指定してください。", alias: "エイリアス", aliasPlaceholder: "corp-saml", displayName: "表示名", displayNamePlaceholder: "Acme SSO", providerType: "プロバイダータイプ", priority: "優先度", domains: "ドメイン", domainsPlaceholder: "acme.com, acme.org", samlEntityId: "SAML Entity ID", samlEntityIdPlaceholder: "https://idp.acme.com/entity", samlSsoUrl: "SAML SSO URL", samlSsoUrlPlaceholder: "https://idp.acme.com/sso", samlCertificate: "SAML署名証明書", samlCertificatePlaceholder: "-----BEGIN CERTIFICATE-----...", oidcClientId: "OIDC Client ID", oidcClientSecret: "OIDC Client Secret", oidcAuthorizationUrl: "OIDC Authorization URL", oidcTokenUrl: "OIDC Token URL", createConnector: "コネクタを作成", configuredTitle: "設定済みコネクタ", configuredDescription: "テナントルーティングコネクタの利用可否と検証を管理します。", noConnectors: "Enterpriseコネクタが設定されていません。", connectorCreated: "コネクタを作成しました", connectorDeleted: "コネクタを削除しました", connectorUpdated: "コネクタを更新しました" }, // pragma: allowlist secret
+    errors: { tenantIdRequired: "テナントIDが必要です", invalidStatus: "無効なステータス", invalidIntent: "無効なインテント", unknown: "不明なエラー" },
+    menu: { actions: "操作" },
+  },
+  services: {
+    metaTitle: "Services - Auth9", title: "Services", description: "OIDCクライアントを登録・管理", registerService: "サービスを登録", registerDescription: "新しいOIDCクライアントアプリケーションを登録します。", serviceName: "サービス名", serviceNamePlaceholder: "My App", clientId: "Client ID", clientIdPlaceholder: "my-app-client", optional: "任意", baseUrl: "Base URL", baseUrlPlaceholder: "https://myapp.com", redirectUris: "Redirect URIs（カンマ区切り）", redirectUrisPlaceholder: "https://myapp.com/callback, https://dev.myapp.com/callback", logoutUris: "Logout URIs（カンマ区切り）", logoutUrisPlaceholder: "https://myapp.com/logout", register: "登録", registering: "登録中...", registry: "サービスレジストリ", registrySummary: "{{total}}件のサービス • {{totalPages}}ページ中{{page}}ページ目", serviceId: "ID: {{id}}", updated: "{{date}}に更新", details: "詳細", openMenu: "メニューを開く", menuActions: "操作", deleteTitle: "サービスを削除", deleteDescription: "このサービスを削除してもよろしいですか？", noServices: "サービスが見つかりません", initialSecretTitle: "初期Client Secretを生成しました", initialSecretDescription: "この値をコピーしてください。再度表示されません。", close: "閉じる", // pragma: allowlist secret
+    statuses: { active: "active", inactive: "inactive", suspended: "suspended", pending: "pending" },
+    errors: { serviceIdRequired: "サービスIDが必要です", invalidIntent: "無効なインテント", unknown: "不明なエラー" },
+    detail: { metaTitle: "{{serviceName}} - サービス詳細 - Auth9", description: "サービス設定と統合", tabs: { configuration: "設定", integration: "統合", actions: "Actions（{{count}}）", branding: "ブランディング" }, configurationTitle: "設定", configurationDescription: "サービスの一般設定", saveChanges: "変更を保存", saving: "保存中...", clientsTitle: "Clients", clientsDescription: "認証情報（API Keys）", createClientTitle: "新しいClientを作成", createClientDescription: "このサービスの新しい認証情報セットを作成します。", clientDescriptionOptional: "説明（任意）", clientDescriptionPlaceholder: "e.g. Production Web App", create: "作成", copyClientId: "Client IDをコピー", noDescription: "説明なし", createdOn: "作成日: {{date}}", regenerateSecretTitle: "シークレットを再生成", regenerateSecretDescription: "シークレットを再生成しますか？古いシークレットは即座に無効になります。", regenerate: "再生成", deleteClientTitle: "Clientを削除", deleteClientDescription: "このClientを削除しますか？この操作は取り消せません。", noClients: "Clientが見つかりません。", integrationUnavailable: "統合情報を取得できません。Auth9 Coreが起動し、Keycloakに接続できることを確認してください。", secretDialogNewTitle: "Clientを作成しました", secretDialogRegeneratedTitle: "シークレットを再生成しました", secretDialogDescription: "Client Secretを今すぐコピーしてください。再度表示されません。", clientSecret: "Client Secret", clientCreated: "Client ID", brandingSaved: "サービスのブランディングを保存しました", close: "閉じる" },
+    integration: { clientsCredentials: "Clients & Credentials", clientsCredentialsDescription: "SDK統合用のClient IDとシークレット", noClientsConfigured: "Clientが設定されていません。設定タブでClientを作成してください。", public: "Public", confidential: "Confidential", publicNoSecret: "Public client - シークレット不要", hide: "非表示", reveal: "表示", copySecret: "シークレットをコピー", keycloakUnavailable: "取得できません - Keycloakを確認してください", environmentVariables: "環境変数", environmentVariablesDescription: "アプリケーションの.envファイルに追加してください", endpoints: "OAuth/OIDCエンドポイント", endpointsDescription: "OIDC統合用の標準エンドポイント", endpoint: "エンドポイント", url: "URL", sdkInitialization: "SDK初期化", sdkInitializationDescription: "アプリケーションのクイックスタートコード", endpointLabels: { authorize: "Authorize", token: "Token", callback: "Callback", logout: "Logout", userinfo: "UserInfo", openidConfiguration: "OIDC Discovery", jwks: "JWKS" } }, // pragma: allowlist secret
+    branding: { systemDefaultTitle: "システムデフォルトのブランディングを使用中", systemDefaultDescription: "このサービスはシステム全体のブランディング設定を使用しています。カスタマイズして独自の見た目にできます。", customize: "ブランディングをカスタマイズ", title: "サービスブランディング", description: "このサービスのログインページの外観をカスタマイズします。システムデフォルトを上書きします。", companyIdentity: "企業情報", companyName: "会社名", companyNamePlaceholder: "Your Company Name", logoUrl: "Logo URL", logoUrlPlaceholder: "https://example.com/logo.png", faviconUrl: "Favicon URL", faviconUrlPlaceholder: "https://example.com/favicon.ico", loginOptions: "ログインオプション", allowRegistration: "登録を許可", allowRegistrationHint: "ログインページに「アカウント作成」リンクを表示", toggleAllowRegistration: "登録許可を切り替え", colors: "色", primaryColor: "プライマリカラー", secondaryColor: "セカンダリカラー", backgroundColor: "背景色", textColor: "文字色", customCss: "カスタムCSS", advanced: "詳細", customCssPlaceholder: ".login-form {\n  border-radius: 16px;\n}", saveBranding: "ブランディングを保存", resetToDefault: "デフォルトに戻す", chooseColor: "{{label}}を選択" },
+  },
+  serviceActions: {
+    metaTitle: "Actions - Auth9", newMetaTitle: "新規Action - Auth9", detailMetaTitle: "{{actionName}} - Action - Auth9", editMetaTitle: "{{actionName}}を編集 - Auth9",
+    errors: { serviceIdRequired: "サービスIDが必要です", serviceAndActionIdRequired: "サービスIDとAction IDが必要です", invalidIntent: "無効なインテント", unknown: "不明なエラー", idsRequired: "IDが必要です" },
+    title: "Actions", description: "TypeScriptで認証フローActionsを管理", newAction: "新規Action", filters: "フィルター", triggerType: "トリガータイプ", all: "すべて", searchPlaceholder: "Actionsを検索...", noActions: "Actionが見つかりません", noActionsDescription: "最初のActionを作成して始めましょう", noSearchResults: "検索条件を調整してみてください", createAction: "Actionを作成", enabled: "有効", disabled: "無効", strict: "Strict", executions: "実行回数", successRate: "成功率", lastExecuted: "最終実行", never: "未実行", order: "順序", lastError: "最終エラー", viewDetails: "詳細を表示", edit: "編集", deleting: "削除中...", deleteConfirm: "「{{name}}」を削除してもよろしいですか？",
+    newTitle: "新規Action", newDescription: "新しい認証フローActionを作成します", editTitle: "Actionを編集", basicInformation: "基本情報", basicInformationDescription: "Actionの基本設定を構成します", updateBasicInformationDescription: "Actionの基本設定を更新します", name: "名前", descriptionLabel: "説明", namePlaceholder: "my-action", descriptionPlaceholder: "このActionは何をしますか？", trigger: "トリガー", selectTrigger: "トリガーを選択", triggerImmutable: "トリガーは作成後に変更できません", executionOrder: "実行順序", executionOrderHint: "小さい番号が先に実行されます", timeout: "タイムアウト（ms）", timeoutHint: "最大実行時間", strictMode: "Strict Mode", strictModeHint: "Action失敗時に認証フローをブロック", script: "スクリプト", scriptDescription: "認証コンテキストを変更するTypeScriptコードを記述します", scriptEditDescription: "このActionのTypeScriptコードを更新します", scriptTemplates: "スクリプトテンプレート", chooseTemplate: "テンプレートを選択（任意）", scriptCode: "TypeScriptコード", scriptPlaceholder: "// Your TypeScript code here\ncontext;", scriptHelp: "`context`オブジェクトはグローバルで利用可能です。変更して返してください。", contextStructure: "コンテキスト構造:", creating: "作成中...", saving: "保存中...", saveChanges: "変更を保存",
+    statistics: { totalExecutions: "総実行回数", avgDuration: "平均所要時間", last24h: "過去24時間", executionsSuffix: "回の実行", executionStatistics: "実行統計", errors: "エラー" },
+    tabs: { script: "スクリプト", logs: "実行ログ（{{count}}）" },
+    scriptExecutedOn: "このコードは{{trigger}}イベントのたびに実行されます", executionLogs: "実行ログ", executionLogsDescription: "直近のAction実行（最新50件）", noExecutions: "まだ実行がありません", metadata: "メタデータ", actionId: "Action ID", serviceId: "Service ID", createdAt: "作成日", updatedAt: "更新日", success: "成功", failed: "失敗", errorMessage: "エラーメッセージ", executionId: "Execution ID", triggerId: "トリガー", duration: "所要時間", executedAt: "実行日時", userId: "User ID",
+    triggers: { postLogin: "Post Login", preUserRegistration: "Pre Registration", postUserRegistration: "Post Registration", postChangePassword: "Post Password Change", postEmailVerification: "Post Email Verification", preTokenRefresh: "Pre Token Refresh", unknown: "Unknown Trigger" }, // pragma: allowlist secret
+  },
+  dashboardHome: {
+    tenantFallback: "ダッシュボード", welcome: "{{tenantName}} へようこそ。アイデンティティサービスの概要です。",
+    stats: { totalTenants: "テナント数", activeUsers: "アクティブユーザー", services: "サービス", auditEvents: "監査イベント" },
+    emptyTitle: "最初のテナントを作成して始めましょう", emptyDescription: "テナントは各環境や顧客ごとにアイデンティティとポリシーを分離します。作成するとダッシュボードの残りのワークフローが利用できます。", emptyAction: "始める", recentActivity: "最近のアクティビティ", noRecentActivity: "最近のアクティビティはありません", viewDetails: "詳細を見る",
+  },
+  audit: {
+    metaTitle: "監査ログ - Auth9", title: "監査ログ", description: "テナント間の管理変更を追跡", trail: "監査トレイル", trailDescription: "{{total}}件 • {{totalPages}}ページ中{{page}}ページ目", action: "アクション", resource: "リソース", actor: "実行者", time: "日時", noLogs: "監査ログが見つかりません", page: "{{totalPages}}ページ中{{page}}ページ目", previous: "前へ", next: "次へ",
+  },
+  analytics: {
+    metaTitle: "分析 - Auth9", loadFailed: "分析の読み込みに失敗しました", title: "分析", description: "ログインアクティビティと統計", lastDays: "過去{{days}}日間", custom: "カスタム", to: "〜", apply: "適用", totalLogins: "総ログイン数", successful: "成功", failed: "失敗", uniqueUsers: "ユニークユーザー数", successRate: "成功率{{rate}}%", byEventType: "イベントタイプ別", byDeviceType: "デバイスタイプ別", noData: "データがありません", dailyTrend: "日次ログイン推移", noTrend: "推移データがありません", successfulLegend: "成功", failedLegend: "失敗", viewLoginEvents: "ログインイベントを見る", viewLoginEventsDescription: "詳細なログインアクティビティを確認し、問題をトラブルシュート", viewEvents: "イベントを見る →",
+  },
+  analyticsEvents: {
+    metaTitle: "ログインイベント - Auth9", loadFailed: "イベントの読み込みに失敗しました", title: "ログインイベント", description: "すべての認証試行の詳細ログ", back: "← 分析に戻る", filterPlaceholder: "メールアドレスでフィルター...", filter: "フィルター", clear: "クリア", recentEvents: "最近のイベント", total: "合計{{count}}件", noEvents: "イベントが見つかりません",
+    headers: { time: "日時", event: "イベント", user: "ユーザー", ipAddress: "IPアドレス", device: "デバイス", details: "詳細" },
+    page: "{{totalPages}}ページ中{{page}}ページ目", previous: "前へ", next: "次へ", unknown: "不明",
+    labels: { success: "ログイン成功", social: "ソーシャルログイン", failedPassword: "パスワード誤り", failedMfa: "MFA失敗", locked: "アカウントロック" },
+  },
+  accountPasskeys: {
+    loadError: "パスキーの読み込みに失敗しました", deleted: "パスキーを削除しました", operationFailed: "操作に失敗しました", invalidAction: "無効なアクション", title: "パスキー", description: "パスキーは、デバイスの生体認証（指紋、顔）や画面ロックを使って、パスワードなしで安全にサインインする方法です。", registering: "登録中...", add: "パスキーを追加", startFailed: "登録の開始に失敗しました", completeFailed: "登録の完了に失敗しました", cancelled: "登録がキャンセルされたか、タイムアウトしました。", registrationFailed: "登録に失敗しました", registered: "パスキーを登録しました！", passwordless: "パスワードレス", twoFactor: "二要素認証", yourPasskeys: "あなたのパスキー", addFirst: "最初のパスキーを追加", passkeyFallback: "パスキー",
+    about: "パスキーについて", secureTitle: "より安全", secureDescription: "パスキーはフィッシングに強く、パスワードのように盗まれることはありません。", fastTitle: "高速で簡単", fastDescription: "デバイスの生体認証で、タッチや顔認証ですぐにサインインできます。", everywhereTitle: "どこでも使える", everywhereDescription: "同じアカウントでサインインしているデバイス間でパスキーが同期されます。",
+  },
+  accountIdentities: {
+    loadError: "リンク済みアイデンティティの読み込みに失敗しました", notAuthenticated: "認証されていません", providerAliasRequired: "プロバイダーエイリアスが必要です", unlinkSuccess: "アイデンティティのリンクを解除しました", operationFailed: "操作に失敗しました", invalidAction: "無効なアクション", title: "リンク済みアイデンティティ", description: "Auth9アカウントに接続された外部アカウント。サードパーティプロバイダーでサインインできます。", linkAnother: "別のアイデンティティをリンク", linkAnotherDescription: "このアカウントに追加のサインイン方法を接続するため、検証済みプロバイダーフローを開始します。", linkAction: "{{provider}}をリンク", linkedOn: "{{date}}にリンク", unlink: "リンク解除", noIdentities: "リンク済みアイデンティティがありません", noIdentitiesWithProviders: "まだ外部アカウントを接続していません。上のリンクアクションで今すぐ追加できます。", noIdentitiesWithoutProviders: "まだ外部アカウントを接続していません。プロバイダーが有効になれば、ここでリンクできます。",
+  },
+  invite: {
+    metaTitle: "招待を承諾 - Auth9", missingToken: "招待トークンがありません", invalidTitle: "無効な招待", invalidDescription: "招待リンクが欠落しているか、形式が正しくありません。", goToLogin: "ログインへ", title: "招待を承諾", description: "アカウントを作成するか、詳細を確認してテナントに参加してください。", emailOptional: "メール（任意）", emailPlaceholder: "you@example.com", displayName: "表示名", displayNamePlaceholder: "あなたの名前", password: "パスワード", passwordPlaceholder: "パスワードを作成", passwordHint: "すでにアカウントをお持ちの場合は、空欄のままで構いません。", accepted: "招待を承諾しました。サインインできます。", submitting: "送信中...", accept: "招待を承諾", existingAccount: "すでにアカウントをお持ちですか？", signIn: "サインイン", unknownError: "不明なエラー",
+  },
+  onboarding: {
+    createMetaTitle: "組織を作成 - Auth9", pendingMetaTitle: "アクティベーション待ち - Auth9", pendingTitle: "アクティベーション待ち", pendingDescription: "組織は作成されましたが、アクティベーションを待っています。", pendingHint: "メールドメインが組織ドメインと一致していません。プラットフォーム管理者が確認してアクティベートします。", tryAnotherDomain: "戻って別のドメインを試す", signOut: "サインアウト", required: "すべての項目は必須です", failed: "組織の作成に失敗しました", createTitle: "組織を作成", createDescription: "ユーザーとアクセスの管理を始めるために組織を設定してください。", organizationName: "組織名", organizationNamePlaceholder: "Acme Corporation", slug: "スラッグ", slugPlaceholder: "acme-corp", slugHint: "URL用識別子（小文字、ハイフンのみ）", emailDomain: "メールドメイン", emailDomainPlaceholder: "acme.com", emailDomainHint: "このメールドメインのユーザーは自動検証されます", creating: "作成中...", create: "組織を作成",
+  },
+  tenantSelect: {
+    metaTitle: "テナントを選択 - Auth9", selectTitle: "テナントを選択", selectDescription: "入る組織コンテキストを選んでください。", searchPlaceholder: "テナントを検索...", noTenants: "テナントが見つかりません", current: "現在", count: "{{total}}テナント中{{filtered}}件", countFiltered: "{{total}}テナント中{{filtered}}件（「{{query}}」でフィルター済み）", selectRequired: "テナントを選択してください", accessFailed: "このテナントにアクセスできませんでした。もう一度お試しいただくか、サポートにお問い合わせください。",
+  },
+  securityAlerts: {
+    metaTitle: "セキュリティアラート - Auth9", loadFailed: "セキュリティアラートの読み込みに失敗しました", resolved: "アラートを解決しました", operationFailed: "操作に失敗しました", invalidAction: "無効なアクション", title: "セキュリティアラート", description: "セキュリティ脅威を監視して対応", all: "すべて", unresolved: "未解決（{{count}}）", severity: "重要度:", type: "タイプ:", alertsTitle: "アラート", total: "合計{{count}}件", allClear: "問題なし！", noUnresolved: "未解決のセキュリティアラートはありません。", noAlerts: "セキュリティアラートが見つかりません。", resolvedBadge: "解決済み", user: "ユーザー", resolve: "解決", pageOf: "{{totalPages}}ページ中{{page}}ページ目", previous: "前へ", next: "次へ",
+    recommendationsTitle: "セキュリティ推奨事項",
+    recommendations: { reviewCritical: "重大なアラートは24時間以内に確認して解決する", enableMfa: "すべての管理者アカウントでMFAを有効にする", configureRateLimit: "ブルートフォース攻撃を防ぐためレート制限を設定する", setupWebhooks: "リアルタイムのセキュリティ通知を受け取るためWebhookを設定する", reviewSessions: "ユーザーセッションを定期的に確認し、不審なセッションを無効にする" },
+    severities: { critical: "重大", high: "高", medium: "中", low: "低" },
+    types: { brute_force: "ブルートフォース攻撃", new_device: "新デバイスでのログイン", impossible_travel: "不可能な移動", suspicious_ip: "不審なIP" },
+  },
+  rolesPage: {
+    metaTitle: "ロールと権限 - Auth9", unknownError: "不明なエラー", invalidIntent: "無効なインテント", title: "ロールと権限", description: "サービスごとにロール、権限、ロール階層を管理",
+    tabs: { roles: "ロール", permissions: "権限", hierarchy: "階層" },
+    rolesCardTitle: "ロール管理", rolesCardDescription: "{{count}}サービス • 各サービスのロールを作成・管理", addRole: "ロールを追加", inheritsFrom: "{{name}}を継承", parentFallback: "親", managePermissions: "権限", openMenu: "メニューを開く", actions: "アクション", edit: "編集", deleteRoleTitle: "ロールを削除", deleteRoleDescription: "このロールを削除してもよろしいですか？", noRolesForService: "このサービスにはまだロールが作成されていません", noServicesFound: "サービスが見つかりません",
+    permissionsCardTitle: "権限管理", permissionsCardDescription: "各サービスの権限を作成・管理", addPermission: "権限を追加", code: "コード", name: "名前", descriptionLabel: "説明", noPermissionsForService: "このサービスにはまだ権限が作成されていません", deletePermissionTitle: "権限を削除", deletePermissionDescription: "この権限を削除してもよろしいですか？",
+    hierarchyCardTitle: "ロール階層", hierarchyCardDescription: "各サービスのロール継承構造を表示", noRolesDefined: "このサービスにはロールが定義されていません", orphanedRoles: "孤立ロール（無効な親）:", permissionCount: "{{count}}権限", permissionCount_other: "{{count}}権限",
+    createRoleTitle: "ロールを作成", createRoleDescription: "このサービスに新しいロールを追加します。", roleName: "ロール名", roleNamePlaceholder: "admin", roleDescriptionPlaceholder: "フルアクセスを持つ管理者ロール", parentRoleOptional: "親ロール（任意）", noParentRole: "親なし（ルートロール）", creating: "作成中...", create: "作成", editRoleTitle: "ロールを編集", editRoleDescription: "ロールの詳細を更新します。", saving: "保存中...", saveChanges: "変更を保存",
+    createPermissionTitle: "権限を作成", createPermissionDescription: "このサービスに新しい権限を追加します。", permissionCode: "権限コード", permissionCodePlaceholder: "user:read", permissionCodeHint: "「resource:action」形式を使用（例: user:read, post:write）", displayName: "表示名", permissionNamePlaceholder: "ユーザーを読む", permissionDescriptionPlaceholder: "ユーザー情報の読み取りを許可",
+    managePermissionsTitle: "権限を管理", managePermissionsDescription: "ロール{{name}}に権限を割り当てる", noPermissionsDefined: "このサービスには権限が定義されていません。", createPermissionsFirst: "まず権限タブで権限を作成してください。", done: "完了",
+  },
+  abacPage: {
+    metaTitle: "ABAC ポリシー - Auth9", policyJsonRulesRequired: "Policy JSONはrules配列を持つオブジェクトである必要があります", jsonObjectRequired: "{{field}}はJSONオブジェクトである必要があります", noActiveTenant: "アクティブなテナントが選択されていません", notAuthenticated: "認証されていません", simulationFieldsRequired: "シミュレーションのactionとresource typeは必須です", invalidIntent: "無効なインテント", unknownError: "不明なエラー",
+    title: "ABAC ポリシー", description: "テナント{{tenantId}}のドラフト、公開、ロールバック、シミュレーションのワークフローを管理します。", currentStatus: "現在のステータス", currentStatusDescription: "ポリシーモードと現在公開されているバージョン", mode: "モード", published: "公開済み", disabled: "無効", none: "なし",
+    createDraftTitle: "ドラフトを作成", createDraftDescription: "新しいABACポリシーのドラフトバージョンを送信", changeNote: "変更メモ", changeNotePlaceholder: "このバージョンを作成した理由", policyJson: "Policy JSON", submitting: "送信中...", createDraft: "ドラフトを作成",
+    versionsTitle: "バージョン", versionsDescription: "公開、ロールバック、ドラフトの更新", noVersions: "ABACポリシーのバージョンはまだありません。", noChangeNote: "変更メモなし", publishEnforce: "公開（強制）", publishShadow: "公開（シャドウ）", rollback: "これにロールバック", updateDraftChangeNote: "ドラフトの変更メモを更新", draftPolicyJson: "ドラフトPolicy JSON", updateDraft: "ドラフトを更新",
+    simulationTitle: "ポリシーシミュレーション", simulationDescription: "単一の決定をシミュレートし、マッチしたルールを確認", action: "アクション", resourceType: "リソースタイプ", subjectJson: "subject JSON", resourceJson: "resource JSON", requestJson: "request JSON", envJson: "env JSON", usePolicyJson: "公開バージョンの代わりに下のPolicy JSONを使用", optionalPolicyJson: "Policy JSON（任意）", simulating: "シミュレート中...", runSimulation: "シミュレーションを実行", decision: "決定", matchedAllowRules: "マッチしたallowルール", matchedDenyRules: "マッチしたdenyルール",
+  },
+  usersPage: {
+    metaTitle: "ユーザー - Auth9", unknownError: "不明なエラー", invalidIntent: "無効なインテント", emailRequired: "メールは必須です", emailInvalid: "有効なメールアドレスを入力してください", title: "ユーザー", description: "ユーザーとテナント割り当てを管理", createUser: "ユーザーを作成", searchPlaceholder: "メールまたは名前で検索...", searchAria: "ユーザーを検索", search: "検索", userDirectory: "ユーザーディレクトリ", pagination: "{{count}}ユーザー • {{totalPages}}ページ中{{page}}ページ目",
+    name: "名前", mfa: "MFA", updated: "更新日", enabled: "有効", disabled: "無効", manageTenants: "テナントを管理", edit: "編集", noUsersFound: "ユーザーが見つかりません", clearFilter: "フィルターをクリア", email: "メール", displayName: "表示名", openMenu: "メニューを開く", actions: "アクション",
+    editUser: "ユーザーを編集", enableMfa: "MFAを有効化", disableMfa: "MFAを無効化", forceLogoutTitle: "強制ログアウト", forceLogoutDescription: "このユーザーをすべてのアクティブセッションから強制ログアウトしますか？", forceLogoutConfirm: "強制ログアウト", forceLogout: "強制ログアウト", deleteUserTitle: "ユーザーを削除", deleteUserDescription: "このユーザーを削除してもよろしいですか？この操作は取り消せません。", editUserTitle: "ユーザーを編集", editUserDescription: "ユーザーのプロフィール詳細を更新します。", saveChanges: "変更を保存",
+    createUserTitle: "ユーザーを作成", createUserDescription: "新しいユーザーアカウントを作成します。", emailRequiredLabel: "メール *", emailPlaceholder: "user@example.com", passwordRequiredLabel: "パスワード *", passwordPlaceholder: "強力なパスワードを入力", displayNamePlaceholder: "John Doe", tenantOptional: "テナント（任意）", noTenant: "テナントなし（プラットフォームユーザー）", createUserSubmit: "ユーザーを作成",
+    manageTenantsTitle: "{{email}}のテナントを管理", manageTenantsDescription: "ユーザーをテナントに割り当て、ロールを管理します。", joinedTenants: "参加テナント", loadingTenants: "テナント情報を読み込み中...", loadingTenantsError: "テナントの読み込みエラー: {{error}}", unknownTenant: "不明なテナント", member: "メンバー", admin: "管理者", viewer: "閲覧者", roles: "ロール", remove: "削除", notMemberOfAnyTenant: "どのテナントにも所属していません。", addToTenant: "テナントに追加", tenant: "テナント", selectTenant: "テナントを選択", role: "ロール", add: "追加",
+    enableMfaTitle: "MFAを有効化", disableMfaTitle: "MFAを無効化", mfaDescription: "{{email}}のMFAを{{action}}するにはパスワードを入力してください。", enabling: "有効化", disabling: "無効化", yourPassword: "パスワード", passwordConfirmPlaceholder: "確認のためパスワードを入力",
+    assignRolesTitle: "ロールを割り当て", assignRolesDescription: "{{tenant}}でロールを割り当てます。", service: "サービス", selectService: "サービスを選択", noRolesDefined: "このサービスにはロールが定義されていません。", done: "完了", saveRoles: "ロールを保存",
+  },
+  validation: {
+    required: "この項目は必須です。", email: "有効なメールアドレスを入力してください。", slug: "スラッグは小文字、数字、ハイフンのみ使用できます。先頭または末尾にハイフンは使えません。", length: "長さは1〜63文字である必要があります。", alreadyExists: "この値はすでに存在します。別の値を使用してください。", notFound: "リクエストされたリソースが見つかりません。", conflict: "この識別子のリソースはすでに存在します。", duplicateEntry: "この名前はすでに存在します。別の名前を使用してください。",
+    fields: { slug: "スラッグ", name: "名前", email: "メール", logo_url: "ロゴURL" },
+  },
+} as const;

@@ -33,7 +33,7 @@ export default function LoginResetPassword(
       : msgStr("email");
 
   return (
-    <PageLayout>
+    <PageLayout lightModeLabel={msgStr("lightMode")} darkModeLabel={msgStr("darkMode")}>
       <GlassCard>
         {/* Header */}
         <div className="login-header">
@@ -93,7 +93,7 @@ export default function LoginResetPassword(
         {/* Back to Login */}
         <div className="login-footer">
           <a href={url.loginUrl} className="form-link--secondary">
-            {msgStr("backToLogin") || "\u2190 Back to Login"}
+            {msgStr("backToLogin")}
           </a>
         </div>
       </GlassCard>

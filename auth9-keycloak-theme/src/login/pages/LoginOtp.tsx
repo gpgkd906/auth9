@@ -26,7 +26,7 @@ export default function LoginOtp(
   };
 
   return (
-    <PageLayout>
+    <PageLayout lightModeLabel={msgStr("lightMode")} darkModeLabel={msgStr("darkMode")}>
       <GlassCard>
         {/* Header */}
         <div className="login-header">
@@ -56,7 +56,7 @@ export default function LoginOtp(
           {/* OTP Device Selector (if multiple devices) */}
           {otpLogin.userOtpCredentials.length > 1 && (
             <div className="form-group">
-              <label className="form-label">Select OTP Device</label>
+              <label className="form-label">{msgStr("selectOtpDevice")}</label>
               <div className="otp-devices">
                 {otpLogin.userOtpCredentials.map((credential, index) => (
                   <label key={credential.id} className="otp-device-option">

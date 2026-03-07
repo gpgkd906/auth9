@@ -7,7 +7,7 @@
 
 ---
 
-> **语言说明**: Portal 默认语言为 `zh-CN`。如需按英文按钮/标题执行本用例，请先在页面右上角切换到 `English`，或预置 `auth9_locale=en-US` cookie。若未切换，测试时应以中文文案为准。
+> **语言说明**: Portal 支持三种语言（`zh-CN` / `en-US` / `ja`），默认为 `zh-CN`。如需按英文按钮/标题执行本用例，请先在页面右上角切换到 `English`，或预置 `auth9_locale=en-US` cookie；如需日语，切换到 `日本語` 或预置 `auth9_locale=ja`。若未切换，测试时应以中文文案为准。
 
 ## 背景说明
 

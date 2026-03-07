@@ -29,7 +29,7 @@ export default function Register(
   };
 
   return (
-    <PageLayout>
+    <PageLayout lightModeLabel={msgStr("lightMode")} darkModeLabel={msgStr("darkMode")}>
       {/* Custom styles for Keycloakify UserProfileFormFields */}
       <style>{`
         .auth9-register-form input[type="text"],
@@ -122,7 +122,7 @@ export default function Register(
 
         {/* Back to Login */}
         <div className="login-footer">
-          {msgStr("backToLogin") || "Already have an account?"}{" "}
+          {msgStr("alreadyHaveAccount")}{" "}
           <a href={url.loginUrl}>{msg("doLogIn")}</a>
         </div>
       </GlassCard>

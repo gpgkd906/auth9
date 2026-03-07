@@ -131,6 +131,7 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
         nonce: params.nonce.as_deref(),
         connector_alias: kc_idp_hint.as_deref(),
         kc_action: params.kc_action.as_deref(),
+        ui_locales: params.ui_locales.as_deref(),
     })?;
 
     Ok(Redirect::temporary(&auth_url).into_response())
@@ -193,6 +194,7 @@ pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::
         nonce: params.nonce.as_deref(),
         connector_alias: Some(&discovery.keycloak_alias),
         kc_action: None,
+        ui_locales: params.ui_locales.as_deref(),
     })?;
 
     Ok(Json(SuccessResponse::new(EnterpriseSsoDiscoveryResponse {

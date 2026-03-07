@@ -21,6 +21,7 @@ export const enterpriseSsoApi = {
       scope: string;
       state: string;
       nonce?: string;
+      ui_locales?: string;
     }
   ): Promise<{ data: EnterpriseSsoDiscoveryResponse }> => {
     const url = new URL(`${API_BASE_URL}/api/v1/enterprise-sso/discovery`);
@@ -30,6 +31,7 @@ export const enterpriseSsoApi = {
     url.searchParams.set("scope", query.scope);
     url.searchParams.set("state", query.state);
     if (query.nonce) url.searchParams.set("nonce", query.nonce);
+    if (query.ui_locales) url.searchParams.set("ui_locales", query.ui_locales);
 
     const response = await fetch(url.toString(), {
       method: "POST",

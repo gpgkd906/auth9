@@ -13,12 +13,18 @@ import { LockClosedIcon } from "@radix-ui/react-icons";
 import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
 import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
+import type { AppLocale } from "~/i18n";
 
 export const meta: MetaFunction = ({ matches }) => {
   return buildMeta(resolveMetaLocale(matches), "auth.login.metaTitle");
 };
 
-function buildAuthorizeParams(requestUrl: URL) {
+function mapLocaleToKeycloak(locale: AppLocale): string {
+  if (locale.startsWith("en")) return "en";
+  return locale;
+}
+
+function buildAuthorizeParams(requestUrl: URL, locale: AppLocale) {
   const corePublicUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const portalUrl = process.env.AUTH9_PORTAL_URL || requestUrl.origin;
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
@@ -38,6 +44,7 @@ function buildAuthorizeParams(requestUrl: URL) {
     scope: "openid email profile",
     state,
     nonce: crypto.randomUUID(),
+    ui_locales: mapLocaleToKeycloak(locale),
   };
 }
 
@@ -96,7 +103,7 @@ export async function action({ request }: ActionFunctionArgs) {
       return { error: translate(locale, "auth.login.ssoEmailRequired") };
     }
 
-    const auth = buildAuthorizeParams(url);
+    const auth = buildAuthorizeParams(url, locale);
     try {
       const result = await enterpriseSsoApi.discover({ email }, auth);
       const oauthCookie = await serializeOAuthState(auth.state);
@@ -110,7 +117,7 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "password-login") {
-    const auth = buildAuthorizeParams(url);
+    const auth = buildAuthorizeParams(url, locale);
     const corePublicUrl = auth.corePublicUrl;
     const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
     authorizeUrl.searchParams.set("response_type", auth.response_type);
@@ -119,6 +126,7 @@ export async function action({ request }: ActionFunctionArgs) {
     authorizeUrl.searchParams.set("scope", auth.scope);
     authorizeUrl.searchParams.set("state", auth.state);
     authorizeUrl.searchParams.set("nonce", auth.nonce);
+    authorizeUrl.searchParams.set("ui_locales", auth.ui_locales);
 
     const oauthCookie = await serializeOAuthState(auth.state);
     return redirect(authorizeUrl.toString(), {

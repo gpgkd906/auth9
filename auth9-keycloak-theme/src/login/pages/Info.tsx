@@ -16,7 +16,7 @@ export default function Info(
   const branding = useBrandingContext();
 
   return (
-    <PageLayout>
+    <PageLayout lightModeLabel={msgStr("lightMode")} darkModeLabel={msgStr("darkMode")}>
       <GlassCard>
         {/* Header */}
         <div className="login-header">
@@ -59,7 +59,7 @@ export default function Info(
               </a>
             ) : (
               <a href={url.loginUrl} className="form-link--secondary">
-                {"\u2190 " + (msgStr("backToLogin") || "Back to Login")}
+                {msgStr("backToLogin")}
               </a>
             )}
           </div>

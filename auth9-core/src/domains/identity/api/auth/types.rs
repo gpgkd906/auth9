@@ -16,6 +16,7 @@ pub struct AuthorizeRequest {
     pub nonce: Option<String>,
     pub connector_alias: Option<String>,
     pub kc_action: Option<String>,
+    pub ui_locales: Option<String>,
 }
 
 /// OIDC callback handler
