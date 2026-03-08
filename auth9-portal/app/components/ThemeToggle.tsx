@@ -7,12 +7,13 @@ export function ThemeToggle() {
   const { t } = useI18n();
 
   return (
-    <div className="theme-toggle" data-testid="theme-toggle">
+    <div className="theme-toggle" role="group" aria-label={t("common.theme.label")} data-testid="theme-toggle">
       <button
         className={cn("theme-btn", theme === "light" && "active")}
         onClick={() => setTheme("light")}
         title={t("common.theme.light")}
         aria-label={t("common.theme.switchToLight")}
+        aria-pressed={theme === "light"}
         tabIndex={0}
         data-testid="theme-light"
       >
@@ -23,6 +24,7 @@ export function ThemeToggle() {
         onClick={() => setTheme("dark")}
         title={t("common.theme.dark")}
         aria-label={t("common.theme.switchToDark")}
+        aria-pressed={theme === "dark"}
         tabIndex={0}
         data-testid="theme-dark"
       >

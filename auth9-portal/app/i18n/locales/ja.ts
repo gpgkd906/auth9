@@ -45,6 +45,7 @@ export default {
       switcherLabel: "言語を切り替え",
     },
     theme: {
+      label: "テーマ",
       light: "ライトモード",
       dark: "ダークモード",
       switchToLight: "ライトモードに切り替え",

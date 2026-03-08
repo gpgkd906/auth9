@@ -102,7 +102,7 @@
   --sidebar-border: rgba(255, 255, 255, 0.08);
   --sidebar-item-hover: rgba(255, 255, 255, 0.06);
   --sidebar-item-active-bg: var(--accent-blue-light);
-  --sidebar-item-active-text: var(--accent-blue);
+  --sidebar-item-active-text: #4DA3FF;
 
   /* Dark backdrop */
   --backdrop-gradient: linear-gradient(135deg,
@@ -270,6 +270,7 @@
 
   .liquid-glass:hover {
     background: var(--glass-bg-hover);
+    border-color: var(--glass-highlight);
     box-shadow:
       0 12px 40px var(--glass-shadow-strong),
       inset 0 1px 0 var(--glass-highlight),
@@ -376,6 +377,7 @@
 
   .sidebar-nav {
     flex: 1;
+    min-height: 0;
     padding: 16px 12px;
     overflow-y: auto;
   }
@@ -623,7 +625,7 @@
     border-radius: 6px;
     border: none;
     background: transparent;
-    color: var(--text-tertiary);
+    color: var(--text-secondary);
     cursor: pointer;
     transition: background 0.2s ease, color 0.2s ease;
   }

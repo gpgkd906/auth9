@@ -75,17 +75,29 @@ export default function App() {
   );
 }
 
+function readLocaleFromCookie(): AppLocale | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.split("; ").find((c) => c.startsWith("auth9_locale="));
+  if (!match) return null;
+  const raw = decodeURIComponent(match.split("=")[1] || "");
+  if (raw === "en-US" || raw === "zh-CN" || raw === "ja") return raw;
+  return null;
+}
+
 export function ErrorBoundary() {
   const error = useRouteError();
   const rootData = useRouteLoaderData("root") as { locale?: AppLocale } | undefined;
-  const locale = rootData?.locale || "zh-CN";
+  const locale: AppLocale = rootData?.locale
+    || readLocaleFromCookie()
+    || (typeof document !== "undefined" && (document.documentElement.lang as AppLocale))
+    || "zh-CN";
 
   if (isRouteErrorResponse(error)) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
         <div className="text-center">
-          <h1 className="text-6xl font-bold text-gray-900">{error.status}</h1>
-          <p className="mt-4 text-xl text-gray-600">
+          <h1 className="text-6xl font-bold text-[var(--text-primary)]">{error.status}</h1>
+          <p className="mt-4 text-xl text-[var(--text-secondary)]">
             {error.status === 404
               ? translate(locale, "common.errors.pageNotFound")
               : translate(locale, "common.errors.somethingWentWrong")}
@@ -102,10 +114,10 @@ export function ErrorBoundary() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center">
+    <div className="min-h-screen flex items-center justify-center bg-[var(--bg-primary)]">
       <div className="text-center">
-        <h1 className="text-6xl font-bold text-gray-900">Error</h1>
-        <p className="mt-4 text-xl text-gray-600">
+        <h1 className="text-6xl font-bold text-[var(--text-primary)]">Error</h1>
+        <p className="mt-4 text-xl text-[var(--text-secondary)]">
           {translate(locale, "common.errors.somethingWentWrong")}
         </p>
         <a

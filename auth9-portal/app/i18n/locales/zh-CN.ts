@@ -45,6 +45,7 @@ export default {
       switcherLabel: "切换语言",
     },
     theme: {
+      label: "主题",
       light: "浅色模式",
       dark: "深色模式",
       switchToLight: "切换到浅色模式",

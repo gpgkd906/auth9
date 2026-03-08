@@ -38,20 +38,40 @@
 ## 场景 1：API 返回 Confidential Client 的完整集成信息
 
 ### 初始状态
-- 已创建 Service，包含至少一个 Confidential Client（非 Public Client）
+- **必须通过 API 创建** Service 和 Client（非 DB seed 数据）
 - 已获取有效的 Admin Access Token
+
+> **⚠️ 重要**: DB 迁移种子数据（如 M2M 测试 client）仅写入数据库，不会同步到 Keycloak。
+> 使用种子数据测试时，`client_secret` 将返回占位符 `"(set — use the secret configured at creation)"`，
+> 这是预期行为（DB 仅存储哈希，无法还原明文）。
+> 要测试真实 secret 返回，必须通过 `POST /api/v1/services` 或 `POST /api/v1/services/{id}/clients` 创建 client。
 
 ### 目的
 验证 Integration API 返回完整的集成信息，包含 Keycloak 中的真实 client_secret
 
 ### 测试操作流程
 1. 获取 Admin Access Token
-2. 调用 Integration API：
+2. **通过 API 创建 Service**（不要使用预置种子数据）：
+   ```bash
+   curl -s -X POST http://localhost:8080/api/v1/services \
+     -H "Authorization: Bearer {access_token}" \
+     -H "Content-Type: application/json" \
+     -d '{"name": "Integration Test Service", "client_id": "integration-test"}' | jq .
+   ```
+3. 调用 Integration API：
    ```bash
    curl -s http://localhost:8080/api/v1/services/{service_id}/integration \
      -H "Authorization: Bearer {access_token}" | jq .
    ```
-3. 检查响应 JSON 结构
+4. 检查响应 JSON 结构
+
+### 常见失败原因
+
+| 症状 | 原因 | 解决方法 |
+|------|------|----------|
+| `client_secret` 返回占位符 | 使用了 DB seed 数据 | 通过 API 创建 Service |
+| Keycloak 中无对应 client | Service 未通过 API 创建 | 通过 API 创建 Service |
+| 401 未授权 | Token 过期或无效 | 重新获取 Token |
 
 ### 预期结果
 - 状态码 `200`

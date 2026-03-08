@@ -45,6 +45,7 @@ export default {
       switcherLabel: "Switch language",
     },
     theme: {
+      label: "Theme",
       light: "Light mode",
       dark: "Dark mode",
       switchToLight: "Switch to light mode",
