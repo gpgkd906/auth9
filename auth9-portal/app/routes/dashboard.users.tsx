@@ -1,59 +1,42 @@
-import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit, useNavigate, useSearchParams, useOutletContext } from "react-router";
-import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
-import { userApi, tenantApi, rbacApi, serviceApi, sessionApi, type User, type Tenant, type Service, type Role, type TenantUserWithTenant } from "~/services/api";
-import { getAccessToken, getSession, destroySession } from "~/services/session.server";
-import { mapApiError } from "~/lib/error-messages";
-import { FormattedDate } from "~/components/ui/formatted-date";
-
-// Type for tenant info embedded in user-tenant response
-interface TenantInfo {
-  id: string;
-  name: string;
-  slug: string;
-  logo_url?: string;
-  status: string;
-}
-
-// Type for user-tenant relationship from userApi.getTenants
-interface UserTenant {
-  id: string;
-  tenant_id: string;
-  user_id: string;
-  role_in_tenant: string;
-  joined_at: string;
-  tenant: TenantInfo;
-}
+import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
+import {
+  Form,
+  useActionData,
+  useLoaderData,
+  useNavigate,
+  useNavigation,
+  useOutletContext,
+  useSearchParams,
+  useSubmit,
+} from "react-router";
+import { useEffect, useState, type FormEvent } from "react";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "~/components/ui/dialog";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from "~/components/ui/dropdown-menu";
-import { DotsHorizontalIcon, Pencil2Icon, PersonIcon, GearIcon, TrashIcon, ExitIcon } from "@radix-ui/react-icons";
-import { Avatar, AvatarFallback } from "~/components/ui/avatar";
-import { Badge } from "~/components/ui/badge";
-import { useEffect, useState } from "react";
+import { CreateUserDialog } from "~/components/users/create-user-dialog";
+import { EditUserDialog } from "~/components/users/edit-user-dialog";
+import { ManageUserRolesDialog } from "~/components/users/manage-user-roles-dialog";
+import { ManageUserTenantsDialog } from "~/components/users/manage-user-tenants-dialog";
+import { MfaConfirmationDialog } from "~/components/users/mfa-confirmation-dialog";
+import type { TenantInfo, UserTenant } from "~/components/users/types";
+import { UsersDirectory } from "~/components/users/users-directory";
+import { mapApiError } from "~/lib/error-messages";
 import { useConfirm } from "~/hooks/useConfirm";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
-import { Checkbox } from "~/components/ui/checkbox";
 import { useI18n } from "~/i18n";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { translate } from "~/i18n/translate";
+import {
+  rbacApi,
+  serviceApi,
+  sessionApi,
+  tenantApi,
+  userApi,
+  type Role,
+  type Tenant,
+  type TenantUserWithTenant,
+  type User,
+} from "~/services/api";
 import { resolveLocale } from "~/services/locale.server";
+import { destroySession, getAccessToken, getSession } from "~/services/session.server";
 
 export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "usersPage.metaTitle");
 
@@ -67,11 +50,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const perPage = Number(url.searchParams.get("perPage") || "20");
   const search = url.searchParams.get("search") || undefined;
   const accessToken = await getAccessToken(request);
+
   const [users, tenants, services] = await Promise.all([
     userApi.list(page, perPage, search, accessToken || undefined),
-    tenantApi.list(1, 100, undefined, accessToken || undefined), // List first 100 tenants for now
-    serviceApi.list(undefined, 1, 100, accessToken || undefined) // List first 100 services
+    tenantApi.list(1, 100, undefined, accessToken || undefined),
+    serviceApi.list(undefined, 1, 100, accessToken || undefined),
   ]);
+
   return { users, tenants, services };
 }
 
@@ -110,11 +95,14 @@ export async function action({ request }: ActionFunctionArgs) {
       const roles_json = formData.get("roles") as string;
       const roles = JSON.parse(roles_json);
 
-      await rbacApi.assignRoles({
-        user_id,
-        tenant_id,
-        role_ids: roles
-      }, accessToken || undefined);
+      await rbacApi.assignRoles(
+        {
+          user_id,
+          tenant_id,
+          role_ids: roles,
+        },
+        accessToken || undefined
+      );
       return { success: true, intent };
     }
 
@@ -123,6 +111,7 @@ export async function action({ request }: ActionFunctionArgs) {
       const display_name = formData.get("display_name") as string;
       const password = formData.get("password") as string;
       const tenant_id = formData.get("tenant_id") as string | null;
+
       await userApi.create(
         { email, display_name, password, ...(tenant_id ? { tenant_id } : {}) },
         accessToken || undefined
@@ -147,16 +136,16 @@ export async function action({ request }: ActionFunctionArgs) {
     if (intent === "force_logout") {
       const id = formData.get("id") as string;
       await sessionApi.forceLogoutUser(id, accessToken || undefined);
-      // Check if admin force-logged out themselves by verifying the token is still valid
+
       try {
         await userApi.getMe(accessToken || undefined);
       } catch {
-        // Token was revoked (self-logout) — clear session and redirect to login
         const session = await getSession(request);
         const cookie = session ? await destroySession(session) : undefined;
         const { redirect } = await import("react-router");
         throw redirect("/login", cookie ? { headers: { "Set-Cookie": cookie } } : undefined);
       }
+
       return { success: true, intent };
     }
 
@@ -200,7 +189,6 @@ export async function action({ request }: ActionFunctionArgs) {
       await userApi.updateRoleInTenant(user_id, tenant_id, role_in_tenant, accessToken || undefined);
       return { success: true, intent };
     }
-
   } catch (error) {
     const message = mapApiError(error, locale);
     return { error: message, intent };
@@ -214,69 +202,60 @@ export default function UsersPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
-  const confirm = useConfirm();
   const navigate = useNavigate();
+  const confirm = useConfirm();
   const [searchParams] = useSearchParams();
   const { activeTenant } = useOutletContext<{ activeTenant?: TenantUserWithTenant }>();
   const { t } = useI18n();
-  const activeTenantId = activeTenant?.tenant_id;
 
+  const activeTenantId = activeTenant?.tenant_id;
   const currentSearch = searchParams.get("search") || "";
+  const isSubmitting = navigation.state === "submitting";
+  const createUserError =
+    actionData && "error" in actionData && actionData.intent === "create_user" ? String(actionData.error) : null;
+  const addToTenantError =
+    actionData && "error" in actionData && actionData.intent === "add_to_tenant" ? String(actionData.error) : null;
+
   const [searchInput, setSearchInput] = useState(currentSearch);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [creatingUser, setCreatingUser] = useState(false);
   const [managingTenantsUser, setManagingTenantsUser] = useState<User | null>(null);
-  const [managingRoles, setManagingRoles] = useState<{ user: User, tenant: TenantInfo } | null>(null);
-
-  // Email validation state for Create User dialog
-  const [createEmailError, setCreateEmailError] = useState<string | null>(null);
-  const [createEmailValue, setCreateEmailValue] = useState("");
-
-  const validateEmail = (email: string): boolean => {
-    if (!email) {
-      setCreateEmailError(t("usersPage.emailRequired"));
-      return false;
-    }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-      setCreateEmailError(t("usersPage.emailInvalid"));
-      return false;
-    }
-    setCreateEmailError(null);
-    return true;
-  };
-
-  // State for MFA password confirmation dialog
+  const [managingRoles, setManagingRoles] = useState<{ user: User; tenant: TenantInfo } | null>(null);
   const [mfaAction, setMfaAction] = useState<{ user: User; action: "enable" | "disable" } | null>(null);
-  const [mfaPassword, setMfaPassword] = useState("");
   const [mfaError, setMfaError] = useState<string | null>(null);
-
-  // State for Manage Roles
-  const [selectedServiceId, setSelectedServiceId] = useState<string>("");
+  const [selectedServiceId, setSelectedServiceId] = useState("");
   const [availableRoles, setAvailableRoles] = useState<Role[]>([]);
   const [assignedRoleIds, setAssignedRoleIds] = useState<Set<string>>(new Set());
   const [allAssignedRoles, setAllAssignedRoles] = useState<Role[]>([]);
+  const [userTenants, setUserTenants] = useState<UserTenant[]>([]);
+  const [loadingTenants, setLoadingTenants] = useState(false);
+  const [tenantsError, setTenantsError] = useState<string | null>(null);
 
-  const isSubmitting = navigation.state === "submitting";
+  useEffect(() => {
+    setSearchInput(currentSearch);
+  }, [currentSearch]);
 
-  // Close dialogs on success
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
-      if (actionData.intent === "update_user") setEditingUser(null);
-      if (actionData.intent === "create_user") setCreatingUser(false);
-      if (actionData.intent === "assign_roles") setManagingRoles(null);
+      if (actionData.intent === "update_user") {
+        setEditingUser(null);
+      }
+      if (actionData.intent === "create_user") {
+        setCreatingUser(false);
+      }
+      if (actionData.intent === "assign_roles") {
+        setManagingRoles(null);
+      }
       if (actionData.intent === "enable_mfa" || actionData.intent === "disable_mfa") {
         setMfaAction(null);
-        setMfaPassword("");
         setMfaError(null);
       }
-      // Refresh tenant list after role update
       if (actionData.intent === "update_role_in_tenant" && managingTenantsUser) {
         const formData = new FormData();
         formData.append("intent", "get_user_tenants");
         formData.append("user_id", managingTenantsUser.id);
         submit(formData, { method: "post" });
       }
-      // Refresh assigned roles after unassign via server-side action
       if (actionData.intent === "unassign_role" && managingRoles) {
         const formData = new FormData();
         formData.append("intent", "get_user_assigned_roles");
@@ -284,29 +263,21 @@ export default function UsersPage() {
         formData.append("tenant_id", managingRoles.tenant.id);
         submit(formData, { method: "post" });
       }
-      // Handle server-side role data responses
       if (actionData.intent === "get_user_assigned_roles" && actionData.data) {
         const roles = actionData.data as Role[];
         setAllAssignedRoles(roles);
-        setAssignedRoleIds(new Set(roles.map((r: Role) => r.id)));
+        setAssignedRoleIds(new Set(roles.map((role) => role.id)));
       }
       if (actionData.intent === "get_service_roles" && actionData.data) {
         setAvailableRoles(actionData.data as Role[]);
       }
     }
-    // Show MFA errors in the confirmation dialog
+
     if (actionData && "error" in actionData && (actionData.intent === "enable_mfa" || actionData.intent === "disable_mfa")) {
       setMfaError(String(actionData.error));
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [actionData]);
+  }, [actionData, managingRoles, managingTenantsUser, submit]);
 
-  // Fetch user tenants when opening Manage Tenants dialog
-  const [userTenants, setUserTenants] = useState<UserTenant[]>([]);
-  const [loadingTenants, setLoadingTenants] = useState(false);
-  const [tenantsError, setTenantsError] = useState<string | null>(null);
-
-  // Load user tenants when dialog opens
   useEffect(() => {
     if (managingTenantsUser) {
       setLoadingTenants(true);
@@ -316,10 +287,8 @@ export default function UsersPage() {
       formData.append("user_id", managingTenantsUser.id);
       submit(formData, { method: "post" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [managingTenantsUser]);
+  }, [managingTenantsUser, submit]);
 
-  // Update userTenants when action returns data
   useEffect(() => {
     if (actionData && actionData.intent === "get_user_tenants") {
       setLoadingTenants(false);
@@ -331,7 +300,6 @@ export default function UsersPage() {
     }
   }, [actionData]);
 
-  // Fetch assigned roles when opening Manage Roles dialog (server-side)
   useEffect(() => {
     if (managingRoles) {
       const formData = new FormData();
@@ -340,10 +308,17 @@ export default function UsersPage() {
       formData.append("tenant_id", managingRoles.tenant.id);
       submit(formData, { method: "post" });
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [managingRoles, submit]);
+
+  useEffect(() => {
+    if (!managingRoles) {
+      setSelectedServiceId("");
+      setAvailableRoles([]);
+      setAssignedRoleIds(new Set());
+      setAllAssignedRoles([]);
+    }
   }, [managingRoles]);
 
-  // Fetch available roles when service is selected (server-side)
   useEffect(() => {
     if (selectedServiceId) {
       const formData = new FormData();
@@ -353,14 +328,15 @@ export default function UsersPage() {
     } else {
       setAvailableRoles([]);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedServiceId]);
+  }, [selectedServiceId, submit]);
 
   const handleAssignRoles = () => {
-    if (!managingRoles) return;
+    if (!managingRoles) {
+      return;
+    }
 
-    const rolesToAdd = Array.from(assignedRoleIds).filter(id =>
-      availableRoles.some(r => r.id === id)
+    const rolesToAdd = Array.from(assignedRoleIds).filter((roleId) =>
+      availableRoles.some((availableRole) => availableRole.id === roleId)
     );
 
     submit(
@@ -368,14 +344,37 @@ export default function UsersPage() {
         intent: "assign_roles",
         user_id: managingRoles.user.id,
         tenant_id: managingRoles.tenant.id,
-        roles: JSON.stringify(rolesToAdd)
+        roles: JSON.stringify(rolesToAdd),
       },
       { method: "post" }
     );
   };
 
-  const handleSearchSubmit = (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
+  const handleRoleCheckedChange = (roleId: string, checked: boolean, wasOriginallyAssigned: boolean) => {
+    const nextAssignedRoleIds = new Set(assignedRoleIds);
+
+    if (checked) {
+      nextAssignedRoleIds.add(roleId);
+    } else {
+      nextAssignedRoleIds.delete(roleId);
+      if (wasOriginallyAssigned && managingRoles) {
+        submit(
+          {
+            intent: "unassign_role",
+            user_id: managingRoles.user.id,
+            tenant_id: managingRoles.tenant.id,
+            role_id: roleId,
+          },
+          { method: "post" }
+        );
+      }
+    }
+
+    setAssignedRoleIds(nextAssignedRoleIds);
+  };
+
+  const handleSearchSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
     const params = new URLSearchParams();
     if (searchInput.trim()) {
       params.set("search", searchInput);
@@ -384,15 +383,47 @@ export default function UsersPage() {
     navigate(`/dashboard/users?${params.toString()}`);
   };
 
+  const handleClearFilter = () => {
+    setSearchInput("");
+    navigate("/dashboard/users?page=1");
+  };
+
+  const handleForceLogout = async (user: User) => {
+    const ok = await confirm({
+      title: t("usersPage.forceLogoutTitle"),
+      description: t("usersPage.forceLogoutDescription"),
+      confirmLabel: t("usersPage.forceLogoutConfirm"),
+    });
+
+    if (ok) {
+      submit({ intent: "force_logout", id: user.id }, { method: "post" });
+    }
+  };
+
+  const handleDeleteUser = async (user: User) => {
+    const ok = await confirm({
+      title: t("usersPage.deleteUserTitle"),
+      description: t("usersPage.deleteUserDescription"),
+      variant: "destructive",
+    });
+
+    if (ok) {
+      submit({ intent: "delete_user", id: user.id }, { method: "post" });
+    }
+  };
+
   return (
     <div className="space-y-6">
-
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div>
-          <h1 className="mb-2 text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("usersPage.title")}</h1>
+          <h1 className="mb-2 text-[24px] font-semibold tracking-tight text-[var(--text-primary)]">
+            {t("usersPage.title")}
+          </h1>
           <p className="text-sm text-[var(--text-secondary)]">{t("usersPage.description")}</p>
         </div>
-        <Button onClick={() => setCreatingUser(true)} className="w-full min-h-11 sm:w-auto sm:min-h-10">+ {t("usersPage.createUser")}</Button>
+        <Button onClick={() => setCreatingUser(true)} className="min-h-11 w-full sm:min-h-10 sm:w-auto">
+          + {t("usersPage.createUser")}
+        </Button>
       </div>
 
       <Form onSubmit={handleSearchSubmit} className="flex gap-2">
@@ -401,585 +432,90 @@ export default function UsersPage() {
           placeholder={t("usersPage.searchPlaceholder")}
           aria-label={t("usersPage.searchAria")}
           value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          className="flex-1 min-h-11 sm:min-h-10"
+          onChange={(event) => setSearchInput(event.target.value)}
+          className="min-h-11 flex-1 sm:min-h-10"
         />
-        <Button type="submit" variant="outline" className="min-h-11 sm:min-h-10">{t("usersPage.search")}</Button>
+        <Button type="submit" variant="outline" className="min-h-11 sm:min-h-10">
+          {t("usersPage.search")}
+        </Button>
       </Form>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>{t("usersPage.userDirectory")}</CardTitle>
-          <CardDescription>
-            {t("usersPage.pagination", {
-              count: users.pagination.total,
-              page: users.pagination.page,
-              totalPages: users.pagination.total_pages,
-            })}
-          </CardDescription>
-        </CardHeader>
-        <div className="px-6 pb-6">
-          <div className="mt-2 overflow-hidden rounded-xl border border-[var(--glass-border-subtle)] md:hidden">
-            {users.data.length > 0 ? (
-              <div className="space-y-3 p-3">
-                {users.data.map((user: User) => (
-                  <div key={user.id} className="rounded-lg border border-[var(--glass-border-subtle)] bg-[var(--sidebar-item-hover)]/20 p-3">
-                    <div className="space-y-1 text-sm">
-                      <p className="font-semibold text-[var(--text-primary)] break-all">{user.email}</p>
-                      <p className="text-[var(--text-secondary)]">{t("usersPage.name")}: {user.display_name || "-"}</p>
-                      <p className="text-[var(--text-secondary)]">{t("usersPage.mfa")}: {user.mfa_enabled ? t("usersPage.enabled") : t("usersPage.disabled")}</p>
-                      <p className="text-[var(--text-tertiary)] text-xs">
-                        {t("usersPage.updated")}: <FormattedDate date={user.updated_at} />
-                      </p>
-                    </div>
-                    <div className="mt-3 grid grid-cols-2 gap-2">
-                      <Button
-                        variant="outline"
-                        className="w-full min-h-11 text-[13px]"
-                        onClick={() => setManagingTenantsUser(user)}
-                      >
-                        {t("usersPage.manageTenants")}
-                      </Button>
-                      <Button
-                        variant="secondary"
-                        className="w-full min-h-11 text-[13px]"
-                        onClick={() => setEditingUser(user)}
-                      >
-                        {t("usersPage.edit")}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex flex-col items-center px-4 py-6 text-center text-[var(--text-tertiary)]">
-                <p>{t("usersPage.noUsersFound")}</p>
-                {currentSearch && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    className="mt-4 min-h-11"
-                    onClick={() => {
-                      setSearchInput("");
-                      navigate("/dashboard/users?page=1");
-                    }}
-                  >
-                    {t("usersPage.clearFilter")}
-                  </Button>
-                )}
-              </div>
-            )}
-          </div>
-          <div className="mt-2 hidden overflow-x-auto rounded-xl border border-[var(--glass-border-subtle)] md:block">
-            <table className="min-w-[600px] w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
-              <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-tertiary)] uppercase tracking-[0.04em] text-[11px] border-b border-[var(--glass-border-subtle)]">
-                <tr>
-                  <th className="px-4 py-3 font-semibold">{t("usersPage.email")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("usersPage.displayName")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("usersPage.mfa")}</th>
-                  <th className="px-4 py-3 font-semibold">{t("usersPage.updated")}</th>
-                  <th className="px-4 py-3 font-semibold w-10"></th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-[var(--glass-border-subtle)]">
-                {users.data.map((user: User) => (
-                  <tr key={user.id} className="text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]/50">
-                    <td className="px-4 py-3">
-                      <div className="flex items-center gap-3">
-                        <Avatar className="h-8 w-8 text-xs">
-                          <AvatarFallback>{user.email.charAt(0).toUpperCase()}</AvatarFallback>
-                        </Avatar>
-                        <span className="font-medium text-[var(--text-primary)]">{user.email}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3">{user.display_name || "-"}</td>
-                    <td className="px-4 py-3">
-                      <Badge variant={user.mfa_enabled ? "success" : "secondary"}>
-                        {user.mfa_enabled ? t("usersPage.enabled") : t("usersPage.disabled")}
-                      </Badge>
-                    </td>
-                    <td className="px-4 py-3">
-                      <FormattedDate date={user.updated_at} />
-                    </td>
-                    <td className="px-4 py-3">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" className="h-11 w-11 p-0 sm:h-8 sm:w-8 active:scale-95">
-                            <span className="sr-only">{t("usersPage.openMenu")}</span>
-                            <DotsHorizontalIcon className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          <DropdownMenuLabel>{t("usersPage.actions")}</DropdownMenuLabel>
-                          <DropdownMenuItem onClick={() => setEditingUser(user)}>
-                            <Pencil2Icon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.editUser")}
-                          </DropdownMenuItem>
-                          <DropdownMenuItem onClick={() => setManagingTenantsUser(user)}>
-                            <PersonIcon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.manageTenants")}
-                          </DropdownMenuItem>
-                          {user.mfa_enabled ? (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setMfaAction({ user, action: "disable" });
-                                setMfaPassword("");
-                                setMfaError(null);
-                              }}
-                            >
-                              {t("usersPage.disableMfa")}
-                            </DropdownMenuItem>
-                          ) : (
-                            <DropdownMenuItem
-                              onClick={() => {
-                                setMfaAction({ user, action: "enable" });
-                                setMfaPassword("");
-                                setMfaError(null);
-                              }}
-                            >
-                              {t("usersPage.enableMfa")}
-                            </DropdownMenuItem>
-                          )}
-                          <DropdownMenuItem
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: t("usersPage.forceLogoutTitle"),
-                                description: t("usersPage.forceLogoutDescription"),
-                                confirmLabel: t("usersPage.forceLogoutConfirm"),
-                              });
-                              if (ok) {
-                                submit({ intent: "force_logout", id: user.id }, { method: "post" });
-                              }
-                            }}
-                          >
-                            <ExitIcon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.forceLogout")}
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            className="text-[var(--accent-red)] focus:text-[var(--accent-red)]"
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: t("usersPage.deleteUserTitle"),
-                                description: t("usersPage.deleteUserDescription"),
-                                variant: "destructive",
-                              });
-                              if (ok) {
-                                submit({ intent: "delete_user", id: user.id }, { method: "post" });
-                              }
-                            }}
-                          >
-                            <TrashIcon className="mr-2 h-3.5 w-3.5" /> {t("common.buttons.delete")}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </td>
-                  </tr>
-                ))}
-                {users.data.length === 0 && (
-                  <tr>
-                    <td className="px-4 py-6 text-center text-[var(--text-tertiary)]" colSpan={5}>
-                      <div className="flex flex-col items-center">
-                        <p>{t("usersPage.noUsersFound")}</p>
-                        {currentSearch && (
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            className="mt-4 min-h-10"
-                            onClick={() => {
-                              setSearchInput("");
-                              navigate("/dashboard/users?page=1");
-                            }}
-                          >
-                            {t("usersPage.clearFilter")}
-                          </Button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </Card>
-
-      {/* Edit User Dialog */}
-      <Dialog open={!!editingUser} onOpenChange={(open) => !open && setEditingUser(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("usersPage.editUserTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("usersPage.editUserDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <Form method="post" className="space-y-4">
-            <input type="hidden" name="intent" value="update_user" />
-            <input type="hidden" name="id" value={editingUser?.id || ""} />
-            <div className="space-y-1.5">
-              <Label htmlFor="edit-name">{t("usersPage.displayName")}</Label>
-              <Input
-                id="edit-name"
-                name="display_name"
-                defaultValue={editingUser?.display_name || ""}
-              />
-            </div>
-            <DialogFooter>
-              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => setEditingUser(null)}>
-                {t("common.buttons.cancel")}
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {t("usersPage.saveChanges")}
-              </Button>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Create User Dialog */}
-      <Dialog open={creatingUser} onOpenChange={(open) => {
-        if (!open) {
-          setCreatingUser(false);
-          setCreateEmailError(null);
-          setCreateEmailValue("");
-        }
-      }}>
-        <DialogContent aria-modal="true">
-          <DialogHeader>
-            <DialogTitle>{t("usersPage.createUserTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("usersPage.createUserDescription")}
-            </DialogDescription>
-          </DialogHeader>
-          <Form method="post" className="space-y-4" onSubmit={(e) => {
-            if (!validateEmail(createEmailValue)) {
-              e.preventDefault();
-            }
-          }}>
-            <input type="hidden" name="intent" value="create_user" />
-            <div className="space-y-1.5">
-              <Label htmlFor="create-email">{t("usersPage.emailRequiredLabel")}</Label>
-              <Input
-                id="create-email"
-                name="email"
-                type="email"
-                required
-                aria-required="true"
-                placeholder={t("usersPage.emailPlaceholder")}
-                value={createEmailValue}
-                onChange={(e) => {
-                  setCreateEmailValue(e.target.value);
-                  if (createEmailError) validateEmail(e.target.value);
-                }}
-                onBlur={(e) => validateEmail(e.target.value)}
-                className={createEmailError ? "border-[var(--accent-red)]" : ""}
-                aria-invalid={createEmailError ? true : undefined}
-                aria-errormessage={createEmailError ? "create-email-error" : undefined}
-              />
-              {createEmailError && (
-                <p id="create-email-error" role="alert" className="text-sm text-[var(--accent-red)]">{createEmailError}</p>
-              )}
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="create-name">{t("usersPage.displayName")}</Label>
-              <Input
-                id="create-name"
-                name="display_name"
-                placeholder={t("usersPage.displayNamePlaceholder")}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="create-password">{t("usersPage.passwordRequiredLabel")}</Label>
-              <Input
-                id="create-password"
-                name="password"
-                type="password"
-                required
-                aria-required="true"
-                placeholder={t("usersPage.passwordPlaceholder")}
-              />
-            </div>
-            <div className="space-y-1.5">
-              <Label id="create-tenant-label">{t("usersPage.tenantOptional")}</Label>
-              <Select name="tenant_id" defaultValue={activeTenantId} aria-labelledby="create-tenant-label">
-                <SelectTrigger aria-labelledby="create-tenant-label">
-                  <SelectValue placeholder={t("usersPage.noTenant")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {tenants.data.map((t: Tenant) => (
-                    <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            {actionData && "error" in actionData && actionData.intent === "create_user" && (
-              <p role="alert" className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => {
-                setCreatingUser(false);
-                setCreateEmailError(null);
-                setCreateEmailValue("");
-              }}>
-                {t("common.buttons.cancel")}
-              </Button>
-              <Button type="submit" disabled={isSubmitting}>
-                {t("usersPage.createUserSubmit")}
-              </Button>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
-
-      {/* Manage Tenants Dialog */}
-      <Dialog open={!!managingTenantsUser} onOpenChange={(open) => !open && setManagingTenantsUser(null)}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
-            <DialogTitle>{t("usersPage.manageTenantsTitle", { email: managingTenantsUser?.email || "" })}</DialogTitle>
-            <DialogDescription>
-              {t("usersPage.manageTenantsDescription")}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-6">
-            <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4">
-              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">{t("usersPage.joinedTenants")}</h4>
-              <div className="space-y-2">
-                {loadingTenants && (
-                  <p className="text-sm text-[var(--text-tertiary)]">{t("usersPage.loadingTenants")}</p>
-                )}
-                {tenantsError && (
-                  <p className="text-sm text-[var(--accent-red)]">{t("usersPage.loadingTenantsError", { error: tenantsError })}</p>
-                )}
-                {!loadingTenants && userTenants.map((ut: UserTenant) => (
-                  <div key={ut.tenant_id} className="flex items-center justify-between rounded-lg bg-[var(--sidebar-item-hover)] p-2 text-sm">
-                    <div className="flex items-center gap-2">
-                      {ut.tenant?.logo_url && <img src={ut.tenant.logo_url} alt="" className="h-5 w-5 rounded" />}
-                      <span className="font-medium text-[var(--text-primary)]">{ut.tenant?.name ?? t("usersPage.unknownTenant")}</span>
-                      <Select
-                        key={`${ut.tenant_id}-${ut.role_in_tenant}`}
-                        defaultValue={ut.role_in_tenant}
-                        onValueChange={(value) => {
-                          if (value !== ut.role_in_tenant && managingTenantsUser) {
-                            submit(
-                              {
-                                intent: "update_role_in_tenant",
-                                user_id: managingTenantsUser.id,
-                                tenant_id: ut.tenant_id,
-                                role_in_tenant: value,
-                              },
-                              { method: "post" }
-                            );
-                          }
-                        }}
-                      >
-                        <SelectTrigger className="h-7 w-24 text-xs">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="member">{t("usersPage.member")}</SelectItem>
-                          <SelectItem value="admin">{t("usersPage.admin")}</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => managingTenantsUser && ut.tenant && setManagingRoles({ user: managingTenantsUser, tenant: ut.tenant })} disabled={!ut.tenant}>
-                        <GearIcon className="mr-2 h-3.5 w-3.5" /> {t("usersPage.roles")}
-                      </Button>
-                      <Form method="post" className="inline">
-                        <input type="hidden" name="intent" value="remove_from_tenant" />
-                        <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
-                        <input type="hidden" name="tenant_id" value={ut.tenant_id} />
-                        <Button size="sm" variant="ghost" className="text-[var(--accent-red)] hover:text-[var(--accent-red)]">
-                          {t("usersPage.remove")}
-                        </Button>
-                      </Form>
-                    </div>
-                  </div>
-                ))}
-                {!loadingTenants && !tenantsError && userTenants.length === 0 && <p className="text-sm text-[var(--text-tertiary)]">{t("usersPage.notMemberOfAnyTenant")}</p>}
-              </div>
-            </div>
-
-            <div className="rounded-xl border border-[var(--glass-border-subtle)] p-4 bg-[var(--sidebar-item-hover)]/50">
-              <h4 className="mb-4 text-sm font-medium text-[var(--text-primary)]">{t("usersPage.addToTenant")}</h4>
-              <Form method="post" className="flex gap-4 items-end">
-                <input type="hidden" name="intent" value="add_to_tenant" />
-                <input type="hidden" name="user_id" value={managingTenantsUser?.id ?? ""} />
-                <div className="flex-1 space-y-2">
-                  <Label id="add-tenant-label">{t("usersPage.tenant")}</Label>
-                  <Select name="tenant_id" aria-labelledby="add-tenant-label">
-                    <SelectTrigger aria-labelledby="add-tenant-label">
-                      <SelectValue placeholder={t("usersPage.selectTenant")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {tenants.data
-                        .filter((t: Tenant) => !userTenants.some((ut: UserTenant) => ut.tenant_id === t.id))
-                        .map((t: Tenant) => (
-                          <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>
-                        ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="w-32 space-y-2">
-                  <Label id="add-role-label">{t("usersPage.role")}</Label>
-                  <Select name="role_in_tenant" defaultValue="member" aria-labelledby="add-role-label">
-                    <SelectTrigger aria-labelledby="add-role-label">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="member">{t("usersPage.member")}</SelectItem>
-                      <SelectItem value="admin">{t("usersPage.admin")}</SelectItem>
-                      <SelectItem value="viewer">{t("usersPage.viewer")}</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <Button type="submit">{t("usersPage.add")}</Button>
-              </Form>
-              {actionData && "error" in actionData && actionData.intent === "add_to_tenant" && (
-                <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
-              )}
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* MFA Password Confirmation Dialog */}
-      <Dialog open={!!mfaAction} onOpenChange={(open) => {
-        if (!open) {
-          setMfaAction(null);
-          setMfaPassword("");
+      <UsersDirectory
+        currentSearch={currentSearch}
+        pagination={users.pagination}
+        users={users.data}
+        onClearFilter={handleClearFilter}
+        onDeleteUser={handleDeleteUser}
+        onEditUser={setEditingUser}
+        onForceLogout={handleForceLogout}
+        onManageTenants={setManagingTenantsUser}
+        onToggleMfa={({ action, user }) => {
+          setMfaAction({ action, user });
           setMfaError(null);
-        }
-      }}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{mfaAction?.action === "enable" ? t("usersPage.enableMfaTitle") : t("usersPage.disableMfaTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("usersPage.mfaDescription", {
-                action: mfaAction?.action === "enable" ? t("usersPage.enabling") : t("usersPage.disabling"),
-                email: mfaAction?.user.email || "",
-              })}
-            </DialogDescription>
-          </DialogHeader>
-          <Form method="post" className="space-y-4" onSubmit={() => {
+        }}
+      />
+
+      <EditUserDialog isSubmitting={isSubmitting} user={editingUser} onOpenChange={(open) => !open && setEditingUser(null)} />
+
+      <CreateUserDialog
+        activeTenantId={activeTenantId}
+        error={createUserError}
+        isSubmitting={isSubmitting}
+        open={creatingUser}
+        tenants={tenants.data}
+        onOpenChange={setCreatingUser}
+      />
+
+      <ManageUserTenantsDialog
+        addToTenantError={addToTenantError}
+        loadingTenants={loadingTenants}
+        tenants={tenants.data as Tenant[]}
+        tenantsError={tenantsError}
+        user={managingTenantsUser}
+        userTenants={userTenants}
+        onManageRoles={(tenant) => managingTenantsUser && setManagingRoles({ user: managingTenantsUser, tenant })}
+        onOpenChange={(open) => !open && setManagingTenantsUser(null)}
+        onUpdateRoleInTenant={(tenantId, roleInTenant) => {
+          if (!managingTenantsUser) {
+            return;
+          }
+          submit(
+            {
+              intent: "update_role_in_tenant",
+              user_id: managingTenantsUser.id,
+              tenant_id: tenantId,
+              role_in_tenant: roleInTenant,
+            },
+            { method: "post" }
+          );
+        }}
+      />
+
+      <MfaConfirmationDialog
+        error={mfaError}
+        isSubmitting={isSubmitting}
+        mfaAction={mfaAction}
+        onOpenChange={(open) => {
+          if (!open) {
+            setMfaAction(null);
             setMfaError(null);
-          }}>
-            <input type="hidden" name="intent" value={mfaAction?.action === "enable" ? "enable_mfa" : "disable_mfa"} />
-            <input type="hidden" name="id" value={mfaAction?.user.id || ""} />
-            <div className="space-y-1.5">
-              <Label htmlFor="mfa-confirm-password">{t("usersPage.yourPassword")}</Label>
-              <Input
-                id="mfa-confirm-password"
-                name="confirm_password"
-                type="password"
-                required
-                placeholder={t("usersPage.passwordConfirmPlaceholder")}
-                value={mfaPassword}
-                onChange={(e) => setMfaPassword(e.target.value)}
-              />
-            </div>
-            {mfaError && (
-              <p className="text-sm text-[var(--accent-red)]">{mfaError}</p>
-            )}
-            <DialogFooter>
-              <Button type="button" variant="outline" className="bg-[var(--glass-bg)]" onClick={() => {
-                setMfaAction(null);
-                setMfaPassword("");
-                setMfaError(null);
-              }}>
-                {t("common.buttons.cancel")}
-              </Button>
-              <Button type="submit" disabled={isSubmitting || !mfaPassword}>
-                {mfaAction?.action === "enable" ? t("usersPage.enableMfa") : t("usersPage.disableMfa")}
-              </Button>
-            </DialogFooter>
-          </Form>
-        </DialogContent>
-      </Dialog>
+          }
+        }}
+      />
 
-      {/* Manage Roles Dialog */}
-      <Dialog open={!!managingRoles} onOpenChange={(open) => !open && setManagingRoles(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("usersPage.assignRolesTitle")}</DialogTitle>
-            <DialogDescription>
-              {t("usersPage.assignRolesDescription", { tenant: managingRoles?.tenant.name || "" })}
-            </DialogDescription>
-          </DialogHeader>
-
-          <div className="space-y-4">
-            <div className="space-y-2">
-              <Label id="role-service-label">{t("usersPage.service")}</Label>
-              <Select onValueChange={setSelectedServiceId} aria-labelledby="role-service-label">
-                <SelectTrigger aria-labelledby="role-service-label">
-                  <SelectValue placeholder={t("usersPage.selectService")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {services.data.map((s: Service) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-
-            {selectedServiceId && (
-              <div className="flex flex-col gap-3 max-h-64 overflow-y-auto border border-[var(--glass-border-subtle)] p-2 rounded-xl">
-                {availableRoles.length === 0 ? (
-                  <p className="text-sm text-[var(--text-tertiary)]">{t("usersPage.noRolesDefined")}</p>
-                ) : (
-                  availableRoles.map((role: Role) => {
-                    const isAssigned = assignedRoleIds.has(role.id);
-                    const wasOriginallyAssigned = allAssignedRoles.some((r: Role) => r.id === role.id);
-                    return (
-                      <div key={role.id} className="flex h-10 min-h-[40px] items-center gap-3">
-                        <Checkbox
-                          id={role.id}
-                          checked={isAssigned}
-                          onCheckedChange={(checked: boolean | 'indeterminate') => {
-                            const newSet = new Set(assignedRoleIds);
-                            if (checked === true) {
-                              newSet.add(role.id);
-                            } else {
-                              newSet.delete(role.id);
-                              // If role was originally assigned, unassign it from backend
-                              if (wasOriginallyAssigned && managingRoles) {
-                                submit(
-                                  {
-                                    intent: "unassign_role",
-                                    user_id: managingRoles.user.id,
-                                    tenant_id: managingRoles.tenant.id,
-                                    role_id: role.id
-                                  },
-                                  { method: "post" }
-                                );
-                              }
-                            }
-                            setAssignedRoleIds(newSet);
-                          }}
-                        />
-                        <label
-                          htmlFor={role.id}
-                          className="text-sm font-medium leading-none text-[var(--text-primary)] peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
-                        >
-                          {role.name}
-                          {role.description && <span className="ml-2 text-[var(--text-tertiary)] font-normal">{role.description}</span>}
-                        </label>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
-          </div>
-
-          <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setManagingRoles(null)}>
-              {t("usersPage.done")}
-            </Button>
-            <Button onClick={handleAssignRoles} disabled={isSubmitting || !selectedServiceId}>
-              {t("usersPage.saveRoles")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ManageUserRolesDialog
+        allAssignedRoles={allAssignedRoles}
+        availableRoles={availableRoles}
+        assignedRoleIds={assignedRoleIds}
+        isSubmitting={isSubmitting}
+        managingRoles={managingRoles}
+        selectedServiceId={selectedServiceId}
+        services={services.data}
+        setSelectedServiceId={setSelectedServiceId}
+        onAssignRoles={handleAssignRoles}
+        onOpenChange={(open) => !open && setManagingRoles(null)}
+        onRoleCheckedChange={handleRoleCheckedChange}
+      />
     </div>
   );
 }
