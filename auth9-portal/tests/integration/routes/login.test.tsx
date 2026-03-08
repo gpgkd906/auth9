@@ -250,7 +250,7 @@ describe("Login Page", () => {
         render(<RoutesStub initialEntries={["/login?error=server_error"]} />);
 
         expect(await screen.findByText("Sign in failed")).toBeInTheDocument();
-        expect(screen.getByText(/An error occurred during sign in: server_error/)).toBeInTheDocument();
+        expect(screen.getByText(/An error occurred during sign in\. Please try again\./)).toBeInTheDocument();
     });
 
     it("displays Auth9 logo on error page", async () => {

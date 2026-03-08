@@ -149,10 +149,11 @@ describe("ThemeToggle", () => {
     document.documentElement.removeAttribute("data-theme");
   });
 
-  it("renders light and dark mode buttons", () => {
+  it("renders toggle button matching current theme", () => {
     render(<ThemeToggle />);
-    expect(screen.getByLabelText("Switch to light mode")).toBeInTheDocument();
+    // Default theme is "light", so only the "switch to dark" button is shown
     expect(screen.getByLabelText("Switch to dark mode")).toBeInTheDocument();
+    expect(screen.queryByLabelText("Switch to light mode")).not.toBeInTheDocument();
   });
 
   it("clicking dark mode button sets dark theme", async () => {
