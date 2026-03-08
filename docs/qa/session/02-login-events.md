@@ -10,11 +10,26 @@
 
 Auth9 采用 Headless Keycloak 架构，登录事件的产生和记录涉及两个系统：
 
-1. **用户名/密码与 MFA 验证由底层认证引擎处理** → 测试应通过 Auth9 登录入口触发 OIDC 流程
+1. **用户名/密码与 MFA 验证由底层认证引擎处理** → 认证引擎产生事件
 2. **事件通过 Webhook 推送** → Keycloak ext-event-http SPI 插件（p2-inc/keycloak-events）将事件实时推送到 auth9-core 的 `POST /api/v1/keycloak/events` 端点
 3. **Auth9 Core 记录和分析** → Auth9 接收事件后写入 `login_events` 表，并触发安全检测（如暴力破解告警）
 
-**关键点**：Auth9 不直接处理用户名/密码验证，所有认证均通过底层 OIDC 流程完成。本文档不要求也不建议手工访问底层登录页 URL。
+**关键点**：本文档测试的是事件接收和记录链路，通过直接调用 Webhook API 模拟事件，不通过浏览器登录流程。这确保测试解耦于 Keycloak UI，与 Headless Keycloak 架构一致。
+
+### Webhook 事件模拟方法
+
+所有场景使用以下模式模拟 Keycloak 事件推送：
+
+```bash
+SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+BODY='<event JSON>'
+SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+  -H "Content-Type: application/json" \
+  -H "x-keycloak-signature: sha256=$SIG" \
+  -d "$BODY"
+```
 
 ---
 
@@ -52,24 +67,35 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/session/seed.sql
 ## 场景 1：登录成功事件记录
 
 ### 初始状态
-- 用户使用正确凭证登录
+- Auth9 服务运行中
+- Webhook secret 已配置
 
 ### 目的
 验证成功登录事件被正确记录
 
 ### 测试操作流程
-1. 用户使用正确密码登录
-2. 登录成功
+1. 通过 Webhook API 模拟一次登录成功事件：
+   ```bash
+   SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+   BODY='{"type":"LOGIN","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"192.168.1.100","time":'"$(($(date +%s)*1000))"',"details":{"username":"testuser","email":"testuser@example.com","authMethod":"password"}}'
+   SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+   curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+     -H "Content-Type: application/json" \
+     -H "x-keycloak-signature: sha256=$SIG" \
+     -d "$BODY"
+   ```
+2. 查询数据库
 
 ### 预期结果
-- 登录成功
+- Webhook 返回 HTTP 204
 - 事件被记录
 
 ### 预期数据状态
 ```sql
-SELECT event_type, ip_address, device_type, created_at FROM login_events
-WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
--- 预期: event_type = 'success'
+SELECT event_type, ip_address, created_at FROM login_events
+WHERE email = 'testuser@example.com' ORDER BY created_at DESC LIMIT 1;
+-- 预期: event_type = 'success', ip_address = '192.168.1.100'
 ```
 
 ---
@@ -77,21 +103,28 @@ WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 ## 场景 2：登录失败事件记录
 
 ### 初始状态
-- 用户使用错误密码登录
-- **Keycloak ext-event-http SPI 已部署**（`keycloak-events-*.jar` 在 providers 目录中）
-- **seeder 已配置 ext-event-http 监听器**（`KEYCLOAK_WEBHOOK_SECRET` 已设置）
+- Auth9 服务运行中
+- Webhook secret 已配置
 
 ### 目的
 验证失败登录事件被正确记录
 
 ### 测试操作流程
-1. 用户通过 Portal 登录页输入错误密码
-2. 登录失败
-3. **等待 2-3 秒**（事件通过 Webhook 异步推送）
-4. 查询数据库
+1. 通过 Webhook API 模拟一次登录失败事件：
+   ```bash
+   SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+   BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"192.168.1.200","error":"invalid_user_credentials","time":'"$(($(date +%s)*1000))"',"details":{"username":"user","email":"user@example.com"}}'
+   SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+   curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+     -H "Content-Type: application/json" \
+     -H "x-keycloak-signature: sha256=$SIG" \
+     -d "$BODY"
+   ```
+2. 查询数据库
 
 ### 预期结果
-- 登录失败
+- Webhook 返回 HTTP 204
 - 失败事件被记录
 
 ### 预期数据状态
@@ -105,33 +138,43 @@ WHERE email = 'user@example.com' ORDER BY created_at DESC LIMIT 1;
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| 事件未记录 | ext-event-http SPI 未加载 | 检查 `docker exec auth9-keycloak ls /opt/keycloak/providers/` 确认 JAR 存在 |
-| 事件未记录 | Webhook 未到达 auth9-core | 检查 `KEYCLOAK_WEBHOOK_SECRET` 配置；如需平台排障，可确认底层 realm Events → Event Listeners 包含 `ext-event-http` |
-| 事件延迟 | Webhook 推送有短暂延迟 | 等待 3-5 秒后再查询 |
+| Webhook 返回 401 | 签名不匹配 | 确认 `SECRET` 与 auth9-core 配置的 `KEYCLOAK_WEBHOOK_SECRET` 一致 |
+| 事件未记录 | auth9-core 未运行 | 检查 `docker ps` 确认 auth9-core 容器正常 |
+| Webhook 返回 204 但无记录 | 事件类型未映射 | 确认 `type` 字段为有效类型（LOGIN、LOGIN_ERROR 等） |
 
 ---
 
 ## 场景 3：MFA 失败事件记录
 
 ### 初始状态
-- 用户启用了 MFA
-- 用户输入错误的 MFA 代码
+- Auth9 服务运行中
+- Webhook secret 已配置
 
 ### 目的
 验证 MFA 失败事件被记录
 
 ### 测试操作流程
-1. 正确输入密码
-2. 在 MFA 验证界面输入错误代码
+1. 通过 Webhook API 模拟一次 MFA 验证失败事件：
+   ```bash
+   SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+   BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"192.168.1.150","error":"invalid_totp","time":'"$(($(date +%s)*1000))"',"details":{"username":"mfa-user","email":"mfa-user@example.com","credentialType":"otp"}}'
+   SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+   curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+     -H "Content-Type: application/json" \
+     -H "x-keycloak-signature: sha256=$SIG" \
+     -d "$BODY"
+   ```
+2. 查询数据库
 
 ### 预期结果
-- MFA 验证失败
-- 事件被记录
+- Webhook 返回 HTTP 204
+- MFA 失败事件被记录
 
 ### 预期数据状态
 ```sql
 SELECT event_type, failure_reason FROM login_events
-WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
+WHERE email = 'mfa-user@example.com' ORDER BY created_at DESC LIMIT 1;
 -- 预期: event_type = 'failed_mfa'
 ```
 
@@ -140,23 +183,48 @@ WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 ## 场景 4：账户锁定事件
 
 ### 初始状态
-- 用户连续多次登录失败
+- Auth9 服务运行中
+- Webhook secret 已配置
 
 ### 目的
-验证账户锁定机制和事件记录
+验证账户锁定事件被正确记录
 
 ### 测试操作流程
-1. 连续 5 次使用错误密码登录
+1. 通过 Webhook API 连续发送 5 个登录失败事件，模拟暴力破解：
+   ```bash
+   SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+   USER_ID="550e8400-e29b-41d4-a716-446655440000"
+
+   for i in $(seq 1 5); do
+     BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"'"$USER_ID"'","ipAddress":"10.0.0.50","error":"invalid_user_credentials","time":'"$(($(date +%s)*1000 + i))"',"details":{"username":"locked-user","email":"locked-user@example.com"}}'
+     SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+     curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+       -H "Content-Type: application/json" \
+       -H "x-keycloak-signature: sha256=$SIG" \
+       -d "$BODY"
+     echo ""
+   done
+   ```
+2. 发送一个账户锁定事件：
+   ```bash
+   BODY='{"type":"USER_DISABLED_BY_TEMPORARY_LOCKOUT","realmId":"auth9","clientId":"auth9-portal","userId":"'"$USER_ID"'","ipAddress":"10.0.0.50","time":'"$(($(date +%s)*1000 + 6))"',"details":{"username":"locked-user","email":"locked-user@example.com"}}'
+   SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+   curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+     -H "Content-Type: application/json" \
+     -H "x-keycloak-signature: sha256=$SIG" \
+     -d "$BODY"
+   ```
+3. 查询数据库
 
 ### 预期结果
-- 账户被临时锁定
-- 锁定事件被记录
+- 所有 Webhook 返回 HTTP 204
+- 5 条失败事件 + 1 条锁定事件被记录
 
 ### 预期数据状态
 ```sql
 SELECT event_type, created_at FROM login_events
-WHERE user_id = '{user_id}' ORDER BY created_at DESC LIMIT 6;
--- 预期: 最后一条为 'locked'
+WHERE email = 'locked-user@example.com' ORDER BY created_at DESC LIMIT 6;
+-- 预期: 最新一条为 'locked'，其余 5 条为 'failed_password'
 ```
 
 ---

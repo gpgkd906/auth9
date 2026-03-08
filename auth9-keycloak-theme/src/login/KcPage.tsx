@@ -15,6 +15,8 @@ const Register = lazy(() => import("./pages/Register"));
 const LoginResetPassword = lazy(() => import("./pages/LoginResetPassword"));
 const LoginOtp = lazy(() => import("./pages/LoginOtp"));
 const Info = lazy(() => import("./pages/Info"));
+const ErrorPage = lazy(() => import("./pages/Error"));
+const LoginPageExpired = lazy(() => import("./pages/LoginPageExpired"));
 
 /**
  * Default auth9 API URL - can be overridden via theme.properties
@@ -109,6 +111,28 @@ export default function KcPage(props: { kcContext: KcContext }) {
             case "info.ftl":
               return (
                 <Info
+                  kcContext={kcContext}
+                  i18n={i18n}
+                  doUseDefaultCss={false}
+                  classes={{}}
+                  Template={Template}
+                />
+              );
+
+            case "error.ftl":
+              return (
+                <ErrorPage
+                  kcContext={kcContext}
+                  i18n={i18n}
+                  doUseDefaultCss={false}
+                  classes={{}}
+                  Template={Template}
+                />
+              );
+
+            case "login-page-expired.ftl":
+              return (
+                <LoginPageExpired
                   kcContext={kcContext}
                   i18n={i18n}
                   doUseDefaultCss={false}

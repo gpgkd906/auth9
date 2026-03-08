@@ -56,10 +56,21 @@ Auth9 登录事件链路使用 Webhook 模式：
 验证 Keycloak 通过 ext-event-http 推送的事件可被 auth9-core 正确处理并写入登录事件表。
 
 ### 测试操作流程
-1. 通过 Portal 执行一次失败登录（输入错误密码）
-2. 等待 2-3 秒后查询数据库
+1. 通过 Webhook API 模拟一次登录失败事件（不经过浏览器，直接调用 auth9-core 端点）：
+   ```bash
+   SECRET="dev-webhook-secret-change-in-production"  # pragma: allowlist secret
+   BODY='{"type":"LOGIN_ERROR","realmId":"auth9","clientId":"auth9-portal","userId":"550e8400-e29b-41d4-a716-446655440000","ipAddress":"192.168.1.100","error":"invalid_user_credentials","time":'"$(($(date +%s)*1000))"',"details":{"username":"john","email":"john@example.com"}}'
+   SIG=$(echo -n "$BODY" | openssl dgst -sha256 -hmac "$SECRET" | cut -d' ' -f2)
+
+   curl -s -w "\nHTTP: %{http_code}" -X POST "http://localhost:8080/api/v1/keycloak/events" \
+     -H "Content-Type: application/json" \
+     -H "x-keycloak-signature: sha256=$SIG" \
+     -d "$BODY"
+   ```
+2. 查询数据库
 
 ### 预期结果
+- Webhook 返回 HTTP 204
 - `login_events` 新增 `event_type='failed_password'` 记录
 
 ### 预期数据状态
@@ -69,7 +80,7 @@ FROM login_events
 WHERE email = 'john@example.com'
 ORDER BY created_at DESC
 LIMIT 1;
--- 预期: event_type='success', ip_address='192.168.1.100'
+-- 预期: event_type='failed_password', ip_address='192.168.1.100'
 ```
 
 ---

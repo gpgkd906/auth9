@@ -6,7 +6,7 @@
 
 | ID | 标题 | 状态 | 优先级 | 创建日期 | 预计修复 |
 |----|------|------|--------|----------|----------|
-| 002 | QA 文档 Keycloak UI 泄漏整改清单 | 🔴 Active | High | 2026-03-04 | 2026-03-18 |
+| 002 | QA 文档 Keycloak UI 泄漏整改清单 | 🟢 Resolved | High | 2026-03-04 | 2026-03-08（已修复：补齐 error.ftl/login-page-expired.ftl 主题 + QA 文档改用 Webhook API） |
 | ~~001~~ | ~~Action Test Endpoint - axum/tonic 版本冲突~~ | 🟢 Resolved | — | 2026-02-12 | 已于 2026-02-19 解决（升级 OpenTelemetry 0.27→0.31） |
 
 ---
