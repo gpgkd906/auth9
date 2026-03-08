@@ -1,6 +1,25 @@
 repos:
-  - repo: https://github.com/Yelp/detect-secrets
-    rev: v1.5.0
+  - repo: local
     hooks:
       - id: detect-secrets
-        args: ['--baseline', '.secrets.baseline']
+        name: detect-secrets
+        entry: python scripts/detect_secrets_hook.py
+        language: python
+        args:
+          - --baseline
+          - .secrets.baseline
+        additional_dependencies:
+          - detect-secrets==1.5.0
+        pass_filenames: true
+      - id: detect-secrets-refresh
+        name: detect-secrets-refresh
+        entry: python scripts/refresh_secrets_baseline.py
+        language: python
+        args:
+          - --baseline
+          - .secrets.baseline
+        additional_dependencies:
+          - detect-secrets==1.5.0
+        pass_filenames: true
+        stages:
+          - manual
