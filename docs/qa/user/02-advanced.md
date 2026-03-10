@@ -113,6 +113,15 @@ SELECT mfa_enabled FROM users WHERE id = '{user_id}';
 -- 预期: true
 ```
 
+### 后续流程说明
+管理员启用 MFA 后，auth9-core 会在 Keycloak 中为该用户设置 `required_actions: ["CONFIGURE_TOTP"]`。用户**下次登录时**，Keycloak 将强制跳转到 TOTP 配置页（`login-config-totp.ftl`），引导用户：
+1. 安装 authenticator 应用（FreeOTP / Google Authenticator 等）
+2. 扫描 QR 码或手动输入密钥
+3. 输入 6 位验证码完成注册
+4. 命名设备（可选）
+
+此 TOTP 配置页由 auth9-keycloak-theme 自定义渲染（`LoginConfigTotp.tsx`），保持 Liquid Glass 品牌风格。完整的 UI 流程测试见 `docs/qa/auth/01-oidc-login.md` 场景 5。
+
 ---
 
 ## 场景 3：禁用用户 MFA

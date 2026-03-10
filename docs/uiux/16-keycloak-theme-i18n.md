@@ -2,7 +2,7 @@
 
 **模块**: 认证流程 / 国际化
 **测试范围**: Keycloak 自定义主题在 zh-CN / en-US / ja 下的文案正确性、语言参数透传、认证页品牌一致性
-**场景数**: 4
+**场景数**: 5
 **关联 Ticket**: `docs/ticket/keycloak-theme_i18n-not-implemented_scenario1_20260307_162702.md`
 
 ---
@@ -144,20 +144,39 @@ if (matches) {
 - 可触发 MFA（如账号已启用 TOTP）
 
 ### 目的
-验证 Keycloak 主题的所有页面（不只是登录页）均完成 i18n，包括 MFA 页、密码重置页、错误提示页。
+验证 Keycloak 主题的所有页面（不只是登录页）均完成 i18n，包括 MFA 验证页、TOTP 配置页、认证器选择页、密码重置页、错误提示页。
 
 ### 测试操作流程
+
+**MFA 验证页（OTP 输入）**：
 1. 使用已启用 MFA 的账号，在中文 Portal 下触发 MFA 流程
 2. 观察 MFA 页面（输入 OTP 码的页面）的文案语言，特别是 OTP 设备选择标签
 3. 在 Portal 设置英文，重复触发 MFA 流程
 4. 在 Portal 设置日语，重复触发 MFA 流程
-5. 在认证页输入错误密码 N 次，触发账号锁定或限流提示页
-6. 观察这些附加页面在三种语言下的文案
+
+**TOTP 配置页（首次设置）**：
+5. 使用管理员刚启用 MFA 但尚未配置 TOTP 的账号登录
+6. 观察 TOTP 配置页面（QR 码页面）在三种语言下的文案
+7. 验证自定义 key 翻译：`configTotpSubtitle`、`configTotpDevicePlaceholder`
+
+**认证器选择页（多认证方式）**：
+8. 如可触发认证器选择（配置多种认证方式），观察选择页的三语文案
+9. 验证自定义 key 翻译：`selectAuthenticatorSubtitle`
+
+**错误页**：
+10. 在认证页输入错误密码 N 次，触发账号锁定或限流提示页
+11. 观察这些附加页面在三种语言下的文案
 
 ### 预期视觉效果
-- **MFA 页（中文）**：OTP 选择标签「选择验证设备」、验证按钮「验证」
-- **MFA 页（英文）**：OTP 选择标签「Select OTP Device」
-- **MFA 页（日语）**：OTP 选择标签「OTPデバイスを選択」
+- **MFA 验证页（中文）**：OTP 选择标签「选择验证设备」、验证按钮「验证」
+- **MFA 验证页（英文）**：OTP 选择标签「Select OTP Device」
+- **MFA 验证页（日语）**：OTP 选择标签「OTPデバイスを選択」
+- **TOTP 配置页（中文）**：副标题「设置验证器应用以保护您的账户」、设备名称占位符「例：我的手机」
+- **TOTP 配置页（英文）**：副标题「Set up your authenticator app to secure your account」、设备名称占位符「e.g. My Phone」
+- **TOTP 配置页（日语）**：副标题「認証アプリを設定してアカウントを保護します」、设备名称占位符「例：マイフォン」
+- **认证器选择页（中文）**：副标题「选择您的身份验证方式」
+- **认证器选择页（英文）**：副标题「Choose how you want to verify your identity」
+- **认证器选择页（日语）**：副标题「本人確認の方法を選択してください」
 - **密码重置页**：返回登录链接在日语下为「← ログインに戻る」
 - **错误/限流页**：三种语言下均显示对应翻译
 
@@ -219,6 +238,38 @@ if (loginBtn) {
 
 ---
 
+## 场景 5：MFA 全流程页面品牌一致性
+
+### 初始状态
+- 管理员已为测试用户启用 MFA，用户尚未配置 TOTP
+- Docker 环境运行正常，Keycloak 使用最新 auth9 主题
+
+### 目的
+验证 MFA 全流程中所有 Keycloak 托管页面均使用 auth9 自定义主题（Liquid Glass），不出现 Keycloak 默认 PatternFly 样式。
+
+### 测试操作流程
+1. 使用管理员刚启用 MFA 但尚未配置 TOTP 的账号登录
+2. 输入密码后，进入 TOTP 配置页（`login-config-totp.ftl`）
+3. 验证 TOTP 配置页使用 Liquid Glass 风格：
+   - 毛玻璃卡片容器
+   - 渐变背景
+   - 步骤编号蓝色气泡
+   - QR 码白色圆角容器
+   - Glass Input / Glass Button 组件
+4. 完成 TOTP 配置
+5. 后续登录时，进入 OTP 验证页（`login-otp.ftl`）
+6. 验证 OTP 验证页同样保持 Liquid Glass 风格
+7. 如可触发认证器选择页（`select-authenticator.ftl`），验证其品牌一致性
+
+### 预期结果
+- ☐ TOTP 配置页：Liquid Glass 风格，无 PatternFly 元素
+- ☐ OTP 验证页：Liquid Glass 风格，与配置页一致
+- ☐ 认证器选择页：Liquid Glass 风格卡片列表
+- ☐ 全流程中无视觉风格断裂（从登录页 → 配置页 → 验证页过渡自然）
+- ☐ 深色模式下所有页面风格正确（特别注意 QR 码在深色背景下仍清晰可见）
+
+---
+
 ## 检查清单
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
@@ -227,6 +278,7 @@ if (loginBtn) {
 | 2 | 三语下认证页完整文案覆盖 | ☐ | | | 含自定义 key 日语验证 |
 | 3 | MFA 页与错误页三语一致性 | ☐ | | | 需有启用 MFA 的测试账号 |
 | 4 | ui_locales 三语参数透传 + 企业 SSO | ☐ | | | 含映射验证 en-US→en |
+| 5 | MFA 全流程页面品牌一致性 | ☐ | | | TOTP 配置页/认证器选择页 Liquid Glass 风格 |
 
 ---
 
@@ -234,5 +286,6 @@ if (loginBtn) {
 
 1. **场景 1**：中文/英文 Portal × 中文/英文 Keycloak 认证页对比（2×2 截图组合）
 2. **场景 2**：认证页所有文案区域截图（标注各区域）
-3. **场景 3**：MFA 页中英文各一张
+3. **场景 3**：MFA 验证页中英文各一张 + TOTP 配置页中英文各一张 + 认证器选择页（如可触发）
 4. **场景 4**：Chrome DevTools Network 截图，标注 `ui_locales` 参数位置
+5. **场景 5**：TOTP 配置页 Light/Dark 模式各一张，OTP 验证页一张，认证器选择页一张
