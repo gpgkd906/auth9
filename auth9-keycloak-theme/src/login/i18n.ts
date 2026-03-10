@@ -15,6 +15,10 @@ const { useI18n, ofTypeI18n } = i18nBuilder
       alreadyHaveAccount: "Already have an account?",
       lightMode: "Light mode",
       darkMode: "Dark mode",
+      configTotpSubtitle: "Set up your authenticator app to secure your account",
+      configTotpDevicePlaceholder: "e.g. My Phone",
+      selectAuthenticatorSubtitle: "Choose how you want to verify your identity",
+      resetOtpDescription: "Select the authenticator device to reset",
     },
     ja: {
       backToLogin: "← ログインに戻る",
@@ -23,6 +27,10 @@ const { useI18n, ofTypeI18n } = i18nBuilder
       alreadyHaveAccount: "アカウントをお持ちですか？",
       lightMode: "ライトモード",
       darkMode: "ダークモード",
+      configTotpSubtitle: "認証アプリを設定してアカウントを保護します",
+      configTotpDevicePlaceholder: "例：マイフォン",
+      selectAuthenticatorSubtitle: "本人確認の方法を選択してください",
+      resetOtpDescription: "リセットする認証デバイスを選択してください",
     },
     "zh-CN": {
       backToLogin: "← 返回登录",
@@ -31,6 +39,10 @@ const { useI18n, ofTypeI18n } = i18nBuilder
       alreadyHaveAccount: "已有账户？",
       lightMode: "浅色模式",
       darkMode: "深色模式",
+      configTotpSubtitle: "设置验证器应用以保护您的账户",
+      configTotpDevicePlaceholder: "例：我的手机",
+      selectAuthenticatorSubtitle: "选择您的身份验证方式",
+      resetOtpDescription: "选择要重置的验证设备",
     },
   })
   .build();

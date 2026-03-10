@@ -14,6 +14,9 @@ const Login = lazy(() => import("./pages/Login"));
 const Register = lazy(() => import("./pages/Register"));
 const LoginResetPassword = lazy(() => import("./pages/LoginResetPassword"));
 const LoginOtp = lazy(() => import("./pages/LoginOtp"));
+const LoginConfigTotp = lazy(() => import("./pages/LoginConfigTotp"));
+const SelectAuthenticator = lazy(() => import("./pages/SelectAuthenticator"));
+const LoginResetOtp = lazy(() => import("./pages/LoginResetOtp"));
 const Info = lazy(() => import("./pages/Info"));
 const ErrorPage = lazy(() => import("./pages/Error"));
 const LoginPageExpired = lazy(() => import("./pages/LoginPageExpired"));
@@ -100,6 +103,39 @@ export default function KcPage(props: { kcContext: KcContext }) {
             case "login-otp.ftl":
               return (
                 <LoginOtp
+                  kcContext={kcContext}
+                  i18n={i18n}
+                  doUseDefaultCss={false}
+                  classes={{}}
+                  Template={Template}
+                />
+              );
+
+            case "login-config-totp.ftl":
+              return (
+                <LoginConfigTotp
+                  kcContext={kcContext}
+                  i18n={i18n}
+                  doUseDefaultCss={false}
+                  classes={{}}
+                  Template={Template}
+                />
+              );
+
+            case "select-authenticator.ftl":
+              return (
+                <SelectAuthenticator
+                  kcContext={kcContext}
+                  i18n={i18n}
+                  doUseDefaultCss={false}
+                  classes={{}}
+                  Template={Template}
+                />
+              );
+
+            case "login-reset-otp.ftl":
+              return (
+                <LoginResetOtp
                   kcContext={kcContext}
                   i18n={i18n}
                   doUseDefaultCss={false}
