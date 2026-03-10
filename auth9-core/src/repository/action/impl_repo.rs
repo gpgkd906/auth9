@@ -12,7 +12,7 @@ use async_trait::async_trait;
 impl ActionRepository for ActionRepositoryImpl {
     async fn create(
         &self,
-        tenant_id: StringUuid,
+        tenant_id: Option<StringUuid>,
         service_id: StringUuid,
         input: &CreateActionInput,
     ) -> Result<Action> {

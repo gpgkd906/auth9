@@ -222,7 +222,7 @@ export default function ServiceDetailPage() {
     <div className="space-y-6">
       <div className="flex items-center space-x-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to="/dashboard/services">
+          <Link to="/dashboard/services" aria-label={t("common.buttons.back")}>
             <ArrowLeftIcon className="h-4 w-4" />
           </Link>
         </Button>

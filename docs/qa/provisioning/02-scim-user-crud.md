@@ -277,6 +277,38 @@ WHERE auth9_resource_id = '{user_id}' ORDER BY created_at DESC LIMIT 1;
 - 重复用户：HTTP 409，`scimType: "uniqueness"`
 - 不存在：HTTP 404
 
+### 重复用户场景的设计行为说明
+
+SCIM POST /Users 对已存在 email 的处理取决于该用户是否已被 SCIM 管理：
+
+| 场景 | 条件 | 预期响应 | 说明 |
+|------|------|----------|------|
+| 用户不存在 | email 未注册 | **201 Created** | 正常创建 |
+| 用户存在，未被 SCIM 管理 | `scim_external_id IS NULL` | **201 Created** | 系统将现有用户关联到 SCIM（设置 `scim_external_id` 和 `scim_provisioned_by`），实现无缝接管 |
+| 用户存在，已被 SCIM 管理 | `scim_external_id IS NOT NULL` | **409 Conflict** | `scimType: "uniqueness"` |
+
+> **设计意图**：第二种情况（201）是为了支持渐进式 SCIM 接管——当组织启用 SCIM provisioning 时，已通过其他方式创建的存在用户会被自动关联到 SCIM，无需手动迁移。
+
+**测试 409 的正确方法**：
+```bash
+# 1. 先通过 SCIM 创建用户（获得 201）
+curl -s -X POST "http://localhost:8080/api/v1/scim/v2/Users" \
+  -H "Authorization: Bearer $SCIM_TOKEN" \
+  -H "Content-Type: application/scim+json" \
+  -d '{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"conflict-test@example.com","externalId":"ext-001","active":true}'
+
+# 2. 再次用相同 email 创建（获得 409）
+curl -s -X POST "http://localhost:8080/api/v1/scim/v2/Users" \
+  -H "Authorization: Bearer $SCIM_TOKEN" \
+  -H "Content-Type: application/scim+json" \
+  -d '{"schemas":["urn:ietf:params:scim:schemas:core:2.0:User"],"userName":"conflict-test@example.com","externalId":"ext-002","active":true}'
+# 预期: HTTP 409, scimType: "uniqueness"
+
+# 验证 SCIM 字段
+mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
+  "SELECT email, scim_external_id, scim_provisioned_by FROM users WHERE email = 'conflict-test@example.com';"
+```
+
 ---
 
 ## 检查清单

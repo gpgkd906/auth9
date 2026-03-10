@@ -19,7 +19,7 @@ mod tests;
 pub trait ActionRepository: Send + Sync {
     async fn create(
         &self,
-        tenant_id: StringUuid,
+        tenant_id: Option<StringUuid>,
         service_id: StringUuid,
         input: &CreateActionInput,
     ) -> Result<Action>;

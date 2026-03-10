@@ -33,7 +33,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// Create a new action
     pub async fn create(
         &self,
-        tenant_id: StringUuid,
+        tenant_id: Option<StringUuid>,
         service_id: StringUuid,
         input: CreateActionInput,
     ) -> Result<Action> {
@@ -177,7 +177,7 @@ impl<R: ActionRepository + 'static> ActionService<R> {
     /// Batch upsert actions (create or update)
     pub async fn batch_upsert(
         &self,
-        tenant_id: StringUuid,
+        tenant_id: Option<StringUuid>,
         service_id: StringUuid,
         inputs: Vec<UpsertActionInput>,
     ) -> Result<BatchUpsertResponse> {
@@ -526,11 +526,11 @@ mod tests {
         // create should succeed
         let action_clone = expected_action.clone();
         mock.expect_create()
-            .withf(move |tid, sid, _| *tid == tenant_id && *sid == service_id)
+            .withf(move |tid, sid, _| *tid == Some(tenant_id) && *sid == service_id)
             .returning(move |_, _, _| Ok(action_clone.clone()));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, service_id, input).await;
+        let result = service.create(Some(tenant_id), service_id, input).await;
 
         assert!(result.is_ok());
         let action = result.unwrap();
@@ -554,7 +554,7 @@ mod tests {
             .returning(move |_, _, _| Ok(vec![existing.clone()]));
 
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, service_id, input).await;
+        let result = service.create(Some(tenant_id), service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -577,7 +577,7 @@ mod tests {
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, service_id, input).await;
+        let result = service.create(Some(tenant_id), service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -600,7 +600,7 @@ mod tests {
 
         let mock = MockActionRepository::new();
         let service = ActionService::new(Arc::new(mock), None);
-        let result = service.create(tenant_id, service_id, input).await;
+        let result = service.create(Some(tenant_id), service_id, input).await;
 
         assert!(result.is_err());
         let err = result.unwrap_err();
@@ -1267,7 +1267,7 @@ mod tests {
             },
         ];
 
-        let result = service.batch_upsert(tenant_id, service_id, inputs).await;
+        let result = service.batch_upsert(Some(tenant_id), service_id, inputs).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();
@@ -1313,7 +1313,7 @@ mod tests {
             },
         ];
 
-        let result = service.batch_upsert(tenant_id, service_id, inputs).await;
+        let result = service.batch_upsert(Some(tenant_id), service_id, inputs).await;
 
         assert!(result.is_ok());
         let response = result.unwrap();

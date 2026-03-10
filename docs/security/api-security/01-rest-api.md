@@ -204,27 +204,34 @@ curl http://localhost:8080/debug/pprof
 4. 尝试并发请求
 
 ### 预期安全行为
-- 分页有最大限制 (如 100)
+- 分页有最大限制 (MAX_PER_PAGE = 100)
 - 导出有数量/频率限制
 - 响应大小受限
 - 并发请求限流
 
+> **实现状态**: 已实现。`PaginationQuery` 使用 `deserialize_per_page` 自动将 `per_page`/`limit` 值 clamp 到 `MAX_PER_PAGE`(100)。超过 100 的值会被静默限制为 100，小于 1 的值返回 400 错误。默认 `per_page` = 20。
+
 ### 验证方法
 ```bash
-# 超大分页
+# 超大分页 — 返回的 per_page 会被 clamp 到 100
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users?limit=1000000"
-# 预期: limit 被限制为最大值 (如 100)
+# 预期: limit 被 clamp 到 100，如果数据库中不足 100 条则返回全部
 
-# 检查实际返回数量
+# 检查实际返回数量 — 注意: 如果数据库用户不足 100 条，返回实际数量
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users?limit=1000" | jq '.data | length'
-# 预期: <= 100
+# 预期: <= 100 (实际返回数取决于数据库中的记录数)
+
+# 检查分页元数据 — 验证 per_page 是否被 clamp
+curl -H "Authorization: Bearer $TOKEN" \
+  "http://localhost:8080/api/v1/users?limit=1000000" | jq '.per_page'
+# 预期: 100 (已 clamp)
 
 # 负数分页
 curl -H "Authorization: Bearer $TOKEN" \
   "http://localhost:8080/api/v1/users?limit=-1"
-# 预期: 400 或使用默认值
+# 预期: 400 ("per_page must be a positive integer")
 
 # 并发提取
 for i in {1..100}; do
@@ -234,9 +241,16 @@ done
 # 观察是否触发限流
 ```
 
+### 常见误报
+
+| 症状 | 原因 | 解决 |
+|------|------|------|
+| limit=1000000 只返回 5 条数据 | 数据库中仅有 5 个用户，limit 已被 clamp 到 100 但数据不足 | 检查 `.per_page` 字段确认 clamp 生效，而非看 `.data` 长度 |
+| 看起来 limit 没有限制 | 测试环境数据量太少，无法区分 "无限制" 和 "有限制但数据不足" | 先插入 >100 条测试数据再验证 |
+
 ### 修复建议
-- 分页 limit 最大 100
-- 默认 limit 为 20
+- ✅ 分页 limit 最大 100 (已实现)
+- ✅ 默认 limit 为 20 (已实现)
 - 负数参数使用默认值
 - 实现请求限流
 

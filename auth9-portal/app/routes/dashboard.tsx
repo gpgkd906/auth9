@@ -274,6 +274,7 @@ export default function Dashboard() {
               to="/logout"
               className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:bg-[var(--surface-secondary)] transition-colors"
               title={t("common.buttons.signOut")}
+              aria-label={t("common.buttons.signOut")}
             >
               <LogOutIcon className="w-4 h-4" />
             </Link>

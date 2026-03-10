@@ -126,7 +126,7 @@ export default function OrganizationSettingsPage() {
                         {!settings?.branding?.logo_url && <span className="text-[var(--text-tertiary)]">{t("settings.organization.noBranding")}</span>}
                       </td>
                       <td className="px-4 py-3">
-                        <Button variant="ghost" size="sm" onClick={() => setEditingTenant(tenant)}>
+                        <Button variant="ghost" size="sm" onClick={() => setEditingTenant(tenant)} aria-label={t("common.buttons.edit")}>
                           <Pencil2Icon className="h-4 w-4" />
                         </Button>
                       </td>

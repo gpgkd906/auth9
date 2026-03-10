@@ -18,6 +18,8 @@ export default {
       resetting: "リセット中...",
       copy: "コピー",
       copyField: "{{field}}をコピー",
+      back: "戻る",
+      edit: "編集",
     },
     labels: {
       email: "メールアドレス",

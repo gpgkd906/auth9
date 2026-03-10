@@ -85,6 +85,24 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
 
 ## 场景 3：托管认证页登录 → Dashboard 跳转 & Identity Token 验证
 
+### 前置检查
+
+执行测试前请确认以下条件，避免环境问题导致误报：
+
+```bash
+# 1. Redis 运行且可连接（OAuth state 存储在 Redis 中，TTL=300s）
+docker exec auth9-redis redis-cli PING
+# 预期: PONG
+
+# 2. Keycloak 健康且可访问
+curl -sf http://localhost:8081/health/ready
+# 预期: HTTP 200
+
+# 3. auth9-core 健康
+curl -sf http://localhost:8080/health
+# 预期: HTTP 200
+```
+
 ### 初始状态
 - 已进入 Auth9 托管认证页
 - admin 用户存在（admin / SecurePass123!）
@@ -109,6 +127,15 @@ Auth9 Core gRPC → Tenant Access Token (with roles/permissions)
   - 展开 "View raw token" 显示 JWT 字符串（以 `eyJ` 开头）
 - 页面右上角显示 "Logout" 链接
 - **不出现** "Authentication failed" 或 "Token exchange failed" 错误
+
+### OAuth Callback 常见故障排查
+
+| 现象 | 原因 | 解决方法 |
+|------|------|----------|
+| "Missing state" 或 "Invalid state" 错误 | Redis 未运行或 state key 已过期（TTL=300s） | `docker exec auth9-redis redis-cli PING` 确认 Redis 可达；若登录耗时超过 5 分钟需重新发起 |
+| "Missing state" 但 Redis 正常 | Keycloak 未在重定向中保留 state 参数 | 检查 Keycloak realm 的 Valid Redirect URIs 配置，确认包含 `http://localhost:8080/api/v1/auth/callback` |
+| callback 返回 500 或连接拒绝 | auth9-demo 的 `AUTH9_URL` 配置错误，指向了错误的 auth9-core 地址 | 检查 docker-compose 中 `AUTH9_URL` 环境变量，应为 `http://localhost:8080`（或容器内地址） |
+| 登录后停留在空白页 | 浏览器 cookie 阻止了跨域重定向 | 使用 Chrome 无痕模式，或确认 `localhost` 域名一致（不要混用 `127.0.0.1`） |
 
 ### 预期数据状态
 ```sql

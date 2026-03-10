@@ -300,6 +300,7 @@ export default function WebhooksPage() {
                       variant="ghost"
                       size="sm"
                       title={t("tenants.webhooks.list.regenerateSecret")}
+                      aria-label={t("tenants.webhooks.list.regenerateSecret")}
                       disabled={isSubmitting}
                       onClick={async () => {
                         const ok = await confirm({
@@ -314,13 +315,14 @@ export default function WebhooksPage() {
                     >
                       <ReloadIcon className="h-4 w-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => openEditDialog(webhook)}>
+                    <Button variant="ghost" size="sm" onClick={() => openEditDialog(webhook)} aria-label={t("common.buttons.edit")}>
                       <Pencil2Icon className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="ghost"
                       size="sm"
                       className="text-[var(--accent-red)] hover:text-[var(--accent-red)] hover:bg-[var(--accent-red)]/10"
+                      aria-label={t("common.buttons.delete")}
                       disabled={isSubmitting}
                       onClick={async () => {
                         const ok = await confirm({

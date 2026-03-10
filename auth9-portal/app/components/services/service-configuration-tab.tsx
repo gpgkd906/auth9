@@ -150,7 +150,7 @@ export function ServiceConfigurationTab({
                         <Button
                           variant="ghost"
                           size="icon"
-                          className="h-11 w-11 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] sm:h-6 sm:w-6"
+                          className="h-11 w-11 text-[var(--text-tertiary)] hover:text-[var(--text-secondary)] sm:h-8 sm:w-8"
                           onClick={() => handleCopy(client.client_id, `client-${client.id}`)}
                           title={t("services.detail.copyClientId")}
                         >

@@ -18,6 +18,8 @@ export default {
       resetting: "Resetting...",
       copy: "Copy",
       copyField: "Copy {{field}}",
+      back: "Back",
+      edit: "Edit",
     },
     labels: {
       email: "Email",

@@ -80,7 +80,7 @@ export default function EditActionPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`}><ArrowLeftIcon className="h-4 w-4" /></Link>
+          <Link to={`/dashboard/services/${serviceId}/actions/${action.id}`} aria-label={t("common.buttons.back")}><ArrowLeftIcon className="h-4 w-4" /></Link>
         </Button>
         <div>
           <h1 className="text-3xl font-bold">{t("serviceActions.editTitle")}</h1>

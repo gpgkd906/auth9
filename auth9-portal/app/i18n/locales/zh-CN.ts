@@ -18,6 +18,8 @@ export default {
       resetting: "重置中...",
       copy: "复制",
       copyField: "复制{{field}}",
+      back: "返回",
+      edit: "编辑",
     },
     labels: {
       email: "邮箱",

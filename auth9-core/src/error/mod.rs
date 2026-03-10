@@ -145,24 +145,48 @@ impl IntoResponse for AppError {
 // Conversion from validation errors
 impl From<validator::ValidationErrors> for AppError {
     fn from(errors: validator::ValidationErrors) -> Self {
-        let messages: Vec<String> = errors
-            .field_errors()
-            .iter()
-            .map(|(field, errs)| {
-                let field_name = format_field_name(field);
-                let err_msg = errs
-                    .first()
-                    .map(|e| format_validation_error(e, &field_name))
-                    .unwrap_or_else(|| format!("{} is invalid", field_name));
-                err_msg
-            })
-            .collect();
+        let mut messages = Vec::new();
+        collect_validation_errors(&errors, "", &mut messages);
         AppError::Validation(messages.join("; "))
     }
 }
 
+fn collect_validation_errors(
+    errors: &validator::ValidationErrors,
+    prefix: &str,
+    messages: &mut Vec<String>,
+) {
+    for (field, kind) in errors.errors() {
+        let full_field = if prefix.is_empty() {
+            field.to_string()
+        } else {
+            format!("{}.{}", prefix, field)
+        };
+        match kind {
+            validator::ValidationErrorsKind::Field(field_errors) => {
+                let field_name = format_field_name(&full_field);
+                if let Some(err) = field_errors.first() {
+                    messages.push(format_validation_error(err, &field_name));
+                } else {
+                    messages.push(format!("{} is invalid", field_name));
+                }
+            }
+            validator::ValidationErrorsKind::Struct(nested) => {
+                collect_validation_errors(nested, &full_field, messages);
+            }
+            validator::ValidationErrorsKind::List(list) => {
+                for (index, nested) in list {
+                    let indexed = format!("{}[{}]", full_field, index);
+                    collect_validation_errors(nested, &indexed, messages);
+                }
+            }
+        }
+    }
+}
+
 fn format_field_name(field: &str) -> String {
-    match field {
+    let leaf = field.rsplit('.').next().unwrap_or(field);
+    match leaf {
         "current_password" => "Current password".to_string(),
         "new_password" => "New password".to_string(),
         "confirm_password" => "Confirm password".to_string(),
@@ -362,6 +386,36 @@ mod tests {
         if let Err(jwt_err) = invalid_result {
             let app_err: AppError = jwt_err.into();
             assert!(matches!(app_err, AppError::Jwt(_)));
+        }
+    }
+
+    #[test]
+    fn test_nested_validation_errors_propagate() {
+        use validator::{ValidationError, ValidationErrors, ValidationErrorsKind};
+        use std::borrow::Cow;
+
+        let mut inner_errors = ValidationErrors::new();
+        let mut field_err = ValidationError::new("path_traversal");
+        field_err.message = Some(Cow::Borrowed("path traversal detected"));
+        inner_errors.add("logo_url", field_err);
+
+        let mut mid_errors = ValidationErrors::new();
+        mid_errors
+            .0
+            .insert(Cow::Borrowed("branding"), ValidationErrorsKind::Struct(Box::new(inner_errors)));
+
+        let mut outer_errors = ValidationErrors::new();
+        outer_errors
+            .0
+            .insert(Cow::Borrowed("settings"), ValidationErrorsKind::Struct(Box::new(mid_errors)));
+
+        let app_err: AppError = outer_errors.into();
+        match &app_err {
+            AppError::Validation(msg) => {
+                assert!(msg.contains("Logo Url") || msg.contains("Logo url"), "Expected 'Logo Url' in: {}", msg);
+                assert!(msg.contains("path_traversal"), "Expected 'path_traversal' in: {}", msg);
+            }
+            _ => panic!("Expected Validation error, got {:?}", app_err),
         }
     }
 

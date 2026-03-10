@@ -179,6 +179,16 @@ grpcurl -plaintext \
 - 调用方只能查询授权范围内的用户
 - 不存在的用户返回相同错误
 
+### 实现说明：防枚举设计
+
+GetUserRoles 端点对以下两种情况返回 **相同的错误信息**（`"User not found in tenant"`）：
+1. user_id 在系统中完全不存在
+2. user_id 存在但不属于目标 tenant
+
+这意味着 **无法通过此端点区分「用户不存在」和「用户存在但不在该租户」**，从而防止全局用户枚举。
+
+> **对授权调用方的说明**：该端点要求认证（API key 或 mTLS），因此授权调用方可以判断某个用户是否在特定租户中是预期行为——这属于正常的业务查询能力，不构成安全漏洞。测试时需注意区分「未认证的枚举」（应被拦截）和「已认证的合法查询」。
+
 ### 验证方法
 ```bash
 # 枚举用户角色
@@ -190,6 +200,22 @@ done
 
 # 检查响应是否泄露用户存在性
 # 不存在的用户应返回相同错误
+
+# 防枚举验证：以下两个请求应返回完全相同的错误
+RANDOM_UUID=$(uuidgen | tr '[:upper:]' '[:lower:]')
+REAL_USER_NOT_IN_TENANT="{real_user_id_not_in_target_tenant}"
+
+grpcurl -plaintext \
+  -H "x-api-key: $API_KEY" \
+  -d "{\"user_id\":\"$RANDOM_UUID\",\"tenant_id\":\"$TENANT_ID\"}" \
+  localhost:50051 auth9.TokenExchange/GetUserRoles
+# 预期: NOT_FOUND "User not found in tenant"
+
+grpcurl -plaintext \
+  -H "x-api-key: $API_KEY" \
+  -d "{\"user_id\":\"$REAL_USER_NOT_IN_TENANT\",\"tenant_id\":\"$TENANT_ID\"}" \
+  localhost:50051 auth9.TokenExchange/GetUserRoles
+# 预期: NOT_FOUND "User not found in tenant" (相同的错误信息)
 ```
 
 ### 常见误报

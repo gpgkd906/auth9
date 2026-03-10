@@ -37,20 +37,14 @@ pub async fn create_action<S: HasServices>(
     Path(service_id): Path<StringUuid>,
     Json(input): Json<CreateActionInput>,
 ) -> Result<Json<SuccessResponse<Action>>, AppError> {
-    // Resolve service's tenant for policy enforcement
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionWrite,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionWrite)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
-    let action = action_service.create(tenant_id, service_id, input).await?;
+    let action = action_service
+        .create(tenant_id, service_id, input)
+        .await?;
 
     Ok(Json(SuccessResponse::new(action)))
 }
@@ -74,14 +68,7 @@ pub async fn list_actions<S: HasServices>(
     Query(params): Query<ListActionsQuery>,
 ) -> Result<Json<SuccessResponse<Vec<Action>>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionRead,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionRead)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -116,14 +103,7 @@ pub async fn get_action<S: HasServices>(
     Path((service_id, action_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<Action>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionRead,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionRead)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -152,14 +132,7 @@ pub async fn update_action<S: HasServices>(
     Json(input): Json<UpdateActionInput>,
 ) -> Result<Json<SuccessResponse<Action>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionWrite,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionWrite)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -187,14 +160,7 @@ pub async fn delete_action<S: HasServices>(
     Path((service_id, action_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<MessageResponse>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionWrite,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionWrite)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -230,14 +196,7 @@ pub async fn batch_upsert_actions<S: HasServices>(
     }
 
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionWrite,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionWrite)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -268,14 +227,7 @@ pub async fn test_action<S: HasServices>(
     Json(req): Json<TestActionRequest>,
 ) -> Result<Json<SuccessResponse<TestActionResponse>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionWrite,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionWrite)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -305,14 +257,7 @@ pub async fn get_action_log<S: HasServices>(
     Path((service_id, log_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<ActionExecution>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionRead,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionRead)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -340,14 +285,7 @@ pub async fn query_action_logs<S: HasServices>(
     Query(params): Query<LogQueryParams>,
 ) -> Result<Json<PaginatedResponse<ActionExecution>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionRead,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionRead)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_id = if let Some(ref id_str) = params.action_id {
@@ -410,14 +348,7 @@ pub async fn get_action_stats<S: HasServices>(
     Path((service_id, action_id)): Path<(StringUuid, StringUuid)>,
 ) -> Result<Json<SuccessResponse<ActionStats>>, AppError> {
     let tenant_id = resolve_service_tenant(&state, service_id).await?;
-    enforce(
-        state.config(),
-        &auth,
-        &PolicyInput {
-            action: PolicyAction::ActionRead,
-            scope: ResourceScope::Tenant(tenant_id),
-        },
-    )?;
+    enforce_action_policy(&state, &auth, tenant_id, PolicyAction::ActionRead)?;
     ensure_service_scope(&state, &auth, service_id).await?;
 
     let action_service = state.action_service();
@@ -447,15 +378,39 @@ pub async fn get_triggers<S: HasServices>(
 // Helper functions
 // ============================================================
 
-/// Resolve service_id to its tenant_id for policy enforcement
+/// Resolve service_id to its optional tenant_id for policy enforcement
 async fn resolve_service_tenant<S: HasServices>(
     state: &S,
     service_id: StringUuid,
-) -> Result<StringUuid, AppError> {
+) -> Result<Option<StringUuid>, AppError> {
     let service = state.client_service().get(*service_id).await?;
-    service
-        .tenant_id
-        .ok_or_else(|| AppError::NotFound("Service has no associated tenant".to_string()))
+    Ok(service.tenant_id)
+}
+
+fn enforce_action_policy<S: HasServices>(
+    state: &S,
+    auth: &AuthUser,
+    tenant_id: Option<StringUuid>,
+    policy_action: PolicyAction,
+) -> Result<(), AppError> {
+    match tenant_id {
+        Some(tid) => enforce(
+            state.config(),
+            auth,
+            &PolicyInput {
+                action: policy_action,
+                scope: ResourceScope::Tenant(tid),
+            },
+        ),
+        None => enforce(
+            state.config(),
+            auth,
+            &PolicyInput {
+                action: PolicyAction::PlatformAdmin,
+                scope: ResourceScope::Global,
+            },
+        ),
+    }
 }
 
 /// Verify the caller's token is scoped to the target service.

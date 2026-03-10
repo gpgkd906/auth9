@@ -84,7 +84,7 @@ export default function NewActionPage() {
     <div className="space-y-6">
       <div className="flex items-center gap-4">
         <Button variant="ghost" size="icon" asChild>
-          <Link to={`/dashboard/services/${serviceId}/actions`}>
+          <Link to={`/dashboard/services/${serviceId}/actions`} aria-label={t("common.buttons.back")}>
             <ArrowLeftIcon className="h-4 w-4" />
           </Link>
         </Button>
