@@ -15,6 +15,11 @@ import {
   tenantServiceApi,
   securityAlertApi,
   passwordApi,
+  authApi,
+  organizationApi,
+  enterpriseSsoApi,
+  tenantSsoApi,
+  actionApi,
   sessionApi,
   webauthnApi,
   identityProviderApi,
@@ -213,7 +218,7 @@ describe('API Service', () => {
     });
 
     it('should create a user with password', async () => {
-      const input = { email: 'new@example.com', display_name: 'New User', password: 'secret123' };
+      const input = { email: 'new@example.com', display_name: 'New User', password: 'secret123' }; // pragma: allowlist secret
 
       mockFetch.mockResolvedValue({
         ok: true,
@@ -396,7 +401,7 @@ describe('API Service', () => {
         json: async () => ({
           data: {
             client: { id: '123', service_id: 'svc', client_id: 'new-client', created_at: '' },
-            client_secret: 'secret123',
+            client_secret: 'secret123', // pragma: allowlist secret
           },
         }),
       });
@@ -1359,7 +1364,7 @@ describe('API Service', () => {
     it('should regenerate webhook secret', async () => {
       mockFetch.mockResolvedValue({
         ok: true,
-        json: async () => ({ data: { id: 'wh-1', secret: 'new-secret' } }),
+        json: async () => ({ data: { id: 'wh-1', secret: 'new-secret' } }), // pragma: allowlist secret
       });
 
       const result = await webhookApi.regenerateSecret('tenant-1', 'wh-1');
@@ -1420,6 +1425,259 @@ describe('API Service', () => {
         expect.stringContaining('/api/v1/tenants/tenant-1/services/enabled'),
         expect.any(Object)
       );
+    });
+  });
+
+  // ============================================================================
+  // Auth / Organization / SSO API
+  // ============================================================================
+
+  describe('authApi', () => {
+    it('should exchange tenant token with identity token auth header', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          access_token: 'tenant-access-token',
+          token_type: 'Bearer',
+          expires_in: 3600,
+          refresh_token: 'tenant-refresh-token',
+        }),
+      });
+
+      const result = await authApi.exchangeTenantToken('tenant-1', 'service-1', 'identity-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/auth/tenant-token'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer identity-token',
+          },
+          body: JSON.stringify({ tenant_id: 'tenant-1', service_id: 'service-1' }),
+        })
+      );
+      expect(result.access_token).toBe('tenant-access-token');
+    });
+  });
+
+  describe('organizationApi', () => {
+    it('should create organization with bearer token', async () => {
+      const input = {
+        name: 'Acme Org',
+        slug: 'acme-org',
+        domain: 'acme.test',
+        logo_url: 'https://cdn.example.com/logo.png',
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'tenant-1',
+            name: 'Acme Org',
+            slug: 'acme-org',
+            settings: {},
+            status: 'active',
+            created_at: '',
+            updated_at: '',
+          },
+        }),
+      });
+
+      const result = await organizationApi.create(input, 'org-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/organizations'),
+        expect.objectContaining({
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer org-token',
+          },
+          body: JSON.stringify(input),
+        })
+      );
+      expect(result.data.slug).toBe('acme-org');
+    });
+  });
+
+  describe('enterpriseSsoApi', () => {
+    it('should discover enterprise sso and include optional query params', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            tenant_id: 'tenant-1',
+            tenant_slug: 'acme',
+            connector_alias: 'saml-main',
+            authorize_url: 'https://idp.example.com/auth',
+          },
+        }),
+      });
+
+      const result = await enterpriseSsoApi.discover(
+        { email: 'user@acme.test' },
+        {
+          response_type: 'code',
+          client_id: 'portal-client',
+          redirect_uri: 'http://localhost/callback',
+          scope: 'openid profile',
+          state: 'state-123',
+          nonce: 'nonce-123',
+          ui_locales: 'en-US',
+        }
+      );
+
+      const [url, options] = mockFetch.mock.calls.at(-1) as [string, RequestInit];
+      expect(url).toContain('/api/v1/enterprise-sso/discovery?');
+      expect(url).toContain('response_type=code');
+      expect(url).toContain('client_id=portal-client');
+      expect(url).toContain('nonce=nonce-123');
+      expect(url).toContain('ui_locales=en-US');
+      expect(options).toMatchObject({
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: 'user@acme.test' }),
+      });
+      expect(result.data.connector_alias).toBe('saml-main');
+    });
+  });
+
+  describe('tenantSsoApi', () => {
+    it('should list tenant sso connectors', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [
+            {
+              id: 'connector-1',
+              tenant_id: 'tenant-1',
+              alias: 'corp-saml',
+              provider_type: 'saml',
+              enabled: true,
+              priority: 1,
+              keycloak_alias: 'kc-corp-saml',
+              config: {},
+              domains: ['acme.test'],
+              created_at: '',
+              updated_at: '',
+            },
+          ],
+        }),
+      });
+
+      const result = await tenantSsoApi.list('tenant-1', 'tenant-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/sso/connectors'),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer tenant-token',
+          },
+        })
+      );
+      expect(result.data[0].alias).toBe('corp-saml');
+    });
+
+    it('should create tenant sso connector', async () => {
+      const input = {
+        alias: 'corp-oidc',
+        display_name: 'Corp OIDC',
+        provider_type: 'oidc' as const,
+        enabled: true,
+        priority: 10,
+        config: { issuer: 'https://issuer.example.com' },
+        domains: ['corp.test'],
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'connector-2',
+            tenant_id: 'tenant-1',
+            keycloak_alias: 'kc-corp-oidc',
+            created_at: '',
+            updated_at: '',
+            ...input,
+          },
+        }),
+      });
+
+      await tenantSsoApi.create('tenant-1', input, 'tenant-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/sso/connectors'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should update tenant sso connector', async () => {
+      const input = {
+        display_name: 'Updated Corp OIDC',
+        enabled: false,
+        priority: 20,
+        config: { issuer: 'https://issuer-v2.example.com' },
+        domains: ['corp-v2.test'],
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'connector-2',
+            tenant_id: 'tenant-1',
+            alias: 'corp-oidc',
+            provider_type: 'oidc',
+            keycloak_alias: 'kc-corp-oidc',
+            created_at: '',
+            updated_at: '',
+            ...input,
+          },
+        }),
+      });
+
+      await tenantSsoApi.update('tenant-1', 'connector-2', input, 'tenant-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/sso/connectors/connector-2'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should test tenant sso connector', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: { ok: true, message: 'Connector verified' } }),
+      });
+
+      const result = await tenantSsoApi.test('tenant-1', 'connector-2', 'tenant-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/tenants/tenant-1/sso/connectors/connector-2/test'),
+        expect.objectContaining({
+          method: 'POST',
+        })
+      );
+      expect(result.data.message).toBe('Connector verified');
+    });
+
+    it('should throw on tenant sso delete failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 409,
+        json: async () => ({ error: 'conflict', message: 'Connector is in use' }),
+      });
+
+      await expect(tenantSsoApi.delete('tenant-1', 'connector-2', 'tenant-token')).rejects.toThrow('Connector is in use');
     });
   });
 
@@ -1852,6 +2110,200 @@ describe('API Service', () => {
           headers: { Authorization: 'Bearer token' },
         })
       );
+    });
+  });
+
+  // ============================================================================
+  // Action API
+  // ============================================================================
+
+  describe('actionApi', () => {
+    it('should list actions filtered by trigger', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [] }),
+      });
+
+      await actionApi.list('service-1', 'post-login', 'action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/service-1/actions?trigger_id=post-login'),
+        expect.objectContaining({
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: 'Bearer action-token',
+          },
+        })
+      );
+    });
+
+    it('should get action details', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'action-1',
+            service_id: 'service-1',
+            name: 'Post Login Hook',
+            trigger_id: 'post-login',
+            script: 'export default async () => {}',
+            enabled: true,
+            execution_order: 1,
+            timeout_ms: 5000,
+            execution_count: 10,
+            error_count: 0,
+            created_at: '',
+            updated_at: '',
+          },
+        }),
+      });
+
+      const result = await actionApi.get('service-1', 'action-1', 'action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/service-1/actions/action-1'),
+        expect.any(Object)
+      );
+      expect(result.data.name).toBe('Post Login Hook');
+    });
+
+    it('should create an action', async () => {
+      const input = {
+        name: 'Pre Registration Hook',
+        description: 'Runs before registration',
+        trigger_id: 'pre-user-registration' as const,
+        script: 'export default async () => {}',
+        enabled: true,
+        execution_order: 2,
+        timeout_ms: 3000,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'action-2',
+            service_id: 'service-1',
+            execution_count: 0,
+            error_count: 0,
+            created_at: '',
+            updated_at: '',
+            ...input,
+          },
+        }),
+      });
+
+      await actionApi.create('service-1', input, 'action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/service-1/actions'),
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should update an action', async () => {
+      const input = {
+        name: 'Updated Action',
+        enabled: false,
+        execution_order: 9,
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            id: 'action-1',
+            service_id: 'service-1',
+            trigger_id: 'post-login',
+            script: 'export default async () => {}',
+            timeout_ms: 5000,
+            execution_count: 10,
+            error_count: 0,
+            created_at: '',
+            updated_at: '',
+            ...input,
+          },
+        }),
+      });
+
+      await actionApi.update('service-1', 'action-1', input, 'action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/service-1/actions/action-1'),
+        expect.objectContaining({
+          method: 'PATCH',
+          body: JSON.stringify(input),
+        })
+      );
+    });
+
+    it('should list action logs with optional filters', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: [],
+          pagination: { page: 1, per_page: 25, total: 0, total_pages: 0 },
+        }),
+      });
+
+      await actionApi.logs('service-1', 'action-1', false, 25, 'action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/service-1/actions/logs?limit=25&action_id=action-1&success=false'),
+        expect.any(Object)
+      );
+    });
+
+    it('should get action stats', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({
+          data: {
+            execution_count: 100,
+            error_count: 5,
+            success_rate: 95,
+            avg_duration_ms: 120,
+            last_24h_count: 20,
+            last_executed_at: '2026-03-11T00:00:00Z',
+          },
+        }),
+      });
+
+      const result = await actionApi.stats('service-1', 'action-1', 'action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/services/service-1/actions/action-1/stats'),
+        expect.any(Object)
+      );
+      expect(result.data.success_rate).toBe(95);
+    });
+
+    it('should list available action triggers', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: ['post-login', 'pre-user-registration'] }),
+      });
+
+      const result = await actionApi.triggers('action-token');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/actions/triggers'),
+        expect.any(Object)
+      );
+      expect(result.data).toContain('post-login');
+    });
+
+    it('should throw on action delete failure', async () => {
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 500,
+        json: async () => ({ error: 'internal_error', message: 'Delete failed' }),
+      });
+
+      await expect(actionApi.delete('service-1', 'action-1', 'action-token')).rejects.toThrow('Delete failed');
     });
   });
 
