@@ -21,7 +21,7 @@
 | `--bg-secondary` | `#FFFFFF` | `#1C1C1E` |
 | `--glass-bg` | `rgba(255,255,255,0.72)` | `rgba(44,44,46,0.65)` |
 | `--text-primary` | `#1D1D1F` | `#FFFFFF` |
-| `--text-secondary` | `#86868B` | `#98989D` |
+| `--text-secondary` | `#6E6E73` | `#98989D` |
 
 ---
 
@@ -130,14 +130,18 @@ console.log('Body transition:', transition);
 
 #### 表单输入框
 **Light 模式**：
-- 背景：白色 `#FFFFFF`
-- 边框：`#E5E5EA`
-- Placeholder：`#AEAEB2`
+- 背景：`var(--sidebar-item-hover)` — `rgba(0, 0, 0, 0.04)`
+- 边框：`var(--glass-border-subtle)` — `rgba(0, 0, 0, 0.06)`
+- Placeholder：`var(--text-tertiary)` — `#AEAEB2`
+- 圆角：`12px`（`rounded-[12px]`）
 
 **Dark 模式**：
-- 背景：深灰 `#1C1C1E`
-- 边框：`rgba(255, 255, 255, 0.1)`
-- Placeholder：`#636366`
+- 背景：`var(--sidebar-item-hover)` — `rgba(255, 255, 255, 0.06)`
+- 边框：`var(--glass-border-subtle)` — `rgba(255, 255, 255, 0.05)`
+- Placeholder：`var(--text-tertiary)` — `#636366`
+- 圆角：`12px`（不变）
+
+> **注意**: Input 使用 `var(--sidebar-item-hover)` 作为背景色（而非 `--bg-secondary`），这是设计系统约定，确保输入框在 Glass Card 内有微弱对比。
 
 #### Badge 状态
 **颜色不变**：

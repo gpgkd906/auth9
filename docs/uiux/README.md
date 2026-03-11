@@ -18,18 +18,19 @@
 | [02-theme-switching.md](./02-theme-switching.md) | 主题切换、明暗模式 | 4 |
 | [03-visual-hierarchy.md](./03-visual-hierarchy.md) | 视觉层级、间距、布局 | 4 |
 
-### 交互体验 (2 个文档, 9 个场景)
+### 交互体验 (3 个文档, 14 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [04-animations.md](./04-animations.md) | 动画流畅度、过渡效果 | 5 |
 | [05-responsive-layout.md](./05-responsive-layout.md) | 响应式布局、移动端适配 | 4 |
+| [22-dialog-empty-state-patterns.md](./22-dialog-empty-state-patterns.md) | Dialog 玻璃效果一致性、焦点陷阱、Empty State 统一、表单提交状态 | 5 |
 
 ### 可访问性 (1 个文档, 5 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [06-accessibility.md](./06-accessibility.md) | WCAG 合规性、键盘导航、屏幕阅读器 | 5 |
 
-### 页面专项 (9 个文档, 43 个场景)
+### 页面专项 (15 个文档, 80 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [07-dashboard-page.md](./07-dashboard-page.md) | 概览页统计、动态列表 | 5 |
@@ -42,6 +43,11 @@
 | [14-global-controls-placement.md](./14-global-controls-placement.md) | 主题/语言切换控件在 Landing 和 Dashboard 中的无重叠布局 | 5 |
 | [15-error-message-ux.md](./15-error-message-ux.md) | 错误消息人类可读性、mapApiError 两层映射、内联错误本地化 | 5 |
 | [16-keycloak-theme-i18n.md](./16-keycloak-theme-i18n.md) | Keycloak 认证页 i18n 文案覆盖、语言参数透传 | 4 |
+| [17-account-pages.md](./17-account-pages.md) | 账户管理（Profile、Security、Passkeys、Sessions）布局与深色模式 | 6 |
+| [18-roles-abac-pages.md](./18-roles-abac-pages.md) | 角色 Tab/层级树/权限复选框、ABAC 策略编辑器与模拟引擎 | 6 |
+| [19-analytics-audit-pages.md](./19-analytics-audit-pages.md) | Analytics 趋势图表、Audit Logs 表格、Security Alerts 严重度过滤 | 6 |
+| [20-onboarding-auth-flow.md](./20-onboarding-auth-flow.md) | Onboarding 引导、Login 多方式切换、Register、Invite Accept、Tenant Select | 6 |
+| [21-tenant-detail-pages.md](./21-tenant-detail-pages.md) | 租户详情概览、Webhooks 配置、SSO 连接器、Invitations 邀请管理 | 5 |
 
 ---
 
@@ -50,10 +56,10 @@
 | 类别 | 文档数 | 场景数 |
 |------|--------|--------|
 | 视觉设计 | 3 | 13 |
-| 交互体验 | 2 | 9 |
+| 交互体验 | 3 | 14 |
 | 可访问性 | 1 | 5 |
-| 页面专项 | 10 | 50 |
-| **总计** | **16** | **77** |
+| 页面专项 | 15 | 80 |
+| **总计** | **22** | **112** |
 
 ---
 
@@ -199,15 +205,37 @@ box-shadow: 0 8px 32px var(--glass-shadow),
 | Token | Light | Dark |
 |-------|-------|------|
 | `--bg-primary` | `#F2F2F7` | `#000000` |
+| `--bg-secondary` | `#FFFFFF` | `#1C1C1E` |
 | `--glass-bg` | `rgba(255,255,255,0.72)` | `rgba(44,44,46,0.65)` |
 | `--accent-blue` | `#007AFF` | `#007AFF` |
 | `--text-primary` | `#1D1D1F` | `#FFFFFF` |
+| `--text-secondary` | `#6E6E73` | `#98989D` |
+| `--text-tertiary` | `#AEAEB2` | `#636366` |
 
 ### 圆角规范
-- Cards: `20px`
+- Cards: `20px`（`liquid-glass`）
 - Sidebar: `24px`
-- Buttons/Inputs: `12px`
+- Buttons: `12px`
+- Inputs: `12px`
+- **Selects / Textareas**: `10px`（与 Input 不同，注意区分）
+- Menus / Dropdowns: `14px`
+- Tab triggers / Menu items: `8px`
 - Badges: `100px` (pill)
+
+### 组件尺寸速查
+| 组件 | 高度 | 圆角 | 备注 |
+|------|------|------|------|
+| Button (default) | 40px (`h-10`) | 12px | `px-5 py-2.5` |
+| Button (sm) | 44px (`min-h-[44px]`) | 12px | `px-3` |
+| Button (icon) | 44px (`h-11`) | 12px | `min-w-[44px]` |
+| Input | 40px (`h-10`) | 12px | `px-3 py-2.5` |
+| Select trigger | 40px (`h-10`) | **10px** | `px-3 py-2` |
+| Textarea | ≥80px (`min-h-[80px]`) | **10px** | `px-4 py-3` |
+| Checkbox | 16px (`h-4 w-4`) | 4px | — |
+| Switch | 20×36px (`h-5 w-9`) | full | — |
+| Avatar | 40px (`h-10 w-10`) | full | — |
+| Badge | auto | full (pill) | `px-2.5 py-0.5`, 11px |
+| Tab trigger | ≥44px (`min-h-[44px]`) | 8px | `px-3 py-2.5` |
 
 ### 动画时长
 - 悬停效果: `0.3s`
@@ -221,6 +249,8 @@ box-shadow: 0 8px 32px var(--glass-shadow),
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-11 | 2.1.0 | 设计系统对齐审计：交叉比对全部组件实现与文档约束值，修正 10 处漂移。`--text-secondary` Light 色值 `#86868B`→`#6E6E73`（`01`/`02`/`06`/`design-system`）；Button padding `px-4 py-2`→`px-5 py-2.5` + 尺寸变体表（`01`）；Select/Textarea 圆角 12px→10px（`03`/`design-system`）；Label 颜色 `--text-primary`→`--text-secondary`（`03`）；表头颜色 `--text-secondary`→`--text-tertiary`（`03`）；Input 背景从硬编码改为 `var(--sidebar-item-hover)`（`02`）；触摸目标尺寸对齐实际值（`05`）；Dialog vs AlertDialog max-width 区分（`03`）；Outline Button 文字/边框从蓝色修正为 `--text-primary`/`--glass-border-subtle`（`01`）；README 新增组件尺寸速查表和圆角细分 |
+| 2026-03-11 | 2.0.0 | 覆盖缺口补全：新增 6 个文档 35 个场景。页面专项新增 Account 账户管理（`17`）、Roles/ABAC 角色与策略（`18`）、Analytics/Audit/Alerts 数据页面（`19`）、Onboarding/Auth 引导与认证流程（`20`）、Tenant Detail 租户详情子页面（`21`）；交互体验新增 Dialog/Empty State 跨页面一致性（`22`）。总计 22 个文档 112 个场景 |
 | 2026-03-08 | 1.5.0 | 错误消息映射重构：重写 `15`（错误消息 UX）反映 `mapApiError` 两层映射架构、16 种 error code 三语覆盖表、内联错误展示（非 Toast）；Cross-doc 更新 `12` 场景 5 引用新映射架构 |
 | 2026-03-07 | 1.4.0 | i18n 三语扩展：更新 `12`（Portal 国际化）和 `16`（Keycloak 主题 i18n）追加日语场景；Cross-doc 同步更新 `14`（全局控件布局）和 `15`（错误消息 UX）的语言描述为三语 |
 | 2026-03-07 | 1.3.0 | 新增 4 个缺陷回归专项 UI/UX 测试文档：Landing 页卡片交互（`13`）、全局控件布局无重叠（`14`）、错误消息用户体验（`15`）、Keycloak 主题 i18n（`16`）；共 16 个文档 77 个场景 |

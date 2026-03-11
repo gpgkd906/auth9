@@ -183,14 +183,27 @@ console.log('--accent-blue:', getVar('--accent-blue'));
 |------|------|------|------|------|
 | `default` | 蓝色 `#007AFF` | 白色 | 无 | 主操作 |
 | `secondary` | 玻璃效果 | 深色/白色 | 有 | 次要操作 |
-| `outline` | 透明 | 蓝色 | 蓝色 | 三级操作 |
+| `outline` | 透明 | `--text-primary` | `--glass-border-subtle` | 三级操作 |
 | `glass` | 完整玻璃效果 | 深色/白色 | 玻璃边框 | 特殊强调 |
 | `destructive` | 红色 `#FF3B30` | 白色 | 无 | 危险操作 |
 
 **统一规范**：
-- 圆角：`12px`
-- 内边距：`px-4 py-2`（16px 水平，8px 垂直）
+- 圆角：`12px`（`rounded-[12px]`）
+- 内边距：`px-5 py-2.5`（20px 水平，10px 垂直）— default size
+- 高度：`h-10`（40px）— default size
 - 悬停：向上浮动 1px（主按钮）或背景变化（次要按钮）
+- 阴影（主按钮）：`0 4px 12px rgba(0,122,255,0.3)`
+
+> **⚠️ 尺寸变体对照**：
+>
+> | Size | 高度 | 最小高度 | 内边距 | 字号 |
+> |------|------|---------|--------|------|
+> | `default` | `h-10` (40px) | — | `px-5 py-2.5` | 14px |
+> | `sm` | `h-10` (40px) | `min-h-[44px]` | `px-3` | 13px |
+> | `lg` | `h-11` (44px) | — | `px-7` | 15px |
+> | `icon` | `h-11` (44px) | `min-h-[44px]` `min-w-[44px]` | — | — |
+>
+> 注意：`sm` 按钮的 `min-h-[44px]` 会使渲染高度为 44px（高于 `h-10` 的 40px），与 `h-10` Input 放在同一行时可能出现 4px 高度差。确保搜索栏等场景使用匹配的 size。
 
 ### 验证工具
 ```javascript
@@ -199,7 +212,8 @@ const primaryBtn = document.querySelector('button[type="submit"]');
 const styles = getComputedStyle(primaryBtn);
 console.log('Background:', styles.backgroundColor); // rgb(0, 122, 255)
 console.log('Border radius:', styles.borderRadius); // 12px
-console.log('Padding:', styles.padding); // 8px 16px
+console.log('Padding:', styles.padding); // 10px 20px
+console.log('Height:', primaryBtn.offsetHeight); // 40px (default)
 ```
 
 ---
@@ -223,7 +237,7 @@ console.log('Padding:', styles.padding); // 8px 16px
 **卡片统一规范**：
 - 背景：`var(--glass-bg)` 玻璃效果
 - 圆角：`20px`
-- 内边距：`20px`（CardHeader 和 CardContent）
+- 内边距：CardHeader `p-5 pb-0`（20px，底部无间距）；CardContent `p-5 pt-4`（20px，顶部 16px）
 - 边框：`1px solid var(--glass-border)`
 - 阴影：`0 8px 32px var(--glass-shadow)` + 内高光
 - 光照：左上角 135° 渐变叠加

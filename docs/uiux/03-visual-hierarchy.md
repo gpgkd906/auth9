@@ -153,8 +153,8 @@ checkTypography();
 #### 表格布局
 **表头**：
 - 背景：无（透明或浅色）
-- 文字：11px，字重 600，大写（`uppercase`），`letter-spacing: 0.04em`
-- 颜色：`--text-secondary`
+- 文字：11px，字重 600（`semibold`），大写（`uppercase`），`letter-spacing: 0.04em`
+- 颜色：`--text-tertiary`（表头使用 tertiary 色，非 secondary）
 - 对齐：左对齐（数字列右对齐）
 
 **表格行**：
@@ -218,24 +218,30 @@ console.log('Inner div display:', getComputedStyle(innerDiv).display); // 'block
 ### 预期视觉效果
 
 #### 表单结构
-**弹窗容器**：
-- 宽度：`max-w-md`（448px）
-- 背景：玻璃效果
-- 圆角：20px
-- 内边距：24px
+**弹窗容器**（Dialog vs AlertDialog 区分）：
+- Dialog 宽度：`max-w-md`（448px）；AlertDialog 宽度：`max-w-lg`（512px）
+- 背景：`var(--glass-bg)` + `backdrop-filter: blur(24px)`
+- 圆角：`20px`（`rounded-[20px]`）
+- 内边距：`p-6`（24px）
 
 **表单字段**：
 - 字段间距：16px（`space-y-4`）
 - 标签：
   - 位置：输入框上方
-  - 字号：13px，字重 500
-  - 颜色：`--text-primary`
+  - 字号：13px，字重 500（`font-medium`）
+  - 颜色：`--text-secondary`（非 `--text-primary`）
   - 底部间距：4-6px
 - 输入框：
   - 高度：40px（`h-10`）
-  - 圆角：12px
-  - 边框：1px solid
-  - 内边距：横向 12px
+  - 圆角：12px（`rounded-[12px]`）
+  - 边框：`1px solid var(--glass-border-subtle)`
+  - 内边距：横向 12px（`px-3`）
+- Select 触发器：
+  - 高度：40px（`h-10`）
+  - 圆角：**10px**（`rounded-[10px]`）— 注意与 Input 的 12px 不同
+- Textarea：
+  - 最小高度：80px（`min-h-[80px]`）
+  - 圆角：**10px**（`rounded-[10px]`）— 注意与 Input 的 12px 不同
 
 **按钮组**：
 - 位置：表单底部

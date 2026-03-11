@@ -39,7 +39,7 @@ Auth9 Portal uses the **Liquid Glass** design language, inspired by Apple's WWDC
 | `--glass-highlight` | `rgba(255, 255, 255, 0.9)` | Inner highlight (top edge) |
 | `--glass-illumination` | `rgba(255, 255, 255, 0.4)` | Gradient illumination |
 | `--text-primary` | `#1D1D1F` | Main text |
-| `--text-secondary` | `#86868B` | Secondary text |
+| `--text-secondary` | `#6E6E73` | Secondary text |
 | `--text-tertiary` | `#AEAEB2` | Placeholder/disabled text |
 | `--text-inverse` | `#FFFFFF` | Text on dark backgrounds |
 
@@ -116,13 +116,17 @@ Auth9 Portal uses the **Liquid Glass** design language, inspired by Apple's WWDC
 
 | Token | Value | Usage |
 |-------|-------|-------|
-| Cards | 20px | Main content cards |
+| Cards | 20px | Main content cards (`liquid-glass`) |
 | Sidebar | 24px | Floating sidebar container |
 | Buttons | 12px | All button variants |
-| Inputs | 12px | Form inputs, selects |
+| Inputs | 12px | Text inputs (`<Input>`) |
+| Selects | 10px | Select triggers (`<Select>`) |
+| Textareas | 10px | Multi-line inputs (`<Textarea>`) |
+| Menus/Dropdowns | 14px | Select content, dropdown menus |
 | Badges | 100px (pill) | Status badges |
 | Avatars | 50% | Circular avatars |
-| Small elements | 10px | Dropdown items, tabs |
+| Small elements | 8px | Menu items, tab triggers, dialog close |
+| Tabs container | 12px | TabsList container |
 
 ---
 
@@ -200,12 +204,13 @@ Auth9 Portal uses the **Liquid Glass** design language, inspired by Apple's WWDC
 
 | Variant | Description | Usage |
 |---------|-------------|-------|
-| `default` | Blue background, white text | Primary actions |
-| `secondary` | Glass background | Secondary actions |
-| `outline` | Transparent with border | Tertiary actions |
-| `ghost` | No background | Minimal actions |
-| `glass` | Full glass effect | Special emphasis |
-| `destructive` | Red background | Delete, danger actions |
+| `default` | Blue `#007AFF` bg, white text, shadow `0 4px 12px rgba(0,122,255,0.3)` | Primary actions |
+| `secondary` | `--sidebar-item-hover` bg, `--text-primary` text | Secondary actions |
+| `outline` | Transparent bg, `--glass-border-subtle` border, `--text-primary` text | Tertiary actions |
+| `ghost` | No bg, `--text-secondary` text → hover `--text-primary` | Minimal actions |
+| `glass` | `--glass-bg` + `backdrop-filter: blur(16px)`, `--glass-border` border | Special emphasis |
+| `link` | `--accent-blue` text, underline, no padding/height | Inline links |
+| `destructive` | `--accent-red` bg, white text, shadow `0 4px 12px rgba(255,59,48,0.3)` | Delete, danger actions |
 
 ```tsx
 // Primary button
