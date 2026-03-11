@@ -2005,6 +2005,9 @@ describe("Roles Page", () => {
 
         it("assign_permission calls rbacApi.assignPermissionToRole", async () => {
             vi.mocked(rbacApi.assignPermissionToRole).mockResolvedValue(undefined);
+            vi.mocked(rbacApi.getRole).mockResolvedValue({
+                data: { id: "r1", service_id: "s1", name: "Admin", permissions: [], created_at: "", updated_at: "" },
+            });
 
             const request = createFormRequest({
                 intent: "assign_permission",
@@ -2013,12 +2016,18 @@ describe("Roles Page", () => {
             });
 
             const result = await action({ request, params: {}, context: {} });
-            expect(result).toEqual({ success: true });
+            expect(result).toEqual({
+                success: true,
+                role: { id: "r1", service_id: "s1", name: "Admin", permissions: [], created_at: "", updated_at: "" },
+            });
             expect(rbacApi.assignPermissionToRole).toHaveBeenCalledWith("r1", "p1", "test-token");
         });
 
         it("remove_permission calls rbacApi.removePermissionFromRole", async () => {
             vi.mocked(rbacApi.removePermissionFromRole).mockResolvedValue(undefined);
+            vi.mocked(rbacApi.getRole).mockResolvedValue({
+                data: { id: "r1", service_id: "s1", name: "Admin", permissions: [], created_at: "", updated_at: "" },
+            });
 
             const request = createFormRequest({
                 intent: "remove_permission",
@@ -2027,7 +2036,10 @@ describe("Roles Page", () => {
             });
 
             const result = await action({ request, params: {}, context: {} });
-            expect(result).toEqual({ success: true });
+            expect(result).toEqual({
+                success: true,
+                role: { id: "r1", service_id: "s1", name: "Admin", permissions: [], created_at: "", updated_at: "" },
+            });
             expect(rbacApi.removePermissionFromRole).toHaveBeenCalledWith("r1", "p1", "test-token");
         });
 

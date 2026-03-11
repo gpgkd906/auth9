@@ -11,6 +11,7 @@ import { invitationApi } from "~/services/api";
 vi.mock("~/services/api", () => ({
   invitationApi: {
     accept: vi.fn(),
+    validate: vi.fn(),
   },
 }));
 
@@ -25,17 +26,25 @@ describe("Invite Accept Page", () => {
 
   describe("loader", () => {
     it("returns token from URL search params", async () => {
+      vi.mocked(invitationApi.validate).mockResolvedValue({
+        data: { status: "pending", email: "test@example.com" },
+      });
       const request = new Request(
         "http://localhost/invite/accept?token=abc123"
       );
       const result = await loader({ request, params: {}, context: {} });
-      expect(result).toEqual({ token: "abc123" });
+      expect(result).toEqual({
+        token: "abc123",
+        invitationStatus: "pending",
+        invitationEmail: "test@example.com",
+      });
+      expect(invitationApi.validate).toHaveBeenCalledWith("abc123");
     });
 
     it("returns null token when not provided", async () => {
       const request = new Request("http://localhost/invite/accept");
       const result = await loader({ request, params: {}, context: {} });
-      expect(result).toEqual({ token: null });
+      expect(result).toEqual({ token: null, invitationStatus: null });
     });
   });
 
@@ -69,7 +78,7 @@ describe("Invite Accept Page", () => {
       formData.append("token", "valid-token");
       formData.append("email", "test@example.com");
       formData.append("display_name", "Test User");
-      formData.append("password", "Password123!");
+      formData.append("password", "example-password-for-test");
 
       const request = new Request("http://localhost/invite/accept", {
         method: "POST",
@@ -87,7 +96,7 @@ describe("Invite Accept Page", () => {
         token: "valid-token",
         email: "test@example.com",
         display_name: "Test User",
-        password: "Password123!",
+        password: "example-password-for-test", // pragma: allowlist secret
       });
     });
 
