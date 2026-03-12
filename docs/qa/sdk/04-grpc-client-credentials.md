@@ -24,7 +24,15 @@
 
 `ClientCredentials` 封装 M2M（Machine-to-Machine）认证流程，自动缓存 Token 并在到期前 30 秒刷新。
 
-测试方法：集成测试需要 Docker 环境（auth9-core + gRPC 端口 50051）
+测试方法：集成测试需要 Docker 环境（auth9-core + `auth9-grpc-tls`）。
+
+> **本地开发注意**: 宿主机 `localhost:50051` 当前接的是 `auth9-grpc-tls`，不是明文 gRPC。
+> 直连宿主机时必须同时提供：
+>
+> - `x-api-key: dev-grpc-api-key`
+> - mTLS 客户端证书：`deploy/dev-certs/grpc/{ca.crt,client.crt,client.key}`
+>
+> 如果用 Docker 网络内的 `grpcurl`/服务名访问，可按网络内地址单独配置。
 
 ---
 
@@ -42,9 +50,20 @@
 1. 创建 gRPC 客户端并调用 exchangeToken：
    ```typescript
    import { Auth9 } from "@auth9/node";
+   import fs from "node:fs";
 
    const auth9 = new Auth9({ domain: "http://localhost:8080" });
-   const grpc = auth9.grpc({ address: "localhost:50051" });
+   const grpc = auth9.grpc({
+     address: "localhost:50051",
+     auth: {
+       apiKey: "dev-grpc-api-key", // pragma: allowlist secret
+       mtls: {
+         ca: fs.readFileSync("deploy/dev-certs/grpc/ca.crt"),
+         cert: fs.readFileSync("deploy/dev-certs/grpc/client.crt"),
+         key: fs.readFileSync("deploy/dev-certs/grpc/client.key"),
+       },
+     },
+   });
 
    const result = await grpc.exchangeToken({
      identityToken: "{identity_token}",
@@ -97,7 +116,17 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 ### 测试操作流程
 1. 验证 Token（**必须传入 audience**）：
    ```typescript
-   const grpc = auth9.grpc({ address: "localhost:50051" });
+   const grpc = auth9.grpc({
+     address: "localhost:50051",
+     auth: {
+       apiKey: "dev-grpc-api-key", // pragma: allowlist secret
+       mtls: {
+         ca: fs.readFileSync("deploy/dev-certs/grpc/ca.crt"),
+         cert: fs.readFileSync("deploy/dev-certs/grpc/client.crt"),
+         key: fs.readFileSync("deploy/dev-certs/grpc/client.key"),
+       },
+     },
+   });
 
    const validateResult = await grpc.validateToken({
      accessToken: "{tenant_access_token}",
@@ -124,6 +153,7 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
    ```typescript
    const invalidResult = await grpc.validateToken({
      accessToken: "invalid-token",
+     audience: "{service_client_id}",
    });
    ```
 
@@ -146,7 +176,17 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 ### 测试操作流程
 1. 调用 GetUserRoles：
    ```typescript
-   const grpc = auth9.grpc({ address: "localhost:50051" });
+   const grpc = auth9.grpc({
+     address: "localhost:50051",
+     auth: {
+       apiKey: "dev-grpc-api-key", // pragma: allowlist secret
+       mtls: {
+         ca: fs.readFileSync("deploy/dev-certs/grpc/ca.crt"),
+         cert: fs.readFileSync("deploy/dev-certs/grpc/client.crt"),
+         key: fs.readFileSync("deploy/dev-certs/grpc/client.key"),
+       },
+     },
+   });
 
    const result = await grpc.getUserRoles({
      userId: "{user_id}",
@@ -159,6 +199,8 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
    grpc.close();
    ```
 2. 比对数据库查询结果
+
+> `GetUserRoles.service_id` 与 `ExchangeToken` 保持一致，应传 **OAuth `client_id`**（例如 `auth9-portal`）。
 
 ### 预期结果
 - `result.roles` 每个元素包含 `id`（UUID）、`name`（角色名）、`serviceId`（服务 UUID）

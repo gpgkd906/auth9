@@ -43,6 +43,7 @@ export interface ValidateTokenResponse {
 export interface GetUserRolesRequest {
   userId: string;
   tenantId: string;
+  /** Optional OAuth client_id filter. */
   serviceId?: string;
 }
 

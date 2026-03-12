@@ -44,11 +44,19 @@ npm run dev
 |----------|---------|-------------|
 | `PORT` | `3002` | Server port |
 | `AUTH9_DOMAIN` | `http://localhost:8080` | Auth9 Core URL |
-| `AUTH9_GRPC_ADDRESS` | `localhost:50051` | Auth9 gRPC address |
+| `AUTH9_GRPC_ADDRESS` | `localhost:50051` | Auth9 gRPC TLS address |
 | `AUTH9_GRPC_API_KEY` | `dev-grpc-api-key` | gRPC API key |
+| `AUTH9_GRPC_CERT_DIR` | `../deploy/dev-certs/grpc` | Dev mTLS cert directory used when connecting to host `localhost:50051` |
 | `AUTH9_AUDIENCE` | `demo-service` | Expected JWT audience |
 | `AUTH9_ADMIN_TOKEN` | *(empty)* | Optional default admin token for enterprise connector APIs |
 | `AUTH9_DEFAULT_TENANT_ID` | `demo` | Default tenant used by enterprise SSO demo APIs |
+
+## Local gRPC TLS
+
+When this demo connects to `localhost:50051`, it now assumes the local Docker stack is exposing `auth9-grpc-tls`.
+That means host-based calls need both the API key and the dev client certificates under `deploy/dev-certs/grpc`.
+
+If you point `AUTH9_GRPC_ADDRESS` at a different endpoint, the demo will use plain API-key auth unless you provide your own SDK config changes.
 
 ## SDK Packages
 

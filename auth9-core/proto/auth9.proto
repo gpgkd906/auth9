@@ -67,7 +67,7 @@ message GetUserRolesRequest {
   string user_id = 1;
   // Tenant ID
   string tenant_id = 2;
-  // Optional: filter by service ID
+  // Optional: filter by OAuth client_id string (for example "auth9-portal").
   string service_id = 3;
 }
 

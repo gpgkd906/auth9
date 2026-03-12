@@ -1,30 +1,111 @@
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { Auth9GrpcClient } from "./dist/index.js";
 import { ClientCredentials } from "./dist/index.js";
 
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
 const ADMIN_TOKEN = process.env.ADMIN_TOKEN || "";
-const TENANT_ID = process.env.TENANT_ID || "6e71e4d8-7752-4c7d-aafc-66c02a77ca00";
+const TENANT_ID = process.env.TENANT_ID || "";
 const SERVICE_ID = process.env.SERVICE_ID || "auth9-portal";
-const USER_ID = process.env.USER_ID || "0ed10582-aab3-4525-b735-8a354e3f1401";
+const USER_ID = process.env.USER_ID || "";
 const CLIENT_ID = process.env.CLIENT_ID || "auth9-m2m-test";
 const CLIENT_SECRET = process.env.CLIENT_SECRET || "m2m-test-secret-do-not-use-in-production";
 const GRPC_ADDRESS = process.env.GRPC_ADDRESS || "localhost:50051";
 const DOMAIN = process.env.DOMAIN || "http://localhost:8080";
+const DEV_GRPC_CERT_DIR = process.env.GRPC_CERT_DIR
+  || path.resolve(__dirname, "../../../deploy/dev-certs/grpc");
 
 async function sleep(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-async function testScenario1() {
-  console.log("\n=== Scenario 1: gRPC Token Exchange ===");
-  const client = new Auth9GrpcClient({
+function shouldUseLocalMtls(address) {
+  return address === "localhost:50051" || address === "127.0.0.1:50051";
+}
+
+function decodeJwtPayload(token) {
+  const [, payload] = token.split(".");
+  if (!payload) {
+    throw new Error("ADMIN_TOKEN is not a valid JWT");
+  }
+  return JSON.parse(Buffer.from(payload, "base64url").toString("utf8"));
+}
+
+function buildGrpcClient() {
+  if (shouldUseLocalMtls(GRPC_ADDRESS)) {
+    return new Auth9GrpcClient({
+      address: GRPC_ADDRESS,
+      auth: {
+        apiKey: "dev-grpc-api-key", // pragma: allowlist secret
+        mtls: {
+          ca: fs.readFileSync(path.join(DEV_GRPC_CERT_DIR, "ca.crt")),
+          cert: fs.readFileSync(path.join(DEV_GRPC_CERT_DIR, "client.crt")),
+          key: fs.readFileSync(path.join(DEV_GRPC_CERT_DIR, "client.key")),
+        },
+      },
+    });
+  }
+
+  return new Auth9GrpcClient({
     address: GRPC_ADDRESS,
     auth: { apiKey: "dev-grpc-api-key" }, // pragma: allowlist secret
   });
+}
+
+async function resolveQaContext() {
+  if (!ADMIN_TOKEN) {
+    throw new Error("ADMIN_TOKEN is required for gRPC integration scenarios");
+  }
+
+  const claims = decodeJwtPayload(ADMIN_TOKEN);
+  const resolvedUserId = USER_ID || claims.sub;
+
+  if (!resolvedUserId) {
+    throw new Error("Unable to resolve USER_ID from ADMIN_TOKEN");
+  }
+
+  if (TENANT_ID) {
+    return { tenantId: TENANT_ID, userId: resolvedUserId };
+  }
+
+  const response = await fetch(
+    `${DOMAIN}/api/v1/users/me/tenants?service_id=${encodeURIComponent(SERVICE_ID)}`,
+    {
+      headers: {
+        Authorization: `Bearer ${ADMIN_TOKEN}`,
+      },
+    },
+  );
+
+  if (!response.ok) {
+    throw new Error(`Failed to resolve tenant context: ${response.status} ${await response.text()}`);
+  }
+
+  const payload = await response.json();
+  const tenants = Array.isArray(payload?.data) ? payload.data : [];
+  const activeTenant = tenants.find((tenant) => tenant.status === "active") || tenants[0];
+
+  if (!activeTenant?.tenant_id) {
+    throw new Error(`No tenant membership returned for service ${SERVICE_ID}`);
+  }
+
+  return {
+    tenantId: activeTenant.tenant_id,
+    userId: resolvedUserId,
+  };
+}
+
+async function testScenario1(context) {
+  console.log("\n=== Scenario 1: gRPC Token Exchange ===");
+  const client = buildGrpcClient();
 
   try {
     const result = await client.exchangeToken({
       identityToken: ADMIN_TOKEN,
-      tenantId: TENANT_ID,
+      tenantId: context.tenantId,
       serviceId: SERVICE_ID,
     });
 
@@ -54,23 +135,28 @@ async function testScenario1() {
   }
 }
 
-async function testScenario2(accessToken) {
+async function testScenario2(accessToken, context) {
   console.log("\n=== Scenario 2: gRPC ValidateToken & IntrospectToken ===");
-  const client = new Auth9GrpcClient({
-    address: GRPC_ADDRESS,
-    auth: { apiKey: "dev-grpc-api-key" }, // pragma: allowlist secret
-  });
+  const client = buildGrpcClient();
 
   try {
     // Test validateToken with valid token
-    const validateResult = await client.validateToken({ accessToken });
+    const validateResult = await client.validateToken({
+      accessToken,
+      audience: SERVICE_ID,
+    });
     console.log("Validate Result:", validateResult);
     
-    const validPass = validateResult.valid === true && validateResult.userId && validateResult.tenantId;
+    const validPass = validateResult.valid === true
+      && validateResult.userId === context.userId
+      && validateResult.tenantId === context.tenantId;
     console.log("✓ Valid token validation:", validPass);
     
     // Test validateToken with invalid token
-    const invalidResult = await client.validateToken({ accessToken: "invalid-token" });
+    const invalidResult = await client.validateToken({
+      accessToken: "invalid-token",
+      audience: SERVICE_ID,
+    });
     console.log("Invalid Validate Result:", invalidResult);
     
     const invalidPass = invalidResult.valid === false;
@@ -105,17 +191,15 @@ async function testScenario2(accessToken) {
   }
 }
 
-async function testScenario3() {
+async function testScenario3(context) {
   console.log("\n=== Scenario 3: gRPC GetUserRoles ===");
-  const client = new Auth9GrpcClient({
-    address: GRPC_ADDRESS,
-    auth: { apiKey: "dev-grpc-api-key" }, // pragma: allowlist secret
-  });
+  const client = buildGrpcClient();
 
   try {
     const result = await client.getUserRoles({
-      userId: USER_ID,
-      tenantId: TENANT_ID,
+      userId: context.userId,
+      tenantId: context.tenantId,
+      serviceId: SERVICE_ID,
     });
 
     console.log("GetUserRoles Result:", result);
@@ -255,16 +339,25 @@ async function testScenario5() {
 async function main() {
   console.log("Starting QA Integration Tests for SDK");
   console.log("=====================================");
+  const context = await resolveQaContext();
+
+  console.log("Resolved gRPC QA context:", {
+    grpcAddress: GRPC_ADDRESS,
+    tenantId: context.tenantId,
+    userId: context.userId,
+    serviceId: SERVICE_ID,
+    transport: shouldUseLocalMtls(GRPC_ADDRESS) ? "mTLS" : "api-key",
+  });
   
   const results = [];
   
   // Scenario 1
-  const s1 = await testScenario1();
+  const s1 = await testScenario1(context);
   results.push(s1);
   
   // Scenario 2 needs access token from scenario 1
   if (s1.success && s1.accessToken) {
-    const s2 = await testScenario2(s1.accessToken);
+    const s2 = await testScenario2(s1.accessToken, context);
     results.push(s2);
   } else {
     console.log("\n⚠️ Skipping Scenario 2 (no valid access token)");
@@ -272,7 +365,7 @@ async function main() {
   }
   
   // Scenario 3
-  const s3 = await testScenario3();
+  const s3 = await testScenario3(context);
   results.push(s3);
   
   // Scenario 4

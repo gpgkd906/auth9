@@ -1,5 +1,6 @@
 import express from "express";
 import session from "express-session";
+import fs from "node:fs";
 import path from "path";
 import { fileURLToPath } from "url";
 import crypto from "node:crypto";
@@ -28,6 +29,35 @@ const config = {
     clientId: process.env.AUTH9_CLIENT_ID || "auth9-demo",
     defaultTenantId: process.env.AUTH9_DEFAULT_TENANT_ID || "demo",
 };
+
+function buildGrpcConfig() {
+    const address = config.auth9GrpcAddress;
+    const grpcConfig: {
+        address: string;
+        auth?: {
+            apiKey?: string;
+            mtls?: { ca: Buffer; cert: Buffer; key: Buffer };
+        };
+    } = {
+        address,
+        auth: { apiKey: config.auth9GrpcApiKey },
+    };
+
+    if (address === "localhost:50051" || address === "127.0.0.1:50051") {
+        const certDir = process.env.AUTH9_GRPC_CERT_DIR
+            || path.resolve(__dirname, "../../deploy/dev-certs/grpc");
+        grpcConfig.auth = {
+            apiKey: config.auth9GrpcApiKey,
+            mtls: {
+                ca: fs.readFileSync(path.join(certDir, "ca.crt")),
+                cert: fs.readFileSync(path.join(certDir, "client.crt")),
+                key: fs.readFileSync(path.join(certDir, "client.key")),
+            },
+        };
+    }
+
+    return grpcConfig;
+}
 
 // ─── SDK Initialization ─────────────────────────────────────────────────────
 
@@ -349,10 +379,7 @@ demoRouter.post("/exchange-token", async (req, res) => {
 
     try {
         // Use gRPC to exchange token
-        const grpc = auth9.grpc({
-            address: config.auth9GrpcAddress,
-            auth: { apiKey: config.auth9GrpcApiKey },
-        });
+        const grpc = auth9.grpc(buildGrpcConfig());
 
         const result = await grpc.exchangeToken({
             identityToken,
@@ -387,10 +414,7 @@ demoRouter.post("/introspect", async (req, res) => {
     const token = authHeader.split(" ")[1];
 
     try {
-        const grpc = auth9.grpc({
-            address: config.auth9GrpcAddress,
-            auth: { apiKey: config.auth9GrpcApiKey },
-        });
+        const grpc = auth9.grpc(buildGrpcConfig());
 
         const result = await grpc.introspectToken({ token });
         grpc.close();

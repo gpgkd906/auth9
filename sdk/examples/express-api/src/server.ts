@@ -1,5 +1,8 @@
 import express from "express";
-import { Auth9, Auth9Error } from "@auth9/node";
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { Auth9, Auth9Error, type GrpcClientConfig } from "@auth9/node";
 import {
   auth9Middleware,
   requirePermission,
@@ -8,6 +11,32 @@ import {
 
 const app = express();
 app.use(express.json());
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+function buildGrpcConfig() {
+  const address = process.env.AUTH9_GRPC_ADDRESS || "localhost:50051";
+  const apiKey = process.env.AUTH9_GRPC_API_KEY || "dev-grpc-api-key";
+  const grpcConfig: GrpcClientConfig = {
+    address,
+    auth: { apiKey },
+  };
+
+  if (address === "localhost:50051" || address === "127.0.0.1:50051") {
+    const certDir = process.env.AUTH9_GRPC_CERT_DIR
+      || path.resolve(__dirname, "../../../../deploy/dev-certs/grpc");
+    grpcConfig.auth = {
+      apiKey,
+      mtls: {
+        ca: fs.readFileSync(path.join(certDir, "ca.crt")),
+        cert: fs.readFileSync(path.join(certDir, "client.crt")),
+        key: fs.readFileSync(path.join(certDir, "client.key")),
+      },
+    };
+  }
+
+  return grpcConfig;
+}
 
 // Initialize Auth9
 const auth9 = new Auth9({
@@ -150,9 +179,7 @@ app.get(
 // Token Exchange example via gRPC
 app.post("/api/exchange-token", async (req, res, next) => {
   try {
-    const grpc = auth9.grpc({
-      address: process.env.AUTH9_GRPC_ADDRESS || "localhost:50051",
-    });
+    const grpc = auth9.grpc(buildGrpcConfig());
 
     const result = await grpc.exchangeToken({
       identityToken: req.headers.authorization!.slice(7),

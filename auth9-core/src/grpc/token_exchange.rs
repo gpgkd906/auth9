@@ -16,6 +16,28 @@ use tonic::{Request, Response, Status};
 use tracing::debug;
 use uuid::Uuid;
 
+async fn resolve_optional_service_scope<S: ServiceRepository>(
+    service_repo: &S,
+    requested_service_id: &str,
+) -> Result<Option<StringUuid>, Status> {
+    if requested_service_id.is_empty() {
+        return Ok(None);
+    }
+
+    let service = service_repo
+        .find_by_client_id(requested_service_id)
+        .await
+        .map_err(|e| Status::internal(format!("Failed to lookup service: {}", e)))?
+        .ok_or_else(|| {
+            Status::not_found(format!(
+                "Service not found for service_id '{}'. service_id expects an OAuth client_id string (for example 'auth9-portal').",
+                requested_service_id
+            ))
+        })?;
+
+    Ok(Some(service.id))
+}
+
 /// In-memory sliding window rate limiter for gRPC token exchange.
 #[derive(Clone)]
 pub struct GrpcRateLimiter {
@@ -693,46 +715,13 @@ where
             }
         }
 
-        let (user_roles, role_records) = if req.service_id.is_empty() {
+        let resolved_service_id =
+            resolve_optional_service_scope(self.service_repo.as_ref(), &req.service_id).await?;
+
+        let (user_roles, role_records) = if let Some(service_id) = resolved_service_id {
             let user_roles = match self
                 .cache_manager
-                .get_user_roles(Uuid::from(user_id), Uuid::from(tenant_id))
-                .await
-            {
-                Ok(Some(roles)) => roles,
-                _ => {
-                    let roles = self
-                        .rbac_repo
-                        .find_user_roles_in_tenant(user_id, tenant_id)
-                        .await
-                        .map_err(|e| {
-                            Status::internal(format!("Failed to get user roles: {}", e))
-                        })?;
-
-                    let _ = self.cache_manager.set_user_roles(&roles).await;
-                    roles
-                }
-            };
-
-            let role_records = self
-                .rbac_repo
-                .find_user_role_records_in_tenant(user_id, tenant_id, None)
-                .await
-                .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
-            (user_roles, role_records)
-        } else {
-            let service_id = req
-                .service_id
-                .parse::<StringUuid>()
-                .map_err(|_| Status::invalid_argument("Invalid service ID"))?;
-
-            let user_roles = match self
-                .cache_manager
-                .get_user_roles_for_service(
-                    Uuid::from(user_id),
-                    Uuid::from(tenant_id),
-                    service_id.0,
-                )
+                .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service_id.0)
                 .await
             {
                 Ok(Some(roles)) => roles,
@@ -759,6 +748,33 @@ where
                 .await
                 .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
 
+            (user_roles, role_records)
+        } else {
+            let user_roles = match self
+                .cache_manager
+                .get_user_roles(Uuid::from(user_id), Uuid::from(tenant_id))
+                .await
+            {
+                Ok(Some(roles)) => roles,
+                _ => {
+                    let roles = self
+                        .rbac_repo
+                        .find_user_roles_in_tenant(user_id, tenant_id)
+                        .await
+                        .map_err(|e| {
+                            Status::internal(format!("Failed to get user roles: {}", e))
+                        })?;
+
+                    let _ = self.cache_manager.set_user_roles(&roles).await;
+                    roles
+                }
+            };
+
+            let role_records = self
+                .rbac_repo
+                .find_user_role_records_in_tenant(user_id, tenant_id, None)
+                .await
+                .map_err(|e| Status::internal(format!("Failed to get role records: {}", e)))?;
             (user_roles, role_records)
         };
 
@@ -840,6 +856,7 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::repository::service::MockServiceRepository;
 
     #[test]
     fn test_exchange_token_request_structure() {
@@ -920,7 +937,7 @@ mod tests {
         let request = GetUserRolesRequest {
             user_id: "user-123".to_string(),
             tenant_id: "tenant-456".to_string(),
-            service_id: "service-789".to_string(),
+            service_id: "auth9-portal".to_string(),
         };
 
         assert!(!request.service_id.is_empty());
@@ -1132,6 +1149,44 @@ mod tests {
         // Verify UUIDs can be parsed back
         assert!(Uuid::parse_str(&role.id).is_ok());
         assert!(Uuid::parse_str(&role.service_id).is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_resolve_optional_service_scope_resolves_client_id() {
+        let service_id = StringUuid::new_v4();
+        let mut repo = MockServiceRepository::new();
+        let expected = service_id;
+        repo.expect_find_by_client_id()
+            .with(mockall::predicate::eq("auth9-portal"))
+            .times(1)
+            .returning(move |_| {
+                Ok(Some(crate::models::service::Service {
+                    id: expected,
+                    ..Default::default()
+                }))
+            });
+
+        let resolved = resolve_optional_service_scope(&repo, "auth9-portal")
+            .await
+            .unwrap();
+
+        assert_eq!(resolved, Some(service_id));
+    }
+
+    #[tokio::test]
+    async fn test_resolve_optional_service_scope_rejects_unknown_client_id() {
+        let mut repo = MockServiceRepository::new();
+        repo.expect_find_by_client_id()
+            .with(mockall::predicate::eq("missing-client"))
+            .times(1)
+            .returning(|_| Ok(None));
+
+        let err = resolve_optional_service_scope(&repo, "missing-client")
+            .await
+            .unwrap_err();
+
+        assert_eq!(err.code(), tonic::Code::NotFound);
+        assert!(err.message().contains("OAuth client_id"));
     }
 
     #[test]
