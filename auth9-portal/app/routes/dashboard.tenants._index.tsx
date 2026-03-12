@@ -245,7 +245,7 @@ export default function TenantsIndexPage() {
                 />
               </div>
               <div className="flex gap-2 w-full md:w-auto">
-                <Button type="submit" variant="outline" className="bg-[var(--glass-bg)] flex-1 md:flex-none" size="default">
+                <Button type="submit" variant="outline" className="w-full bg-[var(--glass-bg)] md:w-auto" size="default">
                   {t("tenants.actions.search")}
                 </Button>
                 {data.search && (
@@ -253,7 +253,7 @@ export default function TenantsIndexPage() {
                     type="button"
                     variant="ghost"
                     size="default"
-                    className="flex-1 md:flex-none"
+                    className="w-full md:w-auto"
                     onClick={() => {
                       setSearchValue("");
                       window.location.href = "/dashboard/tenants";

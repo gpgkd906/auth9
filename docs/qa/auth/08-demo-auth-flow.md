@@ -106,6 +106,20 @@ curl -sf http://localhost:8080/health
 ### 初始状态
 - 已进入 Auth9 托管认证页
 - admin 用户存在（admin / SecurePass123!）
+- `users.mfa_enabled` 对 `admin@auth9.local` 为 `0`
+
+### 步骤 0：验证测试数据完整性
+
+在执行登录前，先确认种子用户未被历史测试污染：
+
+```sql
+SELECT id, email, mfa_enabled
+FROM users
+WHERE email = 'admin@auth9.local';
+-- 预期: mfa_enabled = 0
+```
+
+若 `mfa_enabled = 1`，说明本地数据已被先前测试修改。先执行 `./scripts/reset-docker.sh` 重建环境，再继续本场景；否则会被认证流程正常引导到 MFA 配置页，这不是 OAuth Demo Flow 缺陷。
 
 ### 目的
 验证输入凭证后完成 OAuth code exchange，获取 Auth9-signed Identity Token，正确显示用户信息

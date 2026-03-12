@@ -70,9 +70,26 @@ function getDeviceIcon(deviceType?: string) {
       return <MobileIcon className="h-5 w-5" />;
     case "tablet":
       return <MobileIcon className="h-5 w-5" />;
+    case "unknown":
+      return <GlobeIcon className="h-5 w-5" />;
     case "desktop":
-    default:
       return <DesktopIcon className="h-5 w-5" />;
+    default:
+      return <GlobeIcon className="h-5 w-5" />;
+  }
+}
+
+function getDeviceLabel(session: SessionInfo, t: ReturnType<typeof useI18n>["t"]) {
+  if (session.device_name) return session.device_name;
+
+  switch (session.device_type) {
+    case "desktop":
+      return "Desktop Browser";
+    case "mobile":
+    case "tablet":
+      return "Mobile Device";
+    default:
+      return t("account.sessions.unknownDevice");
   }
 }
 
@@ -114,14 +131,14 @@ export default function AccountSessionsPage() {
         </CardHeader>
         <CardContent>
           {currentSession ? (
-            <div className="flex items-start gap-4">
+            <div className="flex items-start gap-4 rounded-xl border border-[var(--accent-green)]/20 border-l-4 border-l-[var(--accent-green)] bg-[var(--accent-green)]/5 px-4 py-4">
               <div className="p-3 bg-green-100 text-[var(--accent-green)] rounded-full">
                 {getDeviceIcon(currentSession.device_type)}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <span className="font-medium">
-                    {currentSession.device_name || t("account.sessions.unknownDevice")}
+                    {getDeviceLabel(currentSession, t)}
                   </span>
                   <span className="inline-flex items-center gap-1 text-xs bg-green-100 text-[var(--accent-green)] px-2 py-0.5 rounded-full">
                     <CheckCircledIcon className="h-3 w-3" />
@@ -200,7 +217,7 @@ export default function AccountSessionsPage() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="font-medium truncate">
-                      {session.device_name || t("account.sessions.unknownDevice")}
+                      {getDeviceLabel(session, t)}
                     </div>
                     <div className="text-sm text-[var(--text-secondary)] mt-1 space-y-0.5">
                       {session.ip_address && (

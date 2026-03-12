@@ -26,10 +26,10 @@ export default function AccountLayout() {
         <p className="text-sm text-[var(--text-secondary)]">{t("account.description")}</p>
       </div>
 
-      <div className="flex gap-6">
+      <div className="flex flex-col gap-6 lg:flex-row">
         {/* Account Navigation */}
-        <nav className="w-48 flex-shrink-0">
-          <ul className="space-y-1">
+        <nav className="w-full flex-shrink-0 lg:w-48">
+          <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-1">
             {accountNav.map((item) => {
               const isActive = location.pathname === item.href;
               return (
@@ -37,9 +37,9 @@ export default function AccountLayout() {
                   <Link
                     to={item.href}
                     className={cn(
-                      "block px-3 py-2 rounded-xl text-sm transition-colors",
+                      "block rounded-xl px-3 py-2 text-sm font-medium transition-colors",
                       isActive
-                        ? "bg-[var(--accent-blue)] text-white"
+                        ? "bg-[var(--accent-blue-light)] text-[var(--accent-blue)]"
                         : "text-[var(--text-secondary)] hover:bg-[var(--sidebar-item-hover)]"
                     )}
                   >

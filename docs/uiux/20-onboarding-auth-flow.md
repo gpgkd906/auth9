@@ -85,12 +85,16 @@
 验证注册页和忘记密码页与登录页保持相同的布局框架和设计语言。
 
 ### 测试操作流程
-1. 访问 `/register`，检查页面结构。
-2. 访问 `/forgot-password`，检查表单和成功状态切换。
-3. 对比三个页面（Login / Register / Forgot Password）的 Card 宽度、圆角、间距一致性。
+1. 先确认系统允许公开注册：
+   - 在 Portal 进入 `/dashboard/settings/branding`，打开 `Allow registration`
+   - 或调用 `/api/v1/public/branding` 确认 `allow_registration = true`
+2. 访问 `/register`，检查页面结构。
+3. 访问 `/forgot-password`，检查表单和成功状态切换。
+4. 对比三个页面（Login / Register / Forgot Password）的 Card 宽度、圆角、间距一致性。
 
 ### 预期视觉效果
 - **注册页**:
+  - 前置条件: 默认 Docker 环境下公开注册通常关闭；若未开启，`/register` 重定向到 `/login` 属于预期行为，不应判为缺陷。
   - 字段: Email + Display Name + Password，`space-y-4` 间距。
   - 提交按钮: "Create Account" `variant="default"` 蓝色全宽。
   - 底部: "Already have an account?" + `Link to /login`，`--accent-blue` 色。
@@ -104,6 +108,13 @@
   - 均使用 `animate-fade-in-up` 入场动画。
   - 均有 `page-backdrop` 动态背景。
   - 品牌标识位置和样式一致。
+
+### 故障排查
+
+| 现象 | 原因 | 处理方式 |
+|------|------|----------|
+| 访问 `/register` 直接跳到 `/login` | `allow_registration` 未开启 | 在 `/dashboard/settings/branding` 开启 `Allow registration` 后重试 |
+| Keycloak 显示“不允许注册” | 底层认证引擎尚未同步允许注册配置 | 保存 Branding 设置后等待数秒，再检查 auth9-core 日志中的 Keycloak sync 结果 |
 
 ---
 

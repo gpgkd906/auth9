@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
+import { Form, Link, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useState, useEffect, useRef } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -19,6 +19,7 @@ import { redirect } from "react-router";
 import { webhookApi, tenantApi, type Webhook, type CreateWebhookInput } from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import {
+  ArrowLeftIcon,
   PlusIcon,
   Pencil2Icon,
   TrashIcon,
@@ -150,7 +151,7 @@ export async function action({ request, params }: ActionFunctionArgs) {
 export default function WebhooksPage() {
   const { t } = useI18n();
   const formatters = useFormatters();
-  const { webhooks, error: loadError } = useLoaderData<typeof loader>();
+  const { webhooks, error: loadError, tenantId } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const submit = useSubmit();
@@ -223,6 +224,18 @@ export default function WebhooksPage() {
 
   return (
     <div className="space-y-6">
+      <div className="flex items-center gap-3">
+        <Button variant="ghost" size="icon" asChild>
+          <Link to={`/dashboard/tenants/${tenantId}`} aria-label={t("tenants.actions.backToList")}>
+            <ArrowLeftIcon className="h-4 w-4" />
+          </Link>
+        </Button>
+        <div>
+          <h1 className="text-[24px] font-semibold tracking-tight text-[var(--text-primary)]">{t("tenants.webhooks.title")}</h1>
+          <p className="text-sm text-[var(--text-secondary)]">{t("tenants.webhooks.description")}</p>
+        </div>
+      </div>
+
       <Card>
         <CardHeader>
           <div className="flex items-center justify-between">

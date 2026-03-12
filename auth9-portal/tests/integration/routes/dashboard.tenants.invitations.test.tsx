@@ -303,7 +303,7 @@ describe("Invitations Page", () => {
     });
   });
 
-  it("has back link to tenants page", async () => {
+  it("has back link to tenant detail page", async () => {
     const RoutesStub = createRoutesStub([
       {
         path: "/dashboard/tenants/:tenantId/invitations",
@@ -315,9 +315,8 @@ describe("Invitations Page", () => {
     render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/invitations"]} />);
 
     await waitFor(() => {
-      // Find the back arrow link by its href
       const links = screen.getAllByRole("link");
-      const backLink = links.find((link) => link.getAttribute("href") === "/dashboard/tenants");
+      const backLink = links.find((link) => link.getAttribute("href") === "/dashboard/tenants/tenant-1");
       expect(backLink).toBeInTheDocument();
     });
   });
@@ -484,10 +483,10 @@ describe("Invitations Page", () => {
       const { user } = renderPage();
 
       await waitFor(() => {
-        expect(screen.getByText("Invite User")).toBeInTheDocument();
+        expect(screen.getAllByRole("button", { name: "Invite User" })[0]).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("Invite User"));
+      await user.click(screen.getAllByRole("button", { name: "Invite User" })[0]);
 
       await waitFor(() => {
         expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -500,10 +499,10 @@ describe("Invitations Page", () => {
       const { user } = renderPage();
 
       await waitFor(() => {
-        expect(screen.getByText("Invite User")).toBeInTheDocument();
+        expect(screen.getAllByRole("button", { name: "Invite User" })[0]).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("Invite User"));
+      await user.click(screen.getAllByRole("button", { name: "Invite User" })[0]);
 
       await waitFor(() => {
         expect(screen.getByRole("dialog")).toBeInTheDocument();
@@ -518,10 +517,10 @@ describe("Invitations Page", () => {
       const { user } = renderPage();
 
       await waitFor(() => {
-        expect(screen.getByText("Invite User")).toBeInTheDocument();
+        expect(screen.getAllByRole("button", { name: "Invite User" })[0]).toBeInTheDocument();
       });
 
-      await user.click(screen.getByText("Invite User"));
+      await user.click(screen.getAllByRole("button", { name: "Invite User" })[0]);
 
       await waitFor(() => {
         expect(screen.getByRole("dialog")).toBeInTheDocument();

@@ -1,6 +1,6 @@
 import type { MetaFunction, LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, Link, useActionData, useLoaderData, useNavigation, useParams, useSearchParams, useSubmit } from "react-router";
-import { PlusIcon, DotsHorizontalIcon, TrashIcon, ReloadIcon, Cross2Icon, ArrowLeftIcon } from "@radix-ui/react-icons";
+import { PlusIcon, DotsHorizontalIcon, TrashIcon, ReloadIcon, Cross2Icon, ArrowLeftIcon, EnvelopeClosedIcon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
 import { useConfirm } from "~/hooks/useConfirm";
 import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
@@ -265,9 +265,9 @@ export default function InvitationsPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <div>
-          <div className="flex items-center gap-3 mb-1">
-            <Link to="/dashboard/tenants" className="text-[var(--text-secondary)] hover:text-[var(--text-secondary)] transition-colors" aria-label={t("tenants.actions.backToList")}>
+          <div>
+            <div className="flex items-center gap-3 mb-1">
+            <Link to={`/dashboard/tenants/${tenant.id}`} className="text-[var(--text-secondary)] hover:text-[var(--text-secondary)] transition-colors" aria-label={t("tenants.actions.backToList")}>
               <ArrowLeftIcon className="h-5 w-5" />
             </Link>
             <h1 className="text-[24px] font-semibold text-[var(--text-primary)] tracking-tight">{t("tenants.invitations.title")}</h1>
@@ -378,6 +378,21 @@ export default function InvitationsPage() {
         </CardHeader>
         <div className="px-6 pb-6">
           <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">
+            {invitations.length === 0 ? (
+              <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
+                <div className="mb-4 flex h-12 w-12 items-center justify-center rounded-full bg-[var(--sidebar-item-hover)] text-[var(--text-secondary)]">
+                  <EnvelopeClosedIcon className="h-6 w-6" />
+                </div>
+                <h3 className="text-[17px] font-semibold text-[var(--text-primary)]">{t("tenants.invitations.noInvitations")}</h3>
+                <p className="mt-2 max-w-md text-[13px] text-[var(--text-secondary)]">
+                  {t("tenants.invitations.listDescription", { total: 0, page: 1, totalPages: 1 })}
+                </p>
+                <Button className="mt-5" onClick={() => setIsCreateOpen(true)}>
+                  <PlusIcon className="mr-2 h-4 w-4" />
+                  {t("tenants.invitations.sendInvitation")}
+                </Button>
+              </div>
+            ) : (
             <table className="min-w-full divide-y divide-[var(--glass-border-subtle)] text-sm">
               <thead className="bg-[var(--sidebar-item-hover)] text-left text-[var(--text-secondary)]">
                 <tr>
@@ -426,13 +441,9 @@ export default function InvitationsPage() {
                     </td>
                   </tr>
                 ))}
-                {invitations.length === 0 && (
-                  <tr>
-                    <td className="px-4 py-6 text-center text-[var(--text-secondary)]" colSpan={6}>{t("tenants.invitations.noInvitations")}</td>
-                  </tr>
-                )}
               </tbody>
             </table>
+            )}
           </div>
 
           {pagination.total_pages > 1 && (

@@ -13,6 +13,7 @@ import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
 import { mapApiError } from "~/lib/error-messages";
+import { useState } from "react";
 
 export const meta: MetaFunction<typeof loader> = ({ data, matches }) => {
   return buildMeta(resolveMetaLocale(matches), "tenants.sso.metaTitle", undefined, {
@@ -117,6 +118,7 @@ export default function TenantSsoPage() {
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const [providerType, setProviderType] = useState<"saml" | "oidc">("saml");
 
   return (
     <div className="space-y-6">
@@ -163,6 +165,7 @@ export default function TenantSsoPage() {
                 name="provider_type"
                 className="w-full h-10 rounded-md border bg-transparent px-3 text-sm"
                 defaultValue="saml"
+                onChange={(event) => setProviderType(event.target.value as "saml" | "oidc")}
               >
                 <option value="saml">SAML</option>
                 <option value="oidc">OIDC</option>
@@ -177,35 +180,41 @@ export default function TenantSsoPage() {
               <Input id="domains" name="domains" required placeholder={t("tenants.sso.domainsPlaceholder")} />
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor="entity_id">{t("tenants.sso.samlEntityId")}</Label>
-              <Input id="entity_id" name="entity_id" placeholder={t("tenants.sso.samlEntityIdPlaceholder")} />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="sso_url">{t("tenants.sso.samlSsoUrl")}</Label>
-              <Input id="sso_url" name="sso_url" placeholder={t("tenants.sso.samlSsoUrlPlaceholder")} />
-            </div>
-            <div className="space-y-2 md:col-span-2">
-              <Label htmlFor="certificate">{t("tenants.sso.samlCertificate")}</Label>
-              <Input id="certificate" name="certificate" placeholder={t("tenants.sso.samlCertificatePlaceholder")} />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="client_id">{t("tenants.sso.oidcClientId")}</Label>
-              <Input id="client_id" name="client_id" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="client_secret">{t("tenants.sso.oidcClientSecret")}</Label>
-              <Input id="client_secret" name="client_secret" type="password" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="authorization_url">{t("tenants.sso.oidcAuthorizationUrl")}</Label>
-              <Input id="authorization_url" name="authorization_url" />
-            </div>
-            <div className="space-y-2">
-              <Label htmlFor="token_url">{t("tenants.sso.oidcTokenUrl")}</Label>
-              <Input id="token_url" name="token_url" />
-            </div>
+            {providerType === "saml" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="entity_id">{t("tenants.sso.samlEntityId")}</Label>
+                  <Input id="entity_id" name="entity_id" placeholder={t("tenants.sso.samlEntityIdPlaceholder")} />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="sso_url">{t("tenants.sso.samlSsoUrl")}</Label>
+                  <Input id="sso_url" name="sso_url" placeholder={t("tenants.sso.samlSsoUrlPlaceholder")} />
+                </div>
+                <div className="space-y-2 md:col-span-2">
+                  <Label htmlFor="certificate">{t("tenants.sso.samlCertificate")}</Label>
+                  <Input id="certificate" name="certificate" placeholder={t("tenants.sso.samlCertificatePlaceholder")} />
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="client_id">{t("tenants.sso.oidcClientId")}</Label>
+                  <Input id="client_id" name="client_id" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="client_secret">{t("tenants.sso.oidcClientSecret")}</Label>
+                  <Input id="client_secret" name="client_secret" type="password" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="authorization_url">{t("tenants.sso.oidcAuthorizationUrl")}</Label>
+                  <Input id="authorization_url" name="authorization_url" />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="token_url">{t("tenants.sso.oidcTokenUrl")}</Label>
+                  <Input id="token_url" name="token_url" />
+                </div>
+              </>
+            )}
 
             <div className="md:col-span-2">
               <Button type="submit" disabled={isSubmitting}>
