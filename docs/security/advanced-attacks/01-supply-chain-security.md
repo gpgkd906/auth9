@@ -365,6 +365,10 @@ kube-bench run --targets master,node
      --jq '.[] | {number, state, severity: .security_advisory.severity, package: .security_vulnerability.package.name, ecosystem: .security_vulnerability.package.ecosystem, summary: .security_advisory.summary, patched: .security_vulnerability.first_patched_version.identifier}'
    ```
 
+> **注意**: Dependabot 状态不是在 push 后瞬时更新。锁文件升级刚合并或刚 push 到默认分支时，
+> GitHub 依赖图可能还在重扫，短时间内仍会显示旧的 `open` 告警。只有在实时查询结果里
+> `state == "open"` 仍然存在时，才应判定场景失败；如果同一批告警已经转为 `fixed`，应视为通过而不是继续开票。
+
 2. 筛选 open 状态的警报：
    ```bash
    gh api repos/:owner/:repo/dependabot/alerts \
@@ -416,6 +420,12 @@ gh api repos/:owner/:repo/dependabot/alerts \
 - 对 pnpm workspace 使用 `pnpm.overrides` 强制升级传递依赖
 - 设置 CI 门禁：当存在 HIGH/CRITICAL 警报时阻止合并
 - 定期（每周）审查 Dependabot 警报状态
+
+### 常见误报排查
+
+| 症状 | 根因 | 处理方式 |
+|------|------|----------|
+| 本地锁文件已升级，但票据仍显示旧的 HIGH open alerts | GitHub 依赖图/Dependabot 状态刷新滞后 | 重新执行 `gh api` 查询，确认告警是否已转为 `fixed`，不要仅根据历史截图或早先输出判定失败 |
 
 ---
 
