@@ -126,11 +126,11 @@ describe("Webhooks Page", () => {
     render(<RoutesStub initialEntries={["/dashboard/tenants/tenant-1/webhooks"]} />);
 
     await waitFor(() => {
-      expect(screen.getByText("Webhooks")).toBeInTheDocument();
+      expect(screen.getByRole("heading", { level: 1, name: "Webhooks" })).toBeInTheDocument();
     });
     expect(
-      screen.getByText(/receive real-time notifications for events/i)
-    ).toBeInTheDocument();
+      screen.getAllByText(/receive real-time notifications for events/i).length
+    ).toBeGreaterThan(0);
   });
 
   it("renders add webhook button", async () => {

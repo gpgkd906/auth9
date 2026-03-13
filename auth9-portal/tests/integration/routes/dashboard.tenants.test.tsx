@@ -445,7 +445,9 @@ describe("Tenants Page", () => {
         // Verify confirmation dialog appears
         await waitFor(() => {
             expect(screen.getByTestId("confirm-dialog-title")).toHaveTextContent("Delete Tenant");
-            expect(screen.getByText("Are you sure you want to delete this tenant?")).toBeInTheDocument();
+            expect(
+                screen.getByText((_, element) => element?.textContent === "Are you sure you want to delete Acme Corp?")
+            ).toBeInTheDocument();
         });
     });
 

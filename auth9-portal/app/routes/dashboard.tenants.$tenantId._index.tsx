@@ -173,14 +173,14 @@ export default function TenantDetailPage() {
   const settingsError = settingsFetcher.data && "error" in (settingsFetcher.data as Record<string, unknown>)
     ? String((settingsFetcher.data as Record<string, unknown>).error)
     : null;
-  const tenantBlacklistEntries = Array.isArray(tenantBlacklist) ? tenantBlacklist : [];
-  const [tenantBlacklistText, setTenantBlacklistText] = useState(
-    tenantBlacklistEntries.map((entry) => entry.ip_address).join("\n")
-  );
+  const tenantBlacklistTextValue = (Array.isArray(tenantBlacklist) ? tenantBlacklist : [])
+    .map((entry) => entry.ip_address)
+    .join("\n");
+  const [tenantBlacklistText, setTenantBlacklistText] = useState(tenantBlacklistTextValue);
 
   useEffect(() => {
-    setTenantBlacklistText(tenantBlacklistEntries.map((entry) => entry.ip_address).join("\n"));
-  }, [tenantBlacklist]);
+    setTenantBlacklistText(tenantBlacklistTextValue);
+  }, [tenantBlacklistTextValue]);
 
   return (
     <div className="space-y-6">
