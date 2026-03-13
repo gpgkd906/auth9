@@ -7,6 +7,7 @@ import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/ca
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "~/components/ui/tabs";
 import { Checkbox } from "~/components/ui/checkbox";
 import {
@@ -37,6 +38,8 @@ import { resolveLocale } from "~/services/locale.server";
 interface EditableRole extends Role {
   service_id: string;
 }
+
+const NO_PARENT_ROLE_VALUE = "__none__";
 
 export const meta: MetaFunction = ({ matches }) => buildMeta(resolveMetaLocale(matches), "rolesPage.metaTitle");
 
@@ -182,7 +185,9 @@ export default function RolesPage() {
 
   // Role state
   const [createRoleServiceId, setCreateRoleServiceId] = useState<string | null>(null);
+  const [createParentRoleId, setCreateParentRoleId] = useState(NO_PARENT_ROLE_VALUE);
   const [editingRole, setEditingRole] = useState<EditableRole | null>(null);
+  const [editParentRoleId, setEditParentRoleId] = useState(NO_PARENT_ROLE_VALUE);
   const [managingPermissionsRole, setManagingPermissionsRole] = useState<{
     role: EditableRole;
     permissions: Permission[];
@@ -201,7 +206,9 @@ export default function RolesPage() {
   useEffect(() => {
     if (actionData && "success" in actionData && actionData.success) {
       setCreateRoleServiceId(null);
+      setCreateParentRoleId(NO_PARENT_ROLE_VALUE);
       setEditingRole(null);
+      setEditParentRoleId(NO_PARENT_ROLE_VALUE);
       setCreatePermissionServiceId(null);
 
       // If we got role permissions back, update the managing state
@@ -218,6 +225,16 @@ export default function RolesPage() {
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [actionData]);
+
+  useEffect(() => {
+    if (createRoleServiceId) {
+      setCreateParentRoleId(NO_PARENT_ROLE_VALUE);
+    }
+  }, [createRoleServiceId]);
+
+  useEffect(() => {
+    setEditParentRoleId(editingRole?.parent_role_id || NO_PARENT_ROLE_VALUE);
+  }, [editingRole]);
 
   const openManagePermissions = async (role: EditableRole, servicePermissions: Permission[]) => {
     // Fetch current role permissions
@@ -574,7 +591,15 @@ export default function RolesPage() {
       </Tabs>
 
       {/* Create Role Dialog */}
-      <Dialog open={!!createRoleServiceId} onOpenChange={(open) => !open && setCreateRoleServiceId(null)}>
+      <Dialog
+        open={!!createRoleServiceId}
+        onOpenChange={(open) => {
+          if (!open) {
+            setCreateRoleServiceId(null);
+            setCreateParentRoleId(NO_PARENT_ROLE_VALUE);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("rolesPage.createRoleTitle")}</DialogTitle>
@@ -583,6 +608,11 @@ export default function RolesPage() {
           <Form method="post" className="space-y-4">
             <input type="hidden" name="intent" value="create_role" />
             <input type="hidden" name="service_id" value={createRoleServiceId || ""} />
+            <input
+              type="hidden"
+              name="parent_role_id"
+              value={createParentRoleId === NO_PARENT_ROLE_VALUE ? "" : createParentRoleId}
+            />
             <div className="space-y-2">
               <Label htmlFor="create-name">{t("rolesPage.roleName")}</Label>
               <Input id="create-name" name="name" placeholder={t("rolesPage.roleNamePlaceholder")} required />
@@ -592,23 +622,31 @@ export default function RolesPage() {
               <Input id="create-description" name="description" placeholder={t("rolesPage.roleDescriptionPlaceholder")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="create-parent">{t("rolesPage.parentRoleOptional")}</Label>
-              <select
-                id="create-parent"
-                name="parent_role_id"
-                className="w-full px-3 py-2 border border-[var(--glass-border-subtle)] rounded-md text-sm"
-              >
-                <option value="">{t("rolesPage.noParentRole")}</option>
-                {createRoleServiceId && getParentRoleOptions(createRoleServiceId).map(role => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
+              <Label id="create-parent-label" htmlFor="create-parent-trigger">{t("rolesPage.parentRoleOptional")}</Label>
+              <Select value={createParentRoleId} onValueChange={setCreateParentRoleId}>
+                <SelectTrigger id="create-parent-trigger" aria-labelledby="create-parent-label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PARENT_ROLE_VALUE}>{t("rolesPage.noParentRole")}</SelectItem>
+                  {createRoleServiceId && getParentRoleOptions(createRoleServiceId).map(role => (
+                    <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {actionData && "error" in actionData && actionData.intent === "create_role" && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setCreateRoleServiceId(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setCreateRoleServiceId(null);
+                  setCreateParentRoleId(NO_PARENT_ROLE_VALUE);
+                }}
+              >
                 {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>
@@ -620,7 +658,15 @@ export default function RolesPage() {
       </Dialog>
 
       {/* Edit Role Dialog */}
-      <Dialog open={!!editingRole} onOpenChange={(open) => !open && setEditingRole(null)}>
+      <Dialog
+        open={!!editingRole}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingRole(null);
+            setEditParentRoleId(NO_PARENT_ROLE_VALUE);
+          }
+        }}
+      >
         <DialogContent>
           <DialogHeader>
             <DialogTitle>{t("rolesPage.editRoleTitle")}</DialogTitle>
@@ -630,6 +676,11 @@ export default function RolesPage() {
             <input type="hidden" name="intent" value="update_role" />
             <input type="hidden" name="service_id" value={editingRole?.service_id || ""} />
             <input type="hidden" name="role_id" value={editingRole?.id || ""} />
+            <input
+              type="hidden"
+              name="parent_role_id"
+              value={editParentRoleId === NO_PARENT_ROLE_VALUE ? "" : editParentRoleId}
+            />
             <div className="space-y-2">
               <Label htmlFor="edit-name">{t("rolesPage.roleName")}</Label>
               <Input id="edit-name" name="name" defaultValue={editingRole?.name} required />
@@ -639,24 +690,31 @@ export default function RolesPage() {
               <Input id="edit-description" name="description" defaultValue={editingRole?.description} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-parent">{t("rolesPage.parentRoleOptional")}</Label>
-              <select
-                id="edit-parent"
-                name="parent_role_id"
-                defaultValue={editingRole?.parent_role_id || ""}
-                className="w-full px-3 py-2 border border-[var(--glass-border-subtle)] rounded-md text-sm"
-              >
-                <option value="">{t("rolesPage.noParentRole")}</option>
-                {editingRole && getParentRoleOptions(editingRole.service_id, editingRole.id).map(role => (
-                  <option key={role.id} value={role.id}>{role.name}</option>
-                ))}
-              </select>
+              <Label id="edit-parent-label" htmlFor="edit-parent-trigger">{t("rolesPage.parentRoleOptional")}</Label>
+              <Select value={editParentRoleId} onValueChange={setEditParentRoleId}>
+                <SelectTrigger id="edit-parent-trigger" aria-labelledby="edit-parent-label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value={NO_PARENT_ROLE_VALUE}>{t("rolesPage.noParentRole")}</SelectItem>
+                  {editingRole && getParentRoleOptions(editingRole.service_id, editingRole.id).map(role => (
+                    <SelectItem key={role.id} value={role.id}>{role.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             {actionData && "error" in actionData && actionData.intent === "update_role" && (
               <p className="text-sm text-[var(--accent-red)]">{String(actionData.error)}</p>
             )}
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditingRole(null)}>
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => {
+                  setEditingRole(null);
+                  setEditParentRoleId(NO_PARENT_ROLE_VALUE);
+                }}
+              >
                 {t("common.buttons.cancel")}
               </Button>
               <Button type="submit" disabled={isSubmitting}>

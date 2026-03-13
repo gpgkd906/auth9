@@ -56,6 +56,22 @@ function buildEnglishRequest(url: string, init?: RequestInit) {
     return new Request(url, { ...init, headers });
 }
 
+async function openRoleParentSelector(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("combobox", { name: "Parent Role (Optional)" }));
+}
+
+if (!HTMLElement.prototype.hasPointerCapture) {
+    HTMLElement.prototype.hasPointerCapture = () => false;
+}
+
+if (!HTMLElement.prototype.setPointerCapture) {
+    HTMLElement.prototype.setPointerCapture = () => {};
+}
+
+if (!HTMLElement.prototype.releasePointerCapture) {
+    HTMLElement.prototype.releasePointerCapture = () => {};
+}
+
 describe("Roles Page", () => {
     const mockServices = {
         data: [
@@ -557,7 +573,7 @@ describe("Roles Page", () => {
     // ============================================================================
 
     describe("create role dialog interactions", () => {
-        it("shows form fields including parent role select with existing roles as options", async () => {
+        it("shows form fields including parent role selector with existing roles as options", async () => {
             const RoutesStub = createRoutesStub([
                 {
                     path: "/dashboard/roles",
@@ -585,10 +601,10 @@ describe("Roles Page", () => {
             });
 
             // The parent role select should have existing roles as options
-            const parentSelect = screen.getByLabelText("Parent Role (Optional)");
+            const parentSelect = screen.getByRole("combobox", { name: "Parent Role (Optional)" });
             expect(parentSelect).toBeInTheDocument();
-            // Should have "No parent" option plus both existing roles
-            const options = within(parentSelect as HTMLElement).getAllByRole("option");
+            await openRoleParentSelector(user);
+            const options = await screen.findAllByRole("option");
             expect(options.length).toBe(3); // "No parent" + Admin + Viewer
         });
 
@@ -723,9 +739,10 @@ describe("Roles Page", () => {
                 expect(screen.getByRole("dialog")).toBeInTheDocument();
             });
 
-            // Parent role select should only have "No parent" option since Service B has no roles
-            const parentSelect = screen.getByLabelText("Parent Role (Optional)");
-            const options = within(parentSelect as HTMLElement).getAllByRole("option");
+            const parentSelect = screen.getByRole("combobox", { name: "Parent Role (Optional)" });
+            expect(parentSelect).toBeInTheDocument();
+            await openRoleParentSelector(user);
+            const options = await screen.findAllByRole("option");
             expect(options.length).toBe(1); // Only "No parent"
         });
     });
@@ -804,12 +821,55 @@ describe("Roles Page", () => {
             });
 
             // Parent select should exclude the current role (Admin) but include Viewer
-            const parentSelect = screen.getByLabelText("Parent Role (Optional)");
-            const options = within(parentSelect as HTMLElement).getAllByRole("option");
+            const parentSelect = screen.getByRole("combobox", { name: "Parent Role (Optional)" });
+            expect(parentSelect).toBeInTheDocument();
+            await openRoleParentSelector(user);
+            const options = await screen.findAllByRole("option");
             // Should have "No parent" + Viewer (excluding Admin itself)
             expect(options.length).toBe(2);
             expect(options[0]).toHaveTextContent("No parent (root role)");
             expect(options[1]).toHaveTextContent("Viewer");
+        });
+
+        it("submits selected parent role from create dialog", async () => {
+            const RoutesStub = createRoutesStub([
+                {
+                    path: "/dashboard/roles",
+                    Component: WrappedPage,
+                    loader: () => mockLoaderData,
+                    action: async ({ request }) => {
+                        const formData = await request.formData();
+                        expect(formData.get("intent")).toBe("create_role");
+                        expect(formData.get("parent_role_id")).toBe("r2");
+                        return { success: true };
+                    },
+                },
+            ]);
+
+            const user = userEvent.setup();
+            render(<RoutesStub initialEntries={["/dashboard/roles"]} />);
+
+            await waitFor(() => {
+                expect(screen.getByText("Service A")).toBeInTheDocument();
+            });
+
+            const addButtons = screen.getAllByRole("button", { name: /Add Role/i });
+            await user.click(addButtons[0]);
+
+            await waitFor(() => {
+                expect(screen.getByRole("dialog")).toBeInTheDocument();
+            });
+
+            const dialog = screen.getByRole("dialog");
+            await user.type(within(dialog).getByLabelText("Role Name"), "Editor");
+            await openRoleParentSelector(user);
+            await user.click(await screen.findByRole("option", { name: "Viewer" }));
+
+            await user.click(within(dialog).getByRole("button", { name: "Create" }));
+
+            await waitFor(() => {
+                expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+            });
         });
 
         it("submits edit role form", async () => {

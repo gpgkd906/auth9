@@ -5,6 +5,7 @@ import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select";
 import { Switch } from "~/components/ui/switch";
 import { getAccessToken } from "~/services/session.server";
 import { tenantApi, tenantSsoApi } from "~/services/api";
@@ -150,6 +151,7 @@ export default function TenantSsoPage() {
           <Form method="post" className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <input type="hidden" name="intent" value="create" />
             <input type="hidden" name="enabled" value="true" />
+            <input type="hidden" name="provider_type" value={providerType} />
             <div className="space-y-2">
               <Label htmlFor="alias">{t("tenants.sso.alias")}</Label>
               <Input id="alias" name="alias" required placeholder={t("tenants.sso.aliasPlaceholder")} />
@@ -159,17 +161,16 @@ export default function TenantSsoPage() {
               <Input id="display_name" name="display_name" placeholder={t("tenants.sso.displayNamePlaceholder")} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="provider_type">{t("tenants.sso.providerType")}</Label>
-              <select
-                id="provider_type"
-                name="provider_type"
-                className="w-full h-10 rounded-md border bg-transparent px-3 text-sm"
-                defaultValue="saml"
-                onChange={(event) => setProviderType(event.target.value as "saml" | "oidc")}
-              >
-                <option value="saml">SAML</option>
-                <option value="oidc">OIDC</option>
-              </select>
+              <Label id="provider_type_label" htmlFor="provider_type_trigger">{t("tenants.sso.providerType")}</Label>
+              <Select value={providerType} onValueChange={(value) => setProviderType(value as "saml" | "oidc")}>
+                <SelectTrigger id="provider_type_trigger" aria-labelledby="provider_type_label">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="saml">SAML</SelectItem>
+                  <SelectItem value="oidc">OIDC</SelectItem>
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
               <Label htmlFor="priority">{t("tenants.sso.priority")}</Label>
