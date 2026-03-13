@@ -1,8 +1,9 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Form, useActionData, useFetcher, useLoaderData, useNavigation } from "react-router";
 import { useEffect, useState } from "react";
+import { SettingsSectionHeading } from "~/components/settings/settings-card-header";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
 import { Switch } from "~/components/ui/switch";
@@ -113,9 +114,11 @@ export default function SecuritySettingsPage() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.securitySettings.title")}</CardTitle>
-          <CardDescription>{t("settings.securitySettings.description")}</CardDescription>
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={t("settings.securitySettings.title")}
+            description={t("settings.securitySettings.description")}
+          />
         </CardHeader>
         <CardContent>
           <div className="space-y-4">

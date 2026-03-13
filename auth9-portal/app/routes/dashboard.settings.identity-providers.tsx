@@ -2,8 +2,9 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Pencil2Icon, PlusIcon, TrashIcon } from "@radix-ui/react-icons";
+import { SettingsHeroCard } from "~/components/settings/settings-card-header";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent } from "~/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -172,20 +173,16 @@ export default function IdentityProvidersPage() {
 
   return (
     <div className="space-y-6">
-      <Card>
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>{t("settings.identityProvidersPage.title")}</CardTitle>
-              <CardDescription>{t("settings.identityProvidersPage.description")}</CardDescription>
-            </div>
-            <Button onClick={openCreateDialog}>
+      <SettingsHeroCard
+        title={t("settings.identityProvidersPage.title")}
+        description={t("settings.identityProvidersPage.description")}
+        actions={
+          <Button onClick={openCreateDialog} className="w-full sm:w-auto">
               <PlusIcon className="mr-2 h-4 w-4" />
               {t("settings.identityProvidersPage.addProvider")}
-            </Button>
-          </div>
-        </CardHeader>
-      </Card>
+          </Button>
+        }
+      />
 
       {loadError && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{loadError}</div>}
       {actionData?.error && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{actionData.error}</div>}

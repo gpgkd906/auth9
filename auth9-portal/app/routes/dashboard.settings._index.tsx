@@ -2,7 +2,8 @@ import type { LoaderFunctionArgs, ActionFunctionArgs } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { Pencil2Icon } from "@radix-ui/react-icons";
 import { useEffect, useState } from "react";
-import { Card, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { SettingsSectionHeading } from "~/components/settings/settings-card-header";
+import { Card, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Label } from "~/components/ui/label";
 import { Input } from "~/components/ui/input";
@@ -88,15 +89,15 @@ export default function OrganizationSettingsPage() {
   return (
     <>
       <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.organization.title")}</CardTitle>
-          <CardDescription>
-            {t("settings.organization.description", {
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={t("settings.organization.title")}
+            description={t("settings.organization.description", {
               total: data.pagination.total,
               page: data.pagination.page,
               totalPages: data.pagination.total_pages,
             })}
-          </CardDescription>
+          />
         </CardHeader>
         <div className="px-6 pb-6">
           <div className="overflow-hidden rounded-xl border border-[var(--glass-border-subtle)]">

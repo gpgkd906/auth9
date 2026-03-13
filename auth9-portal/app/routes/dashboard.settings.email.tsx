@@ -2,10 +2,11 @@ import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react
 import { Form, useActionData, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useEffect, useState } from "react";
 import { CheckCircledIcon, CrossCircledIcon, ExclamationTriangleIcon } from "@radix-ui/react-icons";
+import { SettingsSectionHeading } from "~/components/settings/settings-card-header";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "~/components/ui/alert-dialog";
 import { Checkbox } from "~/components/ui/checkbox";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "~/components/ui/dialog";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -231,9 +232,11 @@ export default function EmailSettingsPage() {
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.emailSettings.title")}</CardTitle>
-          <CardDescription>{t("settings.emailSettings.description")}</CardDescription>
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={t("settings.emailSettings.title")}
+            description={t("settings.emailSettings.description")}
+          />
         </CardHeader>
         <CardContent>
           <Form method="post" className="space-y-6">

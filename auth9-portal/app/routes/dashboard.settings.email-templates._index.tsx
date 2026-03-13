@@ -3,7 +3,8 @@ import { Link, useLoaderData } from "react-router";
 import { Pencil1Icon } from "@radix-ui/react-icons";
 import { Badge } from "~/components/ui/badge";
 import { Button } from "~/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { SettingsSectionHeading } from "~/components/settings/settings-card-header";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "~/components/ui/table";
 import { useI18n } from "~/i18n";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
@@ -36,9 +37,11 @@ export default function EmailTemplatesPage() {
       {error && <div className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</div>}
 
       <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.emailTemplatesPage.title")}</CardTitle>
-          <CardDescription>{t("settings.emailTemplatesPage.description")}</CardDescription>
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={t("settings.emailTemplatesPage.title")}
+            description={t("settings.emailTemplatesPage.description")}
+          />
         </CardHeader>
         <CardContent>
           <Table>
@@ -80,11 +83,12 @@ export default function EmailTemplatesPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{t("settings.emailTemplatesPage.variablesTitle")}</CardTitle>
-          <CardDescription>
-            {t("settings.emailTemplatesPage.variablesDescription", { syntax: "{{variable_name}}" })}
-          </CardDescription>
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={<span className="text-base">{t("settings.emailTemplatesPage.variablesTitle")}</span>}
+            description={t("settings.emailTemplatesPage.variablesDescription", { syntax: "{{variable_name}}" })}
+            className="min-h-0"
+          />
         </CardHeader>
         <CardContent>
           <div className="text-sm text-[var(--text-secondary)]">

@@ -2,7 +2,8 @@ import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react
 import { Form, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useEffect } from "react";
 import { CheckCircledIcon, ResetIcon } from "@radix-ui/react-icons";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
+import { SettingsSectionHeading } from "~/components/settings/settings-card-header";
+import { Card, CardContent, CardHeader } from "~/components/ui/card";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
 import { Label } from "~/components/ui/label";
@@ -160,9 +161,11 @@ export default function BrandingSettingsPage() {
       )}
 
       <Card>
-        <CardHeader>
-          <CardTitle>{t("settings.brandingPage.title")}</CardTitle>
-          <CardDescription>{t("settings.brandingPage.description")}</CardDescription>
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={t("settings.brandingPage.title")}
+            description={t("settings.brandingPage.description")}
+          />
         </CardHeader>
         <CardContent>
           <Form id="branding-settings-form" method="post" className="space-y-6 pb-24 md:pb-0">
