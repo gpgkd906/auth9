@@ -202,6 +202,10 @@ compareThemes();
 4. 再次观察背景渐变
 5. 验证动画持续性和流畅性
 
+> **DOM 定位说明**：动态背景挂在共享布局的 `.page-backdrop` 元素上，
+> 它通常位于 Dashboard 父级路由容器，而不是 `dashboard._index.tsx` 自身的内容节点里。
+> 检查时应在整个页面根节点范围查询 `.page-backdrop` / `::before`，不要只看页面主内容区。
+
 ### 预期视觉效果
 
 #### Light 模式渐变

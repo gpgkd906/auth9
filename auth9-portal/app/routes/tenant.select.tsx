@@ -1,5 +1,5 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { redirect, useFetcher, useLoaderData, useNavigation } from "react-router";
+import { redirect, useLoaderData, useNavigation, useSubmit } from "react-router";
 import { useMemo, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
@@ -74,9 +74,9 @@ export default function TenantSelectPage() {
     error?: string | null;
   };
   const [searchQuery, setSearchQuery] = useState("");
-  const fetcher = useFetcher();
   const navigation = useNavigation();
-  const isSubmitting = navigation.state === "submitting" || fetcher.state !== "idle";
+  const submit = useSubmit();
+  const isSubmitting = navigation.state === "submitting";
 
   const filteredTenants = useMemo(() => {
     if (!searchQuery.trim()) return tenants;
@@ -90,7 +90,7 @@ export default function TenantSelectPage() {
 
   const handleTenantClick = (tenantId: string) => {
     if (tenantId === activeTenantId) return;
-    fetcher.submit(
+    submit(
       { tenantId },
       { method: "post" }
     );
@@ -178,11 +178,11 @@ export default function TenantSelectPage() {
                   })}
             </p>
           )}
-          {(error || fetcher.data?.error) && (
+          {error && (
             <p className="text-sm text-[var(--accent-red)]">
               {error === "tenant_exchange_failed"
                 ? t("tenantSelect.accessFailed")
-                : String(error || fetcher.data?.error)}
+                : String(error)}
             </p>
           )}
         </CardContent>

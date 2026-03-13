@@ -62,11 +62,10 @@ export const userApi = {
     input: CreateUserInput & { password?: string; tenant_id?: string },
     accessToken?: string
   ): Promise<{ data: User }> => {
-    const { password, tenant_id, ...user } = input;
     const response = await fetch(`${API_BASE_URL}/api/v1/users`, {
       method: "POST",
       headers: getHeaders(accessToken),
-      body: JSON.stringify({ ...user, password, tenant_id }),
+      body: JSON.stringify(input),
     });
     return handleResponse(response);
   },

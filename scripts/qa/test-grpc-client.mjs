@@ -133,6 +133,7 @@ async function runTests() {
     // ValidateToken
     const validateResult = await grpc.validateToken({
       accessToken,
+      audience: serviceId,
     });
 
     if (validateResult.valid === true) {
@@ -191,6 +192,7 @@ async function runTests() {
     // Test invalid token
     const invalidResult = await grpc.validateToken({
       accessToken: "invalid-token",
+      audience: serviceId,
     });
 
     if (invalidResult.valid === false) {

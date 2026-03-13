@@ -49,7 +49,8 @@
 ### 验证工具
 ```javascript
 // DevTools Console
-const card = document.querySelector('.stat-card');
+// 统计卡片没有单独的 .stat-card 类；请直接选中 Dashboard 上任一 stats Card 元素
+const card = document.querySelector('.grid .liquid-glass');
 const styles = getComputedStyle(card);
 
 // 验证 backdrop-filter
@@ -68,6 +69,9 @@ console.log(styles.borderRadius);
 // 验证阴影
 console.log(styles.boxShadow); 
 // 应包含 8px 和 32px 阴影
+
+// 悬停验证必须看 computed transform，不要只检查组件局部 Tailwind 类名；
+// 上浮效果由全局 .liquid-glass:hover 提供。
 ```
 
 ---

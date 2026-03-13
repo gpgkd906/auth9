@@ -97,6 +97,16 @@ async function testStats() {
 testStats().catch(console.error);
 ```
 
+### 验证注意事项
+- 使用 **本次场景新创建的 action.id** 查询统计，不要复用旧 action
+- 若脚本已执行过一次，先删除旧 Action 或重建新名字，避免 `last_24h_count` 混入历史数据
+- 若需要数据库校验，请同时检查：
+  ```sql
+  SELECT execution_count, error_count FROM actions WHERE id = '{action_id}';
+  SELECT COUNT(*) FROM action_executions WHERE action_id = '{action_id}';
+  ```
+  两者都应与本次执行次数一致（本场景为 10）
+
 ### 预期输出
 ```
 Execution count: 10

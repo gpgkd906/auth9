@@ -87,7 +87,8 @@ describe("Dashboard Index Page", () => {
         renderDashboardWithContext();
 
         await waitFor(() => {
-            expect(screen.getByText("Acme Corp")).toBeInTheDocument();
+            expect(screen.getByText("Dashboard")).toBeInTheDocument();
+            expect(screen.getByText("Welcome to Acme Corp. Here's an overview of your identity service.")).toBeInTheDocument();
             expect(screen.getByText("Total Tenants")).toBeInTheDocument();
             expect(screen.getByText("Active Users")).toBeInTheDocument();
             expect(screen.getByText("Services")).toBeInTheDocument();

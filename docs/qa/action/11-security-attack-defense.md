@@ -170,6 +170,12 @@ curl -X POST http://localhost:8080/api/v1/services/{service_id}/actions \
 
 ### 2. 跨 Service Action 访问
 
+> **步骤 0：确认测试主体不是平台管理员**
+>
+> `admin@auth9.local` 在本地 Docker 种子环境中是 **platform admin**，跨租户/跨 service 访问本来就允许。
+> 若使用该账号去做租户隔离验证，得到 `200 OK` 是预期行为，不是漏洞。
+> 本场景必须改用 **非 platform admin** 的 tenant 用户，只验证 tenant scope，而不是平台级特权。
+
 **测试方法**:
 ```bash
 # Service A 的管理员尝试访问 Service B 的 Action
@@ -178,6 +184,11 @@ curl -X GET http://localhost:8080/api/v1/services/{service_b_id}/actions/{action
 ```
 
 **预期**: HTTP 403 Forbidden 或 404 Not Found
+
+### 常见误报排查
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| 使用 `admin@auth9.local` 得到 `200 OK` | 该账号是 platform admin，具备跨租户管理权限 | 改用非平台管理员的 tenant 用户重新测试 |
 
 ### 3. 删除他人的 Action
 

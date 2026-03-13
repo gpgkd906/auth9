@@ -55,11 +55,12 @@ export default function DashboardIndex() {
   const data = useLoaderData<typeof loader>();
   const { activeTenant } = useOutletContext<OutletContext>();
   const tenantName = activeTenant?.tenant?.name || t("dashboardHome.tenantFallback");
+  const pageTitle = t("dashboard.fallbackTitle");
 
   return (
     <div className="space-y-6">
       <div className="animate-fade-in-up">
-        <h1 className="mb-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{tenantName}</h1>
+        <h1 className="mb-1 text-[28px] font-bold text-[var(--text-primary)] tracking-tight">{pageTitle}</h1>
         <p className="mb-6 text-[15px] text-[var(--text-secondary)]">
           {t("dashboardHome.welcome", { tenantName })}
         </p>
@@ -147,7 +148,7 @@ function StatsCard({
   };
 
   return (
-    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full p-5 shadow-[0_12px_36px_var(--glass-shadow-strong),inset_0_1px_0_var(--glass-highlight),inset_0_-1px_0_rgba(0,0,0,0.05)] hover:shadow-[0_16px_44px_var(--glass-shadow-strong),inset_0_1px_0_var(--glass-highlight),inset_0_-1px_0_rgba(0,0,0,0.05)]`}>
+    <Card className={`animate-fade-in-up ${delay} relative overflow-hidden h-full p-5 shadow-[0_12px_36px_var(--glass-shadow-strong),inset_0_1px_0_var(--glass-highlight),inset_0_-1px_0_rgba(0,0,0,0.05)] hover:-translate-y-[2px] hover:shadow-[0_16px_44px_var(--glass-shadow-strong),inset_0_1px_0_var(--glass-highlight),inset_0_-1px_0_rgba(0,0,0,0.05)]`}>
       <div className={`absolute inset-0 bg-gradient-to-br ${colorClasses[color]} pointer-events-none`} />
       <CardContent className="!p-0 relative h-full flex flex-col">
         <p className="text-[13px] font-medium text-[var(--text-secondary)]">{title}</p>

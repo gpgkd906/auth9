@@ -112,6 +112,8 @@ WHERE tu.user_id = '{user_id}' AND tu.tenant_id = '{tenant_id}';
 > **⚠️ 重要**: 在 Production 环境下，`validateToken` **必须传入 `audience` 参数**，
 > 否则会返回 `FAILED_PRECONDITION: audience is required in production`。
 > `audience` 值应等于 Token Exchange 时使用的 `service_id`（即 client_id，如 `auth9-demo`）。
+> 仓库内自测脚本 `scripts/qa/test-grpc-client.mjs` 也必须带上该参数；若脚本报
+> `FAILED_PRECONDITION`，先检查脚本是否传了 `audience`，不要直接提后端缺陷。
 
 ### 测试操作流程
 1. 验证 Token（**必须传入 audience**）：

@@ -73,6 +73,7 @@ services:
       KEYCLOAK_ADMIN_CLIENT_SECRET: dev-client-secret-change-in-production
       KEYCLOAK_ADMIN: admin
       KEYCLOAK_ADMIN_PASSWORD: admin
+      AUTH9_ADMIN_PASSWORD: ${AUTH9_ADMIN_PASSWORD:-SecurePass123!}
       KEYCLOAK_SSL_REQUIRED: none  # Set to "external" or "all" in production
       KEYCLOAK_WEBHOOK_SECRET: ${KEYCLOAK_WEBHOOK_SECRET:-dev-webhook-secret-change-in-production}
       # Settings encryption key for sensitive data (generate with: openssl rand -base64 32)

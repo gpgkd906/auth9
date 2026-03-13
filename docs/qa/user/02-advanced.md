@@ -55,11 +55,21 @@ curl -sf http://localhost:8081/health/ready
 mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
   "SELECT id, email, keycloak_id FROM users WHERE id = '{user_id}';"
 # 预期: keycloak_id 非空
+
+# 3. 确认 Keycloak 中实际存在该用户（避免仅 DB 有映射、底层认证主体已缺失）
+KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
+  -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
+  | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
+
+curl -sf "http://localhost:8081/admin/realms/auth9/users/{keycloak_id}" \
+  -H "Authorization: Bearer $KC_TOKEN" > /dev/null
+# 预期: HTTP 200
 ```
 
 ### 初始状态
 - 存在用户 id=`{user_id}`，mfa_enabled=false
 - **目标用户必须具备有效的底层认证主体映射**（`keycloak_id` 非空）
+- **目标用户必须真实存在于 Keycloak 中**；仅在 Auth9 数据库里手动插入 `keycloak_id` 不足以支持 MFA
 - 管理员已登录且知道自己的密码（用于二次确认）
 - **Token 类型要求**：Portal UI 自动使用 Tenant Access Token；手动 API 测试时 **必须** 使用 Tenant Access Token（通过 `node scripts/qa/gen-access-token.js` 生成）。Identity Token 仅允许租户选择/exchange 操作，对此端点会返回 403。
 
@@ -84,6 +94,7 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 -e \
 |------|------|----------|
 | 对话框显示错误信息 | 管理员密码输入错误 | 检查输入的密码是否为当前登录管理员的密码（即 **Keycloak admin 密码**，默认 `SecurePass123!`） |
 | 对话框显示 "not found" | 目标用户无 Keycloak 账户 | 确认用户是通过正常注册流程创建的，非直接插入 DB |
+| 数据库里有 `keycloak_id`，但仍然 "not found" | Keycloak 侧真实用户已被删除，DB 映射陈旧 | 重新通过正常注册/创建流程生成用户，勿手工插入测试数据 |
 | 对话框关闭但状态未变 | 页面重新加载延迟 | 等待 1-2 秒或手动刷新页面后检查 |
 | 无任何响应 | accessToken 缺失（session 过期） | 重新登录后再试 |
 | API 返回 403 "Identity token is only allowed..." | 手动 API 测试使用了 Identity Token | **必须使用 Tenant Access Token**（`node scripts/qa/gen-access-token.js` 生成） |

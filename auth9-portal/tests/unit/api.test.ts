@@ -231,7 +231,7 @@ describe('API Service', () => {
         expect.stringContaining('/api/v1/users'),
         expect.objectContaining({
           method: 'POST',
-          body: JSON.stringify({ email: input.email, display_name: input.display_name, password: input.password }),
+          body: JSON.stringify(input),
         })
       );
     });

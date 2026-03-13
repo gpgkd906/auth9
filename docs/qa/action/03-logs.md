@@ -91,12 +91,12 @@ WHERE action_id = '{action_id}';
 
 ### 测试操作流程（API）
 ```bash
-# 查询最近 50 条日志
-curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?limit=50 \
+# 查询最近 50 条日志（当前实现使用 action_id 查询参数，而非 /actions/{action_id}/logs 路由）
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?action_id={action_id}&limit=50" \
   -H "Authorization: Bearer $TOKEN"
 
 # 分页查询
-curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?limit=10\&offset=10 \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?action_id={action_id}&limit=10&offset=10" \
   -H "Authorization: Bearer $TOKEN"
 ```
 
@@ -112,7 +112,7 @@ curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs
 
 ### 预期结果（API）
 - HTTP 200 OK
-- 返回日志数组，包含完整字段：
+- 返回 `PaginatedResponse`，分页字段位于 `pagination` 对象中：
   ```json
   {
     "data": [
@@ -128,8 +128,12 @@ curl http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs
         "executed_at": "2026-02-12T10:30:00Z"
       }
     ],
-    "total": 20,
-    "has_more": false
+    "pagination": {
+      "page": 1,
+      "per_page": 50,
+      "total": 20,
+      "total_pages": 1
+    }
   }
   ```
 
@@ -159,13 +163,19 @@ LIMIT 10;
 ### 测试操作流程（API）
 ```bash
 # 查询所有成功的执行
-curl "http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?success=true&limit=50" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?action_id={action_id}&success=true&limit=50" \
   -H "Authorization: Bearer $TOKEN"
 
 # 查询所有失败的执行
-curl "http://localhost:8080/api/v1/services/{service_id}/actions/{action_id}/logs?success=false&limit=50" \
+curl "http://localhost:8080/api/v1/services/{service_id}/actions/logs?action_id={action_id}&success=false&limit=50" \
   -H "Authorization: Bearer $TOKEN"
 ```
+
+### 常见误报排查
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| `404 Not Found` on `/actions/{action_id}/logs` | 误用了旧路由格式 | 改用 `/actions/logs?action_id={action_id}` |
+| 断言 `total/has_more` 失败 | 当前实现返回 `pagination` 对象 | 校验 `pagination.total` / `pagination.total_pages` |
 
 ### 预期结果
 - 仅返回符合 success 参数的日志

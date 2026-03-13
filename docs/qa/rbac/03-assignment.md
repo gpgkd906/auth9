@@ -87,6 +87,9 @@ SELECT COUNT(*) FROM role_permissions WHERE role_id = '{role_id}' AND permission
 - 存在角色 `{role_id}`
 - 用户尚未拥有该角色
 
+> 本地 `./scripts/reset-docker.sh` 的默认种子数据只保证存在 `Auth9 Admin Portal` 的 `admin` 角色。
+> `Auth9 Demo Service` 并不会默认带出 `Content Editor` 等业务角色。若要验证该类场景，需先在目标服务中手动创建对应角色；否则可改用已存在的 `admin` 角色验证分配流程本身。
+
 ### 目的
 验证用户-角色分配功能
 
