@@ -38,20 +38,22 @@
 
 ### 测试操作流程
 1. 在租户详情页进入「Enterprise SSO」
-2. 点击「Create Connector」并填写：
+2. 确认「Provider Type」控件使用项目统一 Selector 组件，而非浏览器原生 `<select>`
+3. 点击「Create Connector」并填写：
    - Alias：`{connector_alias}`
    - Provider Type：`saml`
    - Domains：`{corp_domain}`
-   - Entity ID：`{entity_id}`
-   - SSO URL：`{sso_url}`
-   - Certificate：`{certificate}`
-3. 点击「Create Connector」提交
-4. 可选：在 `http://localhost:3002/dashboard` 的「Enterprise SSO QA Panel」执行同等操作（Create SAML Connector）
+   - SAML Entity ID：`{entity_id}`
+   - SAML SSO URL：`{sso_url}`
+   - SAML 签名证书：`{certificate}`
+4. 点击「Create Connector」提交
+5. 可选：在 `http://localhost:3002/dashboard` 的「Enterprise SSO QA Panel」执行同等操作（Create SAML Connector）
 
 ### 预期结果
 - 页面提示创建成功
 - 连接器列表出现新记录
 - 展示 provider type 为 `SAML`，域名包含 `{corp_domain}`
+- 「Provider Type」切换为 `saml` 时，仅显示 SAML 字段组，不显示 OIDC 字段组
 
 ### 预期数据状态
 ```sql
@@ -77,7 +79,10 @@ WHERE domain = '{corp_domain}';
 验证 OIDC 连接器字段校验与创建
 
 ### 测试操作流程
-1. 调用 demo 代理创建接口（推荐）：
+1. 在租户详情页进入「Enterprise SSO」
+2. 将「Provider Type」切换为 `oidc`
+3. 确认页面显示 `OIDC Client ID`、`OIDC Client Secret`、`OIDC Authorization URL`、`OIDC Token URL`
+4. 调用 demo 代理创建接口（推荐）：
 ```bash
 curl -X POST 'http://localhost:3002/demo/enterprise/connectors' \
   -H 'Content-Type: application/json' \
@@ -96,7 +101,7 @@ curl -X POST 'http://localhost:3002/demo/enterprise/connectors' \
     }
   }'
 ```
-2. 或直连 core 接口：
+5. 或直连 core 接口：
 ```bash
 curl -X POST 'http://localhost:8080/api/v1/tenants/{tenant_id}/sso/connectors' \
   -H 'Authorization: Bearer {tenant_access_token}' \
@@ -115,12 +120,13 @@ curl -X POST 'http://localhost:8080/api/v1/tenants/{tenant_id}/sso/connectors' \
     }
   }'
 ```
-3. 查询连接器列表确认返回
+6. 查询连接器列表确认返回
 
 ### 预期结果
 - HTTP 状态码 `200`
 - 返回的 `data.alias` 为 `{oidc_alias}`
 - 可在列表中看到 OIDC 连接器
+- Portal 表单切换到 `oidc` 后，不再展示 `SAML Entity ID` / `SAML SSO URL` / `Certificate`
 
 ### 预期数据状态
 ```sql

@@ -73,16 +73,17 @@
 
 ### 测试操作流程
 1. 访问 `/dashboard/tenants/:tenantId/sso`。
-2. 选择 Provider Type = SAML，验证展示的字段。
-3. 切换为 OIDC，验证字段变化。
-4. 检查已配置连接器的列表展示。
+2. 观察 Provider Type 控件外观，确认其为项目统一 Select 组件。
+3. 选择 Provider Type = SAML，验证展示的字段。
+4. 切换为 OIDC，验证字段变化。
+5. 检查已配置连接器的列表展示。
 
 ### 预期视觉效果
-- **Provider Type Select**: 顶部 Select 组件（SAML / OIDC），`border-radius: 12px`。
-- **SAML 字段**: Entity ID + SSO URL + Certificate（Textarea），`grid-cols-1 md:grid-cols-2`。
-- **OIDC 字段**: Client ID + Client Secret + Discovery URL + Authorization URL + Token URL，`grid-cols-1 md:grid-cols-2`。
+- **Provider Type Select**: 顶部 Select 组件（SAML / OIDC），Trigger 高度 40px、圆角 10px，样式与 Portal 其他选择器一致。
+- **SAML 字段**: `SAML Entity ID` + `SAML SSO URL` + `SAML 签名证书`，布局为 `grid-cols-1 md:grid-cols-2`，证书输入与其他 Input 保持统一表单风格。
+- **OIDC 字段**: `OIDC Client ID` + `OIDC Client Secret` + `OIDC Authorization URL` + `OIDC Token URL`，`grid-cols-1 md:grid-cols-2`。
 - **字段切换**: 类型更改时字段区域平滑过渡（无布局跳动）。
-- **Certificate Textarea**: 较高的最小高度（`min-h-[120px]`），`font-mono` 等宽字体。
+- **下拉面板**: glass/popover 风格，选中项带勾选反馈，不出现浏览器原生 `<option>` 样式。
 - **连接器列表**:
   - 每项: Card 样式，左侧提供商图标/名称 + 类型 Badge。
   - Switch: 启用/禁用切换。

@@ -374,6 +374,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-14 | 5.5.2 | **Portal Selector 组件替换文档同步**：更新 `rbac/02-role.md` 与 `identity-provider/03-tenant-enterprise-sso-connectors.md`，补充 Roles 父角色选择器与 Tenant SSO `Provider Type` 已切换为项目统一 Select 组件的验证要点；同步更新 UI/UX 文档 `18-roles-abac-pages.md`、`21-tenant-detail-pages.md` 的下拉控件样式与条件字段说明；QA 文档总数与场景数不变（97/459） |
 | 2026-03-14 | 5.5.1 | **租户级恶意 IP 黑名单文档同步**：新增 `tenant/05-security-malicious-ip-blacklist.md`，覆盖租户详情页入口可见性、租户级黑名单配置、非法 IP 拒绝、跨租户隔离、平台级优先；同步更新 `session/04-boundary.md` 对可疑 IP 告警来源的说明，并为 `security/authorization/01-tenant-isolation.md` 补充租户级黑名单隔离场景；共 97 个文档 459 个场景 |
 | 2026-03-12 | 5.5.0 | **Landing 公共页面 + 语言切换器 DropdownMenu 重构**：新增 `auth/14-landing-public-pages.md`（5 场景），覆盖 `/privacy`、`/terms`、`/docs` 页面入口可见性、内容完整性、三语翻译；跨文档影响：更新 UIUX `12-i18n-localization.md`（语言切换器从 `<select>` 改为 DropdownMenu 描述）、`13-landing-page-interactions.md`（补充 Footer 链接说明）、`14-global-controls-placement.md`（更新 LanguageSwitcher 实现描述）；新增 UIUX `23-public-pages-layout.md`（5 场景）覆盖 PublicPageLayout 布局、prose-glass 排版、Docs 卡片网格；共 96 个文档 454 个场景 |
 | 2026-03-07 | 5.4.1 | **i18n 三语扩展 cross-doc 同步**：更新 `auth/01-oidc-login.md`、`passkeys/02-passkey-auth.md`、`auth/12-enterprise-sso-ui-regression.md` 的语言说明，从双语扩展为三语（追加 `ja`） |

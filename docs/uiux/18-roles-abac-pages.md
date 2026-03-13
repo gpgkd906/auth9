@@ -35,14 +35,17 @@
 ### 测试操作流程
 1. 点击"Create Role"按钮，打开创建 Dialog。
 2. 检查 Dialog 的背景模糊、圆角、阴影。
-3. 填写表单并验证 Parent Role 下拉菜单的样式。
+3. 检查 Parent Role 控件是否为项目统一 Selector 组件。
+4. 展开 Parent Role 下拉菜单，检查选项面板样式与选中态。
+5. 打开某个既有角色的编辑 Dialog，验证 Parent Role 默认值与当前继承关系一致。
 4. 在移动端验证 Dialog 宽度自适应。
 
 ### 预期视觉效果
 - **Dialog 背景**: `backdrop-filter: blur(24px)`，遮罩层 `rgba(0, 0, 0, 0.5)` 半透明。
 - **Dialog 容器**: `border-radius: 20px`，`--glass-bg` 背景，最大宽度 `max-w-lg`（512px）。
-- **表单字段**: Name（Input）、Description（Textarea）、Parent Role（Select），间距 `space-y-4`。
-- **Select 下拉**: `border-radius: 12px`，下拉项 `rounded-[10px]`（small elements），排除当前角色选项。
+- **表单字段**: Name（Input）、Description（Input）、Parent Role（Select），间距 `space-y-4`。
+- **Select Trigger**: 高度 40px（`h-10`），圆角 10px，边框/背景与项目 Select 风格一致。
+- **Select 下拉**: Popover 面板使用 glass 背景与 `rounded-[14px]`；下拉项 `rounded-[8px]`，选中态带勾选图标；编辑场景中排除当前角色自身。
 - **底部按钮**: Cancel（`variant="outline"`）+ Create（`variant="default"`），`gap-3`（12px），右对齐。
 - **移动端**: Dialog 宽度 `calc(100% - 32px)`，底部按钮 `flex-col-reverse` 堆叠。
 
