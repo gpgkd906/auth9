@@ -30,6 +30,7 @@ use crate::keycloak::KeycloakClient;
 use crate::repository::{
     action::ActionRepositoryImpl, audit::AuditRepositoryImpl, invitation::InvitationRepositoryImpl,
     linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
+    malicious_ip_blacklist::MaliciousIpBlacklistRepositoryImpl,
     password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
     scim_group_mapping::ScimGroupRoleMappingRepositoryImpl,
     scim_log::ScimProvisioningLogRepositoryImpl, scim_token::ScimTokenRepositoryImpl,
@@ -139,6 +140,7 @@ pub struct AppState {
         SecurityDetectionService<
             LoginEventRepositoryImpl,
             SecurityAlertRepositoryImpl,
+            MaliciousIpBlacklistRepositoryImpl,
             WebhookRepositoryImpl,
         >,
     >,
@@ -369,6 +371,7 @@ impl HasWebhooks for AppState {
 impl HasSecurityAlerts for AppState {
     type SecurityLoginEventRepo = LoginEventRepositoryImpl;
     type SecurityAlertRepo = SecurityAlertRepositoryImpl;
+    type SecurityMaliciousIpBlacklistRepo = MaliciousIpBlacklistRepositoryImpl;
     type SecurityWebhookRepo = WebhookRepositoryImpl;
 
     fn security_detection_service(
@@ -376,6 +379,7 @@ impl HasSecurityAlerts for AppState {
     ) -> &SecurityDetectionService<
         Self::SecurityLoginEventRepo,
         Self::SecurityAlertRepo,
+        Self::SecurityMaliciousIpBlacklistRepo,
         Self::SecurityWebhookRepo,
     > {
         &self.security_detection_service
@@ -453,6 +457,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let rbac_repo = Arc::new(RbacRepositoryImpl::new(db_pool.clone()));
     let audit_repo = Arc::new(AuditRepositoryImpl::new(db_pool.clone()));
     let system_settings_repo = Arc::new(SystemSettingsRepositoryImpl::new(db_pool.clone()));
+    let malicious_ip_blacklist_repo =
+        Arc::new(MaliciousIpBlacklistRepositoryImpl::new(db_pool.clone()));
     let invitation_repo = Arc::new(InvitationRepositoryImpl::new(db_pool.clone()));
     // New repositories for 5 features
     let password_reset_repo = Arc::new(PasswordResetRepositoryImpl::new(db_pool.clone()));
@@ -578,6 +584,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create system settings service with Keycloak sync
     let system_settings_service = Arc::new(SystemSettingsService::with_sync_service(
         system_settings_repo.clone(),
+        malicious_ip_blacklist_repo.clone(),
         encryption_key,
         keycloak_sync_service.clone(),
     ));
@@ -662,9 +669,10 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 
     let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
 
-    let security_detection_service = Arc::new(SecurityDetectionService::new(
+    let security_detection_service = Arc::new(SecurityDetectionService::new_with_blacklist(
         login_event_repo,
         security_alert_repo,
+        malicious_ip_blacklist_repo,
         webhook_service.clone(),
         SecurityDetectionConfig::default(),
     ));

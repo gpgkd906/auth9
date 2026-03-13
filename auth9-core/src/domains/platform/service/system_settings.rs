@@ -3,24 +3,38 @@
 use crate::crypto::{decrypt, encrypt, EncryptionKey};
 use crate::domains::platform::service::KeycloakSyncService;
 use crate::error::{AppError, Result};
+use crate::models::common::StringUuid;
 use crate::models::email::EmailProviderConfig;
 use crate::models::system_settings::{
-    SettingCategory, SettingKey, SystemSettingResponse, SystemSettingRow, UpsertSystemSettingInput,
+    MaliciousIpBlacklistEntry, MaliciousIpBlacklistInput, SettingCategory, SettingKey,
+    SystemSettingResponse, SystemSettingRow, UpsertSystemSettingInput,
 };
-use crate::repository::SystemSettingsRepository;
+use crate::repository::{MaliciousIpBlacklistRepository, SystemSettingsRepository};
+use async_trait::async_trait;
 use std::sync::Arc;
+use validator::Validate;
 
 /// Service for managing system-wide settings
 pub struct SystemSettingsService<R: SystemSettingsRepository> {
     repo: Arc<R>,
+    malicious_ip_blacklist_repo: Arc<dyn MaliciousIpBlacklistRepository>,
     encryption_key: Option<EncryptionKey>,
     sync_service: Option<Arc<KeycloakSyncService>>,
 }
 
 impl<R: SystemSettingsRepository> SystemSettingsService<R> {
     pub fn new(repo: Arc<R>, encryption_key: Option<EncryptionKey>) -> Self {
+        Self::new_with_blacklist(repo, Arc::new(NoopMaliciousIpBlacklistRepository), encryption_key)
+    }
+
+    pub fn new_with_blacklist(
+        repo: Arc<R>,
+        malicious_ip_blacklist_repo: Arc<dyn MaliciousIpBlacklistRepository>,
+        encryption_key: Option<EncryptionKey>,
+    ) -> Self {
         Self {
             repo,
+            malicious_ip_blacklist_repo,
             encryption_key,
             sync_service: None,
         }
@@ -29,11 +43,13 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
     /// Create a new SystemSettingsService with Keycloak sync support
     pub fn with_sync_service(
         repo: Arc<R>,
+        malicious_ip_blacklist_repo: Arc<dyn MaliciousIpBlacklistRepository>,
         encryption_key: Option<EncryptionKey>,
         sync_service: Arc<KeycloakSyncService>,
     ) -> Self {
         Self {
             repo,
+            malicious_ip_blacklist_repo,
             encryption_key,
             sync_service: Some(sync_service),
         }
@@ -117,6 +133,49 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
                 .validate()
                 .map_err(|e| AppError::Validation(e.to_string())),
         }
+    }
+
+    pub async fn list_malicious_ip_blacklist(&self) -> Result<Vec<MaliciousIpBlacklistEntry>> {
+        self.malicious_ip_blacklist_repo.list().await
+    }
+
+    pub async fn update_malicious_ip_blacklist(
+        &self,
+        entries: Vec<MaliciousIpBlacklistInput>,
+        actor_id: Option<StringUuid>,
+    ) -> Result<Vec<MaliciousIpBlacklistEntry>> {
+        let mut normalized = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+
+        for entry in entries {
+            entry
+                .validate()
+                .map_err(|e| AppError::Validation(e.to_string()))?;
+
+            let ip = normalize_ip(&entry.ip_address)?;
+            if seen.insert(ip.clone()) {
+                normalized.push(MaliciousIpBlacklistEntry {
+                    id: StringUuid::new_v4(),
+                    ip_address: ip,
+                    reason: entry.reason.map(|reason| reason.trim().to_string()),
+                    created_by: actor_id,
+                    created_at: chrono::Utc::now(),
+                    updated_at: chrono::Utc::now(),
+                });
+            }
+        }
+
+        self.malicious_ip_blacklist_repo
+            .replace_all(&normalized, actor_id)
+            .await
+    }
+
+    pub async fn find_blacklisted_ip(
+        &self,
+        ip_address: &str,
+    ) -> Result<Option<MaliciousIpBlacklistEntry>> {
+        let normalized = normalize_ip(ip_address)?;
+        self.malicious_ip_blacklist_repo.find_by_ip(&normalized).await
     }
 
     // ========================================================================
@@ -240,10 +299,40 @@ impl<R: SystemSettingsRepository> SystemSettingsService<R> {
     }
 }
 
+fn normalize_ip(ip_address: &str) -> Result<String> {
+    let trimmed = ip_address.trim();
+    let parsed = trimmed
+        .parse::<std::net::IpAddr>()
+        .map_err(|_| AppError::Validation(format!("Invalid IP address: {}", trimmed)))?;
+    Ok(parsed.to_string())
+}
+
+struct NoopMaliciousIpBlacklistRepository;
+
+#[async_trait]
+impl MaliciousIpBlacklistRepository for NoopMaliciousIpBlacklistRepository {
+    async fn list(&self) -> Result<Vec<MaliciousIpBlacklistEntry>> {
+        Ok(vec![])
+    }
+
+    async fn replace_all(
+        &self,
+        entries: &[MaliciousIpBlacklistEntry],
+        _created_by: Option<StringUuid>,
+    ) -> Result<Vec<MaliciousIpBlacklistEntry>> {
+        Ok(entries.to_vec())
+    }
+
+    async fn find_by_ip(&self, _ip_address: &str) -> Result<Option<MaliciousIpBlacklistEntry>> {
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::models::email::SmtpConfig;
+    use crate::repository::malicious_ip_blacklist::MockMaliciousIpBlacklistRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
     use mockall::predicate::*;
 
@@ -263,6 +352,45 @@ mod tests {
 
         let config = service.get_email_config().await.unwrap();
         assert!(matches!(config, EmailProviderConfig::None));
+    }
+
+    #[tokio::test]
+    async fn test_update_malicious_ip_blacklist_normalizes_and_deduplicates() {
+        let mock = MockSystemSettingsRepository::new();
+        let mut blacklist = MockMaliciousIpBlacklistRepository::new();
+
+        blacklist.expect_replace_all().returning(|entries, created_by| {
+            assert_eq!(created_by, Some(StringUuid::nil()));
+            assert_eq!(entries.len(), 1);
+            assert_eq!(entries[0].ip_address, "203.0.113.10");
+            Ok(entries.to_vec())
+        });
+
+        let service = SystemSettingsService::new_with_blacklist(
+            Arc::new(mock),
+            Arc::new(blacklist),
+            None,
+        );
+
+        let entries = service
+            .update_malicious_ip_blacklist(
+                vec![
+                    MaliciousIpBlacklistInput {
+                        ip_address: " 203.0.113.10 ".to_string(),
+                        reason: None,
+                    },
+                    MaliciousIpBlacklistInput {
+                        ip_address: "203.0.113.10".to_string(),
+                        reason: Some("duplicate".to_string()),
+                    },
+                ],
+                Some(StringUuid::nil()),
+            )
+            .await
+            .unwrap();
+
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].ip_address, "203.0.113.10");
     }
 
     #[tokio::test]

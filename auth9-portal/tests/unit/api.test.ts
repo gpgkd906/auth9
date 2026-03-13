@@ -808,6 +808,39 @@ describe('API Service', () => {
       );
       expect(result.success).toBe(true);
     });
+
+    it('should get malicious ip blacklist', async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: 'entry-1', ip_address: '203.0.113.10', created_at: '', updated_at: '' }] }),
+      });
+
+      const result = await systemApi.getMaliciousIpBlacklist();
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/security/malicious-ip-blacklist'),
+        expect.objectContaining({ headers: expect.any(Object) })
+      );
+      expect(result.data[0].ip_address).toBe('203.0.113.10');
+    });
+
+    it('should update malicious ip blacklist', async () => {
+      const entries = [{ ip_address: '203.0.113.10' }];
+      mockFetch.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [] }),
+      });
+
+      await systemApi.updateMaliciousIpBlacklist(entries);
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        expect.stringContaining('/api/v1/system/security/malicious-ip-blacklist'),
+        expect.objectContaining({
+          method: 'PUT',
+          body: JSON.stringify({ entries }),
+        })
+      );
+    });
   });
 
   describe('invitationApi', () => {

@@ -34,6 +34,11 @@ where
             post(platform_api::system_settings::send_test_email::<S>),
         )
         .route(
+            "/api/v1/system/security/malicious-ip-blacklist",
+            get(platform_api::system_settings::get_malicious_ip_blacklist::<S>)
+                .put(platform_api::system_settings::update_malicious_ip_blacklist::<S>),
+        )
+        .route(
             "/api/v1/system/email-templates",
             get(platform_api::email_template::list_templates::<S>),
         )

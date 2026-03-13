@@ -35,7 +35,9 @@ pub use auth9_core::models::service::{
     Client, CreateServiceInput, Service, ServiceStatus, UpdateServiceInput,
 };
 pub use auth9_core::models::session::{CreateSessionInput, Session};
-pub use auth9_core::models::system_settings::{SystemSettingRow, UpsertSystemSettingInput};
+pub use auth9_core::models::system_settings::{
+    MaliciousIpBlacklistEntry, SystemSettingRow, UpsertSystemSettingInput,
+};
 pub use auth9_core::models::tenant::{
     CreateTenantInput, Tenant, TenantSettings, TenantStatus, UpdateTenantInput,
 };
@@ -48,9 +50,10 @@ use auth9_core::repository::audit::{
 };
 pub use auth9_core::repository::{
     ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
-    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceBrandingRepository,
-    ServiceRepository, SessionRepository, SystemSettingsRepository, TenantRepository,
-    UserRepository, WebAuthnRepository, WebhookRepository,
+    MaliciousIpBlacklistRepository, PasswordResetRepository, RbacRepository,
+    SecurityAlertRepository, ServiceBrandingRepository, ServiceRepository, SessionRepository,
+    SystemSettingsRepository, TenantRepository, UserRepository, WebAuthnRepository,
+    WebhookRepository,
 };
 use chrono::{DateTime, Utc};
 use std::collections::HashMap;
@@ -1536,6 +1539,56 @@ impl SystemSettingsRepository for TestSystemSettingsRepository {
         let mut settings = self.settings.write().await;
         settings.retain(|s| !(s.category == category && s.setting_key == key));
         Ok(())
+    }
+}
+
+pub struct TestMaliciousIpBlacklistRepository {
+    entries: RwLock<Vec<MaliciousIpBlacklistEntry>>,
+}
+
+impl TestMaliciousIpBlacklistRepository {
+    pub fn new() -> Self {
+        Self {
+            entries: RwLock::new(vec![]),
+        }
+    }
+
+    #[allow(dead_code)]
+    pub async fn add_entry(&self, entry: MaliciousIpBlacklistEntry) {
+        self.entries.write().await.push(entry);
+    }
+}
+
+impl Default for TestMaliciousIpBlacklistRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl MaliciousIpBlacklistRepository for TestMaliciousIpBlacklistRepository {
+    async fn list(&self) -> Result<Vec<MaliciousIpBlacklistEntry>> {
+        Ok(self.entries.read().await.clone())
+    }
+
+    async fn replace_all(
+        &self,
+        entries: &[MaliciousIpBlacklistEntry],
+        _created_by: Option<StringUuid>,
+    ) -> Result<Vec<MaliciousIpBlacklistEntry>> {
+        let mut stored = self.entries.write().await;
+        *stored = entries.to_vec();
+        Ok(stored.clone())
+    }
+
+    async fn find_by_ip(&self, ip_address: &str) -> Result<Option<MaliciousIpBlacklistEntry>> {
+        Ok(self
+            .entries
+            .read()
+            .await
+            .iter()
+            .find(|entry| entry.ip_address == ip_address)
+            .cloned())
     }
 }
 

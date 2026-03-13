@@ -11,7 +11,14 @@ import { useI18n } from "~/i18n";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { translate } from "~/i18n/translate";
 import { mapApiError } from "~/lib/error-messages";
-import { passwordApi, tenantApi, type PasswordPolicy, type Tenant } from "~/services/api";
+import {
+  passwordApi,
+  systemApi,
+  tenantApi,
+  type MaliciousIpBlacklistEntry,
+  type PasswordPolicy,
+  type Tenant,
+} from "~/services/api";
 import { getAccessToken } from "~/services/session.server";
 import { resolveLocale } from "~/services/locale.server";
 
@@ -38,6 +45,8 @@ export async function loader({ request }: LoaderFunctionArgs) {
 
   let policy: PasswordPolicy | null = null;
   let policyError: string | null = null;
+  let blacklist: MaliciousIpBlacklistEntry[] = [];
+  let blacklistError: string | null = null;
 
   if (tenantId) {
     try {
@@ -48,7 +57,22 @@ export async function loader({ request }: LoaderFunctionArgs) {
     }
   }
 
-  return { tenants, tenantsError, selectedTenantId: tenantId || "", policy, policyError };
+  try {
+    const blacklistResponse = await systemApi.getMaliciousIpBlacklist(accessToken || undefined);
+    blacklist = blacklistResponse.data;
+  } catch (error) {
+    blacklistError = error instanceof Error ? error.message : translate(locale, "settings.securitySettings.loadBlacklistFailed");
+  }
+
+  return {
+    tenants,
+    tenantsError,
+    selectedTenantId: tenantId || "",
+    policy,
+    policyError,
+    blacklist,
+    blacklistError,
+  };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -75,6 +99,18 @@ export async function action({ request }: ActionFunctionArgs) {
       await passwordApi.updatePasswordPolicy(tenantId, policy, accessToken || undefined);
       return { success: true, message: translate(locale, "settings.securitySettings.updated") };
     }
+
+    if (intent === "update_malicious_ip_blacklist") {
+      const raw = (formData.get("maliciousIps") as string) || "";
+      const entries = raw
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((ip_address) => ({ ip_address }));
+
+      await systemApi.updateMaliciousIpBlacklist(entries, accessToken || undefined);
+      return { success: true, message: translate(locale, "settings.securitySettings.blacklistUpdated") };
+    }
   } catch (error) {
     const message = mapApiError(error, locale);
     return { error: message };
@@ -84,7 +120,7 @@ export async function action({ request }: ActionFunctionArgs) {
 }
 
 export default function SecuritySettingsPage() {
-  const { tenants, tenantsError, selectedTenantId, policy: loadedPolicy, policyError } = useLoaderData<typeof loader>();
+  const { tenants, tenantsError, selectedTenantId, policy: loadedPolicy, policyError, blacklist, blacklistError } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const policyFetcher = useFetcher<typeof loader>();
@@ -92,6 +128,7 @@ export default function SecuritySettingsPage() {
 
   const [selectedTenant, setSelectedTenant] = useState<string>(selectedTenantId);
   const [policy, setPolicy] = useState<PasswordPolicy | null>(loadedPolicy);
+  const [blacklistText, setBlacklistText] = useState<string>(blacklist.map((entry) => entry.ip_address).join("\n"));
 
   const isSubmitting = navigation.state === "submitting";
   const loadingPolicy = policyFetcher.state === "loading";
@@ -111,8 +148,46 @@ export default function SecuritySettingsPage() {
     }
   }, [policyFetcher.data]);
 
+  useEffect(() => {
+    setBlacklistText(blacklist.map((entry) => entry.ip_address).join("\n"));
+  }, [blacklist]);
+
   return (
     <div className="space-y-6">
+      <Card>
+        <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
+          <SettingsSectionHeading
+            title={t("settings.securitySettings.blacklistTitle")}
+            description={t("settings.securitySettings.blacklistDescription")}
+          />
+        </CardHeader>
+        <CardContent>
+          <Form method="post" className="space-y-4">
+            <input type="hidden" name="intent" value="update_malicious_ip_blacklist" />
+            <div className="space-y-2">
+              <Label htmlFor="maliciousIps">{t("settings.securitySettings.blacklistInput")}</Label>
+              <textarea
+                id="maliciousIps"
+                name="maliciousIps"
+                value={blacklistText}
+                onChange={(event) => setBlacklistText(event.target.value)}
+                className="min-h-40 w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+                placeholder={t("settings.securitySettings.blacklistPlaceholder")}
+              />
+              <p className="text-xs text-[var(--text-secondary)]">{t("settings.securitySettings.blacklistHint")}</p>
+            </div>
+
+            {blacklistError && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{blacklistError}</div>}
+            {actionData?.error && <div className="rounded-md bg-red-50 p-3 text-sm text-[var(--accent-red)]">{actionData.error}</div>}
+            {actionData?.success && <div className="rounded-md bg-[var(--accent-green)]/10 p-3 text-sm text-[var(--accent-green)]">{actionData.message}</div>}
+
+            <div className="sticky bottom-0 z-10 -mb-4 flex flex-wrap items-center gap-3 border-t bg-[var(--bg-secondary)] pb-4 pt-4 md:static">
+              <Button type="submit" disabled={isSubmitting}>{isSubmitting ? t("settings.securitySettings.saving") : t("settings.securitySettings.saveBlacklist")}</Button>
+            </div>
+          </Form>
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader className="p-5 pb-5 sm:p-6 sm:pb-6">
           <SettingsSectionHeading

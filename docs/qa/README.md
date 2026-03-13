@@ -106,12 +106,13 @@
 | [auth/14-landing-public-pages.md](./auth/14-landing-public-pages.md) | Landing 公共页面（Privacy / Terms / Docs）入口、内容、三语翻译 | 5 |
 | [auth/15-dark-mode-auth-contrast.md](./auth/15-dark-mode-auth-contrast.md) | 独立认证页与 Auth9 品牌认证页的 Dark Mode 对比度回归（Portal + Keycloak Theme） | 5 |
 
-### 系统设置 (3 个文档, 15 个场景)
+### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [settings/01-branding.md](./settings/01-branding.md) | 登录页品牌设置 | 5 |
 | [settings/02-email-provider.md](./settings/02-email-provider.md) | 邮件服务商配置 | 5 |
 | [settings/03-email-templates.md](./settings/03-email-templates.md) | 邮件模板管理 | 5 |
+| [settings/04-security-malicious-ip-blacklist.md](./settings/04-security-malicious-ip-blacklist.md) | 平台级恶意 IP 黑名单配置、校验与 suspicious_ip 告警联动 | 5 |
 
 ### 身份提供商 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
@@ -202,7 +203,7 @@
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
 | 认证流程 | 15 | 70 |
-| 系统设置 | 3 | 15 |
+| 系统设置 | 4 | 20 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
 | 分析与统计 | 2 | 10 |
@@ -211,7 +212,13 @@
 | SDK | 6 | 30 |
 | 集成测试 | 11 | 54 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **97** | **459** |
+| **总计** | **98** | **464** |
+
+### 文档对齐记录
+
+| 日期 | 版本 | 变更 |
+|------|------|------|
+| 2026-03-14 | 4.3.0 | 新增平台级恶意 IP 黑名单 QA 文档（`settings/04`），并同步修正 `session/04` 对可疑 IP 告警来源的说明，覆盖黑名单配置、输入校验、`suspicious_ip`/`critical` 告警联动 |
 
 ---
 

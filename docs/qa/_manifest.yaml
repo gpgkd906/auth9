@@ -656,6 +656,14 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-06
+  - id: settings/04-security-malicious-ip-blacklist
+    path: docs/qa/settings/04-security-malicious-ip-blacklist.md
+    module: settings
+    scenarios: 5
+    has_ui_flow: true
+    has_entry_visibility: true
+    has_checklist: true
+    last_reviewed: 2026-03-14
   - id: tenant/01-crud
     path: docs/qa/tenant/01-crud.md
     module: tenant

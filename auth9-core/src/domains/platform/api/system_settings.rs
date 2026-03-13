@@ -5,7 +5,11 @@ use crate::http_support::{
     require_platform_admin_with_db, write_audit_log_generic, SuccessResponse,
 };
 use crate::middleware::auth::AuthUser;
+use crate::models::common::StringUuid;
 use crate::models::email::EmailProviderConfig;
+use crate::models::system_settings::{
+    MaliciousIpBlacklistEntry, UpdateMaliciousIpBlacklistRequest,
+};
 use crate::state::{HasServices, HasSystemSettings};
 use axum::{
     extract::State,
@@ -34,6 +38,62 @@ pub struct TestEmailResponse {
 #[derive(Debug, Clone, Deserialize, ToSchema)]
 pub struct SendTestEmailRequest {
     pub to_email: String,
+}
+
+#[utoipa::path(
+    get,
+    path = "/api/v1/system/security/malicious-ip-blacklist",
+    tag = "Platform",
+    responses(
+        (status = 200, description = "Success", body = [MaliciousIpBlacklistEntry])
+    )
+)]
+pub async fn get_malicious_ip_blacklist<S: HasSystemSettings + HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+) -> Result<impl IntoResponse> {
+    require_platform_admin_with_db(&state, &auth).await?;
+    let entries = state
+        .system_settings_service()
+        .list_malicious_ip_blacklist()
+        .await?;
+    Ok(Json(SuccessResponse::new(entries)))
+}
+
+#[utoipa::path(
+    put,
+    path = "/api/v1/system/security/malicious-ip-blacklist",
+    tag = "Platform",
+    request_body = UpdateMaliciousIpBlacklistRequest,
+    responses(
+        (status = 200, description = "Success", body = [MaliciousIpBlacklistEntry])
+    )
+)]
+pub async fn update_malicious_ip_blacklist<S: HasSystemSettings + HasServices>(
+    State(state): State<S>,
+    auth: AuthUser,
+    headers: HeaderMap,
+    Json(request): Json<UpdateMaliciousIpBlacklistRequest>,
+) -> Result<impl IntoResponse> {
+    require_platform_admin_with_db(&state, &auth).await?;
+
+    let entries = state
+        .system_settings_service()
+        .update_malicious_ip_blacklist(request.entries, Some(StringUuid(auth.user_id)))
+        .await?;
+
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "system.security.malicious_ip_blacklist.update",
+        "system_setting",
+        None,
+        None,
+        serde_json::to_value(&entries).ok(),
+    )
+    .await;
+
+    Ok(Json(SuccessResponse::new(entries)))
 }
 
 /// Get email provider settings (with sensitive data masked)

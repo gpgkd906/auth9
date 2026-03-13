@@ -25,9 +25,9 @@ use crate::repository::scim_log::ScimProvisioningLogRepository;
 use crate::repository::scim_token::ScimTokenRepository;
 use crate::repository::{
     ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
-    PasswordResetRepository, RbacRepository, SecurityAlertRepository, ServiceBrandingRepository,
-    ServiceRepository, SessionRepository, SystemSettingsRepository, TenantRepository,
-    UserRepository, WebhookRepository,
+    MaliciousIpBlacklistRepository, PasswordResetRepository, RbacRepository,
+    SecurityAlertRepository, ServiceBrandingRepository, ServiceRepository, SessionRepository,
+    SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
 };
 
 // ============================================================
@@ -257,6 +257,8 @@ pub trait HasSecurityAlerts: Clone + Send + Sync + 'static {
     type SecurityLoginEventRepo: LoginEventRepository;
     /// The security alert repository type
     type SecurityAlertRepo: SecurityAlertRepository;
+    /// The malicious IP blacklist repository type
+    type SecurityMaliciousIpBlacklistRepo: MaliciousIpBlacklistRepository;
     /// The webhook repository type
     type SecurityWebhookRepo: WebhookRepository;
 
@@ -266,6 +268,7 @@ pub trait HasSecurityAlerts: Clone + Send + Sync + 'static {
     ) -> &SecurityDetectionService<
         Self::SecurityLoginEventRepo,
         Self::SecurityAlertRepo,
+        Self::SecurityMaliciousIpBlacklistRepo,
         Self::SecurityWebhookRepo,
     >;
 

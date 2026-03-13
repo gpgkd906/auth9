@@ -8,10 +8,13 @@ use crate::models::analytics::{
 };
 use crate::models::common::StringUuid;
 use crate::repository::WebhookRepository;
-use crate::repository::{LoginEventRepository, SecurityAlertRepository};
+use crate::repository::{
+    LoginEventRepository, MaliciousIpBlacklistRepository, SecurityAlertRepository,
+};
 use chrono::{Duration, Utc};
 use std::collections::HashMap;
 use std::sync::Arc;
+use async_trait::async_trait;
 
 /// Configuration for security detection rules
 #[derive(Debug, Clone)]
@@ -56,26 +59,34 @@ impl Default for SecurityDetectionConfig {
 pub struct SecurityDetectionService<
     L: LoginEventRepository,
     S: SecurityAlertRepository,
+    B: MaliciousIpBlacklistRepository,
     W: WebhookRepository,
 > {
     login_event_repo: Arc<L>,
     security_alert_repo: Arc<S>,
+    malicious_ip_blacklist_repo: Arc<B>,
     webhook_service: Arc<WebhookService<W>>,
     config: SecurityDetectionConfig,
 }
 
-impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository + 'static>
-    SecurityDetectionService<L, S, W>
+impl<
+        L: LoginEventRepository,
+        S: SecurityAlertRepository,
+        B: MaliciousIpBlacklistRepository,
+        W: WebhookRepository + 'static,
+    > SecurityDetectionService<L, S, B, W>
 {
-    pub fn new(
+    pub fn new_with_blacklist(
         login_event_repo: Arc<L>,
         security_alert_repo: Arc<S>,
+        malicious_ip_blacklist_repo: Arc<B>,
         webhook_service: Arc<WebhookService<W>>,
         config: SecurityDetectionConfig,
     ) -> Self {
         Self {
             login_event_repo,
             security_alert_repo,
+            malicious_ip_blacklist_repo,
             webhook_service,
             config,
         }
@@ -90,6 +101,13 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
 
         // Check for brute force attacks (IP-level)
         if let Some(ip) = &event.ip_address {
+            if let Some(alert) = self
+                .check_ip_blacklist(ip, event.user_id, event.tenant_id)
+                .await?
+            {
+                alerts.push(alert);
+            }
+
             if let Some(alert) = self
                 .check_brute_force(ip, event.user_id, event.tenant_id)
                 .await?
@@ -180,6 +198,35 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
         }
 
         Ok(alerts)
+    }
+
+    async fn check_ip_blacklist(
+        &self,
+        ip_address: &str,
+        user_id: Option<StringUuid>,
+        tenant_id: Option<StringUuid>,
+    ) -> Result<Option<SecurityAlert>> {
+        let blacklisted = self.malicious_ip_blacklist_repo.find_by_ip(ip_address).await?;
+
+        if let Some(entry) = blacklisted {
+            let input = CreateSecurityAlertInput {
+                user_id,
+                tenant_id,
+                alert_type: SecurityAlertType::SuspiciousIp,
+                severity: AlertSeverity::Critical,
+                details: Some(serde_json::json!({
+                    "ip_address": entry.ip_address,
+                    "blacklist_reason": entry.reason,
+                    "detection_reason": "ip_blacklist",
+                })),
+            };
+
+            let alert = self.security_alert_repo.create(&input).await?;
+            metrics::counter!("auth9_security_alerts_total", "type" => "suspicious_ip", "severity" => "critical").increment(1);
+            return Ok(Some(alert));
+        }
+
+        Ok(None)
     }
 
     /// Check for brute force attack pattern
@@ -597,10 +644,54 @@ impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository +
     }
 }
 
+impl<L: LoginEventRepository, S: SecurityAlertRepository, W: WebhookRepository + 'static>
+    SecurityDetectionService<L, S, NoopMaliciousIpBlacklistRepository, W>
+{
+    pub fn new(
+        login_event_repo: Arc<L>,
+        security_alert_repo: Arc<S>,
+        webhook_service: Arc<WebhookService<W>>,
+        config: SecurityDetectionConfig,
+    ) -> Self {
+        Self::new_with_blacklist(
+            login_event_repo,
+            security_alert_repo,
+            Arc::new(NoopMaliciousIpBlacklistRepository),
+            webhook_service,
+            config,
+        )
+    }
+}
+
+struct NoopMaliciousIpBlacklistRepository;
+
+#[async_trait]
+impl MaliciousIpBlacklistRepository for NoopMaliciousIpBlacklistRepository {
+    async fn list(&self) -> Result<Vec<crate::models::system_settings::MaliciousIpBlacklistEntry>> {
+        Ok(vec![])
+    }
+
+    async fn replace_all(
+        &self,
+        entries: &[crate::models::system_settings::MaliciousIpBlacklistEntry],
+        _created_by: Option<StringUuid>,
+    ) -> Result<Vec<crate::models::system_settings::MaliciousIpBlacklistEntry>> {
+        Ok(entries.to_vec())
+    }
+
+    async fn find_by_ip(
+        &self,
+        _ip_address: &str,
+    ) -> Result<Option<crate::models::system_settings::MaliciousIpBlacklistEntry>> {
+        Ok(None)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::repository::login_event::MockLoginEventRepository;
+    use crate::repository::malicious_ip_blacklist::MockMaliciousIpBlacklistRepository;
     use crate::repository::security_alert::MockSecurityAlertRepository;
     use crate::repository::webhook::MockWebhookRepository;
     use mockall::predicate::*;
@@ -616,6 +707,90 @@ mod tests {
         assert_eq!(config.slow_brute_force_long_window_mins, 1440);
         assert_eq!(config.password_spray_threshold, 5);
         assert_eq!(config.impossible_travel_distance_km, 500.0);
+    }
+
+    #[tokio::test]
+    async fn test_analyze_login_event_blacklisted_ip_creates_critical_alert() {
+        let login_mock = MockLoginEventRepository::new();
+        let mut alert_mock = MockSecurityAlertRepository::new();
+        let mut blacklist_mock = MockMaliciousIpBlacklistRepository::new();
+        let mut webhook_mock = MockWebhookRepository::new();
+        let mut login_mock = login_mock;
+
+        login_mock
+            .expect_count_failed_by_ip()
+            .returning(|_, _| Ok(0));
+        login_mock
+            .expect_count_failed_by_ip_multi_user()
+            .returning(|_, _| Ok(0));
+        login_mock
+            .expect_count_failed_by_user()
+            .returning(|_, _| Ok(0));
+
+        blacklist_mock
+            .expect_find_by_ip()
+            .with(eq("203.0.113.10"))
+            .returning(|_| {
+                Ok(Some(crate::models::system_settings::MaliciousIpBlacklistEntry {
+                    id: StringUuid::new_v4(),
+                    ip_address: "203.0.113.10".to_string(),
+                    reason: Some("known_malicious".to_string()),
+                    created_by: None,
+                    created_at: Utc::now(),
+                    updated_at: Utc::now(),
+                }))
+            });
+
+        alert_mock.expect_create().returning(|input| {
+            assert_eq!(input.alert_type, SecurityAlertType::SuspiciousIp);
+            assert_eq!(input.severity, AlertSeverity::Critical);
+            assert_eq!(
+                input.details.as_ref().and_then(|d| d.get("detection_reason")).and_then(|v| v.as_str()),
+                Some("ip_blacklist")
+            );
+            Ok(SecurityAlert {
+                id: StringUuid::new_v4(),
+                user_id: input.user_id,
+                tenant_id: input.tenant_id,
+                alert_type: input.alert_type.clone(),
+                severity: input.severity.clone(),
+                details: input.details.clone(),
+                ..Default::default()
+            })
+        });
+
+        webhook_mock
+            .expect_list_enabled_for_event()
+            .returning(|_| Ok(vec![]));
+
+        let webhook_service = Arc::new(WebhookService::new(Arc::new(webhook_mock)));
+        let service = SecurityDetectionService::new_with_blacklist(
+            Arc::new(login_mock),
+            Arc::new(alert_mock),
+            Arc::new(blacklist_mock),
+            webhook_service,
+            SecurityDetectionConfig::default(),
+        );
+
+        let event = LoginEvent {
+            id: 1,
+            user_id: None,
+            email: None,
+            tenant_id: None,
+            event_type: LoginEventType::FailedPassword,
+            ip_address: Some("203.0.113.10".to_string()),
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: Some("invalid_password".to_string()),
+            created_at: Utc::now(),
+        };
+
+        let alerts = service.analyze_login_event(&event).await.unwrap();
+        assert_eq!(alerts.len(), 1);
+        assert_eq!(alerts[0].alert_type, SecurityAlertType::SuspiciousIp);
+        assert_eq!(alerts[0].severity, AlertSeverity::Critical);
     }
 
     #[tokio::test]

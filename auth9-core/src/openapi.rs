@@ -169,6 +169,9 @@ use utoipa::OpenApi;
             // ── System settings domain ─────────────────────────────────
             crate::models::system_settings::SystemSettingResponse,
             crate::models::system_settings::SettingCategory,
+            crate::models::system_settings::MaliciousIpBlacklistEntry,
+            crate::models::system_settings::MaliciousIpBlacklistInput,
+            crate::models::system_settings::UpdateMaliciousIpBlacklistRequest,
 
             // ── WebAuthn domain ────────────────────────────────────────
             crate::models::webauthn::WebAuthnCredential,
@@ -313,6 +316,8 @@ use utoipa::OpenApi;
         crate::domains::platform::api::system_settings::update_email_settings,
         crate::domains::platform::api::system_settings::test_email_connection,
         crate::domains::platform::api::system_settings::send_test_email,
+        crate::domains::platform::api::system_settings::get_malicious_ip_blacklist,
+        crate::domains::platform::api::system_settings::update_malicious_ip_blacklist,
 
         // ── Platform: Branding ─────────────────────────────────────
         crate::domains::platform::api::branding::get_public_branding,

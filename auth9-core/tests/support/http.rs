@@ -12,6 +12,7 @@ pub use super::mock_keycloak::MockKeycloakServer;
 use crate::support::{
     create_test_jwt_manager, TestActionRepository, TestAuditRepository, TestInvitationRepository,
     TestLinkedIdentityRepository, TestLoginEventRepository, TestPasswordResetRepository,
+    TestMaliciousIpBlacklistRepository,
     TestRbacRepository, TestSecurityAlertRepository, TestServiceBrandingRepository,
     TestServiceRepository, TestSessionRepository, TestSystemSettingsRepository,
     TestTenantRepository, TestUserRepository, TestWebhookRepository,
@@ -190,6 +191,7 @@ pub struct TestAppState {
         SecurityDetectionService<
             TestLoginEventRepository,
             TestSecurityAlertRepository,
+            TestMaliciousIpBlacklistRepository,
             TestWebhookRepository,
         >,
     >,
@@ -206,6 +208,8 @@ pub struct TestAppState {
     pub service_repo: Arc<TestServiceRepository>,
     pub rbac_repo: Arc<TestRbacRepository>,
     pub system_settings_repo: Arc<TestSystemSettingsRepository>,
+    #[allow(dead_code)]
+    pub malicious_ip_blacklist_repo: Arc<TestMaliciousIpBlacklistRepository>,
     #[allow(dead_code)]
     pub password_reset_repo: Arc<TestPasswordResetRepository>,
     pub session_repo: Arc<TestSessionRepository>,
@@ -234,6 +238,7 @@ impl TestAppState {
         let rbac_repo = Arc::new(TestRbacRepository::new());
         let audit_repo = Arc::new(TestAuditRepository::new());
         let system_settings_repo = Arc::new(TestSystemSettingsRepository::new());
+        let malicious_ip_blacklist_repo = Arc::new(TestMaliciousIpBlacklistRepository::new());
         let password_reset_repo = Arc::new(TestPasswordResetRepository::new());
         let session_repo = Arc::new(TestSessionRepository::new());
         let linked_identity_repo = Arc::new(TestLinkedIdentityRepository::new());
@@ -283,8 +288,9 @@ impl TestAppState {
             None,
         ));
         let rbac_service = Arc::new(RbacService::new(rbac_repo.clone(), None));
-        let system_settings_service = Arc::new(SystemSettingsService::new(
+        let system_settings_service = Arc::new(SystemSettingsService::new_with_blacklist(
             system_settings_repo.clone(),
+            malicious_ip_blacklist_repo.clone(),
             None,
         ));
         let email_service = Arc::new(EmailService::new(system_settings_service.clone()));
@@ -352,9 +358,10 @@ impl TestAppState {
             "http://localhost:3000".to_string(),
         ));
         let analytics_service = Arc::new(AnalyticsService::new(login_event_repo.clone()));
-        let security_detection_service = Arc::new(SecurityDetectionService::new(
+        let security_detection_service = Arc::new(SecurityDetectionService::new_with_blacklist(
             login_event_repo.clone(),
             security_alert_repo.clone(),
+            malicious_ip_blacklist_repo.clone(),
             webhook_service.clone(),
             Default::default(),
         ));
@@ -401,6 +408,7 @@ impl TestAppState {
             service_repo,
             rbac_repo,
             system_settings_repo,
+            malicious_ip_blacklist_repo,
             password_reset_repo,
             session_repo,
             linked_identity_repo,
@@ -634,6 +642,7 @@ impl HasAnalytics for TestAppState {
 impl HasSecurityAlerts for TestAppState {
     type SecurityLoginEventRepo = TestLoginEventRepository;
     type SecurityAlertRepo = TestSecurityAlertRepository;
+    type SecurityMaliciousIpBlacklistRepo = TestMaliciousIpBlacklistRepository;
     type SecurityWebhookRepo = TestWebhookRepository;
 
     fn security_detection_service(
@@ -641,6 +650,7 @@ impl HasSecurityAlerts for TestAppState {
     ) -> &SecurityDetectionService<
         Self::SecurityLoginEventRepo,
         Self::SecurityAlertRepo,
+        Self::SecurityMaliciousIpBlacklistRepo,
         Self::SecurityWebhookRepo,
     > {
         &self.security_detection_service

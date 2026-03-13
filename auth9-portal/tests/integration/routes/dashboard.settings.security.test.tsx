@@ -7,7 +7,7 @@ import SecuritySettingsPage, {
   action,
 } from "~/routes/dashboard.settings.security";
 import { I18nProvider } from "~/i18n";
-import { passwordApi, tenantApi } from "~/services/api";
+import { passwordApi, systemApi, tenantApi } from "~/services/api";
 
 // Mock the API
 vi.mock("~/services/api", () => ({
@@ -17,6 +17,10 @@ vi.mock("~/services/api", () => ({
   },
   tenantApi: {
     list: vi.fn(),
+  },
+  systemApi: {
+    getMaliciousIpBlacklist: vi.fn(),
+    updateMaliciousIpBlacklist: vi.fn(),
   },
 }));
 
@@ -56,6 +60,15 @@ const mockPolicy = {
   lockout_duration_mins: 15,
 };
 
+const mockBlacklist = [
+  {
+    id: "entry-1",
+    ip_address: "203.0.113.10",
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
+];
+
 describe("Security Settings Page", () => {
   function WrappedPage() {
     return (
@@ -70,6 +83,9 @@ describe("Security Settings Page", () => {
     vi.mocked(tenantApi.list).mockResolvedValue({ data: mockTenants });
     vi.mocked(passwordApi.getPasswordPolicy).mockResolvedValue({
       data: mockPolicy,
+    });
+    vi.mocked(systemApi.getMaliciousIpBlacklist).mockResolvedValue({
+      data: mockBlacklist,
     });
   });
 
@@ -86,6 +102,8 @@ describe("Security Settings Page", () => {
       selectedTenantId: "",
       policy: null,
       policyError: null,
+      blacklist: mockBlacklist,
+      blacklistError: null,
     });
     expect(tenantApi.list).toHaveBeenCalledWith(1, 100, undefined, undefined);
   });
@@ -136,6 +154,29 @@ describe("Security Settings Page", () => {
     expect(response).toEqual({ error: "Invalid action" });
   });
 
+  it("action updates malicious IP blacklist successfully", async () => {
+    vi.mocked(systemApi.updateMaliciousIpBlacklist).mockResolvedValue({ data: mockBlacklist });
+
+    const formData = new FormData();
+    formData.append("intent", "update_malicious_ip_blacklist");
+    formData.append("maliciousIps", "203.0.113.10\n198.51.100.24");
+
+    const request = buildEnglishRequest("http://localhost/dashboard/settings/security", {
+      method: "POST",
+      body: formData,
+    });
+
+    const response = await action({ request, params: {}, context: {} });
+    expect(response).toEqual({
+      success: true,
+      message: "Malicious IP blacklist updated",
+    });
+    expect(systemApi.updateMaliciousIpBlacklist).toHaveBeenCalledWith(
+      [{ ip_address: "203.0.113.10" }, { ip_address: "198.51.100.24" }],
+      undefined
+    );
+  });
+
   // ============================================================================
   // Rendering Tests
   // ============================================================================
@@ -157,6 +198,7 @@ describe("Security Settings Page", () => {
     expect(
       screen.getByText("Configure password requirements for tenant users.")
     ).toBeInTheDocument();
+    expect(screen.getByText("Malicious IP Blacklist")).toBeInTheDocument();
   });
 
   it("renders tenant selector", async () => {

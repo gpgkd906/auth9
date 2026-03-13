@@ -1,9 +1,11 @@
 //! System settings domain types
 
+use crate::models::common::StringUuid;
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 use utoipa::ToSchema;
+use validator::Validate;
 
 /// System setting row from the database
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
@@ -29,6 +31,8 @@ pub enum SettingCategory {
     Auth,
     /// Branding/UI settings
     Branding,
+    /// Platform security settings
+    Security,
 }
 
 impl SettingCategory {
@@ -37,6 +41,7 @@ impl SettingCategory {
             Self::Email => "email",
             Self::Auth => "auth",
             Self::Branding => "branding",
+            Self::Security => "security",
         }
     }
 }
@@ -55,6 +60,7 @@ impl std::str::FromStr for SettingCategory {
             "email" => Ok(Self::Email),
             "auth" => Ok(Self::Auth),
             "branding" => Ok(Self::Branding),
+            "security" => Ok(Self::Security),
             _ => Err(format!("Unknown setting category: {}", s)),
         }
     }
@@ -99,6 +105,30 @@ pub struct SystemSettingResponse {
     pub value: serde_json::Value,
     pub description: Option<String>,
     pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
+pub struct MaliciousIpBlacklistEntry {
+    pub id: StringUuid,
+    pub ip_address: String,
+    pub reason: Option<String>,
+    pub created_by: Option<StringUuid>,
+    pub created_at: DateTime<Utc>,
+    pub updated_at: DateTime<Utc>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
+pub struct MaliciousIpBlacklistInput {
+    #[validate(length(min = 1, max = 45))]
+    pub ip_address: String,
+    #[validate(length(max = 255))]
+    pub reason: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize, Serialize, ToSchema, Validate)]
+pub struct UpdateMaliciousIpBlacklistRequest {
+    #[validate(length(max = 1000))]
+    pub entries: Vec<MaliciousIpBlacklistInput>,
 }
 
 impl From<SystemSettingRow> for SystemSettingResponse {

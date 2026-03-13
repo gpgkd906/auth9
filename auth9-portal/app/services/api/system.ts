@@ -48,6 +48,15 @@ export interface TestEmailResponse {
   message_id?: string;
 }
 
+export interface MaliciousIpBlacklistEntry {
+  id: string;
+  ip_address: string;
+  reason?: string | null;
+  created_by?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 // System Setting Response from backend
 export interface SystemSettingResponse {
   category: string;
@@ -100,6 +109,33 @@ export const systemApi = {
         method: "POST",
         headers: getHeaders(accessToken),
         body: JSON.stringify({ to_email: toEmail }),
+      }
+    );
+    return handleResponse(response);
+  },
+
+  getMaliciousIpBlacklist: async (
+    accessToken?: string
+  ): Promise<{ data: MaliciousIpBlacklistEntry[] }> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/system/security/malicious-ip-blacklist`,
+      {
+        headers: getHeaders(accessToken),
+      }
+    );
+    return handleResponse(response);
+  },
+
+  updateMaliciousIpBlacklist: async (
+    entries: Array<{ ip_address: string; reason?: string }>,
+    accessToken?: string
+  ): Promise<{ data: MaliciousIpBlacklistEntry[] }> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/system/security/malicious-ip-blacklist`,
+      {
+        method: "PUT",
+        headers: getHeaders(accessToken),
+        body: JSON.stringify({ entries }),
       }
     );
     return handleResponse(response);
