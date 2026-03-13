@@ -613,6 +613,14 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                     tracing::warn!("Failed to record action test execution: {}", e);
                 }
 
+                if let Err(stats_err) = self
+                    .action_repo
+                    .update_execution_stats(action.id, true, None)
+                    .await
+                {
+                    tracing::warn!("Failed to update action test stats: {}", stats_err);
+                }
+
                 let console_logs = Vec::new(); // TODO: Capture console.log output via op state
                 Ok((modified_context, duration_ms, console_logs))
             }
@@ -631,11 +639,19 @@ impl<R: ActionRepository + 'static> ActionEngine<R> {
                         user_id,
                         false,
                         duration_ms,
-                        Some(error_msg),
+                        Some(error_msg.clone()),
                     )
                     .await
                 {
                     tracing::warn!("Failed to record action test execution: {}", record_err);
+                }
+
+                if let Err(stats_err) = self
+                    .action_repo
+                    .update_execution_stats(action.id, false, Some(error_msg.clone()))
+                    .await
+                {
+                    tracing::warn!("Failed to update action test stats: {}", stats_err);
                 }
 
                 Err(e)
@@ -750,6 +766,90 @@ mod tests {
             "engineering"
         );
         assert_eq!(claims.get("tier").unwrap().as_str().unwrap(), "premium");
+    }
+
+    #[tokio::test]
+    async fn test_test_action_updates_stats_on_success() {
+        let action = create_test_action("context;");
+        let action_id = action.id;
+        let service_id = action.service_id;
+        let tenant_id = action.tenant_id;
+        let mut mock_repo = MockActionRepository::new();
+
+        mock_repo
+            .expect_record_execution()
+            .withf(move |recorded_action_id,
+                         recorded_tenant_id,
+                         recorded_service_id,
+                         trigger_id,
+                         _user_id,
+                         success,
+                         _duration_ms,
+                         error| {
+                *recorded_action_id == action_id
+                    && *recorded_tenant_id == tenant_id
+                    && *recorded_service_id == service_id
+                    && trigger_id == "test"
+                    && *success
+                    && error.is_none()
+            })
+            .returning(|_, _, _, _, _, _, _, _| Ok(()));
+        mock_repo
+            .expect_update_execution_stats()
+            .withf(move |id, success, error| *id == action_id && *success && error.is_none())
+            .returning(|_, _, _| Ok(()));
+
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+        let context = create_test_context();
+
+        let result = engine.test_action(&action, context).await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_test_action_updates_stats_on_failure() {
+        let action = create_test_action("throw new Error('boom');");
+        let action_id = action.id;
+        let service_id = action.service_id;
+        let tenant_id = action.tenant_id;
+        let mut mock_repo = MockActionRepository::new();
+
+        mock_repo
+            .expect_record_execution()
+            .withf(move |recorded_action_id,
+                         recorded_tenant_id,
+                         recorded_service_id,
+                         trigger_id,
+                         _user_id,
+                         success,
+                         _duration_ms,
+                         error| {
+                *recorded_action_id == action_id
+                    && *recorded_tenant_id == tenant_id
+                    && *recorded_service_id == service_id
+                    && trigger_id == "test"
+                    && !*success
+                    && error
+                        .as_deref()
+                        .is_some_and(|message| message.contains("Test action 'test-action' failed"))
+            })
+            .returning(|_, _, _, _, _, _, _, _| Ok(()));
+        mock_repo
+            .expect_update_execution_stats()
+            .withf(move |id, success, error| {
+                *id == action_id
+                    && !*success
+                    && error
+                        .as_deref()
+                        .is_some_and(|message| message.contains("Test action 'test-action' failed"))
+            })
+            .returning(|_, _, _| Ok(()));
+
+        let engine = ActionEngine::new(Arc::new(mock_repo));
+        let context = create_test_context();
+
+        let result = engine.test_action(&action, context).await;
+        assert!(result.is_err());
     }
 
     #[tokio::test]
