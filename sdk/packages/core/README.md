@@ -264,4 +264,4 @@ MIT
 
 - [Auth9 Documentation](../../docs/)
 - [Actions API Guide](./ACTIONS.md)
-- [GitHub Repository](https://github.com/auth9/auth9)
+- [GitHub Repository](https://github.com/gpgkd906/auth9)

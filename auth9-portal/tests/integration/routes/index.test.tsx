@@ -72,7 +72,7 @@ describe("Landing Page", () => {
 
         render(<RoutesStub initialEntries={["/"]} />);
 
-        expect(screen.getByText(/© 2024 Auth9/)).toBeInTheDocument();
+        expect(screen.getByText(/© 2026 Auth9/)).toBeInTheDocument();
         expect(screen.getByText("Privacy")).toBeInTheDocument();
         expect(screen.getByText("Terms")).toBeInTheDocument();
     });

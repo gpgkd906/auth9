@@ -105,7 +105,7 @@ export default {
       rbacDescription: "Fine-grained access control with roles, permissions, and inheritance.",
     },
     footer: {
-      copyright: "© 2024 Auth9. All rights reserved.",
+      copyright: "© 2026 Auth9. All rights reserved.",
       privacy: "Privacy",
       terms: "Terms",
     },

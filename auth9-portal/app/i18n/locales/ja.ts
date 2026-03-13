@@ -105,7 +105,7 @@ export default {
       rbacDescription: "ロール、権限、継承によるきめ細かいアクセス制御。",
     },
     footer: {
-      copyright: "© 2024 Auth9. All rights reserved.",
+      copyright: "© 2026 Auth9. All rights reserved.",
       privacy: "プライバシー",
       terms: "利用規約",
     },

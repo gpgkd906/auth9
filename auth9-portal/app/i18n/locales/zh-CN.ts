@@ -105,7 +105,7 @@ export default {
       rbacDescription: "通过角色、权限和继承关系实现精细化访问控制。",
     },
     footer: {
-      copyright: "© 2024 Auth9。保留所有权利。",
+      copyright: "© 2026 Auth9。保留所有权利。",
       privacy: "隐私政策",
       terms: "服务条款",
     },

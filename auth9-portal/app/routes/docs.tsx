@@ -52,7 +52,7 @@ export default function DocsPage() {
         </Card>
 
         <a
-          href="https://github.com/pact-im/auth9"
+          href="https://github.com/gpgkd906/auth9"
           target="_blank"
           rel="noopener noreferrer"
           className="block"
