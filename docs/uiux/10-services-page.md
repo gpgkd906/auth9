@@ -41,16 +41,31 @@
 
 ---
 
-## 场景 5：Service 详情页 Actions / Branding Tab 布局
+## 场景 5：Service 详情页 Actions / Branding Tab 布局 及 Action 详情页脚本代码块
 
 ### 目的
-验证 Service 详情页新增的「Actions」和「Branding」标签页在不同尺寸下的布局表现。
+验证 Service 详情页新增的「Actions」和「Branding」标签页在不同尺寸下的布局表现，以及 Action 详情页中脚本代码使用深色代码块渲染、与普通文本明确区分。
 
 ### 预期视觉效果
 - **Tab 栏**: 4 个标签（Configuration、Integration、Actions、Branding）在宽屏下水平排列，窄屏下可横向滚动，不折行
 - **Actions Tab**: Action 列表卡片与「New Action」按钮间距一致，空状态居中显示提示文字
 - **Branding Tab**: 颜色选择器排列整齐（2 列网格），表单字段间距与其他 Tab 一致
 - **「Reset to Default」按钮**: 使用 destructive 配色，与「Save Changes」按钮水平对齐
+
+#### Action 详情页脚本代码块
+- **代码块背景**: 脚本代码区域使用深色背景（`#0d1117`），与卡片白色/浅色背景形成鲜明对比，用户可一眼识别代码区域
+- **字体**: 代码使用等宽字体（`font-mono`），字号 `text-sm`，文字颜色为 `#c9d1d9`
+- **复制按钮**: Hover 代码块时右上角出现复制按钮（`CopyIcon`），点击后显示 ✓ 勾选反馈，2 秒后恢复
+- **溢出处理**: 长代码行支持水平滚动（`overflow-x-auto`），不折行（`whitespace-pre`）
+- **深色模式**: 代码块在深色模式下仍保持深色背景，不因主题切换而丢失视觉区分度
+
+### 验证方法
+1. 进入任意 Service 详情页 → Actions Tab → 点击某个 Action 进入详情页
+2. 在「Script」标签页中确认脚本代码区域使用深色背景渲染
+3. 在 DevTools 中选中代码块容器 `<div>`，确认 `background-color` 为 `rgb(13, 17, 23)`（即 `#0d1117`）
+4. 将鼠标悬停在代码块上，确认复制按钮出现
+5. 点击复制按钮，确认剪贴板内容与页面代码一致
+6. 切换深色模式，确认代码块视觉效果不变
 
 ---
 

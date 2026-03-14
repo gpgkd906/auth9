@@ -10,6 +10,7 @@ import { getAuth9Client, withService } from "~/lib/auth9-client";
 import { FormattedDate } from "~/components/ui/formatted-date";
 import { getAccessToken } from "~/services/session.server";
 import { ArrowLeftIcon, CheckCircledIcon, CrossCircledIcon, ClockIcon, CodeIcon, ActivityLogIcon, ChevronDownIcon, ChevronRightIcon } from "@radix-ui/react-icons";
+import { CodeBlock } from "~/components/services/copyable-value";
 import { useI18n } from "~/i18n";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { resolveLocale } from "~/services/locale.server";
@@ -119,7 +120,7 @@ export default function ActionDetailPage() {
               <CardDescription>{t("serviceActions.scriptExecutedOn", { trigger: getActionTriggerLabel(effectiveLocale, action.triggerId) })}</CardDescription>
             </CardHeader>
             <CardContent>
-              <pre className="p-4 bg-muted rounded-md overflow-x-auto"><code className="text-sm">{action.script}</code></pre>
+              <CodeBlock>{action.script}</CodeBlock>
               <div className="grid grid-cols-2 gap-4 mt-4">
                 <div><div className="text-sm font-medium mb-1">{t("serviceActions.executionOrder")}</div><div className="text-2xl font-bold">{action.executionOrder}</div></div>
                 <div><div className="text-sm font-medium mb-1">{t("serviceActions.timeout")}</div><div className="text-2xl font-bold">{action.timeoutMs}ms</div></div>
