@@ -778,21 +778,23 @@ mod tests {
 
         mock_repo
             .expect_record_execution()
-            .withf(move |recorded_action_id,
-                         recorded_tenant_id,
-                         recorded_service_id,
-                         trigger_id,
-                         _user_id,
-                         success,
-                         _duration_ms,
-                         error| {
-                *recorded_action_id == action_id
-                    && *recorded_tenant_id == tenant_id
-                    && *recorded_service_id == service_id
-                    && trigger_id == "test"
-                    && *success
-                    && error.is_none()
-            })
+            .withf(
+                move |recorded_action_id,
+                      recorded_tenant_id,
+                      recorded_service_id,
+                      trigger_id,
+                      _user_id,
+                      success,
+                      _duration_ms,
+                      error| {
+                    *recorded_action_id == action_id
+                        && *recorded_tenant_id == tenant_id
+                        && *recorded_service_id == service_id
+                        && trigger_id == "test"
+                        && *success
+                        && error.is_none()
+                },
+            )
             .returning(|_, _, _, _, _, _, _, _| Ok(()));
         mock_repo
             .expect_update_execution_stats()
@@ -816,23 +818,25 @@ mod tests {
 
         mock_repo
             .expect_record_execution()
-            .withf(move |recorded_action_id,
-                         recorded_tenant_id,
-                         recorded_service_id,
-                         trigger_id,
-                         _user_id,
-                         success,
-                         _duration_ms,
-                         error| {
-                *recorded_action_id == action_id
-                    && *recorded_tenant_id == tenant_id
-                    && *recorded_service_id == service_id
-                    && trigger_id == "test"
-                    && !*success
-                    && error
-                        .as_deref()
-                        .is_some_and(|message| message.contains("Test action 'test-action' failed"))
-            })
+            .withf(
+                move |recorded_action_id,
+                      recorded_tenant_id,
+                      recorded_service_id,
+                      trigger_id,
+                      _user_id,
+                      success,
+                      _duration_ms,
+                      error| {
+                    *recorded_action_id == action_id
+                        && *recorded_tenant_id == tenant_id
+                        && *recorded_service_id == service_id
+                        && trigger_id == "test"
+                        && !*success
+                        && error.as_deref().is_some_and(|message| {
+                            message.contains("Test action 'test-action' failed")
+                        })
+                },
+            )
             .returning(|_, _, _, _, _, _, _, _| Ok(()));
         mock_repo
             .expect_update_execution_stats()

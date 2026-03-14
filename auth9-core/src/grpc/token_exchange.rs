@@ -721,7 +721,11 @@ where
         let (user_roles, role_records) = if let Some(service_id) = resolved_service_id {
             let user_roles = match self
                 .cache_manager
-                .get_user_roles_for_service(Uuid::from(user_id), Uuid::from(tenant_id), service_id.0)
+                .get_user_roles_for_service(
+                    Uuid::from(user_id),
+                    Uuid::from(tenant_id),
+                    service_id.0,
+                )
                 .await
             {
                 Ok(Some(roles)) => roles,

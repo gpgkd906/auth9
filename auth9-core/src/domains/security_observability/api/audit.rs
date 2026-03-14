@@ -41,8 +41,7 @@ pub async fn list<S: HasServices>(
     let per_page = query
         .limit
         .unwrap_or(50)
-        .max(1)
-        .min(crate::http_support::MAX_PER_PAGE);
+        .clamp(1, crate::http_support::MAX_PER_PAGE);
 
     let page_param = query.page;
     let page = page_param.unwrap_or(1).max(1);
@@ -121,7 +120,7 @@ mod tests {
             limit: Some(10),
             ..Default::default()
         };
-        let per_page = query.limit.unwrap_or(50).max(1).min(100);
+        let per_page = query.limit.unwrap_or(50).clamp(1, 100);
         let page_param = query.page;
         let page = page_param.unwrap_or(1).max(1);
         let offset = (page - 1) * per_page;
@@ -161,7 +160,7 @@ mod tests {
             limit: Some(999),
             ..Default::default()
         };
-        let per_page = query.limit.unwrap_or(50).max(1).min(100);
+        let per_page = query.limit.unwrap_or(50).clamp(1, 100);
         assert_eq!(per_page, 100);
     }
 }

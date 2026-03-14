@@ -188,7 +188,7 @@ fn format_field_name(field: &str) -> String {
     let leaf = field.rsplit('.').next().unwrap_or(field);
     match leaf {
         "current_password" => "Current password".to_string(), // pragma: allowlist secret
-        "new_password" => "New password".to_string(), // pragma: allowlist secret
+        "new_password" => "New password".to_string(),         // pragma: allowlist secret
         "confirm_password" => "Confirm password".to_string(), // pragma: allowlist secret
         "email" => "Email".to_string(),
         "name" => "Name".to_string(),
