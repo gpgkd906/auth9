@@ -265,6 +265,71 @@ fn derive_failure_reason_with_details(
     })
 }
 
+async fn resolve_event_tenant_id<S: HasServices>(
+    state: &S,
+    user_id: Option<StringUuid>,
+    client_id: Option<&str>,
+) -> Option<StringUuid> {
+    let uid = user_id?;
+
+    let tenant_memberships = match state.user_service().get_user_tenants(uid).await {
+        Ok(tenant_memberships) => tenant_memberships,
+        Err(err) => {
+            warn!(
+                user_id = %uid,
+                error = %err,
+                "Failed to resolve tenant memberships for Keycloak event"
+            );
+            return None;
+        }
+    };
+
+    if tenant_memberships.is_empty() {
+        return None;
+    }
+
+    if let Some(client_id) = client_id {
+        match state.client_service().get_by_client_id(client_id).await {
+            Ok(service) => {
+                if let Some(service_tenant_id) = service.tenant_id {
+                    if tenant_memberships
+                        .iter()
+                        .any(|membership| membership.tenant_id == service_tenant_id)
+                    {
+                        return Some(service_tenant_id);
+                    }
+
+                    warn!(
+                        user_id = %uid,
+                        client_id,
+                        service_tenant_id = %service_tenant_id,
+                        "Keycloak event client resolved to tenant outside user memberships"
+                    );
+                    return None;
+                }
+            }
+            Err(err) => {
+                debug!(
+                    client_id,
+                    error = %err,
+                    "Failed to resolve client service for Keycloak event tenant inference"
+                );
+            }
+        }
+    }
+
+    if tenant_memberships.len() == 1 {
+        return Some(tenant_memberships[0].tenant_id);
+    }
+
+    warn!(
+        user_id = %uid,
+        membership_count = tenant_memberships.len(),
+        "Ambiguous tenant context for multi-tenant Keycloak event; storing without tenant_id"
+    );
+    None
+}
+
 #[allow(dead_code)]
 fn derive_failure_reason(error: Option<&str>) -> Option<String> {
     derive_failure_reason_with_details(error, &KeycloakEventDetails::default())
@@ -443,15 +508,7 @@ pub async fn process_keycloak_event<
         None
     };
 
-    // Resolve tenant_id from user's tenant memberships
-    let tenant_id = if let Some(uid) = user_id {
-        match state.user_service().get_user_tenants(uid).await {
-            Ok(tenants) if !tenants.is_empty() => Some(tenants[0].tenant_id),
-            _ => None,
-        }
-    } else {
-        None
-    };
+    let tenant_id = resolve_event_tenant_id(state, user_id, event.client_id.as_deref()).await;
 
     let email = event
         .details

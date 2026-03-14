@@ -5,6 +5,9 @@
 use crate::support::http::TestAppState;
 use auth9_core::domains::integration::api::keycloak_event;
 use auth9_core::models::analytics::LoginEventType;
+use auth9_core::models::common::StringUuid;
+use auth9_core::models::service::{Client, Service};
+use auth9_core::models::user::{TenantUser, User};
 use auth9_core::repository::LoginEventRepository;
 use axum::{
     body::Body,
@@ -12,6 +15,7 @@ use axum::{
     routing::post,
     Router,
 };
+use chrono::Utc;
 use hmac::{Hmac, Mac};
 use sha2::Sha256;
 use tower::ServiceExt;
@@ -183,6 +187,142 @@ async fn test_receive_lockout_event() {
     let events = state.login_event_repo.list(0, 10).await.unwrap();
     assert_eq!(events.len(), 1);
     assert_eq!(events[0].event_type, LoginEventType::Locked);
+}
+
+#[tokio::test]
+async fn test_receive_multi_tenant_event_without_explicit_context_keeps_tenant_empty() {
+    let state = TestAppState::new("http://mock-keycloak");
+    let app = build_keycloak_event_test_router(state.clone());
+
+    let user_id = StringUuid::new_v4();
+    let tenant_a = StringUuid::new_v4();
+    let tenant_b = StringUuid::new_v4();
+
+    state
+        .user_repo
+        .add_user(User {
+            id: user_id,
+            keycloak_id: "kc-multi-user".to_string(),
+            email: "multi@example.com".to_string(),
+            ..Default::default()
+        })
+        .await;
+    state
+        .user_repo
+        .add_tenant_user(TenantUser {
+            id: StringUuid::new_v4(),
+            tenant_id: tenant_a,
+            user_id,
+            role_in_tenant: "admin".to_string(),
+            joined_at: Utc::now(),
+        })
+        .await;
+    state
+        .user_repo
+        .add_tenant_user(TenantUser {
+            id: StringUuid::new_v4(),
+            tenant_id: tenant_b,
+            user_id,
+            role_in_tenant: "member".to_string(),
+            joined_at: Utc::now(),
+        })
+        .await;
+
+    let body = serde_json::json!({
+        "type": "LOGIN_ERROR",
+        "userId": "kc-multi-user",
+        "clientId": "auth9-portal",
+        "error": "invalid_user_credentials",
+        "ipAddress": "198.51.100.24",
+        "time": now_millis(),
+        "details": {
+            "username": "multi@example.com",
+            "email": "multi@example.com"
+        }
+    });
+    let body_bytes = serde_json::to_vec(&body).unwrap();
+
+    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let events = state.login_event_repo.list(0, 10).await.unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].tenant_id, None);
+}
+
+#[tokio::test]
+async fn test_receive_multi_tenant_event_uses_tenant_scoped_client_match() {
+    let state = TestAppState::new("http://mock-keycloak");
+    let app = build_keycloak_event_test_router(state.clone());
+
+    let user_id = StringUuid::new_v4();
+    let tenant_a = StringUuid::new_v4();
+    let tenant_b = StringUuid::new_v4();
+    let service_id = StringUuid::new_v4();
+
+    state
+        .user_repo
+        .add_user(User {
+            id: user_id,
+            keycloak_id: "kc-client-scoped-user".to_string(),
+            email: "scoped@example.com".to_string(),
+            ..Default::default()
+        })
+        .await;
+    for tenant_id in [tenant_a, tenant_b] {
+        state
+            .user_repo
+            .add_tenant_user(TenantUser {
+                id: StringUuid::new_v4(),
+                tenant_id,
+                user_id,
+                role_in_tenant: "member".to_string(),
+                joined_at: Utc::now(),
+            })
+            .await;
+    }
+
+    state
+        .service_repo
+        .add_service(Service {
+            id: service_id,
+            tenant_id: Some(tenant_b),
+            name: "Tenant B Service".to_string(),
+            ..Default::default()
+        })
+        .await;
+    state
+        .service_repo
+        .add_client(Client {
+            id: StringUuid::new_v4(),
+            service_id,
+            client_id: "tenant-b-client".to_string(),
+            client_secret_hash: "hashed".to_string(), // pragma: allowlist secret
+            name: Some("Tenant B Key".to_string()),
+            created_at: Utc::now(),
+        })
+        .await;
+
+    let body = serde_json::json!({
+        "type": "LOGIN_ERROR",
+        "userId": "kc-client-scoped-user",
+        "clientId": "tenant-b-client",
+        "error": "invalid_user_credentials",
+        "ipAddress": "198.51.100.25",
+        "time": now_millis(),
+        "details": {
+            "username": "scoped@example.com",
+            "email": "scoped@example.com"
+        }
+    });
+    let body_bytes = serde_json::to_vec(&body).unwrap();
+
+    let status = post_keycloak_event(&app, &body_bytes, vec![]).await;
+    assert_eq!(status, StatusCode::NO_CONTENT);
+
+    let events = state.login_event_repo.list(0, 10).await.unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].tenant_id, Some(tenant_b));
 }
 
 // ============================================================================
