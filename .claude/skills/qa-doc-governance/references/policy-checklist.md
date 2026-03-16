@@ -12,6 +12,7 @@
    - explicit sign out.
 6. `docs/qa/README.md` index must match filesystem docs.
 7. `docs/qa/_manifest.yaml` must reflect current docs and scenario counts.
+8. Test domains must comply with `docs/testing/test-domain-policy.md`: only `@example.com`, `@test.com`, `@auth9.local` for emails; `*.example.com` for URLs/org domains. No invented domains.
 
 ## Recommended split strategy for long docs
 

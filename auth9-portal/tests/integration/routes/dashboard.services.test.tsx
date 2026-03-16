@@ -243,7 +243,7 @@ describe("Services Page", () => {
                 Component: WrappedPage,
                 loader,
                 action: () => {
-                    return { success: true, intent: "create", secret: "my-secret-value-123" };
+                    return { success: true, intent: "create", secret: "my-secret-value-123" }; // pragma: allowlist secret
                 },
             },
         ]);
@@ -279,7 +279,7 @@ describe("Services Page", () => {
                 path: "/dashboard/services",
                 Component: WrappedPage,
                 loader,
-                action: () => ({ success: true, intent: "create", secret: "secret-xyz" }),
+                action: () => ({ success: true, intent: "create", secret: "secret-xyz" }), // pragma: allowlist secret
             },
         ]);
 
@@ -451,8 +451,8 @@ describe("action", () => {
             data: {
                 id: "s1",
                 name: "New App",
-                redirect_uris: ["https://app.com/callback"],
-                logout_uris: ["https://app.com/logout"],
+                redirect_uris: ["https://app.example.com/callback"],
+                logout_uris: ["https://app.example.com/logout"],
                 status: "active",
                 created_at: new Date().toISOString(),
                 updated_at: new Date().toISOString(),
@@ -464,20 +464,20 @@ describe("action", () => {
             intent: "create",
             name: "New App",
             client_id: "my-client",
-            base_url: "https://app.com",
-            redirect_uris: "https://app.com/callback",
-            logout_uris: "https://app.com/logout",
+            base_url: "https://app.example.com",
+            redirect_uris: "https://app.example.com/callback",
+            logout_uris: "https://app.example.com/logout",
         });
 
         const result = await action({ request, params: {}, context: {} });
-        expect(result).toEqual({ success: true, intent: "create", secret: "secret-abc-123" });
+        expect(result).toEqual({ success: true, intent: "create", secret: "secret-abc-123" }); // pragma: allowlist secret
         expect(serviceApi.create).toHaveBeenCalledWith(
             expect.objectContaining({
                 name: "New App",
                 client_id: "my-client",
-                base_url: "https://app.com",
-                redirect_uris: ["https://app.com/callback"],
-                logout_uris: ["https://app.com/logout"],
+                base_url: "https://app.example.com",
+                redirect_uris: ["https://app.example.com/callback"],
+                logout_uris: ["https://app.example.com/logout"],
             }),
             undefined,
         );

@@ -79,7 +79,7 @@ WHERE tu.user_id = '{user_id}' AND t.slug = 'demo';
 
 ### 初始状态
 - 用户在 `/onboard` 页面
-- 用户邮箱为 `user@acme.com`
+- 用户邮箱为 `user@acme.example.com`
 - 使用**全新** slug（推荐附加时间戳），避免复用历史测试残留的租户数据
 
 ### 目的
@@ -94,7 +94,7 @@ WHERE tu.user_id = '{user_id}' AND t.slug = 'demo';
 1. 在 `/onboard` 页面，填写：
    - Organization name: `Acme Corp`
    - Slug: `acme-corp`（自动生成或手动输入）
-   - Domain: `acme.com`（应从邮箱自动提取；若未自动填充，手工输入后再继续）
+   - Domain: `acme.example.com`（应从邮箱自动提取；若未自动填充，手工输入后再继续）
 2. 点击「Create Organization」
 3. 观察页面跳转
 
@@ -107,7 +107,7 @@ WHERE tu.user_id = '{user_id}' AND t.slug = 'demo';
 ### 预期数据状态
 ```sql
 SELECT name, slug, domain, status FROM tenants WHERE slug = 'acme-corp';
--- 预期: status = 'active', domain = 'acme.com'
+-- 预期: status = 'active', domain = 'acme.example.com'
 
 SELECT tu.role_in_tenant FROM tenant_users tu
 JOIN tenants t ON t.id = tu.tenant_id
@@ -119,7 +119,7 @@ WHERE tu.user_id = '{user_id}' AND t.slug = 'acme-corp';
 
 | 症状 | 常见原因 | 处理方式 |
 |------|----------|----------|
-| 跳转到 `/onboard/pending` | 提交的 Domain 不是当前登录邮箱的真实域名 | 提交前确认 Domain 为 `acme.com`，且登录账号邮箱后缀也是 `@acme.com` |
+| 跳转到 `/onboard/pending` | 提交的 Domain 不是当前登录邮箱的真实域名 | 提交前确认 Domain 为 `acme.example.com`，且登录账号邮箱后缀也是 `@acme.example.com` |
 | 数据库查到旧的 `pending` 记录 | 复用了历史测试 slug | 使用全新 slug，或先确认旧记录已清理 |
 | `/onboard` 没有直接进入创建页 | 当前账号已存在 active tenant | 换用全新账号，先执行场景 1 验证用户无 tenant 关联 |
 

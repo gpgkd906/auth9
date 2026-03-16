@@ -63,7 +63,7 @@ describe("Service Detail Page", () => {
     const mockService = {
         id: "s1",
         name: "My App",
-        base_url: "https://myapp.com",
+        base_url: "https://myapp.example.com",
         redirect_uris: [],
         logout_uris: [],
         status: "active" as const,
@@ -107,7 +107,7 @@ describe("Service Detail Page", () => {
 
         await waitFor(() => {
             expect(screen.getByText("My App")).toBeInTheDocument();
-            expect(screen.getByDisplayValue("https://myapp.com")).toBeInTheDocument();
+            expect(screen.getByDisplayValue("https://myapp.example.com")).toBeInTheDocument();
             expect(screen.getByText("client-id-1")).toBeInTheDocument();
         });
     });
@@ -232,7 +232,7 @@ describe("Service Detail Page", () => {
                 id: "c2",
                 service_id: "s1",
                 client_id: "new-client-id",
-                client_secret: "super-secret-value",
+                client_secret: "super-secret-value", // pragma: allowlist secret
                 name: "New Client",
                 created_at: new Date().toISOString(),
             },
@@ -444,8 +444,8 @@ describe("Service Detail Page", () => {
     it("renders service with redirect and logout URIs", async () => {
         const serviceWithUris = {
             ...mockService,
-            redirect_uris: ["https://app.com/callback", "https://app.com/auth"],
-            logout_uris: ["https://app.com/logout"],
+            redirect_uris: ["https://app.example.com/callback", "https://app.example.com/auth"],
+            logout_uris: ["https://app.example.com/logout"],
         };
         vi.mocked(serviceApi.get).mockResolvedValue({ data: serviceWithUris });
         vi.mocked(serviceApi.listClients).mockResolvedValue(mockClients);
@@ -461,8 +461,8 @@ describe("Service Detail Page", () => {
         render(<RoutesStub initialEntries={["/dashboard/services/s1"]} />);
 
         await waitFor(() => {
-            expect(screen.getByDisplayValue("https://app.com/callback, https://app.com/auth")).toBeInTheDocument();
-            expect(screen.getByDisplayValue("https://app.com/logout")).toBeInTheDocument();
+            expect(screen.getByDisplayValue("https://app.example.com/callback, https://app.example.com/auth")).toBeInTheDocument();
+            expect(screen.getByDisplayValue("https://app.example.com/logout")).toBeInTheDocument();
         });
     });
 
@@ -564,7 +564,7 @@ describe("action", () => {
                 id: "c2",
                 service_id: "s1",
                 client_id: "new-client-id",
-                client_secret: "new-client-secret-xyz",
+                client_secret: "new-client-secret-xyz", // pragma: allowlist secret
                 name: "Production Client",
                 created_at: new Date().toISOString(),
             },
@@ -579,7 +579,7 @@ describe("action", () => {
         expect(result).toEqual({
             success: true,
             intent: "create_client",
-            secret: "new-client-secret-xyz",
+            secret: "new-client-secret-xyz", // pragma: allowlist secret
             clientId: "new-client-id",
         });
         expect(serviceApi.createClient).toHaveBeenCalledWith("s1", { name: "Production Client" }, undefined);
@@ -591,7 +591,7 @@ describe("action", () => {
                 id: "c3",
                 service_id: "s1",
                 client_id: "unnamed-client-id",
-                client_secret: "unnamed-secret",
+                client_secret: "unnamed-secret", // pragma: allowlist secret
                 name: "",
                 created_at: new Date().toISOString(),
             },
@@ -606,7 +606,7 @@ describe("action", () => {
         expect(result).toEqual({
             success: true,
             intent: "create_client",
-            secret: "unnamed-secret",
+            secret: "unnamed-secret", // pragma: allowlist secret
             clientId: "unnamed-client-id",
         });
         expect(serviceApi.createClient).toHaveBeenCalledWith("s1", { name: undefined }, undefined);
@@ -639,7 +639,7 @@ describe("action", () => {
         expect(result).toEqual({
             success: true,
             intent: "regenerate_secret",
-            secret: "regenerated-secret-456",
+            secret: "regenerated-secret-456", // pragma: allowlist secret
             regeneratedClientId: "client-id-1",
         });
         expect(serviceApi.regenerateClientSecret).toHaveBeenCalledWith("s1", "client-id-1", undefined);

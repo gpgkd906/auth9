@@ -67,9 +67,9 @@ playwright-cli open example.com  # Uses "mysession" automatically
 # Scrape multiple sites concurrently
 
 # Start all browsers
-playwright-cli -s=site1 open https://site1.com &
-playwright-cli -s=site2 open https://site2.com &
-playwright-cli -s=site3 open https://site3.com &
+playwright-cli -s=site1 open https://site1.example.com &
+playwright-cli -s=site2 open https://site2.example.com &
+playwright-cli -s=site3 open https://site3.example.com &
 wait
 
 # Take snapshots from each
@@ -85,8 +85,8 @@ playwright-cli close-all
 
 ```bash
 # Test different user experiences
-playwright-cli -s=variant-a open "https://app.com?variant=a"
-playwright-cli -s=variant-b open "https://app.com?variant=b"
+playwright-cli -s=variant-a open "https://app.example.com?variant=a"
+playwright-cli -s=variant-b open "https://app.example.com?variant=b"
 
 # Compare
 playwright-cli -s=variant-a screenshot

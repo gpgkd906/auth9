@@ -39,7 +39,7 @@ Auth9 Portal 的实现方式：
 ### 测试操作流程
 1. 打开浏览器开发者工具 → Application → Cookies
 2. 访问 `/login`
-3. 输入企业邮箱地址（如 `user@acme.com`），点击「Continue with Enterprise SSO」
+3. 输入企业邮箱地址（如 `user@acme.example.com`），点击「Continue with Enterprise SSO」
 4. 观察浏览器跳转前的 Set-Cookie 响应头
 5. 完成托管认证流程
 6. 观察回调 `/auth/callback` 的请求

@@ -69,8 +69,8 @@
 3. 填写信息：
    - **Service Name**: 应用名称。
    - **Client ID**: (可选) 自定义 Client ID，留空则自动生成。
-   - **Base URL**: 应用的主 URL (例如 `https://myapp.com`)。
-   - **Redirect URIs**: OIDC 回调地址 (例如 `https://myapp.com/callback`)。多个地址用逗号分隔。
+   - **Base URL**: 应用的主 URL (例如 `https://myapp.example.com`)。
+   - **Redirect URIs**: OIDC 回调地址 (例如 `https://myapp.example.com/callback`)。多个地址用逗号分隔。
    - **Logout URIs**: 登出回调地址。
 4. 点击 **Register**。
 

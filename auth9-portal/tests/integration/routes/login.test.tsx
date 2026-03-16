@@ -110,7 +110,7 @@ describe("Login Page", () => {
     it("action redirects to discovered enterprise SSO URL", async () => {
         const formData = new FormData();
         formData.append("intent", "sso-login");
-        formData.append("email", "user@acme.com");
+        formData.append("email", "user@acme.example.com");
         const request = new Request("http://localhost:3000/login", {
             method: "POST",
             body: formData,

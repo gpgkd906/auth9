@@ -20,7 +20,7 @@ B2B 场景下，新用户首次 OAuth 登录后不再自动加入 demo 租户，
 {
   "name": "Acme Corp",
   "slug": "acme-corp",
-  "domain": "acme.com",
+  "domain": "acme.example.com",
   "logo_url": "https://example.com/logo.png"
 }
 ```
@@ -31,7 +31,7 @@ B2B 场景下，新用户首次 OAuth 登录后不再自动加入 demo 租户，
   "id": "{tenant_id}",
   "name": "Acme Corp",
   "slug": "acme-corp",
-  "domain": "acme.com",
+  "domain": "acme.example.com",
   "status": "active"
 }
 ```
@@ -42,7 +42,7 @@ B2B 场景下，新用户首次 OAuth 登录后不再自动加入 demo 租户，
   "id": "{tenant_id}",
   "name": "Acme Corp",
   "slug": "acme-corp",
-  "domain": "acme.com",
+  "domain": "acme.example.com",
   "status": "pending"
 }
 ```
@@ -78,7 +78,7 @@ B2B 场景下，新用户首次 OAuth 登录后不再自动加入 demo 租户，
 ## 场景 1：域名匹配 — 创建组织自动 Active
 
 ### 初始状态
-- 用户已通过 OAuth 登录，邮箱为 `user@acme.com`
+- 用户已通过 OAuth 登录，邮箱为 `user@acme.example.com`
 - 持有有效的 Identity Token
 - 不存在 slug 为 `acme-corp` 的租户
 
@@ -91,7 +91,7 @@ B2B 场景下，新用户首次 OAuth 登录后不再自动加入 demo 租户，
    curl -X POST http://localhost:8080/api/v1/organizations \
      -H "Authorization: Bearer {identity_token}" \
      -H "Content-Type: application/json" \
-     -d '{"name": "Acme Corp", "slug": "acme-corp", "domain": "acme.com"}'
+     -d '{"name": "Acme Corp", "slug": "acme-corp", "domain": "acme.example.com"}'
    ```
 2. 记录返回的 `{tenant_id}`
 3. 查询数据库验证
@@ -99,12 +99,12 @@ B2B 场景下，新用户首次 OAuth 登录后不再自动加入 demo 租户，
 ### 预期结果
 - HTTP 201，返回租户信息
 - `status` 为 `active`
-- `domain` 为 `acme.com`
+- `domain` 为 `acme.example.com`
 
 ### 预期数据状态
 ```sql
 SELECT id, name, slug, domain, status FROM tenants WHERE slug = 'acme-corp';
--- 预期: status = 'active', domain = 'acme.com'
+-- 预期: status = 'active', domain = 'acme.example.com'
 
 SELECT tu.role_in_tenant, tu.user_id
 FROM tenant_users tu
@@ -131,7 +131,7 @@ WHERE t.slug = 'acme-corp';
    curl -X POST http://localhost:8080/api/v1/organizations \
      -H "Authorization: Bearer {identity_token}" \
      -H "Content-Type: application/json" \
-     -d '{"name": "Acme Pending", "slug": "acme-pending", "domain": "acme.com"}'
+     -d '{"name": "Acme Pending", "slug": "acme-pending", "domain": "acme.example.com"}'
    ```
 2. 查询数据库验证
 
@@ -143,7 +143,7 @@ WHERE t.slug = 'acme-corp';
 ### 预期数据状态
 ```sql
 SELECT id, name, slug, domain, status FROM tenants WHERE slug = 'acme-pending';
--- 预期: status = 'pending', domain = 'acme.com'
+-- 预期: status = 'pending', domain = 'acme.example.com'
 
 SELECT tu.role_in_tenant FROM tenant_users tu
 JOIN tenants t ON t.id = tu.tenant_id
@@ -211,7 +211,7 @@ SELECT COUNT(*) FROM tenants WHERE slug = 'acme-corp';
    curl -X POST http://localhost:8080/api/v1/organizations \
      -H "Authorization: Bearer {identity_token}" \
      -H "Content-Type: application/json" \
-     -d '{"name": "Test", "slug": "test-proto-domain", "domain": "https://acme.com"}'
+     -d '{"name": "Test", "slug": "test-proto-domain", "domain": "https://acme.example.com"}'
    ```
 
 ### 预期结果

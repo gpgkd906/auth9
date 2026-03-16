@@ -55,7 +55,7 @@ const mockIdentities = [
         provider_type: "microsoft",
         provider_alias: "ms-corp",
         external_user_id: "ext-3",
-        external_email: "alice@corp.com",
+        external_email: "alice@corp.example.com",
         linked_at: "2024-03-01T00:00:00Z",
     },
     {
@@ -71,7 +71,7 @@ const mockIdentities = [
         provider_type: "facebook",
         provider_alias: "",
         external_user_id: "ext-5",
-        external_email: "alice@fb.com",
+        external_email: "alice@example.com",
         linked_at: "2024-05-01T00:00:00Z",
     },
     {

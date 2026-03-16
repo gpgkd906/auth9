@@ -58,7 +58,7 @@ For repeated API calls, use the wrapper script that auto-injects the token:
 .claude/skills/tools/qa-api-test.sh GET /api/v1/tenants
 
 # POST with JSON body
-.claude/skills/tools/qa-api-test.sh POST /api/v1/users '{"email":"test@example.com","password":"Pass123!"}'
+.claude/skills/tools/qa-api-test.sh POST /api/v1/users '{"email":"test@example.com","password":"Pass123!"}' # pragma: allowlist secret
 
 # PUT with JSON body
 .claude/skills/tools/qa-api-test.sh PUT /api/v1/tenants/{id}/password-policy '{"min_length":12}'
@@ -84,6 +84,17 @@ hey -n 20 -c 20 -m POST \
 ```
 
 Note: Rate limiting is active on some endpoints (e.g., forgot-password: 5 req/min, token: 10 req/min).
+
+## Test Domain Policy (MUST FOLLOW)
+
+All test data (emails, URLs, domains) must comply with `docs/testing/test-domain-policy.md`. Summary:
+
+- **Email addresses**: Only `@example.com`, `@test.com`, `@auth9.local`
+- **Callback/redirect URLs**: Only `https://*.example.com/...`
+- **Organization domains**: Only `*.example.com` (e.g. `acme.example.com`)
+- **Security attack scenarios**: Only `evil.com`, `attacker.com`, `attacker.example`
+- **When unsure**: Use `example.com`
+- **NEVER** invent domains like `test-enterprise.com`, `acme.com`, `corp.com`, etc.
 
 ## Test Scripts Directory (`scripts/qa/`)
 

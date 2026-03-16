@@ -103,6 +103,7 @@ Project documentation is in `docs/`. Read the relevant doc before related tasks:
 - `api-access-control.md` - API access control design
 - `keycloak-theme.md` - Keycloak theme customization
 - `keycloak-service-refactor.md` - Keycloak service layer refactoring plan (KeycloakSyncService, KeycloakOidcService)
+- `testing/test-domain-policy.md` - **Test domain allowlist** (MUST follow when generating test data)
 
 ## Skills
 
@@ -224,7 +225,7 @@ function createFormRequest(url: string, data: Record<string, string>): Request {
 it("action validates input", async () => {
   const request = createFormRequest("http://localhost/register", {
     email: "test@example.com",
-    password: "password123",
+    password: "password123", // pragma: allowlist secret
   });
   const response = await action({ request, params: {}, context: {} });
   expect(response.status).toBe(302);
@@ -267,7 +268,7 @@ await keycloak.authenticate();  // Master realm admin
 await keycloak.createUser({
   username: "e2e-test-user",
   email: "e2e-test@example.com",
-  password: "Test123!",
+  password: "Test123!", // pragma: allowlist secret
   firstName: "E2E",
   lastName: "TestUser",
 });

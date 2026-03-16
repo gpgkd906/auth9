@@ -88,7 +88,7 @@ describe("Tenant SSO Page", () => {
     formData.append("display_name", "Acme OIDC");
     formData.append("provider_type", "oidc");
     formData.append("priority", "100");
-    formData.append("domains", "acme.com, acme.io");
+    formData.append("domains", "acme.example.com, acme2.example.com");
     formData.append("client_id", "client-id");
     formData.append("client_secret", "client-credential-placeholder");
     formData.append("authorization_url", "https://idp.example.com/auth");
@@ -114,7 +114,7 @@ describe("Tenant SSO Page", () => {
         provider_type: "oidc",
         enabled: true,
         priority: 100,
-        domains: ["acme.com", "acme.io"],
+        domains: ["acme.example.com", "acme2.example.com"],
         config: {
           clientId: "client-id",
           clientSecret: "client-credential-placeholder", // pragma: allowlist secret
@@ -182,7 +182,7 @@ describe("Tenant SSO Page", () => {
           expect(formData.get("intent")).toBe("create");
           expect(formData.get("provider_type")).toBe("oidc");
           expect(formData.get("alias")).toBe("acme-oidc");
-          expect(formData.get("domains")).toBe("acme.com");
+          expect(formData.get("domains")).toBe("acme.example.com");
           return { success: true, message: "ok" };
         },
       },
@@ -195,7 +195,7 @@ describe("Tenant SSO Page", () => {
     });
 
     await user.type(screen.getByLabelText("Alias"), "acme-oidc");
-    await user.type(screen.getByLabelText("Domains"), "acme.com");
+    await user.type(screen.getByLabelText("Domains"), "acme.example.com");
     await user.click(screen.getByRole("combobox", { name: "Provider Type" }));
     await user.click(await screen.findByRole("option", { name: "OIDC" }));
     await user.click(screen.getByRole("button", { name: "Create Connector" }));

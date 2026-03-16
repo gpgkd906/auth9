@@ -53,6 +53,7 @@ Read `references/qa-doc-template.md` for the exact format template.
 
 ### Content generation rules
 
+0. **Test Domain Policy**: All test data (emails, URLs, domains) MUST comply with `docs/testing/test-domain-policy.md`. Only use `@example.com`, `@test.com`, `@auth9.local` for emails; `*.example.com` for URLs/org domains; `evil.com`/`attacker.com` for security attack contexts. NEVER invent non-standard domains.
 1. **Language**: All descriptive text in Chinese. Technical terms (SQL, API paths, field names) in English.
 2. **Scenarios must cover**: Happy path + error/rejection cases + boundary conditions
 3. **UI button/menu names**: Use Chinese book title marks e.g. 「创建」「保存」

@@ -1532,7 +1532,7 @@ describe('API Service', () => {
       const input = {
         name: 'Acme Org',
         slug: 'acme-org',
-        domain: 'acme.test',
+        domain: 'acme.example.com',
         logo_url: 'https://cdn.example.com/logo.png',
       };
 
@@ -1583,7 +1583,7 @@ describe('API Service', () => {
       });
 
       const result = await enterpriseSsoApi.discover(
-        { email: 'user@acme.test' },
+        { email: 'user@acme.example.com' },
         {
           response_type: 'code',
           client_id: 'portal-client',
@@ -1604,7 +1604,7 @@ describe('API Service', () => {
       expect(options).toMatchObject({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email: 'user@acme.test' }),
+        body: JSON.stringify({ email: 'user@acme.example.com' }),
       });
       expect(result.data.connector_alias).toBe('saml-main');
     });
@@ -1625,7 +1625,7 @@ describe('API Service', () => {
               priority: 1,
               keycloak_alias: 'kc-corp-saml',
               config: {},
-              domains: ['acme.test'],
+              domains: ['acme.example.com'],
               created_at: '',
               updated_at: '',
             },

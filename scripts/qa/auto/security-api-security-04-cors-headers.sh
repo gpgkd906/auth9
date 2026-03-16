@@ -30,7 +30,7 @@ scenario 1 "CORS configuration security" '
   assert_eq "$allows_null" "false" "CORS does not allow null origin"
 
   any_headers=$(curl -sI "${API_BASE}/api/v1/users" \
-    -H "Origin: http://random-site.com" 2>&1)
+    -H "Origin: http://random.example.com" 2>&1)
   any_lower=$(echo "$any_headers" | tr "[:upper:]" "[:lower:]")
   wildcard_plus_creds=false
   if echo "$any_lower" | grep -q "access-control-allow-origin: \*"; then

@@ -44,7 +44,7 @@ WHERE d.domain = '{corp_domain}' AND c.enabled = 1;
 ## 场景 7：Portal `/login` 页面输入未配置域名邮箱显示错误（UI 回归）
 
 ### 初始状态
-- 系统中不存在域名 `unknown-corp.com` 的连接器绑定
+- 系统中不存在域名 `unknown-corp.example.com` 的连接器绑定
 - 用户已登出
 
 ### 目的
@@ -54,7 +54,7 @@ WHERE d.domain = '{corp_domain}' AND c.enabled = 1;
 
 ### 测试操作流程
 1. 在浏览器中访问 `http://localhost:3000/login`
-2. 在邮箱输入框中输入 `user@unknown-corp.com`
+2. 在邮箱输入框中输入 `user@unknown-corp.example.com`
 3. 点击「Continue with Enterprise SSO」按钮
 4. 等待响应
 
@@ -80,7 +80,7 @@ WHERE d.domain = '{corp_domain}' AND c.enabled = 1;
 
 1. 调用 **`browser_navigate`**: `http://localhost:3000/login`
 2. 调用 **`browser_snapshot`** 确认页面渲染（未发生 auto-redirect）
-3. 调用 **`browser_fill_form`**: 在邮箱输入框填入 `user@unknown-corp.com`
+3. 调用 **`browser_fill_form`**: 在邮箱输入框填入 `user@unknown-corp.example.com`
 4. 调用 **`browser_click`**: 点击「Continue with Enterprise SSO」按钮
 5. 等待页面响应后调用 **`browser_snapshot`**
 6. **验证**：
