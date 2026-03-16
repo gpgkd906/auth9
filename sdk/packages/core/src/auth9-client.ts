@@ -6,6 +6,14 @@ import { RolesClient } from "./clients/roles.js";
 import { PermissionsClient } from "./clients/permissions.js";
 import { RbacClient } from "./clients/rbac.js";
 import { InvitationsClient } from "./clients/invitations.js";
+import { IdentityProvidersClient } from "./clients/identity-providers.js";
+import { SsoClient } from "./clients/sso.js";
+import { SamlClient } from "./clients/saml.js";
+import { AbacClient } from "./clients/abac.js";
+import { SessionsClient } from "./clients/sessions.js";
+import { WebhooksClient } from "./clients/webhooks.js";
+import { ScimClient } from "./clients/scim.js";
+import { TenantServicesClient } from "./clients/tenant-services.js";
 import type {
   Action,
   CreateActionInput,
@@ -37,6 +45,14 @@ export class Auth9Client {
   private _permissions?: PermissionsClient;
   private _rbac?: RbacClient;
   private _invitations?: InvitationsClient;
+  private _identityProviders?: IdentityProvidersClient;
+  private _sso?: SsoClient;
+  private _saml?: SamlClient;
+  private _abac?: AbacClient;
+  private _sessions?: SessionsClient;
+  private _webhooks?: WebhooksClient;
+  private _scim?: ScimClient;
+  private _tenantServices?: TenantServicesClient;
 
   constructor(config: Auth9ClientConfig) {
     this.http = new Auth9HttpClient({
@@ -88,6 +104,38 @@ export class Auth9Client {
 
   get invitations(): InvitationsClient {
     return (this._invitations ??= new InvitationsClient(this.http));
+  }
+
+  get identityProviders(): IdentityProvidersClient {
+    return (this._identityProviders ??= new IdentityProvidersClient(this.http));
+  }
+
+  get sso(): SsoClient {
+    return (this._sso ??= new SsoClient(this.http));
+  }
+
+  get saml(): SamlClient {
+    return (this._saml ??= new SamlClient(this.http));
+  }
+
+  get abac(): AbacClient {
+    return (this._abac ??= new AbacClient(this.http));
+  }
+
+  get sessions(): SessionsClient {
+    return (this._sessions ??= new SessionsClient(this.http));
+  }
+
+  get webhooks(): WebhooksClient {
+    return (this._webhooks ??= new WebhooksClient(this.http));
+  }
+
+  get scim(): ScimClient {
+    return (this._scim ??= new ScimClient(this.http));
+  }
+
+  get tenantServices(): TenantServicesClient {
+    return (this._tenantServices ??= new TenantServicesClient(this.http));
   }
 
   get actions() {

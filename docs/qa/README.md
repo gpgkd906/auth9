@@ -158,7 +158,7 @@
 | [action/11-security-attack-defense.md](./action/11-security-attack-defense.md) | 攻击防护（命令注入、提权、伪造、脚本注入） | 4 |
 | [action/12-api-sdk-advanced.md](./action/12-api-sdk-advanced.md) | API/SDK 进阶（日志、统计、错误、并发、AI Agent） | 5 |
 
-### SDK (@auth9/core + @auth9/node) (7 个文档, 35 个场景)
+### SDK (@auth9/core + @auth9/node) (8 个文档, 40 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [sdk/01-core-types-utils.md](./sdk/01-core-types-utils.md) | 类型导出、snake/camel 转换、错误体系、Claims 辨别 | 5 |
@@ -168,6 +168,7 @@
 | [sdk/05-express-middleware.md](./sdk/05-express-middleware.md) | Express 中间件、权限控制、角色控制、AuthInfo | 5 |
 | [sdk/06-middleware-testing.md](./sdk/06-middleware-testing.md) | Next.js/Fastify 中间件、Mock Token、构建输出 | 5 |
 | [sdk/07-core-management-clients.md](./sdk/07-core-management-clients.md) | 核心管理 API 子客户端（Tenants/Users/Services/Roles/Invitations） | 5 |
+| [sdk/08-security-enterprise-clients.md](./sdk/08-security-enterprise-clients.md) | 安全与企业功能子客户端（IdP/SSO/SAML/ABAC/Sessions/Webhooks/SCIM/TenantServices） | 5 |
 
 ### 集成测试 (12 个文档, 59 个场景)
 | 文档 | 描述 | 场景数 |

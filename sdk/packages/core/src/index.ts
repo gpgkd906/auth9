@@ -62,8 +62,48 @@ export type {
 export type {
   Webhook,
   CreateWebhookInput,
+  UpdateWebhookInput,
   WebhookTestResult,
 } from "./types/webhook.js";
+export type {
+  IdentityProvider,
+  CreateIdentityProviderInput,
+  UpdateIdentityProviderInput,
+  IdentityProviderTemplate,
+  LinkedIdentity,
+} from "./types/identity-provider.js";
+export type {
+  SSOConnector,
+  CreateSSOConnectorInput,
+  UpdateSSOConnectorInput,
+  SSOTestResult,
+} from "./types/sso.js";
+export type {
+  SamlApplication,
+  CreateSamlApplicationInput,
+  UpdateSamlApplicationInput,
+  SamlCertificateInfo,
+} from "./types/saml.js";
+export type {
+  AbacPolicy,
+  AbacRule,
+  CreateAbacPolicyInput,
+  UpdateAbacPolicyInput,
+  SimulateAbacInput,
+  AbacSimulationResult,
+} from "./types/abac.js";
+export type {
+  ScimToken,
+  ScimTokenWithValue,
+  CreateScimTokenInput,
+  ScimLog,
+  ScimLogQuery,
+  ScimGroupMapping,
+} from "./types/scim.js";
+export type {
+  TenantServiceInfo,
+  ToggleTenantServiceInput,
+} from "./types/tenant-service.js";
 export type {
   LoginStats,
   LoginEvent,
@@ -102,6 +142,14 @@ export { RolesClient } from "./clients/roles.js";
 export { PermissionsClient } from "./clients/permissions.js";
 export { RbacClient } from "./clients/rbac.js";
 export { InvitationsClient } from "./clients/invitations.js";
+export { IdentityProvidersClient } from "./clients/identity-providers.js";
+export { SsoClient } from "./clients/sso.js";
+export { SamlClient } from "./clients/saml.js";
+export { AbacClient } from "./clients/abac.js";
+export { SessionsClient } from "./clients/sessions.js";
+export { WebhooksClient } from "./clients/webhooks.js";
+export { ScimClient } from "./clients/scim.js";
+export { TenantServicesClient } from "./clients/tenant-services.js";
 
 // Errors
 export {

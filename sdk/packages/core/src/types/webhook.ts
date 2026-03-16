@@ -19,6 +19,14 @@ export interface CreateWebhookInput {
   enabled?: boolean;
 }
 
+export interface UpdateWebhookInput {
+  name?: string;
+  url?: string;
+  secret?: string;
+  events?: string[];
+  enabled?: boolean;
+}
+
 export interface WebhookTestResult {
   success: boolean;
   statusCode?: number;
