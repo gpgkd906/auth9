@@ -13,6 +13,9 @@ use uuid::Uuid;
 pub struct NoOpCacheManager {
     oidc_states: Arc<RwLock<HashMap<String, String>>>,
     refresh_sessions: Arc<RwLock<HashMap<String, String>>>,
+    otp_store: Arc<RwLock<HashMap<String, String>>>,
+    counters: Arc<RwLock<HashMap<String, u64>>>,
+    flags: Arc<RwLock<HashMap<String, bool>>>,
 }
 
 impl NoOpCacheManager {
@@ -20,6 +23,9 @@ impl NoOpCacheManager {
         Self {
             oidc_states: Arc::new(RwLock::new(HashMap::new())),
             refresh_sessions: Arc::new(RwLock::new(HashMap::new())),
+            otp_store: Arc::new(RwLock::new(HashMap::new())),
+            counters: Arc::new(RwLock::new(HashMap::new())),
+            flags: Arc::new(RwLock::new(HashMap::new())),
         }
     }
 
@@ -179,6 +185,46 @@ impl NoOpCacheManager {
     ) -> Result<bool> {
         // NoOp: always report as not duplicate
         Ok(false)
+    }
+
+    // ==================== OTP ====================
+
+    pub async fn store_otp(&self, key: &str, code: &str, _ttl_secs: u64) -> Result<()> {
+        self.otp_store
+            .write()
+            .await
+            .insert(key.to_string(), code.to_string());
+        Ok(())
+    }
+
+    pub async fn get_otp(&self, key: &str) -> Result<Option<String>> {
+        Ok(self.otp_store.read().await.get(key).cloned())
+    }
+
+    pub async fn remove_otp(&self, key: &str) -> Result<()> {
+        self.otp_store.write().await.remove(key);
+        Ok(())
+    }
+
+    pub async fn increment_counter(&self, key: &str, _ttl_secs: u64) -> Result<u64> {
+        let mut counters = self.counters.write().await;
+        let entry = counters.entry(key.to_string()).or_insert(0);
+        *entry += 1;
+        Ok(*entry)
+    }
+
+    pub async fn get_counter(&self, key: &str) -> Result<u64> {
+        Ok(self.counters.read().await.get(key).copied().unwrap_or(0))
+    }
+
+    pub async fn set_flag(&self, key: &str, _ttl_secs: u64) -> Result<bool> {
+        let mut flags = self.flags.write().await;
+        if flags.contains_key(key) {
+            Ok(true)
+        } else {
+            flags.insert(key.to_string(), true);
+            Ok(false)
+        }
     }
 }
 

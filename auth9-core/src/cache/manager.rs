@@ -454,6 +454,66 @@ impl CacheManager {
 
     // ==================== Webhook Event Deduplication ====================
 
+    // ==================== OTP ====================
+
+    pub async fn store_otp(&self, key: &str, code: &str, ttl_secs: u64) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(key, code, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_otp(&self, key: &str) -> Result<Option<String>> {
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(key).await?;
+        Ok(value)
+    }
+
+    pub async fn remove_otp(&self, key: &str) -> Result<()> {
+        self.delete(key).await
+    }
+
+    pub async fn increment_counter(&self, key: &str, ttl_secs: u64) -> Result<u64> {
+        let mut conn = self.conn.clone();
+        let value: u64 = redis::cmd("INCR")
+            .arg(key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        // Set TTL only on first increment (when counter transitions from 0 to 1)
+        if value == 1 {
+            let _: () = redis::cmd("EXPIRE")
+                .arg(key)
+                .arg(ttl_secs)
+                .query_async(&mut conn)
+                .await
+                .map_err(AppError::from)?;
+        }
+        Ok(value)
+    }
+
+    pub async fn get_counter(&self, key: &str) -> Result<u64> {
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(key).await?;
+        Ok(value.and_then(|v| v.parse().ok()).unwrap_or(0))
+    }
+
+    pub async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool> {
+        let mut conn = self.conn.clone();
+        let result: Option<String> = redis::cmd("SET")
+            .arg(key)
+            .arg("1")
+            .arg("NX")
+            .arg("EX")
+            .arg(ttl_secs)
+            .query_async(&mut conn)
+            .await
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Redis SETNX failed: {}", e)))?;
+        // result is Some("OK") if newly set, None if already existed
+        Ok(result.is_none())
+    }
+
+    // ==================== Webhook Event Deduplication ====================
+
     /// Atomically check if a webhook event key exists and set it if not (SETNX).
     /// Returns true if the event was already processed (duplicate).
     pub async fn check_and_mark_webhook_event(

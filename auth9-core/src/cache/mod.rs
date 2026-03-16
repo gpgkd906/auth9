@@ -95,6 +95,26 @@ pub trait CacheOperations: Send + Sync {
     /// Check if a webhook event has already been processed (returns true if duplicate).
     /// If not a duplicate, marks it as processed with the given TTL.
     async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool>;
+
+    // ==================== OTP ====================
+
+    /// Store an OTP code with TTL
+    async fn store_otp(&self, key: &str, code: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get a stored OTP code
+    async fn get_otp(&self, key: &str) -> Result<Option<String>>;
+
+    /// Remove a stored OTP code (one-time consumption)
+    async fn remove_otp(&self, key: &str) -> Result<()>;
+
+    /// Increment a counter and return the new value. Sets TTL on first increment.
+    async fn increment_counter(&self, key: &str, ttl_secs: u64) -> Result<u64>;
+
+    /// Get the current value of a counter (0 if not set)
+    async fn get_counter(&self, key: &str) -> Result<u64>;
+
+    /// Set a flag key with TTL. Returns true if the key already existed.
+    async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool>;
 }
 
 /// Cache key prefixes
@@ -110,6 +130,10 @@ pub(crate) mod keys {
     pub const REFRESH_TOKEN_SESSION: &str = "auth9:refresh_session";
     pub const SESSION_REFRESH_TOKENS: &str = "auth9:session_tokens";
     pub const WEBHOOK_EVENT_DEDUP: &str = "auth9:webhook_dedup";
+    pub const OTP: &str = "auth9:otp";
+    pub const OTP_COOLDOWN: &str = "auth9:otp_cooldown";
+    pub const OTP_DAILY: &str = "auth9:otp_daily";
+    pub const OTP_FAIL: &str = "auth9:otp_fail";
 }
 
 /// Default TTLs

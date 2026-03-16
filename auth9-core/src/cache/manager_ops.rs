@@ -132,4 +132,30 @@ impl CacheOperations for CacheManager {
     async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool> {
         CacheManager::check_and_mark_webhook_event(self, event_key, ttl_secs).await
     }
+
+    // ==================== OTP ====================
+
+    async fn store_otp(&self, key: &str, code: &str, ttl_secs: u64) -> Result<()> {
+        CacheManager::store_otp(self, key, code, ttl_secs).await
+    }
+
+    async fn get_otp(&self, key: &str) -> Result<Option<String>> {
+        CacheManager::get_otp(self, key).await
+    }
+
+    async fn remove_otp(&self, key: &str) -> Result<()> {
+        CacheManager::remove_otp(self, key).await
+    }
+
+    async fn increment_counter(&self, key: &str, ttl_secs: u64) -> Result<u64> {
+        CacheManager::increment_counter(self, key, ttl_secs).await
+    }
+
+    async fn get_counter(&self, key: &str) -> Result<u64> {
+        CacheManager::get_counter(self, key).await
+    }
+
+    async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool> {
+        CacheManager::set_flag(self, key, ttl_secs).await
+    }
 }

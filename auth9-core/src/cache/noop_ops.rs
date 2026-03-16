@@ -137,4 +137,30 @@ impl CacheOperations for NoOpCacheManager {
     async fn check_and_mark_webhook_event(&self, event_key: &str, ttl_secs: u64) -> Result<bool> {
         NoOpCacheManager::check_and_mark_webhook_event(self, event_key, ttl_secs).await
     }
+
+    // ==================== OTP ====================
+
+    async fn store_otp(&self, key: &str, code: &str, ttl_secs: u64) -> Result<()> {
+        NoOpCacheManager::store_otp(self, key, code, ttl_secs).await
+    }
+
+    async fn get_otp(&self, key: &str) -> Result<Option<String>> {
+        NoOpCacheManager::get_otp(self, key).await
+    }
+
+    async fn remove_otp(&self, key: &str) -> Result<()> {
+        NoOpCacheManager::remove_otp(self, key).await
+    }
+
+    async fn increment_counter(&self, key: &str, ttl_secs: u64) -> Result<u64> {
+        NoOpCacheManager::increment_counter(self, key, ttl_secs).await
+    }
+
+    async fn get_counter(&self, key: &str) -> Result<u64> {
+        NoOpCacheManager::get_counter(self, key).await
+    }
+
+    async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool> {
+        NoOpCacheManager::set_flag(self, key, ttl_secs).await
+    }
 }
