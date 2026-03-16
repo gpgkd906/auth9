@@ -7,7 +7,7 @@ const PORT = 3001;
 // Middleware: auth9Middleware (non-optional)
 app.use(auth9Middleware({
   domain: "http://localhost:8080",
-  audience: "auth9-portal",
+  audience: "5eadeb71-039e-45b1-9184-657a365b5794",
 }));
 
 // Test route for scenario 1: req.auth injection
@@ -27,6 +27,7 @@ const optionalApp = express();
 optionalApp.use(auth9Middleware({
   domain: "http://localhost:8080",
   optional: true,
+  audience: "5eadeb71-039e-45b1-9184-657a365b5794",
 }));
 
 optionalApp.get("/public-or-private", (req, res) => {

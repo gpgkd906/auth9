@@ -99,7 +99,7 @@ describe("Auth9GrpcClient", () => {
 
     const client = new Auth9GrpcClient({
       address: "localhost:50051",
-      auth: { apiKey: "test-api-key" },
+      auth: { apiKey: "test-api-key" }, // pragma: allowlist secret
     });
 
     const result = await client.exchangeToken({
@@ -125,7 +125,7 @@ describe("Auth9GrpcClient", () => {
       tenant_id: "tenant-1",
       service_id: "svc-1",
     });
-    expect((metadata as MockMetadata).get("x-api-key")).toBe("test-api-key");
+    expect((metadata as InstanceType<typeof MockMetadata>).get("x-api-key")).toBe("test-api-key");
     expect(result).toEqual({
       accessToken: "access-1",
       tokenType: "Bearer",

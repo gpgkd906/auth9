@@ -286,8 +286,8 @@
 
 | # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
 |---|------|------|----------|----------|------|
-| 1 | Next.js Middleware 路径控制 | ☐ | | | |
-| 2 | Fastify Plugin 注入 | ☐ | | | |
-| 3 | createMockToken 生成 | ☐ | | | |
-| 4 | createMockAuth9 中间件 | ☐ | | | |
-| 5 | SDK 构建输出格式 | ☐ | | | |
+| 1 | Next.js Middleware 路径控制 | ✅ | 2026-03-16 | opencode | 8 tests passed |
+| 2 | Fastify Plugin 注入 | ✅ | 2026-03-16 | opencode | 9 tests passed |
+| 3 | createMockToken 生成 | ✅ | 2026-03-16 | opencode | 8 tests passed |
+| 4 | createMockAuth9 中间件 | ✅ | 2026-03-16 | opencode | (含于场景3) |
+| 5 | SDK 构建输出格式 | ✅ | 2026-03-16 | opencode | ESM+CJS+types OK |
