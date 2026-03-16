@@ -21,3 +21,4 @@ export * from "./webhook";
 export * from "./tenant-service";
 export * from "./security-alert";
 export * from "./action";
+export * from "./email-otp";

@@ -72,15 +72,17 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   let allowRegistration = false;
+  let emailOtpEnabled = false;
 
   try {
     const { data: branding } = await publicBrandingApi.get(clientId);
     allowRegistration = branding.allow_registration;
+    emailOtpEnabled = branding.email_otp_enabled ?? false;
   } catch {
     // Default closed if branding cannot be loaded.
   }
 
-  return { error, apiBaseUrl, allowRegistration, locale };
+  return { error, apiBaseUrl, allowRegistration, emailOtpEnabled, locale };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -204,6 +206,7 @@ export default function Login() {
     error: string | null;
     apiBaseUrl: string;
     allowRegistration: boolean;
+    emailOtpEnabled: boolean;
     locale: string;
   };
   const actionData = useActionData<typeof action>();
@@ -368,6 +371,15 @@ export default function Login() {
                   {isSubmitting ? t("auth.login.redirecting") : t("auth.login.passwordButton")}
                 </Button>
               </Form>
+
+              {/* Email OTP Login Button */}
+              {data.emailOtpEnabled && (
+                <Link to="/auth/email-otp">
+                  <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
+                    {t("auth.login.emailOtpButton")}
+                  </Button>
+                </Link>
+              )}
 
               {/* Passkey Login Button */}
               <Button

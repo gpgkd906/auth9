@@ -48,6 +48,7 @@ describe("Login Page", () => {
             error: null,
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            emailOtpEnabled: false,
             locale: "zh-CN",
         });
     });
@@ -60,6 +61,7 @@ describe("Login Page", () => {
             error: "access_denied",
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            emailOtpEnabled: false,
             locale: "zh-CN",
         });
     });
@@ -72,6 +74,7 @@ describe("Login Page", () => {
             error: "server_error",
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            emailOtpEnabled: false,
             locale: "zh-CN",
         });
     });
@@ -95,6 +98,7 @@ describe("Login Page", () => {
             error: null,
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: true,
+            emailOtpEnabled: false,
             locale: "zh-CN",
         });
     });
@@ -315,6 +319,7 @@ describe("Login Page", () => {
             error: null,
             apiBaseUrl: "http://localhost:8080",
             allowRegistration: false,
+            emailOtpEnabled: false,
             locale: "zh-CN",
         });
     });

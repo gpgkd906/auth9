@@ -49,6 +49,7 @@ Auth9 采用 Headless Keycloak 架构，品牌设置支持两级配置：
 | favicon_url | TEXT | Favicon URL |
 | custom_css | TEXT | 自定义 CSS |
 | allow_registration | BOOLEAN | 是否允许注册 |
+| email_otp_enabled | BOOLEAN | 是否启用 Email OTP 登录（默认 false，见 [auth/17-email-otp-login.md](../auth/17-email-otp-login.md)） |
 
 ---
 

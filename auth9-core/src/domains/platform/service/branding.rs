@@ -304,6 +304,7 @@ mod tests {
             company_name: Some("My Company".to_string()),
             favicon_url: None,
             allow_registration: false,
+            email_otp_enabled: false,
         };
 
         let result = service.update_branding(config.clone()).await;

@@ -250,6 +250,7 @@ mod tests {
             company_name: Some("Auth9".to_string()),
             favicon_url: Some("https://example.com/favicon.ico".to_string()),
             allow_registration: false,
+            email_otp_enabled: false,
         };
 
         let response = SuccessResponse::new(config);

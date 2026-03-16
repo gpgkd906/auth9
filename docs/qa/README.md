@@ -88,7 +88,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (16 个文档, 75 个场景)
+### 认证流程 (17 个文档, 80 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 5 |
@@ -106,7 +106,8 @@
 | [auth/13-keycloak-ui-visibility-regression.md](./auth/13-keycloak-ui-visibility-regression.md) | 社交登录/关联异常路径下的 Keycloak UI 可视性回归（仅检查是否有原生 UI 泄漏） | 5 |
 | [auth/14-landing-public-pages.md](./auth/14-landing-public-pages.md) | Landing 公共页面（Privacy / Terms / Docs）入口、内容、三语翻译 | 5 |
 | [auth/15-dark-mode-auth-contrast.md](./auth/15-dark-mode-auth-contrast.md) | 独立认证页与 Auth9 品牌认证页的 Dark Mode 对比度回归（Portal + Keycloak Theme） | 5 |
-| [auth/16-pkce-flow.md](./auth/16-pkce-flow.md) | PKCE (RFC 7636) 参数透传、Cookie 存储、Public Client 强制验证 | 5 | 🆕
+| [auth/16-pkce-flow.md](./auth/16-pkce-flow.md) | PKCE (RFC 7636) 参数透传、Cookie 存储、Public Client 强制验证 | 5 |
+| [auth/17-email-otp-login.md](./auth/17-email-otp-login.md) | Email OTP 无密码登录（发送/验证端点、Portal UI 入口、租户级开关、防枚举） | 5 | 🆕
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -205,7 +206,7 @@
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
-| 认证流程 | 15 | 70 |
+| 认证流程 | 17 | 80 |
 | 系统设置 | 4 | 20 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
@@ -215,13 +216,14 @@
 | SDK | 6 | 30 |
 | 集成测试 | 11 | 54 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **98** | **464** |
+| **总计** | **99** | **469** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
 | 2026-03-14 | 4.3.0 | 新增平台级恶意 IP 黑名单 QA 文档（`settings/04`），并同步修正 `session/04` 对可疑 IP 告警来源的说明，覆盖黑名单配置、输入校验、`suspicious_ip`/`critical` 告警联动 |
+| 2026-03-16 | 5.8.0 | 新增 `auth/17-email-otp-login.md`（5 个场景）；更新 `auth/01-oidc-login.md` 认证方式表增加 Email OTP 行；更新 `settings/01-branding.md` BrandingConfig 字段表增加 `email_otp_enabled` |
 
 ---
 

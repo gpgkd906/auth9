@@ -123,6 +123,10 @@ pub struct BrandingConfig {
     /// Whether to allow showing registration link on login page (default: false)
     #[serde(default)]
     pub allow_registration: bool,
+
+    /// Whether to enable Email OTP (passwordless) login (default: false)
+    #[serde(default)]
+    pub email_otp_enabled: bool,
 }
 
 impl Default for BrandingConfig {
@@ -137,6 +141,7 @@ impl Default for BrandingConfig {
             company_name: None,
             favicon_url: None,
             allow_registration: false,
+            email_otp_enabled: false,
         }
     }
 }
@@ -226,6 +231,7 @@ mod tests {
             company_name: None,
             favicon_url: None,
             allow_registration: false,
+            email_otp_enabled: false,
         };
         assert!(config.validate().is_ok());
     }
@@ -324,6 +330,7 @@ mod tests {
             company_name: Some("Test Corp".to_string()),
             favicon_url: Some("https://example.com/favicon.ico".to_string()),
             allow_registration: true,
+            email_otp_enabled: false,
         };
 
         let json = serde_json::to_string(&config).unwrap();

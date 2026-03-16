@@ -48,6 +48,14 @@ where
             "/api/v1/auth/webauthn/authenticate/complete",
             post(identity_api::webauthn::complete_authentication::<S>),
         )
+        .route(
+            "/api/v1/auth/email-otp/send",
+            post(identity_api::email_otp::send_email_otp::<S>),
+        )
+        .route(
+            "/api/v1/auth/email-otp/verify",
+            post(identity_api::email_otp::verify_email_otp::<S>),
+        )
 }
 
 pub fn protected_routes<S>() -> Router<S>

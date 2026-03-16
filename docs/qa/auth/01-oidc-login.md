@@ -22,6 +22,7 @@ Auth9 采用 Headless Keycloak 架构：
 |------|---------|------|
 | **Continue with Enterprise SSO** | 企业 SSO | 输入邮箱 → 域名发现 → Keycloak + `kc_idp_hint` → 直跳企业 IdP |
 | **Sign in with password** | 密码登录 | → Auth9 品牌认证页（由 auth9-keycloak-theme 承载）→ 输入用户名+密码 |
+| **Sign in with email code** | Email OTP | → `/auth/email-otp` → 输入邮箱 → 输入 6 位验证码（需启用 `email_otp_enabled`，见 [17-email-otp-login.md](./17-email-otp-login.md)） |
 | **Sign in with passkey** | Passkey | WebAuthn API → 无密码认证（不经过 Keycloak） |
 
 **本文档测试的是「Sign in with password」路径**，即通过 Auth9 品牌认证页进行用户名+密码认证。

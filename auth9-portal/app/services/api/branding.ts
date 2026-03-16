@@ -67,6 +67,7 @@ export interface BrandingConfig {
   company_name?: string;
   favicon_url?: string;
   allow_registration: boolean;
+  email_otp_enabled?: boolean;
 }
 
 // Public Branding API (no authentication required)
