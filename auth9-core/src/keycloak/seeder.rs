@@ -54,8 +54,8 @@ fn get_admin_password() -> String {
 /// Generate a cryptographically secure random password
 fn generate_secure_password() -> String {
     use rand::Rng;
-    const CHARSET_LOWER: &[u8] = b"abcdefghijkmnopqrstuvwxyz";
-    const CHARSET_UPPER: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ";
+    const CHARSET_LOWER: &[u8] = b"abcdefghijkmnopqrstuvwxyz"; // pragma: allowlist secret
+    const CHARSET_UPPER: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ"; // pragma: allowlist secret
     const CHARSET_DIGIT: &[u8] = b"23456789";
     const CHARSET_SPECIAL: &[u8] = b"!@#$%^&*";
 
@@ -1288,10 +1288,7 @@ impl KeycloakSeeder {
             ],
             attributes: {
                 let mut attrs = existing_client.attributes.unwrap_or_default();
-                attrs.insert(
-                    "pkce.code.challenge.method".to_string(),
-                    "S256".to_string(),
-                );
+                attrs.insert("pkce.code.challenge.method".to_string(), "S256".to_string());
                 Some(attrs)
             },
             public_client: true, // Public client for demo app
@@ -1354,10 +1351,7 @@ impl KeycloakSeeder {
             ],
             attributes: {
                 let mut attrs = HashMap::new();
-                attrs.insert(
-                    "pkce.code.challenge.method".to_string(),
-                    "S256".to_string(),
-                );
+                attrs.insert("pkce.code.challenge.method".to_string(), "S256".to_string());
                 Some(attrs)
             },
             public_client: true, // Public client for demo app
