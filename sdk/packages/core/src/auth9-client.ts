@@ -35,7 +35,10 @@ import type {
   ActionStats,
   UpsertActionInput,
   BatchUpsertResponse,
+  LogQueryFilter,
 } from "./types/action.js";
+import { ActionTrigger } from "./types/action.js";
+import type { PaginatedResponse } from "./types/responses.js";
 
 export interface Auth9ClientConfig {
   baseUrl: string;
@@ -254,21 +257,37 @@ export class Auth9Client {
         );
         return result.data;
       },
-      logs: async (options?: { actionId?: string; success?: boolean; limit?: number }) => {
+      logs: async (options?: LogQueryFilter) => {
         const params: Record<string, string> = {};
         if (options?.actionId) params.action_id = options.actionId;
+        if (options?.triggerId) params.trigger_id = options.triggerId;
+        if (options?.userId) params.user_id = options.userId;
         if (options?.success !== undefined) params.success = String(options.success);
+        if (options?.from) params.from = options.from;
+        if (options?.to) params.to = options.to;
         if (options?.limit) params.limit = String(options.limit);
-        
-        const result = await this.http.get<{ data: ActionExecution[] }>(
+        if (options?.offset) params.offset = String(options.offset);
+
+        return this.http.get<PaginatedResponse<ActionExecution>>(
           `/api/v1/services/${serviceId}/actions/logs`,
           params
+        );
+      },
+      getLog: async (logId: string) => {
+        const result = await this.http.get<{ data: ActionExecution }>(
+          `/api/v1/services/${serviceId}/actions/logs/${logId}`
         );
         return result.data;
       },
       stats: async (id: string) => {
         const result = await this.http.get<{ data: ActionStats }>(
           `/api/v1/services/${serviceId}/actions/${id}/stats`
+        );
+        return result.data;
+      },
+      getTriggers: async () => {
+        const result = await this.http.get<{ data: ActionTrigger[] }>(
+          `/api/v1/actions/triggers`
         );
         return result.data;
       },

@@ -17,10 +17,34 @@ pnpm add @auth9/core
 - ✅ Error handling with typed exceptions
 - ✅ **Actions API** - Manage Auth9 Actions (TypeScript scripts in authentication flow)
 - ✅ **26 domain sub-clients** - Tenants, Users, Services, Roles, Permissions, RBAC, Sessions, Invitations, Webhooks, Identity Providers, SSO, SAML, ABAC, SCIM, Organizations, Password, Passkeys, Email OTP, Auth, Tenant Services, Audit Logs, Analytics, Security Alerts, System Settings, Email Templates, Branding
+- ✅ **100% auth9-core REST API coverage** - Every endpoint mapped to a typed SDK method
 - ✅ Claims validation and token type detection
 - ✅ Full type safety
 
 ## Quick Start
+
+```typescript
+import { Auth9Client } from '@auth9/core';
+
+const client = new Auth9Client({
+  baseUrl: 'https://auth9.example.com',
+  apiKey: 'your-api-key', // pragma: allowlist secret // pragma: allowlist secret
+  serviceId: 'your-service-id',  // required for actions API
+});
+
+// Domain sub-clients with full type safety
+const tenants = await client.tenants.list();
+const users = await client.users.list();
+const roles = await client.roles.list('service-id');
+
+// Actions API
+const triggers = await client.actions.getTriggers();
+const actions = await client.actions.list();
+const logs = await client.actions.logs({ success: false, limit: 10 });
+const logDetail = await client.actions.getLog('log-id');
+```
+
+### Low-level HTTP Client
 
 ```typescript
 import { Auth9HttpClient } from '@auth9/core';
@@ -40,16 +64,20 @@ const { data: tenants } = await client.get<{ data: Tenant[] }>('/api/v1/tenants'
 Auth9 Actions allow you to run custom TypeScript code at key points in the authentication flow.
 
 ```typescript
-import { Auth9HttpClient, ActionTrigger } from '@auth9/core';
-import type { Action, CreateActionInput } from '@auth9/core';
+import { Auth9Client, ActionTrigger } from '@auth9/core';
 
-const client = new Auth9HttpClient({
+const client = new Auth9Client({
   baseUrl: 'https://auth9.example.com',
-  accessToken: 'your-api-token',
+  apiKey: 'your-api-key', // pragma: allowlist secret
+  serviceId: 'your-service-id',
 });
 
-// Create an action to add custom claims
-const input: CreateActionInput = {
+// List available triggers
+const triggers = await client.actions.getTriggers();
+// => ["post-login", "pre-user-registration", ...]
+
+// Create an action
+const action = await client.actions.create({
   name: 'Add department claim',
   triggerId: ActionTrigger.PostLogin,
   script: `
@@ -58,12 +86,18 @@ const input: CreateActionInput = {
     context;
   `,
   enabled: true,
-};
+});
 
-const { data: action } = await client.post<{ data: Action }>(
-  '/api/v1/tenants/your-tenant-id/actions',
-  input
-);
+// Query execution logs (paginated, with full filter)
+const logs = await client.actions.logs({
+  actionId: action.id,
+  success: false,
+  from: '2026-01-01T00:00:00Z',
+  limit: 50,
+});
+
+// Get single log detail
+const logDetail = await client.actions.getLog(logs.data[0].id);
 ```
 
 👉 **[Full Actions API Guide](./ACTIONS.md)** - Comprehensive documentation and examples
@@ -84,11 +118,12 @@ import type {
   Invitation,
   Webhook,
 
-  // Actions (NEW)
+  // Actions
   Action,
   ActionContext,
   ActionExecution,
   ActionStats,
+  LogQueryFilter,
 
   // Input types
   CreateTenantInput,
@@ -108,7 +143,7 @@ import type {
 
 ```typescript
 import {
-  ActionTrigger,  // NEW: post-login, pre-user-registration, etc.
+  ActionTrigger,  // post-login, pre-user-registration, etc.
 } from '@auth9/core';
 ```
 
@@ -151,6 +186,40 @@ try {
 }
 ```
 
+## Sub-Clients Reference
+
+All sub-clients are lazy-loaded and accessed as properties on `Auth9Client`.
+
+| Sub-Client | Methods | Description |
+|------------|---------|-------------|
+| `client.tenants` | `list` `get` `create` `update` `delete` `listUsers` `getMaliciousIpBlacklist` `updateMaliciousIpBlacklist` | Tenant management |
+| `client.users` | `list` `get` `getMe` `updateMe` `create` `update` `delete` `enableMfa` `disableMfa` `getTenants` `addToTenant` `removeFromTenant` `updateRoleInTenant` | User management |
+| `client.services` | `list` `get` `create` `update` `delete` `getIntegrationInfo` `listClients` `createClient` `deleteClient` `regenerateClientSecret` | Service & client management |
+| `client.roles` | `list` `get` `create` `update` `delete` `assignPermission` `removePermission` | Role management |
+| `client.permissions` | `list` `create` `delete` | Permission management |
+| `client.rbac` | `assignRoles` `getUserRoles` `getUserAssignedRoles` `unassignRole` | Role-based access control |
+| `client.invitations` | `list` `get` `create` `delete` `revoke` `resend` `validate` `accept` | Tenant invitations |
+| `client.identityProviders` | `list` `get` `create` `update` `delete` `getTemplates` `listMyLinkedIdentities` `unlinkIdentity` | Social/Enterprise IdP |
+| `client.sso` | `listConnectors` `createConnector` `updateConnector` `deleteConnector` `testConnector` | Enterprise SSO |
+| `client.saml` | `list` `get` `create` `update` `delete` `getMetadata` `getCertificate` `getCertificateInfo` | SAML applications |
+| `client.abac` | `listPolicies` `createPolicy` `updatePolicy` `publishPolicy` `rollbackPolicy` `simulate` | Attribute-based access control |
+| `client.sessions` | `listMy` `revoke` `revokeAllOther` `forceLogout` | Session management |
+| `client.webhooks` | `list` `get` `create` `update` `delete` `test` `regenerateSecret` | Webhook management |
+| `client.scim` | `listTokens` `createToken` `revokeToken` `listLogs` `listGroupMappings` `updateGroupMappings` | SCIM provisioning admin |
+| `client.tenantServices` | `list` `toggle` `getEnabled` | Tenant-service associations |
+| `client.password` | `forgotPassword` `resetPassword` `changeMyPassword` `adminSetPassword` `getPolicy` `updatePolicy` | Password flows & policy |
+| `client.passkeys` | `list` `delete` `startRegistration` `completeRegistration` `startAuthentication` `completeAuthentication` | WebAuthn/Passkey |
+| `client.emailOtp` | `send` `verify` | Email OTP authentication |
+| `client.auth` | `getAuthorizeUrl` `getLogoutUrl` `exchangeTenantToken` `getUserInfo` `discoverEnterpriseSso` | OAuth/OIDC flows |
+| `client.organizations` | `create` `getMyTenants` | Organization management |
+| `client.auditLogs` | `list` | Audit log queries |
+| `client.analytics` | `getLoginStats` `listLoginEvents` `getDailyTrend` | Login analytics |
+| `client.securityAlerts` | `list` `resolve` | Security alert management |
+| `client.system` | `getEmailSettings` `updateEmailSettings` `testEmailConnection` `sendTestEmail` `getMaliciousIpBlacklist` `updateMaliciousIpBlacklist` | System configuration |
+| `client.emailTemplates` | `list` `get` `update` `reset` `preview` `sendTest` | Email template management |
+| `client.branding` | `get` `update` `getPublic` `getForService` `updateForService` `deleteForService` | Branding configuration |
+| `client.actions` | `list` `get` `create` `update` `delete` `test` `batchUpsert` `logs` `getLog` `stats` `getTriggers` | Actions (requires `serviceId`) |
+
 ## HTTP Client
 
 The HTTP client automatically handles:
@@ -174,7 +243,7 @@ const client = new Auth9HttpClient({
 await client.get<T>(path, params?);
 await client.post<T>(path, body?);
 await client.put<T>(path, body?);
-await client.patch<T>(path, body?);  // NEW: For Actions updates
+await client.patch<T>(path, body?);
 await client.delete(path);
 ```
 
@@ -209,15 +278,16 @@ toCamelCase({ user_id: '123', display_name: 'John' });
 Perfect for AI Agents that dynamically create and manage services:
 
 ```typescript
-import { Auth9HttpClient, ActionTrigger } from '@auth9/core';
-import type { UpsertActionInput, BatchUpsertResponse } from '@auth9/core';
+import { Auth9Client, ActionTrigger } from '@auth9/core';
+import type { UpsertActionInput } from '@auth9/core';
 
-const client = new Auth9HttpClient({
-  baseUrl: process.env.AUTH9_URL,
-  accessToken: process.env.AUTH9_API_KEY,
+const client = new Auth9Client({
+  baseUrl: process.env.AUTH9_URL!,
+  apiKey: process.env.AUTH9_API_KEY!,
+  serviceId: process.env.AUTH9_SERVICE_ID!,
 });
 
-// Deploy access control rules for multiple services
+// Deploy access control rules via batch upsert
 const actions: UpsertActionInput[] = services.map((service, index) => ({
   name: `${service}-access-control`,
   triggerId: ActionTrigger.PostLogin,
@@ -230,16 +300,19 @@ const actions: UpsertActionInput[] = services.map((service, index) => ({
     context;
   `,
   enabled: true,
+  strictMode: false,
   executionOrder: index,
   timeoutMs: 3000,
 }));
 
-const { data: result } = await client.post<{ data: BatchUpsertResponse }>(
-  `/api/v1/tenants/${tenantId}/actions/batch`,
-  { actions }
-);
-
+const result = await client.actions.batchUpsert(actions);
 console.log(`Deployed ${result.created.length} rules`);
+
+// Monitor execution health
+for (const action of result.created) {
+  const stats = await client.actions.stats(action.id);
+  console.log(`${action.name}: ${stats.errorCount} errors / ${stats.executionCount} runs`);
+}
 ```
 
 See [ACTIONS.md](./ACTIONS.md) for complete examples.

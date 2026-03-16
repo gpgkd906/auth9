@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Auth9HttpClient } from "../http-client.js";
+import { Auth9Client } from "../auth9-client.js";
 import type {
   Action,
   CreateActionInput,
@@ -339,19 +340,20 @@ describe("Action Types with HTTP Client", () => {
         json: () =>
           Promise.resolve({
             data: [
-              {
-                id: ActionTrigger.PostLogin,
-                name: "Post Login",
-                description: "Triggered after successful login",
-              },
+              ActionTrigger.PostLogin,
+              ActionTrigger.PreUserRegistration,
+              ActionTrigger.PostUserRegistration,
+              ActionTrigger.PostChangePassword,
+              ActionTrigger.PostEmailVerification,
+              ActionTrigger.PreTokenRefresh,
             ],
           }),
       });
 
-      await client.get("/api/v1/triggers");
+      await client.get("/api/v1/actions/triggers");
 
       expect(mockFetch).toHaveBeenCalledWith(
-        "https://auth9.example.com/api/v1/triggers",
+        "https://auth9.example.com/api/v1/actions/triggers",
         expect.objectContaining({
           method: "GET",
         })
@@ -367,6 +369,137 @@ describe("Action Types with HTTP Client", () => {
       expect(ActionTrigger.PostChangePassword).toBe("post-change-password");
       expect(ActionTrigger.PostEmailVerification).toBe("post-email-verification");
       expect(ActionTrigger.PreTokenRefresh).toBe("pre-token-refresh");
+    });
+  });
+});
+
+describe("Auth9Client Actions API", () => {
+  const client = new Auth9Client({
+    baseUrl: "https://auth9.example.com",
+    apiKey: "test-token", // pragma: allowlist secret
+    serviceId: "service-123",
+  });
+
+  const serviceId = "service-123";
+
+  describe("getTriggers", () => {
+    it("sends GET /api/v1/actions/triggers", async () => {
+      const triggers = [
+        ActionTrigger.PostLogin,
+        ActionTrigger.PreUserRegistration,
+        ActionTrigger.PostUserRegistration,
+        ActionTrigger.PostChangePassword,
+        ActionTrigger.PostEmailVerification,
+        ActionTrigger.PreTokenRefresh,
+      ];
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: triggers }),
+      });
+
+      const result = await client.actions.getTriggers();
+
+      expect(result).toEqual(triggers);
+      expect(result).toHaveLength(6);
+      expect(mockFetch).toHaveBeenCalledWith(
+        "https://auth9.example.com/api/v1/actions/triggers",
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+  });
+
+  describe("getLog", () => {
+    it("sends GET /api/v1/services/{serviceId}/actions/logs/{logId}", async () => {
+      const mockLog: ActionExecution = {
+        id: "exec-1",
+        actionId: "action-1",
+        serviceId: serviceId,
+        triggerId: ActionTrigger.PostLogin,
+        userId: "user-1",
+        success: true,
+        durationMs: 10,
+        executedAt: "2026-02-12T10:00:00Z",
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ data: mockLog }),
+      });
+
+      const result = await client.actions.getLog("exec-1");
+
+      expect(result.id).toBe("exec-1");
+      expect(result.success).toBe(true);
+      expect(mockFetch).toHaveBeenCalledWith(
+        `https://auth9.example.com/api/v1/services/${serviceId}/actions/logs/exec-1`,
+        expect.objectContaining({ method: "GET" }),
+      );
+    });
+  });
+
+  describe("logs with full filter", () => {
+    it("sends all query params from LogQueryFilter", async () => {
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            data: [],
+            pagination: { page: 1, per_page: 50, total: 0, total_pages: 0 },
+          }),
+      });
+
+      await client.actions.logs({
+        actionId: "action-1",
+        triggerId: "post-login",
+        userId: "user-1",
+        success: true,
+        from: "2026-01-01T00:00:00Z",
+        to: "2026-01-31T00:00:00Z",
+        limit: 100,
+        offset: 50,
+      });
+
+      const calledUrl = mockFetch.mock.calls[0][0] as string;
+      expect(calledUrl).toContain("action_id=action-1");
+      expect(calledUrl).toContain("trigger_id=post-login");
+      expect(calledUrl).toContain("user_id=user-1");
+      expect(calledUrl).toContain("success=true");
+      expect(calledUrl).toContain("from=2026-01-01T00%3A00%3A00Z");
+      expect(calledUrl).toContain("to=2026-01-31T00%3A00%3A00Z");
+      expect(calledUrl).toContain("limit=100");
+      expect(calledUrl).toContain("offset=50");
+    });
+
+    it("returns PaginatedResponse", async () => {
+      const mockLog: ActionExecution = {
+        id: "exec-1",
+        actionId: "action-1",
+        serviceId: serviceId,
+        triggerId: ActionTrigger.PostLogin,
+        success: true,
+        durationMs: 10,
+        executedAt: "2026-02-12T10:00:00Z",
+      };
+
+      mockFetch.mockResolvedValue({
+        ok: true,
+        status: 200,
+        json: () =>
+          Promise.resolve({
+            data: [mockLog],
+            pagination: { page: 1, per_page: 50, total: 1, total_pages: 1 },
+          }),
+      });
+
+      const result = await client.actions.logs();
+
+      expect(result.data).toHaveLength(1);
+      expect(result.pagination).toBeDefined();
+      expect(result.pagination.total).toBe(1);
     });
   });
 });

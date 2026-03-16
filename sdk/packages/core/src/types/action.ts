@@ -2,7 +2,7 @@ export enum ActionTrigger {
   PostLogin = "post-login",
   PreUserRegistration = "pre-user-registration",
   PostUserRegistration = "post-user-registration",
-  PostChangePassword = "post-change-password",
+  PostChangePassword = "post-change-password", // pragma: allowlist secret
   PostEmailVerification = "post-email-verification",
   PreTokenRefresh = "pre-token-refresh",
 }
@@ -126,6 +126,7 @@ export interface BatchUpsertResponse {
 
 export interface LogQueryFilter {
   actionId?: string;
+  triggerId?: string;
   userId?: string;
   success?: boolean;
   from?: string;
