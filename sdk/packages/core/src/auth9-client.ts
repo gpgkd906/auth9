@@ -1,4 +1,11 @@
 import { Auth9HttpClient } from "./http-client.js";
+import { TenantsClient } from "./clients/tenants.js";
+import { UsersClient } from "./clients/users.js";
+import { ServicesClient } from "./clients/services.js";
+import { RolesClient } from "./clients/roles.js";
+import { PermissionsClient } from "./clients/permissions.js";
+import { RbacClient } from "./clients/rbac.js";
+import { InvitationsClient } from "./clients/invitations.js";
 import type {
   Action,
   CreateActionInput,
@@ -23,6 +30,14 @@ export class Auth9Client {
   private tenantId?: string;
   private serviceId?: string;
 
+  private _tenants?: TenantsClient;
+  private _users?: UsersClient;
+  private _services?: ServicesClient;
+  private _roles?: RolesClient;
+  private _permissions?: PermissionsClient;
+  private _rbac?: RbacClient;
+  private _invitations?: InvitationsClient;
+
   constructor(config: Auth9ClientConfig) {
     this.http = new Auth9HttpClient({
       baseUrl: config.baseUrl,
@@ -45,6 +60,34 @@ export class Auth9Client {
       throw new Error("serviceId must be set to use actions API");
     }
     return this.serviceId;
+  }
+
+  get tenants(): TenantsClient {
+    return (this._tenants ??= new TenantsClient(this.http));
+  }
+
+  get users(): UsersClient {
+    return (this._users ??= new UsersClient(this.http));
+  }
+
+  get services(): ServicesClient {
+    return (this._services ??= new ServicesClient(this.http));
+  }
+
+  get roles(): RolesClient {
+    return (this._roles ??= new RolesClient(this.http));
+  }
+
+  get permissions(): PermissionsClient {
+    return (this._permissions ??= new PermissionsClient(this.http));
+  }
+
+  get rbac(): RbacClient {
+    return (this._rbac ??= new RbacClient(this.http));
+  }
+
+  get invitations(): InvitationsClient {
+    return (this._invitations ??= new InvitationsClient(this.http));
   }
 
   get actions() {

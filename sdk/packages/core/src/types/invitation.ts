@@ -17,3 +17,16 @@ export interface CreateInvitationInput {
   roleIds: string[];
   expiresInHours?: number;
 }
+
+export interface InvitationValidation {
+  valid: boolean;
+  invitation?: Invitation;
+  tenantName?: string;
+}
+
+export interface AcceptInvitationInput {
+  token: string;
+  email?: string;
+  displayName?: string;
+  password?: string;
+}

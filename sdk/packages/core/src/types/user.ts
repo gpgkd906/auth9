@@ -15,3 +15,17 @@ export interface CreateUserInput {
   password?: string;
   tenantId?: string;
 }
+
+export interface UpdateUserInput {
+  displayName?: string;
+  avatarUrl?: string;
+}
+
+export interface AddUserToTenantInput {
+  tenantId: string;
+  roleInTenant: string;
+}
+
+export interface UpdateUserRoleInput {
+  roleInTenant: string;
+}

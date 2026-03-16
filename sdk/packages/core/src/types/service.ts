@@ -35,6 +35,24 @@ export interface CreateClientInput {
   name?: string;
 }
 
+export interface UpdateServiceInput {
+  name?: string;
+  baseUrl?: string;
+  redirectUris?: string[];
+  logoutUris?: string[];
+  status?: "active" | "inactive";
+}
+
+export interface ServiceIntegration {
+  serviceId: string;
+  clientId: string;
+  issuerUrl: string;
+  authorizationEndpoint: string;
+  tokenEndpoint: string;
+  userinfoEndpoint: string;
+  jwksUri: string;
+}
+
 export interface ServiceWithStatus {
   id: string;
   name: string;

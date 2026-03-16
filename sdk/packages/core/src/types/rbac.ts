@@ -34,6 +34,12 @@ export interface RoleWithPermissions extends Role {
   permissions: Permission[];
 }
 
+export interface UpdateRoleInput {
+  name?: string;
+  description?: string;
+  parentRoleId?: string | null;
+}
+
 export interface AssignRolesInput {
   userId: string;
   tenantId: string;

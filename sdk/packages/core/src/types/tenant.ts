@@ -16,6 +16,28 @@ export interface CreateTenantInput {
   settings?: Record<string, unknown>;
 }
 
+export interface UpdateTenantInput {
+  name?: string;
+  slug?: string;
+  logoUrl?: string;
+  settings?: Record<string, unknown>;
+  status?: "active" | "inactive" | "suspended";
+}
+
+export interface MaliciousIpBlacklistEntry {
+  id: string;
+  tenantId: string;
+  ipAddress: string;
+  reason?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface UpdateMaliciousIpBlacklistInput {
+  entries: { ipAddress: string; reason?: string }[];
+}
+
 export interface TenantUser {
   id: string;
   tenantId: string;

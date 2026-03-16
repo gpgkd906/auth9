@@ -16,13 +16,27 @@ export type {
 } from "./types/responses.js";
 
 // Types - Domain
-export type { Tenant, CreateTenantInput, TenantUser } from "./types/tenant.js";
-export type { User, CreateUserInput } from "./types/user.js";
+export type {
+  Tenant,
+  CreateTenantInput,
+  UpdateTenantInput,
+  MaliciousIpBlacklistEntry,
+  UpdateMaliciousIpBlacklistInput,
+  TenantUser,
+} from "./types/tenant.js";
+export type {
+  User,
+  CreateUserInput,
+  UpdateUserInput,
+  AddUserToTenantInput,
+  UpdateUserRoleInput,
+} from "./types/user.js";
 export type {
   Role,
   Permission,
   CreateRoleInput,
   CreatePermissionInput,
+  UpdateRoleInput,
   RoleWithPermissions,
   AssignRolesInput,
   UserRolesInTenant,
@@ -30,6 +44,8 @@ export type {
 export type {
   Service,
   CreateServiceInput,
+  UpdateServiceInput,
+  ServiceIntegration,
   Client,
   ClientWithSecret,
   CreateClientInput,
@@ -40,6 +56,8 @@ export type {
   Invitation,
   InvitationStatus,
   CreateInvitationInput,
+  InvitationValidation,
+  AcceptInvitationInput,
 } from "./types/invitation.js";
 export type {
   Webhook,
@@ -75,6 +93,15 @@ export { Auth9HttpClient } from "./http-client.js";
 export type { HttpClientConfig } from "./http-client.js";
 export { Auth9Client } from "./auth9-client.js";
 export type { Auth9ClientConfig } from "./auth9-client.js";
+
+// Sub-Clients
+export { TenantsClient } from "./clients/tenants.js";
+export { UsersClient } from "./clients/users.js";
+export { ServicesClient } from "./clients/services.js";
+export { RolesClient } from "./clients/roles.js";
+export { PermissionsClient } from "./clients/permissions.js";
+export { RbacClient } from "./clients/rbac.js";
+export { InvitationsClient } from "./clients/invitations.js";
 
 // Errors
 export {
