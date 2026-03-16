@@ -654,6 +654,169 @@ impl KeycloakClient {
     }
 
     // ============================================================================
+    // SAML Client Management
+    // ============================================================================
+
+    /// Create a SAML client in Keycloak
+    pub async fn create_saml_client(&self, client: &KeycloakSamlClient) -> Result<String> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients",
+            self.config.url, self.config.realm
+        );
+
+        let response = self
+            .http_client
+            .post(&url)
+            .bearer_auth(&token)
+            .json(client)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to create SAML client: {}", e)))?;
+
+        if response.status() == StatusCode::CONFLICT {
+            return Err(AppError::Conflict(
+                "SAML client already exists in Keycloak".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to create SAML client: {} - {}",
+                status, body
+            )));
+        }
+
+        let location = response
+            .headers()
+            .get("location")
+            .and_then(|v| v.to_str().ok())
+            .ok_or_else(|| AppError::Keycloak("Missing location header".to_string()))?;
+
+        let client_uuid = location
+            .split('/')
+            .next_back()
+            .ok_or_else(|| AppError::Keycloak("Invalid location header".to_string()))?;
+
+        Ok(client_uuid.to_string())
+    }
+
+    /// Update a SAML client in Keycloak
+    pub async fn update_saml_client(
+        &self,
+        client_uuid: &str,
+        client: &KeycloakSamlClient,
+    ) -> Result<()> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients/{}",
+            self.config.url, self.config.realm, client_uuid
+        );
+
+        let response = self
+            .http_client
+            .put(&url)
+            .bearer_auth(&token)
+            .json(client)
+            .send()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to update SAML client: {}", e)))?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to update SAML client: {} - {}",
+                status, body
+            )));
+        }
+
+        Ok(())
+    }
+
+    /// Delete a SAML client from Keycloak
+    pub async fn delete_saml_client(&self, client_uuid: &str) -> Result<()> {
+        // SAML clients use the same endpoint as OIDC clients
+        self.delete_oidc_client(client_uuid).await
+    }
+
+    /// Get SAML client installation configuration (e.g., IdP Metadata XML)
+    pub async fn get_saml_client_installation(
+        &self,
+        client_uuid: &str,
+        provider_id: &str,
+    ) -> Result<String> {
+        let token = self.get_admin_token().await?;
+        let url = format!(
+            "{}/admin/realms/{}/clients/{}/installation/providers/{}",
+            self.config.url, self.config.realm, client_uuid, provider_id
+        );
+
+        let response = self
+            .http_client
+            .get(&url)
+            .bearer_auth(&token)
+            .send()
+            .await
+            .map_err(|e| {
+                AppError::Keycloak(format!("Failed to get SAML installation config: {}", e))
+            })?;
+
+        if response.status() == StatusCode::NOT_FOUND {
+            return Err(AppError::NotFound(
+                "SAML client or installation provider not found".to_string(),
+            ));
+        }
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to get SAML installation config: {} - {}",
+                status, body
+            )));
+        }
+
+        let xml = response.text().await.map_err(|e| {
+            AppError::Keycloak(format!(
+                "Failed to read installation config response: {}",
+                e
+            ))
+        })?;
+
+        Ok(xml)
+    }
+
+    /// Get the realm-level SAML IdP descriptor (public endpoint, no auth required)
+    pub async fn get_saml_idp_descriptor(&self) -> Result<String> {
+        let url = format!(
+            "{}/realms/{}/protocol/saml/descriptor",
+            self.config.url, self.config.realm
+        );
+
+        let response =
+            self.http_client.get(&url).send().await.map_err(|e| {
+                AppError::Keycloak(format!("Failed to get SAML IdP descriptor: {}", e))
+            })?;
+
+        if !response.status().is_success() {
+            let status = response.status();
+            let body = response.text().await.unwrap_or_default();
+            return Err(AppError::Keycloak(format!(
+                "Failed to get SAML IdP descriptor: {} - {}",
+                status, body
+            )));
+        }
+
+        response
+            .text()
+            .await
+            .map_err(|e| AppError::Keycloak(format!("Failed to read SAML IdP descriptor: {}", e)))
+    }
+
+    // ============================================================================
     // Password Management
     // ============================================================================
 

@@ -9,6 +9,7 @@
 //! - Helper functions for making HTTP requests (get_json, post_json, etc.)
 
 pub use super::mock_keycloak::MockKeycloakServer;
+use crate::support::TestSamlApplicationRepository;
 use crate::support::{
     create_test_jwt_manager, TestActionRepository, TestAuditRepository, TestInvitationRepository,
     TestLinkedIdentityRepository, TestLoginEventRepository, TestMaliciousIpBlacklistRepository,
@@ -37,7 +38,8 @@ use auth9_core::domains::security_observability::service::{
     AnalyticsService, SecurityDetectionService,
 };
 use auth9_core::domains::tenant_access::service::{
-    InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
+    InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
+    UserRepositoryBundle, UserService,
 };
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
@@ -71,7 +73,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         grpc_host: "127.0.0.1".to_string(),
         grpc_port: 50051,
         database: DatabaseConfig {
-            url: "mysql://test:test@localhost/test".to_string(),
+            url: "mysql://test:test@localhost/test".to_string(), // pragma: allowlist secret
             max_connections: 1,
             min_connections: 1,
             acquire_timeout_secs: 30,
@@ -81,7 +83,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             url: "redis://localhost".to_string(),
         },
         jwt: JwtConfig {
-            secret: "test-secret-key-for-http-testing".to_string(),
+            secret: "test-secret-key-for-http-testing".to_string(), // pragma: allowlist secret
             issuer: "https://auth9.test".to_string(),
             access_token_ttl_secs: 3600,
             refresh_token_ttl_secs: 604800,
@@ -94,7 +96,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             public_url: keycloak_url.to_string(),
             realm: "test".to_string(),
             admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "test-secret".to_string(),
+            admin_client_secret: "test-secret".to_string(), // pragma: allowlist secret
             ssl_required: "none".to_string(),
             core_public_url: None,
             portal_url: None,
@@ -225,6 +227,7 @@ pub struct TestAppState {
     pub scim_token_service: Arc<ScimTokenService<TestScimTokenRepository>>,
     pub scim_group_mapping_repo: Arc<TestScimGroupMappingRepository>,
     pub scim_log_repo: Arc<TestScimLogRepository>,
+    pub saml_application_service: Arc<SamlApplicationService<TestSamlApplicationRepository>>,
 }
 
 impl TestAppState {
@@ -370,6 +373,11 @@ impl TestAppState {
         let scim_token_repo = Arc::new(TestScimTokenRepository::new());
         let scim_group_mapping_repo = Arc::new(TestScimGroupMappingRepository::new());
         let scim_log_repo = Arc::new(TestScimLogRepository::new());
+        let saml_application_service = Arc::new(SamlApplicationService::new(
+            Arc::new(TestSamlApplicationRepository::new()),
+            Arc::new(KeycloakClient::new(config.keycloak.clone())),
+        ));
+
         let scim_token_service = Arc::new(ScimTokenService::new(scim_token_repo));
         let scim_service = Arc::new(ScimService::new(
             user_repo.clone(),
@@ -420,6 +428,7 @@ impl TestAppState {
             scim_token_service,
             scim_group_mapping_repo,
             scim_log_repo,
+            saml_application_service,
         }
     }
 
@@ -455,6 +464,7 @@ impl HasServices for TestAppState {
     type WebhookRepo = TestWebhookRepository;
     type CascadeInvitationRepo = TestInvitationRepository;
     type ActionRepo = TestActionRepository;
+    type SamlApplicationRepo = TestSamlApplicationRepository;
 
     fn config(&self) -> &Config {
         &self.config
@@ -513,6 +523,10 @@ impl HasServices for TestAppState {
 
     fn action_service(&self) -> &ActionService<Self::ActionRepo> {
         &self.action_service
+    }
+
+    fn saml_application_service(&self) -> &SamlApplicationService<Self::SamlApplicationRepo> {
+        &self.saml_application_service
     }
 
     async fn check_ready(&self) -> (bool, bool) {

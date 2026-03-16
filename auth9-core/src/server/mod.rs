@@ -23,7 +23,8 @@ use crate::domains::security_observability::service::{
     AnalyticsService, SecurityDetectionConfig, SecurityDetectionService,
 };
 use crate::domains::tenant_access::service::{
-    InvitationService, TenantRepositoryBundle, TenantService, UserRepositoryBundle, UserService,
+    InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
+    UserRepositoryBundle, UserService,
 };
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
@@ -32,6 +33,7 @@ use crate::repository::{
     linked_identity::LinkedIdentityRepositoryImpl, login_event::LoginEventRepositoryImpl,
     malicious_ip_blacklist::MaliciousIpBlacklistRepositoryImpl,
     password_reset::PasswordResetRepositoryImpl, rbac::RbacRepositoryImpl,
+    saml_application::SamlApplicationRepositoryImpl,
     scim_group_mapping::ScimGroupRoleMappingRepositoryImpl,
     scim_log::ScimProvisioningLogRepositoryImpl, scim_token::ScimTokenRepositoryImpl,
     security_alert::SecurityAlertRepositoryImpl, service::ServiceRepositoryImpl,
@@ -156,6 +158,7 @@ pub struct AppState {
     pub scim_token_service: Arc<ScimTokenService<ScimTokenRepositoryImpl>>,
     pub scim_group_mapping_repo: Arc<ScimGroupRoleMappingRepositoryImpl>,
     pub scim_log_repo: Arc<ScimProvisioningLogRepositoryImpl>,
+    pub saml_application_service: Arc<SamlApplicationService<SamlApplicationRepositoryImpl>>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -173,6 +176,7 @@ impl HasServices for AppState {
     type WebhookRepo = WebhookRepositoryImpl;
     type CascadeInvitationRepo = InvitationRepositoryImpl;
     type ActionRepo = ActionRepositoryImpl;
+    type SamlApplicationRepo = SamlApplicationRepositoryImpl;
 
     fn config(&self) -> &Config {
         &self.config
@@ -231,6 +235,10 @@ impl HasServices for AppState {
 
     fn action_service(&self) -> &ActionService<Self::ActionRepo> {
         &self.action_service
+    }
+
+    fn saml_application_service(&self) -> &SamlApplicationService<Self::SamlApplicationRepo> {
+        &self.saml_application_service
     }
 
     async fn check_ready(&self) -> (bool, bool) {
@@ -687,6 +695,13 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         rbac_repo.clone(),
     ));
 
+    // Create SAML Application service
+    let saml_application_repo = Arc::new(SamlApplicationRepositoryImpl::new(db_pool.clone()));
+    let saml_application_service = Arc::new(SamlApplicationService::new(
+        saml_application_repo,
+        Arc::new(keycloak_client.clone()),
+    ));
+
     // Create app state
     let state = AppState {
         config: Arc::new(config.clone()),
@@ -718,6 +733,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         scim_token_service,
         scim_group_mapping_repo,
         scim_log_repo,
+        saml_application_service,
     };
 
     // Create rate limit state for middleware

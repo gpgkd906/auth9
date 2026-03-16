@@ -68,7 +68,7 @@ pub use uuid::Uuid;
 
 pub fn test_jwt_config() -> JwtConfig {
     JwtConfig {
-        secret: "test-secret-key-for-api-testing-purposes".to_string(),
+        secret: "test-secret-key-for-api-testing-purposes".to_string(), // pragma: allowlist secret
         issuer: "https://auth9.test".to_string(),
         access_token_ttl_secs: 3600,
         refresh_token_ttl_secs: 604800,
@@ -3775,5 +3775,104 @@ mod tests {
         let result = tenant_service.get(tenant.id).await;
         assert!(result.is_ok());
         assert_eq!(result.unwrap().name, "Test Tenant");
+    }
+}
+
+// =============================================================================
+// TestSamlApplicationRepository
+// =============================================================================
+
+use auth9_core::models::saml_application::{SamlApplication, UpdateSamlApplicationInput};
+use auth9_core::repository::saml_application::SamlApplicationRepository;
+
+pub struct TestSamlApplicationRepository {
+    apps: RwLock<Vec<SamlApplication>>,
+}
+
+impl TestSamlApplicationRepository {
+    pub fn new() -> Self {
+        Self {
+            apps: RwLock::new(vec![]),
+        }
+    }
+}
+
+impl Default for TestSamlApplicationRepository {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[async_trait]
+impl SamlApplicationRepository for TestSamlApplicationRepository {
+    async fn create(&self, app: &SamlApplication) -> Result<SamlApplication> {
+        let mut apps = self.apps.write().await;
+        apps.push(app.clone());
+        Ok(app.clone())
+    }
+
+    async fn find_by_id(&self, id: StringUuid) -> Result<Option<SamlApplication>> {
+        let apps = self.apps.read().await;
+        Ok(apps.iter().find(|a| a.id == id).cloned())
+    }
+
+    async fn find_by_tenant_and_entity_id(
+        &self,
+        tenant_id: StringUuid,
+        entity_id: &str,
+    ) -> Result<Option<SamlApplication>> {
+        let apps = self.apps.read().await;
+        Ok(apps
+            .iter()
+            .find(|a| a.tenant_id == tenant_id && a.entity_id == entity_id)
+            .cloned())
+    }
+
+    async fn list_by_tenant(&self, tenant_id: StringUuid) -> Result<Vec<SamlApplication>> {
+        let apps = self.apps.read().await;
+        Ok(apps
+            .iter()
+            .filter(|a| a.tenant_id == tenant_id)
+            .cloned()
+            .collect())
+    }
+
+    async fn update(
+        &self,
+        id: StringUuid,
+        input: &UpdateSamlApplicationInput,
+    ) -> Result<SamlApplication> {
+        let mut apps = self.apps.write().await;
+        let app = apps
+            .iter_mut()
+            .find(|a| a.id == id)
+            .ok_or_else(|| AppError::NotFound("SAML application not found".to_string()))?;
+        if let Some(ref name) = input.name {
+            app.name = name.clone();
+        }
+        if let Some(ref acs_url) = input.acs_url {
+            app.acs_url = acs_url.clone();
+        }
+        if let Some(enabled) = input.enabled {
+            app.enabled = enabled;
+        }
+        Ok(app.clone())
+    }
+
+    async fn delete(&self, id: StringUuid) -> Result<()> {
+        let mut apps = self.apps.write().await;
+        let len_before = apps.len();
+        apps.retain(|a| a.id != id);
+        if apps.len() == len_before {
+            return Err(AppError::NotFound("SAML application not found".to_string()));
+        }
+        Ok(())
+    }
+
+    async fn delete_by_tenant(&self, tenant_id: StringUuid) -> Result<u64> {
+        let mut apps = self.apps.write().await;
+        let len_before = apps.len();
+        apps.retain(|a| a.tenant_id != tenant_id);
+        Ok((len_before - apps.len()) as u64)
     }
 }

@@ -797,3 +797,19 @@ documents:
     has_checklist: true
     last_reviewed: 2026-02-21
     test_script: scripts/qa/auto/webhook-04-boundary.sh
+  - id: saml-application/01-crud
+    path: docs/qa/saml-application/01-crud.md
+    module: saml-application
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-16
+  - id: saml-application/02-metadata-validation
+    path: docs/qa/saml-application/02-metadata-validation.md
+    module: saml-application
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-16

@@ -258,6 +258,38 @@ pub struct RealmUpdate {
     pub wait_increment_seconds: Option<i32>,
 }
 
+/// Keycloak SAML client representation
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakSamlClient {
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub id: Option<String>,
+    pub client_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub name: Option<String>,
+    pub enabled: bool,
+    pub protocol: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub base_url: Option<String>,
+    #[serde(default)]
+    pub redirect_uris: Vec<String>,
+    #[serde(default)]
+    pub attributes: HashMap<String, String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub protocol_mappers: Vec<KeycloakProtocolMapper>,
+}
+
+/// Keycloak protocol mapper (used for SAML attribute mappings)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct KeycloakProtocolMapper {
+    pub name: String,
+    pub protocol: String,
+    pub protocol_mapper: String,
+    #[serde(default)]
+    pub config: HashMap<String, String>,
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

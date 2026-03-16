@@ -16,7 +16,9 @@ use crate::domains::platform::service::{
 };
 use crate::domains::provisioning::service::{ScimService, ScimTokenService};
 use crate::domains::security_observability::service::{AnalyticsService, SecurityDetectionService};
-use crate::domains::tenant_access::service::{InvitationService, TenantService, UserService};
+use crate::domains::tenant_access::service::{
+    InvitationService, SamlApplicationService, TenantService, UserService,
+};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
 use crate::repository::audit::AuditRepository;
@@ -26,8 +28,9 @@ use crate::repository::scim_token::ScimTokenRepository;
 use crate::repository::{
     ActionRepository, InvitationRepository, LinkedIdentityRepository, LoginEventRepository,
     MaliciousIpBlacklistRepository, PasswordResetRepository, RbacRepository,
-    SecurityAlertRepository, ServiceBrandingRepository, ServiceRepository, SessionRepository,
-    SystemSettingsRepository, TenantRepository, UserRepository, WebhookRepository,
+    SamlApplicationRepository, SecurityAlertRepository, ServiceBrandingRepository,
+    ServiceRepository, SessionRepository, SystemSettingsRepository, TenantRepository,
+    UserRepository, WebhookRepository,
 };
 
 // ============================================================
@@ -91,6 +94,8 @@ pub trait HasServices: Clone + Send + Sync + 'static {
     type CascadeInvitationRepo: InvitationRepository;
     /// The action repository type
     type ActionRepo: ActionRepository;
+    /// The SAML application repository type
+    type SamlApplicationRepo: SamlApplicationRepository;
 
     /// Get the application configuration
     fn config(&self) -> &Config;
@@ -118,6 +123,9 @@ pub trait HasServices: Clone + Send + Sync + 'static {
 
     /// Get the action service
     fn action_service(&self) -> &ActionService<Self::ActionRepo>;
+
+    /// Get the SAML application service
+    fn saml_application_service(&self) -> &SamlApplicationService<Self::SamlApplicationRepo>;
 
     /// Check if the system is ready (database and cache are healthy)
     /// Returns (db_ok, cache_ok) tuple

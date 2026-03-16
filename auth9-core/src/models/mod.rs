@@ -13,6 +13,7 @@ pub mod invitation;
 pub mod linked_identity;
 pub mod password;
 pub mod rbac;
+pub mod saml_application;
 pub mod scim;
 pub mod service;
 pub mod session;

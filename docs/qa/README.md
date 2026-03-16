@@ -184,7 +184,13 @@
 | [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Keycloak 事件源安全校验、外部系统同步 | 5 |
 | [integration/12-otp-service-layer.md](./integration/12-otp-service-layer.md) | OTP 通用服务层基础设施（OtpManager、OtpChannel、速率限制、CacheOperations 扩展） | 5 |
 
-### SCIM Provisioning (5 个文档, 25 个场景) 🆕
+### SAML Application (2 个文档, 10 个场景) 🆕
+| 文档 | 描述 | 场景数 |
+|------|------|--------|
+| [saml-application/01-crud.md](./saml-application/01-crud.md) | SAML Application CRUD（创建、列表、获取、更新、删除） | 5 |
+| [saml-application/02-metadata-validation.md](./saml-application/02-metadata-validation.md) | IdP Metadata XML 获取、输入校验、属性映射、跨租户隔离 | 5 |
+
+### SCIM Provisioning (5 个文档, 25 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [provisioning/01-scim-token-management.md](./provisioning/01-scim-token-management.md) | SCIM Bearer Token 创建、列表、吊销（管理 API） | 5 |
@@ -199,7 +205,7 @@
 
 | 模块 | 文档数 | 场景数 |
 |------|--------|--------|
-| 租户管理 | 4 | 20 |
+| 租户管理 | 5 | 25 |
 | 用户管理 | 6 | 28 |
 | RBAC 角色权限 | 5 | 22 |
 | 服务与客户端 | 6 | 30 |
@@ -215,14 +221,16 @@
 | Action | 12 | 49 |
 | SDK | 6 | 30 |
 | 集成测试 | 11 | 54 |
+| SAML Application | 2 | 10 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **99** | **469** |
+| **总计** | **101** | **479** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
 | 2026-03-14 | 4.3.0 | 新增平台级恶意 IP 黑名单 QA 文档（`settings/04`），并同步修正 `session/04` 对可疑 IP 告警来源的说明，覆盖黑名单配置、输入校验、`suspicious_ip`/`critical` 告警联动 |
+| 2026-03-16 | 5.9.0 | **SAML IdP 出站 Phase 1**：新增 `saml-application/01-crud.md`（5 场景）、`saml-application/02-metadata-validation.md`（5 场景），覆盖 SAML Application CRUD、IdP Metadata XML 公开端点、输入校验、属性映射验证、跨租户隔离、默认值；跨文档无影响（纯新增 API，无修改现有端点）；共 101 个文档 479 个场景 |
 | 2026-03-16 | 5.8.0 | 新增 `auth/17-email-otp-login.md`（5 个场景）；更新 `auth/01-oidc-login.md` 认证方式表增加 Email OTP 行；更新 `settings/01-branding.md` BrandingConfig 字段表增加 `email_otp_enabled` |
 
 ---
@@ -378,6 +386,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-16 | 5.9.0 | **SAML IdP 出站 Phase 1 测试文档**：新增 `saml-application/01-crud.md`（5 场景）、`saml-application/02-metadata-validation.md`（5 场景）；共 101 个文档 479 个场景 |
 | 2026-03-16 | 5.7.0 | **OTP 通用服务层基础设施测试**：新增 `integration/12-otp-service-layer.md`（5 场景），覆盖 OtpManager 单元测试验证、模块代码结构完整性、CacheOperations 扩展完整性、速率限制默认配置、编译和 Lint 检查；跨文档无影响（纯后端基础设施层，无 API/UI 变更）；共 99 个文档 469 个场景 |
 | 2026-03-15 | 5.6.0 | **PKCE (RFC 7636) 安全增强文档**：新增 `auth/16-pkce-flow.md`（5 场景），覆盖 Portal 密码/SSO 登录 PKCE 参数透传、cookie 存储生命周期、authorize 端点透传验证、向后兼容、public client 强制 PKCE；跨文档影响：更新 `session/07-oauth-state-csrf.md` cookie 格式说明（`state` → `{ state, codeVerifier }`）、`auth/08-demo-auth-flow.md` 补充 PKCE 强制说明、`security/authentication/01-oidc-security.md` 标记 PKCE 已实现；共 98 个文档 464 个场景 |
 | 2026-03-14 | 5.5.2 | **Portal Selector 组件替换文档同步**：更新 `rbac/02-role.md` 与 `identity-provider/03-tenant-enterprise-sso-connectors.md`，补充 Roles 父角色选择器与 Tenant SSO `Provider Type` 已切换为项目统一 Select 组件的验证要点；同步更新 UI/UX 文档 `18-roles-abac-pages.md`、`21-tenant-detail-pages.md` 的下拉控件样式与条件字段说明；QA 文档总数与场景数不变（97/459） |

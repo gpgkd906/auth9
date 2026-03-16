@@ -19,6 +19,11 @@ where
             post(tenant_access_api::invitation::accept::<S>),
         )
         .route("/api/v1/users", post(tenant_access_api::user::create::<S>))
+        // SAML Application public endpoints (metadata for external SPs)
+        .route(
+            "/api/v1/tenants/{tenant_id}/saml-apps/{app_id}/metadata",
+            get(tenant_access_api::saml_application::get_metadata::<S>),
+        )
 }
 
 pub fn protected_routes<S>() -> Router<S>
@@ -110,5 +115,17 @@ where
         .route(
             "/api/v1/invitations/{id}/resend",
             post(tenant_access_api::invitation::resend::<S>),
+        )
+        // SAML Application CRUD (protected)
+        .route(
+            "/api/v1/tenants/{tenant_id}/saml-apps",
+            get(tenant_access_api::saml_application::list::<S>)
+                .post(tenant_access_api::saml_application::create::<S>),
+        )
+        .route(
+            "/api/v1/tenants/{tenant_id}/saml-apps/{app_id}",
+            get(tenant_access_api::saml_application::get::<S>)
+                .put(tenant_access_api::saml_application::update::<S>)
+                .delete(tenant_access_api::saml_application::delete::<S>),
         )
 }
