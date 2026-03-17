@@ -1,8 +1,11 @@
 use crate::error::Result;
-use crate::keycloak::{KeycloakFederatedIdentity, KeycloakIdentityProvider, RealmUpdate};
+use crate::keycloak::RealmUpdate;
 use async_trait::async_trait;
 
-pub mod keycloak;
+pub mod adapters;
+mod types;
+
+pub use types::{FederatedIdentityRepresentation, IdentityProviderRepresentation};
 
 /// User lifecycle operations for an identity backend.
 #[async_trait]
@@ -26,19 +29,22 @@ pub trait IdentityCredentialStore: Send + Sync {}
 /// Federation and broker management operations for an identity backend.
 #[async_trait]
 pub trait FederationBroker: Send + Sync {
-    async fn list_identity_providers(&self) -> Result<Vec<KeycloakIdentityProvider>>;
-    async fn get_identity_provider(&self, alias: &str) -> Result<KeycloakIdentityProvider>;
-    async fn create_identity_provider(&self, provider: &KeycloakIdentityProvider) -> Result<()>;
+    async fn list_identity_providers(&self) -> Result<Vec<IdentityProviderRepresentation>>;
+    async fn get_identity_provider(&self, alias: &str) -> Result<IdentityProviderRepresentation>;
+    async fn create_identity_provider(
+        &self,
+        provider: &IdentityProviderRepresentation,
+    ) -> Result<()>;
     async fn update_identity_provider(
         &self,
         alias: &str,
-        provider: &KeycloakIdentityProvider,
+        provider: &IdentityProviderRepresentation,
     ) -> Result<()>;
     async fn delete_identity_provider(&self, alias: &str) -> Result<()>;
     async fn get_user_federated_identities(
         &self,
         user_id: &str,
-    ) -> Result<Vec<KeycloakFederatedIdentity>>;
+    ) -> Result<Vec<FederatedIdentityRepresentation>>;
     async fn remove_user_federated_identity(
         &self,
         user_id: &str,
@@ -67,11 +73,13 @@ pub trait IdentityEngine: Send + Sync {
 mod tests {
     use super::*;
     use crate::config::KeycloakConfig;
+    use crate::identity_engine::adapters::keycloak::KeycloakIdentityEngineAdapter;
     use crate::keycloak::KeycloakClient;
+    use std::sync::Arc;
 
     #[test]
-    fn keycloak_client_exposes_identity_engine_surfaces() {
-        let client = KeycloakClient::new(KeycloakConfig {
+    fn keycloak_adapter_exposes_identity_engine_surfaces() {
+        let client = Arc::new(KeycloakClient::new(KeycloakConfig {
             url: "http://localhost:8080".to_string(),
             public_url: "http://localhost:8080".to_string(),
             realm: "test".to_string(),
@@ -81,9 +89,10 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
-        });
+        }));
 
-        let engine: &dyn IdentityEngine = &client;
+        let adapter = KeycloakIdentityEngineAdapter::new(client);
+        let engine: &dyn IdentityEngine = &adapter;
 
         let _ = engine.user_store();
         let _ = engine.client_store();

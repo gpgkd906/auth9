@@ -239,6 +239,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity_engine::adapters::keycloak::KeycloakSessionStoreAdapter;
     use crate::keycloak::KeycloakClient;
     use crate::models::user::User;
     use crate::repository::session::MockSessionRepository;
@@ -319,12 +320,10 @@ mod tests {
             .returning(|_| Ok(vec![]));
 
         // Create a mock Keycloak client - we won't use it in this test
-        let keycloak = create_test_keycloak_client();
-
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -352,11 +351,10 @@ mod tests {
                 }])
             });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -380,11 +378,10 @@ mod tests {
             .with(eq(session_id))
             .returning(|_| Ok(None));
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -409,11 +406,10 @@ mod tests {
             }))
         });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -433,11 +429,10 @@ mod tests {
             .with(eq(session_id))
             .returning(|_| Ok(()));
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -455,11 +450,10 @@ mod tests {
             Ok(5)
         });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -478,11 +472,10 @@ mod tests {
             .with(eq(user_id))
             .returning(|_| Ok(None));
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -526,11 +519,10 @@ mod tests {
                 ])
             });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None, // webhook_publisher
         );
 
@@ -559,11 +551,10 @@ mod tests {
             })
         });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None,
         );
 
@@ -612,11 +603,10 @@ mod tests {
             })
         });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None,
         );
 
@@ -652,11 +642,10 @@ mod tests {
             })
         });
 
-        let keycloak = create_test_keycloak_client();
         let service = SessionService::new(
             Arc::new(session_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            create_test_identity_sessions(),
             None,
         );
 
@@ -667,9 +656,9 @@ mod tests {
     }
 
     // Helper to create a test KeycloakClient (won't make actual calls in these tests)
-    fn create_test_keycloak_client() -> KeycloakClient {
+    fn create_test_keycloak_client() -> Arc<KeycloakClient> {
         use crate::config::KeycloakConfig;
-        KeycloakClient::new(KeycloakConfig {
+        Arc::new(KeycloakClient::new(KeycloakConfig {
             url: "http://localhost:8081".to_string(),
             public_url: "http://localhost:8081".to_string(),
             realm: "auth9".to_string(),
@@ -679,6 +668,10 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
-        })
+        }))
+    }
+
+    fn create_test_identity_sessions() -> Arc<dyn IdentitySessionStore> {
+        Arc::new(KeycloakSessionStoreAdapter::new(create_test_keycloak_client()))
     }
 }

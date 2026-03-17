@@ -41,6 +41,9 @@ use auth9_core::domains::tenant_access::service::{
     InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
     UserRepositoryBundle, UserService,
 };
+use auth9_core::identity_engine::adapters::keycloak::{
+    KeycloakFederationBrokerAdapter, KeycloakIdentityEngineAdapter, KeycloakSessionStoreAdapter,
+};
 use auth9_core::identity_engine::{FederationBroker, IdentityEngine, IdentitySessionStore};
 use auth9_core::jwt::JwtManager;
 use auth9_core::keycloak::KeycloakClient;
@@ -307,9 +310,13 @@ impl TestAppState {
 
         let jwt_manager = create_test_jwt_manager();
         let keycloak_client = KeycloakClient::new(config.keycloak.clone());
-        let identity_sessions: Arc<dyn IdentitySessionStore> = Arc::new(keycloak_client.clone());
-        let federation_broker: Arc<dyn FederationBroker> = Arc::new(keycloak_client.clone());
-        let identity_engine: Arc<dyn IdentityEngine> = Arc::new(keycloak_client.clone());
+        let keycloak_arc = Arc::new(keycloak_client.clone());
+        let identity_sessions: Arc<dyn IdentitySessionStore> =
+            Arc::new(KeycloakSessionStoreAdapter::new(keycloak_arc.clone()));
+        let federation_broker: Arc<dyn FederationBroker> =
+            Arc::new(KeycloakFederationBrokerAdapter::new(keycloak_arc.clone()));
+        let identity_engine: Arc<dyn IdentityEngine> =
+            Arc::new(KeycloakIdentityEngineAdapter::new(keycloak_arc.clone()));
         let cache_manager = NoOpCacheManager::new();
         let db_pool = sqlx::MySqlPool::connect_lazy(&config.database.url).unwrap();
 

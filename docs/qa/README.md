@@ -88,10 +88,10 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (17 个文档, 80 个场景)
+### 认证流程 (18 个文档, 80 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
-| [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 5 |
+| [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 4 |
 | [auth/02-token-exchange.md](./auth/02-token-exchange.md) | Token Exchange | 5 |
 | [auth/03-password.md](./auth/03-password.md) | 密码管理（优先通过 Auth9 代理页验证） | 5 |
 | [auth/04-social.md](./auth/04-social.md) | 社交登录、OIDC 端点（通过 Auth9 登录入口触发） | 5 |
@@ -108,6 +108,7 @@
 | [auth/15-dark-mode-auth-contrast.md](./auth/15-dark-mode-auth-contrast.md) | 独立认证页与 Auth9 品牌认证页的 Dark Mode 对比度回归（Portal + Keycloak Theme） | 5 |
 | [auth/16-pkce-flow.md](./auth/16-pkce-flow.md) | PKCE (RFC 7636) 参数透传、Cookie 存储、Public Client 强制验证 | 5 |
 | [auth/17-email-otp-login.md](./auth/17-email-otp-login.md) | Email OTP 无密码登录（发送/验证端点、Portal UI 入口、租户级开关、防枚举） | 5 | 🆕
+| [auth/18-oidc-login-mfa-advanced.md](./auth/18-oidc-login-mfa-advanced.md) | OIDC 登录进阶页回归（TOTP 注册、认证器选择、登出） | 3 |
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -172,7 +173,7 @@
 | [sdk/09-auth-password-passkey-clients.md](./sdk/09-auth-password-passkey-clients.md) | 认证流程与凭证管理子客户端（Password/Passkeys/EmailOtp/Auth/Organizations） | 5 |
 | [sdk/10-observability-config-clients.md](./sdk/10-observability-config-clients.md) | 可观测性与系统配置子客户端（AuditLogs/Analytics/SecurityAlerts/System/EmailTemplates/Branding） | 5 |
 
-### 集成测试 (13 个文档, 62 个场景)
+### 集成测试 (14 个文档, 66 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 4 |
@@ -188,6 +189,7 @@
 | [integration/10-security-hardening-p2.md](./integration/10-security-hardening-p2.md) | 事务性级联删除原子性、Keycloak 事件源安全校验、外部系统同步 | 5 |
 | [integration/12-otp-service-layer.md](./integration/12-otp-service-layer.md) | OTP 通用服务层基础设施（OtpManager、OtpChannel、速率限制、CacheOperations 扩展） | 5 |
 | [integration/13-identity-engine-state-injection.md](./integration/13-identity-engine-state-injection.md) | IdentityEngine 抽象注入、Session/Identity Provider/Realm Sync 回归 | 3 |
+| [integration/14-keycloak-adapter-layer.md](./integration/14-keycloak-adapter-layer.md) | Keycloak adapter 层回归（Session revoke、IdP CRUD、linked identity、realm sync 注入链） | 4 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -227,15 +229,17 @@
 | 审计日志 | 1 | 5 |
 | Action | 12 | 49 |
 | SDK | 9 | 45 |
-| 集成测试 | 13 | 62 |
+| 集成测试 | 14 | 66 |
 | SAML Application | 4 | 20 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **105** | **497** |
+| **总计** | **107** | **501** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-17 | 5.15.0 | **QA 治理收敛**：拆分 `auth/01-oidc-login.md`，新增 `auth/18-oidc-login-mfa-advanced.md`（3 场景），移出进阶 MFA/TOTP/认证器选择场景以满足单文档场景数限制；为 `sdk/07`、`sdk/08` 补检查清单，并为多份 UI 文档补 `入口可见性` 说明；文档总数更新为 107，场景总数保持 501 |
+| 2026-03-17 | 5.14.0 | **Keycloak Phase 1 FR2**：新增 `integration/14-keycloak-adapter-layer.md`（4 场景），覆盖 Keycloak adapter 注入链、Session revoke、Identity Provider CRUD、linked identity 回归；同步更新 `integration/13-identity-engine-state-injection.md` 背景说明；集成测试统计更新为 14 个文档 66 个场景；总计 106 个文档 501 个场景 |
 | 2026-03-17 | 5.13.0 | **Keycloak Phase 1 FR1**：新增 `integration/13-identity-engine-state-injection.md`（3 场景），覆盖 `IdentityEngine` 抽象注入、Session API 回归、Identity Provider API 回归；集成测试统计更新为 13 个文档 62 个场景；总计 105 个文档 497 个场景 |
 | 2026-03-17 | 5.12.0 | **SDK Phase 3 认证流程与凭证管理**：新增 `sdk/09-auth-password-passkey-clients.md`（5 场景），覆盖 Password/Passkeys/EmailOtp/Auth/Organizations 5 个子客户端 21 个方法；同步修正 SDK 统计（8→9 文档、40→45 场景）；共 104 个文档 494 个场景 |
 | 2026-03-14 | 4.3.0 | 新增平台级恶意 IP 黑名单 QA 文档（`settings/04`），并同步修正 `session/04` 对可疑 IP 告警来源的说明，覆盖黑名单配置、输入校验、`suspicious_ip`/`critical` 告警联动 |

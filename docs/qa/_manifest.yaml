@@ -126,7 +126,7 @@ documents:
   - id: auth/01-oidc-login
     path: docs/qa/auth/01-oidc-login.md
     module: auth
-    scenarios: 5
+    scenarios: 4
     has_ui_flow: true
     has_entry_visibility: false
     has_checklist: true
@@ -238,6 +238,14 @@ documents:
     has_entry_visibility: true
     has_checklist: true
     last_reviewed: 2026-03-13
+  - id: auth/18-oidc-login-mfa-advanced
+    path: docs/qa/auth/18-oidc-login-mfa-advanced.md
+    module: auth
+    scenarios: 3
+    has_ui_flow: true
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17
   - id: identity-provider/01-crud
     path: docs/qa/identity-provider/01-crud.md
     module: identity-provider
@@ -370,6 +378,15 @@ documents:
     has_entry_visibility: false
     has_checklist: true
     last_reviewed: 2026-03-17
+  - id: integration/14-keycloak-adapter-layer
+    path: docs/qa/integration/14-keycloak-adapter-layer.md
+    module: integration
+    scenarios: 4
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-17
+    test_script: scripts/qa/auto/integration-14-keycloak-adapter-layer.sh
   - id: invitation/01-create-send
     path: docs/qa/invitation/01-create-send.md
     module: invitation

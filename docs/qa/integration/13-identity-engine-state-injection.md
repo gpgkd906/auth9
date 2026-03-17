@@ -1,7 +1,7 @@
 # 集成测试 - Identity Engine 接口与 State 注入回归
 
 **模块**: 集成测试
-**测试范围**: `IdentityEngine` 抽象注入、SessionService 回归、Identity Provider Service 回归
+**测试范围**: `IdentityEngine` 抽象注入、Keycloak adapter 注入链、SessionService 回归、Identity Provider Service 回归
 **场景数**: 3
 **优先级**: 高
 
@@ -12,6 +12,7 @@
 本用例用于验证 Phase 1 FR1 完成后的关键回归点：
 
 - `AppState` / `TestAppState` 已持有抽象身份后端，而不是仅依赖 `KeycloakClient`
+- 默认 Keycloak backend 通过 `identity_engine/adapters/keycloak/` 注入，而不是直接把 `KeycloakClient` 当作 trait object
 - `SessionService` 通过抽象会话能力访问身份后端
 - `IdentityProviderService` 通过抽象联邦能力访问身份后端
 - `KeycloakSyncService` 通过统一身份引擎抽象更新 realm 配置

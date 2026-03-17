@@ -4,8 +4,7 @@
 //! IdP configuration is stored in Keycloak, Auth9 provides the management UI.
 
 use crate::error::{AppError, Result};
-use crate::identity_engine::FederationBroker;
-use crate::keycloak::KeycloakIdentityProvider;
+use crate::identity_engine::{FederationBroker, IdentityProviderRepresentation};
 use crate::models::common::StringUuid;
 use crate::models::identity_provider::{
     CreateIdentityProviderInput, IdentityProvider, IdentityProviderTemplate,
@@ -39,7 +38,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
     }
 
     // ========================================================================
-    // Identity Provider Management (via Keycloak)
+    // Identity Provider Management (via identity engine adapter)
     // ========================================================================
 
     /// List all identity providers
@@ -72,7 +71,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
             }
         }
 
-        let kc_provider = KeycloakIdentityProvider {
+        let provider = IdentityProviderRepresentation {
             alias: input.alias.clone(),
             display_name: input.display_name,
             provider_id: input.provider_id,
@@ -86,7 +85,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
         };
 
         self.federation_broker
-            .create_identity_provider(&kc_provider)
+            .create_identity_provider(&provider)
             .await?;
 
         // Fetch the created provider
@@ -105,7 +104,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
         let existing = self.federation_broker.get_identity_provider(alias).await?;
 
         // Merge updates (preserve extra Keycloak fields like internalId for round-trip)
-        let updated = KeycloakIdentityProvider {
+        let updated = IdentityProviderRepresentation {
             alias: existing.alias,
             display_name: input.display_name.or(existing.display_name),
             provider_id: existing.provider_id,
@@ -230,10 +229,12 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity_engine::adapters::keycloak::KeycloakFederationBrokerAdapter;
     use crate::keycloak::KeycloakClient;
     use crate::repository::linked_identity::MockLinkedIdentityRepository;
     use crate::repository::user::MockUserRepository;
     use mockall::predicate::*;
+    use std::sync::Arc;
 
     #[test]
     fn test_provider_templates() {
@@ -288,11 +289,11 @@ mod tests {
             .with(eq(user_id))
             .returning(|_| Ok(vec![]));
 
-        let keycloak = create_test_keycloak_client();
+        let keycloak = create_test_federation_broker();
         let service = IdentityProviderService::new(
             Arc::new(linked_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            keycloak,
         );
 
         let identities = service.get_user_identities(user_id).await.unwrap();
@@ -325,11 +326,11 @@ mod tests {
                 ])
             });
 
-        let keycloak = create_test_keycloak_client();
+        let keycloak = create_test_federation_broker();
         let service = IdentityProviderService::new(
             Arc::new(linked_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            keycloak,
         );
 
         let identities = service.get_user_identities(user_id).await.unwrap();
@@ -350,11 +351,11 @@ mod tests {
             .with(eq(identity_id))
             .returning(|_| Ok(None));
 
-        let keycloak = create_test_keycloak_client();
+        let keycloak = create_test_federation_broker();
         let service = IdentityProviderService::new(
             Arc::new(linked_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            keycloak,
         );
 
         let result = service.unlink_identity(user_id, identity_id).await;
@@ -383,11 +384,11 @@ mod tests {
                 }))
             });
 
-        let keycloak = create_test_keycloak_client();
+        let keycloak = create_test_federation_broker();
         let service = IdentityProviderService::new(
             Arc::new(linked_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            keycloak,
         );
 
         let result = service.unlink_identity(user_id, identity_id).await;
@@ -420,11 +421,11 @@ mod tests {
             .with(eq(user_id))
             .returning(|_| Ok(None));
 
-        let keycloak = create_test_keycloak_client();
+        let keycloak = create_test_federation_broker();
         let service = IdentityProviderService::new(
             Arc::new(linked_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            keycloak,
         );
 
         let result = service.unlink_identity(user_id, identity_id).await;
@@ -437,11 +438,11 @@ mod tests {
         let linked_mock = MockLinkedIdentityRepository::new();
         let user_mock = MockUserRepository::new();
 
-        let keycloak = create_test_keycloak_client();
+        let keycloak = create_test_federation_broker();
         let service = IdentityProviderService::new(
             Arc::new(linked_mock),
             Arc::new(user_mock),
-            Arc::new(keycloak),
+            keycloak,
         );
 
         let templates = service.get_templates();
@@ -473,9 +474,9 @@ mod tests {
     }
 
     // Helper to create a test KeycloakClient
-    fn create_test_keycloak_client() -> KeycloakClient {
+    fn create_test_keycloak_client() -> Arc<KeycloakClient> {
         use crate::config::KeycloakConfig;
-        KeycloakClient::new(KeycloakConfig {
+        Arc::new(KeycloakClient::new(KeycloakConfig {
             url: "http://localhost:8081".to_string(),
             public_url: "http://localhost:8081".to_string(),
             realm: "auth9".to_string(),
@@ -485,6 +486,12 @@ mod tests {
             core_public_url: None,
             portal_url: None,
             webhook_secret: None,
-        })
+        }))
+    }
+
+    fn create_test_federation_broker() -> Arc<dyn FederationBroker> {
+        Arc::new(KeycloakFederationBrokerAdapter::new(
+            create_test_keycloak_client(),
+        ))
     }
 }

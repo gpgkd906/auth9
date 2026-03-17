@@ -153,10 +153,10 @@ mod tests {
     use super::*;
     use crate::error::AppError;
     use crate::identity_engine::{
-        FederationBroker, IdentityClientStore, IdentityCredentialStore, IdentityEventSource,
+        FederatedIdentityRepresentation, FederationBroker, IdentityClientStore,
+        IdentityCredentialStore, IdentityEventSource, IdentityProviderRepresentation,
         IdentitySessionStore, IdentityUserStore,
     };
-    use crate::keycloak::{KeycloakFederatedIdentity, KeycloakIdentityProvider};
     use async_trait::async_trait;
     use std::sync::Mutex;
 
@@ -206,17 +206,20 @@ mod tests {
 
     #[async_trait]
     impl FederationBroker for FakeIdentityEngine {
-        async fn list_identity_providers(&self) -> Result<Vec<KeycloakIdentityProvider>> {
+        async fn list_identity_providers(&self) -> Result<Vec<IdentityProviderRepresentation>> {
             Ok(Vec::new())
         }
 
-        async fn get_identity_provider(&self, _alias: &str) -> Result<KeycloakIdentityProvider> {
+        async fn get_identity_provider(
+            &self,
+            _alias: &str,
+        ) -> Result<IdentityProviderRepresentation> {
             Err(AppError::NotFound("not used".to_string()))
         }
 
         async fn create_identity_provider(
             &self,
-            _provider: &KeycloakIdentityProvider,
+            _provider: &IdentityProviderRepresentation,
         ) -> Result<()> {
             Ok(())
         }
@@ -224,7 +227,7 @@ mod tests {
         async fn update_identity_provider(
             &self,
             _alias: &str,
-            _provider: &KeycloakIdentityProvider,
+            _provider: &IdentityProviderRepresentation,
         ) -> Result<()> {
             Ok(())
         }
@@ -236,7 +239,7 @@ mod tests {
         async fn get_user_federated_identities(
             &self,
             _user_id: &str,
-        ) -> Result<Vec<KeycloakFederatedIdentity>> {
+        ) -> Result<Vec<FederatedIdentityRepresentation>> {
             Ok(Vec::new())
         }
 

@@ -13,6 +13,10 @@
 - `auth9-portal` 的 `/forgot-password` 与 `/reset-password`
 - `auth9-keycloak-theme` 承载的登录/忘记密码/信息页
 
+## 入口可见性说明
+
+本文件要求优先从 Portal `/login` 或其他可见认证入口进入目标页面，禁止仅依赖手输 URL 跳过入口可见性验证。
+
 本回归只验证视觉层级与可读性，不替代密码功能本身的主流程验收。密码能力正确性仍以 [03-password.md](./03-password.md) 为主。
 
 ---

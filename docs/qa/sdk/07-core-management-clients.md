@@ -266,3 +266,15 @@ curl -s -X POST http://localhost:8080/api/v1/invitations/$INV_ID/revoke \
 ```
 
 **预期**: HTTP 状态码 200 或 204
+
+---
+
+## 检查清单
+
+| # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
+|---|------|------|----------|----------|------|
+| 1 | Tenants CRUD 全流程 | ☐ | | | |
+| 2 | Users 子客户端 — 创建与租户关联 | ☐ | | | |
+| 3 | Services 子客户端 — CRUD 与 Client 管理 | ☐ | | | |
+| 4 | Roles & Permissions — RBAC 管理 | ☐ | | | |
+| 5 | Invitations — 创建与撤销 | ☐ | | | |

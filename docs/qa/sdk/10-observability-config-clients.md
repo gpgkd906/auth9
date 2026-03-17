@@ -282,3 +282,15 @@ cd sdk/packages/core && npm run test -- --reporter=verbose 2>&1 | grep -E "(audi
 ```
 
 **预期**: 6 个新测试文件全部通过
+
+---
+
+## 检查清单
+
+| # | 场景 | 状态 | 测试日期 | 测试人员 | 备注 |
+|---|------|------|----------|----------|------|
+| 1 | AuditLogs + Analytics 子客户端 — 日志与统计查询 | ☐ | | | |
+| 2 | SecurityAlerts 子客户端 — 安全告警查询与解决 | ☐ | | | |
+| 3 | System 子客户端 — 邮件设置与 IP 黑名单 | ☐ | | | |
+| 4 | EmailTemplates 子客户端 — 模板管理与预览 | ☐ | | | |
+| 5 | Branding 子客户端 — 品牌配置管理 | ☐ | | | |

@@ -497,7 +497,9 @@ fn verify_token(token: &str, hash: &str) -> Result<bool> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::identity_engine::adapters::keycloak::KeycloakIdentityEngineAdapter;
     use crate::domains::platform::service::SystemSettingsService;
+    use crate::identity_engine::IdentityEngine;
     use crate::models::password::PasswordResetToken;
     use crate::repository::password_reset::MockPasswordResetRepository;
     use crate::repository::system_settings::MockSystemSettingsRepository;
@@ -680,7 +682,7 @@ mod tests {
 
         let input = ResetPasswordInput {
             token: "invalid-token".to_string(),
-            new_password: "NewPassword123!".to_string(),
+            new_password: "NewPassword123!".to_string(), // pragma: allowlist secret
         };
 
         let result = service.reset_password(input).await;
@@ -715,7 +717,7 @@ mod tests {
 
         let input = ResetPasswordInput {
             token: "valid-token".to_string(),
-            new_password: "NewPassword123!".to_string(),
+            new_password: "NewPassword123!".to_string(), // pragma: allowlist secret
         };
 
         let result = service.reset_password(input).await;
@@ -738,8 +740,8 @@ mod tests {
         let (service, _) = create_test_password_service(password_reset_mock, user_mock);
 
         let input = ChangePasswordInput {
-            current_password: "current123".to_string(),
-            new_password: "NewPassword123!".to_string(),
+            current_password: "current123".to_string(), // pragma: allowlist secret
+            new_password: "NewPassword123!".to_string(), // pragma: allowlist secret
         };
 
         let result = service.change_password(user_id, input).await;
@@ -885,6 +887,10 @@ mod tests {
         })
     }
 
+    fn create_test_identity_engine(keycloak: Arc<KeycloakClient>) -> Arc<dyn IdentityEngine> {
+        Arc::new(KeycloakIdentityEngineAdapter::new(keycloak))
+    }
+
     // ========================================================================
     // Success Path Tests (with wiremock for Keycloak)
     // ========================================================================
@@ -896,7 +902,7 @@ mod tests {
             public_url: url.to_string(),
             realm: "auth9".to_string(),
             admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "test-secret".to_string(),
+            admin_client_secret: "test-secret".to_string(), // pragma: allowlist secret
             ssl_required: "none".to_string(),
             core_public_url: None,
             portal_url: None,
@@ -1078,7 +1084,7 @@ mod tests {
 
         let input = ResetPasswordInput {
             token: "valid-reset-token".to_string(),
-            new_password: "NewStrongPass1!".to_string(),
+            new_password: "NewStrongPass1!".to_string(), // pragma: allowlist secret
         };
 
         let result = service.reset_password(input).await;
@@ -1119,7 +1125,7 @@ mod tests {
 
         let input = ResetPasswordInput {
             token: "some-token".to_string(),
-            new_password: "weak".to_string(), // Too short for default policy
+            new_password: "weak".to_string(), // pragma: allowlist secret
         };
 
         let result = service.reset_password(input).await;
@@ -1188,8 +1194,8 @@ mod tests {
             create_password_service_with_keycloak(password_reset_mock, user_mock, keycloak);
 
         let input = ChangePasswordInput {
-            current_password: "WrongPassword123!".to_string(),
-            new_password: "NewStrongPass1!".to_string(),
+            current_password: "WrongPassword123!".to_string(), // pragma: allowlist secret
+            new_password: "NewStrongPass1!".to_string(), // pragma: allowlist secret
         };
 
         let result = service.change_password(user_id, input).await;
@@ -1283,8 +1289,8 @@ mod tests {
             create_password_service_with_keycloak(password_reset_mock, user_mock, keycloak);
 
         let input = ChangePasswordInput {
-            current_password: "CorrectPass123!".to_string(),
-            new_password: "NewStrongPass1!".to_string(),
+            current_password: "CorrectPass123!".to_string(), // pragma: allowlist secret
+            new_password: "NewStrongPass1!".to_string(), // pragma: allowlist secret
         };
 
         let result = service.change_password(user_id, input).await;
@@ -1392,7 +1398,9 @@ mod tests {
         ));
         let email_service = Arc::new(EmailService::new(settings_service));
         let keycloak = Arc::new(create_test_keycloak_client());
-        let keycloak_sync = Arc::new(KeycloakSyncService::new(keycloak.clone()));
+        let keycloak_sync = Arc::new(KeycloakSyncService::new(create_test_identity_engine(
+            keycloak.clone(),
+        )));
 
         let service = PasswordService::with_tenant_repo(
             Arc::new(password_reset_mock),
@@ -1431,7 +1439,9 @@ mod tests {
         ));
         let email_service = Arc::new(EmailService::new(settings_service));
         let keycloak = Arc::new(create_test_keycloak_client());
-        let keycloak_sync = Arc::new(KeycloakSyncService::new(keycloak.clone()));
+        let keycloak_sync = Arc::new(KeycloakSyncService::new(create_test_identity_engine(
+            keycloak.clone(),
+        )));
 
         let service = PasswordService::with_tenant_repo(
             Arc::new(password_reset_mock),
@@ -1487,7 +1497,9 @@ mod tests {
         ));
         let email_service = Arc::new(EmailService::new(settings_service));
         let keycloak = Arc::new(create_test_keycloak_client());
-        let keycloak_sync = Arc::new(KeycloakSyncService::new(keycloak.clone()));
+        let keycloak_sync = Arc::new(KeycloakSyncService::new(create_test_identity_engine(
+            keycloak.clone(),
+        )));
 
         let service = PasswordService::with_tenant_repo(
             Arc::new(password_reset_mock),
@@ -1563,7 +1575,9 @@ mod tests {
         ));
         let email_service = Arc::new(EmailService::new(settings_service));
         let keycloak = Arc::new(create_test_keycloak_client());
-        let keycloak_sync = Arc::new(KeycloakSyncService::new(keycloak.clone()));
+        let keycloak_sync = Arc::new(KeycloakSyncService::new(create_test_identity_engine(
+            keycloak.clone(),
+        )));
 
         let service = PasswordService::with_tenant_repo(
             Arc::new(password_reset_mock),
@@ -1609,8 +1623,8 @@ mod tests {
         let (service, _) = create_test_password_service(password_reset_mock, user_mock);
 
         let input = ChangePasswordInput {
-            current_password: "OldPassword123!".to_string(),
-            new_password: "weak".to_string(), // Fails default policy
+            current_password: "OldPassword123!".to_string(), // pragma: allowlist secret
+            new_password: "weak".to_string(), // pragma: allowlist secret
         };
 
         let result = service.change_password(user_id, input).await;

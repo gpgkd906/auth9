@@ -26,6 +26,9 @@ use crate::domains::tenant_access::service::{
     InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
     UserRepositoryBundle, UserService,
 };
+use crate::identity_engine::adapters::keycloak::{
+    KeycloakFederationBrokerAdapter, KeycloakIdentityEngineAdapter, KeycloakSessionStoreAdapter,
+};
 use crate::identity_engine::{FederationBroker, IdentityEngine, IdentitySessionStore};
 use crate::jwt::JwtManager;
 use crate::keycloak::KeycloakClient;
@@ -497,9 +500,12 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create services
     // Create Arc-wrapped Keycloak client for services that need it
     let keycloak_arc = Arc::new(keycloak_client.clone());
-    let identity_sessions: Arc<dyn IdentitySessionStore> = keycloak_arc.clone();
-    let federation_broker: Arc<dyn FederationBroker> = keycloak_arc.clone();
-    let identity_engine: Arc<dyn IdentityEngine> = keycloak_arc.clone();
+    let identity_sessions: Arc<dyn IdentitySessionStore> =
+        Arc::new(KeycloakSessionStoreAdapter::new(keycloak_arc.clone()));
+    let federation_broker: Arc<dyn FederationBroker> =
+        Arc::new(KeycloakFederationBrokerAdapter::new(keycloak_arc.clone()));
+    let identity_engine: Arc<dyn IdentityEngine> =
+        Arc::new(KeycloakIdentityEngineAdapter::new(keycloak_arc.clone()));
 
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));

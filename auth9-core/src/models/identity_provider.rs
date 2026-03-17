@@ -3,6 +3,7 @@
 //! Note: IdP configuration is stored in Keycloak.
 //! These models map Keycloak's IdP structures for Auth9 Portal.
 
+use crate::identity_engine::IdentityProviderRepresentation;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use utoipa::ToSchema;
@@ -115,6 +116,22 @@ impl From<crate::keycloak::KeycloakIdentityProvider> for IdentityProvider {
             link_only: kc.link_only,
             first_broker_login_flow_alias: kc.first_broker_login_flow_alias,
             config: kc.config,
+        }
+    }
+}
+
+impl From<IdentityProviderRepresentation> for IdentityProvider {
+    fn from(value: IdentityProviderRepresentation) -> Self {
+        Self {
+            alias: value.alias,
+            display_name: value.display_name,
+            provider_id: value.provider_id,
+            enabled: value.enabled,
+            trust_email: value.trust_email,
+            store_token: value.store_token,
+            link_only: value.link_only,
+            first_broker_login_flow_alias: value.first_broker_login_flow_alias,
+            config: value.config,
         }
     }
 }

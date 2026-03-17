@@ -11,6 +11,10 @@
 
 Auth9 作为 SAML Identity Provider，可向外部 Service Provider 签发 SAML Assertion。管理员通过 API 注册外部 SP 信息（Entity ID、ACS URL、属性映射等），Auth9 在 Keycloak 中创建对应 `protocol: "saml"` 的 Client，并提供 IdP Metadata XML 供 SP 配置。
 
+## 入口可见性说明
+
+本文件聚焦 API CRUD，不单独覆盖 Portal UI 入口可见性。Portal 侧入口可见性与导航进入路径统一在 [03-portal-ui.md](./03-portal-ui.md) 验证。
+
 端点：
 - `GET    /api/v1/tenants/{tenant_id}/saml-apps` — 列出所有 SAML Application
 - `POST   /api/v1/tenants/{tenant_id}/saml-apps` — 创建 SAML Application

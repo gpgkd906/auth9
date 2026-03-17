@@ -15,6 +15,10 @@ Phase 3 新增以下能力：
 - **Assertion 加密校验**：`encrypt_assertions=true` 时必须提供 `sp_certificate`
 - **SLO POST Binding**：`slo_url` 同时注册 Redirect 和 POST 两种绑定
 
+## 入口可见性说明
+
+本文件仅补充证书与加密能力回归；Portal UI 入口可见性仍以 [03-portal-ui.md](./03-portal-ui.md) 为准，QA 应从已验证入口导航进入对应详情页后再执行证书相关检查。
+
 ---
 
 ## 场景 1：下载 IdP 签名证书（公开端点）
