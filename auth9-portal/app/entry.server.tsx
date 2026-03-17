@@ -13,6 +13,39 @@ function generateNonce(): string {
   return crypto.randomBytes(16).toString("base64");
 }
 
+function getOrigin(value?: string): string | null {
+  if (!value) {
+    return null;
+  }
+
+  try {
+    return new URL(value).origin;
+  } catch {
+    return null;
+  }
+}
+
+function buildConnectSrc(): string {
+  const connectSrc = new Set([
+    "'self'",
+    "http://localhost:*",
+    "https://localhost:*",
+    "ws://localhost:*",
+  ]);
+
+  for (const origin of [
+    getOrigin(process.env.AUTH9_CORE_PUBLIC_URL),
+    getOrigin(process.env.AUTH9_CORE_URL),
+    getOrigin(process.env.KEYCLOAK_PUBLIC_URL),
+  ]) {
+    if (origin) {
+      connectSrc.add(origin);
+    }
+  }
+
+  return Array.from(connectSrc).join(" ");
+}
+
 function setSecurityHeaders(headers: Headers, nonce: string, request?: Request): void {
   // Prevent browser caching of authenticated pages (mitigates bfcache leaking sensitive data)
   headers.set("Cache-Control", "no-store, no-cache, must-revalidate, private");
@@ -39,7 +72,7 @@ function setSecurityHeaders(headers: Headers, nonce: string, request?: Request):
       "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
       "img-src 'self' data: https:",
       "font-src 'self' data: https://fonts.gstatic.com",
-      "connect-src 'self' http://localhost:* https://localhost:* ws://localhost:*",
+      `connect-src ${buildConnectSrc()}`,
       "frame-ancestors 'none'",
       "base-uri 'self'",
       "form-action 'self'",
