@@ -8,9 +8,10 @@
 use crate::config::Config;
 use crate::keycloak::KeycloakSeeder;
 use anyhow::{Context, Result};
+use sqlx::migrate::{MigrateError, Migrator};
 use sqlx::mysql::MySqlPoolOptions;
 use sqlx::{Executor, MySql, Pool};
-use tracing::info;
+use tracing::{info, warn};
 
 /// Default portal service configuration
 const DEFAULT_PORTAL_CLIENT_ID: &str = "auth9-portal";
@@ -31,6 +32,7 @@ const DEFAULT_M2M_SERVICE_NAME: &str = "Auth9 M2M Test Service";
 /// Default demo client configuration
 const DEFAULT_DEMO_CLIENT_ID: &str = "auth9-demo";
 const DEFAULT_DEMO_SERVICE_NAME: &str = "Auth9 Demo Service";
+const SCIM_MAPPING_MIGRATION_VERSION: i64 = 20260222000002;
 
 /// Build redirect URIs for database (JSON array)
 fn build_db_redirect_uris(_core_public_url: Option<&str>, portal_url: Option<&str>) -> String {
@@ -65,7 +67,7 @@ fn build_db_logout_uris(portal_url: Option<&str>) -> String {
 
 /// Extract database name from DATABASE_URL
 fn extract_db_name(url: &str) -> Option<&str> {
-    // URL format: mysql://user:pass@host:port/dbname
+    // URL format: mysql://<user>:<password>@host:port/dbname
     url.rsplit('/').next()
 }
 
@@ -148,14 +150,171 @@ pub async fn run_migrations(config: &Config) -> Result<()> {
 
     info!("Running database migrations...");
 
-    sqlx::migrate!("./migrations")
-        .run(&pool)
-        .await
-        .context("Failed to run migrations")?;
+    let migrator = sqlx::migrate!("./migrations");
+
+    if let Err(error) = migrator.run(&pool).await {
+        match error {
+            MigrateError::ExecuteMigration(_, SCIM_MAPPING_MIGRATION_VERSION) => {
+                warn!(
+                    "Migration {} is not accepted by this MySQL dialect; applying compatibility fallback",
+                    SCIM_MAPPING_MIGRATION_VERSION
+                );
+
+                apply_scim_mapping_migration_compat(&pool, &migrator)
+                    .await
+                    .context("Failed to apply compatibility fallback for SCIM mapping migration")?;
+
+                migrator
+                    .run(&pool)
+                    .await
+                    .context("Failed to continue migrations after SCIM compatibility fallback")?;
+            }
+            other => {
+                return Err(other).context("Failed to run migrations");
+            }
+        }
+    }
 
     pool.close().await;
     info!("Database migrations completed");
     Ok(())
+}
+
+async fn apply_scim_mapping_migration_compat(pool: &Pool<MySql>, migrator: &Migrator) -> Result<()> {
+    let migration = migrator
+        .iter()
+        .find(|migration| migration.version == SCIM_MAPPING_MIGRATION_VERSION)
+        .context("SCIM mapping migration metadata not found")?;
+
+    let start = std::time::Instant::now();
+
+    if !column_exists(pool, "users", "scim_external_id").await? {
+        sqlx::query("ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER keycloak_id")
+            .execute(pool)
+            .await
+            .context("Failed to add users.scim_external_id")?;
+    }
+
+    if !column_exists(pool, "users", "scim_provisioned_by").await? {
+        sqlx::query(
+            "ALTER TABLE users ADD COLUMN scim_provisioned_by CHAR(36) NULL AFTER scim_external_id",
+        )
+        .execute(pool)
+        .await
+        .context("Failed to add users.scim_provisioned_by")?;
+    }
+
+    if !index_exists(pool, "users", "idx_users_scim_external_id").await? {
+        sqlx::query("ALTER TABLE users ADD INDEX idx_users_scim_external_id (scim_external_id)")
+            .execute(pool)
+            .await
+            .context("Failed to add idx_users_scim_external_id")?;
+    }
+
+    sqlx::query(
+        r#"
+        CREATE TABLE IF NOT EXISTS scim_group_role_mappings (
+            id CHAR(36) PRIMARY KEY,
+            tenant_id CHAR(36) NOT NULL,
+            connector_id CHAR(36) NOT NULL,
+            scim_group_id VARCHAR(255) NOT NULL,
+            scim_group_display_name VARCHAR(255),
+            role_id CHAR(36) NOT NULL,
+            created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            UNIQUE INDEX idx_scim_group_mapping (connector_id, scim_group_id),
+            INDEX idx_scim_group_tenant (tenant_id)
+        )
+        "#,
+    )
+    .execute(pool)
+    .await
+    .context("Failed to create scim_group_role_mappings")?;
+
+    let applied: Option<bool> =
+        sqlx::query_scalar("SELECT success FROM _sqlx_migrations WHERE version = ?")
+            .bind(SCIM_MAPPING_MIGRATION_VERSION)
+            .fetch_optional(pool)
+            .await
+            .context("Failed to inspect _sqlx_migrations for SCIM mapping migration")?;
+
+    let execution_time = start.elapsed().as_nanos() as i64;
+
+    match applied {
+        Some(_) => {
+            sqlx::query(
+                r#"
+                UPDATE _sqlx_migrations
+                SET description = ?, success = TRUE, checksum = ?, execution_time = ?
+                WHERE version = ?
+                "#,
+            )
+            .bind(&*migration.description)
+            .bind(&*migration.checksum)
+            .bind(execution_time)
+            .bind(SCIM_MAPPING_MIGRATION_VERSION)
+            .execute(pool)
+            .await
+            .context("Failed to update _sqlx_migrations for SCIM mapping migration")?;
+        }
+        None => {
+            sqlx::query(
+                r#"
+                INSERT INTO _sqlx_migrations (version, description, success, checksum, execution_time)
+                VALUES (?, ?, TRUE, ?, ?)
+                "#,
+            )
+            .bind(SCIM_MAPPING_MIGRATION_VERSION)
+            .bind(&*migration.description)
+            .bind(&*migration.checksum)
+            .bind(execution_time)
+            .execute(pool)
+            .await
+            .context("Failed to insert _sqlx_migrations row for SCIM mapping migration")?;
+        }
+    }
+
+    Ok(())
+}
+
+async fn column_exists(pool: &Pool<MySql>, table: &str, column: &str) -> Result<bool> {
+    let exists: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT 1
+        FROM information_schema.columns
+        WHERE table_schema = DATABASE()
+          AND table_name = ?
+          AND column_name = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(table)
+    .bind(column)
+    .fetch_optional(pool)
+    .await
+    .context("Failed to check information_schema.columns")?;
+
+    Ok(exists.is_some())
+}
+
+async fn index_exists(pool: &Pool<MySql>, table: &str, index: &str) -> Result<bool> {
+    let exists: Option<i64> = sqlx::query_scalar(
+        r#"
+        SELECT 1
+        FROM information_schema.statistics
+        WHERE table_schema = DATABASE()
+          AND table_name = ?
+          AND index_name = ?
+        LIMIT 1
+        "#,
+    )
+    .bind(table)
+    .bind(index)
+    .fetch_optional(pool)
+    .await
+    .context("Failed to check information_schema.statistics")?;
+
+    Ok(exists.is_some())
 }
 
 /// Seed Keycloak with default realm, admin user, and portal client
