@@ -681,8 +681,7 @@ data:
   ENVIRONMENT: "production"
   NODE_ENV: "production"
   OTEL_METRICS_ENABLED: "true"
-  OTEL_TRACING_ENABLED: "true"
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.observability:4317"
+  OTEL_TRACING_ENABLED: "false"
   LOG_FORMAT: "json"
   OTEL_SERVICE_NAME: "auth9-core"
 EOF
@@ -1022,6 +1021,7 @@ apply_keycloak_configmap() {
     # the public HTTPS URL regardless of request origin (browser via cloudflared
     # or auth9-core via internal K8s DNS).
     local keycloak_public_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
+    local auth9_core_public_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
 
     cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -1046,7 +1046,7 @@ data:
   KC_SPI_THEME_LOGIN_DEFAULT: auth9
   KC_SPI_THEME_EMAIL_DEFAULT: keycloak
   KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
-  AUTH9_API_URL: http://auth9-core:8080
+  AUTH9_API_URL: "$auth9_core_public_url"
   KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
   KC_LOG_LEVEL: INFO
   KC_CACHE: ispn

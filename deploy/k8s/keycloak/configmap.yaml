@@ -30,8 +30,8 @@ data:
   KC_SPI_THEME_EMAIL_DEFAULT: keycloak
   KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
 
-  # Auth9 API URL for theme integration
-  AUTH9_API_URL: http://auth9-core:8080
+  # Auth9 API public URL for theme integration (executed in the browser)
+  AUTH9_API_URL: https://api.auth9.example.com
 
   # Keycloak event listener: ext-event-http (p2-inc/keycloak-events) pushes events to auth9-core webhook.
   KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events

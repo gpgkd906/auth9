@@ -68,7 +68,6 @@ data:
 
   # Telemetry / Observability
   OTEL_METRICS_ENABLED: "true"
-  OTEL_TRACING_ENABLED: "true"
-  OTEL_EXPORTER_OTLP_ENDPOINT: "http://tempo.observability:4317"
+  OTEL_TRACING_ENABLED: "false"
   LOG_FORMAT: "json"
   OTEL_SERVICE_NAME: "auth9-core"
