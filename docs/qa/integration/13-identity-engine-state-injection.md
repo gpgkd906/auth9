@@ -13,6 +13,7 @@
 
 - `AppState` / `TestAppState` 已持有抽象身份后端，而不是仅依赖 `KeycloakClient`
 - 默认 Keycloak backend 通过 `identity_engine/adapters/keycloak/` 注入，而不是直接把 `KeycloakClient` 当作 trait object
+- backend flag 选择逻辑由 `integration/16-auth9-oidc-skeleton-and-backend-flag.md` 覆盖，这里只验证默认 Keycloak 分支
 - `SessionService` 通过抽象会话能力访问身份后端
 - `IdentityProviderService` 通过抽象联邦能力访问身份后端
 - `KeycloakSyncService` 通过统一身份引擎抽象更新 realm 配置

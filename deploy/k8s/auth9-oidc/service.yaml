@@ -1,0 +1,18 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: auth9-oidc
+  namespace: auth9
+  labels:
+    app.kubernetes.io/name: auth9-oidc
+    app.kubernetes.io/component: identity-backend
+    app.kubernetes.io/part-of: auth9
+spec:
+  type: ClusterIP
+  selector:
+    app.kubernetes.io/name: auth9-oidc
+  ports:
+    - name: http
+      port: 8090
+      targetPort: http
+      protocol: TCP

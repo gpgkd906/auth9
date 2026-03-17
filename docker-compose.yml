@@ -30,6 +30,7 @@ services:
       # Password Reset Security
       PASSWORD_RESET_HMAC_KEY: dev-password-reset-hmac-key-change-in-production
       PASSWORD_RESET_TOKEN_TTL_SECS: 3600
+      IDENTITY_BACKEND: ${IDENTITY_BACKEND:-keycloak}
     depends_on:
       tidb:
         condition: service_healthy
@@ -102,6 +103,7 @@ services:
       HSTS_ENABLED: "true"
       HSTS_HTTPS_ONLY: "true"
       HSTS_TRUST_X_FORWARDED_PROTO: "true"
+      IDENTITY_BACKEND: ${IDENTITY_BACKEND:-keycloak}
     security_opt:
       - no-new-privileges:true
     cap_drop:
@@ -116,6 +118,28 @@ services:
         condition: service_completed_successfully
       redis:
         condition: service_started
+    networks:
+      - auth9-network
+    restart: unless-stopped
+
+  # ==================== Auth9 OIDC Skeleton ====================
+  auth9-oidc:
+    build:
+      context: ./auth9-oidc
+      dockerfile: Dockerfile
+    container_name: auth9-oidc
+    command: ["auth9-oidc"]
+    ports:
+      - "8090:8090"
+    environment:
+      RUST_LOG: info
+      HTTP_HOST: 0.0.0.0
+      HTTP_PORT: 8090
+      DATABASE_URL: mysql://root@tidb:4000/auth9
+      IDENTITY_BACKEND: auth9_oidc
+    depends_on:
+      tidb:
+        condition: service_healthy
     networks:
       - auth9-network
     restart: unless-stopped

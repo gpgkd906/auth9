@@ -110,6 +110,7 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
         telemetry: auth9_core::config::TelemetryConfig::default(),
+        identity_backend: auth9_core::config::IdentityBackend::Keycloak,
         platform_admin_emails: vec!["admin@auth9.local".to_string()],
         webauthn: auth9_core::config::WebAuthnConfig {
             rp_id: "localhost".to_string(),

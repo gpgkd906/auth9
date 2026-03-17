@@ -191,6 +191,7 @@
 | [integration/13-identity-engine-state-injection.md](./integration/13-identity-engine-state-injection.md) | IdentityEngine 抽象注入、Session/Identity Provider/Realm Sync 回归 | 3 |
 | [integration/14-keycloak-adapter-layer.md](./integration/14-keycloak-adapter-layer.md) | Keycloak adapter 层回归（Session revoke、IdP CRUD、linked identity、realm sync 注入链） | 4 |
 | [integration/15-neutral-identity-schema-migration.md](./integration/15-neutral-identity-schema-migration.md) | 中性身份字段迁移回归（identity_subject / provider_session_id / provider_alias） | 4 |
+| [integration/16-auth9-oidc-skeleton-and-backend-flag.md](./integration/16-auth9-oidc-skeleton-and-backend-flag.md) | `auth9-oidc` 服务骨架、`IDENTITY_BACKEND` 开关与双 backend smoke test | 4 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -230,15 +231,16 @@
 | 审计日志 | 1 | 5 |
 | Action | 12 | 49 |
 | SDK | 9 | 45 |
-| 集成测试 | 15 | 70 |
+| 集成测试 | 16 | 74 |
 | SAML Application | 4 | 20 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **108** | **505** |
+| **总计** | **109** | **509** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-17 | 5.17.0 | **Keycloak Phase 1 FR4**：新增 `integration/16-auth9-oidc-skeleton-and-backend-flag.md`（4 场景），覆盖 `auth9-oidc` 独立服务骨架、`IDENTITY_BACKEND` 默认/切换/非法值校验；同步更新 `integration/13`、`integration/14` 的分支覆盖边界说明；集成测试统计更新为 16 个文档 74 个场景；总计 109 个文档 509 个场景 |
 | 2026-03-17 | 5.16.0 | **Keycloak Phase 1 FR3**：新增 `integration/15-neutral-identity-schema-migration.md`（4 场景），覆盖 `identity_subject` / `provider_session_id` / `provider_alias` 的 migration、主路径读写与兼容性；同步更新用户、会话、Enterprise SSO 相关 QA 文档字段说明；集成测试统计更新为 15 个文档 70 个场景；总计 108 个文档 505 个场景 |
 | 2026-03-17 | 5.15.0 | **QA 治理收敛**：拆分 `auth/01-oidc-login.md`，新增 `auth/18-oidc-login-mfa-advanced.md`（3 场景），移出进阶 MFA/TOTP/认证器选择场景以满足单文档场景数限制；为 `sdk/07`、`sdk/08` 补检查清单，并为多份 UI 文档补 `入口可见性` 说明；文档总数更新为 107，场景总数保持 501 |
 | 2026-03-17 | 5.14.0 | **Keycloak Phase 1 FR2**：新增 `integration/14-keycloak-adapter-layer.md`（4 场景），覆盖 Keycloak adapter 注入链、Session revoke、Identity Provider CRUD、linked identity 回归；同步更新 `integration/13-identity-engine-state-injection.md` 背景说明；集成测试统计更新为 14 个文档 66 个场景；总计 106 个文档 501 个场景 |

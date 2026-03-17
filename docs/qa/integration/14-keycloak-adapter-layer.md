@@ -18,6 +18,8 @@
 
 该 FR 不改变外部 API 契约，因此 QA 重点是“适配层抽离后，现有行为未回退”。
 
+本用例仅覆盖 `IDENTITY_BACKEND=keycloak` 分支；`auth9_oidc` backend flag 与骨架探活由 `integration/16-auth9-oidc-skeleton-and-backend-flag.md` 覆盖。
+
 ---
 
 ## 场景 1：服务启动后 adapter 注入链正常

@@ -1,7 +1,7 @@
 //! Server initialization and routing
 
 use crate::cache::CacheManager;
-use crate::config::Config;
+use crate::config::{Config, IdentityBackend};
 use crate::crypto::EncryptionKey;
 use crate::domains;
 use crate::grpc::interceptor::{ApiKeyAuthenticator, AuthInterceptor};
@@ -25,6 +25,9 @@ use crate::domains::security_observability::service::{
 use crate::domains::tenant_access::service::{
     InvitationService, SamlApplicationService, TenantRepositoryBundle, TenantService,
     UserRepositoryBundle, UserService,
+};
+use crate::identity_engine::adapters::auth9_oidc::{
+    Auth9OidcFederationBrokerAdapter, Auth9OidcIdentityEngineAdapter, Auth9OidcSessionStoreAdapter,
 };
 use crate::identity_engine::adapters::keycloak::{
     KeycloakFederationBrokerAdapter, KeycloakIdentityEngineAdapter, KeycloakSessionStoreAdapter,
@@ -72,6 +75,28 @@ use crate::middleware::rate_limit::{
 };
 use crate::middleware::require_auth::AuthMiddlewareState;
 use crate::middleware::security_headers::security_headers_middleware;
+
+pub fn select_identity_backend(
+    config: &Config,
+    keycloak_arc: Arc<KeycloakClient>,
+) -> (
+    Arc<dyn IdentitySessionStore>,
+    Arc<dyn FederationBroker>,
+    Arc<dyn IdentityEngine>,
+) {
+    match config.identity_backend {
+        IdentityBackend::Keycloak => (
+            Arc::new(KeycloakSessionStoreAdapter::new(keycloak_arc.clone())),
+            Arc::new(KeycloakFederationBrokerAdapter::new(keycloak_arc.clone())),
+            Arc::new(KeycloakIdentityEngineAdapter::new(keycloak_arc)),
+        ),
+        IdentityBackend::Auth9Oidc => (
+            Arc::new(Auth9OidcSessionStoreAdapter::new()),
+            Arc::new(Auth9OidcFederationBrokerAdapter::new()),
+            Arc::new(Auth9OidcIdentityEngineAdapter::new()),
+        ),
+    }
+}
 
 // ============================================================
 // Production Service Type Aliases
@@ -452,6 +477,7 @@ impl HasScimServices for AppState {
 
 /// Run the server
 pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) -> Result<()> {
+    info!("Current identity backend: {}", config.identity_backend);
     // Create database connection pool
     let db_pool = MySqlPoolOptions::new()
         .max_connections(config.database.max_connections)
@@ -500,12 +526,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create services
     // Create Arc-wrapped Keycloak client for services that need it
     let keycloak_arc = Arc::new(keycloak_client.clone());
-    let identity_sessions: Arc<dyn IdentitySessionStore> =
-        Arc::new(KeycloakSessionStoreAdapter::new(keycloak_arc.clone()));
-    let federation_broker: Arc<dyn FederationBroker> =
-        Arc::new(KeycloakFederationBrokerAdapter::new(keycloak_arc.clone()));
-    let identity_engine: Arc<dyn IdentityEngine> =
-        Arc::new(KeycloakIdentityEngineAdapter::new(keycloak_arc.clone()));
+    let (identity_sessions, federation_broker, identity_engine) =
+        select_identity_backend(&config, keycloak_arc.clone());
 
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));

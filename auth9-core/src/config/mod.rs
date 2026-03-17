@@ -95,6 +95,27 @@ impl fmt::Debug for PasswordResetConfig {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum IdentityBackend {
+    Keycloak,
+    Auth9Oidc,
+}
+
+impl IdentityBackend {
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Self::Keycloak => "keycloak",
+            Self::Auth9Oidc => "auth9_oidc",
+        }
+    }
+}
+
+impl fmt::Display for IdentityBackend {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// Application configuration
 #[derive(Clone)]
 pub struct Config {
@@ -130,6 +151,8 @@ pub struct Config {
     pub telemetry: TelemetryConfig,
     /// Password reset configuration
     pub password_reset: PasswordResetConfig,
+    /// Selected identity backend implementation.
+    pub identity_backend: IdentityBackend,
     /// Platform admin email allowlist.
     ///
     /// Identity tokens are intentionally tenant-unscoped. Only Identity tokens whose
@@ -176,6 +199,7 @@ impl fmt::Debug for Config {
             .field("server", &self.server)
             .field("telemetry", &self.telemetry)
             .field("password_reset", &self.password_reset)
+            .field("identity_backend", &self.identity_backend)
             .field(
                 "jwt_tenant_access_allowed_audiences",
                 &format!(
@@ -553,6 +577,7 @@ impl Config {
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
+            identity_backend: IdentityBackend::Keycloak,
             cors: CorsConfig::default(),
             webauthn: WebAuthnConfig {
                 rp_id: "localhost".to_string(),
@@ -612,6 +637,17 @@ impl Config {
             hmac_key: env::var("PASSWORD_RESET_HMAC_KEY")
                 .context("PASSWORD_RESET_HMAC_KEY is required")?,
             token_ttl_secs: parse_u64_env("PASSWORD_RESET_TOKEN_TTL_SECS", 3600),
+        };
+        let identity_backend = match env::var("IDENTITY_BACKEND") {
+            Ok(value) => match value.trim().to_ascii_lowercase().as_str() {
+                "" | "keycloak" => IdentityBackend::Keycloak,
+                "auth9_oidc" => IdentityBackend::Auth9Oidc,
+                other => anyhow::bail!(
+                    "Invalid IDENTITY_BACKEND '{}'; expected 'keycloak' or 'auth9_oidc'",
+                    other
+                ),
+            },
+            Err(_) => IdentityBackend::Keycloak,
         };
 
         Ok(Self {
@@ -805,6 +841,7 @@ impl Config {
                 metrics_token: env::var("METRICS_TOKEN").ok(),
             },
             password_reset,
+            identity_backend,
             platform_admin_emails: parse_csv_env(
                 "PLATFORM_ADMIN_EMAILS",
                 vec!["admin@auth9.local".to_string()],
@@ -1136,6 +1173,7 @@ mod tests {
             },
             grpc_security: GrpcSecurityConfig::default(),
             rate_limit: RateLimitConfig::default(),
+            identity_backend: IdentityBackend::Keycloak,
             cors: CorsConfig::default(),
             webauthn: WebAuthnConfig {
                 rp_id: "localhost".to_string(),
@@ -1809,6 +1847,7 @@ mod tests {
                 exchange_rate_limit_requests: 20,
                 exchange_rate_limit_window_secs: 60,
             },
+            identity_backend: IdentityBackend::Keycloak,
             rate_limit: RateLimitConfig::default(),
             cors: CorsConfig::default(),
             webauthn: WebAuthnConfig {

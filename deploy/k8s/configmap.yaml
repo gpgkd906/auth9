@@ -8,6 +8,7 @@ metadata:
 data:
   # Logging
   RUST_LOG: "info"
+  IDENTITY_BACKEND: "keycloak"
   
   # Server configuration
   HTTP_HOST: "0.0.0.0"
@@ -61,6 +62,7 @@ data:
   APP_BASE_URL: "https://auth9.example.com"
   AUTH9_CORE_URL: "http://auth9-core:8080"
   AUTH9_CORE_PUBLIC_URL: "https://api.auth9.example.com"
+  AUTH9_OIDC_URL: "http://auth9-oidc:8090"
   AUTH9_PORTAL_URL: "https://auth9.example.com"
   AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   ENVIRONMENT: "production"

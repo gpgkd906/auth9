@@ -4,8 +4,9 @@
 //! For unit tests, use mock repositories from the service layer.
 
 use auth9_core::config::{
-    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig, RedisConfig,
-    SecurityHeadersConfig, ServerConfig, TelemetryConfig, WebAuthnConfig, RateLimitConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, IdentityBackend, JwtConfig,
+    KeycloakConfig, RateLimitConfig, RedisConfig, SecurityHeadersConfig, ServerConfig,
+    TelemetryConfig, WebAuthnConfig,
 };
 
 /// Test configuration (no real connections needed)
@@ -57,10 +58,17 @@ pub fn test_config() -> Config {
         },
         server: ServerConfig::default(),
         telemetry: TelemetryConfig::default(),
+        identity_backend: IdentityBackend::Keycloak,
         platform_admin_emails: vec!["admin@auth9.local".to_string()],
         jwt_tenant_access_allowed_audiences: vec![],
         security_headers: SecurityHeadersConfig::default(),
         portal_client_id: None,
+        password_reset: auth9_core::config::PasswordResetConfig {
+            hmac_key: "test-password-reset-hmac-key".to_string(),
+            token_ttl_secs: 3600,
+        },
+        async_action: auth9_core::models::action::AsyncActionConfig::default(),
+        branding_allowed_domains: vec![],
     }
 }
 

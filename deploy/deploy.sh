@@ -1120,6 +1120,9 @@ deploy_auth9_apps() {
         print_info "正在部署 auth9-core..."
         kubectl apply -f "$K8S_DIR/auth9-core/" $DRY_RUN
 
+        print_info "正在部署 auth9-oidc..."
+        kubectl apply -f "$K8S_DIR/auth9-oidc/" $DRY_RUN
+
         print_info "正在部署 auth9-portal..."
         kubectl apply -f "$K8S_DIR/auth9-portal/" $DRY_RUN
 
@@ -1188,6 +1191,9 @@ wait_for_auth9_apps() {
     print_info "等待 auth9-core..."
     kubectl rollout status deployment/auth9-core -n "$NAMESPACE" --timeout=300s || true
 
+    print_info "等待 auth9-oidc..."
+    kubectl rollout status deployment/auth9-oidc -n "$NAMESPACE" --timeout=300s || true
+
     print_info "等待 auth9-portal..."
     kubectl rollout status deployment/auth9-portal -n "$NAMESPACE" --timeout=300s || true
 
@@ -1231,6 +1237,9 @@ print_deployment_complete() {
         echo -e "  ${GREEN}auth9-core（后端 API）:${NC}"
         echo -e "    公网 URL:     ${YELLOW}${core_url}${NC}"
         echo -e "    内部地址:     auth9-core.$NAMESPACE.svc.cluster.local:8080"
+        echo ""
+        echo -e "  ${GREEN}auth9-oidc（身份后端骨架）:${NC}"
+        echo -e "    内部地址:     auth9-oidc.$NAMESPACE.svc.cluster.local:8090"
         echo ""
         local keycloak_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
         echo -e "  ${GREEN}keycloak（OIDC 提供者）:${NC}"
