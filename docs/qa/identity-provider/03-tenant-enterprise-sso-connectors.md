@@ -57,7 +57,7 @@
 
 ### 预期数据状态
 ```sql
-SELECT id, tenant_id, alias, provider_type, enabled, keycloak_alias
+SELECT id, tenant_id, alias, provider_type, enabled, provider_alias, keycloak_alias
 FROM enterprise_sso_connectors
 WHERE tenant_id = '{tenant_id}' AND alias = '{connector_alias}';
 -- 预期: 返回 1 行，provider_type='saml'

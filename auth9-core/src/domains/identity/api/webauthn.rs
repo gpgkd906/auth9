@@ -283,7 +283,7 @@ async fn get_keycloak_user_id<S: HasServices>(
     let uuid = crate::models::common::StringUuid::parse_str(user_id)
         .map_err(|_| AppError::BadRequest("Invalid user_id".to_string()))?;
     let user = state.user_service().get(uuid).await?;
-    Ok(user.keycloak_id)
+    Ok(user.identity_subject)
 }
 
 /// Extract client IP from request headers

@@ -25,16 +25,16 @@
 
 ### 预期结果
 - 页面离开 `/login` 并进入托管认证链路
-- 跳转 URL 包含 `kc_idp_hint=` 参数，值为该连接器的 `keycloak_alias`
+- 跳转 URL 包含 `kc_idp_hint=` 参数，值为该连接器的 `provider_alias`
 - 用户进入企业 IdP 的登录页面（而非回退到托管的用户名/密码表单）
 
 ### 预期数据状态
 ```sql
-SELECT c.keycloak_alias, d.domain
+SELECT c.provider_alias, c.keycloak_alias, d.domain
 FROM enterprise_sso_connectors c
 JOIN enterprise_sso_domains d ON d.connector_id = c.id
 WHERE d.domain = '{corp_domain}' AND c.enabled = 1;
--- 预期: 返回 1 条记录，keycloak_alias 与跳转 URL 中的 kc_idp_hint 一致
+-- 预期: 返回 1 条记录，provider_alias 与跳转 URL 中的 kc_idp_hint 一致
 ```
 
 ---

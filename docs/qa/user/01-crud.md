@@ -12,7 +12,7 @@
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
-| keycloak_id | VARCHAR(255) | Keycloak 用户 ID |
+| identity_subject | VARCHAR(255) | 中性身份主体 ID（migration period 下与 `keycloak_id` 同步） |
 | email | VARCHAR(255) | 邮箱（唯一） |
 | display_name | VARCHAR(255) | 显示名称 |
 | mfa_enabled | BOOLEAN | 是否启用 MFA |
@@ -46,8 +46,8 @@
 
 ### 预期数据状态
 ```sql
-SELECT id, keycloak_id, email, display_name, mfa_enabled FROM users WHERE email = 'newuser@example.com';
--- 预期: 存在记录，keycloak_id 非空
+SELECT id, identity_subject, keycloak_id, email, display_name, mfa_enabled FROM users WHERE email = 'newuser@example.com';
+-- 预期: 存在记录，identity_subject 非空；migration period 下 keycloak_id 与其保持一致
 
 -- Keycloak 验证：用户 newuser@example.com 存在
 ```

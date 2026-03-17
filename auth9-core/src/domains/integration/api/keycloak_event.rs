@@ -494,7 +494,7 @@ pub async fn process_keycloak_event<
     }
 
     let user_id = if let Some(ref kc_user_id) = event.user_id {
-        match state.user_service().get_by_keycloak_id(kc_user_id).await {
+        match state.user_service().get_by_identity_subject(kc_user_id).await {
             Ok(user) => Some(user.id),
             Err(_) => {
                 debug!(

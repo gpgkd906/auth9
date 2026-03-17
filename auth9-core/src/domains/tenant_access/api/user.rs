@@ -551,7 +551,7 @@ pub async fn update_me<S: HasServices>(
         };
         state
             .keycloak_client()
-            .update_user(&before.keycloak_id, &update)
+            .update_user(&before.identity_subject, &update)
             .await?;
     }
     let user = state.user_service().update(id, input).await?;
@@ -612,7 +612,7 @@ pub async fn update<S: HasServices>(
         };
         state
             .keycloak_client()
-            .update_user(&before.keycloak_id, &update)
+            .update_user(&before.identity_subject, &update)
             .await?;
     }
     let user = state.user_service().update(id, input).await?;
@@ -661,7 +661,7 @@ pub async fn delete<S: HasServices>(
 
     if let Err(err) = state
         .keycloak_client()
-        .delete_user(&before.keycloak_id)
+        .delete_user(&before.identity_subject)
         .await
     {
         if !matches!(err, crate::error::AppError::NotFound(_)) {
@@ -909,7 +909,7 @@ pub async fn enable_mfa<S: HasServices>(
         .await?;
     let password_valid = state
         .keycloak_client()
-        .validate_user_password(&admin_user.keycloak_id, &input.confirm_password)
+        .validate_user_password(&admin_user.identity_subject, &input.confirm_password)
         .await?;
     if !password_valid {
         return Err(AppError::Forbidden(
@@ -931,7 +931,7 @@ pub async fn enable_mfa<S: HasServices>(
     };
     state
         .keycloak_client()
-        .update_user(&user.keycloak_id, &update)
+        .update_user(&user.identity_subject, &update)
         .await?;
     let updated = state.user_service().set_mfa_enabled(id, true).await?;
     let _ = write_audit_log_generic(
@@ -994,7 +994,7 @@ pub async fn disable_mfa<S: HasServices>(
         .await?;
     let password_valid = state
         .keycloak_client()
-        .validate_user_password(&admin_user.keycloak_id, &input.confirm_password)
+        .validate_user_password(&admin_user.identity_subject, &input.confirm_password)
         .await?;
     if !password_valid {
         return Err(AppError::Forbidden(
@@ -1007,7 +1007,7 @@ pub async fn disable_mfa<S: HasServices>(
     let user = state.user_service().get(id).await?;
     state
         .keycloak_client()
-        .remove_totp_credentials(&user.keycloak_id)
+        .remove_totp_credentials(&user.identity_subject)
         .await?;
     let update = KeycloakUserUpdate {
         username: None,
@@ -1020,7 +1020,7 @@ pub async fn disable_mfa<S: HasServices>(
     };
     state
         .keycloak_client()
-        .update_user(&user.keycloak_id, &update)
+        .update_user(&user.identity_subject, &update)
         .await?;
     let updated = state.user_service().set_mfa_enabled(id, false).await?;
     let _ = write_audit_log_generic(

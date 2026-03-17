@@ -173,7 +173,7 @@
 | [sdk/09-auth-password-passkey-clients.md](./sdk/09-auth-password-passkey-clients.md) | 认证流程与凭证管理子客户端（Password/Passkeys/EmailOtp/Auth/Organizations） | 5 |
 | [sdk/10-observability-config-clients.md](./sdk/10-observability-config-clients.md) | 可观测性与系统配置子客户端（AuditLogs/Analytics/SecurityAlerts/System/EmailTemplates/Branding） | 5 |
 
-### 集成测试 (14 个文档, 66 个场景)
+### 集成测试 (15 个文档, 70 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 4 |
@@ -190,6 +190,7 @@
 | [integration/12-otp-service-layer.md](./integration/12-otp-service-layer.md) | OTP 通用服务层基础设施（OtpManager、OtpChannel、速率限制、CacheOperations 扩展） | 5 |
 | [integration/13-identity-engine-state-injection.md](./integration/13-identity-engine-state-injection.md) | IdentityEngine 抽象注入、Session/Identity Provider/Realm Sync 回归 | 3 |
 | [integration/14-keycloak-adapter-layer.md](./integration/14-keycloak-adapter-layer.md) | Keycloak adapter 层回归（Session revoke、IdP CRUD、linked identity、realm sync 注入链） | 4 |
+| [integration/15-neutral-identity-schema-migration.md](./integration/15-neutral-identity-schema-migration.md) | 中性身份字段迁移回归（identity_subject / provider_session_id / provider_alias） | 4 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -229,15 +230,16 @@
 | 审计日志 | 1 | 5 |
 | Action | 12 | 49 |
 | SDK | 9 | 45 |
-| 集成测试 | 14 | 66 |
+| 集成测试 | 15 | 70 |
 | SAML Application | 4 | 20 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **107** | **501** |
+| **总计** | **108** | **505** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-17 | 5.16.0 | **Keycloak Phase 1 FR3**：新增 `integration/15-neutral-identity-schema-migration.md`（4 场景），覆盖 `identity_subject` / `provider_session_id` / `provider_alias` 的 migration、主路径读写与兼容性；同步更新用户、会话、Enterprise SSO 相关 QA 文档字段说明；集成测试统计更新为 15 个文档 70 个场景；总计 108 个文档 505 个场景 |
 | 2026-03-17 | 5.15.0 | **QA 治理收敛**：拆分 `auth/01-oidc-login.md`，新增 `auth/18-oidc-login-mfa-advanced.md`（3 场景），移出进阶 MFA/TOTP/认证器选择场景以满足单文档场景数限制；为 `sdk/07`、`sdk/08` 补检查清单，并为多份 UI 文档补 `入口可见性` 说明；文档总数更新为 107，场景总数保持 501 |
 | 2026-03-17 | 5.14.0 | **Keycloak Phase 1 FR2**：新增 `integration/14-keycloak-adapter-layer.md`（4 场景），覆盖 Keycloak adapter 注入链、Session revoke、Identity Provider CRUD、linked identity 回归；同步更新 `integration/13-identity-engine-state-injection.md` 背景说明；集成测试统计更新为 14 个文档 66 个场景；总计 106 个文档 501 个场景 |
 | 2026-03-17 | 5.13.0 | **Keycloak Phase 1 FR1**：新增 `integration/13-identity-engine-state-injection.md`（3 场景），覆盖 `IdentityEngine` 抽象注入、Session API 回归、Identity Provider API 回归；集成测试统计更新为 13 个文档 62 个场景；总计 105 个文档 497 个场景 |

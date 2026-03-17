@@ -177,7 +177,7 @@ impl<L: LinkedIdentityRepository, U: UserRepository> IdentityProviderService<L, 
 
         // Remove from Keycloak
         self.federation_broker
-            .remove_user_federated_identity(&user.keycloak_id, &identity.provider_alias)
+            .remove_user_federated_identity(&user.identity_subject, &identity.provider_alias)
             .await?;
 
         // Remove from our database

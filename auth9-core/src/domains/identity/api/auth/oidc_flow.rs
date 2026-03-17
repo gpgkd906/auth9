@@ -105,18 +105,17 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
         .store_oidc_state(&state_nonce, &state_payload_json, OIDC_STATE_TTL_SECS)
         .await?;
 
-    // Resolve connector_alias to keycloak_alias if provided
+    // Resolve connector_alias to provider_alias if provided.
     let kc_idp_hint = if let Some(alias) = params.connector_alias.as_deref() {
-        let keycloak_alias = sqlx::query_scalar::<_, String>(
-            "SELECT keycloak_alias FROM enterprise_sso_connectors WHERE alias = ? AND enabled = TRUE LIMIT 1",
+        let provider_alias = sqlx::query_scalar::<_, String>(
+            "SELECT COALESCE(provider_alias, keycloak_alias) FROM enterprise_sso_connectors WHERE alias = ? AND enabled = TRUE LIMIT 1",
         )
         .bind(alias)
         .fetch_optional(state.db_pool())
         .await
         .ok()
         .flatten();
-        // Use keycloak_alias if found, otherwise fall back to the provided alias
-        Some(keycloak_alias.unwrap_or_else(|| alias.to_string()))
+        Some(provider_alias.unwrap_or_else(|| alias.to_string()))
     } else {
         None
     };
@@ -195,7 +194,7 @@ pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::
         scope: &filtered_scope,
         encoded_state: &state_nonce,
         nonce: params.nonce.as_deref(),
-        connector_alias: Some(&discovery.keycloak_alias),
+        connector_alias: Some(&discovery.provider_alias),
         kc_action: None,
         ui_locales: params.ui_locales.as_deref(),
         code_challenge: params.code_challenge.as_deref(),
@@ -309,7 +308,11 @@ pub async fn token<
             let (action_service_id, service_tenant_id) =
                 resolve_service_ids_for_actions(&state, &state_payload.client_id).await;
 
-            let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
+            let user = match state
+                .user_service()
+                .get_by_identity_subject(&userinfo.sub)
+                .await
+            {
                 Ok(existing) => existing,
                 Err(AppError::NotFound(_)) => {
                     if let Some(service_id) = action_service_id {
@@ -600,7 +603,11 @@ pub async fn token<
             let (action_svc_id, svc_tenant_id) =
                 resolve_service_ids_for_actions(&state, &state_payload.client_id).await;
 
-            let user = match state.user_service().get_by_keycloak_id(&userinfo.sub).await {
+            let user = match state
+                .user_service()
+                .get_by_identity_subject(&userinfo.sub)
+                .await
+            {
                 Ok(existing) => existing,
                 Err(AppError::NotFound(_)) => {
                     let input = crate::models::user::CreateUserInput {

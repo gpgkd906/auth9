@@ -137,14 +137,18 @@ impl<
         self
     }
 
-    pub async fn create(&self, keycloak_id: &str, input: CreateUserInput) -> Result<User> {
+    pub async fn create(&self, identity_subject: &str, input: CreateUserInput) -> Result<User> {
         input.validate()?;
 
-        // Check for duplicate keycloak_id
-        if self.repo.find_by_keycloak_id(keycloak_id).await?.is_some() {
+        if self
+            .repo
+            .find_by_identity_subject(identity_subject)
+            .await?
+            .is_some()
+        {
             return Err(AppError::Conflict(format!(
-                "User with keycloak_id '{}' already exists",
-                keycloak_id
+                "User with identity_subject '{}' already exists",
+                identity_subject
             )));
         }
 
@@ -156,7 +160,7 @@ impl<
             )));
         }
 
-        let user = self.repo.create(keycloak_id, &input).await?;
+        let user = self.repo.create(identity_subject, &input).await?;
 
         // Trigger user.created webhook event
         if let Some(publisher) = &self.webhook_publisher {
@@ -193,9 +197,9 @@ impl<
             .ok_or_else(|| AppError::NotFound(format!("User '{}' not found", email)))
     }
 
-    pub async fn get_by_keycloak_id(&self, keycloak_id: &str) -> Result<User> {
+    pub async fn get_by_identity_subject(&self, identity_subject: &str) -> Result<User> {
         self.repo
-            .find_by_keycloak_id(keycloak_id)
+            .find_by_identity_subject(identity_subject)
             .await?
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))
     }
@@ -377,12 +381,12 @@ impl<
         // 10. Delete from Keycloak AFTER transaction commit
         // (external operation cannot be rolled back, so run after DB is consistent)
         if let Some(ref keycloak) = self.keycloak {
-            match keycloak.delete_user(&user.keycloak_id).await {
+            match keycloak.delete_user(&user.identity_subject).await {
                 Ok(_) => {}
                 Err(AppError::NotFound(_)) => {
                     warn!(
                         "User {} not found in Keycloak during delete, continuing",
-                        user.keycloak_id
+                        user.identity_subject
                     );
                 }
                 Err(e) => return Err(e),
@@ -586,7 +590,7 @@ mod tests {
     async fn test_create_user_success() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("kc-123"))
             .returning(|_| Ok(None));
 
@@ -594,9 +598,9 @@ mod tests {
             .with(eq("test@example.com"))
             .returning(|_| Ok(None));
 
-        mock.expect_create().returning(|keycloak_id, input| {
+        mock.expect_create().returning(|identity_subject, input| {
             Ok(User {
-                keycloak_id: keycloak_id.to_string(),
+                identity_subject: identity_subject.to_string(),
                 email: input.email.clone(),
                 display_name: input.display_name.clone(),
                 ..Default::default()
@@ -619,14 +623,14 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_create_user_duplicate_keycloak_id() {
+    async fn test_create_user_duplicate_identity_subject() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("kc-existing"))
             .returning(|_| {
                 Ok(Some(User {
-                    keycloak_id: "kc-existing".to_string(),
+                    identity_subject: "kc-existing".to_string(),
                     email: "existing@example.com".to_string(),
                     ..Default::default()
                 }))
@@ -730,36 +734,36 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn test_get_by_keycloak_id_success() {
+    async fn test_get_by_identity_subject_success() {
         let mut mock = MockUserRepository::new();
         let user = User {
-            keycloak_id: "kc-123".to_string(),
+            identity_subject: "kc-123".to_string(),
             ..Default::default()
         };
         let user_clone = user.clone();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("kc-123"))
             .returning(move |_| Ok(Some(user_clone.clone())));
 
         let service = create_test_service(mock);
 
-        let result = service.get_by_keycloak_id("kc-123").await;
+        let result = service.get_by_identity_subject("kc-123").await;
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().keycloak_id, "kc-123");
+        assert_eq!(result.unwrap().identity_subject, "kc-123");
     }
 
     #[tokio::test]
-    async fn test_get_by_keycloak_id_not_found() {
+    async fn test_get_by_identity_subject_not_found() {
         let mut mock = MockUserRepository::new();
 
-        mock.expect_find_by_keycloak_id()
+        mock.expect_find_by_identity_subject()
             .with(eq("nonexistent"))
             .returning(|_| Ok(None));
 
         let service = create_test_service(mock);
 
-        let result = service.get_by_keycloak_id("nonexistent").await;
+        let result = service.get_by_identity_subject("nonexistent").await;
         assert!(matches!(result, Err(AppError::NotFound(_))));
     }
 

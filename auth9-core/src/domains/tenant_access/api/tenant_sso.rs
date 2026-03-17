@@ -75,10 +75,10 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
         .get(StringUuid::from(tenant_id))
         .await?;
     let alias = input.alias.trim().to_lowercase();
-    let keycloak_alias = format!("{}--{}", tenant.slug, alias);
+    let provider_alias = format!("{}--{}", tenant.slug, alias);
 
     let keycloak_provider = KeycloakIdentityProvider {
-        alias: keycloak_alias.clone(),
+        alias: provider_alias.clone(),
         display_name: input.display_name.clone(),
         provider_id: provider_type.clone(),
         enabled: input.enabled,
@@ -104,7 +104,7 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
         &provider_type,
         input.enabled,
         input.priority,
-        &keycloak_alias,
+        &provider_alias,
         &config,
         &domains,
     )
@@ -113,7 +113,7 @@ pub async fn create_connector<S: HasServices + HasDbPool>(
     if let Err(e) = insert_result {
         let _ = state
             .keycloak_client()
-            .delete_identity_provider(&keycloak_alias)
+            .delete_identity_provider(&provider_alias)
             .await;
         return Err(e);
     }
@@ -172,7 +172,7 @@ pub async fn update_connector<S: HasServices + HasDbPool>(
     let display_name = input.display_name.or(before.display_name.clone());
 
     let keycloak_provider = KeycloakIdentityProvider {
-        alias: before.keycloak_alias.clone(),
+        alias: before.provider_alias.clone(),
         display_name: display_name.clone(),
         provider_id: before.provider_type.clone(),
         enabled,
@@ -185,7 +185,7 @@ pub async fn update_connector<S: HasServices + HasDbPool>(
     };
     state
         .keycloak_client()
-        .update_identity_provider(&before.keycloak_alias, &keycloak_provider)
+        .update_identity_provider(&before.provider_alias, &keycloak_provider)
         .await?;
 
     let mut tx = state.db_pool().begin().await?;
@@ -265,7 +265,7 @@ pub async fn delete_connector<S: HasServices + HasDbPool>(
 
     state
         .keycloak_client()
-        .delete_identity_provider(&before.keycloak_alias)
+        .delete_identity_provider(&before.provider_alias)
         .await?;
 
     let mut tx = state.db_pool().begin().await?;
@@ -324,7 +324,7 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
 
     let result = match state
         .keycloak_client()
-        .get_identity_provider(&connector.keycloak_alias)
+        .get_identity_provider(&connector.provider_alias)
         .await
     {
         Ok(_) => ConnectorTestResult {
@@ -358,7 +358,7 @@ pub async fn list_connectors_by_tenant(
     let connector_rows = sqlx::query(
         r#"
         SELECT id, tenant_id, alias, display_name, provider_type, enabled, priority,
-               keycloak_alias, config, created_at, updated_at
+               COALESCE(provider_alias, keycloak_alias) AS provider_alias, config, created_at, updated_at
         FROM enterprise_sso_connectors
         WHERE tenant_id = ?
         ORDER BY priority ASC, created_at ASC
@@ -403,7 +403,7 @@ pub async fn list_connectors_by_tenant(
             provider_type: row.try_get("provider_type")?,
             enabled: row.try_get("enabled")?,
             priority: row.try_get("priority")?,
-            keycloak_alias: row.try_get("keycloak_alias")?,
+            provider_alias: row.try_get("provider_alias")?,
             config,
             domains: domains_by_connector.remove(&id).unwrap_or_default(),
             created_at: row.try_get("created_at")?,
@@ -436,7 +436,7 @@ async fn insert_connector(
     provider_type: &str,
     enabled: bool,
     priority: i32,
-    keycloak_alias: &str,
+    provider_alias: &str,
     config: &HashMap<String, String>,
     domains: &[String],
 ) -> Result<()> {
@@ -444,8 +444,8 @@ async fn insert_connector(
     sqlx::query(
         r#"
         INSERT INTO enterprise_sso_connectors
-            (id, tenant_id, alias, display_name, provider_type, enabled, priority, keycloak_alias, config, created_at, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+            (id, tenant_id, alias, display_name, provider_type, enabled, priority, provider_alias, keycloak_alias, config, created_at, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
         "#,
     )
     .bind(connector_id.to_string())
@@ -455,7 +455,8 @@ async fn insert_connector(
     .bind(provider_type)
     .bind(enabled)
     .bind(priority)
-    .bind(keycloak_alias)
+    .bind(provider_alias)
+    .bind(provider_alias)
     .bind(serde_json::to_string(config).map_err(|e| AppError::Internal(e.into()))?)
     .execute(tx.as_mut())
     .await

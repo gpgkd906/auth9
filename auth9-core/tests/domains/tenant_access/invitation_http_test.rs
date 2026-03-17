@@ -1003,7 +1003,7 @@ async fn test_accept_invitation_existing_user_success() {
     // Add existing user matching the invitation email
     let user = User {
         id: StringUuid::new_v4(),
-        keycloak_id: "kc-user-1".to_string(),
+        identity_subject: "kc-user-1".to_string(),
         email: "existing@example.com".to_string(),
         display_name: Some("Existing User".to_string()),
         ..Default::default()
@@ -1191,7 +1191,7 @@ async fn test_accept_invitation_with_role_assignment() {
     // Add existing user
     let user = User {
         id: StringUuid::new_v4(),
-        keycloak_id: "kc-role-user".to_string(),
+        identity_subject: "kc-role-user".to_string(),
         email: "roleuser@example.com".to_string(),
         display_name: Some("Role User".to_string()),
         ..Default::default()

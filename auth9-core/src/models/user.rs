@@ -12,7 +12,7 @@ use validator::Validate;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: StringUuid,
-    pub keycloak_id: String,
+    pub identity_subject: String,
     pub scim_external_id: Option<String>,
     pub scim_provisioned_by: Option<StringUuid>,
     pub email: String,
@@ -30,7 +30,7 @@ impl Default for User {
         let now = Utc::now();
         Self {
             id: StringUuid::new_v4(),
-            keycloak_id: String::new(),
+            identity_subject: String::new(),
             scim_external_id: None,
             scim_provisioned_by: None,
             email: String::new(),

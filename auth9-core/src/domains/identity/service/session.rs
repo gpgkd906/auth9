@@ -43,7 +43,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
     pub async fn create_session(
         &self,
         user_id: StringUuid,
-        keycloak_session_id: Option<String>,
+        provider_session_id: Option<String>,
         ip_address: Option<String>,
         user_agent: Option<String>,
     ) -> Result<Session> {
@@ -57,10 +57,10 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
                 .await?
             {
                 // Revoke in the identity backend if session ID exists
-                if let Some(kc_session_id) = &oldest_session.keycloak_session_id {
+                if let Some(provider_session_id) = &oldest_session.provider_session_id {
                     let _ = self
                         .identity_sessions
-                        .delete_user_session(kc_session_id)
+                        .delete_user_session(provider_session_id)
                         .await;
                 }
                 // Revoke in database
@@ -81,7 +81,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
 
         let input = CreateSessionInput {
             user_id,
-            keycloak_session_id,
+            provider_session_id,
             device_type,
             device_name,
             ip_address,
@@ -131,11 +131,11 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
         }
 
         // Revoke in Keycloak if session ID exists
-        if let Some(kc_session_id) = &session.keycloak_session_id {
+        if let Some(provider_session_id) = &session.provider_session_id {
             // Ignore errors from the identity backend (session may already be expired)
             let _ = self
                 .identity_sessions
-                .delete_user_session(kc_session_id)
+                .delete_user_session(provider_session_id)
                 .await;
         }
 
@@ -179,10 +179,10 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
                 continue;
             }
 
-            if let Some(kc_session_id) = &session.keycloak_session_id {
+            if let Some(provider_session_id) = &session.provider_session_id {
                 let _ = self
                     .identity_sessions
-                    .delete_user_session(kc_session_id)
+                    .delete_user_session(provider_session_id)
                     .await;
             }
         }
@@ -203,7 +203,7 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
         // Logout from the identity backend (ignore if user doesn't exist there)
-        let _ = self.identity_sessions.logout_user(&user.keycloak_id).await;
+        let _ = self.identity_sessions.logout_user(&user.identity_subject).await;
 
         // Revoke all sessions in database regardless of Keycloak status
         self.session_repo.revoke_all_by_user(user_id).await
@@ -496,7 +496,7 @@ mod tests {
             .returning(|id| {
                 Ok(Some(User {
                     id,
-                    keycloak_id: "kc-123".to_string(),
+                    identity_subject: "kc-123".to_string(),
                     ..Default::default()
                 }))
             });
@@ -585,7 +585,7 @@ mod tests {
                 Ok(Some(Session {
                     id: oldest_session_id,
                     user_id: uid,
-                    keycloak_session_id: Some("old-kc-session".to_string()),
+                    provider_session_id: Some("old-kc-session".to_string()),
                     ..Default::default()
                 }))
             });

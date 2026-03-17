@@ -202,7 +202,7 @@ async fn test_receive_multi_tenant_event_without_explicit_context_keeps_tenant_e
         .user_repo
         .add_user(User {
             id: user_id,
-            keycloak_id: "kc-multi-user".to_string(),
+            identity_subject: "kc-multi-user".to_string(),
             email: "multi@example.com".to_string(),
             ..Default::default()
         })
@@ -264,7 +264,7 @@ async fn test_receive_multi_tenant_event_uses_tenant_scoped_client_match() {
         .user_repo
         .add_user(User {
             id: user_id,
-            keycloak_id: "kc-client-scoped-user".to_string(),
+            identity_subject: "kc-client-scoped-user".to_string(),
             email: "scoped@example.com".to_string(),
             ..Default::default()
         })

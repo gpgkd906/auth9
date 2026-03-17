@@ -29,7 +29,7 @@
 | alias | VARCHAR(100) | 连接器别名 |
 | provider_type | VARCHAR(20) | `saml` / `oidc` |
 | enabled | BOOLEAN | 是否启用 |
-| keycloak_alias | VARCHAR(140) | Keycloak IdP alias |
+| provider_alias | VARCHAR(140) | 中性 provider alias（migration period 下与 `keycloak_alias` 同步） |
 | config | JSON | 协议配置 |
 
 ### `enterprise_sso_domains` 表
@@ -72,11 +72,11 @@ curl -X POST 'http://localhost:8080/api/v1/enterprise-sso/discovery?response_typ
 ### 预期结果
 - HTTP 状态码为 `200`
 - 返回 `data.tenant_id`、`data.tenant_slug`、`data.connector_alias`
-- `authorize_url` 包含 `kc_idp_hint=` 且值为租户连接器对应的 `keycloak_alias`
+- `authorize_url` 包含 `kc_idp_hint=` 且值为租户连接器对应的 `provider_alias`
 
 ### 预期数据状态
 ```sql
-SELECT c.id, c.alias, c.keycloak_alias, c.enabled, d.domain
+SELECT c.id, c.alias, c.provider_alias, c.keycloak_alias, c.enabled, d.domain
 FROM enterprise_sso_connectors c
 JOIN enterprise_sso_domains d ON d.connector_id = c.id
 WHERE d.domain = '{corp_domain}';
@@ -197,18 +197,18 @@ SELECT COUNT(*) AS cnt FROM enterprise_sso_connectors;
 ### 测试操作流程
 1. 访问：
 ```bash
-curl -I 'http://localhost:8080/api/v1/auth/authorize?response_type=code&client_id=auth9-portal&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=openid%20email%20profile&state={state}&connector_alias={keycloak_alias}'
+curl -I 'http://localhost:8080/api/v1/auth/authorize?response_type=code&client_id=auth9-portal&redirect_uri=http%3A%2F%2Flocalhost%3A3000%2Fauth%2Fcallback&scope=openid%20email%20profile&state={state}&connector_alias={provider_alias}'
 ```
 2. 查看 `Location` 响应头
 
 ### 预期结果
 - HTTP 状态码为 `307` 或 `302`
 - `Location` 指向底层授权端点
-- `Location` 查询参数中存在 `kc_idp_hint={keycloak_alias}`
+- `Location` 查询参数中存在 `kc_idp_hint={provider_alias}`
 
 ### 预期数据状态
 ```sql
-SELECT COUNT(*) AS cnt FROM enterprise_sso_connectors WHERE keycloak_alias = '{keycloak_alias}';
+SELECT COUNT(*) AS cnt FROM enterprise_sso_connectors WHERE provider_alias = '{provider_alias}';
 -- 预期: cnt >= 1（仅路由透传，无新增写入）
 ```
 

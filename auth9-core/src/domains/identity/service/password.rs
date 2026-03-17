@@ -191,7 +191,7 @@ impl<
 
         // Reset password in Keycloak
         self.keycloak
-            .reset_user_password(&user.keycloak_id, &input.new_password, false)
+            .reset_user_password(&user.identity_subject, &input.new_password, false)
             .await?;
 
         // Track password change timestamp
@@ -236,7 +236,7 @@ impl<
         // Verify current password with Keycloak
         let is_valid = self
             .keycloak
-            .validate_user_password(&user.keycloak_id, &input.current_password)
+            .validate_user_password(&user.identity_subject, &input.current_password)
             .await?;
 
         if !is_valid {
@@ -247,11 +247,11 @@ impl<
 
         // Set new password in Keycloak
         self.keycloak
-            .reset_user_password(&user.keycloak_id, &input.new_password, false)
+            .reset_user_password(&user.identity_subject, &input.new_password, false)
             .await?;
 
         // Invalidate all Keycloak sessions for the user (security: revoke stolen sessions)
-        if let Err(e) = self.keycloak.logout_user(&user.keycloak_id).await {
+        if let Err(e) = self.keycloak.logout_user(&user.identity_subject).await {
             tracing::warn!(
                 user_id = %user_id,
                 "Failed to invalidate Keycloak sessions after password change: {}",
@@ -288,7 +288,7 @@ impl<
 
         // Admin bypass: set password in Keycloak, bypassing realm password policy
         self.keycloak
-            .admin_reset_user_password(&user.keycloak_id, password, temporary)
+            .admin_reset_user_password(&user.identity_subject, password, temporary)
             .await?;
 
         // Track password change timestamp
@@ -972,7 +972,7 @@ mod tests {
             .returning(move |_| {
                 Ok(Some(User {
                     id: user_id,
-                    keycloak_id: "kc-user-1".to_string(),
+                    identity_subject: "kc-user-1".to_string(),
                     email: "existing@example.com".to_string(),
                     display_name: Some("Test User".to_string()),
                     ..Default::default()
@@ -1062,7 +1062,7 @@ mod tests {
             .returning(move |_| {
                 Ok(Some(User {
                     id: user_id,
-                    keycloak_id: kc_user_id.to_string(),
+                    identity_subject: kc_user_id.to_string(),
                     email: "reset@example.com".to_string(),
                     ..Default::default()
                 }))
@@ -1110,7 +1110,7 @@ mod tests {
         user_mock.expect_find_by_id().returning(move |_| {
             Ok(Some(crate::models::user::User {
                 id: user_id,
-                keycloak_id: "kc-1".to_string(),
+                identity_subject: "kc-1".to_string(),
                 email: "user@example.com".to_string(),
                 ..Default::default()
             }))
@@ -1179,7 +1179,7 @@ mod tests {
             .returning(move |_| {
                 Ok(Some(User {
                     id: user_id,
-                    keycloak_id: kc_user_id.to_string(),
+                    identity_subject: kc_user_id.to_string(),
                     email: "change@example.com".to_string(),
                     ..Default::default()
                 }))
@@ -1270,7 +1270,7 @@ mod tests {
             .returning(move |_| {
                 Ok(Some(User {
                     id: user_id,
-                    keycloak_id: kc_user_id.to_string(),
+                    identity_subject: kc_user_id.to_string(),
                     email: "change@example.com".to_string(),
                     ..Default::default()
                 }))
@@ -1609,7 +1609,7 @@ mod tests {
         user_mock.expect_find_by_id().returning(move |_| {
             Ok(Some(crate::models::user::User {
                 id: user_id,
-                keycloak_id: "kc-1".to_string(),
+                identity_subject: "kc-1".to_string(),
                 email: "user@example.com".to_string(),
                 ..Default::default()
             }))

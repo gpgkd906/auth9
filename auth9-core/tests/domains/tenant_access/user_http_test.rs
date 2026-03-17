@@ -187,7 +187,7 @@ async fn test_create_user_returns_201() {
     let response = body.unwrap();
     assert_eq!(response.data.email, "newuser@example.com");
     assert_eq!(response.data.display_name, Some("New User".to_string()));
-    assert_eq!(response.data.keycloak_id, keycloak_user_id);
+    assert_eq!(response.data.identity_subject, keycloak_user_id);
 }
 
 #[tokio::test]
@@ -248,7 +248,7 @@ async fn test_update_user_returns_200() {
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.display_name = Some("Old Name".to_string());
     state.user_repo.add_user(user).await;
 
@@ -335,7 +335,7 @@ async fn test_delete_user_returns_200() {
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     state.user_repo.add_user(user).await;
 
     let app = build_test_router(state);
@@ -359,7 +359,7 @@ async fn test_delete_user_keycloak_not_found_still_succeeds() {
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = "nonexistent-kc-user".to_string();
+    user.identity_subject = "nonexistent-kc-user".to_string();
     state.user_repo.add_user(user).await;
 
     let app = build_test_router(state);
@@ -602,12 +602,12 @@ async fn test_enable_mfa() {
     let token = create_test_tenant_access_token_for_user(admin_id, Uuid::new_v4());
 
     let mut admin_user = create_test_user(Some(admin_id));
-    admin_user.keycloak_id = admin_kc_id;
+    admin_user.identity_subject = admin_kc_id;
     state.user_repo.add_user(admin_user).await;
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.mfa_enabled = false;
     state.user_repo.add_user(user).await;
 
@@ -643,12 +643,12 @@ async fn test_disable_mfa() {
 
     // Add admin user to repo (needed for password verification lookup)
     let mut admin_user = create_test_user(Some(admin_id));
-    admin_user.keycloak_id = admin_kc_id.clone();
+    admin_user.identity_subject = admin_kc_id.clone();
     state.user_repo.add_user(admin_user).await;
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.mfa_enabled = true;
     state.user_repo.add_user(user).await;
 
@@ -734,7 +734,7 @@ async fn test_update_me_changes_display_name() {
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.display_name = Some("Old Name".to_string());
     state.user_repo.add_user(user).await;
 
@@ -768,7 +768,7 @@ async fn test_self_update_succeeds_without_admin() {
 
     let user_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     user.display_name = Some("Original".to_string());
     state.user_repo.add_user(user).await;
 
@@ -1315,7 +1315,7 @@ async fn test_tenant_access_with_user_write_permission_can_delete() {
     let user_id = Uuid::new_v4();
     let tenant_id = Uuid::new_v4();
     let mut user = create_test_user(Some(user_id));
-    user.keycloak_id = keycloak_user_id.to_string();
+    user.identity_subject = keycloak_user_id.to_string();
     state.user_repo.add_user(user).await;
     // Add the target user to the same tenant as the caller's token
     state

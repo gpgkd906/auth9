@@ -42,7 +42,7 @@ async fn test_list_user_sessions_admin() {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: Some(format!("Chrome on macOS {}", i)),
             ip_address: Some("192.168.1.1".to_string()),
@@ -134,7 +134,7 @@ async fn test_force_logout_user() {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: None,
             ip_address: None,
@@ -269,7 +269,7 @@ async fn test_session_info_device_details() {
     let session = Session {
         id: StringUuid::new_v4(),
         user_id,
-        keycloak_session_id: Some("kc-123".to_string()),
+        provider_session_id: Some("kc-123".to_string()),
         device_type: Some("mobile".to_string()),
         device_name: Some("Safari on iPhone".to_string()),
         ip_address: Some("10.0.0.1".to_string()),
@@ -330,7 +330,7 @@ async fn test_list_my_sessions_success() {
                 StringUuid::new_v4()
             },
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: Some(format!("Chrome on macOS {}", i)),
             ip_address: Some("192.168.1.1".to_string()),
@@ -441,7 +441,7 @@ async fn test_revoke_session_success() {
     let current_session = Session {
         id: current_session_id,
         user_id,
-        keycloak_session_id: Some("kc-current-session".to_string()),
+        provider_session_id: Some("kc-current-session".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: None,
         ip_address: None,
@@ -458,7 +458,7 @@ async fn test_revoke_session_success() {
     let session = Session {
         id: session_id,
         user_id,
-        keycloak_session_id: Some("kc-session-to-revoke".to_string()),
+        provider_session_id: Some("kc-session-to-revoke".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: None,
         ip_address: None,
@@ -513,7 +513,7 @@ async fn test_revoke_current_session_rejected() {
     let current_session = Session {
         id: current_session_id,
         user_id,
-        keycloak_session_id: Some("kc-current".to_string()),
+        provider_session_id: Some("kc-current".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: Some("Chrome".to_string()),
         ip_address: None,
@@ -630,7 +630,7 @@ async fn test_revoke_other_sessions_success() {
     let current_session = Session {
         id: current_session_id,
         user_id,
-        keycloak_session_id: Some("kc-current-session".to_string()),
+        provider_session_id: Some("kc-current-session".to_string()),
         device_type: Some("desktop".to_string()),
         device_name: None,
         ip_address: None,
@@ -647,7 +647,7 @@ async fn test_revoke_other_sessions_success() {
         let session = Session {
             id: StringUuid::new_v4(),
             user_id,
-            keycloak_session_id: Some(format!("kc-session-{}", i)),
+            provider_session_id: Some(format!("kc-session-{}", i)),
             device_type: Some("desktop".to_string()),
             device_name: None,
             ip_address: None,

@@ -28,7 +28,7 @@ mysql -h 127.0.0.1 -P 4000 -u root auth9 < docs/qa/session/seed.sql
 |------|------|------|
 | id | CHAR(36) | UUID 主键 |
 | user_id | CHAR(36) | 用户 ID |
-| keycloak_session_id | VARCHAR(255) | Keycloak 会话 ID |
+| provider_session_id | VARCHAR(255) | 中性 provider 会话 ID（migration period 下与 `keycloak_session_id` 同步） |
 | device_type | VARCHAR(50) | 设备类型 |
 | device_name | VARCHAR(255) | 设备名称 |
 | ip_address | VARCHAR(45) | IP 地址 |
