@@ -37,8 +37,8 @@ spec:
       # Do NOT add initContainers here - it causes race conditions with multiple replicas
       containers:
         - name: auth9-core
-          # Image tag is overridden at deploy time via: kubectl set image deployment/auth9-core auth9-core=ghcr.io/gpgkd906/auth9-core@sha256:<digest>
-          image: ghcr.io/gpgkd906/auth9-core:latest
+          # Image tag is overridden at deploy time via: kubectl set image deployment/auth9-core auth9-core=ghcr.io/c9r-io/auth9-core@sha256:<digest>
+          image: ghcr.io/c9r-io/auth9-core:latest
           imagePullPolicy: IfNotPresent
           command: ["auth9-core", "serve"]
           ports:

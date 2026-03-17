@@ -312,7 +312,7 @@ spec:
       restartPolicy: Never
       containers:
         - name: auth9-reset
-          image: ghcr.io/gpgkd906/auth9-core:latest
+          image: ghcr.io/c9r-io/auth9-core:latest
           command: ["auth9-core", "reset"]
           envFrom:
             - secretRef:

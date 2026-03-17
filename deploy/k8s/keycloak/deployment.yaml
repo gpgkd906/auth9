@@ -32,7 +32,7 @@ spec:
       # InitContainers: Extract theme JAR
       initContainers:
         - name: init-theme
-          image: ghcr.io/gpgkd906/auth9-keycloak-theme:latest
+          image: ghcr.io/c9r-io/auth9-keycloak-theme:latest
           imagePullPolicy: Always
           command: ["sh", "-c", "cp /theme/*.jar /providers/ 2>/dev/null && echo 'Theme JAR copied'"]
           volumeMounts:
@@ -52,7 +52,7 @@ spec:
               drop:
                 - ALL
         - name: init-events
-          image: ghcr.io/gpgkd906/auth9-keycloak-events:latest
+          image: ghcr.io/c9r-io/auth9-keycloak-events:latest
           imagePullPolicy: Always
           command: ["sh", "-c", "rm -f /providers/keycloak-events-*.jar && cp /events/*.jar /providers/ 2>/dev/null && echo 'Events SPI JAR copied'"]
           volumeMounts:

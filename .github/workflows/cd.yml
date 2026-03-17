@@ -1,6 +1,6 @@
 # Auth9 CD Pipeline
 # Builds and pushes Docker images on push to main
-# Images are pushed to ghcr.io/gpgkd906/auth9-*
+# Images are pushed to ghcr.io/<repository_owner>/auth9-*
 
 name: CD
 
@@ -10,10 +10,11 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  CORE_IMAGE_NAME: gpgkd906/auth9-core
-  PORTAL_IMAGE_NAME: gpgkd906/auth9-portal
-  THEME_IMAGE_NAME: gpgkd906/auth9-keycloak-theme
-  EVENTS_IMAGE_NAME: gpgkd906/auth9-keycloak-events
+  IMAGE_NAMESPACE: ${{ github.repository_owner }}
+  CORE_IMAGE_NAME: auth9-core
+  PORTAL_IMAGE_NAME: auth9-portal
+  THEME_IMAGE_NAME: auth9-keycloak-theme
+  EVENTS_IMAGE_NAME: auth9-keycloak-events
 
 jobs:
   # ==================== Build and Push auth9-core ====================
@@ -47,7 +48,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
@@ -63,10 +64,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}:buildcache
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:buildcache
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.CORE_IMAGE_NAME }}:buildcache,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:buildcache,mode=max
           platforms: linux/amd64
 
       - name: Export image digest
@@ -104,7 +105,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.PORTAL_IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
@@ -121,10 +122,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache,mode=max
           platforms: linux/amd64
 
       - name: Export image digest
@@ -161,7 +162,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.THEME_IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
@@ -177,10 +178,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.THEME_IMAGE_NAME }}:buildcache
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:buildcache
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.THEME_IMAGE_NAME }}:buildcache,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:buildcache,mode=max
           platforms: linux/amd64
 
   # ==================== Build and Push auth9-keycloak-events ====================
@@ -213,7 +214,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.REGISTRY }}/${{ env.EVENTS_IMAGE_NAME }}
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}
           tags: |
             type=sha,prefix=
             type=raw,value=latest,enable={{is_default_branch}}
@@ -229,10 +230,10 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache
           cache-to: |
             type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache,mode=max
           platforms: linux/amd64
 
   # ==================== Generate Summary ====================
@@ -257,48 +258,48 @@ jobs:
           ### auth9-core
           
           ```
-          ghcr.io/gpgkd906/auth9-core:${SHORT_SHA}
-          ghcr.io/gpgkd906/auth9-core:latest
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:${SHORT_SHA}
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:latest
           ```
           
           ### auth9-portal
 
           ```
-          ghcr.io/gpgkd906/auth9-portal:${SHORT_SHA}
-          ghcr.io/gpgkd906/auth9-portal:latest
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:${SHORT_SHA}
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:latest
           ```
 
           ### auth9-keycloak-theme
 
           ```
-          ghcr.io/gpgkd906/auth9-keycloak-theme:${SHORT_SHA}
-          ghcr.io/gpgkd906/auth9-keycloak-theme:latest
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:${SHORT_SHA}
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:latest
           ```
 
           ### auth9-keycloak-events
 
           ```
-          ghcr.io/gpgkd906/auth9-keycloak-events:${SHORT_SHA}
-          ghcr.io/gpgkd906/auth9-keycloak-events:latest
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:${SHORT_SHA}
+          ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:latest
           ```
 
           ### Quick Copy (with commit SHA)
 
           | Component | Image |
           |-----------|-------|
-          | auth9-core | `ghcr.io/gpgkd906/auth9-core:${SHORT_SHA}` |
-          | auth9-portal | `ghcr.io/gpgkd906/auth9-portal:${SHORT_SHA}` |
-          | auth9-keycloak-theme | `ghcr.io/gpgkd906/auth9-keycloak-theme:${SHORT_SHA}` |
-          | auth9-keycloak-events | `ghcr.io/gpgkd906/auth9-keycloak-events:${SHORT_SHA}` |
+          | auth9-core | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:${SHORT_SHA}` |
+          | auth9-portal | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:${SHORT_SHA}` |
+          | auth9-keycloak-theme | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:${SHORT_SHA}` |
+          | auth9-keycloak-events | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:${SHORT_SHA}` |
 
           ### Quick Copy (latest)
 
           | Component | Image |
           |-----------|-------|
-          | auth9-core | `ghcr.io/gpgkd906/auth9-core:latest` |
-          | auth9-portal | `ghcr.io/gpgkd906/auth9-portal:latest` |
-          | auth9-keycloak-theme | `ghcr.io/gpgkd906/auth9-keycloak-theme:latest` |
-          | auth9-keycloak-events | `ghcr.io/gpgkd906/auth9-keycloak-events:latest` |
+          | auth9-core | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:latest` |
+          | auth9-portal | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:latest` |
+          | auth9-keycloak-theme | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:latest` |
+          | auth9-keycloak-events | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:latest` |
 
           ### Pinned by Digest (for immutable deployments)
 
