@@ -35,8 +35,8 @@ declare -A AUTH9_SECRETS
 declare -A KEYCLOAK_SECRETS
 declare -A CONFIGMAP_VALUES
 
-# Admin credentials (extracted from init job)
-AUTH9_ADMIN_USERNAME=""
+# Admin credentials (default username is stable in Keycloak seeder)
+AUTH9_ADMIN_USERNAME="admin"
 AUTH9_ADMIN_PASSWORD=""
 
 # Colors
@@ -464,6 +464,7 @@ collect_admin_email() {
         if confirm_action "  保留现有管理员邮箱？"; then
             # Sync to PLATFORM_ADMIN_EMAILS even when keeping existing value
             CONFIGMAP_VALUES[PLATFORM_ADMIN_EMAILS]="${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}"
+            AUTH9_ADMIN_USERNAME="${AUTH9_ADMIN_USERNAME:-admin}"
             return 0
         fi
     fi
@@ -471,6 +472,7 @@ collect_admin_email() {
     local email=$(prompt_user "  管理员邮箱" "admin@auth9.local")
     AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]="$email"
     CONFIGMAP_VALUES[PLATFORM_ADMIN_EMAILS]="$email"
+    AUTH9_ADMIN_USERNAME="${AUTH9_ADMIN_USERNAME:-admin}"
     print_success "AUTH9_ADMIN_EMAIL 已配置"
 }
 
@@ -942,6 +944,17 @@ extract_client_secret() {
         print_info "正在读取 auth9-init 作业日志..."
         local init_logs=$(kubectl logs job/auth9-init -n "$NAMESPACE" 2>/dev/null || echo "")
 
+        if [ -z "$AUTH9_ADMIN_USERNAME" ]; then
+            AUTH9_ADMIN_USERNAME="admin"
+        fi
+
+        if [ -z "${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}" ]; then
+            local admin_email_from_logs=$(echo "$init_logs" | grep "Initial data seeded:" | sed -n 's/.*email=\([^",} ]*\).*/\1/p' | head -1)
+            if [ -n "$admin_email_from_logs" ]; then
+                AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]="$admin_email_from_logs"
+            fi
+        fi
+
         # Extract admin credentials if present
         if echo "$init_logs" | grep -q "AUTH9_ADMIN_USERNAME="; then
             AUTH9_ADMIN_USERNAME=$(echo "$init_logs" | grep "AUTH9_ADMIN_USERNAME=" | sed 's/.*AUTH9_ADMIN_USERNAME=//' | sed 's/[",}.].*//' | head -1)
@@ -1183,6 +1196,9 @@ print_deployment_complete() {
             echo -e "  ${RED}${BOLD}重要: 请安全保存这些凭据！${NC}"
             echo ""
             echo -e "  ${GREEN}用户名:${NC}  ${YELLOW}${AUTH9_ADMIN_USERNAME}${NC}"
+            if [ -n "${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}" ]; then
+                echo -e "  ${GREEN}邮箱:${NC}    ${YELLOW}${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}${NC}"
+            fi
             echo -e "  ${GREEN}密码:${NC}    ${YELLOW}${AUTH9_ADMIN_PASSWORD}${NC}"
             echo ""
             echo -e "  ${DIM}登录地址: ${portal_url}${NC}"
