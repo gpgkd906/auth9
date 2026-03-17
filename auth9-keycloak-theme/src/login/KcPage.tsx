@@ -22,9 +22,60 @@ const ErrorPage = lazy(() => import("./pages/Error"));
 const LoginPageExpired = lazy(() => import("./pages/LoginPageExpired"));
 
 /**
- * Default auth9 API URL - can be overridden via theme.properties
+ * Local development fallback.
+ * Production should resolve the API URL from theme properties or OAuth context.
  */
-const DEFAULT_API_URL = "http://localhost:8080";
+const LOCAL_DEFAULT_API_URL = "http://localhost:8080";
+
+function isLoopbackHostname(hostname: string): boolean {
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
+
+function isLoopbackUrl(url: string): boolean {
+  try {
+    return isLoopbackHostname(new URL(url).hostname);
+  } catch {
+    return false;
+  }
+}
+
+function deriveApiUrlFromOAuthContext(): string | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+
+  try {
+    const currentUrl = new URL(window.location.href);
+    const redirectUri = currentUrl.searchParams.get("redirect_uri");
+    if (!redirectUri) {
+      return undefined;
+    }
+
+    return new URL(redirectUri).origin;
+  } catch {
+    return undefined;
+  }
+}
+
+function resolveApiUrl(kcContext: KcContext): string {
+  const configuredApiUrl = kcContext.properties?.auth9ApiUrl?.trim();
+  if (configuredApiUrl) {
+    if (!isLoopbackUrl(configuredApiUrl)) {
+      return configuredApiUrl;
+    }
+
+    if (typeof window !== "undefined" && isLoopbackHostname(window.location.hostname)) {
+      return configuredApiUrl;
+    }
+  }
+
+  const inferredApiUrl = deriveApiUrlFromOAuthContext();
+  if (inferredApiUrl) {
+    return inferredApiUrl;
+  }
+
+  return configuredApiUrl || LOCAL_DEFAULT_API_URL;
+}
 
 /**
  * Loading fallback component
@@ -56,8 +107,9 @@ export default function KcPage(props: { kcContext: KcContext }) {
   const { kcContext } = props;
   const { i18n } = useI18n({ kcContext });
 
-  // Get auth9 API URL from theme properties
-  const apiUrl = kcContext.properties?.auth9ApiUrl || DEFAULT_API_URL;
+  // Prefer explicit theme config. If unavailable or left at localhost in a public deployment,
+  // infer the API origin from the OAuth redirect_uri to avoid browser-side localhost fetches.
+  const apiUrl = resolveApiUrl(kcContext);
 
   // Extract client_id for service-level branding
   const clientId = (kcContext as Record<string, unknown> & { client?: { clientId?: string } }).client?.clientId;
