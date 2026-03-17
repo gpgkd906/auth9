@@ -39,6 +39,10 @@
 - 管理员已登录
 - 系统有登录事件数据
 
+> **前置门禁**: 本文档默认“登录流程已单独验收通过”。
+> 若从未认证状态进入本场景，需先按 `docs/qa/auth/01-oidc-login.md` 完成登录验证。
+> 如果 `/login` 页面本身出现跳转、按钮、CSP 或 Keycloak 联邦登录问题，应归类到认证文档，不应作为 Analytics 缺陷建票。
+
 ### 目的
 验证分析概览页面正确显示统计数据
 
@@ -215,6 +219,13 @@ WHERE created_at BETWEEN '{start_date}' AND '{end_date}';
 - 页面自动重定向到 `/login`
 - 不显示 dashboard 内容
 - 登录后可正常访问原页面
+
+### 常见误报排查
+
+| 现象 | 原因 | 解决 |
+|------|------|------|
+| 在进入 Analytics 前卡在 `/login`，于是提交了 Analytics 缺陷票 | 实际失败点是认证前置步骤，不是 Analytics 页面 | 先执行 `docs/qa/auth/01-oidc-login.md`；仅当登录成功后进入 `/dashboard/analytics` 仍异常，才记录 Analytics 工单 |
+| 点击「Sign in with password」后看到浏览器安全/CSP 控制台信息，就认定 Analytics 页面不可用 | QA 在未进入目标页面前就中断，且把登录链路噪音归因到 Analytics | 以“是否成功跳转到 Keycloak 或完成登录并进入 `/dashboard/analytics`”作为判定标准；认证链路问题单独归档到 Auth |
 
 ---
 

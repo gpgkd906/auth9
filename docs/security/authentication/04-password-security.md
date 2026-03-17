@@ -67,11 +67,12 @@ docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
 
 # 方法 A（推荐）：直接对 OIDC token endpoint 发起错误密码请求
 # 说明：仅当测试客户端开启 Direct Access Grants 时可用
+# 默认开发环境可使用已 seed 的管理员邮箱 `admin@auth9.local` 作为“已知存在用户”。
 for i in {1..50}; do
   curl -X POST http://localhost:8081/realms/auth9/protocol/openid-connect/token \
     -d "grant_type=password" \
     -d "client_id=auth9-portal" \
-    -d "username=admin@test.com" \
+    -d "username=admin@auth9.local" \
     -d "password=wrong_$i"
   echo "Attempt: $i"
 done
@@ -90,6 +91,7 @@ done
 | `bruteForceProtected` 为 null | auth9-core seeder 未执行 | 启动 auth9-core 并等待 seeder 完成 |
 | 从宿主机查询 Admin API 返回 401/403 | nginx gateway 阻止宿主机访问 `/admin` | 使用 `docker exec auth9-core curl ...` 从 Docker 内部查询 |
 | 50 次错误后仍无锁定 | 环境未初始化或使用了错误的 realm | 执行 `./scripts/reset-docker.sh` 重建环境 |
+| 只有 0-1 条 `LOGIN_ERROR`，且始终不锁定 | 测试使用了不存在的用户名，或客户端未开启 Direct Access Grants | 改用默认存在用户 `admin@auth9.local`；若返回 `unauthorized_client`，切换到方法 B，通过标准登录流程或事件链路验证 |
 | 锁定后无法恢复 | `permanentLockout` 意外设为 true | 检查 seeder 配置，默认 `permanentLockout=false` |
 
 ### 修复建议
@@ -143,7 +145,7 @@ curl -X POST http://localhost:8080/api/v1/auth/forgot-password \
 # 测试 Token 重用（示例端点，按实际部署调整）
 curl -X POST http://localhost:8080/api/v1/auth/reset-password \
   -H "Content-Type: application/json" \
-  -d '{"token":"used_token","new_password":"NewPass123!"}'
+  -d '{"token":"used_token","new_password":"NewPass123!"}' # pragma: allowlist secret
 # 预期: 400 "Token invalid or expired"
 
 # 如果系统未暴露上述 API，而是完全委托 Keycloak 托管流程：
@@ -250,13 +252,13 @@ docker exec auth9-core curl -s "http://keycloak:8080/admin/realms/auth9" \
 # 不提供当前密码/再认证信息
 curl -X PUT http://localhost:8080/api/v1/users/me/password \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"new_password":"NewPass123!"}'
+  -d '{"new_password":"NewPass123!"}' # pragma: allowlist secret
 # 预期: 400/401（缺少必要校验）
 
 # 使用旧密码
 curl -X PUT http://localhost:8080/api/v1/users/me/password \
   -H "Authorization: Bearer $TOKEN" \
-  -d '{"current_password":"OldPass123!","new_password":"OldPass123!"}'
+  -d '{"current_password":"OldPass123!","new_password":"OldPass123!"}' # pragma: allowlist secret
 # 预期: 400 "Cannot reuse recent passwords"
 
 # 检查其他会话是否被注销
