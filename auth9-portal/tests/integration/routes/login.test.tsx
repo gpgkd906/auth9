@@ -4,6 +4,17 @@ import { describe, it, expect, vi } from "vitest";
 import Login, { loader, action, meta } from "~/routes/login";
 import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
 
+const defaultBranding = {
+    logo_url: undefined,
+    primary_color: "#007AFF",
+    secondary_color: "#5856D6",
+    background_color: "#F5F5F7",
+    text_color: "#1D1D1F",
+    company_name: "Auth9",
+    allow_registration: false,
+    email_otp_enabled: false,
+};
+
 // Mock session.server
 vi.mock("~/services/session.server", () => ({
     commitSession: vi.fn().mockResolvedValue("mock-session-cookie"),
@@ -47,9 +58,8 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: null,
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
         });
     });
 
@@ -60,9 +70,8 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: "access_denied",
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
         });
     });
 
@@ -73,9 +82,8 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: "server_error",
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
         });
     });
 
@@ -97,9 +105,8 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: null,
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: true,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: { ...defaultBranding, allow_registration: true },
         });
     });
 
@@ -227,7 +234,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "access_denied", apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: "access_denied", apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
@@ -246,7 +253,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "server_error", apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: "server_error", apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
@@ -263,14 +270,14 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: "test_error", apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: "test_error", apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
 
         render(<RoutesStub initialEntries={["/login?error=test_error"]} />);
 
-        expect(await screen.findByText("A9")).toBeInTheDocument();
+        expect((await screen.findAllByText("A9")).length).toBeGreaterThan(0);
     });
 
     it("renders forgot password link and hides registration link when signup is disabled", async () => {
@@ -279,7 +286,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: null, apiBaseUrl: "http://localhost:8080", allowRegistration: false };
+                    return { error: null, apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: defaultBranding };
                 },
             },
         ]);
@@ -296,7 +303,7 @@ describe("Login Page", () => {
                 path: "/login",
                 Component: Login,
                 loader() {
-                    return { error: null, apiBaseUrl: "http://localhost:8080", allowRegistration: true };
+                    return { error: null, apiBaseUrl: "http://localhost:8080", locale: "en-US", branding: { ...defaultBranding, allow_registration: true } };
                 },
             },
         ]);
@@ -318,9 +325,8 @@ describe("Login Page", () => {
         expect(result).toEqual({
             error: null,
             apiBaseUrl: "http://localhost:8080",
-            allowRegistration: false,
-            emailOtpEnabled: false,
             locale: "zh-CN",
+            branding: defaultBranding,
         });
     });
 });

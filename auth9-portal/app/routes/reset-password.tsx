@@ -1,6 +1,7 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
 import { Form, useActionData, useLoaderData, useNavigation, Link } from "react-router";
 import { useState } from "react";
+import { getBrandMark } from "~/components/auth/AuthBrandPanel";
 import { AuthPageShell } from "~/components/AuthPageShell";
 import { Button } from "~/components/ui/button";
 import { Input } from "~/components/ui/input";
@@ -11,7 +12,8 @@ import { useI18n } from "~/i18n";
 import { resolveLocale } from "~/services/locale.server";
 import { translate } from "~/i18n/translate";
 import { mapApiError } from "~/lib/error-messages";
-import { passwordApi } from "~/services/api";
+import { passwordApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
+import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 
 export const meta: MetaFunction = ({ matches }) => {
   return buildMeta(resolveMetaLocale(matches), "auth.resetPassword.metaTitle");
@@ -21,12 +23,21 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const locale = await resolveLocale(request);
   const url = new URL(request.url);
   const token = url.searchParams.get("token");
+  const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+  let branding: BrandingConfig = DEFAULT_PUBLIC_BRANDING;
 
-  if (!token) {
-    return { error: translate(locale, "auth.resetPassword.invalidToken") };
+  try {
+    const { data } = await publicBrandingApi.get(clientId);
+    branding = { ...DEFAULT_PUBLIC_BRANDING, ...data };
+  } catch {
+    // Fall back to static branding when the public config is unavailable.
   }
 
-  return { token };
+  if (!token) {
+    return { error: translate(locale, "auth.resetPassword.invalidToken"), branding };
+  }
+
+  return { token, branding };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -59,7 +70,15 @@ export async function action({ request }: ActionFunctionArgs) {
 
 export default function ResetPasswordPage() {
   const { t } = useI18n();
-  const loaderData = useLoaderData<typeof loader>();
+  const rawLoaderData = (useLoaderData<typeof loader>() ?? {}) as {
+    token?: string;
+    error?: string;
+    branding?: BrandingConfig;
+  };
+  const loaderData = {
+    ...rawLoaderData,
+    branding: { ...DEFAULT_PUBLIC_BRANDING, ...(rawLoaderData.branding ?? {}) },
+  };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const [password, setPassword] = useState("");
@@ -70,10 +89,24 @@ export default function ResetPasswordPage() {
   // Show error if no token
   if ("error" in loaderData) {
     return (
-      <AuthPageShell>
+      <AuthPageShell
+        branding={loaderData.branding}
+        panelEyebrow={t("auth.shared.hostedEyebrow")}
+        panelTitle={t("auth.resetPassword.panelTitle")}
+        panelDescription={t("auth.resetPassword.panelDescription")}
+      >
         <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
-            <div className="logo-icon mx-auto mb-4">A9</div>
+            {loaderData.branding.logo_url ? (
+              <img
+                src={loaderData.branding.logo_url}
+                alt={loaderData.branding.company_name || "Auth9"}
+                className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="logo-icon mx-auto mb-4">{getBrandMark(loaderData.branding.company_name || "Auth9")}</div>
+            )}
             <CardTitle className="text-2xl">{t("auth.resetPassword.invalidTitle")}</CardTitle>
             <CardDescription className="auth-form-description">{loaderData.error}</CardDescription>
           </CardHeader>
@@ -90,10 +123,24 @@ export default function ResetPasswordPage() {
   // Show success message
   if (actionData?.success) {
     return (
-      <AuthPageShell>
+      <AuthPageShell
+        branding={loaderData.branding}
+        panelEyebrow={t("auth.shared.hostedEyebrow")}
+        panelTitle={t("auth.resetPassword.panelTitle")}
+        panelDescription={t("auth.resetPassword.panelDescription")}
+      >
         <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
-            <div className="logo-icon mx-auto mb-4">A9</div>
+            {loaderData.branding.logo_url ? (
+              <img
+                src={loaderData.branding.logo_url}
+                alt={loaderData.branding.company_name || "Auth9"}
+                className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="logo-icon mx-auto mb-4">{getBrandMark(loaderData.branding.company_name || "Auth9")}</div>
+            )}
             <CardTitle className="text-2xl">{t("auth.resetPassword.successTitle")}</CardTitle>
             <CardDescription className="auth-form-description">
               {t("auth.resetPassword.successDescription")}
@@ -110,10 +157,24 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <AuthPageShell>
+    <AuthPageShell
+      branding={loaderData.branding}
+      panelEyebrow={t("auth.shared.hostedEyebrow")}
+      panelTitle={t("auth.resetPassword.panelTitle")}
+      panelDescription={t("auth.resetPassword.panelDescription")}
+    >
       <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
-          <div className="logo-icon mx-auto mb-4">A9</div>
+          {loaderData.branding.logo_url ? (
+            <img
+              src={loaderData.branding.logo_url}
+              alt={loaderData.branding.company_name || "Auth9"}
+              className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+              referrerPolicy="no-referrer"
+            />
+          ) : (
+            <div className="logo-icon mx-auto mb-4">{getBrandMark(loaderData.branding.company_name || "Auth9")}</div>
+          )}
           <CardTitle className="text-2xl">{t("auth.resetPassword.title")}</CardTitle>
           <CardDescription className="auth-form-description">{t("auth.resetPassword.description")}</CardDescription>
         </CardHeader>

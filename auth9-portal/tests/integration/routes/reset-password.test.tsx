@@ -26,7 +26,7 @@ describe("Reset Password Page", () => {
 
     const response = await loader({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ error: "无效或缺失的重置令牌" });
+    expect(response).toEqual(expect.objectContaining({ error: "无效或缺失的重置令牌" }));
   });
 
   it("loader returns token when present", async () => {
@@ -34,7 +34,7 @@ describe("Reset Password Page", () => {
 
     const response = await loader({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ token: "abc123" });
+    expect(response).toEqual(expect.objectContaining({ token: "abc123" }));
   });
 
   it("loader returns error when token param is empty string", async () => {
@@ -43,7 +43,7 @@ describe("Reset Password Page", () => {
     const response = await loader({ request, params: {}, context: {} });
 
     // Empty string is falsy, should return error
-    expect(response).toEqual({ error: "无效或缺失的重置令牌" });
+    expect(response).toEqual(expect.objectContaining({ error: "无效或缺失的重置令牌" }));
   });
 
   it("loader preserves full token value with special characters", async () => {
@@ -53,7 +53,7 @@ describe("Reset Password Page", () => {
 
     const response = await loader({ request, params: {}, context: {} });
 
-    expect(response).toEqual({ token: "abc-123_def.456" });
+    expect(response).toEqual(expect.objectContaining({ token: "abc-123_def.456" }));
   });
 
   // ============================================================================

@@ -136,11 +136,11 @@ curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8080/api/v1/syst
 
 ### 重要说明
 
-**登录页是 Keycloak 主题**（不是 auth9-portal 的 `/login` 路由）。
+**默认登录页现在是 auth9-portal 的 `/login` 路由**。Keycloak 主题仅用于 compatibility fallback。
 
-- auth9-portal `/login` 仅是入口选择页面（SSO/密码/Passkey），不加载 branding logo
-- 用户实际输入凭据的页面是 **Keycloak 登录主题**（`auth9-keycloak-theme`）
-- Keycloak 主题通过 `useBranding()` hook 从 `/api/v1/public/branding` 获取 logo
+- 默认入口页是 **Auth9 Portal `/login`**
+- Keycloak fallback 页面仍可能承载实际凭据输入
+- Keycloak 主题在 fallback 模式下通过 `useBranding()` hook 从 `/api/v1/public/branding` 获取 logo
 - Logo 组件位于 `auth9-keycloak-theme/src/login/components/Logo.tsx`
 
 ### 测试步骤
@@ -152,12 +152,13 @@ curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8080/api/v1/syst
      -H "Content-Type: application/json" \
      -d '{"config":{"logo_url":"https://your-monitoring-server.com/logo.png"}}'
    ```
-2. 通过 auth9-portal 进入 **Keycloak 登录页面**（点击"Sign in with password"后的页面）
-3. 检查浏览器开发者工具中外部请求的 `Referer` 头
-4. 检查 `<img>` 标签的 `referrerPolicy` 属性
+2. 先访问 Auth9 Portal `/login`，确认主入口页直接显示品牌 logo 或默认品牌缩写
+3. 如需验证 fallback，再通过 Password fallback 继续进入 Keycloak 页面
+4. 检查浏览器开发者工具中外部请求的 `Referer` 头
+5. 检查 `<img>` 标签的 `referrerPolicy` 属性
 
 ### 预期结果
-- Keycloak 登录主题中的 `<img>` 标签应包含 `referrerPolicy="no-referrer"` 属性
+- Portal `/login` 与 Keycloak fallback 页中的 `<img>` 标签都应包含 `referrerPolicy="no-referrer"` 属性
 - `<img>` 标签还应包含 `crossOrigin="anonymous"` 属性
 - 外部请求不应携带来源页面的 URL 信息
 
@@ -165,7 +166,7 @@ curl -s -o /dev/null -w "%{http_code}" -X PUT "http://localhost:8080/api/v1/syst
 
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
-| auth9-portal `/login` 没有 `<img>` 标签 | 测试了错误的页面 | 需要进入 Keycloak 登录页面（点击 "Sign in with password" 后的页面） |
+| auth9-portal `/login` 没有 `<img>` 标签 | 当前品牌未配置 `logo_url`，页面可能显示默认品牌缩写 | 配置 `logo_url` 后重试，或确认默认品牌缩写是否显示 |
 | Keycloak 登录页没有显示 logo | branding API 未配置 logo_url | 通过 `PUT /api/v1/system/branding` 设置 `logo_url` |
 | logo 显示但缺少 referrerPolicy | Logo 组件未正确实现 | 检查 `auth9-keycloak-theme/src/login/components/Logo.tsx` |
 

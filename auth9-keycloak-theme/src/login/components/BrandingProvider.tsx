@@ -24,8 +24,8 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
 }
 
 /**
- * Provides branding configuration to child components.
- * Fetches configuration from auth9 API and applies CSS variables.
+ * Provides branding configuration to fallback Keycloak theme pages.
+ * The primary auth routes are hosted by Portal; this provider keeps rollback mode aligned with Portal branding.
  *
  * Maps branding API colors to Liquid Glass CSS variables:
  * - primary_color → --accent-blue (main action color)

@@ -112,6 +112,11 @@ export default {
     },
   },
   auth: {
+    shared: {
+      hostedEyebrow: "托管认证",
+      hostedTitle: "由 Portal 托管的认证主入口",
+      hostedDescription: "Auth9 现在直接在 Portal 中承载认证主路由、branding 和认证方式选择。",
+    },
     login: {
       metaTitle: "登录 - Auth9",
       title: "登录",
@@ -137,6 +142,13 @@ export default {
       emailOtpButton: "邮箱验证码登录",
       invalidAction: "无效操作",
       missingAccessToken: "缺少访问令牌",
+      passwordRevealDetails: "查看兼容入口", // pragma: allowlist secret
+      passwordHideDetails: "收起兼容入口", // pragma: allowlist secret
+      passwordFallbackTitle: "密码登录入口已回收到 Portal", // pragma: allowlist secret
+      passwordFallbackDescription: "Hosted password API 会在下一阶段接入 Auth9 API。当前你仍可在 Portal 内确认后继续走兼容 fallback 路径。", // pragma: allowlist secret
+      passwordFallbackContinue: "继续使用兼容 fallback", // pragma: allowlist secret
+      futureMethodsEyebrow: "后续扩展位",
+      futureMethodsDescription: "当前布局已为 password、enterprise SSO、social login 和其他认证方式预留稳定入口位置。", // pragma: allowlist secret
       oauthErrors: {
         accessDenied: "访问被拒绝，请重试或联系管理员。",
         stateMismatch: "登录会话已过期，请重新登录。",
@@ -169,6 +181,8 @@ export default {
       metaTitle: "注册 - Auth9",
       title: "创建你的账户",
       description: "开始使用 Auth9 管理身份系统",
+      panelTitle: "将注册体验纳入 Auth9 Portal",
+      panelDescription: "注册页现在与其他认证页共享同一套路由壳层、branding 来源和响应式布局。",
       submit: "创建账户",
       footerPrefix: "已经有账户了？",
       footerAction: "去登录",
@@ -179,6 +193,8 @@ export default {
       metaTitle: "忘记密码 - Auth9",
       title: "忘记密码？",
       description: "输入你的邮箱地址，我们会向你发送密码重置链接。",
+      panelTitle: "在 Portal 内完成访问恢复",
+      panelDescription: "找回密码页由 Auth9 Portal 直接渲染，品牌、文案和后续验证步骤都留在同一路由体系内。",
       successTitle: "请检查你的邮箱",
       successDescription:
         "如果 {{email}} 对应的账户存在，我们已向该地址发送密码重置说明。",
@@ -188,6 +204,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "重置密码 - Auth9",
+      panelTitle: "在 Auth9 路由内完成密码恢复",
+      panelDescription: "重置密码页现在与登录和注册页共享同一套 Portal 托管壳层与 branding 来源。",
       invalidToken: "无效或缺失的重置令牌",
       expiredToken: "该重置链接已过期，请重新申请。",
       invalidTitle: "链接无效",
@@ -199,6 +217,21 @@ export default {
       passwordRequired: "请输入密码。",
       passwordMismatch: "两次输入的密码不一致。",
       failed: "密码重置失败",
+    },
+    mfaVerify: {
+      metaTitle: "验证 MFA - Auth9",
+      panelTitle: "为 Portal 内 MFA 验证预留主路径",
+      panelDescription: "MFA 验证的路由、布局和 branding 已托管到 Auth9 Portal，后续阶段可无缝接入真实验证后端。",
+      title: "验证 MFA",
+      description: "输入你的验证码以继续。该路由已经为 Hosted MFA 流程准备好页面容器。",
+      extensionTitle: "兼容说明",
+      extensionDescription: "Phase 2 先落地 Portal 路由和 UI 容器。真实验证后端会在后续 FR 中接入。",
+      codeLabel: "验证码",
+      codePlaceholder: "123456",
+      codeRequired: "请输入验证码。",
+      pendingIntegration: "Hosted MFA 验证尚未接入，请在仍使用 Keycloak 的租户中继续走兼容流程。",
+      submit: "继续",
+      verifying: "校验中...",
     },
   },
   dashboard: {

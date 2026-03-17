@@ -112,6 +112,11 @@ export default {
     },
   },
   auth: {
+    shared: {
+      hostedEyebrow: "Hosted login",
+      hostedTitle: "Portal-owned authentication",
+      hostedDescription: "Auth9 now hosts the primary authentication routes, branding, and method selection directly in the Portal.",
+    },
     login: {
       metaTitle: "Sign In - Auth9",
       title: "Sign in",
@@ -137,6 +142,13 @@ export default {
       emailOtpButton: "Sign in with email code",
       invalidAction: "Invalid action",
       missingAccessToken: "Missing access token",
+      passwordRevealDetails: "View fallback", // pragma: allowlist secret
+      passwordHideDetails: "Hide fallback", // pragma: allowlist secret
+      passwordFallbackTitle: "Password sign-in stays anchored in the Portal", // pragma: allowlist secret
+      passwordFallbackDescription: "Hosted password submission will land in Auth9 APIs in the next phase. Until then, you can continue through the compatibility path without leaving the Portal until you confirm.", // pragma: allowlist secret
+      passwordFallbackContinue: "Continue with compatibility fallback", // pragma: allowlist secret
+      futureMethodsEyebrow: "More methods",
+      futureMethodsDescription: "This layout reserves space for password, enterprise SSO, social login, and additional verifiers in later phases.", // pragma: allowlist secret
       oauthErrors: {
         accessDenied: "Access was denied. Please try again or contact your administrator.",
         stateMismatch: "Your sign-in session has expired. Please try again.",
@@ -169,6 +181,8 @@ export default {
       metaTitle: "Sign Up - Auth9",
       title: "Create your account",
       description: "Start managing identity with Auth9",
+      panelTitle: "Bring your users into the Auth9 experience",
+      panelDescription: "Registration now shares the same route shell, branding source, and responsive layout as the rest of the hosted auth flow.",
       submit: "Create account",
       footerPrefix: "Already have an account?",
       footerAction: "Sign in",
@@ -179,6 +193,8 @@ export default {
       metaTitle: "Forgot Password - Auth9",
       title: "Forgot password?",
       description: "Enter your email address and we will send you a link to reset your password.",
+      panelTitle: "Recover access without leaving the Portal",
+      panelDescription: "Password recovery is rendered by Auth9 Portal so branding, copy, and future verification steps stay under one route family.",
       successTitle: "Check your email",
       successDescription:
         "If an account exists for {{email}}, we have sent password reset instructions to that address.",
@@ -188,6 +204,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "Reset Password - Auth9",
+      panelTitle: "Finish password recovery on an Auth9 route",
+      panelDescription: "Reset-password pages now use the same Portal-owned shell and branding source as the login and registration routes.",
       invalidToken: "Invalid or missing reset token",
       expiredToken: "This reset link has expired. Please request a new one.",
       invalidTitle: "Invalid link",
@@ -199,6 +217,21 @@ export default {
       passwordRequired: "Password is required.", // pragma: allowlist secret
       passwordMismatch: "Passwords do not match.", // pragma: allowlist secret
       failed: "Failed to reset password",
+    },
+    mfaVerify: {
+      metaTitle: "Verify MFA - Auth9",
+      panelTitle: "Prepare MFA verification inside the Portal",
+      panelDescription: "The route, layout, and branding are now hosted by Auth9 Portal so the MFA step can move off the Keycloak page in a later phase.",
+      title: "Verify MFA",
+      description: "Enter your verification code to continue. This route is ready for the hosted MFA flow.",
+      extensionTitle: "Compatibility note",
+      extensionDescription: "Phase 2 establishes the Portal route and UI container. The verification backend will be connected in a follow-up feature request.",
+      codeLabel: "Verification code",
+      codePlaceholder: "123456",
+      codeRequired: "Verification code is required.",
+      pendingIntegration: "Hosted MFA verification is not connected yet. Use the compatibility flow if your tenant still prompts through Keycloak.",
+      submit: "Continue",
+      verifying: "Checking...",
     },
   },
   dashboard: {

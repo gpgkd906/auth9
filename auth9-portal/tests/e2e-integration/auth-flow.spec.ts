@@ -13,17 +13,16 @@ test.describe("Scenario: User Authentication Flow", () => {
 
   test("1. Login page should be accessible", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByText("Welcome back")).toBeVisible();
-    await expect(page.getByRole("button", { name: /sign in/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /sign in/i })).toBeVisible();
+    await expect(page.getByRole("button", { name: /continue with enterprise sso/i })).toBeVisible();
   });
 
-  test("2. Clicking sign in should redirect to Keycloak", async ({ page }) => {
+  test("2. Password entry stays in Portal until compatibility fallback is confirmed", async ({ page }) => {
     await page.goto("/login");
-    await page.getByRole("button", { name: /sign in/i }).click();
-
-    // Should redirect to Keycloak login page
-    await expect(page).toHaveURL(/\/realms\/auth9\/protocol\/openid-connect/);
-    await expect(page.getByLabel(/username/i)).toBeVisible();
+    await page.getByRole("button", { name: /sign in with password/i }).click();
+    await expect(page).toHaveURL(/\/login$/);
+    await expect(page.getByText(/hosted password submission will land in auth9 apis/i)).toBeVisible();
+    await expect(page.getByRole("button", { name: /continue with compatibility fallback/i })).toBeVisible();
   });
 
   test("3. User can login with valid credentials", async ({ page }) => {
@@ -34,20 +33,12 @@ test.describe("Scenario: User Authentication Flow", () => {
     await expect(page.url()).toContain("localhost:3000");
   });
 
-  test("4. Invalid credentials should show error", async ({ page }) => {
+  test("4. Compatibility fallback can still reach Keycloak for password flow", async ({ page }) => {
     await page.goto("/login");
-    await page.getByRole("button", { name: /sign in/i }).click();
-
-    // Wait for Keycloak page
+    await page.getByRole("button", { name: /sign in with password/i }).click();
+    await page.getByRole("button", { name: /continue with compatibility fallback/i }).click();
     await page.waitForURL(/\/realms\/auth9\/protocol\/openid-connect/);
-
-    // Fill with invalid credentials
-    await page.getByLabel(/username/i).fill("invalid-user");
-    await page.getByLabel(/password/i).fill("wrong-password");
-    await page.getByRole("button", { name: /sign in/i }).click();
-
-    // Should show error message on Keycloak page
-    await expect(page.getByText(/invalid/i)).toBeVisible();
+    await expect(page.getByLabel(/username/i)).toBeVisible();
   });
 
   test("5. Authenticated user can access dashboard", async ({ page }) => {

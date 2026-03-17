@@ -70,7 +70,7 @@
 - **Card 玻璃效果**: 标准 `liquid-glass`，`border-radius: 20px`。
 - **认证方式分隔**: "or" 文字分隔线，使用 `--glass-border-subtle` 横线 + 居中文字。
 - **SSO 输入**: Email Input + "Continue with SSO" Button（`variant="default"`）。
-- **密码登录**: 指向 Keycloak 的 Button（`variant="glass"` 或 `variant="default"`）。
+- **密码登录**: 先在 Portal 内展开 Password fallback 说明和继续按钮，不应默认立即跳往 Keycloak。
 - **Passkey 登录**: 按钮触发 WebAuthn，提交中显示 loading 状态。
 - **错误消息**: 映射自 `mapOAuthError()`，红色背景 + `--accent-red` 文字，`border-radius: 12px`。
 - **底部链接**: `--accent-blue` 色，`text-sm`（14px），hover 时 `underline`。
@@ -116,7 +116,7 @@
 | 现象 | 原因 | 处理方式 |
 |------|------|----------|
 | 访问 `/register` 直接跳到 `/login` | `allow_registration` 未开启 | 在 `/dashboard/settings/branding` 开启 `Allow registration` 后重试 |
-| Keycloak 显示“不允许注册” | 底层认证引擎尚未同步允许注册配置 | 保存 Branding 设置后等待数秒，再检查 auth9-core 日志中的 Keycloak sync 结果 |
+| 点击 Password 后直接离开 `/login` | 仍在旧入口模型 | 应先显示 Portal 内 fallback 说明，再由用户确认是否继续 |
 
 ---
 

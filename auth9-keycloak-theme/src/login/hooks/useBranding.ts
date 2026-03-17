@@ -33,7 +33,7 @@ interface UseBrandingResult {
 }
 
 /**
- * Hook to fetch branding configuration from auth9 API.
+ * Hook to fetch branding configuration for fallback Keycloak theme rendering.
  * Falls back to defaults if the API is unavailable.
  *
  * @param apiUrl - The auth9 API URL from theme properties

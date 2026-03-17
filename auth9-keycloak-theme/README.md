@@ -1,10 +1,10 @@
 # Auth9 Keycloak Theme
 
-Custom Keycloak login theme for Auth9 with dynamic branding support. This theme fetches branding configuration (logo, colors, company name) from the auth9 API at runtime, allowing customization without restarting Keycloak.
+Fallback Keycloak login theme for Auth9. Phase 2 moves the primary authentication routes and branding rendering into `auth9-portal`; this package remains available for rollback and compatibility mode.
 
 ## Features
 
-- **Dynamic Branding**: Fetches logo, colors, and company name from auth9 API
+- **Fallback Branding**: Fetches logo, colors, and company name from auth9 API when compatibility mode is active
 - **Custom CSS**: Supports injecting custom CSS from the branding settings
 - **Modern Design**: Clean, responsive login/registration pages
 - **No Default Styles**: Completely custom UI without Keycloak's default PatternFly CSS
@@ -129,13 +129,9 @@ Other pages use Keycloakify's default implementation.
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  auth9-portal   │────▶│   auth9-core    │◀────│    Keycloak     │
-│  (Settings UI)  │     │  (Branding API) │     │ (Keycloakify    │
-│                 │     │                 │     │   Theme)        │
+│ hosted auth UI  │     │  (Branding API) │     │ fallback theme  │
+│ default entry   │     │                 │     │ compatibility   │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-        │                       │                       │
-        │   PUT /api/v1/       │   GET /api/v1/        │
-        │   system/branding    │   public/branding     │
-        └──────────────────────┴───────────────────────┘
 ```
 
 ## License

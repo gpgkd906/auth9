@@ -112,6 +112,11 @@ export default {
     },
   },
   auth: {
+    shared: {
+      hostedEyebrow: "Hosted Login",
+      hostedTitle: "Portal が管理する認証導線",
+      hostedDescription: "Auth9 Portal が認証ルート、branding、サインイン方法の選択を直接ホストするようになりました。",
+    },
     login: {
       metaTitle: "サインイン - Auth9",
       title: "サインイン",
@@ -137,6 +142,13 @@ export default {
       emailOtpButton: "メールコードでサインイン",
       invalidAction: "無効なアクション",
       missingAccessToken: "アクセストークンがありません",
+      passwordRevealDetails: "互換 fallback を表示", // pragma: allowlist secret
+      passwordHideDetails: "互換 fallback を隠す", // pragma: allowlist secret
+      passwordFallbackTitle: "パスワード導線は Portal 内で管理されます", // pragma: allowlist secret
+      passwordFallbackDescription: "Hosted password API は次のフェーズで Auth9 API に接続されます。それまでは Portal 上で確認した後に互換 fallback へ進めます。", // pragma: allowlist secret
+      passwordFallbackContinue: "互換 fallback に進む", // pragma: allowlist secret
+      futureMethodsEyebrow: "拡張予定の方式",
+      futureMethodsDescription: "このレイアウトは password、enterprise SSO、social login、追加認証方式の拡張枠を確保しています。", // pragma: allowlist secret
       oauthErrors: {
         accessDenied: "アクセスが拒否されました。もう一度お試しいただくか、管理者にお問い合わせください。",
         stateMismatch: "サインインセッションの有効期限が切れました。もう一度お試しください。",
@@ -169,6 +181,8 @@ export default {
       metaTitle: "サインアップ - Auth9",
       title: "アカウントを作成",
       description: "Auth9でアイデンティティ管理を始めましょう",
+      panelTitle: "登録体験を Auth9 Portal に統一",
+      panelDescription: "登録ページは他の認証ページと同じルートシェル、branding ソース、レスポンシブレイアウトを共有します。",
       submit: "アカウント作成",
       footerPrefix: "すでにアカウントをお持ちですか？",
       footerAction: "サインイン",
@@ -179,6 +193,8 @@ export default {
       metaTitle: "パスワードをお忘れですか - Auth9",
       title: "パスワードをお忘れですか？",
       description: "メールアドレスを入力すると、パスワードリセット用のリンクをお送りします。",
+      panelTitle: "Portal 上でアクセス回復を完了",
+      panelDescription: "パスワード再設定導線は Auth9 Portal が直接描画し、branding と将来の検証ステップを同じルート群に保ちます。",
       successTitle: "メールを確認してください",
       successDescription:
         "{{email}}のアカウントが存在する場合、パスワードリセットの手順をそのアドレスに送信しました。",
@@ -188,6 +204,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "パスワードをリセット - Auth9",
+      panelTitle: "Auth9 ルート内でパスワード回復を完了",
+      panelDescription: "リセット画面はログイン・登録と同じ Portal 管理のシェルと branding ソースを利用します。",
       invalidToken: "無効またはリセットトークンがありません",
       expiredToken: "このリセットリンクは有効期限切れです。新しいリンクを再申請してください。",
       invalidTitle: "無効なリンク",
@@ -199,6 +217,21 @@ export default {
       passwordRequired: "パスワードは必須です。", // pragma: allowlist secret
       passwordMismatch: "パスワードが一致しません。", // pragma: allowlist secret
       failed: "パスワードのリセットに失敗しました",
+    },
+    mfaVerify: {
+      metaTitle: "MFA を確認 - Auth9",
+      panelTitle: "Portal 内 MFA 確認の導線を準備",
+      panelDescription: "MFA 確認のルート、レイアウト、branding は Auth9 Portal でホストされ、後続フェーズで実際の検証バックエンドに接続できます。",
+      title: "MFA を確認",
+      description: "確認コードを入力して続行します。このルートは hosted MFA フロー用の UI コンテナです。",
+      extensionTitle: "互換性メモ",
+      extensionDescription: "Phase 2 では Portal のルートと UI コンテナまでを整備します。実際の検証バックエンドは後続 FR で接続されます。",
+      codeLabel: "確認コード",
+      codePlaceholder: "123456",
+      codeRequired: "確認コードを入力してください。",
+      pendingIntegration: "Hosted MFA 検証はまだ接続されていません。Keycloak を使うテナントでは互換フローを利用してください。",
+      submit: "続行",
+      verifying: "確認中...",
     },
   },
   dashboard: {

@@ -1,11 +1,12 @@
 import type { MetaFunction, ActionFunctionArgs, LoaderFunctionArgs } from "react-router";
 import { redirect, Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
 import { useState, useCallback } from "react";
+import { getBrandMark } from "~/components/auth/AuthBrandPanel";
+import { AuthMethodStack } from "~/components/auth/AuthMethodStack";
+import { AuthPageShell } from "~/components/AuthPageShell";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
-import { LanguageSwitcher } from "~/components/LanguageSwitcher";
-import { ThemeToggle } from "~/components/ThemeToggle";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { useI18n } from "~/i18n";
 import { translate } from "~/i18n/translate";
@@ -13,7 +14,8 @@ import { mapApiError, mapOAuthError } from "~/lib/error-messages";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
-import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
+import { enterpriseSsoApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
+import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 import type { AppLocale } from "~/i18n";
 
 export const meta: MetaFunction = ({ matches }) => {
@@ -71,18 +73,16 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const error = url.searchParams.get("error");
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
-  let allowRegistration = false;
-  let emailOtpEnabled = false;
+  let branding: BrandingConfig = DEFAULT_PUBLIC_BRANDING;
 
   try {
-    const { data: branding } = await publicBrandingApi.get(clientId);
-    allowRegistration = branding.allow_registration;
-    emailOtpEnabled = branding.email_otp_enabled ?? false;
+    const { data } = await publicBrandingApi.get(clientId);
+    branding = { ...DEFAULT_PUBLIC_BRANDING, ...data };
   } catch {
-    // Default closed if branding cannot be loaded.
+    // Fall back to default Portal-owned branding.
   }
 
-  return { error, apiBaseUrl, allowRegistration, emailOtpEnabled, locale };
+  return { error, apiBaseUrl, locale, branding };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
@@ -202,17 +202,23 @@ function toRequestOptions(publicKey: Record<string, unknown>): PublicKeyCredenti
 }
 
 export default function Login() {
-  const data = useLoaderData<typeof loader>() as {
+  const loaderData = (useLoaderData<typeof loader>() ?? {}) as {
     error: string | null;
     apiBaseUrl: string;
-    allowRegistration: boolean;
-    emailOtpEnabled: boolean;
     locale: string;
+    branding: BrandingConfig;
+  };
+  const data = {
+    error: loaderData.error ?? null,
+    apiBaseUrl: loaderData.apiBaseUrl ?? "http://localhost:8080",
+    locale: loaderData.locale ?? "zh-CN",
+    branding: { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) },
   };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const { t } = useI18n();
+  const [passwordExpanded, setPasswordExpanded] = useState(false);
 
   const [authenticating, setAuthenticating] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -313,20 +319,26 @@ export default function Login() {
   }, [data.apiBaseUrl, t]);
 
   return (
-    <>
-      {/* Theme Toggle */}
-      <div className="fixed top-6 right-6 z-20 flex items-center gap-3">
-        <LanguageSwitcher />
-        <ThemeToggle />
-      </div>
-
-      <div className="min-h-screen flex items-center justify-center px-6 relative">
-        {/* Dynamic Background */}
-        <div className="page-backdrop" />
-
-        <Card className="w-full max-w-md relative z-10 animate-fade-in-up">
+    <AuthPageShell
+      branding={data.branding}
+      panelEyebrow={t("auth.shared.hostedEyebrow")}
+      panelTitle={t("auth.shared.hostedTitle")}
+      panelDescription={t("auth.shared.hostedDescription")}
+    >
+      <Card className="auth-form-card w-full max-w-xl animate-fade-in-up">
           <CardHeader className="text-center">
-            <div className="logo-icon mx-auto mb-4">A9</div>
+            {data.branding.logo_url ? (
+              <img
+                src={data.branding.logo_url}
+                alt={data.branding.company_name || "Auth9"}
+                className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
+                referrerPolicy="no-referrer"
+              />
+            ) : (
+              <div className="logo-icon mx-auto mb-4">
+                {getBrandMark(data.branding.company_name || "Auth9")}
+              </div>
+            )}
             <CardTitle className="text-2xl">
               {data.error ? t("auth.login.failedTitle") : t("auth.login.title")}
             </CardTitle>
@@ -338,59 +350,88 @@ export default function Login() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {/* SSO Login Button */}
-              <Form method="post" action="/login">
-                <input type="hidden" name="intent" value="sso-login" />
-                <Input
-                  type="email"
-                  name="email"
-                  required
-                  placeholder={t("common.placeholders.companyEmail")}
-                  className="mb-3"
-                />
-                <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
+              <AuthMethodStack>
+                <Form method="post" action="/login">
+                  <input type="hidden" name="intent" value="sso-login" />
+                  <Input
+                    type="email"
+                    name="email"
+                    required
+                    placeholder={t("common.placeholders.companyEmail")}
+                    className="mb-3"
+                  />
+                  <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
+                    {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
+                  </Button>
+                </Form>
+
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  onClick={() => setPasswordExpanded((current) => !current)}
+                  disabled={isSubmitting || authenticating}
+                >
+                  <span>{t("auth.login.passwordButton")}</span>
+                  <span className="text-xs text-[var(--text-tertiary)]">
+                    {passwordExpanded ? t("auth.login.passwordHideDetails") : t("auth.login.passwordRevealDetails")}
+                  </span>
                 </Button>
-              </Form>
+
+                {passwordExpanded ? (
+                  <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-white/70 p-4 text-left dark:bg-white/6">
+                    <p className="text-sm font-medium text-[var(--text-primary)]">
+                      {t("auth.login.passwordFallbackTitle")}
+                    </p>
+                    <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                      {t("auth.login.passwordFallbackDescription")}
+                    </p>
+                    <Form method="post" action="/login" className="mt-4">
+                      <input type="hidden" name="intent" value="password-login" />
+                      <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
+                        {isSubmitting ? t("auth.login.redirecting") : t("auth.login.passwordFallbackContinue")}
+                      </Button>
+                    </Form>
+                  </div>
+                ) : null}
+
+                {data.branding.email_otp_enabled && (
+                  <Link to="/auth/email-otp">
+                    <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
+                      {t("auth.login.emailOtpButton")}
+                    </Button>
+                  </Link>
+                )}
+
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={handlePasskeyLogin}
+                  disabled={authenticating || isSubmitting}
+                >
+                  <LockClosedIcon className="h-4 w-4 mr-2" />
+                  {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
+                </Button>
+
+                <div className="rounded-2xl border border-dashed border-[var(--glass-border-subtle)] px-4 py-3 text-left">
+                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
+                    {t("auth.login.futureMethodsEyebrow")}
+                  </p>
+                  <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
+                    {t("auth.login.futureMethodsDescription")}
+                  </p>
+                </div>
+              </AuthMethodStack>
 
               {actionData?.error && (
                 <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
               )}
 
-              {/* Divider */}
               <div className="flex items-center gap-4 my-1">
                 <span className="flex-1 h-px bg-[var(--glass-border-subtle)]" />
                 <span className="text-xs uppercase text-[var(--text-tertiary)] tracking-wide">{t("auth.login.or")}</span>
                 <span className="flex-1 h-px bg-[var(--glass-border-subtle)]" />
               </div>
-
-              {/* Password Login Button */}
-              <Form method="post" action="/login">
-                <input type="hidden" name="intent" value="password-login" />
-                <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                  {isSubmitting ? t("auth.login.redirecting") : t("auth.login.passwordButton")}
-                </Button>
-              </Form>
-
-              {/* Email OTP Login Button */}
-              {data.emailOtpEnabled && (
-                <Link to="/auth/email-otp">
-                  <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                    {t("auth.login.emailOtpButton")}
-                  </Button>
-                </Link>
-              )}
-
-              {/* Passkey Login Button */}
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handlePasskeyLogin}
-                disabled={authenticating || isSubmitting}
-              >
-                <LockClosedIcon className="h-4 w-4 mr-2" />
-                {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
-              </Button>
 
               {/* Error Messages */}
               {passkeyError && (
@@ -403,7 +444,7 @@ export default function Login() {
                 <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
                   {t("auth.login.forgotPassword")}
                 </Link>
-                {data.allowRegistration ? (
+                {data.branding.allow_registration ? (
                   <Link to="/register" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
                     {t("auth.login.createAccount")}
                   </Link>
@@ -413,8 +454,7 @@ export default function Login() {
               </div>
             </div>
           </CardContent>
-        </Card>
-      </div>
-    </>
+      </Card>
+    </AuthPageShell>
   );
 }
