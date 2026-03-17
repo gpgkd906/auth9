@@ -75,13 +75,16 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache>(
     headers: HeaderMap,
     Json(input): Json<HostedLoginPasswordRequest>,
 ) -> Result<Json<HostedLoginTokenResponse>> {
+    let start = std::time::Instant::now();
     let email = input.email.trim().to_lowercase();
     let password = input.password.clone();
 
     if email.is_empty() || !email.contains('@') {
+        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
         return Err(AppError::BadRequest("Invalid email address.".to_string()));
     }
     if password.is_empty() {
+        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
         return Err(AppError::BadRequest("Password is required.".to_string()));
     }
 
@@ -89,6 +92,7 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache>(
     let user = match state.user_service().get_by_email(&email).await {
         Ok(user) => user,
         Err(_) => {
+            metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
             return Err(AppError::Unauthorized(
                 "Invalid email or password.".to_string(),
             ));
@@ -101,9 +105,13 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache>(
         .user_store()
         .validate_user_password(&user.identity_subject, &password)
         .await
-        .map_err(|_| AppError::Unauthorized("Invalid email or password.".to_string()))?;
+        .map_err(|_| {
+            metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
+            AppError::Unauthorized("Invalid email or password.".to_string())
+        })?;
 
     if !valid {
+        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
         return Err(AppError::Unauthorized(
             "Invalid email or password.".to_string(),
         ));
@@ -140,6 +148,9 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache>(
         None,
     )
     .await;
+
+    metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted").increment(1);
+    metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password").record(start.elapsed().as_secs_f64());
 
     Ok(Json(HostedLoginTokenResponse {
         access_token: identity_token,

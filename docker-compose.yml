@@ -182,6 +182,9 @@ services:
       AUTH9_CORE_PUBLIC_URL: http://localhost:8080
       SESSION_SECRET: dev-session-secret-change-in-production
       SECURE_COOKIES: "false"  # Local Docker runs on HTTP; NODE_ENV=production is for build optimizations only
+      # Login mode rollout: "hosted" (Auth9 pages) | "oidc" (Keycloak redirect) | "percentage"
+      LOGIN_MODE: ${LOGIN_MODE:-hosted}
+      LOGIN_ROLLOUT_PCT: ${LOGIN_ROLLOUT_PCT:-100}
     depends_on:
       - auth9-core
     networks:

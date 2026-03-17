@@ -67,7 +67,64 @@ async function buildAuthorizeParams(requestUrl: URL, locale: AppLocale) {
   };
 }
 
+// ==================== Login Mode Rollout ====================
+
+/**
+ * Deterministic hash for percentage-based login mode rollout.
+ * Uses client IP + User-Agent to ensure the same visitor consistently
+ * gets the same experience across page loads.
+ */
+function simpleHash(str: string): number {
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash + str.charCodeAt(i)) | 0;
+  }
+  return Math.abs(hash);
+}
+
+function shouldUseHostedLogin(request: Request, percentage: number): boolean {
+  if (percentage >= 100) return true;
+  if (percentage <= 0) return false;
+  const ip = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() || "";
+  const ua = request.headers.get("user-agent") || "";
+  return (simpleHash(ip + ua) % 100) < percentage;
+}
+
+async function redirectToOidcLogin(request: Request) {
+  const url = new URL(request.url);
+  const locale = await resolveLocale(request);
+  const auth = await buildAuthorizeParams(url, locale as AppLocale);
+  const authorizeUrl = `${auth.corePublicUrl}/api/v1/auth/authorize?` +
+    new URLSearchParams({
+      response_type: auth.response_type,
+      client_id: auth.client_id,
+      redirect_uri: auth.redirect_uri,
+      scope: auth.scope,
+      state: auth.state,
+      nonce: auth.nonce,
+      ui_locales: auth.ui_locales,
+      code_challenge: auth.code_challenge,
+      code_challenge_method: auth.code_challenge_method,
+    }).toString();
+  const oauthCookie = await serializeOAuthState(auth.state, auth.codeVerifier);
+  return redirect(authorizeUrl, { headers: { "Set-Cookie": oauthCookie } });
+}
+
 export async function loader({ request }: LoaderFunctionArgs) {
+  // Login mode rollout: "hosted" (default) | "oidc" | "percentage"
+  const loginMode = process.env.LOGIN_MODE || "hosted";
+
+  if (loginMode === "oidc") {
+    return redirectToOidcLogin(request);
+  }
+
+  if (loginMode === "percentage") {
+    const pct = parseInt(process.env.LOGIN_ROLLOUT_PCT || "100", 10);
+    if (!shouldUseHostedLogin(request, pct)) {
+      return redirectToOidcLogin(request);
+    }
+  }
+
   const url = new URL(request.url);
   const locale = await resolveLocale(request);
   const error = url.searchParams.get("error");

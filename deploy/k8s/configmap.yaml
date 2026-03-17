@@ -68,6 +68,10 @@ data:
   ENVIRONMENT: "production"
   NODE_ENV: "production"
 
+  # Login mode rollout: "hosted" | "oidc" | "percentage"
+  LOGIN_MODE: "hosted"
+  LOGIN_ROLLOUT_PCT: "100"
+
   # Telemetry / Observability
   OTEL_METRICS_ENABLED: "true"
   OTEL_TRACING_ENABLED: "false"
