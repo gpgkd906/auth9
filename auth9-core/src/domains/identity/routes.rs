@@ -56,6 +56,23 @@ where
             "/api/v1/auth/email-otp/verify",
             post(identity_api::email_otp::verify_email_otp::<S>),
         )
+        // Hosted Login API
+        .route(
+            "/api/v1/hosted-login/password",
+            post(identity_api::hosted_login::password_login::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/logout",
+            post(identity_api::hosted_login::hosted_logout::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/start-password-reset",
+            post(identity_api::hosted_login::start_password_reset::<S>),
+        )
+        .route(
+            "/api/v1/hosted-login/complete-password-reset",
+            post(identity_api::hosted_login::complete_password_reset::<S>),
+        )
 }
 
 pub fn protected_routes<S>() -> Router<S>

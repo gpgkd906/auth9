@@ -1100,20 +1100,21 @@ mod tests {
 
     #[test]
     fn test_create_user_request_deserialization() {
-        let json = r#"{
+        let value = serde_json::json!({
             "email": "user@example.com",
             "display_name": "John Doe",
             "avatar_url": "https://example.com/avatar.png",
             "password": "secret123" // pragma: allowlist secret
-        }"#;
-        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+        });
+        let json = serde_json::to_string(&value).unwrap();
+        let request: CreateUserRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(request.user.email, "user@example.com");
         assert_eq!(request.user.display_name, Some("John Doe".to_string()));
         assert_eq!(
             request.user.avatar_url,
             Some("https://example.com/avatar.png".to_string())
         );
-        assert_eq!(request.password, Some("secret123".to_string()));
+        assert_eq!(request.password, Some("secret123".to_string())); // pragma: allowlist secret
     }
 
     #[test]
@@ -1231,13 +1232,14 @@ mod tests {
 
     #[test]
     fn test_create_user_request_with_all_fields() {
-        let json = r#"{
+        let value = serde_json::json!({
             "email": "full@example.com",
             "display_name": "Full Name",
             "avatar_url": "https://cdn.example.com/avatars/full.png",
             "password": "SecureP@ssw0rd!" // pragma: allowlist secret
-        }"#;
-        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+        });
+        let json = serde_json::to_string(&value).unwrap();
+        let request: CreateUserRequest = serde_json::from_str(&json).unwrap();
 
         assert_eq!(request.user.email, "full@example.com");
         assert_eq!(request.user.display_name, Some("Full Name".to_string()));
@@ -1371,14 +1373,15 @@ mod tests {
 
     #[test]
     fn test_create_user_request_password_only() {
-        let json = r#"{
+        let value = serde_json::json!({
             "email": "pwd@example.com",
             "password": "OnlyPassword123" // pragma: allowlist secret
-        }"#;
-        let request: CreateUserRequest = serde_json::from_str(json).unwrap();
+        });
+        let json = serde_json::to_string(&value).unwrap();
+        let request: CreateUserRequest = serde_json::from_str(&json).unwrap();
         assert_eq!(request.user.email, "pwd@example.com");
         assert!(request.user.display_name.is_none());
-        assert_eq!(request.password, Some("OnlyPassword123".to_string()));
+        assert_eq!(request.password, Some("OnlyPassword123".to_string())); // pragma: allowlist secret
     }
 
     #[test]

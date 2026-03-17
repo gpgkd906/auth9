@@ -88,7 +88,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (19 个文档, 87 个场景)
+### 认证流程 (20 个文档, 92 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 4 |
@@ -110,6 +110,7 @@
 | [auth/19-hosted-login-routes-and-branding.md](./auth/19-hosted-login-routes-and-branding.md) | Hosted Login 路由托管、Portal branding、`/mfa/verify` 占位与 Keycloak fallback 定位 | 5 |
 | [auth/17-email-otp-login.md](./auth/17-email-otp-login.md) | Email OTP 无密码登录（发送/验证端点、Portal UI 入口、租户级开关、防枚举） | 5 | 🆕
 | [auth/18-oidc-login-mfa-advanced.md](./auth/18-oidc-login-mfa-advanced.md) | OIDC 登录进阶页回归（TOTP 注册、认证器选择、登出） | 3 |
+| [auth/20-hosted-login-api.md](./auth/20-hosted-login-api.md) | Hosted Login API（密码登录、登出、密码重置、Backend Flag 切换） | 5 |
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -227,7 +228,7 @@
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
-| 认证流程 | 18 | 82 |
+| 认证流程 | 20 | 92 |
 | 系统设置 | 4 | 20 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
@@ -238,7 +239,7 @@
 | 集成测试 | 19 | 86 |
 | SAML Application | 4 | 20 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **118** | **553** |
+| **总计** | **119** | **558** |
 
 ### 文档对齐记录
 

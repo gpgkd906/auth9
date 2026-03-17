@@ -14,7 +14,7 @@ import { mapApiError, mapOAuthError } from "~/lib/error-messages";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
-import { enterpriseSsoApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
+import { enterpriseSsoApi, hostedLoginApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
 import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 import type { AppLocale } from "~/i18n";
 
@@ -136,23 +136,32 @@ export async function action({ request }: ActionFunctionArgs) {
   }
 
   if (intent === "password-login") {
-    const auth = await buildAuthorizeParams(url, locale);
-    const corePublicUrl = auth.corePublicUrl;
-    const authorizeUrl = new URL(`${corePublicUrl}/api/v1/auth/authorize`);
-    authorizeUrl.searchParams.set("response_type", auth.response_type);
-    authorizeUrl.searchParams.set("client_id", auth.client_id);
-    authorizeUrl.searchParams.set("redirect_uri", auth.redirect_uri);
-    authorizeUrl.searchParams.set("scope", auth.scope);
-    authorizeUrl.searchParams.set("state", auth.state);
-    authorizeUrl.searchParams.set("nonce", auth.nonce);
-    authorizeUrl.searchParams.set("ui_locales", auth.ui_locales);
-    authorizeUrl.searchParams.set("code_challenge", auth.code_challenge);
-    authorizeUrl.searchParams.set("code_challenge_method", auth.code_challenge_method);
+    const email = String(formData.get("email") || "").trim();
+    const password = String(formData.get("password") || "").trim();
 
-    const oauthCookie = await serializeOAuthState(auth.state, auth.codeVerifier);
-    return redirect(authorizeUrl.toString(), {
-      headers: { "Set-Cookie": oauthCookie },
-    });
+    if (!email || !password) {
+      return { error: translate(locale, "auth.login.credentialsRequired") };
+    }
+
+    try {
+      const result = await hostedLoginApi.passwordLogin(email, password);
+      const session = {
+        accessToken: result.access_token,
+        identityAccessToken: result.access_token,
+        refreshToken: undefined,
+        idToken: undefined,
+        expiresAt: Date.now() + result.expires_in * 1000,
+        identityExpiresAt: Date.now() + result.expires_in * 1000,
+      };
+      return redirect("/tenant/select", {
+        headers: {
+          "Set-Cookie": await commitSession(session),
+        },
+      });
+    } catch (error) {
+      const message = mapApiError(error, locale);
+      return { error: message };
+    }
   }
 
   return { error: translate(locale, "auth.login.invalidAction") };

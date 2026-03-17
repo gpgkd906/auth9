@@ -178,6 +178,11 @@ use utoipa::OpenApi;
             // ── WebAuthn domain ────────────────────────────────────────
             crate::models::webauthn::WebAuthnCredential,
 
+            // ── Hosted Login domain ───────────────────────────────────
+            crate::domains::identity::api::hosted_login::HostedLoginPasswordRequest,
+            crate::domains::identity::api::hosted_login::HostedLoginTokenResponse,
+            crate::domains::identity::api::hosted_login::HostedLoginLogoutRequest,
+
             // ── Health ─────────────────────────────────────────────────
             crate::domains::security_observability::api::health::HealthResponse,
         ),
@@ -220,6 +225,12 @@ use utoipa::OpenApi;
         crate::domains::identity::api::webauthn::complete_authentication,
         crate::domains::identity::api::webauthn::list_passkeys,
         crate::domains::identity::api::webauthn::delete_passkey,
+
+        // ── Identity: Hosted Login ──────────────────────────────────
+        crate::domains::identity::api::hosted_login::password_login,
+        crate::domains::identity::api::hosted_login::hosted_logout,
+        crate::domains::identity::api::hosted_login::start_password_reset,
+        crate::domains::identity::api::hosted_login::complete_password_reset,
 
         // ── Identity: Identity Provider ────────────────────────────
         crate::domains::identity::api::identity_provider::list_providers,
