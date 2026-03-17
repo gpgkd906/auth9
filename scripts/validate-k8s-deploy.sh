@@ -114,6 +114,20 @@ check_not_example_domain() {
     fi
 }
 
+check_csv_contains() {
+    local label="$1"
+    local csv="$2"
+    local expected="$3"
+    local normalized_csv=",$(echo "$csv" | tr -d ' '),"
+    local normalized_expected=",$expected,"
+
+    if [[ "$normalized_csv" == *"$normalized_expected"* ]]; then
+        print_success "$label 包含 $expected"
+    else
+        print_error "$label 缺少 $expected: $csv"
+    fi
+}
+
 check_rollout() {
     local kind="$1"
     local name="$2"
@@ -166,7 +180,7 @@ main() {
         exit 1
     fi
 
-    local app_base_url auth9_core_public_url auth9_portal_url keycloak_public_url jwt_issuer
+    local app_base_url auth9_core_public_url auth9_portal_url keycloak_public_url jwt_issuer cors_allowed_origins
     local keycloak_auth9_api_url keycloak_hostname tracing_enabled tracing_endpoint
     local portal_envfrom_secret portal_session_secret_ref
 
@@ -175,6 +189,7 @@ main() {
     auth9_portal_url="$(cfg auth9-config AUTH9_PORTAL_URL)"
     keycloak_public_url="$(cfg auth9-config KEYCLOAK_PUBLIC_URL)"
     jwt_issuer="$(cfg auth9-config JWT_ISSUER)"
+    cors_allowed_origins="$(cfg auth9-config CORS_ALLOWED_ORIGINS)"
     tracing_enabled="$(cfg auth9-config OTEL_TRACING_ENABLED)"
     tracing_endpoint="$(cfg auth9-config OTEL_EXPORTER_OTLP_ENDPOINT)"
 
@@ -201,10 +216,13 @@ main() {
     check_nonempty "AUTH9_CORE_PUBLIC_URL" "$auth9_core_public_url"
     check_nonempty "AUTH9_PORTAL_URL" "$auth9_portal_url"
     check_nonempty "KEYCLOAK_PUBLIC_URL" "$keycloak_public_url"
+    check_nonempty "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins"
     check_equals "APP_BASE_URL" "$app_base_url" "$auth9_portal_url"
     check_equals "JWT_ISSUER" "$jwt_issuer" "$auth9_core_public_url"
     check_equals "keycloak-config.AUTH9_API_URL" "$keycloak_auth9_api_url" "$auth9_core_public_url"
     check_equals "keycloak-config.KC_HOSTNAME" "$keycloak_hostname" "$keycloak_public_url"
+    check_csv_contains "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins" "$auth9_portal_url"
+    check_csv_contains "CORS_ALLOWED_ORIGINS" "$cors_allowed_origins" "$keycloak_public_url"
     check_not_example_domain "APP_BASE_URL" "$app_base_url"
     check_not_example_domain "AUTH9_CORE_PUBLIC_URL" "$auth9_core_public_url"
     check_not_example_domain "AUTH9_PORTAL_URL" "$auth9_portal_url"
