@@ -65,7 +65,7 @@ jobs:
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+          printf '%s\n' "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}.txt"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
@@ -124,7 +124,8 @@ jobs:
 
           SOURCES=""
           for digest_file in *; do
-            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}@${digest_file}"
+            digest=$(tr -d '\n' < "$digest_file")
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}@${digest}"
           done
 
           docker buildx imagetools create $TAG_ARGS $SOURCES
@@ -178,7 +179,7 @@ jobs:
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+          printf '%s\n' "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}.txt"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
@@ -237,7 +238,8 @@ jobs:
 
           SOURCES=""
           for digest_file in *; do
-            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}@${digest_file}"
+            digest=$(tr -d '\n' < "$digest_file")
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}@${digest}"
           done
 
           docker buildx imagetools create $TAG_ARGS $SOURCES
@@ -290,7 +292,7 @@ jobs:
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+          printf '%s\n' "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}.txt"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
@@ -349,7 +351,8 @@ jobs:
 
           SOURCES=""
           for digest_file in *; do
-            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}@${digest_file}"
+            digest=$(tr -d '\n' < "$digest_file")
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}@${digest}"
           done
 
           docker buildx imagetools create $TAG_ARGS $SOURCES
@@ -402,7 +405,7 @@ jobs:
       - name: Export digest
         run: |
           mkdir -p /tmp/digests
-          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+          printf '%s\n' "${{ steps.build.outputs.digest }}" > "/tmp/digests/${{ matrix.arch }}.txt"
 
       - name: Upload digest
         uses: actions/upload-artifact@v4
@@ -461,7 +464,8 @@ jobs:
 
           SOURCES=""
           for digest_file in *; do
-            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}@${digest_file}"
+            digest=$(tr -d '\n' < "$digest_file")
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}@${digest}"
           done
 
           docker buildx imagetools create $TAG_ARGS $SOURCES
