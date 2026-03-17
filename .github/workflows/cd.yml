@@ -15,28 +15,27 @@ env:
   PORTAL_IMAGE_NAME: auth9-portal
   THEME_IMAGE_NAME: auth9-keycloak-theme
   EVENTS_IMAGE_NAME: auth9-keycloak-events
-  DOCKER_PLATFORMS: linux/amd64,linux/arm64
 
 jobs:
   # ==================== Build and Push auth9-core ====================
   build-core:
-    name: Build auth9-core
-    runs-on: ubuntu-latest
+    name: Build auth9-core (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-      full_image: ${{ steps.meta.outputs.tags }}
-      digest: ${{ steps.digest.outputs.digest }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -47,6 +46,63 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-core
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:build-${{ github.sha }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:buildcache-${{ matrix.arch }}
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:buildcache-${{ matrix.arch }},mode=max
+          platforms: linux/${{ matrix.arch }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-auth9-core-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-core:
+    name: Merge auth9-core manifest
+    runs-on: ubuntu-latest
+    needs: build-core
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-auth9-core-*
+          path: /tmp/digests/auth9-core
+          merge-multiple: true
 
       - name: Extract metadata
         id: meta
@@ -58,45 +114,40 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: ./auth9-core
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}:buildcache,mode=max
-          platforms: ${{ env.DOCKER_PLATFORMS }}
+      - name: Create manifest list
+        working-directory: /tmp/digests/auth9-core
+        run: |
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && TAG_ARGS="$TAG_ARGS -t $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
 
-      - name: Export image digest
-        id: digest
-        run: echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+          SOURCES=""
+          for digest_file in *; do
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.CORE_IMAGE_NAME }}@${digest_file}"
+          done
+
+          docker buildx imagetools create $TAG_ARGS $SOURCES
 
   # ==================== Build and Push auth9-portal ====================
   build-portal:
-    name: Build auth9-portal
-    runs-on: ubuntu-latest
+    name: Build auth9-portal (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-      full_image: ${{ steps.meta.outputs.tags }}
-      digest: ${{ steps.digest.outputs.digest }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -107,6 +158,64 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: auth9-portal/Dockerfile
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:build-${{ github.sha }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache-${{ matrix.arch }}
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache-${{ matrix.arch }},mode=max
+          platforms: linux/${{ matrix.arch }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-auth9-portal-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-portal:
+    name: Merge auth9-portal manifest
+    runs-on: ubuntu-latest
+    needs: build-portal
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-auth9-portal-*
+          path: /tmp/digests/auth9-portal
+          merge-multiple: true
 
       - name: Extract metadata
         id: meta
@@ -118,45 +227,40 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          file: auth9-portal/Dockerfile
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}:buildcache,mode=max
-          platforms: ${{ env.DOCKER_PLATFORMS }}
+      - name: Create manifest list
+        working-directory: /tmp/digests/auth9-portal
+        run: |
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && TAG_ARGS="$TAG_ARGS -t $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
 
-      - name: Export image digest
-        id: digest
-        run: echo "digest=${{ steps.build.outputs.digest }}" >> $GITHUB_OUTPUT
+          SOURCES=""
+          for digest_file in *; do
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.PORTAL_IMAGE_NAME }}@${digest_file}"
+          done
+
+          docker buildx imagetools create $TAG_ARGS $SOURCES
 
   # ==================== Build and Push auth9-keycloak-theme ====================
   build-theme:
-    name: Build auth9-keycloak-theme
-    runs-on: ubuntu-latest
+    name: Build auth9-keycloak-theme (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-      full_image: ${{ steps.meta.outputs.tags }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -167,6 +271,63 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-keycloak-theme
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:build-${{ github.sha }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:buildcache-${{ matrix.arch }}
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:buildcache-${{ matrix.arch }},mode=max
+          platforms: linux/${{ matrix.arch }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-auth9-keycloak-theme-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-theme:
+    name: Merge auth9-keycloak-theme manifest
+    runs-on: ubuntu-latest
+    needs: build-theme
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-auth9-keycloak-theme-*
+          path: /tmp/digests/auth9-keycloak-theme
+          merge-multiple: true
 
       - name: Extract metadata
         id: meta
@@ -178,40 +339,40 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: ./auth9-keycloak-theme
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:buildcache,mode=max
-          platforms: ${{ env.DOCKER_PLATFORMS }}
+      - name: Create manifest list
+        working-directory: /tmp/digests/auth9-keycloak-theme
+        run: |
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && TAG_ARGS="$TAG_ARGS -t $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+          SOURCES=""
+          for digest_file in *; do
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}@${digest_file}"
+          done
+
+          docker buildx imagetools create $TAG_ARGS $SOURCES
 
   # ==================== Build and Push auth9-keycloak-events ====================
   build-events:
-    name: Build auth9-keycloak-events
-    runs-on: ubuntu-latest
+    name: Build auth9-keycloak-events (${{ matrix.arch }})
+    runs-on: ${{ matrix.runner }}
     permissions:
       contents: read
       packages: write
-
-    outputs:
-      image_tag: ${{ steps.meta.outputs.version }}
-      full_image: ${{ steps.meta.outputs.tags }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -223,6 +384,63 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      - name: Build and push
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: ./auth9-keycloak-events
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:build-${{ github.sha }}-${{ matrix.arch }}
+          cache-from: |
+            type=gha
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache-${{ matrix.arch }}
+          cache-to: |
+            type=gha,mode=max
+            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache-${{ matrix.arch }},mode=max
+          platforms: linux/${{ matrix.arch }}
+
+      - name: Export digest
+        run: |
+          mkdir -p /tmp/digests
+          touch "/tmp/digests/${{ steps.build.outputs.digest }}"
+
+      - name: Upload digest
+        uses: actions/upload-artifact@v4
+        with:
+          name: digests-auth9-keycloak-events-${{ matrix.arch }}
+          path: /tmp/digests/*
+          if-no-files-found: error
+          retention-days: 1
+
+  merge-events:
+    name: Merge auth9-keycloak-events manifest
+    runs-on: ubuntu-latest
+    needs: build-events
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Download digests
+        uses: actions/download-artifact@v4
+        with:
+          pattern: digests-auth9-keycloak-events-*
+          path: /tmp/digests/auth9-keycloak-events
+          merge-multiple: true
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@v5
@@ -233,27 +451,26 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
             type=ref,event=branch
 
-      - name: Build and push
-        id: build
-        uses: docker/build-push-action@v5
-        with:
-          context: ./auth9-keycloak-events
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          cache-from: |
-            type=gha
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache
-          cache-to: |
-            type=gha,mode=max
-            type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:buildcache,mode=max
-          platforms: ${{ env.DOCKER_PLATFORMS }}
+      - name: Create manifest list
+        working-directory: /tmp/digests/auth9-keycloak-events
+        run: |
+          TAG_ARGS=""
+          while IFS= read -r tag; do
+            [ -n "$tag" ] && TAG_ARGS="$TAG_ARGS -t $tag"
+          done <<< "${{ steps.meta.outputs.tags }}"
+
+          SOURCES=""
+          for digest_file in *; do
+            SOURCES="$SOURCES ${{ env.REGISTRY }}/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}@${digest_file}"
+          done
+
+          docker buildx imagetools create $TAG_ARGS $SOURCES
 
   # ==================== Generate Summary ====================
   summary:
     name: Deployment Summary
     runs-on: ubuntu-latest
-    needs: [build-core, build-portal, build-theme, build-events]
+    needs: [merge-core, merge-portal, merge-theme, merge-events]
     permissions:
       contents: read
 
@@ -314,12 +531,12 @@ jobs:
           | auth9-keycloak-theme | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.THEME_IMAGE_NAME }}:latest` |
           | auth9-keycloak-events | `ghcr.io/${{ env.IMAGE_NAMESPACE }}/${{ env.EVENTS_IMAGE_NAME }}:latest` |
 
-          ### Pinned by Digest (for immutable deployments)
+          ### Architectures
 
-          | Component | Digest |
-          |-----------|--------|
-          | auth9-core | `CORE_DIGEST` |
-          | auth9-portal | `PORTAL_DIGEST` |
+          These images are published as multi-arch manifests for:
+
+          - `linux/amd64`
+          - `linux/arm64`
 
           ---
 
@@ -331,5 +548,3 @@ jobs:
           
           # Substitute variables in the summary
           sed -i "s/\${SHORT_SHA}/${SHORT_SHA}/g" $GITHUB_STEP_SUMMARY
-          sed -i "s|CORE_DIGEST|${{ needs.build-core.outputs.digest }}|g" $GITHUB_STEP_SUMMARY
-          sed -i "s|PORTAL_DIGEST|${{ needs.build-portal.outputs.digest }}|g" $GITHUB_STEP_SUMMARY
