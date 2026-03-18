@@ -175,7 +175,9 @@ export async function action({ request }: ActionFunctionArgs) {
 
       const authorizeResponse = await fetch(authorizeUrl, { redirect: "manual" });
       const location = authorizeResponse.headers.get("Location") || "";
-      const challengeMatch = location.match(/login_challenge=([^&]+)/);
+      // Extract login_challenge from redirect: try login_challenge= first, then state=
+      // (Keycloak-mode authorize redirects use state= as the login_challenge_id)
+      const challengeMatch = location.match(/login_challenge=([^&]+)/) || location.match(/[?&]state=([^&]+)/);
       loginChallenge = challengeMatch ? challengeMatch[1] : null;
 
       if (!loginChallenge) {
