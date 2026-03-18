@@ -2,7 +2,7 @@ import { type Page } from "@playwright/test";
 import { TEST_CONFIG, type TestUser } from "../setup/test-config";
 
 /**
- * Login as a test user via Keycloak
+ * Login as a test user via Auth9 OIDC
  */
 export async function loginAsTestUser(
   page: Page,

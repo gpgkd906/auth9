@@ -10,7 +10,6 @@
 #   --interactive       启用交互模式（默认）
 #   --non-interactive   禁用交互模式，使用原始行为
 #   --dry-run           仅打印将要执行的操作，不实际执行
-#   --skip-init         跳过 auth9-init 作业（已初始化时使用）
 #   --namespace NS      使用其他命名空间（默认: auth9）
 #   --config-file FILE  从文件加载配置（JSON 或 env 格式）
 #   --with-observability    强制部署可观测性资源
@@ -27,18 +26,15 @@ set -e
 NAMESPACE="${NAMESPACE:-auth9}"
 K8S_DIR="$(cd "$(dirname "$0")" && pwd)/k8s"
 DRY_RUN=""
-SKIP_INIT=""
 INTERACTIVE="true"
 CONFIG_FILE=""
-NEEDS_INIT_JOB="false"
 OBSERVABILITY_MODE="auto"
 
 # Associative arrays for configuration
 declare -A AUTH9_SECRETS
-declare -A KEYCLOAK_SECRETS
 declare -A CONFIGMAP_VALUES
 
-# Admin credentials (default username is stable in Keycloak seeder)
+# Admin credentials
 AUTH9_ADMIN_USERNAME="admin"
 AUTH9_ADMIN_PASSWORD=""
 
@@ -239,14 +235,12 @@ detect_existing_configmap() {
     local jwt_issuer=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.JWT_ISSUER}' 2>/dev/null || echo "")
     local core_public_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_CORE_PUBLIC_URL}' 2>/dev/null || echo "")
     local portal_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_PORTAL_URL}' 2>/dev/null || echo "")
-    local keycloak_public_url=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.KEYCLOAK_PUBLIC_URL}' 2>/dev/null || echo "")
     local portal_client_id=$(kubectl get configmap auth9-config -n "$NAMESPACE" -o jsonpath='{.data.AUTH9_PORTAL_CLIENT_ID}' 2>/dev/null || echo "")
 
     if [ -n "$jwt_issuer" ]; then
         CONFIGMAP_VALUES[JWT_ISSUER]="$jwt_issuer"
         [ -n "$core_public_url" ] && CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]="$core_public_url"
         [ -n "$portal_url" ] && CONFIGMAP_VALUES[AUTH9_PORTAL_URL]="$portal_url"
-        [ -n "$keycloak_public_url" ] && CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$keycloak_public_url"
         [ -n "$portal_client_id" ] && CONFIGMAP_VALUES[AUTH9_PORTAL_CLIENT_ID]="$portal_client_id"
         print_info "auth9-config ConfigMap 已找到"
         return 0
@@ -254,17 +248,6 @@ detect_existing_configmap() {
 
     print_warning "auth9-config ConfigMap 存在但未找到 JWT_ISSUER"
     return 1
-}
-
-should_run_init_job() {
-    # If KEYCLOAK_ADMIN_CLIENT_SECRET already exists and is not empty, skip init
-    if [ -n "${AUTH9_SECRETS[KEYCLOAK_ADMIN_CLIENT_SECRET]}" ]; then
-        NEEDS_INIT_JOB="false"
-        print_info "管理员客户端密钥已存在，可能不需要运行初始化作业"
-    else
-        NEEDS_INIT_JOB="true"
-        print_info "管理员客户端密钥缺失，需要运行初始化作业"
-    fi
 }
 
 ################################################################################
@@ -318,83 +301,6 @@ collect_redis_config() {
 
     AUTH9_SECRETS[REDIS_URL]="redis://${redis_host}:${redis_port}"
     print_success "REDIS_URL 已配置"
-}
-
-collect_keycloak_public_url() {
-    print_info "Keycloak 公网 URL 配置"
-
-    local current="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
-    echo "  当前: $current"
-    echo "  这是 Keycloak 的 cloudflared 隧道 URL（用于浏览器登录）"
-
-    if confirm_action "  修改 Keycloak 公网 URL？"; then
-        local new_url
-        while true; do
-            new_url=$(prompt_user "  Keycloak 公网 URL（cloudflared 隧道）" "$current")
-            if validate_url "$new_url"; then
-                CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$new_url"
-                break
-            fi
-        done
-    else
-        CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]="$current"
-    fi
-
-    print_success "Keycloak 公网 URL 已配置"
-}
-
-collect_keycloak_config() {
-    print_info "Keycloak 配置"
-
-    # KEYCLOAK_URL (internal)
-    if [ -z "${AUTH9_SECRETS[KEYCLOAK_URL]}" ]; then
-        AUTH9_SECRETS[KEYCLOAK_URL]="http://keycloak:8080"
-    fi
-
-    # KEYCLOAK_ADMIN (default value)
-    if [ -z "${AUTH9_SECRETS[KEYCLOAK_ADMIN]}" ]; then
-        AUTH9_SECRETS[KEYCLOAK_ADMIN]="admin"
-    fi
-    KEYCLOAK_SECRETS[KEYCLOAK_ADMIN]="${AUTH9_SECRETS[KEYCLOAK_ADMIN]}"
-
-    # KEYCLOAK_ADMIN_PASSWORD (shared between both secrets)
-    if [ -n "${AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]}" ]; then
-        echo "  Keycloak 管理员密码: （已配置）"
-        if confirm_action "  修改 Keycloak 管理员密码？"; then
-            local keycloak_password=$(prompt_password "  新 Keycloak 管理员密码")
-            AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
-            KEYCLOAK_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
-        else
-            KEYCLOAK_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="${AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]}"
-        fi
-    else
-        local keycloak_password=$(prompt_password "  Keycloak 管理员密码")
-        AUTH9_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
-        KEYCLOAK_SECRETS[KEYCLOAK_ADMIN_PASSWORD]="$keycloak_password"
-    fi
-
-    print_success "Keycloak 管理员已配置"
-}
-
-collect_keycloak_db_password() {
-    print_info "Keycloak 数据库配置"
-
-    # KC_DB_USERNAME (default value)
-    if [ -z "${KEYCLOAK_SECRETS[KC_DB_USERNAME]}" ]; then
-        KEYCLOAK_SECRETS[KC_DB_USERNAME]="keycloak"
-    fi
-
-    # KC_DB_PASSWORD
-    if [ -n "${KEYCLOAK_SECRETS[KC_DB_PASSWORD]}" ]; then
-        echo "  Keycloak 数据库密码: （已配置）"
-        if confirm_action "  修改 Keycloak 数据库密码？"; then
-            KEYCLOAK_SECRETS[KC_DB_PASSWORD]=$(prompt_password "  新 Keycloak 数据库密码")
-        fi
-    else
-        KEYCLOAK_SECRETS[KC_DB_PASSWORD]=$(prompt_password "  Keycloak 数据库密码")
-    fi
-
-    print_success "Keycloak 数据库已配置"
 }
 
 collect_jwt_issuer() {
@@ -536,13 +442,6 @@ generate_secrets() {
         print_info "SESSION_SECRET 已存在（不会重新生成）"
     fi
 
-    # Keycloak webhook secret (for ext-event-http SPI plugin)
-    if [ -z "${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}" ]; then
-        AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]=$(openssl rand -hex 32)
-    fi
-    # Sync webhook HMAC secret to keycloak-secrets (must match auth9-secrets)
-    KEYCLOAK_SECRETS[KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET]="${AUTH9_SECRETS[KEYCLOAK_WEBHOOK_SECRET]}"
-
     # GRPC_API_KEYS
     if [ -z "${AUTH9_SECRETS[GRPC_API_KEYS]}" ]; then
         AUTH9_SECRETS[GRPC_API_KEYS]=$(openssl rand -base64 32)
@@ -660,11 +559,7 @@ apply_configmap() {
     # JWT_ISSUER must be the Core API URL (used for OAuth callback)
     local jwt_issuer="${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}}"
     local portal_url="${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
-    local keycloak_public_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
     local cors_allowed_origins="$portal_url"
-    if [ "$keycloak_public_url" != "$portal_url" ]; then
-        cors_allowed_origins="${cors_allowed_origins},${keycloak_public_url}"
-    fi
 
     cat <<EOF | kubectl apply -f -
 apiVersion: v1
@@ -685,10 +580,6 @@ data:
   JWT_REFRESH_TOKEN_TTL_SECS: "604800"
   JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: "${CONFIGMAP_VALUES[AUTH9_PORTAL_CLIENT_ID]:-auth9-portal}"
   PASSWORD_RESET_TOKEN_TTL_SECS: "3600"
-  KEYCLOAK_REALM: "auth9"
-  KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
-  KEYCLOAK_SSL_REQUIRED: "none"
-  KEYCLOAK_PUBLIC_URL: "$keycloak_public_url"
   GRPC_AUTH_MODE: "api_key"
   GRPC_ENABLE_REFLECTION: "false"
   WEBAUTHN_RP_ID: "${CONFIGMAP_VALUES[WEBAUTHN_RP_ID]:-auth9.example.com}"
@@ -738,33 +629,18 @@ run_interactive_setup() {
     detect_existing_secrets "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS \
         "DATABASE_URL" "REDIS_URL" "JWT_SECRET" "JWT_PRIVATE_KEY" "JWT_PUBLIC_KEY" \
         "SESSION_SECRET" "SETTINGS_ENCRYPTION_KEY" "PASSWORD_RESET_HMAC_KEY" "AUTH9_ADMIN_PASSWORD" \
-        "KEYCLOAK_URL" "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KEYCLOAK_ADMIN_CLIENT_SECRET" \
-        "KEYCLOAK_WEBHOOK_SECRET" "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
-
-    # Detect keycloak-secrets
-    detect_existing_secrets "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS \
-        "KEYCLOAK_ADMIN" "KEYCLOAK_ADMIN_PASSWORD" "KC_DB_USERNAME" "KC_DB_PASSWORD" \
-        "KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_HMAC_SECRET" || true
+        "GRPC_API_KEYS" "AUTH9_ADMIN_EMAIL" || true
 
     # Detect ConfigMap
     detect_existing_configmap || true
-
-    # Check if init job is needed
-    should_run_init_job
-
-    echo ""
-    print_info "是否需要初始化作业: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "是" || echo "否（客户端密钥已存在）")"
 
     # Step 3/6: Collect missing configuration
     print_progress "3/6" "收集配置信息"
     collect_database_config
     collect_redis_config
-    collect_keycloak_config
-    collect_keycloak_db_password
     collect_core_public_url
     collect_jwt_issuer
     collect_portal_url
-    collect_keycloak_public_url
     collect_admin_email
     collect_observability_preference
 
@@ -780,7 +656,6 @@ run_interactive_setup() {
 
     # Apply secrets
     create_or_patch_secret "auth9-secrets" "$NAMESPACE" AUTH9_SECRETS
-    create_or_patch_secret "keycloak-secrets" "$NAMESPACE" KEYCLOAK_SECRETS
 
     # Apply ConfigMap
     apply_configmap
@@ -803,9 +678,7 @@ print_summary() {
     echo "  JWT Issuer: ${CONFIGMAP_VALUES[JWT_ISSUER]:-${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}}"
     echo "  Core 公网 URL: ${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
     echo "  Portal URL: ${CONFIGMAP_VALUES[AUTH9_PORTAL_URL]:-https://auth9.example.com}"
-    echo "  Keycloak 公网 URL: ${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
     echo "  可观测性资源: $OBSERVABILITY_MODE"
-    echo "  初始化作业: $([ "$NEEDS_INIT_JOB" = "true" ] && echo "将运行" || echo "将跳过（客户端密钥已存在）")"
     echo ""
 }
 
@@ -817,63 +690,44 @@ deploy_auth9() {
     print_header "Auth9 部署"
 
     # Step 1: Create namespace and service account
-    print_progress "1/11" "创建命名空间和服务账户"
+    print_progress "1/7" "创建命名空间和服务账户"
     kubectl apply -f "$K8S_DIR/namespace.yaml" $DRY_RUN
     kubectl apply -f "$K8S_DIR/serviceaccount.yaml" $DRY_RUN
 
     # Step 2: ConfigMap already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "2/11" "应用 ConfigMap"
+        print_progress "2/7" "应用 ConfigMap"
         kubectl apply -f "$K8S_DIR/configmap.yaml" $DRY_RUN
     else
-        print_progress "2/11" "ConfigMap 已应用"
+        print_progress "2/7" "ConfigMap 已应用"
     fi
 
     # Step 3: Secrets already applied in interactive setup (skip if interactive)
     if [ "$INTERACTIVE" != "true" ]; then
-        print_progress "3/11" "检查密钥"
+        print_progress "3/7" "检查密钥"
         check_secrets_non_interactive
     else
-        print_progress "3/11" "密钥已应用"
+        print_progress "3/7" "密钥已应用"
     fi
 
-    # Step 4: Deploy infrastructure (keycloak, redis, postgres)
-    print_progress "4/11" "部署基础设施"
+    # Step 4: Deploy infrastructure (redis)
+    print_progress "4/7" "部署基础设施"
     deploy_infrastructure
 
-    # Step 5-6: Wait for dependencies
-    print_progress "5/11" "等待 keycloak-postgres 就绪"
-    wait_for_postgres
-
-    print_progress "6/11" "等待 keycloak 就绪"
-    wait_for_keycloak
-
-    # Step 7-8: Init job (conditional execution) - runs AFTER keycloak is ready
-    if [ "$NEEDS_INIT_JOB" = "true" ] && [ -z "$SKIP_INIT" ]; then
-        print_progress "7/11" "运行 auth9-init 初始化作业"
-        run_init_job
-
-        print_progress "8/11" "提取 Keycloak 管理员客户端密钥"
-        extract_client_secret
-    else
-        print_progress "7/11" "跳过 auth9-init 初始化作业"
-        print_progress "8/11" "跳过密钥提取"
-    fi
-
-    # Step 9: Deploy auth9 applications
-    print_progress "9/11" "部署 auth9 应用"
+    # Step 5: Deploy auth9 applications
+    print_progress "5/7" "部署 auth9 应用"
     deploy_auth9_apps
 
-    # Step 10: Deploy observability resources (ServiceMonitor, PrometheusRule, Grafana dashboards)
-    print_progress "10/11" "部署可观测性资源"
+    # Step 6: Deploy observability resources (ServiceMonitor, PrometheusRule, Grafana dashboards)
+    print_progress "6/7" "部署可观测性资源"
     deploy_observability
 
-    # Step 11: Wait for auth9 apps to be ready
+    # Step 7: Wait for auth9 apps to be ready
     if [ -z "$DRY_RUN" ]; then
-        print_progress "11/11" "等待 auth9 应用就绪"
+        print_progress "7/7" "等待 auth9 应用就绪"
         wait_for_auth9_apps
     else
-        print_progress "11/11" "跳过等待（预演模式）"
+        print_progress "7/7" "跳过等待（预演模式）"
     fi
 
     print_deployment_complete
@@ -890,14 +744,9 @@ check_secrets_non_interactive() {
         echo "      --from-literal=JWT_SECRET='...' \\"
         echo "      --from-literal=JWT_PRIVATE_KEY='...' \\"
         echo "      --from-literal=JWT_PUBLIC_KEY='...' \\"
-        echo "      --from-literal=KEYCLOAK_URL='...' \\"
-        echo "      --from-literal=KEYCLOAK_ADMIN='admin' \\"
-        echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
-        echo "      --from-literal=KEYCLOAK_ADMIN_CLIENT_SECRET='<将自动生成>' \\"
         echo "      --from-literal=SESSION_SECRET='...' \\"
         echo "      --from-literal=SETTINGS_ENCRYPTION_KEY='...' \\"
         echo "      --from-literal=PASSWORD_RESET_HMAC_KEY='...' \\"
-        echo "      --from-literal=KEYCLOAK_WEBHOOK_SECRET='...' \\"
         echo "      --from-literal=GRPC_API_KEYS='...' \\"
         echo "      -n $NAMESPACE"
         echo ""
@@ -905,207 +754,10 @@ check_secrets_non_interactive() {
             print_warning "继续执行（缺少密钥可能导致部署失败）"
         fi
     fi
-
-    if kubectl get secret keycloak-secrets -n "$NAMESPACE" &> /dev/null; then
-        print_success "keycloak-secrets 存在"
-    else
-        print_warning "keycloak-secrets 未找到，请创建："
-        echo "    kubectl create secret generic keycloak-secrets \\"
-        echo "      --from-literal=KEYCLOAK_ADMIN='admin' \\"
-        echo "      --from-literal=KEYCLOAK_ADMIN_PASSWORD='...' \\"
-        echo "      --from-literal=KC_DB_USERNAME='keycloak' \\"
-        echo "      --from-literal=KC_DB_PASSWORD='...' \\"
-        echo "      -n $NAMESPACE"
-        echo ""
-        if [ -z "$DRY_RUN" ]; then
-            print_warning "继续执行（缺少密钥可能导致部署失败）"
-        fi
-    fi
-}
-
-run_init_job() {
-    if [ -z "$DRY_RUN" ]; then
-        # Check if required secrets exist
-        if ! kubectl get secret auth9-secrets -n "$NAMESPACE" &> /dev/null; then
-            print_error "auth9-secrets 未找到。初始化作业需要："
-            echo "    - KEYCLOAK_ADMIN"
-            echo "    - KEYCLOAK_ADMIN_PASSWORD"
-            echo "    - DATABASE_URL"
-            echo "    - REDIS_URL"
-            echo "  请先创建密钥，然后重新运行此脚本。"
-            exit 1
-        fi
-
-        # Delete old job if exists
-        if kubectl get job auth9-init -n "$NAMESPACE" &> /dev/null; then
-            print_info "正在删除现有的 auth9-init 作业..."
-            kubectl delete job auth9-init -n "$NAMESPACE" --ignore-not-found=true
-            sleep 2
-        fi
-
-        # Apply init job
-        print_info "正在创建 auth9-init 作业..."
-        kubectl apply -f "$K8S_DIR/auth9-core/init-job.yaml"
-
-        # Wait for job to complete
-        print_info "等待初始化作业完成（超时: 300秒）..."
-        if kubectl wait --for=condition=complete job/auth9-init -n "$NAMESPACE" --timeout=300s 2>/dev/null; then
-            print_success "初始化作业已成功完成"
-        else
-            print_error "初始化作业失败或超时"
-            echo ""
-            echo "  最近的日志:"
-            kubectl logs job/auth9-init -n "$NAMESPACE" --tail=20 2>/dev/null || true
-            echo ""
-            echo "  完整日志: kubectl logs job/auth9-init -n $NAMESPACE"
-            exit 1
-        fi
-    else
-        print_info "跳过初始化作业（预演模式）"
-    fi
-}
-
-extract_client_secret() {
-    if [ -z "$DRY_RUN" ]; then
-        # Get the secret from init job logs
-        print_info "正在读取 auth9-init 作业日志..."
-        local init_logs=$(kubectl logs job/auth9-init -n "$NAMESPACE" 2>/dev/null || echo "")
-
-        if [ -z "$AUTH9_ADMIN_USERNAME" ]; then
-            AUTH9_ADMIN_USERNAME="admin"
-        fi
-
-        if [ -z "${AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]}" ]; then
-            local admin_email_from_logs=$(echo "$init_logs" | grep "Initial data seeded:" | sed -n 's/.*email=\([^",} ]*\).*/\1/p' | head -1)
-            if [ -n "$admin_email_from_logs" ]; then
-                AUTH9_SECRETS[AUTH9_ADMIN_EMAIL]="$admin_email_from_logs"
-            fi
-        fi
-
-        # Extract admin credentials if present
-        if echo "$init_logs" | grep -q "AUTH9_ADMIN_USERNAME="; then
-            AUTH9_ADMIN_USERNAME=$(echo "$init_logs" | grep "AUTH9_ADMIN_USERNAME=" | sed 's/.*AUTH9_ADMIN_USERNAME=//' | sed 's/[",}.].*//' | head -1)
-            AUTH9_ADMIN_PASSWORD=$(echo "$init_logs" | grep "AUTH9_ADMIN_PASSWORD=" | sed 's/.*AUTH9_ADMIN_PASSWORD=//' | sed 's/[",}.].*//' | head -1)
-            if [ -n "$AUTH9_ADMIN_PASSWORD" ]; then
-                print_success "已提取管理员凭据"
-            fi
-        fi
-
-        if echo "$init_logs" | grep -q "KEYCLOAK_ADMIN_CLIENT_SECRET"; then
-            # Extract secret value, stripping any JSON log wrapping (e.g. trailing ","target":...})
-            local client_secret=$(echo "$init_logs" | grep "KEYCLOAK_ADMIN_CLIENT_SECRET=" | sed 's/.*KEYCLOAK_ADMIN_CLIENT_SECRET=//' | sed 's/[",}.].*//' | head -1)
-
-            if [ -n "$client_secret" ]; then
-                print_success "已提取客户端密钥: ${client_secret:0:8}..."
-                echo ""
-                echo -e "  ${BLUE}KEYCLOAK_ADMIN_CLIENT_SECRET:${NC}"
-                echo "  $client_secret"
-                echo ""
-
-                # Update auth9-secrets with the new client secret
-                if kubectl get secret auth9-secrets -n "$NAMESPACE" &> /dev/null; then
-                    print_info "正在使用新的 KEYCLOAK_ADMIN_CLIENT_SECRET 更新 auth9-secrets..."
-                    local client_secret_b64=$(echo -n "$client_secret" | base64 | tr -d '\n')
-
-                    if kubectl patch secret auth9-secrets -n "$NAMESPACE" \
-                        --type='json' \
-                        -p="[{\"op\": \"add\", \"path\": \"/data/KEYCLOAK_ADMIN_CLIENT_SECRET\", \"value\": \"$client_secret_b64\"}]" 2>/dev/null; then
-                        print_success "密钥更新成功"
-                    else
-                        # Try replace if add fails
-                        kubectl patch secret auth9-secrets -n "$NAMESPACE" \
-                            --type='json' \
-                            -p="[{\"op\": \"replace\", \"path\": \"/data/KEYCLOAK_ADMIN_CLIENT_SECRET\", \"value\": \"$client_secret_b64\"}]" 2>/dev/null || {
-                            print_warning "更新密钥失败（可能已存在）"
-                            echo "  手动更新命令:"
-                            echo "    kubectl patch secret auth9-secrets -n $NAMESPACE --type='json' \\"
-                            echo "      -p='[{\"op\": \"replace\", \"path\": \"/data/KEYCLOAK_ADMIN_CLIENT_SECRET\", \"value\": \"$client_secret_b64\"}]'"
-                        }
-                    fi
-                else
-                    print_warning "auth9-secrets 未找到，无法更新"
-                    echo "  请手动添加: KEYCLOAK_ADMIN_CLIENT_SECRET=$client_secret"
-                fi
-            else
-                print_warning "无法从日志中提取客户端密钥"
-            fi
-        else
-            # Check if client already exists (idempotent operation)
-            if echo "$init_logs" | grep -q "auth9-admin client already exists"; then
-                print_info "auth9-admin 客户端已存在（跳过创建）"
-                echo "  如需密钥，请从 Keycloak 管理控制台手动获取"
-            else
-                print_warning "在初始化日志中未找到客户端密钥"
-                echo "  如果使用预设密钥或客户端已存在，这是预期行为"
-            fi
-        fi
-    else
-        print_info "跳过密钥提取（预演模式）"
-    fi
-}
-
-apply_keycloak_configmap() {
-    # Keycloak 26+ accepts a full URL in KC_HOSTNAME, fixing the token issuer to
-    # the public HTTPS URL regardless of request origin (browser via cloudflared
-    # or auth9-core via internal K8s DNS).
-    local keycloak_public_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
-    local auth9_core_public_url="${CONFIGMAP_VALUES[AUTH9_CORE_PUBLIC_URL]:-https://api.auth9.example.com}"
-
-    cat <<EOF | kubectl apply -f -
-apiVersion: v1
-kind: ConfigMap
-metadata:
-  name: keycloak-config
-  namespace: $NAMESPACE
-  labels:
-    app.kubernetes.io/name: keycloak
-    app.kubernetes.io/component: auth-engine
-    app.kubernetes.io/part-of: auth9
-data:
-  KC_DB: postgres
-  KC_DB_URL_HOST: keycloak-postgres
-  KC_DB_URL_PORT: "5432"
-  KC_DB_URL_DATABASE: keycloak
-  KC_HTTP_ENABLED: "true"
-  KC_HOSTNAME: "$keycloak_public_url"
-  KC_HEALTH_ENABLED: "true"
-  KC_METRICS_ENABLED: "true"
-  KC_PROXY_HEADERS: xforwarded
-  KC_SPI_THEME_LOGIN_DEFAULT: auth9
-  KC_SPI_THEME_EMAIL_DEFAULT: keycloak
-  KC_SPI_THEME_ACCOUNT_DEFAULT: keycloak
-  AUTH9_API_URL: "$auth9_core_public_url"
-  KC_SPI_EVENTS_LISTENER_EXT_EVENT_HTTP_TARGET_URI: http://auth9-core:8080/api/v1/keycloak/events
-  KC_LOG_LEVEL: INFO
-  KC_CACHE: ispn
-  KC_CACHE_STACK: kubernetes
-  JAVA_OPTS_APPEND: "-Djgroups.dns.query=keycloak-headless.auth9.svc.cluster.local"
-EOF
-
-    if [ $? -eq 0 ]; then
-        print_success "Keycloak ConfigMap 已应用 (KC_HOSTNAME=$keycloak_public_url)"
-    else
-        print_error "应用 Keycloak ConfigMap 失败"
-        return 1
-    fi
 }
 
 deploy_infrastructure() {
     if [ -z "$DRY_RUN" ]; then
-        print_info "正在部署 keycloak..."
-        if [ "$INTERACTIVE" = "true" ]; then
-            # Interactive mode: apply keycloak-config dynamically (with correct KC_HOSTNAME),
-            # then apply remaining keycloak resources individually to avoid overwriting
-            apply_keycloak_configmap
-            for f in "$K8S_DIR/keycloak/"*.yaml; do
-                [ "$(basename "$f")" = "configmap.yaml" ] && continue
-                [[ "$(basename "$f")" == *.example* ]] && continue
-                kubectl apply -f "$f"
-            done
-        else
-            kubectl apply -f "$K8S_DIR/keycloak/" $DRY_RUN
-        fi
-
         print_info "正在部署 redis..."
         kubectl apply -f "$K8S_DIR/redis/" $DRY_RUN
 
@@ -1171,22 +823,6 @@ deploy_observability() {
     fi
 }
 
-wait_for_keycloak() {
-    if [ -z "$DRY_RUN" ]; then
-        print_info "等待 keycloak 部署..."
-        kubectl rollout status deployment/keycloak -n "$NAMESPACE" --timeout=300s || true
-
-        # Wait for all keycloak pods to be ready (using kubectl wait)
-        print_info "等待 keycloak Pod 就绪..."
-        if kubectl wait --for=condition=Ready pod -l app.kubernetes.io/name=keycloak -n "$NAMESPACE" --timeout=150s 2>/dev/null; then
-            print_success "Keycloak 已就绪"
-            return 0
-        else
-            print_warning "Keycloak 就绪检查超时，继续执行..."
-        fi
-    fi
-}
-
 wait_for_auth9_apps() {
     print_info "等待 auth9-core..."
     kubectl rollout status deployment/auth9-core -n "$NAMESPACE" --timeout=300s || true
@@ -1200,13 +836,6 @@ wait_for_auth9_apps() {
     print_info "等待 redis..."
     kubectl rollout status deployment/redis -n "$NAMESPACE" --timeout=300s || true
 }
-
-wait_for_postgres() {
-    if [ -z "$DRY_RUN" ]; then
-        kubectl rollout status statefulset/keycloak-postgres -n "$NAMESPACE" --timeout=300s || true
-    fi
-}
-
 
 print_deployment_complete() {
     echo ""
@@ -1238,14 +867,8 @@ print_deployment_complete() {
         echo -e "    公网 URL:     ${YELLOW}${core_url}${NC}"
         echo -e "    内部地址:     auth9-core.$NAMESPACE.svc.cluster.local:8080"
         echo ""
-        echo -e "  ${GREEN}auth9-oidc（身份后端骨架）:${NC}"
+        echo -e "  ${GREEN}auth9-oidc（OIDC 身份引擎）:${NC}"
         echo -e "    内部地址:     auth9-oidc.$NAMESPACE.svc.cluster.local:8090"
-        echo ""
-        local keycloak_url="${CONFIGMAP_VALUES[KEYCLOAK_PUBLIC_URL]:-https://idp.auth9.example.com}"
-        echo -e "  ${GREEN}keycloak（OIDC 提供者）:${NC}"
-        echo -e "    公网 URL:     ${YELLOW}${keycloak_url}${NC}"
-        echo -e "    内部地址:     keycloak.$NAMESPACE.svc.cluster.local:8080"
-        echo -e "    ${DIM}（浏览器会重定向到 Keycloak 进行登录）${NC}"
         echo ""
 
         # Display admin credentials if extracted
@@ -1287,10 +910,6 @@ parse_arguments() {
                 DRY_RUN="--dry-run=client"
                 shift
                 ;;
-            --skip-init)
-                SKIP_INIT="true"
-                shift
-                ;;
             --namespace)
                 NAMESPACE="$2"
                 shift 2
@@ -1316,7 +935,6 @@ parse_arguments() {
                 echo "  --interactive       启用交互模式（默认）"
                 echo "  --non-interactive   禁用交互模式"
                 echo "  --dry-run           仅打印将要执行的操作，不实际执行"
-                echo "  --skip-init         跳过 auth9-init 初始化作业"
                 echo "  --namespace NS      使用其他命名空间（默认: auth9）"
                 echo "  --config-file FILE  从文件加载配置"
                 echo "  --with-observability    强制部署可观测性资源"

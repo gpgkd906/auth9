@@ -236,7 +236,6 @@ delete_configmaps() {
         kubectl get configmaps -n "$NAMESPACE" -o name 2>/dev/null | grep -v "kube-root-ca" || true
     else
         kubectl delete configmap auth9-config -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete configmap keycloak-config -n "$NAMESPACE" --ignore-not-found=true
         kubectl delete configmap auth9-grafana-dashboards -n "$NAMESPACE" --ignore-not-found=true
         print_success "ConfigMaps 已删除"
     fi
@@ -274,7 +273,6 @@ reset_tidb_database() {
 
     echo ""
     print_warning "此操作将删除 auth9 数据库中的所有数据！"
-    print_warning "KEYCLOAK_ADMIN_CLIENT_SECRET 将被删除（下次部署重新生成）"
     echo ""
 
     if [ -n "$DRY_RUN" ]; then
@@ -331,19 +329,6 @@ EOF
         kubectl delete job auth9-reset -n "$NAMESPACE" --ignore-not-found=true 2>/dev/null
         print_success "数据库已重置"
 
-        # 只删除 KEYCLOAK_ADMIN_CLIENT_SECRET（需要重新生成），保留其他配置
-        print_info "正在删除 KEYCLOAK_ADMIN_CLIENT_SECRET..."
-        kubectl patch secret auth9-secrets -n "$NAMESPACE" \
-            --type='json' \
-            -p='[{"op": "remove", "path": "/data/KEYCLOAK_ADMIN_CLIENT_SECRET"}]' 2>/dev/null || true
-        print_success "KEYCLOAK_ADMIN_CLIENT_SECRET 已删除（下次部署将重新生成）"
-
-        echo ""
-        print_warning "注意: TiDB 数据已重置，但 Keycloak PVCs 中的数据仍然存在。"
-        print_warning "Seed 管理员用户与 Keycloak 管理员共享 keycloak_id 链接。"
-        print_warning "如果需要完全重置，建议同时删除 Keycloak PVCs。"
-        print_info "重新运行 init 将通过 ON DUPLICATE KEY UPDATE 自动重新链接。"
-
         return 0
     else
         print_error "数据库重置失败或超时"
@@ -357,12 +342,6 @@ EOF
 interactive_delete_secrets() {
     print_progress "8/10" "Secrets"
 
-    # 如果数据库重置成功，提示 client secret 已删除
-    if [ -n "$DB_RESET_DONE" ]; then
-        print_info "KEYCLOAK_ADMIN_CLIENT_SECRET 已在数据库重置步骤中删除"
-        echo ""
-    fi
-
     echo ""
     echo -e "  ${YELLOW}当前密钥:${NC}"
     kubectl get secrets -n "$NAMESPACE" --no-headers 2>/dev/null | grep -v "default-token\|service-account" | while read line; do
@@ -375,8 +354,6 @@ interactive_delete_secrets() {
     echo "    - REDIS_URL"
     echo "    - JWT_SECRET、JWT_PRIVATE_KEY、JWT_PUBLIC_KEY"
     echo "    - SESSION_SECRET、SETTINGS_ENCRYPTION_KEY、PASSWORD_RESET_HMAC_KEY"
-    echo "    - KEYCLOAK_URL、KEYCLOAK_ADMIN、KEYCLOAK_ADMIN_PASSWORD"
-    echo "    - KEYCLOAK_ADMIN_CLIENT_SECRET"
     echo "    - GRPC_API_KEYS"
     echo ""
 
@@ -388,7 +365,6 @@ interactive_delete_secrets() {
     if confirm_action "  删除剩余密钥？（下次部署需要重新配置）"; then
         print_info "正在删除密钥..."
         kubectl delete secret auth9-secrets -n "$NAMESPACE" --ignore-not-found=true
-        kubectl delete secret keycloak-secrets -n "$NAMESPACE" --ignore-not-found=true
         print_success "密钥已删除"
     else
         print_info "保留密钥"
@@ -411,9 +387,7 @@ interactive_delete_pvcs() {
     done
     echo ""
 
-    print_warning "PVCs 包含数据库数据:"
-    echo "    - Keycloak PostgreSQL 数据"
-    echo "    - 用户账户、Realm 配置等"
+    print_warning "PVCs 包含数据库数据"
     echo ""
     echo -e "  ${RED}警告: 删除 PVCs 将永久销毁所有数据库数据！${NC}"
     echo ""

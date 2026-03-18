@@ -2,11 +2,10 @@
 # Restricts traffic between components to minimize attack surface.
 #
 # Traffic flow:
-#   ingress → auth9-portal → auth9-core → tidb, redis, keycloak
-#                                        ← keycloak (callback)
+#   ingress → auth9-portal → auth9-core → tidb, redis
 
 ---
-# auth9-core: accepts traffic from auth9-portal and keycloak only
+# auth9-core: accepts traffic from auth9-portal only
 apiVersion: networking.k8s.io/v1
 kind: NetworkPolicy
 metadata:
@@ -24,9 +23,6 @@ spec:
         - podSelector:
             matchLabels:
               app.kubernetes.io/name: auth9-portal
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: keycloak
       ports:
         - protocol: TCP
           port: 8080
@@ -49,14 +45,6 @@ spec:
       ports:
         - protocol: TCP
           port: 6379
-    # Keycloak
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: keycloak
-      ports:
-        - protocol: TCP
-          port: 8080
     # DNS resolution
     - to: []
       ports:
@@ -96,59 +84,6 @@ spec:
       ports:
         - protocol: TCP
           port: 8080
-    # Keycloak (for OIDC redirect flows via BFF)
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: keycloak
-      ports:
-        - protocol: TCP
-          port: 8080
-    # DNS resolution
-    - to: []
-      ports:
-        - protocol: UDP
-          port: 53
-        - protocol: TCP
-          port: 53
-
----
-# Keycloak: accepts traffic from auth9-core and auth9-portal
-apiVersion: networking.k8s.io/v1
-kind: NetworkPolicy
-metadata:
-  name: keycloak
-  namespace: auth9
-spec:
-  podSelector:
-    matchLabels:
-      app.kubernetes.io/name: keycloak
-  policyTypes:
-    - Ingress
-    - Egress
-  ingress:
-    - from:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: auth9-core
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: auth9-portal
-        - namespaceSelector:
-            matchLabels:
-              kubernetes.io/metadata.name: ingress-nginx
-      ports:
-        - protocol: TCP
-          port: 8080
-  egress:
-    # PostgreSQL (Keycloak DB)
-    - to:
-        - podSelector:
-            matchLabels:
-              app.kubernetes.io/name: postgres
-      ports:
-        - protocol: TCP
-          port: 5432
     # DNS resolution
     - to: []
       ports:

@@ -8,8 +8,7 @@ metadata:
 data:
   # Logging
   RUST_LOG: "info"
-  IDENTITY_BACKEND: "keycloak"
-  
+
   # Server configuration
   HTTP_HOST: "0.0.0.0"
   HTTP_PORT: "8080"
@@ -29,14 +28,6 @@ data:
   JWT_TENANT_ACCESS_ALLOWED_AUDIENCES: "auth9-portal"
   PASSWORD_RESET_TOKEN_TTL_SECS: "3600"
 
-  # Keycloak configuration
-  KEYCLOAK_REALM: "auth9"
-  KEYCLOAK_ADMIN_CLIENT_ID: "auth9-admin"
-  KEYCLOAK_SSL_REQUIRED: "none"
-  # IMPORTANT: KEYCLOAK_PUBLIC_URL is the browser-accessible URL for Keycloak login
-  # Must be exposed via cloudflared tunnel
-  KEYCLOAK_PUBLIC_URL: "https://idp.auth9.example.com"
-  
   # gRPC Security
   GRPC_AUTH_MODE: "api_key"
   GRPC_ENABLE_REFLECTION: "false"
@@ -46,7 +37,7 @@ data:
   WEBAUTHN_RP_ID: "auth9.example.com"
 
   # CORS
-  CORS_ALLOWED_ORIGINS: "https://auth9.example.com,https://idp.auth9.example.com"
+  CORS_ALLOWED_ORIGINS: "https://auth9.example.com"
   CORS_ALLOW_CREDENTIALS: "true"
   ACTION_ALLOWED_DOMAINS: "gitski.work,c9r.io"
 
@@ -67,10 +58,6 @@ data:
   AUTH9_PORTAL_CLIENT_ID: "auth9-portal"
   ENVIRONMENT: "production"
   NODE_ENV: "production"
-
-  # Login mode rollout: "hosted" | "oidc" | "percentage"
-  LOGIN_MODE: "hosted"
-  LOGIN_ROLLOUT_PCT: "100"
 
   # Telemetry / Observability
   OTEL_METRICS_ENABLED: "true"

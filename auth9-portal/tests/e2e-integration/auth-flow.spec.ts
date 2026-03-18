@@ -6,7 +6,7 @@ import { loginAsTestUser } from "./fixtures/auth";
  * Scenario: User Authentication Flow
  *
  * Tests the complete authentication journey from login to accessing protected resources.
- * This scenario verifies the integration between Portal, Keycloak, and Auth9 Core.
+ * This scenario verifies the integration between Portal and Auth9 Core.
  */
 test.describe("Scenario: User Authentication Flow", () => {
   const testUser = TEST_CONFIG.testUsers.standard;
@@ -33,15 +33,7 @@ test.describe("Scenario: User Authentication Flow", () => {
     await expect(page.url()).toContain("localhost:3000");
   });
 
-  test("4. Compatibility fallback can still reach Keycloak for password flow", async ({ page }) => {
-    await page.goto("/login");
-    await page.getByRole("button", { name: /sign in with password/i }).click();
-    await page.getByRole("button", { name: /continue with compatibility fallback/i }).click();
-    await page.waitForURL(/\/realms\/auth9\/protocol\/openid-connect/);
-    await expect(page.getByLabel(/username/i)).toBeVisible();
-  });
-
-  test("5. Authenticated user can access dashboard", async ({ page }) => {
+  test("4. Authenticated user can access dashboard", async ({ page }) => {
     await loginAsTestUser(page, testUser);
 
     await page.goto("/dashboard");

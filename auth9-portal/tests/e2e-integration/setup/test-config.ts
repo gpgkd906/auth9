@@ -7,16 +7,8 @@ export const TEST_CONFIG = {
   // Service URLs
   portalUrl: "http://localhost:3000",
   auth9CoreUrl: "http://localhost:8080",
-  keycloakUrl: "http://localhost:8081",
-  keycloakRealm: "auth9",
 
-  // Keycloak Admin (master realm)
-  keycloakAdmin: {
-    username: "admin",
-    password: "admin",
-  },
-
-  // Test Users (created during setup)
+  // Test Users (created during seed)
   testUsers: {
     standard: {
       username: "e2e-test-user",
