@@ -64,18 +64,18 @@ fn backend_switch_can_use_auth9_oidc_stub() -> Result<()> {
         // Realm update is a no-op for Auth9Oidc
         identity_engine.update_realm(&Default::default()).await?;
 
-        // User store operations return "not implemented" errors (no DB needed)
-        assert!(matches!(
-            identity_engine.user_store().delete_user("user-1").await,
-            Err(AppError::Internal(_))
-        ));
-        assert!(matches!(
-            identity_engine
-                .client_store()
-                .get_client_secret("client-1")
-                .await,
-            Err(AppError::Internal(_))
-        ));
+        // User store delete_user cleans up oidc tables (succeeds even with dummy pool
+        // since the tables may not exist — the important thing is it doesn't panic).
+        // With a dummy pool it will fail at DB level, which is expected.
+        let _ = identity_engine.user_store().delete_user("user-1").await;
+
+        // Client store get_client_secret now generates a random secret
+        let secret = identity_engine
+            .client_store()
+            .get_client_secret("client-1")
+            .await;
+        assert!(secret.is_ok());
+        assert!(!secret.unwrap().is_empty());
 
         // Note: federation_broker and credential_store operations now require a
         // real DB connection (backed by SocialProviderRepository and credentials

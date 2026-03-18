@@ -91,6 +91,22 @@ pub struct Config {
 - 移除 `keycloak: KeycloakConfig { ... }` 字段
 - 改为设置 `core_public_url` 和 `portal_url` 顶层字段
 
+### R5: 补全 Auth9OidcClientStore 的 SAML 方法
+
+FR1 中以下三个 SAML 方法使用占位实现，因为当时 `Auth9OidcClientStore` 无法访问 `Config`（URL）和 `JwtManager`（签名证书）。FR4 重构 Config 后，`core_public_url` 已提升到 Config 顶层，此时应一并完善：
+
+| 方法 | FR1 占位行为 | FR4 应实现 |
+|------|-------------|-----------|
+| `saml_sso_url()` | 返回空字符串 | 返回 `{core_public_url}/api/v1/saml/sso` |
+| `get_saml_idp_descriptor()` | 硬编码 XML，Location 为空 | 填入真实 `entityID` 和 `SingleSignOnService Location` |
+| `get_active_signing_certificate()` | 返回 `"placeholder-certificate"` | 从 `JwtManager` 导出 RSA 公钥的 Base64 编码 |
+
+**实现方式**：
+
+- `Auth9OidcClientStore` 构造函数增加 `core_public_url: Option<String>` 参数
+- `Auth9OidcIdentityEngineAdapter::new()` 从 `Config` 中取 `core_public_url` 传入
+- `get_active_signing_certificate` 可暂保持占位（需 `JwtManager` 依赖，scope 较大），或在 `server/mod.rs` 构建 adapter 时将公钥 PEM 传入
+
 ---
 
 ## 非目标

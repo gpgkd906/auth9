@@ -10,12 +10,16 @@ use crate::keycloak::{KeycloakOidcClient, RealmUpdate};
 use crate::repository::social_provider::SocialProviderRepository;
 use anyhow::anyhow;
 use argon2::{
-    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    password_hash::{
+        rand_core::{OsRng, RngCore},
+        PasswordHash, PasswordHasher, PasswordVerifier, SaltString,
+    },
     Argon2,
 };
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use sqlx::MySqlPool;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 struct Auth9OidcUserStore {
@@ -72,31 +76,109 @@ impl Auth9OidcUserStore {
 
 #[async_trait]
 impl IdentityUserStore for Auth9OidcUserStore {
-    async fn create_user(&self, _input: &IdentityUserCreateInput) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user create not implemented"
-        )))
+    async fn create_user(&self, input: &IdentityUserCreateInput) -> Result<String> {
+        let identity_subject = uuid::Uuid::new_v4().to_string();
+
+        if let Some(ref credentials) = input.credentials {
+            for cred in credentials {
+                if cred.credential_type == "password" {
+                    self.upsert_password_credential(
+                        &identity_subject,
+                        &cred.value,
+                        cred.temporary,
+                    )
+                    .await?;
+                }
+            }
+        }
+
+        Ok(identity_subject)
     }
 
     async fn get_user(&self, user_id: &str) -> Result<IdentityUserRepresentation> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' get not implemented",
-            user_id
-        )))
+        use sqlx::Row;
+
+        let row = sqlx::query(
+            "SELECT id, email, display_name FROM users WHERE identity_subject = ?",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to query user: {}", e)))?;
+
+        let row = row.ok_or_else(|| {
+            AppError::NotFound(format!("user with identity_subject '{}' not found", user_id))
+        })?;
+
+        let id: String = row
+            .try_get("id")
+            .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
+        let email: String = row
+            .try_get("email")
+            .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
+        let display_name: Option<String> = row
+            .try_get("display_name")
+            .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
+
+        // Check email verification status
+        let email_verified = sqlx::query_as::<_, (i8,)>(
+            "SELECT email_verified FROM user_verification_status WHERE user_id = ?",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to query verification status: {}", e)))?
+        .map(|(v,)| v != 0)
+        .unwrap_or(false);
+
+        Ok(IdentityUserRepresentation {
+            id: Some(id),
+            username: email.clone(),
+            email: Some(email),
+            first_name: display_name,
+            last_name: None,
+            enabled: true,
+            email_verified,
+            attributes: HashMap::new(),
+        })
     }
 
-    async fn update_user(&self, user_id: &str, _input: &IdentityUserUpdateInput) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' update not implemented",
-            user_id
-        )))
+    async fn update_user(&self, _user_id: &str, _input: &IdentityUserUpdateInput) -> Result<()> {
+        // No-op: caller updates auth9 DB directly via user_service().update()
+        Ok(())
     }
 
     async fn delete_user(&self, user_id: &str) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' delete not implemented",
-            user_id
-        )))
+        // Clean up auth9-oidc related tables for this user
+        sqlx::query("DELETE FROM credentials WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(anyhow!("failed to delete credentials: {}", e)))?;
+
+        sqlx::query("DELETE FROM pending_actions WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(anyhow!("failed to delete pending actions: {}", e)))?;
+
+        sqlx::query("DELETE FROM email_verification_tokens WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                AppError::Internal(anyhow!("failed to delete verification tokens: {}", e))
+            })?;
+
+        sqlx::query("DELETE FROM user_verification_status WHERE user_id = ?")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                AppError::Internal(anyhow!("failed to delete verification status: {}", e))
+            })?;
+
+        Ok(())
     }
 
     async fn set_user_password(
@@ -146,103 +228,113 @@ impl IdentityUserStore for Auth9OidcUserStore {
     }
 }
 
-#[derive(Default)]
-struct Auth9OidcClientStore;
+struct Auth9OidcClientStore {
+    #[allow(dead_code)]
+    pool: MySqlPool,
+}
+
+impl Auth9OidcClientStore {
+    fn new(pool: MySqlPool) -> Self {
+        Self { pool }
+    }
+
+    /// Generate a random 32-byte hex string for use as a client secret.
+    fn generate_random_secret() -> String {
+        let mut bytes = [0u8; 32];
+        OsRng.fill_bytes(&mut bytes);
+        hex::encode(bytes)
+    }
+}
 
 #[async_trait]
 impl IdentityClientStore for Auth9OidcClientStore {
     async fn create_oidc_client(&self, _client: &KeycloakOidcClient) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc oidc client create not implemented"
-        )))
+        // Auth9 OIDC: return a placeholder UUID. The actual client record is
+        // created by ClientService at the application layer.
+        Ok(uuid::Uuid::new_v4().to_string())
     }
 
-    async fn get_client_secret(&self, client_uuid: &str) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc client '{}' secret lookup not implemented",
-            client_uuid
-        )))
+    async fn get_client_secret(&self, _client_uuid: &str) -> Result<String> {
+        // Auth9 OIDC: generate a random secret for the creation flow.
+        // The caller (authorization/api/service.rs) passes this to
+        // ClientService::create_with_secret which hashes and stores it.
+        Ok(Self::generate_random_secret())
     }
 
-    async fn regenerate_client_secret(&self, client_uuid: &str) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc client '{}' secret regeneration not implemented",
-            client_uuid
-        )))
+    async fn regenerate_client_secret(&self, _client_uuid: &str) -> Result<String> {
+        Ok(Self::generate_random_secret())
     }
 
     async fn get_client_uuid_by_client_id(&self, client_id: &str) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc client '{}' lookup not implemented",
+        // Auth9 OIDC manages clients in its own DB, not in an external identity backend.
+        // Returning NotFound causes callers to fall through to the auth9 DB path.
+        Err(AppError::NotFound(format!(
+            "auth9_oidc does not manage client '{}' externally",
             client_id
         )))
     }
 
     async fn get_client_by_client_id(&self, client_id: &str) -> Result<KeycloakOidcClient> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc client '{}' fetch not implemented",
+        // Auth9 OIDC manages clients in its own DB. Returning NotFound causes
+        // list-clients enrichment to use the DB-managed path.
+        Err(AppError::NotFound(format!(
+            "auth9_oidc does not manage client '{}' externally",
             client_id
         )))
     }
 
     async fn update_oidc_client(
         &self,
-        client_uuid: &str,
+        _client_uuid: &str,
         _client: &KeycloakOidcClient,
     ) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc client '{}' update not implemented",
-            client_uuid
-        )))
+        // No-op: application layer handles client updates in auth9 DB
+        Ok(())
     }
 
-    async fn delete_oidc_client(&self, client_uuid: &str) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc client '{}' delete not implemented",
-            client_uuid
-        )))
+    async fn delete_oidc_client(&self, _client_uuid: &str) -> Result<()> {
+        // No-op: application layer handles client deletion in auth9 DB
+        Ok(())
     }
 
     async fn create_saml_client(
         &self,
         _client: &IdentitySamlClientRepresentation,
     ) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc saml client create not implemented"
-        )))
+        // Application layer handles SAML client creation in auth9 DB
+        Ok(uuid::Uuid::new_v4().to_string())
     }
 
     async fn update_saml_client(
         &self,
-        client_uuid: &str,
+        _client_uuid: &str,
         _client: &IdentitySamlClientRepresentation,
     ) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc saml client '{}' update not implemented",
-            client_uuid
-        )))
+        Ok(())
     }
 
-    async fn delete_saml_client(&self, client_uuid: &str) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc saml client '{}' delete not implemented",
-            client_uuid
-        )))
+    async fn delete_saml_client(&self, _client_uuid: &str) -> Result<()> {
+        Ok(())
     }
 
     async fn get_saml_idp_descriptor(&self) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc saml descriptor not implemented"
-        )))
+        // Return a minimal SAML IdP metadata descriptor.
+        // The actual URLs will be refined after FR4 config refactor.
+        Ok(r#"<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="auth9-oidc">
+  <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="" />
+  </IDPSSODescriptor>
+</EntityDescriptor>"#.to_string())
     }
 
     async fn get_active_signing_certificate(&self) -> Result<String> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc signing certificate lookup not implemented"
-        )))
+        // Return a placeholder. The actual certificate export from JWT key pair
+        // will be implemented when SAML IdP is fully wired.
+        Ok("placeholder-certificate".to_string())
     }
 
     fn saml_sso_url(&self) -> String {
+        // Will be populated with config value after FR4 config refactor
         String::new()
     }
 }
@@ -590,7 +682,7 @@ impl Auth9OidcIdentityEngineAdapter {
     ) -> Self {
         Self {
             user_store: Auth9OidcUserStore::new(pool.clone()),
-            client_store: Auth9OidcClientStore,
+            client_store: Auth9OidcClientStore::new(pool.clone()),
             session_store: Auth9OidcSessionStoreAdapter::new(),
             credential_store: Auth9OidcCredentialStore::new(pool.clone()),
             federation_broker: Auth9OidcFederationBrokerAdapter::new(
