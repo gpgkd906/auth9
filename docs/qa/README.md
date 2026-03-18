@@ -88,7 +88,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (20 个文档, 92 个场景)
+### 认证流程 (22 个文档, 102 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 4 |
@@ -112,6 +112,8 @@
 | [auth/18-oidc-login-mfa-advanced.md](./auth/18-oidc-login-mfa-advanced.md) | OIDC 登录进阶页回归（TOTP 注册、认证器选择、登出） | 3 |
 | [auth/20-hosted-login-api.md](./auth/20-hosted-login-api.md) | Hosted Login API（密码登录、登出、密码重置、Backend Flag 切换） | 5 |
 | [auth/21-hosted-login-rollout.md](./auth/21-hosted-login-rollout.md) | Hosted Login 灰度上线与回滚（LOGIN_MODE 开关、百分比分流、指标观测、回滚验证） | 5 |
+| [auth/22-email-verification.md](./auth/22-email-verification.md) | 邮箱验证流程（发送验证邮件、Token 消费、Replay 防护、防枚举） | 5 |
+| [auth/23-required-actions.md](./auth/23-required-actions.md) | Required Actions 与登录后跳转（Pending Actions API、Force Password、Complete Profile） | 5 |
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -176,7 +178,7 @@
 | [sdk/09-auth-password-passkey-clients.md](./sdk/09-auth-password-passkey-clients.md) | 认证流程与凭证管理子客户端（Password/Passkeys/EmailOtp/Auth/Organizations） | 5 |
 | [sdk/10-observability-config-clients.md](./sdk/10-observability-config-clients.md) | 可观测性与系统配置子客户端（AuditLogs/Analytics/SecurityAlerts/System/EmailTemplates/Branding） | 5 |
 
-### 集成测试 (19 个文档, 86 个场景)
+### 集成测试 (20 个文档, 91 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 4 |
@@ -199,6 +201,7 @@
 | [integration/18-business-layer-keycloak-decoupling.md](./integration/18-business-layer-keycloak-decoupling.md) | 业务层去 `KeycloakClient` 直接依赖、handler 中性 DTO、Password/WebAuthn/SCIM/SAML 抽象回归 | 5 |
 | [integration/19-phase1-identity-abstraction-closure.md](./integration/19-phase1-identity-abstraction-closure.md) | Phase 1 身份抽象层 closure 验收（默认 `keycloak` backend、`auth9_oidc` stub、adapter contract、中性字段主路径） | 4 |
 | [integration/20-local-credential-store.md](./integration/20-local-credential-store.md) | Phase 3 FR1 本地 Credential Store（中性模型、migration、repository 契约、Keycloak 共存） | 5 |
+| [integration/21-email-verification-required-actions.md](./integration/21-email-verification-required-actions.md) | Phase 3 FR3 邮箱验证与 Required Actions（schema 完整性、migration 幂等性、adapter 契约、Identity Token 白名单、Backend fallback） | 5 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -230,7 +233,7 @@
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
-| 认证流程 | 20 | 92 |
+| 认证流程 | 22 | 102 |
 | 系统设置 | 4 | 20 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
@@ -238,15 +241,16 @@
 | 审计日志 | 1 | 5 |
 | Action | 12 | 49 |
 | SDK | 10 | 50 |
-| 集成测试 | 19 | 86 |
+| 集成测试 | 20 | 91 |
 | SAML Application | 4 | 20 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **119** | **558** |
+| **总计** | **122** | **573** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-18 | 5.20.0 | **Phase 3 FR3 邮箱验证与 Required Actions 本地化**：新增 `auth/22-email-verification.md`（5 场景）、`auth/23-required-actions.md`（5 场景）、`integration/21-email-verification-required-actions.md`（5 场景）；跨文档更新 `auth/20-hosted-login-api.md` 端点列表；修复 Identity Token 白名单缺失 pending-actions/complete-action 端点 bug；修复 auth9-oidc 启动时自动建表（Dockerfile + db.rs）；认证 22 文档 102 场景、集成 20 文档 91 场景；总计 122 文档 573 场景 |
 | 2026-03-17 | 5.19.0 | **Keycloak Phase 1 FR3 Closure**：新增 `integration/19-phase1-identity-abstraction-closure.md`（4 场景），收束默认 `keycloak` backend、`auth9_oidc` stub、adapter contract 与中性字段主路径总验收；同步更新 `session/03-alerts.md`、`user/02-advanced.md`、`user/04-account-profile.md`、`identity-provider/02-toggle-validation.md` 的主断言字段说明；集成测试统计更新为 19 个文档 86 个场景；总计 118 个文档 553 个场景 |
 | 2026-03-17 | 5.18.0 | **Keycloak Phase 1 FR2**：新增 `integration/18-business-layer-keycloak-decoupling.md`（5 场景），覆盖业务层去 `KeycloakClient` 直接依赖、handler 中性 DTO、Password/WebAuthn/SCIM/SAML 抽象回归；集成测试统计更新为 18 个文档 82 个场景；总计 111 个文档 517 个场景 |
 | 2026-03-17 | 5.17.0 | **Keycloak Phase 1 FR4**：新增 `integration/16-auth9-oidc-skeleton-and-backend-flag.md`（4 场景），覆盖 `auth9-oidc` 独立服务骨架、`IDENTITY_BACKEND` 默认/切换/非法值校验；同步更新 `integration/13`、`integration/14` 的分支覆盖边界说明；集成测试统计更新为 16 个文档 74 个场景；总计 109 个文档 509 个场景 |
@@ -414,6 +418,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-18 | 5.20.0 | **Phase 3 FR3 邮箱验证与 Required Actions**：新增 3 个文档（auth/22、auth/23、integration/21）共 15 场景；修复 Identity Token 白名单和 auth9-oidc 自动建表；共 122 文档 573 场景 |
 | 2026-03-16 | 5.11.0 | **SAML IdP 出站 Phase 3 测试文档**：新增 `saml-application/04-certificate-encryption.md`（5 场景），覆盖证书端点、加密校验、SLO POST Binding；跨文档更新 `01-crud.md`、`02-metadata-validation.md`、`03-portal-ui.md`；共 103 个文档 489 个场景 |
 | 2026-03-16 | 5.10.0 | **SAML IdP 出站 Phase 2 Portal UI 测试文档**：新增 `saml-application/03-portal-ui.md`（5 场景），覆盖 Portal 入口可见性、表单创建、列表、启停、删除；更新 `01-crud.md`、`uiux/21-tenant-detail-pages.md`；共 102 个文档 484 个场景 |
 | 2026-03-16 | 5.9.0 | **SAML IdP 出站 Phase 1 测试文档**：新增 `saml-application/01-crud.md`（5 场景）、`saml-application/02-metadata-validation.md`（5 场景）；共 101 个文档 479 个场景 |

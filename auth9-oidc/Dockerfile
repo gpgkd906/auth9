@@ -5,6 +5,7 @@ RUN apt-get update && apt-get install -y pkg-config libssl-dev ca-certificates &
 
 COPY Cargo.toml Cargo.toml
 COPY src src
+COPY migrations migrations
 RUN cargo build --release
 
 FROM debian:bookworm-slim

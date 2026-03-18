@@ -206,6 +206,9 @@ fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
             && (*method == Method::POST || *method == Method::DELETE))
         // Invitation management (resend, revoke, get by ID)
         || path.starts_with("/api/v1/invitations")
+        // Required actions (checked immediately after login with identity token)
+        || path == "/api/v1/hosted-login/pending-actions"
+        || path == "/api/v1/hosted-login/complete-action"
 }
 
 /// Generate a 503 Service Unavailable response
@@ -569,6 +572,16 @@ mod tests {
         assert!(is_identity_token_path_allowed(
             "/api/v1/invitations/some-uuid",
             &get
+        ));
+
+        // Required actions (identity token needed post-login)
+        assert!(is_identity_token_path_allowed(
+            "/api/v1/hosted-login/pending-actions",
+            &get
+        ));
+        assert!(is_identity_token_path_allowed(
+            "/api/v1/hosted-login/complete-action",
+            &Method::POST
         ));
 
         // Non-allowed paths

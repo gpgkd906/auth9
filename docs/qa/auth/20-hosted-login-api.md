@@ -12,10 +12,14 @@
 Hosted Login API 提供 Auth9 自有域名下的统一认证端点，前端表单直接调用这些 API 完成认证流程，无需 OIDC 重定向。
 
 端点：
-- `POST /api/v1/hosted-login/password` — 密码登录，返回 identity token
+- `POST /api/v1/hosted-login/password` — 密码登录，返回 identity token（含 `pending_actions`）
 - `POST /api/v1/hosted-login/logout` — 登出，撤销 session 并返回 JSON
 - `POST /api/v1/hosted-login/start-password-reset` — 发起密码重置
 - `POST /api/v1/hosted-login/complete-password-reset` — 完成密码重置
+- `POST /api/v1/hosted-login/send-verification` — 发送邮箱验证邮件（详见 `auth/22-email-verification.md`）
+- `POST /api/v1/hosted-login/verify-email` — 消费验证 token（详见 `auth/22-email-verification.md`）
+- `GET /api/v1/hosted-login/pending-actions` — 列出 pending actions（详见 `auth/23-required-actions.md`）
+- `POST /api/v1/hosted-login/complete-action` — 完成 pending action（详见 `auth/23-required-actions.md`）
 
 请求/响应示例：
 
