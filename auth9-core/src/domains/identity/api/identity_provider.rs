@@ -1,14 +1,14 @@
 //! Identity Provider API handlers
 
 use crate::error::AppError;
-use crate::http_support::{MessageResponse, SuccessResponse};
+use crate::http_support::{write_audit_log_generic, MessageResponse, SuccessResponse};
 use crate::models::common::StringUuid;
 use crate::models::identity_provider::{
     CreateIdentityProviderInput, IdentityProvider, IdentityProviderTemplate,
     UpdateIdentityProviderInput,
 };
 use crate::models::linked_identity::LinkedIdentityInfo;
-use crate::state::{HasIdentityProviders, HasServices};
+use crate::state::{HasAnalytics, HasIdentityProviders, HasServices};
 use axum::{
     extract::{Path, State},
     http::HeaderMap,
@@ -162,17 +162,43 @@ pub async fn list_my_linked_identities<S: HasIdentityProviders + HasServices>(
     )
 )]
 /// Unlink an identity from the current user
-pub async fn unlink_identity<S: HasIdentityProviders + HasServices>(
+pub async fn unlink_identity<S: HasIdentityProviders + HasServices + HasAnalytics>(
     State(state): State<S>,
     headers: HeaderMap,
     Path(identity_id): Path<StringUuid>,
 ) -> Result<Json<MessageResponse>, AppError> {
     let user_id = extract_user_id(&state, &headers)?;
 
+    // Fetch identity info before unlink for event/audit
+    let identities = state
+        .identity_provider_service()
+        .get_user_identities(user_id)
+        .await
+        .unwrap_or_default();
+    let identity_info = identities.iter().find(|i| i.id == identity_id.to_string());
+
     state
         .identity_provider_service()
         .unlink_identity(user_id, identity_id)
         .await?;
+
+    // Record unlink event and audit log
+    if let Some(info) = identity_info {
+        let _ = state
+            .analytics_service()
+            .record_identity_unlinked(user_id, &info.provider_alias, &info.provider_type)
+            .await;
+    }
+    let _ = write_audit_log_generic(
+        &state,
+        &headers,
+        "identity.unlinked",
+        "linked_identity",
+        Some(*identity_id),
+        None,
+        None,
+    )
+    .await;
 
     Ok(Json(MessageResponse::new(
         "Identity unlinked successfully.",

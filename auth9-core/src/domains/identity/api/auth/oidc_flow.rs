@@ -197,6 +197,27 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
         // Unknown connector: fall through to standard Keycloak auth flow
     }
 
+    // Also store a login_challenge under the same state_nonce so that Portal's
+    // social login flow can use the state as a login_challenge ID.
+    // This bridges the Keycloak-mode authorize with the Auth9-native social broker.
+    {
+        let challenge_data = LoginChallengeData {
+            client_id: state_payload.client_id.clone(),
+            redirect_uri: state_payload.redirect_uri.clone(),
+            scope: filtered_scope.clone(),
+            original_state: state_payload.original_state.clone(),
+            nonce: params.nonce.clone(),
+            code_challenge: params.code_challenge.clone(),
+            code_challenge_method: params.code_challenge_method.clone(),
+        };
+        if let Ok(challenge_json) = serde_json::to_string(&challenge_data) {
+            let _ = state
+                .cache()
+                .store_login_challenge(&state_nonce, &challenge_json, LOGIN_CHALLENGE_TTL_SECS)
+                .await;
+        }
+    }
+
     // No connector_alias: standard Keycloak auth flow
     let auth_url = build_keycloak_auth_url(&KeycloakAuthUrlParams {
         keycloak_public_url: &state.config().keycloak.public_url,

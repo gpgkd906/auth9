@@ -2622,6 +2622,8 @@ impl LoginEventRepository for TestLoginEventRepository {
             location: input.location.clone(),
             session_id: input.session_id,
             failure_reason: input.failure_reason.clone(),
+            provider_alias: input.provider_alias.clone(),
+            provider_type: input.provider_type.clone(),
             created_at: Utc::now(),
         };
         self.events.write().await.push(event);
@@ -2855,6 +2857,22 @@ impl LoginEventRepository for TestLoginEventRepository {
         let before = events.len();
         events.retain(|e| e.tenant_id != Some(tenant_id));
         Ok((before - events.len()) as u64)
+    }
+
+    async fn count_federation_failed_by_provider(
+        &self,
+        provider_alias: &str,
+        since: DateTime<Utc>,
+    ) -> Result<i64> {
+        let events = self.events.read().await;
+        Ok(events
+            .iter()
+            .filter(|e| {
+                e.provider_alias.as_deref() == Some(provider_alias)
+                    && e.event_type == auth9_core::models::analytics::LoginEventType::FederationFailed
+                    && e.created_at >= since
+            })
+            .count() as i64)
     }
 
     async fn get_daily_trend(

@@ -7,10 +7,11 @@ use crate::cache::CacheOperations;
 use crate::domains::identity::api::auth::helpers::{
     AuthorizationCodeData, LoginChallengeData, AUTH_CODE_TTL_SECS,
 };
+use crate::domains::security_observability::service::analytics::FederationEventMetadata;
 use crate::error::{AppError, Result};
 use crate::http_support::SuccessResponse;
 use crate::models::linked_identity::{CreateLinkedIdentityInput, PendingMergeData};
-use crate::state::{HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{HasAnalytics, HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -485,13 +486,14 @@ pub async fn authorize<S: HasIdentityProviders + HasServices + HasCache>(
     responses((status = 302, description = "Redirect with authorization code"))
 )]
 pub async fn callback<
-    S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement,
+    S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasAnalytics,
 >(
     State(state): State<S>,
     Query(params): Query<SocialCallbackQuery>,
 ) -> Result<Response> {
     // 1. Check for error from provider
-    if params.error.is_some() {
+    if let Some(ref error) = params.error {
+        tracing::warn!("Social login error from provider: {}", error);
         let login_url = portal_login_url(state.config());
         return Ok(
             Redirect::temporary(&format!("{}?error=social_login_cancelled", login_url))
@@ -638,6 +640,21 @@ pub async fn callback<
     metrics::counter!("auth9_social_login_total", "action" => "callback_success", "provider" => provider.provider_id.clone())
         .increment(1);
 
+    // Record federation login event
+    let fed_meta = FederationEventMetadata {
+        user_id: Some(user.id),
+        email: Some(user.email.clone()),
+        tenant_id: None,
+        provider_alias: social_state.provider_alias,
+        provider_type: provider.provider_id.clone(),
+        ip_address: None,
+        user_agent: None,
+        session_id: Some(session.id),
+    };
+    if let Err(e) = state.analytics_service().record_federation_login(fed_meta).await {
+        tracing::warn!("Failed to record federation login event: {}", e);
+    }
+
     let mut response = Redirect::temporary(redirect_url.as_str()).into_response();
     response.headers_mut().insert(
         axum::http::header::CACHE_CONTROL,
@@ -704,7 +721,7 @@ pub async fn link_authorize<S: HasIdentityProviders + HasServices + HasCache>(
     tag = "Identity",
     responses((status = 302, description = "Redirect to account identities page"))
 )]
-pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache>(
+pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache + HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<SocialCallbackQuery>,
 ) -> Result<Response> {
@@ -785,6 +802,15 @@ pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache>(
         .identity_provider_service()
         .create_linked_identity(&input)
         .await;
+
+    // Record identity linked event
+    if let Err(e) = state
+        .analytics_service()
+        .record_identity_linked(user_id, &provider.alias, &provider.provider_id)
+        .await
+    {
+        tracing::warn!("Failed to record identity linked event: {}", e);
+    }
 
     let identities_url = portal_identities_url(state.config());
     Ok(Redirect::temporary(&identities_url).into_response())

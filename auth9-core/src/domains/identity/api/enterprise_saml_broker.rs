@@ -8,8 +8,9 @@ use crate::domains::identity::api::enterprise_common::{
     self, ConnectorRecord, EnterpriseProfile, EnterpriseSsoLoginState,
     UserResolution, ENTERPRISE_SSO_STATE_TTL_SECS,
 };
+use crate::domains::security_observability::service::analytics::FederationEventMetadata;
 use crate::error::{AppError, Result};
-use crate::state::{HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{HasAnalytics, HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Redirect, Response},
@@ -27,6 +28,30 @@ use std::io::Write;
 
 /// Clock skew tolerance for SAML time validation (seconds)
 const CLOCK_SKEW_SECS: i64 = 300;
+
+// ── SAML Error Classification ──
+
+/// Classify a SAML validation error into a federation failure reason
+fn classify_saml_error(err: &AppError) -> &'static str {
+    let msg = err.to_string().to_lowercase();
+    if msg.contains("issuer") {
+        "invalid_issuer"
+    } else if msg.contains("audience") {
+        "invalid_audience"
+    } else if msg.contains("expired") || msg.contains("notbefore") || msg.contains("notonorafter") {
+        "assertion_expired"
+    } else if msg.contains("inresponseto") {
+        "invalid_assertion"
+    } else if msg.contains("destination") {
+        "invalid_assertion"
+    } else if msg.contains("signature") {
+        "invalid_assertion"
+    } else if msg.contains("status") {
+        "idp_rejected"
+    } else {
+        "invalid_assertion"
+    }
+}
 
 // ── SAML Config Extraction ──
 
@@ -634,7 +659,7 @@ pub async fn saml_authorize_redirect<S: HasServices + HasCache + HasDbPool>(
 }
 
 /// SAML Assertion Consumer Service (ACS) — POST binding callback.
-pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool>(
+pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool + HasAnalytics>(
     State(state): State<S>,
     Form(form): Form<SamlAcsForm>,
 ) -> Result<Response> {
@@ -679,14 +704,32 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
     let sp_eid = enterprise_common::sp_entity_id(config);
     let acs = enterprise_common::saml_acs_url(config);
 
-    let response_data = parse_and_validate_saml_response(
+    let response_data = match parse_and_validate_saml_response(
         &response_xml,
         &saml_config.entity_id,
         &sp_eid,
         &acs,
         sso_state.authn_request_id.as_deref(),
         &saml_config.signing_certificate,
-    )?;
+    ) {
+        Ok(data) => data,
+        Err(e) => {
+            // Record federation failure event with SAML-specific reason
+            let reason = classify_saml_error(&e);
+            let fed_meta = FederationEventMetadata {
+                user_id: None,
+                email: None,
+                tenant_id: crate::models::common::StringUuid::parse_str(&sso_state.tenant_id).ok(),
+                provider_alias: connector.alias.clone(),
+                provider_type: "saml".to_string(),
+                ip_address: None,
+                user_agent: None,
+                session_id: None,
+            };
+            let _ = state.analytics_service().record_federation_failure(fed_meta, reason).await;
+            return Err(e);
+        }
+    };
 
     // 6. Map profile
     let profile = map_saml_profile(&connector.config, &response_data);
@@ -706,6 +749,16 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
             .identity_provider_service()
             .create_linked_identity(&input)
             .await;
+
+        // Record identity linked event
+        if let Err(e) = state
+            .analytics_service()
+            .record_identity_linked(user_id, &connector.alias, "saml")
+            .await
+        {
+            tracing::warn!("Failed to record SAML identity linked event: {}", e);
+        }
+
         let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
         let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
         return Ok(Redirect::temporary(&identities_url).into_response());
@@ -752,6 +805,21 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
 
     metrics::counter!("auth9_enterprise_sso_total", "action" => "saml_callback_success", "connector" => connector.alias.clone())
         .increment(1);
+
+    // Record federation login event
+    let fed_meta = FederationEventMetadata {
+        user_id: Some(user.id),
+        email: Some(user.email.clone()),
+        tenant_id: crate::models::common::StringUuid::parse_str(&sso_state.tenant_id).ok(),
+        provider_alias: connector.alias.clone(),
+        provider_type: "saml".to_string(),
+        ip_address: None,
+        user_agent: None,
+        session_id: Some(session.id),
+    };
+    if let Err(e) = state.analytics_service().record_federation_login(fed_meta).await {
+        tracing::warn!("Failed to record enterprise SAML federation login event: {}", e);
+    }
 
     let mut response = Redirect::temporary(&redirect_url).into_response();
     response.headers_mut().insert(

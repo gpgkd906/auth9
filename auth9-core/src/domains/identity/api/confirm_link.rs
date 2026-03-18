@@ -11,7 +11,7 @@ use crate::domains::identity::api::auth::helpers::{
 };
 use crate::error::AppError;
 use crate::models::linked_identity::{CreateLinkedIdentityInput, PendingMergeData};
-use crate::state::{HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{HasAnalytics, HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -43,7 +43,7 @@ pub struct ConfirmLinkResponse {
     )
 )]
 pub async fn confirm_link<
-    S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement,
+    S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasAnalytics,
 >(
     State(state): State<S>,
     Json(input): Json<ConfirmLinkInput>,
@@ -100,6 +100,15 @@ pub async fn confirm_link<
         .identity_provider_service()
         .create_linked_identity(&link_input)
         .await;
+
+    // Record identity linked event
+    if let Err(e) = state
+        .analytics_service()
+        .record_identity_linked(user.id, &link_input.provider_alias, &link_input.provider_type)
+        .await
+    {
+        tracing::warn!("Failed to record identity linked event: {}", e);
+    }
 
     // 4. Ensure tenant membership if enterprise SSO
     if let Some(ref tenant_id_str) = pending.tenant_id {

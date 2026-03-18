@@ -66,6 +66,19 @@ impl LoginEventMetadata {
     }
 }
 
+/// Metadata for recording federation login events (social or enterprise SSO)
+#[derive(Debug, Clone)]
+pub struct FederationEventMetadata {
+    pub user_id: Option<StringUuid>,
+    pub email: Option<String>,
+    pub tenant_id: Option<StringUuid>,
+    pub provider_alias: String,
+    pub provider_type: String,
+    pub ip_address: Option<String>,
+    pub user_agent: Option<String>,
+    pub session_id: Option<StringUuid>,
+}
+
 pub struct AnalyticsService<R: LoginEventRepository> {
     login_event_repo: Arc<R>,
 }
@@ -98,6 +111,8 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
             location: None,
             session_id: metadata.session_id,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
         };
 
         self.login_event_repo.create(&input).await
@@ -124,6 +139,8 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
             location: None,
             session_id: None,
             failure_reason: Some(failure_reason.to_string()),
+            provider_alias: None,
+            provider_type: None,
         };
 
         self.login_event_repo.create(&input).await
@@ -149,6 +166,105 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
+        };
+
+        self.login_event_repo.create(&input).await
+    }
+
+    /// Record a successful federation login (social or enterprise)
+    pub async fn record_federation_login(
+        &self,
+        metadata: FederationEventMetadata,
+    ) -> Result<i64> {
+        let input = CreateLoginEventInput {
+            user_id: metadata.user_id,
+            email: metadata.email,
+            tenant_id: metadata.tenant_id,
+            event_type: LoginEventType::FederationSuccess,
+            ip_address: metadata.ip_address,
+            user_agent: metadata.user_agent,
+            device_type: None,
+            location: None,
+            session_id: metadata.session_id,
+            failure_reason: None,
+            provider_alias: Some(metadata.provider_alias),
+            provider_type: Some(metadata.provider_type),
+        };
+
+        self.login_event_repo.create(&input).await
+    }
+
+    /// Record a failed federation login
+    pub async fn record_federation_failure(
+        &self,
+        metadata: FederationEventMetadata,
+        reason: &str,
+    ) -> Result<i64> {
+        let input = CreateLoginEventInput {
+            user_id: metadata.user_id,
+            email: metadata.email,
+            tenant_id: metadata.tenant_id,
+            event_type: LoginEventType::FederationFailed,
+            ip_address: metadata.ip_address,
+            user_agent: metadata.user_agent,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: Some(reason.to_string()),
+            provider_alias: Some(metadata.provider_alias),
+            provider_type: Some(metadata.provider_type),
+        };
+
+        self.login_event_repo.create(&input).await
+    }
+
+    /// Record an identity link event
+    pub async fn record_identity_linked(
+        &self,
+        user_id: StringUuid,
+        provider_alias: &str,
+        provider_type: &str,
+    ) -> Result<i64> {
+        let input = CreateLoginEventInput {
+            user_id: Some(user_id),
+            email: None,
+            tenant_id: None,
+            event_type: LoginEventType::IdentityLinked,
+            ip_address: None,
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: None,
+            provider_alias: Some(provider_alias.to_string()),
+            provider_type: Some(provider_type.to_string()),
+        };
+
+        self.login_event_repo.create(&input).await
+    }
+
+    /// Record an identity unlink event
+    pub async fn record_identity_unlinked(
+        &self,
+        user_id: StringUuid,
+        provider_alias: &str,
+        provider_type: &str,
+    ) -> Result<i64> {
+        let input = CreateLoginEventInput {
+            user_id: Some(user_id),
+            email: None,
+            tenant_id: None,
+            event_type: LoginEventType::IdentityUnlinked,
+            ip_address: None,
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: None,
+            provider_alias: Some(provider_alias.to_string()),
+            provider_type: Some(provider_type.to_string()),
         };
 
         self.login_event_repo.create(&input).await
@@ -401,6 +517,8 @@ mod tests {
             location: None,
             session_id: None,
             failure_reason: Some("Account locked".to_string()),
+            provider_alias: None,
+            provider_type: None,
         };
 
         let result = service.record_login_event(input).await;
@@ -610,6 +728,101 @@ mod tests {
             )
             .await;
 
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_record_federation_login() {
+        let mut mock = MockLoginEventRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_create().returning(|input| {
+            assert_eq!(input.event_type, LoginEventType::FederationSuccess);
+            assert_eq!(input.provider_alias.as_deref(), Some("google"));
+            assert_eq!(input.provider_type.as_deref(), Some("google"));
+            assert!(input.failure_reason.is_none());
+            Ok(100)
+        });
+
+        let service = AnalyticsService::new(Arc::new(mock));
+
+        let metadata = FederationEventMetadata {
+            user_id: Some(user_id),
+            email: Some("user@example.com".to_string()),
+            tenant_id: None,
+            provider_alias: "google".to_string(),
+            provider_type: "google".to_string(),
+            ip_address: Some("10.0.0.1".to_string()),
+            user_agent: None,
+            session_id: None,
+        };
+
+        let result = service.record_federation_login(metadata).await;
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), 100);
+    }
+
+    #[tokio::test]
+    async fn test_record_federation_failure() {
+        let mut mock = MockLoginEventRepository::new();
+
+        mock.expect_create().returning(|input| {
+            assert_eq!(input.event_type, LoginEventType::FederationFailed);
+            assert_eq!(input.provider_alias.as_deref(), Some("okta-saml"));
+            assert_eq!(input.provider_type.as_deref(), Some("saml"));
+            assert_eq!(input.failure_reason.as_deref(), Some("invalid_issuer"));
+            Ok(101)
+        });
+
+        let service = AnalyticsService::new(Arc::new(mock));
+
+        let metadata = FederationEventMetadata {
+            user_id: None,
+            email: None,
+            tenant_id: None,
+            provider_alias: "okta-saml".to_string(),
+            provider_type: "saml".to_string(),
+            ip_address: None,
+            user_agent: None,
+            session_id: None,
+        };
+
+        let result = service.record_federation_failure(metadata, "invalid_issuer").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_record_identity_linked() {
+        let mut mock = MockLoginEventRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_create().returning(|input| {
+            assert_eq!(input.event_type, LoginEventType::IdentityLinked);
+            assert_eq!(input.provider_alias.as_deref(), Some("github"));
+            assert_eq!(input.provider_type.as_deref(), Some("github"));
+            assert!(input.user_id.is_some());
+            Ok(102)
+        });
+
+        let service = AnalyticsService::new(Arc::new(mock));
+        let result = service.record_identity_linked(user_id, "github", "github").await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_record_identity_unlinked() {
+        let mut mock = MockLoginEventRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        mock.expect_create().returning(|input| {
+            assert_eq!(input.event_type, LoginEventType::IdentityUnlinked);
+            assert_eq!(input.provider_alias.as_deref(), Some("azure-oidc"));
+            assert_eq!(input.provider_type.as_deref(), Some("oidc"));
+            Ok(103)
+        });
+
+        let service = AnalyticsService::new(Arc::new(mock));
+        let result = service.record_identity_unlinked(user_id, "azure-oidc", "oidc").await;
         assert!(result.is_ok());
     }
 }

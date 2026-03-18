@@ -142,11 +142,12 @@
 | [passkeys/02-passkey-auth.md](./passkeys/02-passkey-auth.md) | Passkey 登录认证流程 | 5 |
 | [passkeys/03-passkey-api.md](./passkeys/03-passkey-api.md) | WebAuthn API 端点测试 | 5 |
 
-### 分析与统计 (2 个文档, 10 个场景)
+### 分析与统计 (3 个文档, 15 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [analytics/01-overview.md](./analytics/01-overview.md) | 统计概览、时间范围筛选 | 5 |
 | [analytics/02-events.md](./analytics/02-events.md) | 登录事件列表、分页 | 5 |
+| [analytics/03-federation-events.md](./analytics/03-federation-events.md) | 联邦审计与安全事件 (FR5) | 5 |
 
 ### 审计日志 (1 个文档, 5 个场景)
 | 文档 | 描述 | 场景数 |
@@ -242,7 +243,7 @@
 | 系统设置 | 4 | 20 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
-| 分析与统计 | 2 | 10 |
+| 分析与统计 | 3 | 15 |
 | 审计日志 | 1 | 5 |
 | Action | 12 | 49 |
 | SDK | 10 | 50 |

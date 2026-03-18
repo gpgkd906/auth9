@@ -17,6 +17,10 @@ pub enum LoginEventType {
     FailedMfa,
     Locked,
     Social,
+    FederationSuccess,
+    FederationFailed,
+    IdentityLinked,
+    IdentityUnlinked,
 }
 
 impl std::str::FromStr for LoginEventType {
@@ -29,6 +33,10 @@ impl std::str::FromStr for LoginEventType {
             "failed_mfa" => Ok(LoginEventType::FailedMfa),
             "locked" => Ok(LoginEventType::Locked),
             "social" => Ok(LoginEventType::Social),
+            "federation_success" => Ok(LoginEventType::FederationSuccess),
+            "federation_failed" => Ok(LoginEventType::FederationFailed),
+            "identity_linked" => Ok(LoginEventType::IdentityLinked),
+            "identity_unlinked" => Ok(LoginEventType::IdentityUnlinked),
             _ => Err(format!("Unknown login event type: {}", s)),
         }
     }
@@ -42,6 +50,10 @@ impl std::fmt::Display for LoginEventType {
             LoginEventType::FailedMfa => write!(f, "failed_mfa"),
             LoginEventType::Locked => write!(f, "locked"),
             LoginEventType::Social => write!(f, "social"),
+            LoginEventType::FederationSuccess => write!(f, "federation_success"),
+            LoginEventType::FederationFailed => write!(f, "federation_failed"),
+            LoginEventType::IdentityLinked => write!(f, "identity_linked"),
+            LoginEventType::IdentityUnlinked => write!(f, "identity_unlinked"),
         }
     }
 }
@@ -87,6 +99,8 @@ pub struct LoginEvent {
     pub location: Option<String>,
     pub session_id: Option<StringUuid>,
     pub failure_reason: Option<String>,
+    pub provider_alias: Option<String>,
+    pub provider_type: Option<String>,
     pub created_at: DateTime<Utc>,
 }
 
@@ -103,6 +117,8 @@ pub struct CreateLoginEventInput {
     pub location: Option<String>,
     pub session_id: Option<StringUuid>,
     pub failure_reason: Option<String>,
+    pub provider_alias: Option<String>,
+    pub provider_type: Option<String>,
 }
 
 /// Security alert types
@@ -367,6 +383,10 @@ pub const WEBHOOK_EVENTS: &[&str] = &[
     "scim.group.created",
     "scim.group.updated",
     "scim.group.deleted",
+    "federation.login.success",
+    "federation.login.failed",
+    "identity.linked",
+    "identity.unlinked",
 ];
 
 /// Webhook event payload sent to webhook endpoints
@@ -541,6 +561,8 @@ mod tests {
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
 
@@ -983,6 +1005,10 @@ mod tests {
             LoginEventType::FailedMfa,
             LoginEventType::Locked,
             LoginEventType::Social,
+            LoginEventType::FederationSuccess,
+            LoginEventType::FederationFailed,
+            LoginEventType::IdentityLinked,
+            LoginEventType::IdentityUnlinked,
         ] {
             let mut buf = Vec::new();
             let result = sqlx::Encode::<sqlx::MySql>::encode_by_ref(&event_type, &mut buf);
@@ -1067,6 +1093,8 @@ mod tests {
             location: Some("Tokyo, JP".to_string()),
             session_id: Some(StringUuid::new_v4()),
             failure_reason: None,
+        provider_alias: None,
+        provider_type: None,
         };
         assert_eq!(input.event_type, LoginEventType::Success);
         assert!(input.failure_reason.is_none());
@@ -1119,5 +1147,97 @@ mod tests {
             ..Default::default()
         };
         assert!(input.validate().is_err());
+    }
+
+    // --- Federation LoginEventType variants ---
+
+    #[test]
+    fn test_federation_event_type_display_and_parse() {
+        assert_eq!(
+            format!("{}", LoginEventType::FederationSuccess),
+            "federation_success"
+        );
+        assert_eq!(
+            format!("{}", LoginEventType::FederationFailed),
+            "federation_failed"
+        );
+        assert_eq!(
+            format!("{}", LoginEventType::IdentityLinked),
+            "identity_linked"
+        );
+        assert_eq!(
+            format!("{}", LoginEventType::IdentityUnlinked),
+            "identity_unlinked"
+        );
+
+        assert_eq!(
+            "federation_success".parse::<LoginEventType>().unwrap(),
+            LoginEventType::FederationSuccess
+        );
+        assert_eq!(
+            "federation_failed".parse::<LoginEventType>().unwrap(),
+            LoginEventType::FederationFailed
+        );
+        assert_eq!(
+            "identity_linked".parse::<LoginEventType>().unwrap(),
+            LoginEventType::IdentityLinked
+        );
+        assert_eq!(
+            "identity_unlinked".parse::<LoginEventType>().unwrap(),
+            LoginEventType::IdentityUnlinked
+        );
+        // Case-insensitive
+        assert_eq!(
+            "FEDERATION_SUCCESS".parse::<LoginEventType>().unwrap(),
+            LoginEventType::FederationSuccess
+        );
+    }
+
+    #[test]
+    fn test_federation_event_type_serialization() {
+        assert_eq!(
+            serde_json::to_string(&LoginEventType::FederationSuccess).unwrap(),
+            "\"federation_success\""
+        );
+        assert_eq!(
+            serde_json::to_string(&LoginEventType::FederationFailed).unwrap(),
+            "\"federation_failed\""
+        );
+        assert_eq!(
+            serde_json::to_string(&LoginEventType::IdentityLinked).unwrap(),
+            "\"identity_linked\""
+        );
+        assert_eq!(
+            serde_json::to_string(&LoginEventType::IdentityUnlinked).unwrap(),
+            "\"identity_unlinked\""
+        );
+    }
+
+    #[test]
+    fn test_webhook_events_include_federation() {
+        assert!(WEBHOOK_EVENTS.contains(&"federation.login.success"));
+        assert!(WEBHOOK_EVENTS.contains(&"federation.login.failed"));
+        assert!(WEBHOOK_EVENTS.contains(&"identity.linked"));
+        assert!(WEBHOOK_EVENTS.contains(&"identity.unlinked"));
+    }
+
+    #[test]
+    fn test_create_login_event_input_with_provider() {
+        let input = CreateLoginEventInput {
+            user_id: Some(StringUuid::new_v4()),
+            email: Some("user@example.com".to_string()),
+            tenant_id: None,
+            event_type: LoginEventType::FederationSuccess,
+            ip_address: None,
+            user_agent: None,
+            device_type: None,
+            location: None,
+            session_id: None,
+            failure_reason: None,
+            provider_alias: Some("google".to_string()),
+            provider_type: Some("google".to_string()),
+        };
+        assert_eq!(input.event_type, LoginEventType::FederationSuccess);
+        assert_eq!(input.provider_alias.as_deref(), Some("google"));
     }
 }

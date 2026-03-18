@@ -115,6 +115,14 @@ documents:
     has_checklist: true
     last_reviewed: 2026-02-21
     test_script: scripts/qa/auto/analytics-02-events.sh
+  - id: analytics/03-federation-events
+    path: docs/qa/analytics/03-federation-events.md
+    module: analytics
+    scenarios: 5
+    has_ui_flow: false
+    has_entry_visibility: false
+    has_checklist: true
+    last_reviewed: 2026-03-18
   - id: audit/01-audit-logs
     path: docs/qa/audit/01-audit-logs.md
     module: audit

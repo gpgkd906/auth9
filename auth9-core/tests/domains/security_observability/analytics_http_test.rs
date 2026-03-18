@@ -314,6 +314,8 @@ async fn test_list_events_filter_by_email() {
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;
@@ -410,6 +412,8 @@ async fn add_test_login_events(state: &TestAppState, count: usize) {
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;
@@ -430,6 +434,8 @@ async fn add_test_login_events_for_user(state: &TestAppState, user_id: StringUui
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;
@@ -454,6 +460,8 @@ async fn add_test_login_events_for_tenant(
             location: None,
             session_id: None,
             failure_reason: None,
+            provider_alias: None,
+            provider_type: None,
             created_at: Utc::now(),
         };
         state.login_event_repo.add_event(event).await;

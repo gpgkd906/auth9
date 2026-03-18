@@ -555,6 +555,8 @@ pub async fn process_keycloak_event<
         } else {
             derive_failure_reason_with_details(event.error.as_deref(), &event.details)
         },
+        provider_alias: event.details.identity_provider.clone(),
+        provider_type: None,
     };
 
     let event_id = state.analytics_service().record_login_event(input).await?;
@@ -598,6 +600,8 @@ pub async fn process_keycloak_event<
                     failure_reason: Some(
                         "Account temporarily locked due to repeated login failures".to_string(),
                     ),
+                    provider_alias: None,
+                    provider_type: None,
                 };
 
                 match state

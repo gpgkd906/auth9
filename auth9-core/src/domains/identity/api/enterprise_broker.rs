@@ -8,8 +8,9 @@ use crate::cache::CacheOperations;
 use crate::domains::identity::api::enterprise_common::{
     self, ConnectorRecord, EnterpriseSsoLoginState, UserResolution, ENTERPRISE_SSO_STATE_TTL_SECS,
 };
+use crate::domains::security_observability::service::analytics::FederationEventMetadata;
 use crate::error::{AppError, Result};
-use crate::state::{HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{HasAnalytics, HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Redirect, Response},
@@ -312,7 +313,7 @@ async fn oidc_authorize<S: HasServices + HasCache + HasDbPool>(
     tag = "Identity",
     responses((status = 302, description = "Redirect with authorization code"))
 )]
-pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool>(
+pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool + HasAnalytics>(
     State(state): State<S>,
     Query(params): Query<EnterpriseSsoCallbackQuery>,
 ) -> Result<Response> {
@@ -390,6 +391,16 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
             .identity_provider_service()
             .create_linked_identity(&input)
             .await;
+
+        // Record identity linked event
+        if let Err(e) = state
+            .analytics_service()
+            .record_identity_linked(user_id, &connector.alias, "oidc")
+            .await
+        {
+            tracing::warn!("Failed to record identity linked event: {}", e);
+        }
+
         let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
         let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
         return Ok(Redirect::temporary(&identities_url).into_response());
@@ -436,6 +447,21 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
 
     metrics::counter!("auth9_enterprise_sso_total", "action" => "callback_success", "connector" => connector.alias.clone())
         .increment(1);
+
+    // Record federation login event
+    let fed_meta = FederationEventMetadata {
+        user_id: Some(user.id),
+        email: Some(user.email.clone()),
+        tenant_id: crate::models::common::StringUuid::parse_str(&sso_state.tenant_id).ok(),
+        provider_alias: connector.alias.clone(),
+        provider_type: "oidc".to_string(),
+        ip_address: None,
+        user_agent: None,
+        session_id: Some(session.id),
+    };
+    if let Err(e) = state.analytics_service().record_federation_login(fed_meta).await {
+        tracing::warn!("Failed to record enterprise OIDC federation login event: {}", e);
+    }
 
     let mut response = Redirect::temporary(&redirect_url).into_response();
     response.headers_mut().insert(
