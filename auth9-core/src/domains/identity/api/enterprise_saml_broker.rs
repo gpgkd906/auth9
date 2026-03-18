@@ -1189,4 +1189,38 @@ mod tests {
         assert_eq!(form.SAMLResponse, "dGVzdA==");
         assert_eq!(form.RelayState.as_deref(), Some("state:sig"));
     }
+
+    #[test]
+    fn test_relay_state_with_empty_key() {
+        let key = b"";
+        let state_id = "test-state-id";
+        let signed = sign_relay_state(state_id, key);
+        // Should still produce a valid signed string
+        assert!(signed.starts_with("test-state-id:"));
+        // And verification with same empty key should succeed
+        let verified = verify_relay_state(&signed, key).unwrap();
+        assert_eq!(verified, "test-state-id");
+    }
+
+    #[test]
+    fn test_parse_saml_response_missing_name_id() {
+        // SAML response with Assertion but no NameID
+        let xml = r#"<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion"><saml:Issuer>https://idp.example.com</saml:Issuer><samlp:Status><samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success"/></samlp:Status><saml:Assertion><saml:Conditions NotBefore="2020-01-01T00:00:00Z" NotOnOrAfter="2099-12-31T23:59:59Z"><saml:AudienceRestriction><saml:Audience>https://auth9.example.com</saml:Audience></saml:AudienceRestriction></saml:Conditions><saml:Subject></saml:Subject></saml:Assertion></samlp:Response>"#;
+
+        let result = parse_and_validate_saml_response(
+            xml,
+            "https://idp.example.com",
+            "https://auth9.example.com",
+            "https://auth9.example.com/acs",
+            None,
+            "",
+        );
+        assert!(result.is_err());
+        let err_msg = result.unwrap_err().to_string();
+        assert!(
+            err_msg.contains("NameID") || err_msg.contains("name_id") || err_msg.contains("Subject"),
+            "Error should mention missing NameID, got: {}",
+            err_msg
+        );
+    }
 }

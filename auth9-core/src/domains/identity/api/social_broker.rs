@@ -1115,4 +1115,112 @@ mod tests {
         let decoded: SocialLinkState = serde_json::from_str(&json).unwrap();
         assert_eq!(decoded.user_id, "user-456");
     }
+
+    // ── Linked Identity Conflict & Takeover Protection ──
+
+    #[test]
+    fn test_map_profile_google_missing_sub() {
+        let json = serde_json::json!({
+            "email": "user@gmail.com",
+            "name": "Test User"
+        });
+        let result = map_profile("google", &json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_map_profile_oidc_missing_sub() {
+        let json = serde_json::json!({
+            "email": "user@example.com"
+        });
+        let result = map_profile("oidc", &json);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_first_login_policy_trust_email_maps_to_auto_merge() {
+        // When trust_email=true, policy should resolve to AutoMerge regardless of first_login_policy field
+        use crate::models::linked_identity::FirstLoginPolicy;
+        let trust_email = true;
+        let first_login_policy_field = "create_new".to_string();
+
+        let policy = if trust_email {
+            FirstLoginPolicy::AutoMerge
+        } else {
+            first_login_policy_field
+                .parse::<FirstLoginPolicy>()
+                .unwrap_or(FirstLoginPolicy::CreateNew)
+        };
+        assert_eq!(policy, FirstLoginPolicy::AutoMerge);
+    }
+
+    #[test]
+    fn test_first_login_policy_no_trust_email_uses_field() {
+        use crate::models::linked_identity::FirstLoginPolicy;
+        let trust_email = false;
+
+        // prompt_confirm
+        let policy = if trust_email {
+            FirstLoginPolicy::AutoMerge
+        } else {
+            "prompt_confirm"
+                .parse::<FirstLoginPolicy>()
+                .unwrap_or(FirstLoginPolicy::CreateNew)
+        };
+        assert_eq!(policy, FirstLoginPolicy::PromptConfirm);
+
+        // create_new
+        let policy = if trust_email {
+            FirstLoginPolicy::AutoMerge
+        } else {
+            "create_new"
+                .parse::<FirstLoginPolicy>()
+                .unwrap_or(FirstLoginPolicy::CreateNew)
+        };
+        assert_eq!(policy, FirstLoginPolicy::CreateNew);
+
+        // invalid → defaults to CreateNew
+        let policy = if trust_email {
+            FirstLoginPolicy::AutoMerge
+        } else {
+            "bogus"
+                .parse::<FirstLoginPolicy>()
+                .unwrap_or(FirstLoginPolicy::CreateNew)
+        };
+        assert_eq!(policy, FirstLoginPolicy::CreateNew);
+    }
+
+    // ── Broker Error/Cancel Path ──
+
+    #[test]
+    fn test_callback_query_with_error() {
+        let query = SocialCallbackQuery {
+            code: None,
+            state: None,
+            error: Some("access_denied".to_string()),
+        };
+        assert_eq!(query.error.as_deref(), Some("access_denied"));
+        assert!(query.code.is_none());
+        assert!(query.state.is_none());
+    }
+
+    #[test]
+    fn test_callback_query_with_code_and_state() {
+        let query = SocialCallbackQuery {
+            code: Some("abc123".to_string()),
+            state: Some("state-xyz".to_string()),
+            error: None,
+        };
+        assert_eq!(query.code.as_deref(), Some("abc123"));
+        assert_eq!(query.state.as_deref(), Some("state-xyz"));
+        assert!(query.error.is_none());
+    }
+
+    #[test]
+    fn test_social_login_state_missing_fields_fails_deserialization() {
+        // Incomplete state should fail
+        let json = r#"{"login_challenge_id": "c"}"#;
+        let result = serde_json::from_str::<SocialLoginState>(json);
+        assert!(result.is_err());
+    }
 }

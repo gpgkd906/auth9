@@ -407,6 +407,86 @@ mod tests {
         assert_eq!(info.external_email, Some("user@gmail.com".to_string()));
     }
 
+    #[tokio::test]
+    async fn test_create_linked_identity_success() {
+        let mut linked_mock = MockLinkedIdentityRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        linked_mock.expect_create().returning(|input| {
+            Ok(LinkedIdentity {
+                id: StringUuid::new_v4(),
+                user_id: input.user_id,
+                provider_type: input.provider_type.clone(),
+                provider_alias: input.provider_alias.clone(),
+                external_user_id: input.external_user_id.clone(),
+                external_email: input.external_email.clone(),
+                linked_at: chrono::Utc::now(),
+            })
+        });
+
+        let keycloak = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+
+        let input = CreateLinkedIdentityInput {
+            user_id,
+            provider_type: "google".to_string(),
+            provider_alias: "google".to_string(),
+            external_user_id: "google-ext-123".to_string(),
+            external_email: Some("user@gmail.com".to_string()),
+        };
+        let result = service.create_linked_identity(&input).await;
+        assert!(result.is_ok());
+        let linked = result.unwrap();
+        assert_eq!(linked.user_id, user_id);
+        assert_eq!(linked.provider_type, "google");
+        assert_eq!(linked.external_user_id, "google-ext-123");
+    }
+
+    #[tokio::test]
+    async fn test_find_linked_identity_existing() {
+        let mut linked_mock = MockLinkedIdentityRepository::new();
+        let user_id = StringUuid::new_v4();
+
+        linked_mock
+            .expect_find_by_provider()
+            .with(eq("github"), eq("gh-456"))
+            .returning(move |alias, ext_id| {
+                Ok(Some(LinkedIdentity {
+                    user_id,
+                    provider_alias: alias.to_string(),
+                    external_user_id: ext_id.to_string(),
+                    provider_type: "github".to_string(),
+                    ..Default::default()
+                }))
+            });
+
+        let keycloak = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+
+        let result = service.find_linked_identity("github", "gh-456").await;
+        assert!(result.is_ok());
+        let found = result.unwrap();
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().external_user_id, "gh-456");
+    }
+
+    #[tokio::test]
+    async fn test_find_linked_identity_not_found() {
+        let mut linked_mock = MockLinkedIdentityRepository::new();
+
+        linked_mock
+            .expect_find_by_provider()
+            .with(eq("github"), eq("nonexistent"))
+            .returning(|_, _| Ok(None));
+
+        let keycloak = create_test_federation_broker();
+        let service = IdentityProviderService::new(Arc::new(linked_mock), keycloak);
+
+        let result = service.find_linked_identity("github", "nonexistent").await;
+        assert!(result.is_ok());
+        assert!(result.unwrap().is_none());
+    }
+
     // Helper to create a test KeycloakClient
     fn create_test_keycloak_client() -> Arc<KeycloakClient> {
         use crate::config::KeycloakConfig;

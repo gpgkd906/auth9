@@ -488,12 +488,169 @@ async fn test_delete_provider_not_found() {
 }
 
 // ============================================================================
+// Confirm-Link Tests
+// ============================================================================
+
+#[tokio::test]
+async fn test_confirm_link_expired_token() {
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    let app = build_idp_test_router(state);
+
+    // POST with a token that doesn't exist in cache → should return 400
+    let input = serde_json::json!({
+        "token": "nonexistent-token-12345"
+    });
+
+    let (status, _): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/confirm-link", &input).await;
+
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
+async fn test_confirm_link_success_link_existing() {
+    use auth9_core::models::linked_identity::PendingMergeData;
+
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create a user to be the "existing" user
+    let user = create_test_user(None);
+    let user_id = user.id;
+    state.user_repo.add_user(user.clone()).await;
+
+    // Store pending merge data in cache
+    let pending = PendingMergeData {
+        existing_user_id: user_id.to_string(),
+        existing_email: user.email.clone(),
+        external_user_id: "google-ext-999".to_string(),
+        provider_alias: "google".to_string(),
+        provider_type: "google".to_string(),
+        external_email: Some("ext@gmail.com".to_string()),
+        display_name: Some("External User".to_string()),
+        login_challenge_id: "test-challenge-1".to_string(),
+        tenant_id: None,
+        ip_address: None,
+        user_agent: None,
+    };
+    let pending_json = serde_json::to_string(&pending).unwrap();
+    state
+        .cache_manager
+        .store_pending_merge("merge-token-abc", &pending_json, 600)
+        .await
+        .unwrap();
+
+    // Also store the login challenge so the confirm flow can consume it
+    let challenge = serde_json::json!({
+        "client_id": "test-client",
+        "redirect_uri": "http://localhost:3000/callback",
+        "scope": "openid",
+        "nonce": null,
+        "code_challenge": null,
+        "code_challenge_method": null,
+        "original_state": null
+    });
+    state
+        .cache_manager
+        .store_login_challenge("test-challenge-1", &challenge.to_string(), 600)
+        .await
+        .unwrap();
+
+    let app = build_idp_test_router(state);
+
+    let input = serde_json::json!({
+        "token": "merge-token-abc"
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/confirm-link", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let body = body.unwrap();
+    assert!(body.get("redirect_url").is_some());
+    let redirect_url = body["redirect_url"].as_str().unwrap();
+    assert!(redirect_url.contains("code="));
+}
+
+#[tokio::test]
+async fn test_confirm_link_create_new_account() {
+    use auth9_core::models::linked_identity::PendingMergeData;
+
+    let mock_kc = MockKeycloakServer::new().await;
+    let state = TestAppState::with_mock_keycloak(&mock_kc);
+
+    // Create an existing user (the one the merge would target)
+    let user = create_test_user(None);
+    let user_id = user.id;
+    state.user_repo.add_user(user.clone()).await;
+
+    // Store pending merge
+    let pending = PendingMergeData {
+        existing_user_id: user_id.to_string(),
+        existing_email: user.email.clone(),
+        external_user_id: "gh-ext-888".to_string(),
+        provider_alias: "github".to_string(),
+        provider_type: "github".to_string(),
+        external_email: Some("newuser@github.com".to_string()),
+        display_name: Some("New User".to_string()),
+        login_challenge_id: "test-challenge-2".to_string(),
+        tenant_id: None,
+        ip_address: None,
+        user_agent: None,
+    };
+    let pending_json = serde_json::to_string(&pending).unwrap();
+    state
+        .cache_manager
+        .store_pending_merge("merge-token-new", &pending_json, 600)
+        .await
+        .unwrap();
+
+    // Store login challenge
+    let challenge = serde_json::json!({
+        "client_id": "test-client",
+        "redirect_uri": "http://localhost:3000/callback",
+        "scope": "openid",
+        "nonce": null,
+        "code_challenge": null,
+        "code_challenge_method": null,
+        "original_state": null
+    });
+    state
+        .cache_manager
+        .store_login_challenge("test-challenge-2", &challenge.to_string(), 600)
+        .await
+        .unwrap();
+
+    let app = build_idp_test_router(state);
+
+    // POST with action="create_new" → should create new user instead of linking
+    let input = serde_json::json!({
+        "token": "merge-token-new",
+        "action": "create_new"
+    });
+
+    let (status, body): (StatusCode, Option<serde_json::Value>) =
+        post_json(&app, "/api/v1/auth/confirm-link", &input).await;
+
+    assert_eq!(status, StatusCode::OK);
+    assert!(body.is_some());
+    let body = body.unwrap();
+    assert!(body.get("redirect_url").is_some());
+    let redirect_url = body["redirect_url"].as_str().unwrap();
+    assert!(redirect_url.contains("code="));
+}
+
+// ============================================================================
 // Test Router Builder
 // ============================================================================
 
 fn build_idp_test_router(state: TestAppState) -> axum::Router {
     use auth9_core::domains::identity::api::identity_provider;
-    use axum::routing::{delete, get};
+    use auth9_core::domains::identity::api::confirm_link;
+    use axum::routing::{delete, get, post};
 
     axum::Router::new()
         .route(
@@ -518,6 +675,10 @@ fn build_idp_test_router(state: TestAppState) -> axum::Router {
         .route(
             "/api/v1/me/linked-identities/{identity_id}",
             delete(identity_provider::unlink_identity::<TestAppState>),
+        )
+        .route(
+            "/api/v1/auth/confirm-link",
+            post(confirm_link::confirm_link::<TestAppState>),
         )
         .with_state(state)
 }

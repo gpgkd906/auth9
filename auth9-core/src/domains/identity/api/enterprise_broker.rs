@@ -634,6 +634,33 @@ mod tests {
         .unwrap();
         assert!(url.contains("login_hint=user%40corp.example.com"));
     }
+
+    // ── Error/Cancel Path Tests ──
+
+    #[test]
+    fn test_callback_query_with_error() {
+        let query = EnterpriseSsoCallbackQuery {
+            code: None,
+            state: None,
+            error: Some("access_denied".to_string()),
+        };
+        assert!(query.error.is_some());
+        assert_eq!(query.error.as_deref(), Some("access_denied"));
+        assert!(query.code.is_none());
+        assert!(query.state.is_none());
+    }
+
+    #[test]
+    fn test_callback_query_normal() {
+        let query = EnterpriseSsoCallbackQuery {
+            code: Some("abc".to_string()),
+            state: Some("xyz".to_string()),
+            error: None,
+        };
+        assert!(query.error.is_none());
+        assert_eq!(query.code.as_deref(), Some("abc"));
+        assert_eq!(query.state.as_deref(), Some("xyz"));
+    }
 }
 
 // ── Enterprise SSO Account Linking ──
