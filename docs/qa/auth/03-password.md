@@ -8,14 +8,14 @@
 
 ## 架构说明
 
-Auth9 采用 Headless Keycloak 架构，密码能力应优先通过 Auth9 自身页面和 API 代理：
+Auth9 密码管理完全由 Auth9 自身控制，不依赖 Keycloak credentials API：
 
-1. **忘记密码页面** → 优先使用 Auth9 Portal `/forgot-password`
-2. **重置密码页面** → 优先使用 Auth9 Portal `/reset-password?token=...`
-3. **密码强度验证** → 由 Auth9 后端执行并同步到底层认证引擎
-4. **修改密码（已登录用户）** → 在 Auth9 Portal `Account -> Security` 页面发起，后端通过 Auth9 API 完成
-
-> **实现说明**：当前托管认证页（由 `auth9-keycloak-theme` 承载）仍可能承载部分历史密码流程入口，但 QA 主路径应以 Auth9 代理页为准，不应把 Keycloak UI 当作标准验收入口。
+1. **忘记密码页面** → Auth9 Portal `/forgot-password`
+2. **重置密码页面** → Auth9 Portal `/reset-password?token=...`
+3. **密码强度验证** → 由 Auth9 后端本地执行（tenant 级别 PasswordPolicy）
+4. **修改密码（已登录用户）** → Auth9 Portal `Account -> Security` 页面
+5. **密码哈希与验证** → Auth9 使用 argon2id 本地哈希，存储在 `credentials` 表
+6. **重置令牌** → HMAC-SHA256 哈希存储在 `password_reset_tokens` 表，支持 replay 防护与过期校验
 
 **推荐测试入口**：
 - 未登录用户：从 `/login` 点击「Forgot Password」，并验证跳转到 `/forgot-password`
@@ -23,9 +23,8 @@ Auth9 采用 Headless Keycloak 架构，密码能力应优先通过 Auth9 自身
 - 已登录用户：进入 `Account -> Security` 修改密码
 
 **测试原则**：
-- 默认从 Auth9 Portal 或直接访问 Auth9 代理页触发密码相关流程
-- 不要求必须手工直接访问底层登录页面 URL
-- 如需排障，可额外核对托管认证页或后台同步状态，但不作为主验收路径
+- 所有密码流程从 Auth9 Portal 触发，不涉及 Keycloak UI
+- 密码验证由 Auth9 本地 argon2id 执行，不调用 Keycloak credentials API
 - Dark Mode 视觉层级与对比度回归由 [15-dark-mode-auth-contrast.md](./15-dark-mode-auth-contrast.md) 单独覆盖
 
 ---
@@ -92,11 +91,17 @@ ORDER BY created_at DESC LIMIT 1;
 
 ### 预期数据状态
 ```sql
--- Auth9 API 已受理密码重置，且新密码可用于后续登录验证
-
 -- 重置令牌应被标记为已使用
 SELECT used_at FROM password_reset_tokens WHERE id = '{token_id}';
 -- 预期: used_at 有值
+
+-- 密码凭据已更新（argon2id 哈希）
+SELECT credential_type, JSON_EXTRACT(credential_data, '$.algorithm') AS algorithm,
+       JSON_EXTRACT(credential_data, '$.temporary') AS temporary
+FROM credentials
+WHERE user_id = (SELECT identity_subject FROM users WHERE email = 'user@example.com')
+  AND credential_type = 'password' AND is_active = 1;
+-- 预期: algorithm = "argon2id", temporary = false
 ```
 
 ---
@@ -172,7 +177,17 @@ ORDER BY created_at DESC LIMIT 1;
 
 ### 预期数据状态
 ```sql
--- Auth9 API 已受理密码更新，且新密码可用于后续登录验证
+-- 密码凭据已更新为新哈希
+SELECT credential_type, JSON_EXTRACT(credential_data, '$.algorithm') AS algorithm,
+       is_active, updated_at
+FROM credentials
+WHERE user_id = (SELECT identity_subject FROM users WHERE email = '{user_email}')
+  AND credential_type = 'password' AND is_active = 1;
+-- 预期: algorithm = "argon2id", is_active = 1, updated_at 为最近时间
+
+-- password_changed_at 已更新
+SELECT password_changed_at FROM users WHERE email = '{user_email}';
+-- 预期: password_changed_at 为最近时间
 ```
 
 ---
@@ -180,19 +195,16 @@ ORDER BY created_at DESC LIMIT 1;
 ## 场景 5：密码强度验证
 
 ### 初始状态
-- **密码策略已由 Seeder 配置并同步到底层认证引擎**（auth9-core 启动时自动执行）
+- **密码策略已由 Seeder 配置**（auth9-core 启动时自动执行）
 - 策略要求：最少 12 字符、至少 1 个大写字母、1 个小写字母、1 个数字、1 个特殊字符
-- 如需做后台同步校验（可选），验证策略是否已同步到内部 realm（**必须使用 Bearer Token，`-u admin:admin` 基础认证可能返回不完整数据**）：
+- 密码策略存储在 Auth9 `tenants` 表的 `password_policy` JSON 字段，由 Auth9 后端本地执行校验
+- 验证当前策略：
   ```bash
-  KC_TOKEN=$(curl -s -X POST "http://localhost:8081/realms/master/protocol/openid-connect/token" \
-    -d "client_id=admin-cli" -d "username=admin" -d "password=admin" -d "grant_type=password" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-  curl -s "http://localhost:8081/admin/realms/auth9" -H "Authorization: Bearer $KC_TOKEN" \
-    | python3 -c "import sys,json; print(json.load(sys.stdin).get('passwordPolicy','NULL'))"
-  # 预期: 非 null，包含 "length(12) and upperCase(1) and ..."
+  TOKEN=$(.claude/skills/tools/gen-admin-token.sh)
+  curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+    -H "Authorization: Bearer $TOKEN" | python3 -m json.tool
+  # 预期: min_length=12, require_uppercase=true, require_lowercase=true, require_numbers=true, require_symbols=true
   ```
-
-> **注意**：如果 `passwordPolicy` 为 `null`，说明 auth9-core 的 Seeder 尚未完成初始化。请确保 auth9-core 已成功启动并完成数据库迁移和底层策略同步。可检查日志：`docker logs auth9-init 2>&1 | grep -i "password\|policy\|seeder"`。注意：seeder 运行在 `auth9-init` 容器中，不是 `auth9-core`。
 
 ### 目的
 验证密码强度验证
@@ -212,9 +224,9 @@ ORDER BY created_at DESC LIMIT 1;
 
 | 症状 | 原因 | 解决方法 |
 |------|------|----------|
-| `passwordPolicy` 为 `null` | Seeder 未完成或 auth9-core 未正常启动 | 检查 `docker logs auth9-core` 确认启动完成 |
+| 密码策略 API 返回默认值 | Seeder 未完成或 tenant 无自定义策略 | 检查 `docker logs auth9-init` 确认 seeder 完成 |
 | `/login` 页面未显示找回密码入口 | Portal 登录页渲染异常或入口回归缺失 | 转测 [15-dark-mode-auth-contrast.md](./15-dark-mode-auth-contrast.md) 场景 1，并检查 `/login` 底部链接区 |
-| 弱密码被接受 | 密码策略未同步到底层 realm | 重启 auth9-core 或手动运行 `./scripts/reset-docker.sh` |
+| 弱密码被接受 | tenant 的 `password_policy` JSON 为空或宽松 | 通过 API 更新密码策略或重启 auth9-core 让 seeder 重新初始化 |
 
 ---
 

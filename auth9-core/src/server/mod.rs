@@ -79,6 +79,7 @@ use crate::middleware::security_headers::security_headers_middleware;
 pub fn select_identity_backend(
     config: &Config,
     keycloak_arc: Arc<KeycloakClient>,
+    db_pool: sqlx::MySqlPool,
 ) -> (
     Arc<dyn IdentitySessionStore>,
     Arc<dyn FederationBroker>,
@@ -93,7 +94,7 @@ pub fn select_identity_backend(
         IdentityBackend::Auth9Oidc => (
             Arc::new(Auth9OidcSessionStoreAdapter::new()),
             Arc::new(Auth9OidcFederationBrokerAdapter::new()),
-            Arc::new(Auth9OidcIdentityEngineAdapter::new()),
+            Arc::new(Auth9OidcIdentityEngineAdapter::new(db_pool)),
         ),
     }
 }
@@ -523,7 +524,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     // Create Arc-wrapped Keycloak client for services that need it
     let keycloak_arc = Arc::new(keycloak_client.clone());
     let (identity_sessions, federation_broker, identity_engine) =
-        select_identity_backend(&config, keycloak_arc.clone());
+        select_identity_backend(&config, keycloak_arc.clone(), db_pool.clone());
 
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));

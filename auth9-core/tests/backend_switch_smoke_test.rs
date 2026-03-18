@@ -20,15 +20,21 @@ fn build_keycloak_client(config: &Config) -> Arc<KeycloakClient> {
     }))
 }
 
+fn dummy_pool() -> sqlx::MySqlPool {
+    sqlx::MySqlPool::connect_lazy("mysql://localhost/dummy").unwrap()
+}
+
 #[test]
 fn backend_switch_defaults_to_keycloak() {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let _guard = runtime.enter();
+
     let mut config = common::test_config();
     config.identity_backend = IdentityBackend::Keycloak;
 
     let (_, federation_broker, _) =
-        select_identity_backend(&config, build_keycloak_client(&config));
+        select_identity_backend(&config, build_keycloak_client(&config), dummy_pool());
 
-    let runtime = tokio::runtime::Runtime::new().unwrap();
     let providers = runtime
         .block_on(federation_broker.list_identity_providers())
         .unwrap_err();
@@ -41,13 +47,15 @@ fn backend_switch_defaults_to_keycloak() {
 
 #[test]
 fn backend_switch_can_use_auth9_oidc_stub() -> Result<()> {
+    let runtime = tokio::runtime::Runtime::new().unwrap();
+    let _guard = runtime.enter();
+
     let mut config = common::test_config();
     config.identity_backend = IdentityBackend::Auth9Oidc;
 
     let (session_store, federation_broker, identity_engine) =
-        select_identity_backend(&config, build_keycloak_client(&config));
+        select_identity_backend(&config, build_keycloak_client(&config), dummy_pool());
 
-    let runtime = tokio::runtime::Runtime::new().unwrap();
     runtime.block_on(async {
         session_store.delete_user_session("session-1").await?;
         session_store.logout_user("user-1").await?;

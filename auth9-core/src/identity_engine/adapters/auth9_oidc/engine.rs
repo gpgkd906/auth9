@@ -8,10 +8,64 @@ use crate::identity_engine::{
 };
 use crate::keycloak::{KeycloakOidcClient, RealmUpdate};
 use anyhow::anyhow;
+use argon2::{
+    password_hash::{rand_core::OsRng, PasswordHash, PasswordHasher, PasswordVerifier, SaltString},
+    Argon2,
+};
 use async_trait::async_trait;
+use sqlx::MySqlPool;
 
-#[derive(Default)]
-struct Auth9OidcUserStore;
+struct Auth9OidcUserStore {
+    pool: MySqlPool,
+}
+
+impl Auth9OidcUserStore {
+    fn new(pool: MySqlPool) -> Self {
+        Self { pool }
+    }
+
+    /// Hash a password with argon2id and store/replace the credential row.
+    async fn upsert_password_credential(
+        &self,
+        user_id: &str,
+        password: &str,
+        temporary: bool,
+    ) -> Result<()> {
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .map_err(|e| AppError::Internal(anyhow!("password hashing failed: {}", e)))?
+            .to_string();
+
+        let data = serde_json::json!({
+            "hash": hash,
+            "algorithm": "argon2id",
+            "temporary": temporary,
+        });
+
+        // Atomic replace: delete old password credential, insert new one
+        sqlx::query(
+            "DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'",
+        )
+        .bind(user_id)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to delete old password credential: {}", e)))?;
+
+        let id = uuid::Uuid::new_v4().to_string();
+        sqlx::query(
+            "INSERT INTO credentials (id, user_id, credential_type, credential_data) VALUES (?, ?, 'password', ?)",
+        )
+        .bind(&id)
+        .bind(user_id)
+        .bind(&data)
+        .execute(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to insert password credential: {}", e)))?;
+
+        Ok(())
+    }
+}
 
 #[async_trait]
 impl IdentityUserStore for Auth9OidcUserStore {
@@ -45,32 +99,47 @@ impl IdentityUserStore for Auth9OidcUserStore {
     async fn set_user_password(
         &self,
         user_id: &str,
-        _password: &str,
-        _temporary: bool,
+        password: &str,
+        temporary: bool,
     ) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' password set not implemented",
-            user_id
-        )))
+        self.upsert_password_credential(user_id, password, temporary)
+            .await
     }
 
     async fn admin_set_user_password(
         &self,
         user_id: &str,
-        _password: &str,
-        _temporary: bool,
+        password: &str,
+        temporary: bool,
     ) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' admin password set not implemented",
-            user_id
-        )))
+        self.upsert_password_credential(user_id, password, temporary)
+            .await
     }
 
-    async fn validate_user_password(&self, user_id: &str, _password: &str) -> Result<bool> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' password validation not implemented",
-            user_id
-        )))
+    async fn validate_user_password(&self, user_id: &str, password: &str) -> Result<bool> {
+        let row: Option<(serde_json::Value,)> = sqlx::query_as(
+            "SELECT credential_data FROM credentials WHERE user_id = ? AND credential_type = 'password' AND is_active = 1 LIMIT 1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to query password credential: {}", e)))?;
+
+        let Some((data,)) = row else {
+            return Ok(false);
+        };
+
+        let hash_str = data
+            .get("hash")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AppError::Internal(anyhow!("malformed password credential data")))?;
+
+        let parsed_hash = PasswordHash::new(hash_str)
+            .map_err(|e| AppError::Internal(anyhow!("invalid password hash format: {}", e)))?;
+
+        Ok(Argon2::default()
+            .verify_password(password.as_bytes(), &parsed_hash)
+            .is_ok())
     }
 }
 
@@ -225,9 +294,9 @@ pub struct Auth9OidcIdentityEngineAdapter {
 }
 
 impl Auth9OidcIdentityEngineAdapter {
-    pub fn new() -> Self {
+    pub fn new(pool: MySqlPool) -> Self {
         Self {
-            user_store: Auth9OidcUserStore,
+            user_store: Auth9OidcUserStore::new(pool),
             client_store: Auth9OidcClientStore,
             session_store: Auth9OidcSessionStoreAdapter::new(),
             credential_store: Auth9OidcCredentialStore,
@@ -265,5 +334,80 @@ impl IdentityEngine for Auth9OidcIdentityEngineAdapter {
 
     async fn update_realm(&self, _settings: &RealmUpdate) -> Result<()> {
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Test argon2id hash-and-verify roundtrip (pure logic, no DB).
+    #[test]
+    fn test_argon2_hash_and_verify_roundtrip() {
+        let password = "StrongP@ss1"; // pragma: allowlist secret
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .expect("hashing should succeed");
+        let hash_str = hash.to_string();
+
+        let parsed = PasswordHash::new(&hash_str).expect("should parse");
+        assert!(Argon2::default()
+            .verify_password(password.as_bytes(), &parsed)
+            .is_ok());
+    }
+
+    #[test]
+    fn test_argon2_verify_wrong_password_fails() {
+        let password = "CorrectPassword1!"; // pragma: allowlist secret
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .expect("hashing should succeed");
+        let hash_str = hash.to_string();
+
+        let parsed = PasswordHash::new(&hash_str).expect("should parse");
+        assert!(Argon2::default()
+            .verify_password(b"WrongPassword1!", &parsed)
+            .is_err());
+    }
+
+    #[test]
+    fn test_credential_json_structure() {
+        let password = "TestPass1!"; // pragma: allowlist secret
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .expect("hashing should succeed")
+            .to_string();
+
+        let data = serde_json::json!({
+            "hash": hash,
+            "algorithm": "argon2id",
+            "temporary": false,
+        });
+
+        assert_eq!(data["algorithm"], "argon2id");
+        assert!(!data["temporary"].as_bool().unwrap());
+        assert!(data["hash"].as_str().unwrap().starts_with("$argon2id$"));
+    }
+
+    #[test]
+    fn test_temporary_flag_preserved() {
+        let password = "TempPass1!"; // pragma: allowlist secret
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(password.as_bytes(), &salt)
+            .expect("hashing should succeed")
+            .to_string();
+
+        for temporary in [true, false] {
+            let data = serde_json::json!({
+                "hash": hash,
+                "algorithm": "argon2id",
+                "temporary": temporary,
+            });
+            assert_eq!(data["temporary"].as_bool().unwrap(), temporary);
+        }
     }
 }
