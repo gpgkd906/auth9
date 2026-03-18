@@ -81,9 +81,11 @@
 
 见 `keycloak_phase4_external_identity_broker.md`
 
-### Phase 5: 灰度切换与 Keycloak 退役
+### Phase 5: Keycloak 全量退役（封闭开发）
 
-目标：完成生产双写/回放/比对/灰度，并下线 Keycloak 运行时依赖。
+目标：补全 auth9_oidc adapter → 移除所有 Keycloak 代码和依赖 → 清理基础设施 → 更新文档。
+
+**方案变更**：原设计为渐进灰度切换（双栈、影子比对、回滚），改为封闭开发全量切换。
 
 见 `keycloak_phase5_cutover_and_keycloak_retirement.md`
 
