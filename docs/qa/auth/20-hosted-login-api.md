@@ -226,8 +226,9 @@ curl -s -w "\nHTTP_STATUS: %{http_code}\n" -X POST http://localhost:8080/api/v1/
 
 ### 预期结果
 - `keycloak` 模式：密码登录正常返回 200 和 token
-- `auth9_oidc` 模式：端点正常响应（当前返回 501 Not Implemented 或类似 stub 错误，因 auth9-oidc adapter 尚未完整实现）
-- 两种模式下**错误结构一致**，均为 `{"error": "...", "message": "..."}`
+- `auth9_oidc` 模式：密码登录正常返回 200 和 token（Phase 3 FR5 已完整实现本地 OIDC 流程，包括密码验证、token 签发、refresh 轮转）
+- 两种模式下**响应结构一致**，均为 `{"access_token": "...", "token_type": "Bearer", "expires_in": ...}`
+- 错误响应结构一致，均为 `{"error": "...", "message": "..."}`
 
 ---
 

@@ -60,10 +60,11 @@ rg "action_type|status|completed_at" auth9-oidc/migrations/20260318000003_create
 
 ### 预期结果
 
-- 3 个 migration 文件存在
+- 4 个 migration 文件存在（`credentials`、`user_verification_status`、`pending_actions`、`email_verification_tokens`）
 - `credentials` 表包含 `credential_type`, `credential_data`, `is_active` 字段
 - `user_verification_status` 表包含 `email_verified`, `email_verified_at` 字段
 - `pending_actions` 表包含 `action_type`, `status`, `completed_at` 字段
+- `email_verification_tokens` 表包含 `token_hash`, `expires_at`, `used_at` 字段
 - 所有表无 `FOREIGN KEY` 约束 (TiDB 规则)
 
 ---
@@ -135,7 +136,7 @@ cd auth9-oidc && cargo test 2>&1
 - 步骤 1: 至少 7 个 credential 测试通过
 - 步骤 2: 至少 3 个 verification 测试通过
 - 步骤 3: 至少 5 个 pending_action 测试通过
-- 步骤 4: 全部 32+ 测试通过，0 失败
+- 步骤 4: 全部 39 测试通过，0 失败
 
 ---
 

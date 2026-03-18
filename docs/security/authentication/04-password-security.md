@@ -13,17 +13,16 @@
 
 ## 背景知识
 
-Auth9 密码管理由 Keycloak 处理：
-- 密码哈希: Argon2 或 PBKDF2
-- 密码重置: 通过邮件链接
-- 密码策略: 可配置强度要求
+Auth9 自行管理密码全生命周期（Phase 3 FR2 已从 Keycloak 接管）：
+- 密码哈希: Argon2id（auth9-oidc 本地存储）
+- 密码重置: Auth9 自签发 reset token，通过邮件链接消费
+- 密码策略: Auth9 自管（`GET/PUT /api/v1/tenants/{id}/password-policy`），支持 min_length、大小写/数字/符号要求、max_age_days、history_count、lockout 阈值
 
-### 架构对齐说明（Headless Keycloak）
+### 架构对齐说明
 
-- Auth9 采用 Headless Keycloak 架构，Keycloak 作为 OIDC/认证引擎使用
-- 本文档不要求必须通过 Keycloak 托管登录页进行测试
-- 密码安全测试以接口、事件、数据库和管理 API 验证为主
-- 如需做页面回归，仅作为补充验证（例如主题/交互），不作为安全结论前置条件
+- 当 `IDENTITY_BACKEND=auth9_oidc` 时，密码验证、重置、策略全部由 Auth9 处理，不依赖 Keycloak
+- 当 `IDENTITY_BACKEND=keycloak` 时（兼容模式），仍由 Keycloak 处理
+- 密码安全测试以 Auth9 API 端点验证为主（`/api/v1/hosted-login/password`、`/api/v1/auth/forgot-password`、`/api/v1/auth/reset-password`、`/api/v1/users/me/password`）
 
 ---
 

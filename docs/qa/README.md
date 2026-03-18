@@ -252,6 +252,8 @@
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-18 | 5.22.0 | **Phase 3 总控 FR 文档治理与闭环**：跨文档修复 `security/authentication/03-mfa-security.md` 背景说明（Keycloak→Auth9 本地 MFA）及 Recovery Code 检查清单；修复 `security/authentication/04-password-security.md` 背景说明（Keycloak→Auth9 本地密码管理）；修复 `integration/20-local-credential-store.md` migration 文件数（3→4）和测试数（32→39）；修复 `auth/20-hosted-login-api.md` 场景 5 auth9_oidc 预期（501→200 正常响应）；总计 122 文档 573 场景 |
+| 2026-03-18 | 5.21.0 | **Phase 3 FR5 Token Issuance 与 FR4 MFA 本地化**：新增 `auth/24-mfa-totp-recovery.md`（5 场景）、`auth/25-auth9-oidc-local-token-issuance.md`（5 场景），覆盖 TOTP 注册/验证/重放防护、Recovery Code 生成/消费、MFA 登录挑战、授权码完整流程、Code Replay、PKCE 验证、Refresh 轮转、ID Token Claims；认证 22 文档 102 场景；总计 122 文档 573 场景 |
 | 2026-03-18 | 5.20.0 | **Phase 3 FR3 邮箱验证与 Required Actions 本地化**：新增 `auth/22-email-verification.md`（5 场景）、`auth/23-required-actions.md`（5 场景）、`integration/21-email-verification-required-actions.md`（5 场景）；跨文档更新 `auth/20-hosted-login-api.md` 端点列表；修复 Identity Token 白名单缺失 pending-actions/complete-action 端点 bug；修复 auth9-oidc 启动时自动建表（Dockerfile + db.rs）；认证 22 文档 102 场景、集成 20 文档 91 场景；总计 122 文档 573 场景 |
 | 2026-03-17 | 5.19.0 | **Keycloak Phase 1 FR3 Closure**：新增 `integration/19-phase1-identity-abstraction-closure.md`（4 场景），收束默认 `keycloak` backend、`auth9_oidc` stub、adapter contract 与中性字段主路径总验收；同步更新 `session/03-alerts.md`、`user/02-advanced.md`、`user/04-account-profile.md`、`identity-provider/02-toggle-validation.md` 的主断言字段说明；集成测试统计更新为 19 个文档 86 个场景；总计 118 个文档 553 个场景 |
 | 2026-03-17 | 5.18.0 | **Keycloak Phase 1 FR2**：新增 `integration/18-business-layer-keycloak-decoupling.md`（5 场景），覆盖业务层去 `KeycloakClient` 直接依赖、handler 中性 DTO、Password/WebAuthn/SCIM/SAML 抽象回归；集成测试统计更新为 18 个文档 82 个场景；总计 111 个文档 517 个场景 |
@@ -420,6 +422,8 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-18 | 5.22.0 | **Phase 3 总控 FR 文档治理与闭环**：跨文档修复安全文档背景说明、集成测试预期值、Hosted Login API 预期；共 122 文档 573 场景 |
+| 2026-03-18 | 5.21.0 | **Phase 3 FR5 Token Issuance 与 FR4 MFA**：新增 auth/24（MFA TOTP/Recovery）、auth/25（本地 OIDC Token 签发）共 10 场景；共 122 文档 573 场景 |
 | 2026-03-18 | 5.20.0 | **Phase 3 FR3 邮箱验证与 Required Actions**：新增 3 个文档（auth/22、auth/23、integration/21）共 15 场景；修复 Identity Token 白名单和 auth9-oidc 自动建表；共 122 文档 573 场景 |
 | 2026-03-16 | 5.11.0 | **SAML IdP 出站 Phase 3 测试文档**：新增 `saml-application/04-certificate-encryption.md`（5 场景），覆盖证书端点、加密校验、SLO POST Binding；跨文档更新 `01-crud.md`、`02-metadata-validation.md`、`03-portal-ui.md`；共 103 个文档 489 个场景 |
 | 2026-03-16 | 5.10.0 | **SAML IdP 出站 Phase 2 Portal UI 测试文档**：新增 `saml-application/03-portal-ui.md`（5 场景），覆盖 Portal 入口可见性、表单创建、列表、启停、删除；更新 `01-crud.md`、`uiux/21-tenant-detail-pages.md`；共 102 个文档 484 个场景 |

@@ -13,10 +13,20 @@
 
 ## 背景知识
 
-Auth9 通过 Keycloak 支持多种 MFA 方式：
-- **TOTP**: 基于时间的一次性密码 (Google Authenticator)
-- **WebAuthn/Passkeys**: 硬件安全密钥或平台认证
+Auth9 自行管理多种 MFA 方式（Phase 3 FR4 已从 Keycloak 接管）：
+- **TOTP**: 基于时间的一次性密码 (Google Authenticator) — Auth9 本地 enroll/verify/replay 防护
+- **WebAuthn/Passkeys**: 硬件安全密钥或平台认证 — Auth9 本地注册/认证
+- **Recovery Code**: 8 组 10 位一次性恢复码，SHA-256 哈希存储
 - **Email OTP**: 邮件验证码
+
+MFA 挑战端点（公开）：
+- `POST /api/v1/mfa/challenge/totp` — TOTP 验证（Redis 90s 重放防护）
+- `POST /api/v1/mfa/challenge/recovery-code` — Recovery Code 消费
+
+MFA 管理端点（需认证）：
+- `GET /api/v1/mfa/status` — 查询启用状态
+- `POST /api/v1/mfa/totp/enroll` / `POST /api/v1/mfa/totp/enroll/verify` — TOTP 注册
+- `POST /api/v1/mfa/recovery-codes/generate` / `GET /api/v1/mfa/recovery-codes/remaining` — Recovery Code 管理
 
 ---
 
@@ -284,7 +294,7 @@ curl -X DELETE http://localhost:8080/api/v1/users/{other_user_id}/mfa \
 | 2 | TOTP 时间窗口攻击 | ✅ PASS | 2026-02-25 | QA Test | otpPolicyLookAheadWindow=1, 系统拒绝时间偏移代码 |
 | 3 | MFA 绕过测试 | ✅ PASS | 2026-02-25 | QA Test | 登录时正确要求 MFA 验证 |
 | 4 | MFA 注册流程安全 | ✅ PASS | 2026-02-25 | QA Test | 启用MFA需要密码确认 |
-| 5 | MFA 恢复机制安全 | ⚠️ 部分验证 | 2026-02-25 | QA Test | 管理员启用MFA需要密码确认；系统无备份码功能 |
+| 5 | MFA 恢复机制安全 | ⚠️ 待重测 | 2026-02-25 | QA Test | Phase 3 FR4 已实现 Recovery Code（8 组/SHA-256 哈希/一次性消费），需重新执行验证 |
 
 ---
 
