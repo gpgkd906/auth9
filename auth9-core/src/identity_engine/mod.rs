@@ -6,7 +6,7 @@ pub mod adapters;
 mod types;
 
 pub use types::{
-    FederatedIdentityRepresentation, IdentityCredentialInput, IdentityCredentialRepresentation,
+    IdentityCredentialInput, IdentityCredentialRepresentation,
     IdentityProtocolMapperRepresentation, IdentityProviderRepresentation,
     IdentitySamlClientRepresentation, IdentityUserCreateInput, IdentityUserRepresentation,
     IdentityUserUpdateInput, PendingActionInfo, VerificationTokenInfo,
@@ -80,6 +80,9 @@ pub trait IdentityCredentialStore: Send + Sync {
 }
 
 /// Federation and broker management operations for an identity backend.
+///
+/// Note: User federated identity operations (get/remove) have been removed.
+/// Auth9 now owns `linked_identities` as primary data via the repository layer.
 #[async_trait]
 pub trait FederationBroker: Send + Sync {
     async fn list_identity_providers(&self) -> Result<Vec<IdentityProviderRepresentation>>;
@@ -94,15 +97,6 @@ pub trait FederationBroker: Send + Sync {
         provider: &IdentityProviderRepresentation,
     ) -> Result<()>;
     async fn delete_identity_provider(&self, alias: &str) -> Result<()>;
-    async fn get_user_federated_identities(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<FederatedIdentityRepresentation>>;
-    async fn remove_user_federated_identity(
-        &self,
-        user_id: &str,
-        provider_alias: &str,
-    ) -> Result<()>;
 }
 
 /// Pending action lifecycle operations for an identity backend.

@@ -1,8 +1,6 @@
 use crate::error::Result;
-use crate::identity_engine::{
-    FederatedIdentityRepresentation, FederationBroker, IdentityProviderRepresentation,
-};
-use crate::keycloak::{KeycloakClient, KeycloakFederatedIdentity, KeycloakIdentityProvider};
+use crate::identity_engine::{FederationBroker, IdentityProviderRepresentation};
+use crate::keycloak::{KeycloakClient, KeycloakIdentityProvider};
 use async_trait::async_trait;
 use std::sync::Arc;
 
@@ -26,6 +24,7 @@ impl From<KeycloakIdentityProvider> for IdentityProviderRepresentation {
             trust_email: value.trust_email,
             store_token: value.store_token,
             link_only: value.link_only,
+            first_login_policy: "auto_merge".to_string(),
             first_broker_login_flow_alias: value.first_broker_login_flow_alias,
             config: value.config,
             extra: value.extra,
@@ -46,16 +45,6 @@ impl From<IdentityProviderRepresentation> for KeycloakIdentityProvider {
             first_broker_login_flow_alias: value.first_broker_login_flow_alias,
             config: value.config,
             extra: value.extra,
-        }
-    }
-}
-
-impl From<KeycloakFederatedIdentity> for FederatedIdentityRepresentation {
-    fn from(value: KeycloakFederatedIdentity) -> Self {
-        Self {
-            identity_provider: value.identity_provider,
-            user_id: value.user_id,
-            user_name: value.user_name,
         }
     }
 }
@@ -97,28 +86,5 @@ impl FederationBroker for KeycloakFederationBrokerAdapter {
 
     async fn delete_identity_provider(&self, alias: &str) -> Result<()> {
         self.client.delete_identity_provider(alias).await
-    }
-
-    async fn get_user_federated_identities(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<FederatedIdentityRepresentation>> {
-        Ok(self
-            .client
-            .get_user_federated_identities(user_id)
-            .await?
-            .into_iter()
-            .map(Into::into)
-            .collect())
-    }
-
-    async fn remove_user_federated_identity(
-        &self,
-        user_id: &str,
-        provider_alias: &str,
-    ) -> Result<()> {
-        self.client
-            .remove_user_federated_identity(user_id, provider_alias)
-            .await
     }
 }

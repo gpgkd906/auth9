@@ -6,7 +6,7 @@
 use crate::cache::CacheOperations;
 use crate::domains::identity::api::enterprise_common::{
     self, ConnectorRecord, EnterpriseProfile, EnterpriseSsoLoginState,
-    ENTERPRISE_SSO_STATE_TTL_SECS,
+    UserResolution, ENTERPRISE_SSO_STATE_TTL_SECS,
 };
 use crate::error::{AppError, Result};
 use crate::state::{HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
@@ -599,6 +599,7 @@ pub async fn saml_authorize_redirect<S: HasServices + HasCache + HasDbPool>(
         connector_alias: connector.alias.clone(),
         tenant_id: connector.tenant_id.clone(),
         authn_request_id: Some(request_id.clone()),
+        link_user_id: None,
     };
     let sso_state_id = uuid::Uuid::new_v4().to_string();
     let sso_state_json =
@@ -690,15 +691,49 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
     // 6. Map profile
     let profile = map_saml_profile(&connector.config, &response_data);
 
-    // 7. Find or create user
-    let user = enterprise_common::find_or_create_enterprise_user(
+    // 7a. If this is a link flow (link_user_id present), create linked identity and redirect
+    if let Some(ref link_uid) = sso_state.link_user_id {
+        let user_id = crate::models::common::StringUuid::parse_str(link_uid)
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid link_user_id")))?;
+        let input = crate::models::linked_identity::CreateLinkedIdentityInput {
+            user_id,
+            provider_type: "saml".to_string(),
+            provider_alias: connector.alias.clone(),
+            external_user_id: profile.external_user_id.clone(),
+            external_email: profile.email.clone(),
+        };
+        let _ = state
+            .identity_provider_service()
+            .create_linked_identity(&input)
+            .await;
+        let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
+        let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
+        return Ok(Redirect::temporary(&identities_url).into_response());
+    }
+
+    // 7b. Find or create user
+    let resolution = enterprise_common::find_or_create_enterprise_user(
         &state,
-        &connector.alias,
+        &connector,
         &sso_state.tenant_id,
         &profile,
         "saml",
+        &sso_state.login_challenge_id,
     )
     .await?;
+
+    // Handle pending merge: redirect to portal confirm-link page
+    let user = match resolution {
+        UserResolution::Found(user) => user,
+        UserResolution::PendingMerge(pending) => {
+            let token = uuid::Uuid::new_v4().to_string();
+            let pending_json = serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
+            state.cache().store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS).await?;
+            let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
+            let redirect_url = format!("{}/login/confirm-link?token={}", portal_base.trim_end_matches('/'), token);
+            return Ok(Redirect::temporary(&redirect_url).into_response());
+        }
+    };
 
     // 8. Create session
     let session = state

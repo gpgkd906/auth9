@@ -391,6 +391,29 @@ impl NoOpCacheManager {
             .remove(&format!("enterprise_sso_state:{}", id)))
     }
 
+    // ==================== Pending Merge ====================
+
+    pub async fn store_pending_merge(
+        &self,
+        token: &str,
+        data: &str,
+        _ttl_secs: u64,
+    ) -> Result<()> {
+        self.oidc_states
+            .write()
+            .await
+            .insert(format!("pending_merge:{}", token), data.to_string());
+        Ok(())
+    }
+
+    pub async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>> {
+        Ok(self
+            .oidc_states
+            .write()
+            .await
+            .remove(&format!("pending_merge:{}", token)))
+    }
+
     // ==================== Audience Validation ====================
 
     pub async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {

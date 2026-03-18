@@ -6,7 +6,7 @@
 
 use crate::cache::CacheOperations;
 use crate::domains::identity::api::enterprise_common::{
-    self, ConnectorRecord, EnterpriseSsoLoginState, ENTERPRISE_SSO_STATE_TTL_SECS,
+    self, ConnectorRecord, EnterpriseSsoLoginState, UserResolution, ENTERPRISE_SSO_STATE_TTL_SECS,
 };
 use crate::error::{AppError, Result};
 use crate::state::{HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
@@ -276,6 +276,7 @@ async fn oidc_authorize<S: HasServices + HasCache + HasDbPool>(
         connector_alias: connector.alias.clone(),
         tenant_id: connector.tenant_id.clone(),
         authn_request_id: None,
+        link_user_id: None,
     };
     let sso_state_json =
         serde_json::to_string(&sso_state).map_err(|e| AppError::Internal(e.into()))?;
@@ -374,15 +375,49 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
     // 6. Map profile
     let profile = map_profile(&connector.config, &userinfo_json)?;
 
-    // 7. Find or create user (enterprise SSO is tenant-scoped)
-    let user = enterprise_common::find_or_create_enterprise_user(
+    // 7a. If this is a link flow (link_user_id present), create linked identity and redirect
+    if let Some(ref link_uid) = sso_state.link_user_id {
+        let user_id = crate::models::common::StringUuid::parse_str(link_uid)
+            .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid link_user_id")))?;
+        let input = crate::models::linked_identity::CreateLinkedIdentityInput {
+            user_id,
+            provider_type: "oidc".to_string(),
+            provider_alias: connector.alias.clone(),
+            external_user_id: profile.external_user_id.clone(),
+            external_email: profile.email.clone(),
+        };
+        let _ = state
+            .identity_provider_service()
+            .create_linked_identity(&input)
+            .await;
+        let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
+        let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
+        return Ok(Redirect::temporary(&identities_url).into_response());
+    }
+
+    // 7b. Find or create user (enterprise SSO is tenant-scoped)
+    let resolution = enterprise_common::find_or_create_enterprise_user(
         &state,
-        &connector.alias,
+        &connector,
         &sso_state.tenant_id,
         &profile,
         "oidc",
+        &sso_state.login_challenge_id,
     )
     .await?;
+
+    // Handle pending merge: redirect to portal confirm-link page
+    let user = match resolution {
+        UserResolution::Found(user) => user,
+        UserResolution::PendingMerge(pending) => {
+            let token = uuid::Uuid::new_v4().to_string();
+            let pending_json = serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
+            state.cache().store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS).await?;
+            let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
+            let redirect_url = format!("{}/login/confirm-link?token={}", portal_base.trim_end_matches('/'), token);
+            return Ok(Redirect::temporary(&redirect_url).into_response());
+        }
+    };
 
     // 8. Create session
     let session = state
@@ -573,4 +608,77 @@ mod tests {
         .unwrap();
         assert!(url.contains("login_hint=user%40corp.example.com"));
     }
+}
+
+// ── Enterprise SSO Account Linking ──
+
+use crate::domains::identity::api::identity_provider::extract_user_id;
+use axum::http::HeaderMap;
+
+/// Initiate enterprise SSO account linking (protected, requires JWT).
+///
+/// GET /api/v1/enterprise-sso/link/{alias}
+#[utoipa::path(
+    get,
+    path = "/api/v1/enterprise-sso/link/{alias}",
+    tag = "Identity",
+    responses((status = 302, description = "Redirect to enterprise IdP for linking"))
+)]
+pub async fn link_authorize<
+    S: HasServices + HasIdentityProviders + HasCache + HasDbPool,
+>(
+    State(state): State<S>,
+    Path(alias): Path<String>,
+    headers: HeaderMap,
+) -> Result<Response> {
+    let user_id = extract_user_id(&state, &headers)?;
+
+    let pool = state.db_pool();
+    let connector = enterprise_common::load_connector(pool, &alias).await?;
+
+    // Build enterprise SSO state with link_user_id
+    let sso_state_id = uuid::Uuid::new_v4().to_string();
+    let sso_state = EnterpriseSsoLoginState {
+        // Use a dummy login_challenge_id — the link flow doesn't use the OIDC authorize flow
+        login_challenge_id: String::new(),
+        connector_alias: connector.alias.clone(),
+        tenant_id: connector.tenant_id.clone(),
+        authn_request_id: None,
+        link_user_id: Some(user_id.to_string()),
+    };
+    let sso_state_json =
+        serde_json::to_string(&sso_state).map_err(|e| AppError::Internal(e.into()))?;
+    state
+        .cache()
+        .store_enterprise_sso_state(&sso_state_id, &sso_state_json, ENTERPRISE_SSO_STATE_TTL_SECS)
+        .await?;
+
+    if connector.provider_type == "saml" {
+        // SAML link flow — redirect to SAML authorize
+        return crate::domains::identity::api::enterprise_saml_broker::saml_authorize_redirect(
+            &state,
+            connector,
+            String::new(), // no login_challenge for link flow
+            None,
+        )
+        .await;
+    }
+
+    // OIDC link flow
+    let endpoints = resolve_endpoints(&connector.config)?;
+    let callback_url = enterprise_common::enterprise_callback_url(state.config());
+    let client_id = connector
+        .config
+        .get("clientId")
+        .ok_or_else(|| AppError::BadRequest("Missing clientId in connector config".to_string()))?;
+
+    let authorize_url = build_enterprise_authorize_url(
+        &endpoints,
+        client_id,
+        &callback_url,
+        &sso_state_id,
+        None,
+    )?;
+
+    Ok(Redirect::temporary(&authorize_url).into_response())
 }

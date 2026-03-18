@@ -679,6 +679,30 @@ impl CacheManager {
             .map_err(AppError::from)
     }
 
+    // ==================== Pending Merge ====================
+
+    pub async fn store_pending_merge(
+        &self,
+        token: &str,
+        data: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}", keys::PENDING_MERGE, token);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::PENDING_MERGE, token);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
     // ==================== Audience Validation ====================
 
     pub async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {

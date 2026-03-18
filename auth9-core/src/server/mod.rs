@@ -98,18 +98,14 @@ pub fn select_identity_backend(
                 Arc::new(crate::repository::social_provider::SocialProviderRepositoryImpl::new(
                     db_pool.clone(),
                 ));
-            let linked_identity_repo: Arc<dyn crate::repository::LinkedIdentityRepository> =
-                Arc::new(LinkedIdentityRepositoryImpl::new(db_pool.clone()));
             (
                 Arc::new(Auth9OidcSessionStoreAdapter::new()),
                 Arc::new(Auth9OidcFederationBrokerAdapter::new(
                     social_provider_repo.clone(),
-                    linked_identity_repo.clone(),
                 )),
                 Arc::new(Auth9OidcIdentityEngineAdapter::new(
                     db_pool,
                     social_provider_repo,
-                    linked_identity_repo,
                 )),
             )
         }
@@ -183,7 +179,7 @@ pub struct AppState {
     pub session_service: Arc<SessionService<SessionRepositoryImpl, UserRepositoryImpl>>,
     pub webauthn_service: Arc<WebAuthnService>,
     pub identity_provider_service:
-        Arc<IdentityProviderService<LinkedIdentityRepositoryImpl, UserRepositoryImpl>>,
+        Arc<IdentityProviderService<LinkedIdentityRepositoryImpl>>,
     pub analytics_service: Arc<AnalyticsService<LoginEventRepositoryImpl>>,
     pub webhook_service: Arc<WebhookService<WebhookRepositoryImpl>>,
     pub security_detection_service: Arc<
@@ -396,11 +392,10 @@ impl HasWebAuthn for AppState {
 /// Implement HasIdentityProviders trait for production AppState
 impl HasIdentityProviders for AppState {
     type LinkedIdentityRepo = LinkedIdentityRepositoryImpl;
-    type IdpUserRepo = UserRepositoryImpl;
 
     fn identity_provider_service(
         &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo> {
+    ) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
         &self.identity_provider_service
     }
 
@@ -766,7 +761,6 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 
     let identity_provider_service = Arc::new(IdentityProviderService::new(
         linked_identity_repo.clone(),
-        user_repo.clone(),
         federation_broker,
     ));
 

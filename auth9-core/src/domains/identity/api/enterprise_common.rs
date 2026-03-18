@@ -5,7 +5,7 @@ use crate::domains::identity::api::auth::helpers::{
     AuthorizationCodeData, LoginChallengeData, AUTH_CODE_TTL_SECS,
 };
 use crate::error::{AppError, Result};
-use crate::models::linked_identity::CreateLinkedIdentityInput;
+use crate::models::linked_identity::{CreateLinkedIdentityInput, FirstLoginPolicy, PendingMergeData};
 use crate::models::user::AddUserToTenantInput;
 use crate::state::{HasCache, HasIdentityProviders, HasServices};
 use serde::{Deserialize, Serialize};
@@ -25,6 +25,9 @@ pub struct EnterpriseSsoLoginState {
     /// SAML AuthnRequest ID for InResponseTo validation (None for OIDC)
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub authn_request_id: Option<String>,
+    /// When set, this is a link flow (not login): link the external identity to this user
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub link_user_id: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -33,6 +36,7 @@ pub struct ConnectorRecord {
     pub tenant_id: String,
     pub provider_type: String,
     pub config: std::collections::HashMap<String, String>,
+    pub first_login_policy: String,
 }
 
 #[derive(Debug, Clone)]
@@ -94,7 +98,7 @@ pub async fn load_connector(
 ) -> Result<ConnectorRecord> {
     let row = sqlx::query(
         r#"
-        SELECT alias, tenant_id, provider_type, config
+        SELECT alias, tenant_id, provider_type, config, first_login_policy
         FROM enterprise_sso_connectors
         WHERE alias = ? AND enabled = TRUE
         LIMIT 1
@@ -115,53 +119,94 @@ pub async fn load_connector(
     let config: std::collections::HashMap<String, String> =
         serde_json::from_value(config_value).unwrap_or_default();
 
+    let first_login_policy: String = row
+        .try_get("first_login_policy")
+        .unwrap_or_else(|_| "auto_merge".to_string());
+
     Ok(ConnectorRecord {
         alias: row.try_get("alias")?,
         tenant_id: row.try_get("tenant_id")?,
         provider_type: row.try_get("provider_type")?,
         config,
+        first_login_policy,
     })
 }
 
 // ── User Resolution (tenant-scoped) ──
 
+/// Result of user resolution: either a user or a pending merge that needs confirmation
+pub enum UserResolution {
+    Found(crate::models::user::User),
+    PendingMerge(PendingMergeData),
+}
+
 pub async fn find_or_create_enterprise_user<S: HasServices + HasIdentityProviders>(
     state: &S,
-    connector_alias: &str,
+    connector: &ConnectorRecord,
     tenant_id: &str,
     profile: &EnterpriseProfile,
     provider_type: &str,
-) -> Result<crate::models::user::User> {
+    login_challenge_id: &str,
+) -> Result<UserResolution> {
     let tenant_uuid = uuid::Uuid::parse_str(tenant_id)
         .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid tenant_id in SSO state")))?;
 
     // Try to find existing linked identity
     let existing_link = state
         .identity_provider_service()
-        .find_linked_identity(connector_alias, &profile.external_user_id)
+        .find_linked_identity(&connector.alias, &profile.external_user_id)
         .await?;
 
     if let Some(linked) = existing_link {
-        return state.user_service().get(linked.user_id).await;
+        let user = state.user_service().get(linked.user_id).await?;
+        return Ok(UserResolution::Found(user));
     }
 
-    // If email exists, try to find existing user by email and auto-link
-    if let Some(ref email) = profile.email {
-        if let Ok(existing_user) = state.user_service().get_by_email(email).await {
-            let input = CreateLinkedIdentityInput {
-                user_id: existing_user.id,
-                provider_type: provider_type.to_string(),
-                provider_alias: connector_alias.to_string(),
-                external_user_id: profile.external_user_id.clone(),
-                external_email: profile.email.clone(),
-            };
-            let _ = state
-                .identity_provider_service()
-                .create_linked_identity(&input)
-                .await;
+    // Determine first login policy
+    let policy = connector
+        .first_login_policy
+        .parse::<FirstLoginPolicy>()
+        .unwrap_or(FirstLoginPolicy::AutoMerge);
 
-            ensure_tenant_membership(state, existing_user.id, tenant_uuid).await;
-            return Ok(existing_user);
+    // If email exists, try to find existing user by email
+    if policy != FirstLoginPolicy::CreateNew {
+        if let Some(ref email) = profile.email {
+            if let Ok(existing_user) = state.user_service().get_by_email(email).await {
+                match policy {
+                    FirstLoginPolicy::AutoMerge => {
+                        let input = CreateLinkedIdentityInput {
+                            user_id: existing_user.id,
+                            provider_type: provider_type.to_string(),
+                            provider_alias: connector.alias.to_string(),
+                            external_user_id: profile.external_user_id.clone(),
+                            external_email: profile.email.clone(),
+                        };
+                        let _ = state
+                            .identity_provider_service()
+                            .create_linked_identity(&input)
+                            .await;
+
+                        ensure_tenant_membership(state, existing_user.id, tenant_uuid).await;
+                        return Ok(UserResolution::Found(existing_user));
+                    }
+                    FirstLoginPolicy::PromptConfirm => {
+                        return Ok(UserResolution::PendingMerge(PendingMergeData {
+                            existing_user_id: existing_user.id.to_string(),
+                            existing_email: existing_user.email.clone(),
+                            external_user_id: profile.external_user_id.clone(),
+                            provider_alias: connector.alias.clone(),
+                            provider_type: provider_type.to_string(),
+                            external_email: profile.email.clone(),
+                            display_name: profile.name.clone(),
+                            login_challenge_id: login_challenge_id.to_string(),
+                            tenant_id: Some(tenant_id.to_string()),
+                            ip_address: None,
+                            user_agent: None,
+                        }));
+                    }
+                    FirstLoginPolicy::CreateNew => unreachable!(),
+                }
+            }
         }
     }
 
@@ -186,7 +231,7 @@ pub async fn find_or_create_enterprise_user<S: HasServices + HasIdentityProvider
     let input = CreateLinkedIdentityInput {
         user_id: new_user.id,
         provider_type: provider_type.to_string(),
-        provider_alias: connector_alias.to_string(),
+        provider_alias: connector.alias.to_string(),
         external_user_id: profile.external_user_id.clone(),
         external_email: profile.email.clone(),
     };
@@ -196,7 +241,7 @@ pub async fn find_or_create_enterprise_user<S: HasServices + HasIdentityProvider
         .await;
 
     ensure_tenant_membership(state, new_user.id, tenant_uuid).await;
-    Ok(new_user)
+    Ok(UserResolution::Found(new_user))
 }
 
 pub async fn ensure_tenant_membership<S: HasServices>(
@@ -280,6 +325,7 @@ mod tests {
             connector_alias: "okta-saml".to_string(),
             tenant_id: "tenant-456".to_string(),
             authn_request_id: Some("_req-789".to_string()),
+            link_user_id: None,
         };
         let json = serde_json::to_string(&state).unwrap();
         let decoded: EnterpriseSsoLoginState = serde_json::from_str(&json).unwrap();
@@ -296,6 +342,7 @@ mod tests {
             connector_alias: "a".to_string(),
             tenant_id: "t".to_string(),
             authn_request_id: None,
+            link_user_id: None,
         };
         let json = serde_json::to_string(&state).unwrap();
         assert!(!json.contains("authn_request_id"));
@@ -310,6 +357,7 @@ mod tests {
             tenant_id: "tid".to_string(),
             provider_type: "saml".to_string(),
             config: HashMap::new(),
+            first_login_policy: "auto_merge".to_string(),
         };
         assert!(format!("{:?}", record).contains("saml"));
     }

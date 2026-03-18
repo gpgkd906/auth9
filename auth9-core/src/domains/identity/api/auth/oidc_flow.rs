@@ -664,11 +664,6 @@ pub async fn token<
                 Err(e) => return Err(e),
             };
 
-            state
-                .identity_provider_service()
-                .sync_user_identities(user.id, &userinfo.sub)
-                .await?;
-
             // Create session record for authorization_code flow
             let session = state
                 .session_service()
@@ -956,11 +951,6 @@ pub async fn token<
                 }
                 Err(e) => return Err(e),
             };
-
-            state
-                .identity_provider_service()
-                .sync_user_identities(user.id, &userinfo.sub)
-                .await?;
 
             let session_id = state
                 .cache()

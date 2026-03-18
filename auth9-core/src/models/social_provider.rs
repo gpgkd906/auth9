@@ -19,6 +19,7 @@ pub struct SocialProvider {
     pub trust_email: bool,
     pub store_token: bool,
     pub link_only: bool,
+    pub first_login_policy: String,
     #[sqlx(json)]
     pub config: HashMap<String, String>,
     pub created_at: DateTime<Utc>,
@@ -36,6 +37,7 @@ impl Default for SocialProvider {
             trust_email: false,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             config: HashMap::new(),
             created_at: Utc::now(),
             updated_at: Utc::now(),
@@ -53,6 +55,7 @@ pub struct CreateSocialProviderInput {
     pub trust_email: bool,
     pub store_token: bool,
     pub link_only: bool,
+    pub first_login_policy: String,
     pub config: HashMap<String, String>,
 }
 
@@ -64,6 +67,7 @@ pub struct UpdateSocialProviderInput {
     pub trust_email: Option<bool>,
     pub store_token: Option<bool>,
     pub link_only: Option<bool>,
+    pub first_login_policy: Option<String>,
     pub config: Option<HashMap<String, String>>,
 }
 
@@ -79,6 +83,7 @@ impl From<SocialProvider> for IdentityProviderRepresentation {
             trust_email: sp.trust_email,
             store_token: sp.store_token,
             link_only: sp.link_only,
+            first_login_policy: sp.first_login_policy,
             first_broker_login_flow_alias: None,
             config: sp.config,
             extra: HashMap::new(),
@@ -96,6 +101,7 @@ impl From<&IdentityProviderRepresentation> for CreateSocialProviderInput {
             trust_email: repr.trust_email,
             store_token: repr.store_token,
             link_only: repr.link_only,
+            first_login_policy: repr.first_login_policy.clone(),
             config: repr.config.clone(),
         }
     }
@@ -147,6 +153,7 @@ mod tests {
             trust_email: false,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             first_broker_login_flow_alias: None,
             config: HashMap::new(),
             extra: HashMap::new(),

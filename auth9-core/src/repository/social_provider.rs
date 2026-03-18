@@ -43,8 +43,9 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         sqlx::query(
             r#"
             INSERT INTO social_providers (id, alias, display_name, provider_type,
-                                          enabled, trust_email, store_token, link_only, config)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                                          enabled, trust_email, store_token, link_only,
+                                          first_login_policy, config)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             "#,
         )
         .bind(id)
@@ -55,6 +56,7 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         .bind(input.trust_email)
         .bind(input.store_token)
         .bind(input.link_only)
+        .bind(&input.first_login_policy)
         .bind(&config_json)
         .execute(&self.pool)
         .await?;
@@ -68,8 +70,8 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         let provider = sqlx::query_as::<_, SocialProvider>(
             r#"
             SELECT id, alias, display_name, provider_type, enabled,
-                   trust_email, store_token, link_only, config,
-                   created_at, updated_at
+                   trust_email, store_token, link_only, first_login_policy,
+                   config, created_at, updated_at
             FROM social_providers
             WHERE alias = ?
             "#,
@@ -85,8 +87,8 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         let providers = sqlx::query_as::<_, SocialProvider>(
             r#"
             SELECT id, alias, display_name, provider_type, enabled,
-                   trust_email, store_token, link_only, config,
-                   created_at, updated_at
+                   trust_email, store_token, link_only, first_login_policy,
+                   config, created_at, updated_at
             FROM social_providers
             ORDER BY alias
             "#,
@@ -101,8 +103,8 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         let providers = sqlx::query_as::<_, SocialProvider>(
             r#"
             SELECT id, alias, display_name, provider_type, enabled,
-                   trust_email, store_token, link_only, config,
-                   created_at, updated_at
+                   trust_email, store_token, link_only, first_login_policy,
+                   config, created_at, updated_at
             FROM social_providers
             WHERE enabled = TRUE
             ORDER BY alias
@@ -129,6 +131,10 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         let trust_email = input.trust_email.unwrap_or(existing.trust_email);
         let store_token = input.store_token.unwrap_or(existing.store_token);
         let link_only = input.link_only.unwrap_or(existing.link_only);
+        let first_login_policy = input
+            .first_login_policy
+            .as_ref()
+            .unwrap_or(&existing.first_login_policy);
         let config = input.config.as_ref().unwrap_or(&existing.config);
         let config_json = serde_json::to_value(config)
             .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize config: {}", e)))?;
@@ -137,7 +143,8 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
             r#"
             UPDATE social_providers
             SET display_name = ?, enabled = ?, trust_email = ?,
-                store_token = ?, link_only = ?, config = ?
+                store_token = ?, link_only = ?, first_login_policy = ?,
+                config = ?
             WHERE alias = ?
             "#,
         )
@@ -146,6 +153,7 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
         .bind(trust_email)
         .bind(store_token)
         .bind(link_only)
+        .bind(first_login_policy)
         .bind(&config_json)
         .bind(alias)
         .execute(&self.pool)
@@ -259,6 +267,7 @@ mod tests {
             trust_email: true,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             config,
         };
 

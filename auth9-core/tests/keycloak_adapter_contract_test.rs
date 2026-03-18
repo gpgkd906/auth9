@@ -167,6 +167,7 @@ async fn keycloak_federation_broker_adapter_supports_identity_provider_crud() {
         trust_email: true,
         store_token: false,
         link_only: false,
+        first_login_policy: "auto_merge".to_string(),
         first_broker_login_flow_alias: None,
         config: HashMap::from([("clientId".to_string(), "corp-client".to_string())]),
         extra: HashMap::new(),
@@ -184,49 +185,6 @@ async fn keycloak_federation_broker_adapter_supports_identity_provider_crud() {
         .unwrap();
 
     adapter.delete_identity_provider("corp-oidc").await.unwrap();
-}
-
-#[tokio::test]
-async fn keycloak_federation_broker_adapter_reads_and_removes_federated_identities() {
-    let server = MockServer::start().await;
-    mock_admin_token(&server, 1).await;
-
-    Mock::given(method("GET"))
-        .and(path("/admin/realms/test/users/user-123/federated-identity"))
-        .respond_with(ResponseTemplate::new(200).set_body_json(json!([
-            {
-                "identityProvider": "google",
-                "userId": "google-123",
-                "userName": "user@gmail.com"
-            }
-        ])))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    Mock::given(method("DELETE"))
-        .and(path(
-            "/admin/realms/test/users/user-123/federated-identity/google",
-        ))
-        .respond_with(ResponseTemplate::new(204))
-        .expect(1)
-        .mount(&server)
-        .await;
-
-    let adapter = KeycloakFederationBrokerAdapter::new(create_test_client(&server.uri()));
-
-    let identities = adapter
-        .get_user_federated_identities("user-123")
-        .await
-        .unwrap();
-    assert_eq!(identities.len(), 1);
-    assert_eq!(identities[0].identity_provider, "google");
-    assert_eq!(identities[0].user_id, "google-123");
-
-    adapter
-        .remove_user_federated_identity("user-123", "google")
-        .await
-        .unwrap();
 }
 
 #[tokio::test]

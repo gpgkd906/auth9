@@ -1387,7 +1387,6 @@ async fn test_token_authorization_code_success_existing_user() {
     mock_kc
         .mock_get_client_uuid_by_client_id("token-auth-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
@@ -1448,7 +1447,6 @@ async fn test_token_authorization_code_new_user() {
     mock_kc
         .mock_get_client_uuid_by_client_id("token-new-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     // Don't pre-create user
@@ -1492,7 +1490,6 @@ async fn test_token_refresh_success() {
     mock_kc
         .mock_get_client_uuid_by_client_id("refresh-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     state
@@ -1559,7 +1556,6 @@ async fn test_token_refresh_new_user() {
     mock_kc
         .mock_get_client_uuid_by_client_id("refresh-new-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     state
@@ -2005,7 +2001,6 @@ async fn test_token_authorization_code_new_user_with_demo_tenant_auto_assign() {
     mock_kc
         .mock_get_client_uuid_by_client_id("demo-tenant-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
@@ -2063,7 +2058,6 @@ async fn test_token_refresh_no_bound_session() {
     mock_kc
         .mock_get_client_uuid_by_client_id("refresh-nosession-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
     // Don't bind refresh token to any session - this triggers the error path
@@ -2233,7 +2227,6 @@ async fn test_token_auth_code_with_tenant_triggers_post_login_actions() {
     mock_kc
         .mock_get_client_uuid_by_client_id("action-client", &client_uuid)
         .await;
-    mock_kc.mock_get_user_federated_identities_empty().await;
 
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 

@@ -66,18 +66,17 @@ pub struct IdentityProviderRepresentation {
     pub trust_email: bool,
     pub store_token: bool,
     pub link_only: bool,
+    /// First login merge policy: auto_merge, prompt_confirm, create_new
+    #[serde(default = "default_first_login_policy")]
+    pub first_login_policy: String,
     pub first_broker_login_flow_alias: Option<String>,
     pub config: HashMap<String, String>,
     /// Preserve backend-specific passthrough fields so adapter round-trips do not lose state.
     pub extra: HashMap<String, serde_json::Value>,
 }
 
-/// Neutral federated identity representation exposed to business services.
-#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct FederatedIdentityRepresentation {
-    pub identity_provider: String,
-    pub user_id: String,
-    pub user_name: Option<String>,
+fn default_first_login_policy() -> String {
+    "auto_merge".to_string()
 }
 
 /// Neutral SAML protocol mapper representation exposed to business services.

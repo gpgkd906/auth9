@@ -48,6 +48,7 @@ pub struct IdentityProvider {
     pub trust_email: bool,
     pub store_token: bool,
     pub link_only: bool,
+    pub first_login_policy: String,
     pub first_broker_login_flow_alias: Option<String>,
     pub config: HashMap<String, String>,
 }
@@ -81,6 +82,7 @@ impl From<KeycloakIdentityProvider> for IdentityProvider {
             trust_email: kc.trust_email,
             store_token: kc.store_token,
             link_only: kc.link_only,
+            first_login_policy: "auto_merge".to_string(),
             first_broker_login_flow_alias: kc.first_broker_login_flow_alias,
             config: kc.config,
         }
@@ -114,6 +116,7 @@ impl From<crate::keycloak::KeycloakIdentityProvider> for IdentityProvider {
             trust_email: kc.trust_email,
             store_token: kc.store_token,
             link_only: kc.link_only,
+            first_login_policy: "auto_merge".to_string(),
             first_broker_login_flow_alias: kc.first_broker_login_flow_alias,
             config: kc.config,
         }
@@ -130,6 +133,7 @@ impl From<IdentityProviderRepresentation> for IdentityProvider {
             trust_email: value.trust_email,
             store_token: value.store_token,
             link_only: value.link_only,
+            first_login_policy: value.first_login_policy,
             first_broker_login_flow_alias: value.first_broker_login_flow_alias,
             config: value.config,
         }
@@ -152,8 +156,14 @@ pub struct CreateIdentityProviderInput {
     pub store_token: bool,
     #[serde(default)]
     pub link_only: bool,
+    #[serde(default = "default_first_login_policy")]
+    pub first_login_policy: String,
     #[serde(default)]
     pub config: HashMap<String, String>,
+}
+
+fn default_first_login_policy() -> String {
+    "auto_merge".to_string()
 }
 
 fn default_true() -> bool {
@@ -168,6 +178,7 @@ pub struct UpdateIdentityProviderInput {
     pub trust_email: Option<bool>,
     pub store_token: Option<bool>,
     pub link_only: Option<bool>,
+    pub first_login_policy: Option<String>,
     pub config: Option<HashMap<String, String>>,
 }
 
@@ -329,6 +340,7 @@ mod tests {
             trust_email: true,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             config: HashMap::new(),
         };
         assert!(input.validate().is_ok());
@@ -344,6 +356,7 @@ mod tests {
             trust_email: false,
             store_token: false,
             link_only: false,
+            first_login_policy: "auto_merge".to_string(),
             config: HashMap::new(),
         };
         assert!(input.validate().is_err());

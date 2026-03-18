@@ -245,6 +245,21 @@ impl CacheOperations for CacheManager {
         CacheManager::consume_enterprise_sso_state(self, id).await
     }
 
+    // ==================== Pending Merge ====================
+
+    async fn store_pending_merge(
+        &self,
+        token: &str,
+        data: &str,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        CacheManager::store_pending_merge(self, token, data, ttl_secs).await
+    }
+
+    async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>> {
+        CacheManager::consume_pending_merge(self, token).await
+    }
+
     // ==================== Audience Validation ====================
 
     async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {

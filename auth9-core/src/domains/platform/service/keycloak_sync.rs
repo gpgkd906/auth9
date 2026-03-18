@@ -153,11 +153,10 @@ mod tests {
     use super::*;
     use crate::error::AppError;
     use crate::identity_engine::{
-        FederatedIdentityRepresentation, FederationBroker, IdentityClientStore,
-        IdentityCredentialRepresentation, IdentityCredentialStore, IdentityEventSource,
-        IdentityProviderRepresentation, IdentitySamlClientRepresentation, IdentitySessionStore,
-        IdentityUserCreateInput, IdentityUserRepresentation, IdentityUserStore,
-        IdentityUserUpdateInput,
+        FederationBroker, IdentityClientStore, IdentityCredentialRepresentation,
+        IdentityCredentialStore, IdentityEventSource, IdentityProviderRepresentation,
+        IdentitySamlClientRepresentation, IdentitySessionStore, IdentityUserCreateInput,
+        IdentityUserRepresentation, IdentityUserStore, IdentityUserUpdateInput,
     };
     use crate::keycloak::KeycloakOidcClient;
     use async_trait::async_trait;
@@ -387,21 +386,6 @@ mod tests {
         }
 
         async fn delete_identity_provider(&self, _alias: &str) -> Result<()> {
-            Ok(())
-        }
-
-        async fn get_user_federated_identities(
-            &self,
-            _user_id: &str,
-        ) -> Result<Vec<FederatedIdentityRepresentation>> {
-            Ok(Vec::new())
-        }
-
-        async fn remove_user_federated_identity(
-            &self,
-            _user_id: &str,
-            _provider_alias: &str,
-        ) -> Result<()> {
             Ok(())
         }
     }

@@ -183,7 +183,7 @@ pub struct TestAppState {
     >,
     pub session_service: Arc<SessionService<TestSessionRepository, TestUserRepository>>,
     pub identity_provider_service:
-        Arc<IdentityProviderService<TestLinkedIdentityRepository, TestUserRepository>>,
+        Arc<IdentityProviderService<TestLinkedIdentityRepository>>,
     pub webauthn_service: Arc<WebAuthnService>,
     pub webhook_service: Arc<WebhookService<TestWebhookRepository>>,
     pub invitation_service: Arc<
@@ -344,7 +344,6 @@ impl TestAppState {
         ));
         let identity_provider_service = Arc::new(IdentityProviderService::new(
             linked_identity_repo.clone(),
-            user_repo.clone(),
             federation_broker,
         ));
         let webauthn_service = {
@@ -647,11 +646,10 @@ impl HasSessionManagement for TestAppState {
 /// Implement HasIdentityProviders trait for TestAppState
 impl HasIdentityProviders for TestAppState {
     type LinkedIdentityRepo = TestLinkedIdentityRepository;
-    type IdpUserRepo = TestUserRepository;
 
     fn identity_provider_service(
         &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo> {
+    ) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
         &self.identity_provider_service
     }
 

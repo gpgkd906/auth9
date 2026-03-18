@@ -230,13 +230,11 @@ pub trait HasWebAuthn: Clone + Send + Sync + 'static {
 pub trait HasIdentityProviders: Clone + Send + Sync + 'static {
     /// The linked identity repository type
     type LinkedIdentityRepo: LinkedIdentityRepository;
-    /// The user repository type
-    type IdpUserRepo: UserRepository;
 
     /// Get the identity provider service
     fn identity_provider_service(
         &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo, Self::IdpUserRepo>;
+    ) -> &IdentityProviderService<Self::LinkedIdentityRepo>;
 
     /// Get the JWT manager for token verification
     fn jwt_manager(&self) -> &JwtManager;

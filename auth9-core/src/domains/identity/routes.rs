@@ -129,6 +129,11 @@ where
             "/api/v1/social-login/link/callback",
             get(identity_api::social_broker::link_callback::<S>),
         )
+        // Confirm-link for pending identity merge
+        .route(
+            "/api/v1/auth/confirm-link",
+            post(identity_api::confirm_link::confirm_link::<S>),
+        )
 }
 
 pub fn protected_routes<S>() -> Router<S>
@@ -213,6 +218,11 @@ where
         .route(
             "/api/v1/social-login/link/{alias}",
             get(identity_api::social_broker::link_authorize::<S>),
+        )
+        // Enterprise SSO account linking
+        .route(
+            "/api/v1/enterprise-sso/link/{alias}",
+            get(identity_api::enterprise_broker::link_authorize::<S>),
         )
         // Required actions
         .route(

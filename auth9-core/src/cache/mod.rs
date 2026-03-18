@@ -186,6 +186,19 @@ pub trait CacheOperations: Send + Sync {
     /// Consume (get + delete) an enterprise SSO login state
     async fn consume_enterprise_sso_state(&self, id: &str) -> Result<Option<String>>;
 
+    // ==================== Pending Merge ====================
+
+    /// Store pending merge state (confirm-link flow for first_login_policy=prompt_confirm)
+    async fn store_pending_merge(
+        &self,
+        token: &str,
+        data: &str,
+        ttl_secs: u64,
+    ) -> Result<()>;
+
+    /// Consume (get + delete) a pending merge state
+    async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>>;
+
     // ==================== Audience Validation ====================
 
     /// Check if a client_id is a registered audience (SISMEMBER on Redis SET).
@@ -225,6 +238,7 @@ pub(crate) mod keys {
     pub const AUTH_CODE: &str = "auth9:auth_code";
     pub const SOCIAL_STATE: &str = "auth9:social_state";
     pub const ENTERPRISE_SSO_STATE: &str = "auth9:enterprise_sso_state";
+    pub const PENDING_MERGE: &str = "auth9:pending_merge";
     pub const VALID_AUDIENCES: &str = "auth9:valid_audiences";
 }
 

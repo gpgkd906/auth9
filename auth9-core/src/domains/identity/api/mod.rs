@@ -1,6 +1,7 @@
 //! Identity domain API handlers.
 
 pub mod auth;
+pub mod confirm_link;
 pub mod email_otp;
 pub mod email_verification;
 pub mod enterprise_broker;

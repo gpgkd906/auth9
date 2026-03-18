@@ -88,7 +88,7 @@
 | [webhook/03-reliability.md](./webhook/03-reliability.md) | 重试、自动禁用 | 4 |
 | [webhook/04-boundary.md](./webhook/04-boundary.md) | URL 验证、边界 | 3 |
 
-### 认证流程 (23 个文档, 107 个场景)
+### 认证流程 (24 个文档, 112 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [auth/01-oidc-login.md](./auth/01-oidc-login.md) | OIDC 登录流程（**Sign in with password** 路径） | 4 |
@@ -118,6 +118,7 @@
 | [auth/25-auth9-oidc-local-token-issuance.md](./auth/25-auth9-oidc-local-token-issuance.md) | Auth9 本地 OIDC Token 签发（授权码流程、Code Replay、PKCE 验证、Refresh 轮转、ID Token Claims） | 5 |
 | [auth/26-enterprise-oidc-broker.md](./auth/26-enterprise-oidc-broker.md) | 企业 OIDC Broker 原生登录（OIDC 连接器 CRUD 不触发 Keycloak、userInfoUrl 必填、Auth9 broker 路由、claim mapping） | 5 |
 | [auth/27-enterprise-saml-broker.md](./auth/27-enterprise-saml-broker.md) | 企业 SAML Broker 原生登录（SAML 连接器 CRUD 不触发 Keycloak、SP Metadata 生成、证书校验、Auth9 broker 路由） | 5 |
+| [auth/28-federated-identity-linking.md](./auth/28-federated-identity-linking.md) | Federated Identity Linking（社交登录身份关联、Unlink/Re-link、first_login_policy 策略控制、confirm-link 过期） | 5 |
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |
@@ -237,7 +238,7 @@
 | 邀请管理 | 3 | 15 |
 | 会话与安全 | 8 | 39 |
 | Webhook | 4 | 17 |
-| 认证流程 | 22 | 102 |
+| 认证流程 | 24 | 112 |
 | 系统设置 | 4 | 20 |
 | 身份提供商 | 3 | 15 |
 | Passkeys | 3 | 15 |
@@ -248,12 +249,13 @@
 | 集成测试 | 20 | 91 |
 | SAML Application | 4 | 20 |
 | SCIM Provisioning | 5 | 25 |
-| **总计** | **122** | **573** |
+| **总计** | **123** | **578** |
 
 ### 文档对齐记录
 
 | 日期 | 版本 | 变更 |
 |------|------|------|
+| 2026-03-18 | 5.24.0 | **Phase 4 FR4 Federated Identity Linking**：新增 `auth/28-federated-identity-linking.md`（5 场景），覆盖社交登录 linked identity 写入、Unlink/Re-link 完整流程、`prompt_confirm` 策略阻止静默 takeover、`create_new` 策略创建独立账号、confirm-link token 过期错误；认证 24 文档 112 场景；总计 123 文档 578 场景 |
 | 2026-03-18 | 5.23.0 | **Phase 4 FR2 Enterprise OIDC Connector**：新增 `auth/26-enterprise-oidc-broker.md`（5 场景），覆盖 OIDC 连接器 CRUD 不触发 Keycloak IDP、userInfoUrl 必填验证、Auth9 原生 broker 路由、endpoint 可达性测试、Discovery 返回 Auth9 broker URL；更新 `auth/09-enterprise-sso-discovery.md` 的场景 1/5 预期（OIDC 使用 Auth9 broker 而非 Keycloak kc_idp_hint）；认证 23 文档 107 场景；总计 123 文档 578 场景 |
 | 2026-03-18 | 5.22.0 | **Phase 3 总控 FR 文档治理与闭环**：跨文档修复 `security/authentication/03-mfa-security.md` 背景说明（Keycloak→Auth9 本地 MFA）及 Recovery Code 检查清单；修复 `security/authentication/04-password-security.md` 背景说明（Keycloak→Auth9 本地密码管理）；修复 `integration/20-local-credential-store.md` migration 文件数（3→4）和测试数（32→39）；修复 `auth/20-hosted-login-api.md` 场景 5 auth9_oidc 预期（501→200 正常响应）；总计 122 文档 573 场景 |
 | 2026-03-18 | 5.21.0 | **Phase 3 FR5 Token Issuance 与 FR4 MFA 本地化**：新增 `auth/24-mfa-totp-recovery.md`（5 场景）、`auth/25-auth9-oidc-local-token-issuance.md`（5 场景），覆盖 TOTP 注册/验证/重放防护、Recovery Code 生成/消费、MFA 登录挑战、授权码完整流程、Code Replay、PKCE 验证、Refresh 轮转、ID Token Claims；认证 22 文档 102 场景；总计 122 文档 573 场景 |
@@ -425,6 +427,7 @@ cargo run --bin seed-data -- --dataset=qa-basic --reset
 
 | 日期 | 版本 | 更新内容 |
 |------|------|----------|
+| 2026-03-18 | 5.24.0 | **Phase 4 FR4 Federated Identity Linking**：新增 auth/28（社交登录身份关联、Unlink/Re-link、first_login_policy 策略、confirm-link 过期）共 5 场景；共 123 文档 578 场景 |
 | 2026-03-18 | 5.22.0 | **Phase 3 总控 FR 文档治理与闭环**：跨文档修复安全文档背景说明、集成测试预期值、Hosted Login API 预期；共 122 文档 573 场景 |
 | 2026-03-18 | 5.21.0 | **Phase 3 FR5 Token Issuance 与 FR4 MFA**：新增 auth/24（MFA TOTP/Recovery）、auth/25（本地 OIDC Token 签发）共 10 场景；共 122 文档 573 场景 |
 | 2026-03-18 | 5.20.0 | **Phase 3 FR3 邮箱验证与 Required Actions**：新增 3 个文档（auth/22、auth/23、integration/21）共 15 场景；修复 Identity Token 白名单和 auth9-oidc 自动建表；共 122 文档 573 场景 |

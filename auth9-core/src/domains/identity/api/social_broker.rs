@@ -9,7 +9,7 @@ use crate::domains::identity::api::auth::helpers::{
 };
 use crate::error::{AppError, Result};
 use crate::http_support::SuccessResponse;
-use crate::models::linked_identity::CreateLinkedIdentityInput;
+use crate::models::linked_identity::{CreateLinkedIdentityInput, PendingMergeData};
 use crate::state::{HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
 use axum::{
     extract::{Path, Query, State},
@@ -558,7 +558,34 @@ pub async fn callback<
     }
 
     // 7. Find or create user
-    let user = find_or_create_user(&state, &provider, &profile).await?;
+    let resolution =
+        find_or_create_user(&state, &provider, &profile, &social_state.login_challenge_id).await?;
+
+    // Handle pending merge: redirect to portal confirm-link page
+    let user = match resolution {
+        UserResolution::Found(user) => user,
+        UserResolution::PendingMerge(pending) => {
+            let token = uuid::Uuid::new_v4().to_string();
+            let pending_json =
+                serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
+            state
+                .cache()
+                .store_pending_merge(&token, &pending_json, SOCIAL_STATE_TTL_SECS)
+                .await?;
+            let portal_base = state
+                .config()
+                .keycloak
+                .portal_url
+                .as_deref()
+                .unwrap_or(&state.config().jwt.issuer);
+            let redirect_url = format!(
+                "{}/login/confirm-link?token={}",
+                portal_base.trim_end_matches('/'),
+                token
+            );
+            return Ok(Redirect::temporary(&redirect_url).into_response());
+        }
+    };
 
     // 8. Create session
     let session = state
@@ -753,15 +780,7 @@ pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache>(
         external_email: profile.email,
     };
 
-    // Use identity_provider_service's linked identity repo access via the service
-    // We get the linked identity through the federation broker's create path
-    state
-        .identity_provider_service()
-        .sync_user_identities(user_id, &user_id.to_string())
-        .await
-        .ok(); // ignore sync errors
-
-    // Direct repo access through service — create linked identity
+    // Create linked identity record
     let _ = state
         .identity_provider_service()
         .create_linked_identity(&input)
@@ -773,13 +792,22 @@ pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache>(
 
 // ── User Resolution ──
 
+/// Result of user resolution: either a user or a pending merge that needs confirmation
+enum UserResolution {
+    Found(crate::models::user::User),
+    PendingMerge(PendingMergeData),
+}
+
 async fn find_or_create_user<
     S: HasServices + HasIdentityProviders,
 >(
     state: &S,
     provider: &crate::models::identity_provider::IdentityProvider,
     profile: &SocialProfile,
-) -> Result<crate::models::user::User> {
+    login_challenge_id: &str,
+) -> Result<UserResolution> {
+    use crate::models::linked_identity::FirstLoginPolicy;
+
     // Try to find existing linked identity
     let existing_link = state
         .identity_provider_service()
@@ -787,10 +815,8 @@ async fn find_or_create_user<
         .await?;
 
     if let Some(linked) = existing_link {
-        return state
-            .user_service()
-            .get(linked.user_id)
-            .await;
+        let user = state.user_service().get(linked.user_id).await?;
+        return Ok(UserResolution::Found(user));
     }
 
     // If link_only, don't auto-create
@@ -801,23 +827,56 @@ async fn find_or_create_user<
         ));
     }
 
-    // If trust_email and email exists, try to find existing user by email
-    if provider.trust_email {
-        if let Some(ref email) = profile.email {
-            if let Ok(existing_user) = state.user_service().get_by_email(email).await {
-                // Auto-link
-                let input = CreateLinkedIdentityInput {
-                    user_id: existing_user.id,
-                    provider_type: provider.provider_id.clone(),
-                    provider_alias: provider.alias.clone(),
-                    external_user_id: profile.external_user_id.clone(),
-                    external_email: profile.email.clone(),
-                };
-                let _ = state
-                    .identity_provider_service()
-                    .create_linked_identity(&input)
-                    .await;
-                return Ok(existing_user);
+    // Determine effective first login policy
+    // trust_email=true → auto_merge (backward compat)
+    // trust_email=false → use first_login_policy field
+    let policy = if provider.trust_email {
+        FirstLoginPolicy::AutoMerge
+    } else {
+        provider
+            .first_login_policy
+            .parse::<FirstLoginPolicy>()
+            .unwrap_or(FirstLoginPolicy::CreateNew)
+    };
+
+    // Try email-based matching
+    if let Some(ref email) = profile.email {
+        if let Ok(existing_user) = state.user_service().get_by_email(email).await {
+            match policy {
+                FirstLoginPolicy::AutoMerge => {
+                    // Auto-link to existing user
+                    let input = CreateLinkedIdentityInput {
+                        user_id: existing_user.id,
+                        provider_type: provider.provider_id.clone(),
+                        provider_alias: provider.alias.clone(),
+                        external_user_id: profile.external_user_id.clone(),
+                        external_email: profile.email.clone(),
+                    };
+                    let _ = state
+                        .identity_provider_service()
+                        .create_linked_identity(&input)
+                        .await;
+                    return Ok(UserResolution::Found(existing_user));
+                }
+                FirstLoginPolicy::PromptConfirm => {
+                    // Store pending merge for user confirmation
+                    return Ok(UserResolution::PendingMerge(PendingMergeData {
+                        existing_user_id: existing_user.id.to_string(),
+                        existing_email: existing_user.email.clone(),
+                        external_user_id: profile.external_user_id.clone(),
+                        provider_alias: provider.alias.clone(),
+                        provider_type: provider.provider_id.clone(),
+                        external_email: profile.email.clone(),
+                        display_name: profile.name.clone(),
+                        login_challenge_id: login_challenge_id.to_string(),
+                        tenant_id: None,
+                        ip_address: None,
+                        user_agent: None,
+                    }));
+                }
+                FirstLoginPolicy::CreateNew => {
+                    // Fall through to create new user
+                }
             }
         }
     }
@@ -853,7 +912,7 @@ async fn find_or_create_user<
         .create_linked_identity(&input)
         .await;
 
-    Ok(new_user)
+    Ok(UserResolution::Found(new_user))
 }
 
 #[cfg(test)]

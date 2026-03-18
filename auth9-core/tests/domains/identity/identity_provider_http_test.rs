@@ -181,8 +181,6 @@ async fn test_list_linked_identities_unauthorized() {
 #[tokio::test]
 async fn test_unlink_identity_success() {
     let mock_kc = MockKeycloakServer::new().await;
-    // Mock the federated identity removal endpoint in Keycloak
-    mock_kc.mock_remove_federated_identity_success().await;
     let state = TestAppState::with_mock_keycloak(&mock_kc);
 
     let user = create_test_user(None);
