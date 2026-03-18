@@ -399,7 +399,7 @@ async fn test_receive_with_valid_signature() {
     let secret = "test-webhook-secret";
     // Set webhook secret in config
     let mut config = (*state.config).clone();
-    config.keycloak.webhook_secret = Some(secret.to_string());
+    config.webhook_secret = Some(secret.to_string());
     state.config = std::sync::Arc::new(config);
 
     let app = build_keycloak_event_test_router(state.clone());
@@ -429,7 +429,7 @@ async fn test_receive_with_valid_signature() {
 async fn test_receive_with_invalid_signature() {
     let mut state = TestAppState::new("http://mock-keycloak");
     let mut config = (*state.config).clone();
-    config.keycloak.webhook_secret = Some("real-secret".to_string());
+    config.webhook_secret = Some("real-secret".to_string());
     state.config = std::sync::Arc::new(config);
 
     let app = build_keycloak_event_test_router(state);
@@ -456,7 +456,7 @@ async fn test_receive_with_invalid_signature() {
 async fn test_receive_missing_signature_when_required() {
     let mut state = TestAppState::new("http://mock-keycloak");
     let mut config = (*state.config).clone();
-    config.keycloak.webhook_secret = Some("secret".to_string());
+    config.webhook_secret = Some("secret".to_string());
     state.config = std::sync::Arc::new(config);
 
     let app = build_keycloak_event_test_router(state);

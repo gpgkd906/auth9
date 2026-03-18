@@ -21,7 +21,7 @@ use crate::support::{
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
-    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, KeycloakConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig,
     RateLimitConfig, RedisConfig, ServerConfig,
 };
 use auth9_core::domains::authorization::service::{ClientService, RbacService};
@@ -64,8 +64,8 @@ use tower::ServiceExt;
 // Test Configuration
 // ============================================================================
 
-/// Create a test config with the given Keycloak base URL
-pub fn create_test_config(keycloak_url: &str) -> Config {
+/// Create a test config (keycloak_url parameter is retained for call-site compatibility)
+pub fn create_test_config(_keycloak_url: &str) -> Config {
     Config {
         environment: "development".to_string(),
         http_host: "127.0.0.1".to_string(),
@@ -91,17 +91,9 @@ pub fn create_test_config(keycloak_url: &str) -> Config {
             public_key_pem: None,
             previous_public_key_pem: None,
         },
-        keycloak: KeycloakConfig {
-            url: keycloak_url.to_string(),
-            public_url: keycloak_url.to_string(),
-            realm: "test".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "test-secret".to_string(), // pragma: allowlist secret
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        },
+        core_public_url: None,
+        portal_url: None,
+        webhook_secret: None,
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),
@@ -1197,13 +1189,12 @@ mod tests {
     #[tokio::test]
     async fn test_create_test_config() {
         let config = create_test_config("http://localhost:8080");
-        assert_eq!(config.keycloak.url, "http://localhost:8080");
-        assert_eq!(config.keycloak.realm, "test");
+        assert_eq!(config.jwt.issuer, "https://auth9.test");
     }
 
     #[tokio::test]
     async fn test_test_app_state_creation() {
         let state = TestAppState::new("http://localhost:8080");
-        assert!(state.config.keycloak.url.contains("localhost"));
+        assert_eq!(state.config.jwt.issuer, "https://auth9.test");
     }
 }

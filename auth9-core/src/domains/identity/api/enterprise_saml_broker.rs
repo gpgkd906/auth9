@@ -759,7 +759,7 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
             tracing::warn!("Failed to record SAML identity linked event: {}", e);
         }
 
-        let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
+        let portal_base = state.config().portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
         let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
         return Ok(Redirect::temporary(&identities_url).into_response());
     }
@@ -782,7 +782,7 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
             let token = uuid::Uuid::new_v4().to_string();
             let pending_json = serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
             state.cache().store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS).await?;
-            let portal_base = state.config().keycloak.portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
+            let portal_base = state.config().portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
             let redirect_url = format!("{}/login/confirm-link?token={}", portal_base.trim_end_matches('/'), token);
             return Ok(Redirect::temporary(&redirect_url).into_response());
         }

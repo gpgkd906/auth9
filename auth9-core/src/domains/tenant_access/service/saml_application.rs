@@ -477,7 +477,7 @@ mod tests {
         let pool = sqlx::MySqlPool::connect_lazy("mysql://fake:fake@localhost/fake").unwrap();
         let social_repo: Arc<dyn crate::repository::SocialProviderRepository> =
             Arc::new(MockSocialProviderRepository::new());
-        Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo))
+        Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo, None))
     }
 
     fn make_test_app(tenant_id: StringUuid) -> SamlApplication {

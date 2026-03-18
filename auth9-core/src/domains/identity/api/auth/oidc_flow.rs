@@ -105,7 +105,6 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
 
             let base = state
                 .config()
-                .keycloak
                 .core_public_url
                 .as_deref()
                 .unwrap_or(&state.config().jwt.issuer);
@@ -140,7 +139,6 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
 
     let portal_url = state
         .config()
-        .keycloak
         .portal_url
         .as_deref()
         .unwrap_or(&state.config().jwt.issuer);
@@ -197,7 +195,6 @@ pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::
 
     let base = state
         .config()
-        .keycloak
         .core_public_url
         .as_deref()
         .unwrap_or(&state.config().jwt.issuer);

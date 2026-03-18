@@ -338,7 +338,6 @@ fn build_social_authorize_url(
 
 fn social_callback_url(config: &crate::config::Config) -> String {
     let base = config
-        .keycloak
         .core_public_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -347,7 +346,6 @@ fn social_callback_url(config: &crate::config::Config) -> String {
 
 fn social_link_callback_url(config: &crate::config::Config) -> String {
     let base = config
-        .keycloak
         .core_public_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -359,7 +357,6 @@ fn social_link_callback_url(config: &crate::config::Config) -> String {
 
 fn portal_login_url(config: &crate::config::Config) -> String {
     let portal = config
-        .keycloak
         .portal_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -368,7 +365,6 @@ fn portal_login_url(config: &crate::config::Config) -> String {
 
 fn portal_identities_url(config: &crate::config::Config) -> String {
     let portal = config
-        .keycloak
         .portal_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -576,7 +572,6 @@ pub async fn callback<
                 .await?;
             let portal_base = state
                 .config()
-                .keycloak
                 .portal_url
                 .as_deref()
                 .unwrap_or(&state.config().jwt.issuer);

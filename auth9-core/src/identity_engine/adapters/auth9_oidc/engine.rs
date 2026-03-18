@@ -231,11 +231,12 @@ impl IdentityUserStore for Auth9OidcUserStore {
 struct Auth9OidcClientStore {
     #[allow(dead_code)]
     pool: MySqlPool,
+    core_public_url: Option<String>,
 }
 
 impl Auth9OidcClientStore {
-    fn new(pool: MySqlPool) -> Self {
-        Self { pool }
+    fn new(pool: MySqlPool, core_public_url: Option<String>) -> Self {
+        Self { pool, core_public_url }
     }
 
     /// Generate a random 32-byte hex string for use as a client secret.
@@ -318,24 +319,28 @@ impl IdentityClientStore for Auth9OidcClientStore {
     }
 
     async fn get_saml_idp_descriptor(&self) -> Result<String> {
-        // Return a minimal SAML IdP metadata descriptor.
-        // The actual URLs will be refined after FR4 config refactor.
-        Ok(r#"<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="auth9-oidc">
+        let base = self.core_public_url.as_deref().unwrap_or("");
+        let sso_url = format!("{}/api/v1/saml/sso", base);
+        Ok(format!(
+            r#"<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="{base}">
   <IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
-    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="" />
+    <SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="{sso_url}" />
   </IDPSSODescriptor>
-</EntityDescriptor>"#.to_string())
+</EntityDescriptor>"#
+        ))
     }
 
     async fn get_active_signing_certificate(&self) -> Result<String> {
-        // Return a placeholder. The actual certificate export from JWT key pair
-        // will be implemented when SAML IdP is fully wired.
+        // Placeholder: actual certificate export from JwtManager requires
+        // additional dependency wiring (tracked separately).
         Ok("placeholder-certificate".to_string())
     }
 
     fn saml_sso_url(&self) -> String {
-        // Will be populated with config value after FR4 config refactor
-        String::new()
+        match &self.core_public_url {
+            Some(url) => format!("{}/api/v1/saml/sso", url),
+            None => String::new(),
+        }
     }
 }
 
@@ -679,10 +684,11 @@ impl Auth9OidcIdentityEngineAdapter {
     pub fn new(
         pool: MySqlPool,
         social_provider_repo: Arc<dyn SocialProviderRepository>,
+        core_public_url: Option<String>,
     ) -> Self {
         Self {
             user_store: Auth9OidcUserStore::new(pool.clone()),
-            client_store: Auth9OidcClientStore::new(pool.clone()),
+            client_store: Auth9OidcClientStore::new(pool.clone(), core_public_url),
             session_store: Auth9OidcSessionStoreAdapter::new(),
             credential_store: Auth9OidcCredentialStore::new(pool.clone()),
             federation_broker: Auth9OidcFederationBrokerAdapter::new(

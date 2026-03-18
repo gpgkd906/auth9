@@ -160,7 +160,7 @@ mod tests {
         let pool = sqlx::MySqlPool::connect_lazy("mysql://fake:fake@localhost/fake").unwrap();
         let social_repo: Arc<dyn crate::repository::SocialProviderRepository> =
             Arc::new(MockSocialProviderRepository::new());
-        let adapter = Auth9OidcIdentityEngineAdapter::new(pool, social_repo);
+        let adapter = Auth9OidcIdentityEngineAdapter::new(pool, social_repo, None);
         let engine: &dyn IdentityEngine = &adapter;
 
         let _ = engine.user_store();

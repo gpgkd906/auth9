@@ -149,7 +149,7 @@ mod tests {
         let pool = sqlx::MySqlPool::connect_lazy("mysql://fake:fake@localhost/fake").unwrap();
         let social_repo: Arc<dyn crate::repository::SocialProviderRepository> =
             Arc::new(MockSocialProviderRepository::new());
-        let engine: Arc<dyn IdentityEngine> = Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo));
+        let engine: Arc<dyn IdentityEngine> = Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo, None));
 
         let service = EmailVerificationService::new(
             engine,

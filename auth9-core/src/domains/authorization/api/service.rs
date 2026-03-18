@@ -694,7 +694,6 @@ pub struct EnvVar {
 /// Build endpoint info from config
 fn build_endpoint_info(config: &Config) -> EndpointInfo {
     let domain = config
-        .keycloak
         .core_public_url
         .clone()
         .unwrap_or_else(|| config.jwt.issuer.clone());
@@ -1174,8 +1173,7 @@ mod tests {
     fn test_config() -> Config {
         let mut config = Config::for_tests();
         config.jwt.issuer = "http://localhost:8080".to_string();
-        config.keycloak.ssl_required = "none".to_string();
-        config.keycloak.realm = "auth9".to_string();
+        // ssl_required and realm fields removed (Keycloak retired)
         config.password_reset.hmac_key = "test-key".to_string();
         config
     }
@@ -1201,7 +1199,7 @@ mod tests {
     #[test]
     fn test_build_endpoint_info_with_core_public_url() {
         let mut config = test_config();
-        config.keycloak.core_public_url = Some("https://api.auth9.example.com".to_string());
+        config.core_public_url = Some("https://api.auth9.example.com".to_string());
         let ep = build_endpoint_info(&config);
 
         assert_eq!(ep.auth9_domain, "https://api.auth9.example.com");

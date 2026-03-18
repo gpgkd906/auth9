@@ -5,7 +5,7 @@
 
 use auth9_core::config::{
     Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig,
-    KeycloakConfig, RateLimitConfig, RedisConfig, SecurityHeadersConfig, ServerConfig,
+    RateLimitConfig, RedisConfig, SecurityHeadersConfig, ServerConfig,
     TelemetryConfig, WebAuthnConfig,
 };
 
@@ -36,17 +36,9 @@ pub fn test_config() -> Config {
             public_key_pem: None,
             previous_public_key_pem: None,
         },
-        keycloak: KeycloakConfig {
-            url: "http://localhost:8081".to_string(),
-            public_url: "http://localhost:8081".to_string(),
-            realm: "test".to_string(),
-            admin_client_id: "admin-cli".to_string(),
-            admin_client_secret: "secret".to_string(),
-            ssl_required: "none".to_string(),
-            core_public_url: None,
-            portal_url: None,
-            webhook_secret: None,
-        },
+        core_public_url: None,
+        portal_url: None,
+        webhook_secret: None,
         grpc_security: GrpcSecurityConfig::default(),
         rate_limit: RateLimitConfig::default(),
         cors: CorsConfig::default(),

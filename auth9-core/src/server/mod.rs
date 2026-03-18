@@ -548,7 +548,7 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let federation_broker: Arc<dyn FederationBroker> =
         Arc::new(Auth9OidcFederationBrokerAdapter::new(social_provider_repo.clone()));
     let identity_engine: Arc<dyn IdentityEngine> =
-        Arc::new(Auth9OidcIdentityEngineAdapter::new(db_pool.clone(), social_provider_repo));
+        Arc::new(Auth9OidcIdentityEngineAdapter::new(db_pool.clone(), social_provider_repo, config.core_public_url.clone()));
 
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));

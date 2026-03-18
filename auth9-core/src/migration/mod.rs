@@ -469,14 +469,13 @@ async fn seed_portal_service(config: &Config) -> Result<()> {
 
     // Build URIs for portal service
     let redirect_uris = build_db_redirect_uris(
-        config.keycloak.core_public_url.as_deref(),
-        config.keycloak.portal_url.as_deref(),
+        config.core_public_url.as_deref(),
+        config.portal_url.as_deref(),
     );
 
-    let logout_uris = build_db_logout_uris(config.keycloak.portal_url.as_deref());
+    let logout_uris = build_db_logout_uris(config.portal_url.as_deref());
 
     let base_url = config
-        .keycloak
         .portal_url
         .as_deref()
         .unwrap_or("http://localhost:3000");
@@ -1074,107 +1073,6 @@ async fn seed_dev_email_config(config: &Config) -> Result<()> {
     }
 
     pool.close().await;
-
-    // Sync SMTP settings directly to Keycloak realm so password reset emails work
-    sync_smtp_to_keycloak(config, &smtp_host).await?;
-
-    Ok(())
-}
-
-/// Sync SMTP configuration directly to Keycloak realm via Admin API
-///
-/// This ensures Keycloak can send password reset and verification emails
-/// using the dev SMTP server (Mailpit).
-async fn sync_smtp_to_keycloak(config: &Config, smtp_host: &str) -> Result<()> {
-    use tracing::warn;
-
-    info!("Syncing SMTP config to Keycloak realm...");
-
-    let http_client = reqwest::Client::builder()
-        .timeout(std::time::Duration::from_secs(30))
-        .build()
-        .context("Failed to create HTTP client")?;
-
-    // Get admin token
-    let admin_username = std::env::var("KEYCLOAK_ADMIN").unwrap_or_else(|_| "admin".to_string());
-    let admin_password =
-        std::env::var("KEYCLOAK_ADMIN_PASSWORD").unwrap_or_else(|_| "admin".to_string());
-
-    let token_url = format!(
-        "{}/realms/master/protocol/openid-connect/token",
-        config.keycloak.url
-    );
-
-    let token_response = http_client
-        .post(&token_url)
-        .form(&[
-            ("grant_type", "password"),
-            ("client_id", "admin-cli"),
-            ("username", &admin_username),
-            ("password", &admin_password),
-        ])
-        .send()
-        .await
-        .context("Failed to get Keycloak admin token for SMTP sync")?;
-
-    if !token_response.status().is_success() {
-        warn!("Failed to get admin token for SMTP sync, skipping Keycloak email config");
-        return Ok(());
-    }
-
-    let token_json: serde_json::Value = token_response.json().await?;
-    let token = token_json["access_token"]
-        .as_str()
-        .context("Missing access_token in Keycloak response")?;
-
-    // Update realm with SMTP settings using GET-merge-PUT pattern
-    // to avoid resetting other realm settings (brute force, events, etc.)
-    let realm_url = format!(
-        "{}/admin/realms/{}",
-        config.keycloak.url, config.keycloak.realm
-    );
-
-    let current: serde_json::Value = http_client
-        .get(&realm_url)
-        .bearer_auth(token)
-        .send()
-        .await
-        .context("Failed to get realm for SMTP update")?
-        .json()
-        .await
-        .context("Failed to parse realm JSON for SMTP update")?;
-
-    let mut updated = current;
-    if let Some(obj) = updated.as_object_mut() {
-        obj.insert(
-            "smtpServer".to_string(),
-            serde_json::json!({
-                "host": smtp_host,
-                "port": "1025",
-                "from": "noreply@auth9.local",
-                "fromDisplayName": "Auth9",
-                "auth": "false",
-                "ssl": "false",
-                "starttls": "false"
-            }),
-        );
-    }
-
-    let response = http_client
-        .put(&realm_url)
-        .bearer_auth(token)
-        .json(&updated)
-        .send()
-        .await
-        .context("Failed to update Keycloak realm SMTP settings")?;
-
-    if response.status().is_success() {
-        info!("Synced SMTP config to Keycloak realm ({}:1025)", smtp_host);
-    } else {
-        let status = response.status();
-        let body = response.text().await.unwrap_or_default();
-        warn!("Failed to sync SMTP to Keycloak: {} - {}", status, body);
-    }
 
     Ok(())
 }

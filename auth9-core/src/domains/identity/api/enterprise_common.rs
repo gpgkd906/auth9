@@ -50,7 +50,6 @@ pub struct EnterpriseProfile {
 
 pub fn enterprise_callback_url(config: &crate::config::Config) -> String {
     let base = config
-        .keycloak
         .core_public_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -62,7 +61,6 @@ pub fn enterprise_callback_url(config: &crate::config::Config) -> String {
 
 pub fn saml_acs_url(config: &crate::config::Config) -> String {
     let base = config
-        .keycloak
         .core_public_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -74,7 +72,6 @@ pub fn saml_acs_url(config: &crate::config::Config) -> String {
 
 pub fn sp_entity_id(config: &crate::config::Config) -> String {
     let base = config
-        .keycloak
         .core_public_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
@@ -83,7 +80,6 @@ pub fn sp_entity_id(config: &crate::config::Config) -> String {
 
 pub fn portal_login_url(config: &crate::config::Config) -> String {
     let portal = config
-        .keycloak
         .portal_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
