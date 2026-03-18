@@ -162,8 +162,6 @@ pub struct RateLimitState {
     config: Arc<RateLimitConfig>,
     redis: Option<ConnectionManager>,
     jwt_manager: Option<JwtManager>,
-    allowed_audiences: Arc<Vec<String>>,
-    is_production: bool,
     fallback: InMemoryRateLimiter,
 }
 
@@ -173,15 +171,11 @@ impl RateLimitState {
         config: RateLimitConfig,
         redis: ConnectionManager,
         jwt_manager: JwtManager,
-        allowed_audiences: Vec<String>,
-        is_production: bool,
     ) -> Self {
         Self {
             config: Arc::new(config),
             redis: Some(redis),
             jwt_manager: Some(jwt_manager),
-            allowed_audiences: Arc::new(allowed_audiences),
-            is_production,
             fallback: InMemoryRateLimiter::new(),
         }
     }
@@ -195,8 +189,6 @@ impl RateLimitState {
             }),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         }
     }
@@ -427,9 +419,7 @@ fn extract_key_from_verified_token(
         ));
     }
 
-    if let Ok(claims) =
-        jwt_manager.verify_tenant_access_token_strict(token, &rate_limit.allowed_audiences)
-    {
+    if let Ok(claims) = jwt_manager.verify_tenant_access_token_any_audience(token) {
         let tenant_id = claims.tenant_id;
         return Some((
             RateLimitKey::TenantClient {
@@ -438,21 +428,6 @@ fn extract_key_from_verified_token(
             },
             Some(tenant_id),
         ));
-    }
-
-    if !rate_limit.is_production {
-        if let Ok(claims) =
-            jwt_manager.verify_tenant_access_token_with_optional_audience(token, None)
-        {
-            let tenant_id = claims.tenant_id;
-            return Some((
-                RateLimitKey::TenantClient {
-                    tenant_id: tenant_id.clone(),
-                    client_id: claims.sub,
-                },
-                Some(tenant_id),
-            ));
-        }
     }
 
     None
@@ -684,8 +659,6 @@ mod tests {
             config: Arc::new(config),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         };
 
@@ -716,8 +689,6 @@ mod tests {
             config: Arc::new(config),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         };
 
@@ -804,8 +775,6 @@ mod tests {
             config: Arc::new(config),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         };
         assert!(!state.is_enabled());
@@ -821,8 +790,6 @@ mod tests {
             config: Arc::new(config),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         };
         // enabled=true but no redis => still disabled
@@ -844,8 +811,6 @@ mod tests {
             config: Arc::new(config),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         };
         // Non-matching endpoint should fall back to default
@@ -874,8 +839,6 @@ mod tests {
             config: Arc::new(config),
             redis: None,
             jwt_manager: None,
-            allowed_audiences: Arc::new(Vec::new()),
-            is_production: true,
             fallback: InMemoryRateLimiter::new(),
         };
         let rule = state.get_rule("POST", "/api/v1/auth/login");

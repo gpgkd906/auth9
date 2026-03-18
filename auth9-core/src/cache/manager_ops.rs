@@ -229,4 +229,22 @@ impl CacheOperations for CacheManager {
     async fn consume_social_login_state(&self, id: &str) -> Result<Option<String>> {
         CacheManager::consume_social_login_state(self, id).await
     }
+
+    // ==================== Audience Validation ====================
+
+    async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {
+        CacheManager::is_valid_audience(self, client_id).await
+    }
+
+    async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()> {
+        CacheManager::refresh_audience_set(self, client_ids).await
+    }
+
+    async fn add_audience(&self, client_id: &str) -> Result<()> {
+        CacheManager::add_audience(self, client_id).await
+    }
+
+    async fn remove_audience(&self, client_id: &str) -> Result<()> {
+        CacheManager::remove_audience(self, client_id).await
+    }
 }

@@ -97,36 +97,60 @@ curl -i -X PUT "http://localhost:8080/api/v1/tenants/{tenant_id}" \
 
 ---
 
-## 场景 3：使用 Tenant Token 访问 tenant 接口成功
+## 场景 3：使用 Tenant Token 访问 tenant 接口成功（多种 service_id）
 
 ### 初始状态
 - 已有 `{identity_token}`
-- 用户属于 `{tenant_id}`，且知道 `{service_client_id}`（如 `auth9-portal`）
+- 用户属于 `{tenant_id}`
+- 已知至少两个不同的 `{service_client_id}`（如 `auth9-portal` 和 `auth9-demo`）
 
 ### 目的
-验证通过 exchange 获取 Tenant Token 后 tenant API 可正常访问
+验证通过 exchange 获取 Tenant Token 后 tenant API 可正常访问。**必须使用不同 service_id 分别测试**，确认 audience 动态验证正确覆盖所有已注册 client。
 
 ### 测试操作流程
-1. 交换 Tenant Token：
+1. 使用 `auth9-portal` 交换 Tenant Token：
 
 ```bash
 curl -s -X POST "http://localhost:8080/api/v1/auth/tenant-token" \
   -H "Authorization: Bearer {identity_token}" \
   -H "Content-Type: application/json" \
-  -d '{"tenant_id":"{tenant_id}","service_id":"{service_client_id}"}'
+  -d '{"tenant_id":"{tenant_id}","service_id":"auth9-portal"}'
 ```
 
-2. 使用返回的 `{tenant_access_token}` 调用 tenant 接口：
+2. 使用返回的 `{tenant_access_token_portal}` 调用 tenant 接口：
 
 ```bash
 curl -i "http://localhost:8080/api/v1/tenants/{tenant_id}" \
-  -H "Authorization: Bearer {tenant_access_token}"
+  -H "Authorization: Bearer {tenant_access_token_portal}"
+```
+
+3. 使用 `auth9-demo` 交换 Tenant Token：
+
+```bash
+curl -s -X POST "http://localhost:8080/api/v1/auth/tenant-token" \
+  -H "Authorization: Bearer {identity_token}" \
+  -H "Content-Type: application/json" \
+  -d '{"tenant_id":"{tenant_id}","service_id":"auth9-demo"}'
+```
+
+4. 使用返回的 `{tenant_access_token_demo}` 调用 tenant 接口：
+
+```bash
+curl -i "http://localhost:8080/api/v1/tenants/{tenant_id}" \
+  -H "Authorization: Bearer {tenant_access_token_demo}"
 ```
 
 ### 预期结果
-- 第 1 步返回 `200` 且包含 `access_token`
-- 第 2 步返回 `200 OK`
-- 返回租户信息与 `{tenant_id}` 一致
+- 第 1、3 步均返回 `200` 且包含 `access_token`
+- 第 2、4 步均返回 `200 OK`
+- 两个 token 的 `aud` 字段分别为 `auth9-portal` 和 `auth9-demo`
+- **关键验证**：不同 service_id 签发的 token 都可以通过 middleware 的 audience 验证
+
+### 常见误报
+
+| 症状 | 原因 | 结论 |
+|------|------|------|
+| `auth9-portal` token 通过但 `auth9-demo` token 返回 401 | audience 验证仍依赖静态白名单而非动态查询 | **BUG** — middleware 未正确使用动态 audience 验证 |
 
 ---
 

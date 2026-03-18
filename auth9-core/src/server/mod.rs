@@ -533,6 +533,28 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let cache_manager = CacheManager::new(&config.redis).await?;
     info!("Connected to Redis");
 
+    // Seed audience validation set: load all registered client_ids into Redis
+    {
+        let client_ids: Vec<String> =
+            sqlx::query_scalar("SELECT client_id FROM clients")
+                .fetch_all(&db_pool)
+                .await
+                .unwrap_or_default();
+        let mut all_audiences = client_ids;
+        // Merge with env var audiences for backward compatibility
+        all_audiences.extend(config.jwt_tenant_access_allowed_audiences.clone());
+        all_audiences.sort();
+        all_audiences.dedup();
+        if let Err(e) = cache_manager.refresh_audience_set(&all_audiences).await {
+            tracing::warn!("Failed to seed audience set in Redis: {}", e);
+        } else {
+            info!(
+                count = all_audiences.len(),
+                "Audience validation set loaded into Redis"
+            );
+        }
+    }
+
     // Create repositories
     let tenant_repo = Arc::new(TenantRepositoryImpl::new(db_pool.clone()));
     let user_repo = Arc::new(UserRepositoryImpl::new(db_pool.clone()));
@@ -889,8 +911,6 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
             rate_limit_config,
             cache_manager.get_connection_manager(),
             jwt_manager.clone(),
-            config.jwt_tenant_access_allowed_audiences.clone(),
-            config.is_production(),
         )
     } else {
         RateLimitState::noop()
@@ -1367,8 +1387,6 @@ where
     // Create auth middleware state with cache for token blacklist checking
     let auth_state = AuthMiddlewareState::new(
         HasServices::jwt_manager(&state).clone(),
-        state.config().jwt_tenant_access_allowed_audiences.clone(),
-        state.config().is_production(),
     )
     .with_cache(std::sync::Arc::new(state.cache().clone()));
 

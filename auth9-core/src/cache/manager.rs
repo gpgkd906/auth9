@@ -655,6 +655,61 @@ impl CacheManager {
             .map_err(AppError::from)
     }
 
+    // ==================== Audience Validation ====================
+
+    pub async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {
+        let mut conn = self.conn.clone();
+        let result: bool = redis::cmd("SISMEMBER")
+            .arg(keys::VALID_AUDIENCES)
+            .arg(client_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        Ok(result)
+    }
+
+    pub async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()> {
+        let mut conn = self.conn.clone();
+        // Atomic replace: delete then add all
+        let _: () = redis::cmd("DEL")
+            .arg(keys::VALID_AUDIENCES)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+
+        if !client_ids.is_empty() {
+            let mut cmd = redis::cmd("SADD");
+            cmd.arg(keys::VALID_AUDIENCES);
+            for id in client_ids {
+                cmd.arg(id.as_str());
+            }
+            let _: () = cmd.query_async(&mut conn).await.map_err(AppError::from)?;
+        }
+        Ok(())
+    }
+
+    pub async fn add_audience(&self, client_id: &str) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let _: () = redis::cmd("SADD")
+            .arg(keys::VALID_AUDIENCES)
+            .arg(client_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        Ok(())
+    }
+
+    pub async fn remove_audience(&self, client_id: &str) -> Result<()> {
+        let mut conn = self.conn.clone();
+        let _: () = redis::cmd("SREM")
+            .arg(keys::VALID_AUDIENCES)
+            .arg(client_id)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)?;
+        Ok(())
+    }
+
     /// Atomically check if a webhook event key exists and set it if not (SETNX).
     /// Returns true if the event was already processed (duplicate).
     pub async fn check_and_mark_webhook_event(

@@ -513,11 +513,9 @@ impl Config {
                     "gRPC reflection is enabled (GRPC_ENABLE_REFLECTION=true) in production; disable it to prevent information leakage"
                 );
             }
-            if self.jwt_tenant_access_allowed_audiences.is_empty() {
-                anyhow::bail!(
-                    "Tenant access token audience allowlist is empty in production; set JWT_TENANT_ACCESS_ALLOWED_AUDIENCES or AUTH9_PORTAL_CLIENT_ID"
-                );
-            }
+            // jwt_tenant_access_allowed_audiences is now optional — audiences are
+            // dynamically loaded from the clients table into Redis on startup.
+            // The env var serves as an additional seed for backward compatibility.
             if self.keycloak.webhook_secret.is_none() {
                 anyhow::bail!("KEYCLOAK_WEBHOOK_SECRET is required in production");
             }

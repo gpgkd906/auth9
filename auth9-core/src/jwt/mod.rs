@@ -549,6 +549,23 @@ impl JwtManager {
         Ok(token_data.claims)
     }
 
+    /// Verify tenant access token without audience validation.
+    ///
+    /// Validates signature, issuer, and expiry but skips `aud` check.
+    /// The caller is responsible for verifying the audience separately
+    /// (e.g., via cache-backed `is_valid_audience` lookup).
+    pub fn verify_tenant_access_token_any_audience(
+        &self,
+        token: &str,
+    ) -> Result<TenantAccessClaims> {
+        let mut validation = self.strict_validation();
+        validation.set_issuer(&[&self.config.issuer]);
+        validation.validate_aud = false;
+
+        let token_data = decode::<TenantAccessClaims>(token, &self.decoding_key, &validation)?;
+        Ok(token_data.claims)
+    }
+
     /// Get token expiration TTL in seconds
     pub fn access_token_ttl(&self) -> i64 {
         self.config.access_token_ttl_secs

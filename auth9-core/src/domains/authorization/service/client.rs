@@ -160,6 +160,11 @@ impl<
             .create_client(service_id, &client_id, &secret_hash, name)
             .await?;
 
+        // Register new client_id in audience validation set
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.add_audience(&client_id).await;
+        }
+
         Ok(ClientWithSecret {
             client,
             client_secret,
@@ -193,6 +198,11 @@ impl<
             .repo
             .create_client(service_id, &client_id, &secret_hash, name)
             .await?;
+
+        // Register new client_id in audience validation set
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.add_audience(&client_id).await;
+        }
 
         Ok(ClientWithSecret {
             client,
@@ -290,6 +300,16 @@ impl<
         let service_id = StringUuid(id);
 
         // CASCADE DELETE:
+        // 0. Collect client_ids for audience cache cleanup before deletion
+        let client_ids_to_remove: Vec<String> = self
+            .repo
+            .list_clients(id)
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .map(|c| c.client_id)
+            .collect();
+
         // 1. Delete all clients (API keys) for this service
         let deleted_clients = self.repo.delete_clients_by_service(id).await?;
         warn!(
@@ -353,6 +373,10 @@ impl<
         // 8. Clear cache
         if let Some(cache) = &self.cache_manager {
             let _ = cache.invalidate_service_config(id).await;
+            // Remove deleted client_ids from audience validation set
+            for client_id in &client_ids_to_remove {
+                let _ = cache.remove_audience(client_id).await;
+            }
         }
         Ok(())
     }
@@ -1103,6 +1127,10 @@ mod tests {
                     ..Default::default()
                 }))
             });
+
+        service_repo
+            .expect_list_clients()
+            .returning(|_| Ok(vec![]));
 
         service_repo
             .expect_delete_clients_by_service()

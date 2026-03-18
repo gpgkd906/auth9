@@ -172,6 +172,20 @@ pub trait CacheOperations: Send + Sync {
 
     /// Consume (get + delete) a social login state
     async fn consume_social_login_state(&self, id: &str) -> Result<Option<String>>;
+
+    // ==================== Audience Validation ====================
+
+    /// Check if a client_id is a registered audience (SISMEMBER on Redis SET).
+    async fn is_valid_audience(&self, client_id: &str) -> Result<bool>;
+
+    /// Replace the entire audience set with the given list (DEL + SADD).
+    async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()>;
+
+    /// Add a single audience to the set (SADD).
+    async fn add_audience(&self, client_id: &str) -> Result<()>;
+
+    /// Remove a single audience from the set (SREM).
+    async fn remove_audience(&self, client_id: &str) -> Result<()>;
 }
 
 /// Cache key prefixes
@@ -197,6 +211,7 @@ pub(crate) mod keys {
     pub const LOGIN_CHALLENGE: &str = "auth9:login_challenge";
     pub const AUTH_CODE: &str = "auth9:auth_code";
     pub const SOCIAL_STATE: &str = "auth9:social_state";
+    pub const VALID_AUDIENCES: &str = "auth9:valid_audiences";
 }
 
 /// Default TTLs

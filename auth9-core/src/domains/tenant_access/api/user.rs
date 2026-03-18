@@ -359,17 +359,8 @@ pub async fn create<S: HasServices + HasBranding>(
             if let Ok(claims) = jwt.verify_identity_token(token) {
                 return AuthUser::from_identity_claims(claims).ok();
             }
-            let allowed = &state.config().jwt_tenant_access_allowed_audiences;
-            if !allowed.is_empty() {
-                if let Ok(claims) = jwt.verify_tenant_access_token_strict(token, allowed) {
-                    return AuthUser::from_tenant_access_claims(claims).ok();
-                }
-            } else if !state.config().is_production() {
-                #[allow(deprecated)]
-                if let Ok(claims) = jwt.verify_tenant_access_token(token, None) {
-                    metrics::counter!("auth9_jwt_legacy_fallback_total", "caller" => "tenant_access_user").increment(1);
-                    return AuthUser::from_tenant_access_claims(claims).ok();
-                }
+            if let Ok(claims) = jwt.verify_tenant_access_token_any_audience(token) {
+                return AuthUser::from_tenant_access_claims(claims).ok();
             }
             None
         });

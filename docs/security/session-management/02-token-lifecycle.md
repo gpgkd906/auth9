@@ -23,6 +23,12 @@ Token 流程：
 2. Token Exchange → 获得 Tenant Access Token
 3. Token 过期 → 使用 Refresh Token 刷新
 
+Audience 验证：
+- Tenant Access Token 的 `aud` 字段等于签发时的 `service_id`（即 `clients.client_id`）
+- 验证方式：启动时从 `clients` 表加载所有 client_id 到 Redis SET，middleware 用 `SISMEMBER` 动态验证
+- Service 创建/删除时自动更新 Redis SET
+- ~~旧方式：静态环境变量 `JWT_TENANT_ACCESS_ALLOWED_AUDIENCES` 白名单~~ — 已移除，仅作为启动种子保留
+
 ---
 
 ## 场景 1：Token 过期验证

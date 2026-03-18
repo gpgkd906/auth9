@@ -234,4 +234,22 @@ impl CacheOperations for NoOpCacheManager {
     async fn consume_social_login_state(&self, id: &str) -> Result<Option<String>> {
         NoOpCacheManager::consume_social_login_state(self, id).await
     }
+
+    // ==================== Audience Validation ====================
+
+    async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {
+        NoOpCacheManager::is_valid_audience(self, client_id).await
+    }
+
+    async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()> {
+        NoOpCacheManager::refresh_audience_set(self, client_ids).await
+    }
+
+    async fn add_audience(&self, client_id: &str) -> Result<()> {
+        NoOpCacheManager::add_audience(self, client_id).await
+    }
+
+    async fn remove_audience(&self, client_id: &str) -> Result<()> {
+        NoOpCacheManager::remove_audience(self, client_id).await
+    }
 }

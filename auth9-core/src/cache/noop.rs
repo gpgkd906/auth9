@@ -3,7 +3,7 @@
 use crate::error::Result;
 use crate::models::rbac::UserRolesInTenant;
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use tokio::sync::RwLock;
 use uuid::Uuid;
@@ -16,6 +16,7 @@ pub struct NoOpCacheManager {
     otp_store: Arc<RwLock<HashMap<String, String>>>,
     counters: Arc<RwLock<HashMap<String, u64>>>,
     flags: Arc<RwLock<HashMap<String, bool>>>,
+    audiences: Arc<RwLock<HashSet<String>>>,
 }
 
 impl NoOpCacheManager {
@@ -26,6 +27,7 @@ impl NoOpCacheManager {
             otp_store: Arc::new(RwLock::new(HashMap::new())),
             counters: Arc::new(RwLock::new(HashMap::new())),
             flags: Arc::new(RwLock::new(HashMap::new())),
+            audiences: Arc::new(RwLock::new(HashSet::new())),
         }
     }
 
@@ -364,6 +366,35 @@ impl NoOpCacheManager {
             .write()
             .await
             .remove(&format!("social_state:{}", id)))
+    }
+
+    // ==================== Audience Validation ====================
+
+    pub async fn is_valid_audience(&self, client_id: &str) -> Result<bool> {
+        let audiences = self.audiences.read().await;
+        // If audience set is empty (not initialized), accept all — allows tests
+        // and fresh starts to work without pre-seeding
+        if audiences.is_empty() {
+            return Ok(true);
+        }
+        Ok(audiences.contains(client_id))
+    }
+
+    pub async fn refresh_audience_set(&self, client_ids: &[String]) -> Result<()> {
+        let mut audiences = self.audiences.write().await;
+        audiences.clear();
+        audiences.extend(client_ids.iter().cloned());
+        Ok(())
+    }
+
+    pub async fn add_audience(&self, client_id: &str) -> Result<()> {
+        self.audiences.write().await.insert(client_id.to_string());
+        Ok(())
+    }
+
+    pub async fn remove_audience(&self, client_id: &str) -> Result<()> {
+        self.audiences.write().await.remove(client_id);
+        Ok(())
     }
 }
 
