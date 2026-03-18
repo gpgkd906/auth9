@@ -367,7 +367,7 @@ pub async fn token<
                                     id: new_user.id.to_string(),
                                     email: new_user.email.clone(),
                                     display_name: new_user.display_name.clone(),
-                                    mfa_enabled: false,
+                                    mfa_enabled: new_user.mfa_enabled,
                                 },
                                 tenant: ActionContextTenant {
                                     id: tenant_id.to_string(),
@@ -463,7 +463,7 @@ pub async fn token<
                             id: user.id.to_string(),
                             email: user.email.clone(),
                             display_name: user.display_name.clone(),
-                            mfa_enabled: false,
+                            mfa_enabled: user.mfa_enabled,
                         },
                         tenant: ActionContextTenant {
                             id: tenant_id.to_string(),
@@ -657,7 +657,7 @@ pub async fn token<
                             id: user.id.to_string(),
                             email: user.email.clone(),
                             display_name: user.display_name.clone(),
-                            mfa_enabled: false,
+                            mfa_enabled: user.mfa_enabled,
                         },
                         tenant: ActionContextTenant {
                             id: tenant_id.to_string(),

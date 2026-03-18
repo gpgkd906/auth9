@@ -245,37 +245,102 @@ impl IdentityClientStore for Auth9OidcClientStore {
     }
 }
 
-#[derive(Default)]
-struct Auth9OidcCredentialStore;
+struct Auth9OidcCredentialStore {
+    pool: MySqlPool,
+}
+
+impl Auth9OidcCredentialStore {
+    fn new(pool: MySqlPool) -> Self {
+        Self { pool }
+    }
+}
 
 #[async_trait]
 impl IdentityCredentialStore for Auth9OidcCredentialStore {
     async fn list_user_credentials(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> Result<Vec<IdentityCredentialRepresentation>> {
-        Ok(Vec::new())
+        use sqlx::Row;
+        let rows = match sqlx::query(
+            "SELECT id, credential_type, user_label, created_at FROM credentials WHERE user_id = ? AND is_active = 1",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        {
+            Ok(rows) => rows,
+            Err(e) => {
+                tracing::debug!("failed to list credentials for user {}: {}", user_id, e);
+                return Ok(Vec::new());
+            }
+        };
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let created_at: chrono::DateTime<Utc> = row.try_get("created_at")
+                .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
+            result.push(IdentityCredentialRepresentation {
+                id: row.try_get("id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                credential_type: row.try_get("credential_type").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                user_label: row.try_get("user_label").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                created_date: Some(created_at.timestamp_millis()),
+            });
+        }
+        Ok(result)
     }
 
     async fn remove_totp_credentials(&self, user_id: &str) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' totp cleanup not implemented",
-            user_id
-        )))
+        sqlx::query("DELETE FROM credentials WHERE user_id = ? AND credential_type = 'totp'")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(anyhow!("failed to remove totp credentials: {}", e)))?;
+        Ok(())
     }
 
     async fn list_webauthn_credentials(
         &self,
-        _user_id: &str,
+        user_id: &str,
     ) -> Result<Vec<IdentityCredentialRepresentation>> {
-        Ok(Vec::new())
+        use sqlx::Row;
+        let rows = sqlx::query(
+            "SELECT id, credential_type, user_label, created_at FROM credentials WHERE user_id = ? AND credential_type = 'webauthn' AND is_active = 1",
+        )
+        .bind(user_id)
+        .fetch_all(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to list webauthn credentials: {}", e)))?;
+
+        let mut result = Vec::with_capacity(rows.len());
+        for row in &rows {
+            let created_at: chrono::DateTime<Utc> = row.try_get("created_at")
+                .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
+            result.push(IdentityCredentialRepresentation {
+                id: row.try_get("id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                credential_type: row.try_get("credential_type").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                user_label: row.try_get("user_label").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                created_date: Some(created_at.timestamp_millis()),
+            });
+        }
+        Ok(result)
     }
 
-    async fn delete_user_credential(&self, user_id: &str, _credential_id: &str) -> Result<()> {
-        Err(AppError::Internal(anyhow!(
-            "auth9_oidc user '{}' credential deletion not implemented",
-            user_id
-        )))
+    async fn delete_user_credential(&self, user_id: &str, credential_id: &str) -> Result<()> {
+        let result = sqlx::query("DELETE FROM credentials WHERE id = ? AND user_id = ?")
+            .bind(credential_id)
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| AppError::Internal(anyhow!("failed to delete credential: {}", e)))?;
+
+        if result.rows_affected() == 0 {
+            return Err(AppError::NotFound(format!(
+                "credential '{}' not found for user '{}'",
+                credential_id, user_id
+            )));
+        }
+        Ok(())
     }
 }
 
@@ -522,7 +587,7 @@ impl Auth9OidcIdentityEngineAdapter {
             user_store: Auth9OidcUserStore::new(pool.clone()),
             client_store: Auth9OidcClientStore,
             session_store: Auth9OidcSessionStoreAdapter::new(),
-            credential_store: Auth9OidcCredentialStore,
+            credential_store: Auth9OidcCredentialStore::new(pool.clone()),
             federation_broker: Auth9OidcFederationBrokerAdapter::new(),
             event_source: Auth9OidcEventSource,
             action_store: Auth9OidcActionStore::new(pool.clone()),

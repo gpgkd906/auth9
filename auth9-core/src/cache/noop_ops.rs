@@ -163,4 +163,40 @@ impl CacheOperations for NoOpCacheManager {
     async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool> {
         NoOpCacheManager::set_flag(self, key, ttl_secs).await
     }
+
+    // ==================== TOTP ====================
+
+    async fn store_totp_setup(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        NoOpCacheManager::store_totp_setup(self, token, data, ttl_secs).await
+    }
+
+    async fn get_totp_setup(&self, token: &str) -> Result<Option<String>> {
+        NoOpCacheManager::get_totp_setup(self, token).await
+    }
+
+    async fn remove_totp_setup(&self, token: &str) -> Result<()> {
+        NoOpCacheManager::remove_totp_setup(self, token).await
+    }
+
+    async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool> {
+        NoOpCacheManager::is_totp_code_used(self, user_id, time_step).await
+    }
+
+    async fn mark_totp_code_used(&self, user_id: &str, time_step: u64, ttl_secs: u64) -> Result<()> {
+        NoOpCacheManager::mark_totp_code_used(self, user_id, time_step, ttl_secs).await
+    }
+
+    // ==================== MFA Session ====================
+
+    async fn store_mfa_session(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        NoOpCacheManager::store_mfa_session(self, token, data, ttl_secs).await
+    }
+
+    async fn get_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        NoOpCacheManager::get_mfa_session(self, token).await
+    }
+
+    async fn consume_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        NoOpCacheManager::consume_mfa_session(self, token).await
+    }
 }

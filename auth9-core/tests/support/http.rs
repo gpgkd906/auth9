@@ -236,6 +236,8 @@ pub struct TestAppState {
     pub saml_application_service: Arc<SamlApplicationService<TestSamlApplicationRepository>>,
     pub email_verification_service: Arc<EmailVerificationService>,
     pub required_actions_service: Arc<RequiredActionService>,
+    pub totp_service: Arc<auth9_core::domains::identity::service::TotpService>,
+    pub recovery_code_service: Arc<auth9_core::domains::identity::service::RecoveryCodeService>,
 }
 
 impl TestAppState {
@@ -403,6 +405,21 @@ impl TestAppState {
         let required_actions_service =
             Arc::new(RequiredActionService::new(identity_engine.clone()));
 
+        // MFA services with mock credential repo
+        let mock_cred_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
+            Arc::new(auth9_oidc::repository::credential::CredentialRepositoryImpl::new(
+                db_pool.clone(),
+            ));
+        let totp_service = Arc::new(auth9_core::domains::identity::service::TotpService::new(
+            mock_cred_repo.clone(),
+            Arc::new(cache_manager.clone()),
+            auth9_core::crypto::EncryptionKey::new([0u8; 32]),
+        ));
+        let recovery_code_service =
+            Arc::new(auth9_core::domains::identity::service::RecoveryCodeService::new(
+                mock_cred_repo,
+            ));
+
         Self {
             config,
             tenant_service,
@@ -448,6 +465,8 @@ impl TestAppState {
             saml_application_service,
             email_verification_service,
             required_actions_service,
+            totp_service,
+            recovery_code_service,
         }
     }
 
@@ -729,6 +748,16 @@ impl auth9_core::state::HasEmailVerification for TestAppState {
 impl auth9_core::state::HasRequiredActions for TestAppState {
     fn required_actions_service(&self) -> &RequiredActionService {
         &self.required_actions_service
+    }
+}
+
+impl auth9_core::state::HasMfa for TestAppState {
+    fn totp_service(&self) -> &auth9_core::domains::identity::service::TotpService {
+        &self.totp_service
+    }
+
+    fn recovery_code_service(&self) -> &auth9_core::domains::identity::service::RecoveryCodeService {
+        &self.recovery_code_service
     }
 }
 

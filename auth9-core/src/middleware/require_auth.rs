@@ -209,6 +209,8 @@ fn is_identity_token_path_allowed(path: &str, method: &Method) -> bool {
         // Required actions (checked immediately after login with identity token)
         || path == "/api/v1/hosted-login/pending-actions"
         || path == "/api/v1/hosted-login/complete-action"
+        // MFA management (TOTP enrollment, recovery codes, status)
+        || path.starts_with("/api/v1/mfa/")
 }
 
 /// Generate a 503 Service Unavailable response

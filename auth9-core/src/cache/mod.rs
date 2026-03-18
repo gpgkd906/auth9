@@ -115,6 +115,34 @@ pub trait CacheOperations: Send + Sync {
 
     /// Set a flag key with TTL. Returns true if the key already existed.
     async fn set_flag(&self, key: &str, ttl_secs: u64) -> Result<bool>;
+
+    // ==================== TOTP ====================
+
+    /// Store TOTP enrollment setup state
+    async fn store_totp_setup(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get TOTP enrollment setup state
+    async fn get_totp_setup(&self, token: &str) -> Result<Option<String>>;
+
+    /// Remove TOTP enrollment setup state
+    async fn remove_totp_setup(&self, token: &str) -> Result<()>;
+
+    /// Check if a TOTP code time step has been used (replay protection)
+    async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool>;
+
+    /// Mark a TOTP code time step as used (replay protection)
+    async fn mark_totp_code_used(&self, user_id: &str, time_step: u64, ttl_secs: u64) -> Result<()>;
+
+    // ==================== MFA Session ====================
+
+    /// Store MFA session data (temporary token after password auth, before MFA verification)
+    async fn store_mfa_session(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()>;
+
+    /// Get MFA session data
+    async fn get_mfa_session(&self, token: &str) -> Result<Option<String>>;
+
+    /// Consume (get + delete) MFA session data
+    async fn consume_mfa_session(&self, token: &str) -> Result<Option<String>>;
 }
 
 /// Cache key prefixes
@@ -134,6 +162,9 @@ pub(crate) mod keys {
     pub const OTP_COOLDOWN: &str = "auth9:otp_cooldown";
     pub const OTP_DAILY: &str = "auth9:otp_daily";
     pub const OTP_FAIL: &str = "auth9:otp_fail";
+    pub const TOTP_SETUP: &str = "auth9:totp_setup";
+    pub const TOTP_USED: &str = "auth9:totp_used";
+    pub const MFA_SESSION: &str = "auth9:mfa_session";
 }
 
 /// Default TTLs

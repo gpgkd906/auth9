@@ -351,3 +351,9 @@ pub trait HasRequiredActions: Clone + Send + Sync + 'static {
     /// Get the required actions service
     fn required_actions_service(&self) -> &RequiredActionService;
 }
+
+/// Trait for states that provide MFA services (TOTP + recovery codes)
+pub trait HasMfa: Clone + Send + Sync + 'static {
+    fn totp_service(&self) -> &crate::domains::identity::service::TotpService;
+    fn recovery_code_service(&self) -> &crate::domains::identity::service::RecoveryCodeService;
+}

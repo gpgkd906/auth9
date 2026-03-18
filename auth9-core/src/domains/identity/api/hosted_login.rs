@@ -6,14 +6,16 @@
 //! returning JSON responses instead of OIDC redirects.
 
 use crate::cache::CacheOperations;
+use crate::domains::identity::api::mfa::{MfaChallengeResponse, MfaSessionData, MFA_SESSION_TTL_SECS};
 use crate::error::{AppError, Result};
 use crate::http_support::{write_audit_log_generic, MessageResponse};
 use crate::models::password::{ForgotPasswordInput, ResetPasswordInput};
 use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::state::{
-    HasCache, HasPasswordManagement, HasRequiredActions, HasServices, HasSessionManagement,
+    HasCache, HasMfa, HasPasswordManagement, HasRequiredActions, HasServices, HasSessionManagement,
+    HasWebAuthn,
 };
-use axum::{extract::State, http::HeaderMap, Json};
+use axum::{extract::State, http::HeaderMap, response::IntoResponse, Json};
 use axum_extra::headers::{authorization::Bearer, Authorization};
 use axum_extra::TypedHeader;
 use chrono::Utc;
@@ -75,11 +77,11 @@ fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
 /// Authenticate with email and password, returning an identity token directly.
 ///
 /// POST /api/v1/hosted-login/password
-pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + HasRequiredActions>(
+pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + HasRequiredActions + HasMfa + HasWebAuthn>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<HostedLoginPasswordRequest>,
-) -> Result<Json<HostedLoginTokenResponse>> {
+) -> Result<axum::response::Response> {
     let start = std::time::Instant::now();
     let email = input.email.trim().to_lowercase();
     let password = input.password.clone();
@@ -122,19 +124,83 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
         ));
     }
 
-    // Create session
     let ip_address = extract_client_ip(&headers);
     let user_agent = headers
         .get(axum::http::header::USER_AGENT)
         .and_then(|v| v.to_str().ok())
         .map(String::from);
 
+    // Check if MFA is required (use user.id — same key used during MFA enrollment)
+    let user_id_str = user.id.to_string();
+    let has_totp = state
+        .totp_service()
+        .has_totp(&user_id_str)
+        .await
+        .unwrap_or(false);
+    let webauthn_creds = state
+        .webauthn_service()
+        .list_credentials(&user_id_str, None)
+        .await
+        .unwrap_or_default();
+    let has_webauthn = !webauthn_creds.is_empty();
+
+    if has_totp || has_webauthn {
+        // MFA required — issue temporary MFA session token
+        let mfa_token = uuid::Uuid::new_v4().to_string();
+        let mfa_data = MfaSessionData {
+            user_id: user.id.to_string(),
+            email: user.email.clone(),
+            display_name: user.display_name.clone(),
+            identity_subject: user.identity_subject.clone(),
+            ip_address,
+            user_agent,
+        };
+        let mfa_json = serde_json::to_string(&mfa_data)
+            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize MFA session: {}", e)))?;
+
+        state
+            .cache()
+            .store_mfa_session(&mfa_token, &mfa_json, MFA_SESSION_TTL_SECS)
+            .await?;
+
+        let mut methods = Vec::new();
+        if has_totp {
+            methods.push("totp".to_string());
+        }
+        if has_webauthn {
+            methods.push("webauthn".to_string());
+        }
+
+        let _ = write_audit_log_generic(
+            &state,
+            &headers,
+            "hosted_login.mfa_challenge",
+            "user",
+            Some(*user.id),
+            None,
+            None,
+        )
+        .await;
+
+        metrics::counter!("auth9_auth_login_total", "result" => "mfa_required", "backend" => "hosted").increment(1);
+        metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password").record(start.elapsed().as_secs_f64());
+
+        let response = MfaChallengeResponse {
+            mfa_required: true,
+            mfa_session_token: mfa_token,
+            mfa_methods: methods,
+            expires_in: MFA_SESSION_TTL_SECS,
+        };
+
+        return Ok(axum::Json(response).into_response());
+    }
+
+    // No MFA — proceed with session creation and token issuance
     let session = state
         .session_service()
         .create_session(user.id, None, ip_address, user_agent)
         .await?;
 
-    // Issue identity token
     let jwt_manager = HasServices::jwt_manager(&state);
     let identity_token = jwt_manager.create_identity_token_with_session(
         *user.id,
@@ -170,12 +236,12 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
     metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted").increment(1);
     metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password").record(start.elapsed().as_secs_f64());
 
-    Ok(Json(HostedLoginTokenResponse {
+    Ok(axum::Json(HostedLoginTokenResponse {
         access_token: identity_token,
         token_type: "Bearer".to_string(),
         expires_in: jwt_manager.access_token_ttl(),
         pending_actions,
-    }))
+    }).into_response())
 }
 
 #[utoipa::path(

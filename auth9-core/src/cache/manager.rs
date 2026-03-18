@@ -514,6 +514,75 @@ impl CacheManager {
 
     // ==================== Webhook Event Deduplication ====================
 
+    // ==================== TOTP ====================
+
+    pub async fn store_totp_setup(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::TOTP_SETUP, token);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_totp_setup(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::TOTP_SETUP, token);
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(&key).await?;
+        Ok(value)
+    }
+
+    pub async fn remove_totp_setup(&self, token: &str) -> Result<()> {
+        let key = format!("{}:{}", keys::TOTP_SETUP, token);
+        self.delete(&key).await
+    }
+
+    pub async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool> {
+        let key = format!("{}:{}:{}", keys::TOTP_USED, user_id, time_step);
+        let mut conn = self.conn.clone();
+        let exists: bool = redis::cmd("EXISTS")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await?;
+        Ok(exists)
+    }
+
+    pub async fn mark_totp_code_used(
+        &self,
+        user_id: &str,
+        time_step: u64,
+        ttl_secs: u64,
+    ) -> Result<()> {
+        let key = format!("{}:{}:{}", keys::TOTP_USED, user_id, time_step);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, "1", ttl_secs).await?;
+        Ok(())
+    }
+
+    // ==================== MFA Session ====================
+
+    pub async fn store_mfa_session(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
+        let key = format!("{}:{}", keys::MFA_SESSION, token);
+        let mut conn = self.conn.clone();
+        let _: () = conn.set_ex(&key, data, ttl_secs).await?;
+        Ok(())
+    }
+
+    pub async fn get_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::MFA_SESSION, token);
+        let mut conn = self.conn.clone();
+        let value: Option<String> = conn.get(&key).await?;
+        Ok(value)
+    }
+
+    pub async fn consume_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        let key = format!("{}:{}", keys::MFA_SESSION, token);
+        let mut conn = self.conn.clone();
+        redis::cmd("GETDEL")
+            .arg(&key)
+            .query_async(&mut conn)
+            .await
+            .map_err(AppError::from)
+    }
+
     /// Atomically check if a webhook event key exists and set it if not (SETNX).
     /// Returns true if the event was already processed (duplicate).
     pub async fn check_and_mark_webhook_event(

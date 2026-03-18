@@ -226,6 +226,81 @@ impl NoOpCacheManager {
             Ok(false)
         }
     }
+
+    // ==================== TOTP ====================
+
+    pub async fn store_totp_setup(&self, token: &str, data: &str, _ttl_secs: u64) -> Result<()> {
+        self.otp_store
+            .write()
+            .await
+            .insert(format!("totp_setup:{}", token), data.to_string());
+        Ok(())
+    }
+
+    pub async fn get_totp_setup(&self, token: &str) -> Result<Option<String>> {
+        Ok(self
+            .otp_store
+            .read()
+            .await
+            .get(&format!("totp_setup:{}", token))
+            .cloned())
+    }
+
+    pub async fn remove_totp_setup(&self, token: &str) -> Result<()> {
+        self.otp_store
+            .write()
+            .await
+            .remove(&format!("totp_setup:{}", token));
+        Ok(())
+    }
+
+    pub async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool> {
+        Ok(self
+            .flags
+            .read()
+            .await
+            .contains_key(&format!("totp_used:{}:{}", user_id, time_step)))
+    }
+
+    pub async fn mark_totp_code_used(
+        &self,
+        user_id: &str,
+        time_step: u64,
+        _ttl_secs: u64,
+    ) -> Result<()> {
+        self.flags
+            .write()
+            .await
+            .insert(format!("totp_used:{}:{}", user_id, time_step), true);
+        Ok(())
+    }
+
+    // ==================== MFA Session ====================
+
+    pub async fn store_mfa_session(&self, token: &str, data: &str, _ttl_secs: u64) -> Result<()> {
+        self.otp_store
+            .write()
+            .await
+            .insert(format!("mfa_session:{}", token), data.to_string());
+        Ok(())
+    }
+
+    pub async fn get_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        Ok(self
+            .otp_store
+            .read()
+            .await
+            .get(&format!("mfa_session:{}", token))
+            .cloned())
+    }
+
+    pub async fn consume_mfa_session(&self, token: &str) -> Result<Option<String>> {
+        Ok(self
+            .otp_store
+            .write()
+            .await
+            .remove(&format!("mfa_session:{}", token)))
+    }
 }
 
 impl Default for NoOpCacheManager {

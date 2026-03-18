@@ -92,6 +92,13 @@ urlencoding = "2"
 webauthn-rs = { version = "0.5", features = ["danger-allow-state-serialisation", "conditional-ui"] }
 webauthn-rs-proto = "0.5"
 
+# TOTP
+totp-rs = { version = "5", features = ["otpauth"] }
+base32 = "0.5"
+
+# Local credential store
+auth9-oidc = { path = "../auth9-oidc" }
+
 # AWS SDK for SES
 aws-config = { version = "1.5", features = ["behavior-version-latest"] }
 aws-sdk-sesv2 = "1.60"

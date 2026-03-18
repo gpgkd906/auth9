@@ -73,6 +73,15 @@ where
             "/api/v1/hosted-login/complete-password-reset",
             post(identity_api::hosted_login::complete_password_reset::<S>),
         )
+        // MFA challenge (during login, no JWT required)
+        .route(
+            "/api/v1/mfa/challenge/totp",
+            post(identity_api::mfa::challenge_totp::<S>),
+        )
+        .route(
+            "/api/v1/mfa/challenge/recovery-code",
+            post(identity_api::mfa::challenge_recovery_code::<S>),
+        )
         // Email verification
         .route(
             "/api/v1/hosted-login/send-verification",
@@ -170,5 +179,30 @@ where
         .route(
             "/api/v1/hosted-login/complete-action",
             post(identity_api::required_actions::complete_action::<S>),
+        )
+        // MFA management (authenticated)
+        .route(
+            "/api/v1/mfa/status",
+            get(identity_api::mfa::mfa_status::<S>),
+        )
+        .route(
+            "/api/v1/mfa/totp/enroll",
+            post(identity_api::mfa::totp_enroll_start::<S>),
+        )
+        .route(
+            "/api/v1/mfa/totp/enroll/verify",
+            post(identity_api::mfa::totp_enroll_verify::<S>),
+        )
+        .route(
+            "/api/v1/mfa/totp",
+            delete(identity_api::mfa::totp_remove::<S>),
+        )
+        .route(
+            "/api/v1/mfa/recovery-codes/generate",
+            post(identity_api::mfa::recovery_codes_generate::<S>),
+        )
+        .route(
+            "/api/v1/mfa/recovery-codes/remaining",
+            get(identity_api::mfa::recovery_codes_remaining::<S>),
         )
 }

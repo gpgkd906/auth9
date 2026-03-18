@@ -114,6 +114,7 @@
 | [auth/21-hosted-login-rollout.md](./auth/21-hosted-login-rollout.md) | Hosted Login 灰度上线与回滚（LOGIN_MODE 开关、百分比分流、指标观测、回滚验证） | 5 |
 | [auth/22-email-verification.md](./auth/22-email-verification.md) | 邮箱验证流程（发送验证邮件、Token 消费、Replay 防护、防枚举） | 5 |
 | [auth/23-required-actions.md](./auth/23-required-actions.md) | Required Actions 与登录后跳转（Pending Actions API、Force Password、Complete Profile） | 5 |
+| [auth/24-mfa-totp-recovery.md](./auth/24-mfa-totp-recovery.md) | MFA 本地化（TOTP 注册/验证/重放防护、Recovery Code 生成/消费、MFA 登录挑战、Session 过期） | 5 |
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |

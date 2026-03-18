@@ -12,7 +12,8 @@ use crate::grpc::TokenExchangeService;
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth9_descriptor");
 use crate::domains::authorization::service::{ClientService, RbacService};
 use crate::domains::identity::service::{
-    EmailVerificationService, IdentityProviderService, PasswordService, RequiredActionService,
+    EmailVerificationService, IdentityProviderService, PasswordService, RecoveryCodeService,
+    RequiredActionService, TotpService,
     SessionService, WebAuthnService,
 };
 use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
@@ -193,6 +194,8 @@ pub struct AppState {
     pub saml_application_service: Arc<SamlApplicationService<SamlApplicationRepositoryImpl>>,
     pub email_verification_service: Arc<EmailVerificationService>,
     pub required_actions_service: Arc<RequiredActionService>,
+    pub totp_service: Arc<TotpService>,
+    pub recovery_code_service: Arc<RecoveryCodeService>,
 }
 
 /// Implement HasServices trait for production AppState
@@ -456,6 +459,16 @@ impl crate::state::HasEmailVerification for AppState {
 impl crate::state::HasRequiredActions for AppState {
     fn required_actions_service(&self) -> &RequiredActionService {
         &self.required_actions_service
+    }
+}
+
+impl crate::state::HasMfa for AppState {
+    fn totp_service(&self) -> &TotpService {
+        &self.totp_service
+    }
+
+    fn recovery_code_service(&self) -> &RecoveryCodeService {
+        &self.recovery_code_service
     }
 }
 
@@ -754,6 +767,32 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     ));
     let required_actions_service = Arc::new(RequiredActionService::new(identity_engine.clone()));
 
+    // Create MFA services (TOTP + recovery codes)
+    let credential_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
+        Arc::new(auth9_oidc::repository::credential::CredentialRepositoryImpl::new(
+            db_pool.clone(),
+        ));
+
+    let totp_encryption_key = match std::env::var("SETTINGS_ENCRYPTION_KEY") {
+        Ok(encoded) if !encoded.is_empty() => {
+            EncryptionKey::from_base64(&encoded).unwrap_or_else(|_| {
+                EncryptionKey::new([0u8; 32]) // Fallback for dev — will fail to decrypt on restart
+            })
+        }
+        _ => {
+            tracing::warn!("SETTINGS_ENCRYPTION_KEY not set — TOTP secrets will use a zero key (DEV ONLY)");
+            EncryptionKey::new([0u8; 32])
+        }
+    };
+
+    let totp_service = Arc::new(TotpService::new(
+        credential_repo.clone(),
+        Arc::new(cache_manager.clone()),
+        totp_encryption_key,
+    ));
+
+    let recovery_code_service = Arc::new(RecoveryCodeService::new(credential_repo));
+
     // Create app state
     let state = AppState {
         config: Arc::new(config.clone()),
@@ -789,6 +828,8 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
         saml_application_service,
         email_verification_service,
         required_actions_service,
+        totp_service,
+        recovery_code_service,
     };
 
     // Create rate limit state for middleware
