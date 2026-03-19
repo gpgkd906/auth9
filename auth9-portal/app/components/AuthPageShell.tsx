@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { AuthBrandPanel, buildAuthBrandStyle } from "~/components/auth/AuthBrandPanel";
+import { buildAuthBrandStyle } from "~/components/auth/AuthBrandPanel";
 import { LanguageSwitcher } from "~/components/LanguageSwitcher";
 import { ThemeToggle } from "~/components/ThemeToggle";
 import { cn } from "~/lib/utils";
@@ -18,9 +18,6 @@ export function AuthPageShell({
   children,
   className,
   branding,
-  panelTitle,
-  panelDescription,
-  panelEyebrow,
 }: AuthPageShellProps) {
   const style = branding ? buildAuthBrandStyle(branding) : undefined;
 
@@ -36,15 +33,7 @@ export function AuthPageShell({
         className={cn("auth-page-shell min-h-screen flex items-center justify-center px-4 py-8 sm:px-6 relative", className)}
       >
         <div className="page-backdrop" />
-        <div className="relative z-10 grid w-full max-w-6xl items-center gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,480px)]">
-          {branding && panelTitle && panelDescription ? (
-            <AuthBrandPanel
-              branding={branding}
-              eyebrow={panelEyebrow}
-              title={panelTitle}
-              description={panelDescription}
-            />
-          ) : null}
+        <div className="relative z-10 flex w-full justify-center">
           {children}
         </div>
       </div>
