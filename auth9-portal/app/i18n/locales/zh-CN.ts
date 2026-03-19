@@ -116,9 +116,9 @@ export default {
   },
   auth: {
     shared: {
-      hostedEyebrow: "托管认证",
-      hostedTitle: "由 Portal 托管的认证主入口",
-      hostedDescription: "Auth9 现在直接在 Portal 中承载认证主路由、branding 和认证方式选择。",
+      hostedEyebrow: "身份平台",
+      hostedTitle: "为你的应用提供安全认证",
+      hostedDescription: "支持密码、SSO、通行密钥和社交账号登录，统一由 Auth9 管理。",
     },
     login: {
       metaTitle: "登录 - Auth9",
@@ -147,7 +147,7 @@ export default {
       missingAccessToken: "缺少访问令牌",
       passwordRevealDetails: "展开表单", // pragma: allowlist secret
       passwordHideDetails: "收起表单", // pragma: allowlist secret
-      passwordEmailPlaceholder: "邮箱地址",
+      passwordEmailPlaceholder: "用户名或邮箱",
       passwordPlaceholder: "密码", // pragma: allowlist secret
       passwordSubmit: "登录", // pragma: allowlist secret
       signingIn: "登录中...",
@@ -186,8 +186,8 @@ export default {
       metaTitle: "注册 - Auth9",
       title: "创建你的账户",
       description: "开始使用 Auth9 管理身份系统",
-      panelTitle: "将注册体验纳入 Auth9 Portal",
-      panelDescription: "注册页现在与其他认证页共享同一套路由壳层、branding 来源和响应式布局。",
+      panelTitle: "加入 Auth9",
+      panelDescription: "创建账户，开始为你的应用管理身份与访问权限。",
       submit: "创建账户",
       footerPrefix: "已经有账户了？",
       footerAction: "去登录",
@@ -198,8 +198,8 @@ export default {
       metaTitle: "忘记密码 - Auth9",
       title: "忘记密码？",
       description: "输入你的邮箱地址，我们会向你发送密码重置链接。",
-      panelTitle: "在 Portal 内完成访问恢复",
-      panelDescription: "找回密码页由 Auth9 Portal 直接渲染，品牌、文案和后续验证步骤都留在同一路由体系内。",
+      panelTitle: "找回你的账户",
+      panelDescription: "安全地重置密码，重置链接将发送到你的邮箱。",
       successTitle: "请检查你的邮箱",
       successDescription:
         "如果 {{email}} 对应的账户存在，我们已向该地址发送密码重置说明。",
@@ -209,8 +209,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "重置密码 - Auth9",
-      panelTitle: "在 Auth9 路由内完成密码恢复",
-      panelDescription: "重置密码页现在与登录和注册页共享同一套 Portal 托管壳层与 branding 来源。",
+      panelTitle: "设置新密码",
+      panelDescription: "选择一个强密码来保护你的账户。",
       invalidToken: "无效或缺失的重置令牌",
       expiredToken: "该重置链接已过期，请重新申请。",
       invalidTitle: "链接无效",

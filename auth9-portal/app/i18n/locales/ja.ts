@@ -116,9 +116,9 @@ export default {
   },
   auth: {
     shared: {
-      hostedEyebrow: "Hosted Login",
-      hostedTitle: "Portal が管理する認証導線",
-      hostedDescription: "Auth9 Portal が認証ルート、branding、サインイン方法の選択を直接ホストするようになりました。",
+      hostedEyebrow: "ID プラットフォーム",
+      hostedTitle: "アプリのための安全な認証",
+      hostedDescription: "パスワード、SSO、パスキー、ソーシャルログインを Auth9 で一元管理。",
     },
     login: {
       metaTitle: "サインイン - Auth9",
@@ -147,7 +147,7 @@ export default {
       missingAccessToken: "アクセストークンがありません",
       passwordRevealDetails: "フォームを表示", // pragma: allowlist secret
       passwordHideDetails: "フォームを隠す", // pragma: allowlist secret
-      passwordEmailPlaceholder: "メールアドレス",
+      passwordEmailPlaceholder: "ユーザー名またはメールアドレス",
       passwordPlaceholder: "パスワード", // pragma: allowlist secret
       passwordSubmit: "サインイン", // pragma: allowlist secret
       signingIn: "サインイン中...",
@@ -186,8 +186,8 @@ export default {
       metaTitle: "サインアップ - Auth9",
       title: "アカウントを作成",
       description: "Auth9でアイデンティティ管理を始めましょう",
-      panelTitle: "登録体験を Auth9 Portal に統一",
-      panelDescription: "登録ページは他の認証ページと同じルートシェル、branding ソース、レスポンシブレイアウトを共有します。",
+      panelTitle: "Auth9 に参加",
+      panelDescription: "アカウントを作成して、アプリの ID とアクセス管理を始めましょう。",
       submit: "アカウント作成",
       footerPrefix: "すでにアカウントをお持ちですか？",
       footerAction: "サインイン",
@@ -198,8 +198,8 @@ export default {
       metaTitle: "パスワードをお忘れですか - Auth9",
       title: "パスワードをお忘れですか？",
       description: "メールアドレスを入力すると、パスワードリセット用のリンクをお送りします。",
-      panelTitle: "Portal 上でアクセス回復を完了",
-      panelDescription: "パスワード再設定導線は Auth9 Portal が直接描画し、branding と将来の検証ステップを同じルート群に保ちます。",
+      panelTitle: "アカウントを復旧",
+      panelDescription: "パスワードを安全にリセットします。リセットリンクがメールアドレスに送信されます。",
       successTitle: "メールを確認してください",
       successDescription:
         "{{email}}のアカウントが存在する場合、パスワードリセットの手順をそのアドレスに送信しました。",
@@ -209,8 +209,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "パスワードをリセット - Auth9",
-      panelTitle: "Auth9 ルート内でパスワード回復を完了",
-      panelDescription: "リセット画面はログイン・登録と同じ Portal 管理のシェルと branding ソースを利用します。",
+      panelTitle: "新しいパスワードを設定",
+      panelDescription: "アカウントを保護するために強力なパスワードを選択してください。",
       invalidToken: "無効またはリセットトークンがありません",
       expiredToken: "このリセットリンクは有効期限切れです。新しいリンクを再申請してください。",
       invalidTitle: "無効なリンク",

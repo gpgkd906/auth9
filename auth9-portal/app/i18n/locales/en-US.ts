@@ -116,9 +116,9 @@ export default {
   },
   auth: {
     shared: {
-      hostedEyebrow: "Hosted login",
-      hostedTitle: "Portal-owned authentication",
-      hostedDescription: "Auth9 now hosts the primary authentication routes, branding, and method selection directly in the Portal.",
+      hostedEyebrow: "Identity Platform",
+      hostedTitle: "Secure authentication for your apps",
+      hostedDescription: "Sign in with password, SSO, passkey, or social accounts — all managed by Auth9.",
     },
     login: {
       metaTitle: "Sign In - Auth9",
@@ -147,7 +147,7 @@ export default {
       missingAccessToken: "Missing access token",
       passwordRevealDetails: "Show form", // pragma: allowlist secret
       passwordHideDetails: "Hide form", // pragma: allowlist secret
-      passwordEmailPlaceholder: "Email address", // pragma: allowlist secret
+      passwordEmailPlaceholder: "Username or email", // pragma: allowlist secret
       passwordPlaceholder: "Password", // pragma: allowlist secret
       passwordSubmit: "Sign in", // pragma: allowlist secret
       signingIn: "Signing in...",
@@ -186,8 +186,8 @@ export default {
       metaTitle: "Sign Up - Auth9",
       title: "Create your account",
       description: "Start managing identity with Auth9",
-      panelTitle: "Bring your users into the Auth9 experience",
-      panelDescription: "Registration now shares the same route shell, branding source, and responsive layout as the rest of the hosted auth flow.",
+      panelTitle: "Join Auth9",
+      panelDescription: "Create an account to start managing identity and access for your applications.",
       submit: "Create account",
       footerPrefix: "Already have an account?",
       footerAction: "Sign in",
@@ -198,8 +198,8 @@ export default {
       metaTitle: "Forgot Password - Auth9",
       title: "Forgot password?",
       description: "Enter your email address and we will send you a link to reset your password.",
-      panelTitle: "Recover access without leaving the Portal",
-      panelDescription: "Password recovery is rendered by Auth9 Portal so branding, copy, and future verification steps stay under one route family.",
+      panelTitle: "Recover your account",
+      panelDescription: "Reset your password securely. A reset link will be sent to your email address.",
       successTitle: "Check your email",
       successDescription:
         "If an account exists for {{email}}, we have sent password reset instructions to that address.",
@@ -209,8 +209,8 @@ export default {
     },
     resetPassword: {
       metaTitle: "Reset Password - Auth9",
-      panelTitle: "Finish password recovery on an Auth9 route",
-      panelDescription: "Reset-password pages now use the same Portal-owned shell and branding source as the login and registration routes.",
+      panelTitle: "Set a new password",
+      panelDescription: "Choose a strong password to secure your account.",
       invalidToken: "Invalid or missing reset token",
       expiredToken: "This reset link has expired. Please request a new one.",
       invalidTitle: "Invalid link",

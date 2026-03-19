@@ -69,12 +69,12 @@ export function AuthBrandPanel({ branding, eyebrow, title, description }: AuthBr
       <div className="space-y-4 rounded-[28px] border border-white/50 bg-white/50 p-6">
         <div className="grid gap-3 sm:grid-cols-2">
           <div className="rounded-2xl bg-white/70 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Portal-owned</p>
-            <p className="mt-2 text-sm text-[var(--text-primary)]">Branding, layout, and entry selection stay on Auth9 routes.</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Secure</p>
+            <p className="mt-2 text-sm text-[var(--text-primary)]">Password, MFA, SSO, Passkey, and social login — all in one place.</p>
           </div>
           <div className="rounded-2xl bg-white/70 p-4">
-            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Fallback ready</p>
-            <p className="mt-2 text-sm text-[var(--text-primary)]">Keycloak theme remains available for rollback and compatibility.</p>
+            <p className="text-xs uppercase tracking-[0.2em] text-[var(--text-tertiary)]">Customizable</p>
+            <p className="mt-2 text-sm text-[var(--text-primary)]">Brand your login pages with your own logo, colors, and domain.</p>
           </div>
         </div>
       </div>

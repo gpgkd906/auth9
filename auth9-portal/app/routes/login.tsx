@@ -340,7 +340,7 @@ export default function Login() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const { t } = useI18n();
-  const [passwordExpanded, setPasswordExpanded] = useState(false);
+  const [passwordExpanded, setPasswordExpanded] = useState(true);
   const [ssoEmail, setSsoEmail] = useState("");
 
   const [authenticating, setAuthenticating] = useState(false);
@@ -523,9 +523,10 @@ export default function Login() {
                       <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
                     )}
                     <Input
-                      type="email"
+                      type="text"
                       name="email"
                       required
+                      autoComplete="username"
                       placeholder={t("auth.login.passwordEmailPlaceholder")}
                       defaultValue={ssoEmail}
                     />
@@ -594,14 +595,6 @@ export default function Login() {
                   </div>
                 )}
 
-                <div className="rounded-2xl border border-dashed border-[var(--glass-border-subtle)] px-4 py-3 text-left">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--text-tertiary)]">
-                    {t("auth.login.futureMethodsEyebrow")}
-                  </p>
-                  <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                    {t("auth.login.futureMethodsDescription")}
-                  </p>
-                </div>
               </AuthMethodStack>
 
               {actionData?.error && (
