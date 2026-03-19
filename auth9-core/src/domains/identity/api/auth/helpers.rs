@@ -72,6 +72,7 @@ pub fn build_callback_url(issuer: &str) -> String {
 
 /// Extract client IP address from request headers
 /// Checks X-Forwarded-For, X-Real-IP, then falls back to None
+#[allow(dead_code)]
 pub(crate) fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
     // Check X-Forwarded-For first (may contain multiple IPs)
     if let Some(xff) = headers.get("x-forwarded-for") {
@@ -413,11 +414,10 @@ mod tests {
     fn test_verify_pkce_s256_correct_verifier() {
         // RFC 7636 Appendix B test vector
         let code_verifier = "dBjftJeZ4CVP-mB92K27uhbUJU1p1r_wW1gFWFOEjXk"; // pragma: allowlist secret
-        // SHA256 of verifier, base64url-encoded
+                                                                           // SHA256 of verifier, base64url-encoded
         use sha2::{Digest, Sha256};
         let hash = Sha256::digest(code_verifier.as_bytes());
-        let code_challenge =
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
+        let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
 
         assert!(verify_pkce_s256(code_verifier, &code_challenge));
     }
@@ -427,8 +427,7 @@ mod tests {
         let code_verifier = "correct-verifier"; // pragma: allowlist secret
         use sha2::{Digest, Sha256};
         let hash = Sha256::digest(code_verifier.as_bytes());
-        let code_challenge =
-            base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
+        let code_challenge = base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(hash);
 
         assert!(!verify_pkce_s256("wrong-verifier", &code_challenge));
     }

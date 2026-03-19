@@ -1093,8 +1093,8 @@ mod tests {
             location: Some("Tokyo, JP".to_string()),
             session_id: Some(StringUuid::new_v4()),
             failure_reason: None,
-        provider_alias: None,
-        provider_type: None,
+            provider_alias: None,
+            provider_type: None,
         };
         assert_eq!(input.event_type, LoginEventType::Success);
         assert!(input.failure_reason.is_none());

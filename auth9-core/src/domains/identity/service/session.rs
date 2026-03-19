@@ -203,7 +203,10 @@ impl<S: SessionRepository, U: UserRepository> SessionService<S, U> {
             .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
 
         // Logout from the identity backend (ignore if user doesn't exist there)
-        let _ = self.identity_sessions.logout_user(&user.identity_subject).await;
+        let _ = self
+            .identity_sessions
+            .logout_user(&user.identity_subject)
+            .await;
 
         // Revoke all sessions in database regardless of Keycloak status
         self.session_repo.revoke_all_by_user(user_id).await

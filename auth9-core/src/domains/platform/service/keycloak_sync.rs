@@ -6,8 +6,8 @@
 
 use crate::error::Result;
 use crate::identity_engine::{IdentityEngine, RealmSettingsUpdate};
-use crate::models::email::SmtpServerConfig;
 use crate::models::branding::BrandingConfig;
+use crate::models::email::SmtpServerConfig;
 use crate::models::password::PasswordPolicy;
 use std::sync::Arc;
 use tracing::{error, info};
@@ -151,13 +151,13 @@ impl KeycloakSyncService {
 mod tests {
     use super::*;
     use crate::error::AppError;
+    use crate::identity_engine::OidcClientRepresentation;
     use crate::identity_engine::{
         FederationBroker, IdentityClientStore, IdentityCredentialRepresentation,
         IdentityCredentialStore, IdentityEventSource, IdentityProviderRepresentation,
         IdentitySamlClientRepresentation, IdentitySessionStore, IdentityUserCreateInput,
         IdentityUserRepresentation, IdentityUserStore, IdentityUserUpdateInput,
     };
-    use crate::identity_engine::OidcClientRepresentation;
     use async_trait::async_trait;
     use std::collections::HashMap;
     use std::sync::Mutex;
@@ -255,7 +255,10 @@ mod tests {
             Ok(format!("uuid-{client_id}"))
         }
 
-        async fn get_client_by_client_id(&self, client_id: &str) -> Result<OidcClientRepresentation> {
+        async fn get_client_by_client_id(
+            &self,
+            client_id: &str,
+        ) -> Result<OidcClientRepresentation> {
             Ok(OidcClientRepresentation {
                 id: Some(format!("uuid-{client_id}")),
                 client_id: client_id.to_string(),

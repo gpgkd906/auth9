@@ -5,8 +5,8 @@
 //! - logout (with token, without token)
 //! - start/complete password reset
 
-use crate::support::http::{post_json, post_json_with_auth, TestAppState};
 use crate::support::create_test_user;
+use crate::support::http::{post_json, post_json_with_auth, TestAppState};
 use auth9_core::domains::identity::api::hosted_login::HostedLoginTokenResponse;
 use auth9_core::http_support::MessageResponse;
 use axum::http::StatusCode;

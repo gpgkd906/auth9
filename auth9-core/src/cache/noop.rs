@@ -393,12 +393,7 @@ impl NoOpCacheManager {
 
     // ==================== Pending Merge ====================
 
-    pub async fn store_pending_merge(
-        &self,
-        token: &str,
-        data: &str,
-        _ttl_secs: u64,
-    ) -> Result<()> {
+    pub async fn store_pending_merge(&self, token: &str, data: &str, _ttl_secs: u64) -> Result<()> {
         self.oidc_states
             .write()
             .await

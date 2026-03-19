@@ -33,10 +33,7 @@ impl RequiredActionService {
     }
 
     /// Get all pending actions for a user, with redirect URLs.
-    pub async fn get_pending_actions(
-        &self,
-        user_id: &str,
-    ) -> Result<Vec<PendingActionResponse>> {
+    pub async fn get_pending_actions(&self, user_id: &str) -> Result<Vec<PendingActionResponse>> {
         let actions = self
             .identity_engine
             .action_store()
@@ -62,19 +59,21 @@ impl RequiredActionService {
         let mut actions = self.get_pending_actions(identity_subject).await?;
 
         // Check if password is temporary → auto-create update_password action
-        if !actions.iter().any(|a| a.action_type == ACTION_UPDATE_PASSWORD) {
-            if self.is_password_temporary(identity_subject).await? {
-                let id = self
-                    .identity_engine
-                    .action_store()
-                    .create_action(identity_subject, ACTION_UPDATE_PASSWORD, None)
-                    .await?;
-                actions.push(PendingActionResponse {
-                    id,
-                    action_type: ACTION_UPDATE_PASSWORD.to_string(),
-                    redirect_url: Self::action_redirect_url(ACTION_UPDATE_PASSWORD),
-                });
-            }
+        if !actions
+            .iter()
+            .any(|a| a.action_type == ACTION_UPDATE_PASSWORD)
+            && self.is_password_temporary(identity_subject).await?
+        {
+            let id = self
+                .identity_engine
+                .action_store()
+                .create_action(identity_subject, ACTION_UPDATE_PASSWORD, None)
+                .await?;
+            actions.push(PendingActionResponse {
+                id,
+                action_type: ACTION_UPDATE_PASSWORD.to_string(),
+                redirect_url: Self::action_redirect_url(ACTION_UPDATE_PASSWORD),
+            });
         }
 
         Ok(actions)

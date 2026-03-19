@@ -2867,7 +2867,8 @@ impl LoginEventRepository for TestLoginEventRepository {
             .iter()
             .filter(|e| {
                 e.provider_alias.as_deref() == Some(provider_alias)
-                    && e.event_type == auth9_core::models::analytics::LoginEventType::FederationFailed
+                    && e.event_type
+                        == auth9_core::models::analytics::LoginEventType::FederationFailed
                     && e.created_at >= since
             })
             .count() as i64)

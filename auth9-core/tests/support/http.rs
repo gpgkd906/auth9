@@ -21,8 +21,8 @@ use crate::support::{
 };
 use auth9_core::cache::NoOpCacheManager;
 use auth9_core::config::{
-    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig,
-    RateLimitConfig, RedisConfig, ServerConfig,
+    Config, CorsConfig, DatabaseConfig, GrpcSecurityConfig, JwtConfig, RateLimitConfig,
+    RedisConfig, ServerConfig,
 };
 use auth9_core::domains::authorization::service::{ClientService, RbacService};
 use auth9_core::domains::identity::service::{
@@ -169,8 +169,7 @@ pub struct TestAppState {
         >,
     >,
     pub session_service: Arc<SessionService<TestSessionRepository, TestUserRepository>>,
-    pub identity_provider_service:
-        Arc<IdentityProviderService<TestLinkedIdentityRepository>>,
+    pub identity_provider_service: Arc<IdentityProviderService<TestLinkedIdentityRepository>>,
     pub webauthn_service: Arc<WebAuthnService>,
     pub webhook_service: Arc<WebhookService<TestWebhookRepository>>,
     pub invitation_service: Arc<
@@ -392,18 +391,17 @@ impl TestAppState {
 
         // MFA services with mock credential repo
         let mock_cred_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
-            Arc::new(auth9_oidc::repository::credential::CredentialRepositoryImpl::new(
-                db_pool.clone(),
-            ));
+            Arc::new(
+                auth9_oidc::repository::credential::CredentialRepositoryImpl::new(db_pool.clone()),
+            );
         let totp_service = Arc::new(auth9_core::domains::identity::service::TotpService::new(
             mock_cred_repo.clone(),
             Arc::new(cache_manager.clone()),
             auth9_core::crypto::EncryptionKey::new([0u8; 32]),
         ));
-        let recovery_code_service =
-            Arc::new(auth9_core::domains::identity::service::RecoveryCodeService::new(
-                mock_cred_repo,
-            ));
+        let recovery_code_service = Arc::new(
+            auth9_core::domains::identity::service::RecoveryCodeService::new(mock_cred_repo),
+        );
 
         Self {
             config,
@@ -628,9 +626,7 @@ impl HasSessionManagement for TestAppState {
 impl HasIdentityProviders for TestAppState {
     type LinkedIdentityRepo = TestLinkedIdentityRepository;
 
-    fn identity_provider_service(
-        &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
+    fn identity_provider_service(&self) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
         &self.identity_provider_service
     }
 
@@ -735,7 +731,9 @@ impl auth9_core::state::HasMfa for TestAppState {
         &self.totp_service
     }
 
-    fn recovery_code_service(&self) -> &auth9_core::domains::identity::service::RecoveryCodeService {
+    fn recovery_code_service(
+        &self,
+    ) -> &auth9_core::domains::identity::service::RecoveryCodeService {
         &self.recovery_code_service
     }
 }

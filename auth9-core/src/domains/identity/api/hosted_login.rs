@@ -6,11 +6,13 @@
 //! returning JSON responses instead of OIDC redirects.
 
 use crate::cache::CacheOperations;
-use crate::domains::identity::api::mfa::{MfaChallengeResponse, MfaSessionData, MFA_SESSION_TTL_SECS};
+use crate::domains::identity::api::mfa::{
+    MfaChallengeResponse, MfaSessionData, MFA_SESSION_TTL_SECS,
+};
+use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::error::{AppError, Result};
 use crate::http_support::{write_audit_log_generic, MessageResponse};
 use crate::models::password::{ForgotPasswordInput, ResetPasswordInput};
-use crate::domains::identity::service::required_actions::PendingActionResponse;
 use crate::state::{
     HasCache, HasMfa, HasPasswordManagement, HasRequiredActions, HasServices, HasSessionManagement,
     HasWebAuthn,
@@ -77,7 +79,9 @@ fn extract_client_ip(headers: &HeaderMap) -> Option<String> {
 /// Authenticate with email and password, returning an identity token directly.
 ///
 /// POST /api/v1/hosted-login/password
-pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + HasRequiredActions + HasMfa + HasWebAuthn>(
+pub async fn password_login<
+    S: HasServices + HasSessionManagement + HasCache + HasRequiredActions + HasMfa + HasWebAuthn,
+>(
     State(state): State<S>,
     headers: HeaderMap,
     Json(input): Json<HostedLoginPasswordRequest>,
@@ -87,11 +91,13 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
     let password = input.password.clone();
 
     if email.is_empty() || !email.contains('@') {
-        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
+        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted")
+            .increment(1);
         return Err(AppError::BadRequest("Invalid email address.".to_string()));
     }
     if password.is_empty() {
-        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
+        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted")
+            .increment(1);
         return Err(AppError::BadRequest("Password is required.".to_string()));
     }
 
@@ -118,7 +124,8 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
         })?;
 
     if !valid {
-        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted").increment(1);
+        metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted")
+            .increment(1);
         return Err(AppError::Unauthorized(
             "Invalid email or password.".to_string(),
         ));
@@ -155,8 +162,9 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
             ip_address,
             user_agent,
         };
-        let mfa_json = serde_json::to_string(&mfa_data)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize MFA session: {}", e)))?;
+        let mfa_json = serde_json::to_string(&mfa_data).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to serialize MFA session: {}", e))
+        })?;
 
         state
             .cache()
@@ -183,7 +191,8 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
         .await;
 
         metrics::counter!("auth9_auth_login_total", "result" => "mfa_required", "backend" => "hosted").increment(1);
-        metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password").record(start.elapsed().as_secs_f64());
+        metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password")
+            .record(start.elapsed().as_secs_f64());
 
         let response = MfaChallengeResponse {
             mfa_required: true,
@@ -278,15 +287,18 @@ pub async fn password_login<S: HasServices + HasSessionManagement + HasCache + H
         }
     }
 
-    metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted").increment(1);
-    metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password").record(start.elapsed().as_secs_f64());
+    metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "hosted")
+        .increment(1);
+    metrics::histogram!("auth9_hosted_login_duration_seconds", "method" => "password")
+        .record(start.elapsed().as_secs_f64());
 
     Ok(axum::Json(HostedLoginTokenResponse {
         access_token: identity_token,
         token_type: "Bearer".to_string(),
         expires_in: jwt_manager.access_token_ttl(),
         pending_actions,
-    }).into_response())
+    })
+    .into_response())
 }
 
 #[utoipa::path(
@@ -460,7 +472,8 @@ mod tests {
 
     #[test]
     fn test_hosted_login_logout_request_deserialization() {
-        let json = r#"{"post_logout_redirect_uri": "https://app.example.com", "client_id": "my-app"}"#;
+        let json =
+            r#"{"post_logout_redirect_uri": "https://app.example.com", "client_id": "my-app"}"#;
         let input: HostedLoginLogoutRequest = serde_json::from_str(json).unwrap();
         assert_eq!(
             input.post_logout_redirect_uri,

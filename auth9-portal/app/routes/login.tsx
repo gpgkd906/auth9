@@ -447,7 +447,7 @@ export default function Login() {
       }
       setAuthenticating(false);
     }
-  }, [data.apiBaseUrl, t]);
+  }, [data.apiBaseUrl, data.loginChallenge, t]);
 
   return (
     <AuthPageShell

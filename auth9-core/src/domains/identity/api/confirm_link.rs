@@ -11,7 +11,9 @@ use crate::domains::identity::api::auth::helpers::{
 };
 use crate::error::AppError;
 use crate::models::linked_identity::{CreateLinkedIdentityInput, PendingMergeData};
-use crate::state::{HasAnalytics, HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{
+    HasAnalytics, HasCache, HasIdentityProviders, HasServices, HasSessionManagement,
+};
 use axum::{extract::State, Json};
 use serde::{Deserialize, Serialize};
 
@@ -104,7 +106,11 @@ pub async fn confirm_link<
     // Record identity linked event
     if let Err(e) = state
         .analytics_service()
-        .record_identity_linked(user.id, &link_input.provider_alias, &link_input.provider_type)
+        .record_identity_linked(
+            user.id,
+            &link_input.provider_alias,
+            &link_input.provider_type,
+        )
         .await
     {
         tracing::warn!("Failed to record identity linked event: {}", e);
@@ -114,7 +120,9 @@ pub async fn confirm_link<
     if let Some(ref tenant_id_str) = pending.tenant_id {
         if let Ok(tenant_uuid) = uuid::Uuid::parse_str(tenant_id_str) {
             crate::domains::identity::api::enterprise_common::ensure_tenant_membership(
-                &state, user.id, tenant_uuid,
+                &state,
+                user.id,
+                tenant_uuid,
             )
             .await;
         }
@@ -157,8 +165,7 @@ pub async fn confirm_link<
         code_challenge: challenge.code_challenge,
         code_challenge_method: challenge.code_challenge_method,
     };
-    let code_json =
-        serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
+    let code_json = serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
         .store_authorization_code(&auth_code, &code_json, AUTH_CODE_TTL_SECS)

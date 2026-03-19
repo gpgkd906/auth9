@@ -4,8 +4,8 @@ use crate::identity_engine::{
     FederationBroker, IdentityActionStore, IdentityClientStore, IdentityCredentialRepresentation,
     IdentityCredentialStore, IdentityEngine, IdentityEventSource, IdentitySamlClientRepresentation,
     IdentitySessionStore, IdentityUserCreateInput, IdentityUserRepresentation, IdentityUserStore,
-    IdentityUserUpdateInput, IdentityVerificationStore, OidcClientRepresentation, PendingActionInfo,
-    RealmSettingsUpdate, VerificationTokenInfo,
+    IdentityUserUpdateInput, IdentityVerificationStore, OidcClientRepresentation,
+    PendingActionInfo, RealmSettingsUpdate, VerificationTokenInfo,
 };
 use crate::repository::social_provider::SocialProviderRepository;
 use anyhow::anyhow;
@@ -51,13 +51,13 @@ impl Auth9OidcUserStore {
         });
 
         // Atomic replace: delete old password credential, insert new one
-        sqlx::query(
-            "DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'",
-        )
-        .bind(user_id)
-        .execute(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(anyhow!("failed to delete old password credential: {}", e)))?;
+        sqlx::query("DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'")
+            .bind(user_id)
+            .execute(&self.pool)
+            .await
+            .map_err(|e| {
+                AppError::Internal(anyhow!("failed to delete old password credential: {}", e))
+            })?;
 
         let id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
@@ -82,12 +82,8 @@ impl IdentityUserStore for Auth9OidcUserStore {
         if let Some(ref credentials) = input.credentials {
             for cred in credentials {
                 if cred.credential_type == "password" {
-                    self.upsert_password_credential(
-                        &identity_subject,
-                        &cred.value,
-                        cred.temporary,
-                    )
-                    .await?;
+                    self.upsert_password_credential(&identity_subject, &cred.value, cred.temporary)
+                        .await?;
                 }
             }
         }
@@ -98,16 +94,18 @@ impl IdentityUserStore for Auth9OidcUserStore {
     async fn get_user(&self, user_id: &str) -> Result<IdentityUserRepresentation> {
         use sqlx::Row;
 
-        let row = sqlx::query(
-            "SELECT id, email, display_name FROM users WHERE identity_subject = ?",
-        )
-        .bind(user_id)
-        .fetch_optional(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(anyhow!("failed to query user: {}", e)))?;
+        let row =
+            sqlx::query("SELECT id, email, display_name FROM users WHERE identity_subject = ?")
+                .bind(user_id)
+                .fetch_optional(&self.pool)
+                .await
+                .map_err(|e| AppError::Internal(anyhow!("failed to query user: {}", e)))?;
 
         let row = row.ok_or_else(|| {
-            AppError::NotFound(format!("user with identity_subject '{}' not found", user_id))
+            AppError::NotFound(format!(
+                "user with identity_subject '{}' not found",
+                user_id
+            ))
         })?;
 
         let id: String = row
@@ -235,7 +233,10 @@ struct Auth9OidcClientStore {
 
 impl Auth9OidcClientStore {
     fn new(pool: MySqlPool, core_public_url: Option<String>) -> Self {
-        Self { pool, core_public_url }
+        Self {
+            pool,
+            core_public_url,
+        }
     }
 
     /// Generate a random 32-byte hex string for use as a client secret.
@@ -365,8 +366,7 @@ impl IdentityClientStore for Auth9OidcClientStore {
                 .replace("-----END PUBLIC KEY-----", "")
                 .replace("-----BEGIN CERTIFICATE-----", "")
                 .replace("-----END CERTIFICATE-----", "")
-                .replace('\n', "")
-                .replace('\r', "")
+                .replace(['\n', '\r'], "")
                 .trim()
                 .to_string();
             if !cert.is_empty() {
@@ -419,12 +419,19 @@ impl IdentityCredentialStore for Auth9OidcCredentialStore {
 
         let mut result = Vec::with_capacity(rows.len());
         for row in &rows {
-            let created_at: chrono::DateTime<Utc> = row.try_get("created_at")
+            let created_at: chrono::DateTime<Utc> = row
+                .try_get("created_at")
                 .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
             result.push(IdentityCredentialRepresentation {
-                id: row.try_get("id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                credential_type: row.try_get("credential_type").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                user_label: row.try_get("user_label").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                id: row
+                    .try_get("id")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                credential_type: row
+                    .try_get("credential_type")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                user_label: row
+                    .try_get("user_label")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
                 created_date: Some(created_at.timestamp_millis()),
             });
         }
@@ -455,12 +462,19 @@ impl IdentityCredentialStore for Auth9OidcCredentialStore {
 
         let mut result = Vec::with_capacity(rows.len());
         for row in &rows {
-            let created_at: chrono::DateTime<Utc> = row.try_get("created_at")
+            let created_at: chrono::DateTime<Utc> = row
+                .try_get("created_at")
                 .map_err(|e| AppError::Internal(anyhow!("{}", e)))?;
             result.push(IdentityCredentialRepresentation {
-                id: row.try_get("id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                credential_type: row.try_get("credential_type").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                user_label: row.try_get("user_label").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                id: row
+                    .try_get("id")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                credential_type: row
+                    .try_get("credential_type")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                user_label: row
+                    .try_get("user_label")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
                 created_date: Some(created_at.timestamp_millis()),
             });
         }
@@ -510,10 +524,18 @@ impl IdentityActionStore for Auth9OidcActionStore {
         let mut actions = Vec::with_capacity(rows.len());
         for row in &rows {
             actions.push(PendingActionInfo {
-                id: row.try_get("id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                action_type: row.try_get("action_type").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                metadata: row.try_get("metadata").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                created_at: row.try_get("created_at").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                id: row
+                    .try_get("id")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                action_type: row
+                    .try_get("action_type")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                metadata: row
+                    .try_get("metadata")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                created_at: row
+                    .try_get("created_at")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
             });
         }
         Ok(actions)
@@ -599,13 +621,14 @@ impl IdentityVerificationStore for Auth9OidcVerificationStore {
         .await
         .map_err(|e| AppError::Internal(anyhow!("failed to upsert verification status: {}", e)))?;
 
-        let row: (i8,) = sqlx::query_as(
-            "SELECT email_verified FROM user_verification_status WHERE user_id = ?",
-        )
-        .bind(user_id)
-        .fetch_one(&self.pool)
-        .await
-        .map_err(|e| AppError::Internal(anyhow!("failed to query verification status: {}", e)))?;
+        let row: (i8,) =
+            sqlx::query_as("SELECT email_verified FROM user_verification_status WHERE user_id = ?")
+                .bind(user_id)
+                .fetch_one(&self.pool)
+                .await
+                .map_err(|e| {
+                    AppError::Internal(anyhow!("failed to query verification status: {}", e))
+                })?;
 
         Ok(row.0 != 0)
     }
@@ -621,7 +644,9 @@ impl IdentityVerificationStore for Auth9OidcVerificationStore {
             .bind(user_id)
             .execute(&self.pool)
             .await
-            .map_err(|e| AppError::Internal(anyhow!("failed to update verification status: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow!("failed to update verification status: {}", e))
+            })?;
         Ok(())
     }
 
@@ -664,11 +689,21 @@ impl IdentityVerificationStore for Auth9OidcVerificationStore {
 
         match row {
             Some(r) => Ok(Some(VerificationTokenInfo {
-                id: r.try_get("id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                user_id: r.try_get("user_id").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                expires_at: r.try_get("expires_at").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                used_at: r.try_get("used_at").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
-                created_at: r.try_get("created_at").map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                id: r
+                    .try_get("id")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                user_id: r
+                    .try_get("user_id")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                expires_at: r
+                    .try_get("expires_at")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                used_at: r
+                    .try_get("used_at")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
+                created_at: r
+                    .try_get("created_at")
+                    .map_err(|e| AppError::Internal(anyhow!("{}", e)))?,
             })),
             None => Ok(None),
         }
@@ -733,9 +768,7 @@ impl Auth9OidcIdentityEngineAdapter {
             client_store: Auth9OidcClientStore::new(pool.clone(), core_public_url),
             session_store: Auth9OidcSessionStoreAdapter::new(),
             credential_store: Auth9OidcCredentialStore::new(pool.clone()),
-            federation_broker: Auth9OidcFederationBrokerAdapter::new(
-                social_provider_repo,
-            ),
+            federation_broker: Auth9OidcFederationBrokerAdapter::new(social_provider_repo),
             event_source: Auth9OidcEventSource,
             action_store: Auth9OidcActionStore::new(pool.clone()),
             verification_store: Auth9OidcVerificationStore::new(pool),

@@ -1,5 +1,6 @@
 import { createRoutesStub } from "react-router";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, it, expect, vi } from "vitest";
 import Login, { loader, action, meta } from "~/routes/login";
 import { enterpriseSsoApi, publicBrandingApi } from "~/services/api";
@@ -292,6 +293,7 @@ describe("Login Page", () => {
     });
 
     it("renders forgot password link and hides registration link when signup is disabled", async () => {
+        const user = userEvent.setup();
         const RoutesStub = createRoutesStub([
             {
                 path: "/login",
@@ -303,6 +305,10 @@ describe("Login Page", () => {
         ]);
 
         render(<RoutesStub initialEntries={["/login"]} />);
+
+        // Navigate to password view to see forgot password link
+        const passwordBtn = await screen.findByRole("button", { name: /sign in with password/i });
+        await user.click(passwordBtn);
 
         expect(await screen.findByRole("link", { name: /forgot password/i })).toBeInTheDocument();
         expect(screen.queryByRole("link", { name: /create account/i })).not.toBeInTheDocument();
@@ -321,8 +327,8 @@ describe("Login Page", () => {
 
         render(<RoutesStub initialEntries={["/login"]} />);
 
-        expect(await screen.findByRole("link", { name: /forgot password/i })).toBeInTheDocument();
-        expect(screen.getByRole("link", { name: /create account/i })).toBeInTheDocument();
+        // Create account link is visible in the methods view
+        expect(await screen.findByRole("link", { name: /create account/i })).toBeInTheDocument();
     });
 
     // ============================================================================

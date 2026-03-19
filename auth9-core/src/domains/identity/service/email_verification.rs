@@ -58,8 +58,7 @@ impl EmailVerificationService {
         let _ = store.get_verification_status(user_id).await;
 
         let (raw_token, token_hash) = Self::generate_token();
-        let expires_at =
-            chrono::Utc::now() + chrono::Duration::hours(DEFAULT_TOKEN_TTL_HOURS);
+        let expires_at = chrono::Utc::now() + chrono::Duration::hours(DEFAULT_TOKEN_TTL_HOURS);
 
         store
             .create_verification_token(user_id, &token_hash, expires_at)
@@ -75,22 +74,15 @@ impl EmailVerificationService {
         let store = self.identity_engine.verification_store();
         let token_hash = Self::hash_token(raw_token);
 
-        let token_info = store
-            .find_valid_token(&token_hash)
-            .await?
-            .ok_or_else(|| {
-                AppError::BadRequest(
-                    "Invalid or expired verification token.".to_string(),
-                )
-            })?;
+        let token_info = store.find_valid_token(&token_hash).await?.ok_or_else(|| {
+            AppError::BadRequest("Invalid or expired verification token.".to_string())
+        })?;
 
         // Mark token as used (replay protection)
         store.mark_token_used(&token_info.id).await?;
 
         // Update verification status
-        store
-            .set_email_verified(&token_info.user_id, true)
-            .await?;
+        store.set_email_verified(&token_info.user_id, true).await?;
 
         Ok(token_info.user_id)
     }
@@ -149,12 +141,10 @@ mod tests {
         let pool = sqlx::MySqlPool::connect_lazy("mysql://fake:fake@localhost/fake").unwrap();
         let social_repo: Arc<dyn crate::repository::SocialProviderRepository> =
             Arc::new(MockSocialProviderRepository::new());
-        let engine: Arc<dyn IdentityEngine> = Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo, None));
+        let engine: Arc<dyn IdentityEngine> =
+            Arc::new(Auth9OidcIdentityEngineAdapter::new(pool, social_repo, None));
 
-        let service = EmailVerificationService::new(
-            engine,
-            "https://auth.example.com".to_string(),
-        );
+        let service = EmailVerificationService::new(engine, "https://auth.example.com".to_string());
 
         let link = service.build_verification_link("abc123");
         assert_eq!(link, "https://auth.example.com/verify-email?token=abc123");

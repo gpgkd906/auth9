@@ -4,8 +4,7 @@
 
 use crate::support::create_test_identity_token;
 use crate::support::http::{
-    build_branding_test_router, get_json, get_json_with_auth, put_json_with_auth,
-    TestAppState,
+    build_branding_test_router, get_json, get_json_with_auth, put_json_with_auth, TestAppState,
 };
 use auth9_core::models::system_settings::SystemSettingRow;
 use axum::http::StatusCode;

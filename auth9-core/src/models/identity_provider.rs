@@ -105,7 +105,6 @@ impl From<IdentityProvider> for KeycloakIdentityProvider {
     }
 }
 
-
 impl From<IdentityProviderRepresentation> for IdentityProvider {
     fn from(value: IdentityProviderRepresentation) -> Self {
         Self {

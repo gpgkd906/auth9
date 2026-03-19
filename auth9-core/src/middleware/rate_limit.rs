@@ -167,11 +167,7 @@ pub struct RateLimitState {
 
 impl RateLimitState {
     /// Create a new rate limit state with Redis backend
-    pub fn new(
-        config: RateLimitConfig,
-        redis: ConnectionManager,
-        jwt_manager: JwtManager,
-    ) -> Self {
+    pub fn new(config: RateLimitConfig, redis: ConnectionManager, jwt_manager: JwtManager) -> Self {
         Self {
             config: Arc::new(config),
             redis: Some(redis),

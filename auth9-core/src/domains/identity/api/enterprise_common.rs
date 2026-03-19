@@ -5,7 +5,9 @@ use crate::domains::identity::api::auth::helpers::{
     AuthorizationCodeData, LoginChallengeData, AUTH_CODE_TTL_SECS,
 };
 use crate::error::{AppError, Result};
-use crate::models::linked_identity::{CreateLinkedIdentityInput, FirstLoginPolicy, PendingMergeData};
+use crate::models::linked_identity::{
+    CreateLinkedIdentityInput, FirstLoginPolicy, PendingMergeData,
+};
 use crate::models::user::AddUserToTenantInput;
 use crate::state::{HasCache, HasIdentityProviders, HasServices};
 use serde::{Deserialize, Serialize};
@@ -79,19 +81,13 @@ pub fn sp_entity_id(config: &crate::config::Config) -> String {
 }
 
 pub fn portal_login_url(config: &crate::config::Config) -> String {
-    let portal = config
-        .portal_url
-        .as_deref()
-        .unwrap_or(&config.jwt.issuer);
+    let portal = config.portal_url.as_deref().unwrap_or(&config.jwt.issuer);
     format!("{}/login", portal.trim_end_matches('/'))
 }
 
 // ── DB Helpers ──
 
-pub async fn load_connector(
-    pool: &sqlx::MySqlPool,
-    alias: &str,
-) -> Result<ConnectorRecord> {
+pub async fn load_connector(pool: &sqlx::MySqlPool, alias: &str) -> Result<ConnectorRecord> {
     let row = sqlx::query(
         r#"
         SELECT alias, tenant_id, provider_type, config, first_login_policy
@@ -289,8 +285,7 @@ pub async fn complete_login_flow<S: HasServices + HasCache>(
         code_challenge: challenge.code_challenge,
         code_challenge_method: challenge.code_challenge_method,
     };
-    let code_json =
-        serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
+    let code_json = serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
         .store_authorization_code(&auth_code, &code_json, AUTH_CODE_TTL_SECS)

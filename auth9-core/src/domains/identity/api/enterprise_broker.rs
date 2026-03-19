@@ -10,7 +10,9 @@ use crate::domains::identity::api::enterprise_common::{
 };
 use crate::domains::security_observability::service::analytics::FederationEventMetadata;
 use crate::error::{AppError, Result};
-use crate::state::{HasAnalytics, HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{
+    HasAnalytics, HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement,
+};
 use axum::{
     extract::{Path, Query, State},
     response::{IntoResponse, Redirect, Response},
@@ -42,9 +44,7 @@ pub struct EnterpriseSsoCallbackQuery {
 
 // ── Endpoint Resolution ──
 
-fn resolve_endpoints(
-    config: &std::collections::HashMap<String, String>,
-) -> Result<OAuthEndpoints> {
+fn resolve_endpoints(config: &std::collections::HashMap<String, String>) -> Result<OAuthEndpoints> {
     let authorization_url = config
         .get("authorizationUrl")
         .ok_or_else(|| {
@@ -57,9 +57,7 @@ fn resolve_endpoints(
         .clone();
     let userinfo_url = config
         .get("userInfoUrl")
-        .ok_or_else(|| {
-            AppError::BadRequest("Missing userInfoUrl in connector config".to_string())
-        })?
+        .ok_or_else(|| AppError::BadRequest("Missing userInfoUrl in connector config".to_string()))?
         .clone();
     let scopes = config
         .get("scopes")
@@ -141,10 +139,9 @@ async fn exchange_code_for_access_token(
         )));
     }
 
-    let body: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse token response: {}", e)))?;
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Failed to parse token response: {}", e))
+    })?;
 
     body["access_token"]
         .as_str()
@@ -232,9 +229,8 @@ pub async fn authorize<S: HasServices + HasCache + HasDbPool>(
         .cache()
         .consume_login_challenge(&params.login_challenge)
         .await?;
-    let challenge_json = challenge_json.ok_or_else(|| {
-        AppError::BadRequest("Invalid or expired login challenge".to_string())
-    })?;
+    let challenge_json = challenge_json
+        .ok_or_else(|| AppError::BadRequest("Invalid or expired login challenge".to_string()))?;
     // Re-store it immediately (peek pattern)
     state
         .cache()
@@ -283,13 +279,18 @@ async fn oidc_authorize<S: HasServices + HasCache + HasDbPool>(
         serde_json::to_string(&sso_state).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
-        .store_enterprise_sso_state(&sso_state_id, &sso_state_json, ENTERPRISE_SSO_STATE_TTL_SECS)
+        .store_enterprise_sso_state(
+            &sso_state_id,
+            &sso_state_json,
+            ENTERPRISE_SSO_STATE_TTL_SECS,
+        )
         .await?;
 
     // Build authorize URL
-    let client_id = connector.config.get("clientId").ok_or_else(|| {
-        AppError::BadRequest("Missing clientId in connector config".to_string())
-    })?;
+    let client_id = connector
+        .config
+        .get("clientId")
+        .ok_or_else(|| AppError::BadRequest("Missing clientId in connector config".to_string()))?;
     let redirect_uri = enterprise_common::enterprise_callback_url(state.config());
 
     let authorize_url = build_enterprise_authorize_url(
@@ -313,7 +314,9 @@ async fn oidc_authorize<S: HasServices + HasCache + HasDbPool>(
     tag = "Identity",
     responses((status = 302, description = "Redirect with authorization code"))
 )]
-pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool + HasAnalytics>(
+pub async fn callback<
+    S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool + HasAnalytics,
+>(
     State(state): State<S>,
     Query(params): Query<EnterpriseSsoCallbackQuery>,
 ) -> Result<Response> {
@@ -345,30 +348,27 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
         serde_json::from_str(&sso_state_json).map_err(|e| AppError::Internal(e.into()))?;
 
     // 3. Look up connector (OIDC only for this callback)
-    let connector = enterprise_common::load_connector(state.db_pool(), &sso_state.connector_alias).await?;
+    let connector =
+        enterprise_common::load_connector(state.db_pool(), &sso_state.connector_alias).await?;
     if connector.provider_type != "oidc" {
         return Err(AppError::BadRequest(
             "OIDC callback received for non-OIDC connector".to_string(),
         ));
     }
     let endpoints = resolve_endpoints(&connector.config)?;
-    let client_id = connector.config.get("clientId").ok_or_else(|| {
-        AppError::BadRequest("Missing clientId in connector config".to_string())
-    })?;
+    let client_id = connector
+        .config
+        .get("clientId")
+        .ok_or_else(|| AppError::BadRequest("Missing clientId in connector config".to_string()))?;
     let client_secret = connector.config.get("clientSecret").ok_or_else(|| {
         AppError::BadRequest("Missing clientSecret in connector config".to_string())
     })?;
 
     // 4. Exchange code for access token
     let redirect_uri = enterprise_common::enterprise_callback_url(state.config());
-    let access_token = exchange_code_for_access_token(
-        &endpoints,
-        client_id,
-        client_secret,
-        &code,
-        &redirect_uri,
-    )
-    .await?;
+    let access_token =
+        exchange_code_for_access_token(&endpoints, client_id, client_secret, &code, &redirect_uri)
+            .await?;
 
     // 5. Fetch userinfo
     let userinfo_json = fetch_userinfo(&endpoints, &access_token).await?;
@@ -401,8 +401,15 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
             tracing::warn!("Failed to record identity linked event: {}", e);
         }
 
-        let portal_base = state.config().portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
-        let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
+        let portal_base = state
+            .config()
+            .portal_url
+            .as_deref()
+            .unwrap_or(&state.config().jwt.issuer);
+        let identities_url = format!(
+            "{}/dashboard/account/identities",
+            portal_base.trim_end_matches('/')
+        );
         return Ok(Redirect::temporary(&identities_url).into_response());
     }
 
@@ -422,10 +429,22 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
         UserResolution::Found(user) => user,
         UserResolution::PendingMerge(pending) => {
             let token = uuid::Uuid::new_v4().to_string();
-            let pending_json = serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
-            state.cache().store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS).await?;
-            let portal_base = state.config().portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
-            let redirect_url = format!("{}/login/confirm-link?token={}", portal_base.trim_end_matches('/'), token);
+            let pending_json =
+                serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
+            state
+                .cache()
+                .store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS)
+                .await?;
+            let portal_base = state
+                .config()
+                .portal_url
+                .as_deref()
+                .unwrap_or(&state.config().jwt.issuer);
+            let redirect_url = format!(
+                "{}/login/confirm-link?token={}",
+                portal_base.trim_end_matches('/'),
+                token
+            );
             return Ok(Redirect::temporary(&redirect_url).into_response());
         }
     };
@@ -459,8 +478,15 @@ pub async fn callback<S: HasServices + HasIdentityProviders + HasCache + HasSess
         user_agent: None,
         session_id: Some(session.id),
     };
-    if let Err(e) = state.analytics_service().record_federation_login(fed_meta).await {
-        tracing::warn!("Failed to record enterprise OIDC federation login event: {}", e);
+    if let Err(e) = state
+        .analytics_service()
+        .record_federation_login(fed_meta)
+        .await
+    {
+        tracing::warn!(
+            "Failed to record enterprise OIDC federation login event: {}",
+            e
+        );
     }
 
     let mut response = Redirect::temporary(&redirect_url).into_response();
@@ -677,9 +703,7 @@ use axum::http::HeaderMap;
     tag = "Identity",
     responses((status = 302, description = "Redirect to enterprise IdP for linking"))
 )]
-pub async fn link_authorize<
-    S: HasServices + HasIdentityProviders + HasCache + HasDbPool,
->(
+pub async fn link_authorize<S: HasServices + HasIdentityProviders + HasCache + HasDbPool>(
     State(state): State<S>,
     Path(alias): Path<String>,
     headers: HeaderMap,
@@ -703,7 +727,11 @@ pub async fn link_authorize<
         serde_json::to_string(&sso_state).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
-        .store_enterprise_sso_state(&sso_state_id, &sso_state_json, ENTERPRISE_SSO_STATE_TTL_SECS)
+        .store_enterprise_sso_state(
+            &sso_state_id,
+            &sso_state_json,
+            ENTERPRISE_SSO_STATE_TTL_SECS,
+        )
         .await?;
 
     if connector.provider_type == "saml" {
@@ -725,13 +753,8 @@ pub async fn link_authorize<
         .get("clientId")
         .ok_or_else(|| AppError::BadRequest("Missing clientId in connector config".to_string()))?;
 
-    let authorize_url = build_enterprise_authorize_url(
-        &endpoints,
-        client_id,
-        &callback_url,
-        &sso_state_id,
-        None,
-    )?;
+    let authorize_url =
+        build_enterprise_authorize_url(&endpoints, client_id, &callback_url, &sso_state_id, None)?;
 
     Ok(Redirect::temporary(&authorize_url).into_response())
 }

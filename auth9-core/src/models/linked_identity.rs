@@ -45,19 +45,15 @@ pub struct CreateLinkedIdentityInput {
 /// First login merge policy for external identity providers
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
+#[derive(Default)]
 pub enum FirstLoginPolicy {
     /// Automatically link to existing user by email match
+    #[default]
     AutoMerge,
     /// Show confirmation page before linking to existing account
     PromptConfirm,
     /// Always create a new account, never auto-link by email
     CreateNew,
-}
-
-impl Default for FirstLoginPolicy {
-    fn default() -> Self {
-        Self::AutoMerge
-    }
 }
 
 impl std::fmt::Display for FirstLoginPolicy {

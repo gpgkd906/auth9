@@ -585,12 +585,7 @@ impl CacheManager {
 
     // ==================== Login Challenge ====================
 
-    pub async fn store_login_challenge(
-        &self,
-        id: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()> {
+    pub async fn store_login_challenge(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()> {
         let key = format!("{}:{}", keys::LOGIN_CHALLENGE, id);
         let mut conn = self.conn.clone();
         let _: () = conn.set_ex(&key, data, ttl_secs).await?;
@@ -681,12 +676,7 @@ impl CacheManager {
 
     // ==================== Pending Merge ====================
 
-    pub async fn store_pending_merge(
-        &self,
-        token: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()> {
+    pub async fn store_pending_merge(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
         let key = format!("{}:{}", keys::PENDING_MERGE, token);
         let mut conn = self.conn.clone();
         let _: () = conn.set_ex(&key, data, ttl_secs).await?;

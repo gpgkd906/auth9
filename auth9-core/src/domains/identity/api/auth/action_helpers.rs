@@ -8,6 +8,7 @@ use sqlx::Row;
 
 /// Resolve service_id and tenant_id for action execution.
 /// Returns (service_id, tenant_id) -- both optional.
+#[allow(dead_code)]
 pub(super) async fn resolve_service_ids_for_actions<S: HasServices>(
     state: &S,
     client_id: &str,
@@ -27,6 +28,7 @@ pub(super) async fn resolve_service_ids_for_actions<S: HasServices>(
 
 /// Resolve (service_id, tenant_id) for action execution at post-login.
 /// Falls back to the user's first tenant membership if no service-level tenant found.
+#[allow(dead_code)]
 pub(super) async fn resolve_action_ids<S: HasServices>(
     state: &S,
     client_id: &str,
@@ -61,6 +63,7 @@ pub(super) async fn resolve_action_ids<S: HasServices>(
     }
 }
 
+#[allow(dead_code)]
 pub(super) async fn resolve_action_tenant_profile<S: HasServices>(
     state: &S,
     tenant_id: StringUuid,

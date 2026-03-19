@@ -284,7 +284,11 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
 
     let result = if connector.provider_type == "oidc" {
         // OIDC: test actual endpoint reachability
-        let auth_url = connector.config.get("authorizationUrl").cloned().unwrap_or_default();
+        let auth_url = connector
+            .config
+            .get("authorizationUrl")
+            .cloned()
+            .unwrap_or_default();
         if auth_url.is_empty() {
             ConnectorTestResult {
                 ok: false,
@@ -297,7 +301,11 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
                 .send()
                 .await
             {
-                Ok(resp) if resp.status().is_success() || resp.status().is_redirection() || resp.status().as_u16() == 400 => {
+                Ok(resp)
+                    if resp.status().is_success()
+                        || resp.status().is_redirection()
+                        || resp.status().as_u16() == 400 =>
+                {
                     // 400 is expected when hitting an OIDC authorize endpoint without params
                     ConnectorTestResult {
                         ok: true,
@@ -319,8 +327,16 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
         }
     } else {
         // SAML: validate certificate and SSO URL
-        let cert = connector.config.get("signingCertificate").cloned().unwrap_or_default();
-        let sso_url = connector.config.get("singleSignOnServiceUrl").cloned().unwrap_or_default();
+        let cert = connector
+            .config
+            .get("signingCertificate")
+            .cloned()
+            .unwrap_or_default();
+        let sso_url = connector
+            .config
+            .get("singleSignOnServiceUrl")
+            .cloned()
+            .unwrap_or_default();
 
         if cert.is_empty() {
             ConnectorTestResult {
@@ -337,7 +353,11 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
             let cert_valid = {
                 use base64::{engine::general_purpose::STANDARD, Engine};
                 let cert_bytes = if cert.contains("-----BEGIN") {
-                    let pem_data: String = cert.lines().filter(|l| !l.starts_with("-----")).collect::<Vec<_>>().join("");
+                    let pem_data: String = cert
+                        .lines()
+                        .filter(|l| !l.starts_with("-----"))
+                        .collect::<Vec<_>>()
+                        .join("");
                     STANDARD.decode(&pem_data).ok()
                 } else {
                     let cleaned: String = cert.chars().filter(|c| !c.is_whitespace()).collect();
@@ -362,10 +382,16 @@ pub async fn test_connector<S: HasServices + HasDbPool>(
                     .send()
                     .await
                 {
-                    Ok(resp) if resp.status().is_success() || resp.status().is_redirection() || resp.status().as_u16() == 400 || resp.status().as_u16() == 405 => {
+                    Ok(resp)
+                        if resp.status().is_success()
+                            || resp.status().is_redirection()
+                            || resp.status().as_u16() == 400
+                            || resp.status().as_u16() == 405 =>
+                    {
                         ConnectorTestResult {
                             ok: true,
-                            message: "SAML SSO endpoint is reachable and certificate is valid.".to_string(),
+                            message: "SAML SSO endpoint is reachable and certificate is valid."
+                                .to_string(),
                         }
                     }
                     Ok(resp) => ConnectorTestResult {
@@ -586,7 +612,13 @@ fn normalize_config(
 fn validate_required_config(provider_type: &str, config: &HashMap<String, String>) -> Result<()> {
     let required: &[&str] = match provider_type {
         "saml" => &["entityId", "singleSignOnServiceUrl", "signingCertificate"],
-        "oidc" => &["clientId", "clientSecret", "authorizationUrl", "tokenUrl", "userInfoUrl"],
+        "oidc" => &[
+            "clientId",
+            "clientSecret",
+            "authorizationUrl",
+            "tokenUrl",
+            "userInfoUrl",
+        ],
         _ => &[],
     };
     let missing: Vec<&str> = required

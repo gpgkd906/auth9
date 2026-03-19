@@ -1134,9 +1134,7 @@ mod tests {
                 }))
             });
 
-        service_repo
-            .expect_list_clients()
-            .returning(|_| Ok(vec![]));
+        service_repo.expect_list_clients().returning(|_| Ok(vec![]));
 
         service_repo
             .expect_delete_clients_by_service()

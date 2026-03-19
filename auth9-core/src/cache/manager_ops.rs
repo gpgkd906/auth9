@@ -177,7 +177,12 @@ impl CacheOperations for CacheManager {
         CacheManager::is_totp_code_used(self, user_id, time_step).await
     }
 
-    async fn mark_totp_code_used(&self, user_id: &str, time_step: u64, ttl_secs: u64) -> Result<()> {
+    async fn mark_totp_code_used(
+        &self,
+        user_id: &str,
+        time_step: u64,
+        ttl_secs: u64,
+    ) -> Result<()> {
         CacheManager::mark_totp_code_used(self, user_id, time_step, ttl_secs).await
     }
 
@@ -217,12 +222,7 @@ impl CacheOperations for CacheManager {
 
     // ==================== Social Login State ====================
 
-    async fn store_social_login_state(
-        &self,
-        id: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()> {
+    async fn store_social_login_state(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()> {
         CacheManager::store_social_login_state(self, id, data, ttl_secs).await
     }
 
@@ -232,12 +232,7 @@ impl CacheOperations for CacheManager {
 
     // ==================== Enterprise SSO State ====================
 
-    async fn store_enterprise_sso_state(
-        &self,
-        id: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()> {
+    async fn store_enterprise_sso_state(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()> {
         CacheManager::store_enterprise_sso_state(self, id, data, ttl_secs).await
     }
 
@@ -247,12 +242,7 @@ impl CacheOperations for CacheManager {
 
     // ==================== Pending Merge ====================
 
-    async fn store_pending_merge(
-        &self,
-        token: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()> {
+    async fn store_pending_merge(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()> {
         CacheManager::store_pending_merge(self, token, data, ttl_secs).await
     }
 

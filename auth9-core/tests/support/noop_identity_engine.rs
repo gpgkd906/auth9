@@ -11,10 +11,10 @@ use auth9_core::identity_engine::{
     IdentityVerificationStore,
 };
 use auth9_core::identity_engine::{
-    IdentityCredentialRepresentation, IdentityProviderRepresentation, IdentityUserCreateInput,
-    IdentityUserRepresentation, IdentityUserUpdateInput, OidcClientRepresentation,
-    PendingActionInfo, RealmSettingsUpdate, VerificationTokenInfo,
-    IdentitySamlClientRepresentation,
+    IdentityCredentialRepresentation, IdentityProviderRepresentation,
+    IdentitySamlClientRepresentation, IdentityUserCreateInput, IdentityUserRepresentation,
+    IdentityUserUpdateInput, OidcClientRepresentation, PendingActionInfo, RealmSettingsUpdate,
+    VerificationTokenInfo,
 };
 use std::collections::HashMap;
 
@@ -43,11 +43,7 @@ impl IdentityUserStore for NoOpUserStore {
         })
     }
 
-    async fn update_user(
-        &self,
-        _user_id: &str,
-        _input: &IdentityUserUpdateInput,
-    ) -> Result<()> {
+    async fn update_user(&self, _user_id: &str, _input: &IdentityUserUpdateInput) -> Result<()> {
         Ok(())
     }
 
@@ -102,10 +98,7 @@ impl IdentityClientStore for NoOpClientStore {
         Ok("test-id".to_string())
     }
 
-    async fn get_client_by_client_id(
-        &self,
-        _client_id: &str,
-    ) -> Result<OidcClientRepresentation> {
+    async fn get_client_by_client_id(&self, _client_id: &str) -> Result<OidcClientRepresentation> {
         Ok(OidcClientRepresentation {
             id: Some("test-id".to_string()),
             client_id: "test-client".to_string(),
@@ -210,11 +203,7 @@ impl IdentityCredentialStore for NoOpCredentialStore {
         Ok(vec![])
     }
 
-    async fn delete_user_credential(
-        &self,
-        _user_id: &str,
-        _credential_id: &str,
-    ) -> Result<()> {
+    async fn delete_user_credential(&self, _user_id: &str, _credential_id: &str) -> Result<()> {
         Ok(())
     }
 }
@@ -231,10 +220,7 @@ impl FederationBroker for NoOpFederationBroker {
         Ok(vec![])
     }
 
-    async fn get_identity_provider(
-        &self,
-        _alias: &str,
-    ) -> Result<IdentityProviderRepresentation> {
+    async fn get_identity_provider(&self, _alias: &str) -> Result<IdentityProviderRepresentation> {
         Ok(IdentityProviderRepresentation {
             alias: String::new(),
             display_name: None,

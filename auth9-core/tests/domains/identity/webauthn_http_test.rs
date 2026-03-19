@@ -4,8 +4,7 @@
 
 use crate::support::create_test_user;
 use crate::support::http::{
-    delete_json, delete_json_with_auth, get_json, get_json_with_auth,
-    TestAppState,
+    delete_json, delete_json_with_auth, get_json, get_json_with_auth, TestAppState,
 };
 use auth9_core::http_support::{MessageResponse, SuccessResponse};
 use auth9_core::models::webauthn::WebAuthnCredential;

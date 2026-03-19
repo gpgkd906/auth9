@@ -958,8 +958,7 @@ mod tests {
                 })
             });
 
-        let service =
-            create_password_service_with_identity_engine(password_reset_mock, user_mock);
+        let service = create_password_service_with_identity_engine(password_reset_mock, user_mock);
 
         let input = ForgotPasswordInput {
             email: "existing@example.com".to_string(),
@@ -1009,8 +1008,7 @@ mod tests {
             .expect_find_user_tenants()
             .returning(|_| Ok(vec![]));
 
-        let service =
-            create_password_service_with_identity_engine(password_reset_mock, user_mock);
+        let service = create_password_service_with_identity_engine(password_reset_mock, user_mock);
 
         let input = ResetPasswordInput {
             token: "valid-reset-token".to_string(),
@@ -1088,8 +1086,7 @@ mod tests {
             .expect_find_user_tenants()
             .returning(|_| Ok(vec![]));
 
-        let service =
-            create_password_service_with_identity_engine(password_reset_mock, user_mock);
+        let service = create_password_service_with_identity_engine(password_reset_mock, user_mock);
 
         let input = ChangePasswordInput {
             current_password: "WrongPassword123!".to_string(), // pragma: allowlist secret
@@ -1131,8 +1128,7 @@ mod tests {
             .expect_update_password_changed_at()
             .returning(|_| Ok(()));
 
-        let service =
-            create_password_service_with_identity_engine(password_reset_mock, user_mock);
+        let service = create_password_service_with_identity_engine(password_reset_mock, user_mock);
 
         let input = ChangePasswordInput {
             current_password: "CorrectPass123!".to_string(), // pragma: allowlist secret

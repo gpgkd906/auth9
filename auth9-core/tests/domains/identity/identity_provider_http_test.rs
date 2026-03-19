@@ -3,9 +3,7 @@
 //! Tests for identity provider management endpoints.
 
 use crate::support::create_test_user;
-use crate::support::http::{
-    delete_json, get_json, post_json, put_json, TestAppState,
-};
+use crate::support::http::{delete_json, get_json, post_json, put_json, TestAppState};
 use auth9_core::http_support::{MessageResponse, SuccessResponse};
 use auth9_core::models::common::StringUuid;
 use auth9_core::models::identity_provider::{IdentityProvider, IdentityProviderTemplate};
@@ -590,8 +588,8 @@ async fn test_confirm_link_create_new_account() {
 // ============================================================================
 
 fn build_idp_test_router(state: TestAppState) -> axum::Router {
-    use auth9_core::domains::identity::api::identity_provider;
     use auth9_core::domains::identity::api::confirm_link;
+    use auth9_core::domains::identity::api::identity_provider;
     use axum::routing::{delete, get, post};
 
     axum::Router::new()

@@ -2,8 +2,8 @@
 
 use crate::config::JwtConfig;
 use crate::error::{AppError, Result};
-use chrono::{Duration, Utc};
 use base64::Engine;
+use chrono::{Duration, Utc};
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
@@ -1027,10 +1027,7 @@ mod tests {
         assert_eq!(token_data.claims.aud, "my-client");
         assert_eq!(token_data.claims.token_type, "id_token");
         assert!(token_data.claims.at_hash.is_some());
-        assert_eq!(
-            token_data.claims.sid,
-            Some(session_id.to_string())
-        );
+        assert_eq!(token_data.claims.sid, Some(session_id.to_string()));
     }
 
     #[test]

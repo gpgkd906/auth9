@@ -4,9 +4,7 @@
 //! Each code is SHA-256 hashed before storage. Codes are one-time use.
 
 use crate::error::{AppError, Result};
-use auth9_oidc::models::credential::{
-    CreateCredentialInput, CredentialType, RecoveryCodeData,
-};
+use auth9_oidc::models::credential::{CreateCredentialInput, CredentialType, RecoveryCodeData};
 use auth9_oidc::repository::credential::CredentialRepository;
 use rand::Rng;
 use sha2::{Digest, Sha256};
@@ -76,10 +74,7 @@ impl RecoveryCodeService {
                 })
                 .await
                 .map_err(|e| {
-                    AppError::Internal(anyhow::anyhow!(
-                        "Failed to store recovery code: {}",
-                        e
-                    ))
+                    AppError::Internal(anyhow::anyhow!("Failed to store recovery code: {}", e))
                 })?;
 
             plaintext_codes.push(code);
@@ -97,10 +92,7 @@ impl RecoveryCodeService {
             .find_by_user_and_type(user_id, CredentialType::RecoveryCode)
             .await
             .map_err(|e| {
-                AppError::Internal(anyhow::anyhow!(
-                    "Failed to load recovery codes: {}",
-                    e
-                ))
+                AppError::Internal(anyhow::anyhow!("Failed to load recovery codes: {}", e))
             })?;
 
         for credential in credentials {
@@ -134,10 +126,7 @@ impl RecoveryCodeService {
                     .update_data(&credential.id, &updated_data)
                     .await
                     .map_err(|e| {
-                        AppError::Internal(anyhow::anyhow!(
-                            "Failed to update recovery code: {}",
-                            e
-                        ))
+                        AppError::Internal(anyhow::anyhow!("Failed to update recovery code: {}", e))
                     })?;
 
                 return Ok(true);
@@ -154,10 +143,7 @@ impl RecoveryCodeService {
             .find_by_user_and_type(user_id, CredentialType::RecoveryCode)
             .await
             .map_err(|e| {
-                AppError::Internal(anyhow::anyhow!(
-                    "Failed to load recovery codes: {}",
-                    e
-                ))
+                AppError::Internal(anyhow::anyhow!("Failed to load recovery codes: {}", e))
             })?;
 
         let count = credentials
@@ -176,10 +162,7 @@ impl RecoveryCodeService {
             .delete_by_user_and_type(user_id, CredentialType::RecoveryCode)
             .await
             .map_err(|e| {
-                AppError::Internal(anyhow::anyhow!(
-                    "Failed to revoke recovery codes: {}",
-                    e
-                ))
+                AppError::Internal(anyhow::anyhow!("Failed to revoke recovery codes: {}", e))
             })?;
         Ok(())
     }
@@ -188,7 +171,7 @@ impl RecoveryCodeService {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use auth9_oidc::models::credential::{Credential, CreateCredentialInput, CredentialType as CT};
+    use auth9_oidc::models::credential::{CreateCredentialInput, Credential, CredentialType as CT};
     use auth9_oidc::repository::credential::CredentialRepository;
     use chrono::Utc;
     use std::collections::HashSet;
@@ -230,7 +213,9 @@ mod tests {
     fn test_generate_single_code_format() {
         let code = RecoveryCodeService::generate_single_code();
         assert_eq!(code.len(), RECOVERY_CODE_LENGTH);
-        assert!(code.chars().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
+        assert!(code
+            .chars()
+            .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit()));
     }
 
     #[test]
@@ -290,9 +275,7 @@ mod tests {
 
         let mut mock = MockCredRepo::new();
         mock.expect_find_by_user_and_type()
-            .returning(move |_, _| {
-                Ok(vec![make_recovery_credential("cred-1", &code_hash, false)])
-            });
+            .returning(move |_, _| Ok(vec![make_recovery_credential("cred-1", &code_hash, false)]));
         mock.expect_update_data()
             .withf(|id, _| id == "cred-1")
             .returning(|_, _| Ok(()));
@@ -309,9 +292,7 @@ mod tests {
 
         let mut mock = MockCredRepo::new();
         mock.expect_find_by_user_and_type()
-            .returning(move |_, _| {
-                Ok(vec![make_recovery_credential("cred-1", &code_hash, true)])
-            });
+            .returning(move |_, _| Ok(vec![make_recovery_credential("cred-1", &code_hash, true)]));
 
         let service = RecoveryCodeService::new(Arc::new(mock));
         let result = service.verify_and_consume("user-1", code).await.unwrap();
@@ -324,9 +305,7 @@ mod tests {
 
         let mut mock = MockCredRepo::new();
         mock.expect_find_by_user_and_type()
-            .returning(move |_, _| {
-                Ok(vec![make_recovery_credential("cred-1", &code_hash, false)])
-            });
+            .returning(move |_, _| Ok(vec![make_recovery_credential("cred-1", &code_hash, false)]));
 
         let service = RecoveryCodeService::new(Arc::new(mock));
         let result = service
@@ -357,14 +336,13 @@ mod tests {
         let hash3 = RecoveryCodeService::hash_code("code3");
 
         let mut mock = MockCredRepo::new();
-        mock.expect_find_by_user_and_type()
-            .returning(move |_, _| {
-                Ok(vec![
-                    make_recovery_credential("c1", &hash1, false),
-                    make_recovery_credential("c2", &hash2, true), // used
-                    make_recovery_credential("c3", &hash3, false),
-                ])
-            });
+        mock.expect_find_by_user_and_type().returning(move |_, _| {
+            Ok(vec![
+                make_recovery_credential("c1", &hash1, false),
+                make_recovery_credential("c2", &hash2, true), // used
+                make_recovery_credential("c3", &hash3, false),
+            ])
+        });
 
         let service = RecoveryCodeService::new(Arc::new(mock));
         let count = service.remaining_count("user-1").await.unwrap();

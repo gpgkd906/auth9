@@ -96,8 +96,8 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
                 code_challenge_method: params.code_challenge_method,
             };
             let challenge_id = uuid::Uuid::new_v4().to_string();
-            let challenge_json = serde_json::to_string(&challenge_data)
-                .map_err(|e| AppError::Internal(e.into()))?;
+            let challenge_json =
+                serde_json::to_string(&challenge_data).map_err(|e| AppError::Internal(e.into()))?;
             state
                 .cache()
                 .store_login_challenge(&challenge_id, &challenge_json, LOGIN_CHALLENGE_TTL_SECS)
@@ -130,8 +130,8 @@ pub async fn authorize<S: HasServices + HasCache + crate::state::HasDbPool>(
         code_challenge_method: params.code_challenge_method,
     };
     let challenge_id = uuid::Uuid::new_v4().to_string();
-    let challenge_json = serde_json::to_string(&challenge_data)
-        .map_err(|e| AppError::Internal(e.into()))?;
+    let challenge_json =
+        serde_json::to_string(&challenge_data).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
         .store_login_challenge(&challenge_id, &challenge_json, LOGIN_CHALLENGE_TTL_SECS)
@@ -186,8 +186,8 @@ pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::
         code_challenge_method: params.code_challenge_method,
     };
     let challenge_id = uuid::Uuid::new_v4().to_string();
-    let challenge_json = serde_json::to_string(&challenge_data)
-        .map_err(|e| AppError::Internal(e.into()))?;
+    let challenge_json =
+        serde_json::to_string(&challenge_data).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
         .store_login_challenge(&challenge_id, &challenge_json, LOGIN_CHALLENGE_TTL_SECS)
@@ -205,7 +205,10 @@ pub async fn enterprise_sso_discovery<S: HasServices + HasCache + crate::state::
         challenge_id,
     );
     // Pass login_hint (user's email) for IdP to pre-fill
-    authorize_url.push_str(&format!("&login_hint={}", urlencoding::encode(&input.email)));
+    authorize_url.push_str(&format!(
+        "&login_hint={}",
+        urlencoding::encode(&input.email)
+    ));
 
     Ok(Json(SuccessResponse::new(EnterpriseSsoDiscoveryResponse {
         tenant_id: discovery.tenant_id,
@@ -282,8 +285,7 @@ pub async fn authorize_complete<S: HasServices + HasCache>(
     Json(params): Json<AuthorizeCompleteRequest>,
 ) -> Result<Json<crate::http_support::SuccessResponse<AuthorizeCompleteResponse>>> {
     // 1. Extract and verify identity token from Authorization header
-    let identity_claims =
-        super::helpers::extract_identity_claims_from_headers(&state, &headers)?;
+    let identity_claims = super::helpers::extract_identity_claims_from_headers(&state, &headers)?;
     let session_id = identity_claims.sid.ok_or_else(|| {
         AppError::BadRequest("Identity token must contain a session ID (sid)".to_string())
     })?;
@@ -293,9 +295,7 @@ pub async fn authorize_complete<S: HasServices + HasCache>(
         .cache()
         .consume_login_challenge(&params.login_challenge_id)
         .await?
-        .ok_or_else(|| {
-            AppError::BadRequest("Invalid or expired login challenge".to_string())
-        })?;
+        .ok_or_else(|| AppError::BadRequest("Invalid or expired login challenge".to_string()))?;
     let challenge: LoginChallengeData =
         serde_json::from_str(&challenge_json).map_err(|e| AppError::Internal(e.into()))?;
 
@@ -315,8 +315,7 @@ pub async fn authorize_complete<S: HasServices + HasCache>(
         code_challenge: challenge.code_challenge,
         code_challenge_method: challenge.code_challenge_method,
     };
-    let code_json =
-        serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
+    let code_json = serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
         .store_authorization_code(&code, &code_json, AUTH_CODE_TTL_SECS)
@@ -377,13 +376,10 @@ pub async fn token<
                 .consume_authorization_code(&code)
                 .await?
                 .ok_or_else(|| {
-                    AppError::BadRequest(
-                        "Invalid or expired authorization code".to_string(),
-                    )
+                    AppError::BadRequest("Invalid or expired authorization code".to_string())
                 })?;
             let code_data: AuthorizationCodeData =
-                serde_json::from_str(&code_data_json)
-                    .map_err(|e| AppError::Internal(e.into()))?;
+                serde_json::from_str(&code_data_json).map_err(|e| AppError::Internal(e.into()))?;
 
             // Validate client_id and redirect_uri match
             if code_data.client_id != client_id {
@@ -404,10 +400,7 @@ pub async fn token<
                         "code_verifier is required when code_challenge was set".to_string(),
                     )
                 })?;
-                let method = code_data
-                    .code_challenge_method
-                    .as_deref()
-                    .unwrap_or("S256");
+                let method = code_data.code_challenge_method.as_deref().unwrap_or("S256");
                 if method != "S256" {
                     return Err(AppError::BadRequest(format!(
                         "Unsupported code_challenge_method: {}",
@@ -415,9 +408,7 @@ pub async fn token<
                     )));
                 }
                 if !verify_pkce_s256(&verifier, challenge) {
-                    return Err(AppError::BadRequest(
-                        "PKCE verification failed".to_string(),
-                    ));
+                    return Err(AppError::BadRequest("PKCE verification failed".to_string()));
                 }
             }
 
@@ -425,10 +416,9 @@ pub async fn token<
                 .user_id
                 .parse()
                 .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid user_id in auth code")))?;
-            let session_id: uuid::Uuid = code_data
-                .session_id
-                .parse()
-                .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid session_id in auth code")))?;
+            let session_id: uuid::Uuid = code_data.session_id.parse().map_err(|_| {
+                AppError::Internal(anyhow::anyhow!("Invalid session_id in auth code"))
+            })?;
 
             // Create identity token
             let identity_token = jwt_manager.create_identity_token_with_session(
@@ -450,21 +440,14 @@ pub async fn token<
             )?;
 
             // Create OIDC refresh token
-            let refresh_token = jwt_manager.create_oidc_refresh_token(
-                user_id,
-                &client_id,
-                session_id,
-            )?;
+            let refresh_token =
+                jwt_manager.create_oidc_refresh_token(user_id, &client_id, session_id)?;
 
             // Bind refresh token to session
             let refresh_ttl = state.config().jwt.refresh_token_ttl_secs.max(1) as u64;
             state
                 .cache()
-                .bind_refresh_token_session(
-                    &refresh_token,
-                    &session_id.to_string(),
-                    refresh_ttl,
-                )
+                .bind_refresh_token_session(&refresh_token, &session_id.to_string(), refresh_ttl)
                 .await?;
 
             metrics::counter!("auth9_auth_login_total", "result" => "success", "backend" => "auth9_oidc").increment(1);
@@ -516,9 +499,7 @@ pub async fn token<
             // Validate Auth9 OIDC refresh token
             let refresh_claims = jwt_manager
                 .verify_oidc_refresh_token(&refresh_token, &client_id)
-                .map_err(|e| {
-                    AppError::Unauthorized(format!("Invalid refresh token: {}", e))
-                })?;
+                .map_err(|e| AppError::Unauthorized(format!("Invalid refresh token: {}", e)))?;
 
             // Verify session binding
             let session_id_str = state
@@ -534,10 +515,10 @@ pub async fn token<
                 AppError::Internal(anyhow::anyhow!("Invalid session_id in refresh binding"))
             })?;
 
-            let user_id: crate::models::common::StringUuid = refresh_claims
-                .sub
-                .parse()
-                .map_err(|_| AppError::Internal(anyhow::anyhow!("Invalid user_id in refresh token")))?;
+            let user_id: crate::models::common::StringUuid =
+                refresh_claims.sub.parse().map_err(|_| {
+                    AppError::Internal(anyhow::anyhow!("Invalid user_id in refresh token"))
+                })?;
 
             let user = state.user_service().get(user_id).await?;
 
@@ -559,11 +540,8 @@ pub async fn token<
                 &new_identity_token,
             )?;
 
-            let new_refresh_token = jwt_manager.create_oidc_refresh_token(
-                *user.id,
-                &client_id,
-                session_id,
-            )?;
+            let new_refresh_token =
+                jwt_manager.create_oidc_refresh_token(*user.id, &client_id, session_id)?;
 
             // Rotate: unbind old, bind new
             let refresh_ttl = state.config().jwt.refresh_token_ttl_secs.max(1) as u64;
@@ -573,11 +551,7 @@ pub async fn token<
                 .await?;
             state
                 .cache()
-                .bind_refresh_token_session(
-                    &new_refresh_token,
-                    &session_id_str,
-                    refresh_ttl,
-                )
+                .bind_refresh_token_session(&new_refresh_token, &session_id_str, refresh_ttl)
                 .await?;
 
             Ok(Json(TokenResponse {

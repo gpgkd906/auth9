@@ -131,7 +131,8 @@ pub trait CacheOperations: Send + Sync {
     async fn is_totp_code_used(&self, user_id: &str, time_step: u64) -> Result<bool>;
 
     /// Mark a TOTP code time step as used (replay protection)
-    async fn mark_totp_code_used(&self, user_id: &str, time_step: u64, ttl_secs: u64) -> Result<()>;
+    async fn mark_totp_code_used(&self, user_id: &str, time_step: u64, ttl_secs: u64)
+        -> Result<()>;
 
     // ==================== MFA Session ====================
 
@@ -163,12 +164,7 @@ pub trait CacheOperations: Send + Sync {
     // ==================== Social Login State ====================
 
     /// Store social login state (social authorize → provider → callback)
-    async fn store_social_login_state(
-        &self,
-        id: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()>;
+    async fn store_social_login_state(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()>;
 
     /// Consume (get + delete) a social login state
     async fn consume_social_login_state(&self, id: &str) -> Result<Option<String>>;
@@ -176,12 +172,7 @@ pub trait CacheOperations: Send + Sync {
     // ==================== Enterprise SSO State ====================
 
     /// Store enterprise SSO login state (enterprise authorize → IdP → callback)
-    async fn store_enterprise_sso_state(
-        &self,
-        id: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()>;
+    async fn store_enterprise_sso_state(&self, id: &str, data: &str, ttl_secs: u64) -> Result<()>;
 
     /// Consume (get + delete) an enterprise SSO login state
     async fn consume_enterprise_sso_state(&self, id: &str) -> Result<Option<String>>;
@@ -189,12 +180,7 @@ pub trait CacheOperations: Send + Sync {
     // ==================== Pending Merge ====================
 
     /// Store pending merge state (confirm-link flow for first_login_policy=prompt_confirm)
-    async fn store_pending_merge(
-        &self,
-        token: &str,
-        data: &str,
-        ttl_secs: u64,
-    ) -> Result<()>;
+    async fn store_pending_merge(&self, token: &str, data: &str, ttl_secs: u64) -> Result<()>;
 
     /// Consume (get + delete) a pending merge state
     async fn consume_pending_merge(&self, token: &str) -> Result<Option<String>>;

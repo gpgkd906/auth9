@@ -11,7 +11,9 @@ use crate::domains::security_observability::service::analytics::FederationEventM
 use crate::error::{AppError, Result};
 use crate::http_support::SuccessResponse;
 use crate::models::linked_identity::{CreateLinkedIdentityInput, PendingMergeData};
-use crate::state::{HasAnalytics, HasCache, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{
+    HasAnalytics, HasCache, HasIdentityProviders, HasServices, HasSessionManagement,
+};
 use axum::{
     extract::{Path, Query, State},
     http::HeaderMap,
@@ -113,7 +115,9 @@ fn resolve_endpoints(
         "oidc" => {
             let auth_url = config
                 .get("authorizationUrl")
-                .ok_or_else(|| AppError::BadRequest("Missing authorizationUrl in OIDC config".to_string()))?
+                .ok_or_else(|| {
+                    AppError::BadRequest("Missing authorizationUrl in OIDC config".to_string())
+                })?
                 .clone();
             let token_url = config
                 .get("tokenUrl")
@@ -121,7 +125,9 @@ fn resolve_endpoints(
                 .clone();
             let userinfo_url = config
                 .get("userInfoUrl")
-                .ok_or_else(|| AppError::BadRequest("Missing userInfoUrl in OIDC config".to_string()))?
+                .ok_or_else(|| {
+                    AppError::BadRequest("Missing userInfoUrl in OIDC config".to_string())
+                })?
                 .clone();
             let scopes = config
                 .get("scopes")
@@ -161,7 +167,9 @@ fn map_profile(provider_type: &str, json: &serde_json::Value) -> Result<SocialPr
             } else {
                 json["id"]
                     .as_str()
-                    .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Missing 'id' in GitHub userinfo")))?
+                    .ok_or_else(|| {
+                        AppError::Internal(anyhow::anyhow!("Missing 'id' in GitHub userinfo"))
+                    })?
                     .to_string()
             };
             Ok(SocialProfile {
@@ -184,10 +192,7 @@ fn map_profile(provider_type: &str, json: &serde_json::Value) -> Result<SocialPr
             avatar_url: None,
         }),
         _ => Ok(SocialProfile {
-            external_user_id: json["sub"]
-                .as_str()
-                .unwrap_or("unknown")
-                .to_string(),
+            external_user_id: json["sub"].as_str().unwrap_or("unknown").to_string(),
             email: json["email"].as_str().map(String::from),
             name: json["name"].as_str().map(String::from),
             avatar_url: json["picture"].as_str().map(String::from),
@@ -263,10 +268,9 @@ async fn exchange_code_for_access_token(
         )));
     }
 
-    let body: serde_json::Value = response
-        .json()
-        .await
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse token response: {}", e)))?;
+    let body: serde_json::Value = response.json().await.map_err(|e| {
+        AppError::Internal(anyhow::anyhow!("Failed to parse token response: {}", e))
+    })?;
 
     body["access_token"]
         .as_str()
@@ -341,7 +345,10 @@ fn social_callback_url(config: &crate::config::Config) -> String {
         .core_public_url
         .as_deref()
         .unwrap_or(&config.jwt.issuer);
-    format!("{}/api/v1/social-login/callback", base.trim_end_matches('/'))
+    format!(
+        "{}/api/v1/social-login/callback",
+        base.trim_end_matches('/')
+    )
 }
 
 fn social_link_callback_url(config: &crate::config::Config) -> String {
@@ -356,18 +363,12 @@ fn social_link_callback_url(config: &crate::config::Config) -> String {
 }
 
 fn portal_login_url(config: &crate::config::Config) -> String {
-    let portal = config
-        .portal_url
-        .as_deref()
-        .unwrap_or(&config.jwt.issuer);
+    let portal = config.portal_url.as_deref().unwrap_or(&config.jwt.issuer);
     format!("{}/login", portal.trim_end_matches('/'))
 }
 
 fn portal_identities_url(config: &crate::config::Config) -> String {
-    let portal = config
-        .portal_url
-        .as_deref()
-        .unwrap_or(&config.jwt.issuer);
+    let portal = config.portal_url.as_deref().unwrap_or(&config.jwt.issuer);
     format!(
         "{}/dashboard/account/identities",
         portal.trim_end_matches('/')
@@ -418,9 +419,8 @@ pub async fn authorize<S: HasIdentityProviders + HasServices + HasCache>(
         .cache()
         .consume_login_challenge(&params.login_challenge)
         .await?;
-    let challenge_json = challenge_json.ok_or_else(|| {
-        AppError::BadRequest("Invalid or expired login challenge".to_string())
-    })?;
+    let challenge_json = challenge_json
+        .ok_or_else(|| AppError::BadRequest("Invalid or expired login challenge".to_string()))?;
     // Re-store it immediately (peek pattern)
     state
         .cache()
@@ -524,12 +524,9 @@ pub async fn callback<
         .config
         .get("clientId")
         .ok_or_else(|| AppError::BadRequest("Missing clientId in provider config".to_string()))?;
-    let client_secret = provider
-        .config
-        .get("clientSecret")
-        .ok_or_else(|| {
-            AppError::BadRequest("Missing clientSecret in provider config".to_string())
-        })?;
+    let client_secret = provider.config.get("clientSecret").ok_or_else(|| {
+        AppError::BadRequest("Missing clientSecret in provider config".to_string())
+    })?;
 
     // 4. Exchange code for access token
     let redirect_uri = social_callback_url(state.config());
@@ -544,8 +541,7 @@ pub async fn callback<
     .await?;
 
     // 5. Fetch userinfo
-    let userinfo_json =
-        fetch_userinfo(&provider.provider_id, &endpoints, &access_token).await?;
+    let userinfo_json = fetch_userinfo(&provider.provider_id, &endpoints, &access_token).await?;
 
     // 6. Map profile
     let mut profile = map_profile(&provider.provider_id, &userinfo_json)?;
@@ -556,8 +552,13 @@ pub async fn callback<
     }
 
     // 7. Find or create user
-    let resolution =
-        find_or_create_user(&state, &provider, &profile, &social_state.login_challenge_id).await?;
+    let resolution = find_or_create_user(
+        &state,
+        &provider,
+        &profile,
+        &social_state.login_challenge_id,
+    )
+    .await?;
 
     // Handle pending merge: redirect to portal confirm-link page
     let user = match resolution {
@@ -614,8 +615,7 @@ pub async fn callback<
         code_challenge: challenge.code_challenge,
         code_challenge_method: challenge.code_challenge_method,
     };
-    let code_json =
-        serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
+    let code_json = serde_json::to_string(&code_data).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
         .store_authorization_code(&auth_code, &code_json, AUTH_CODE_TTL_SECS)
@@ -646,7 +646,11 @@ pub async fn callback<
         user_agent: None,
         session_id: Some(session.id),
     };
-    if let Err(e) = state.analytics_service().record_federation_login(fed_meta).await {
+    if let Err(e) = state
+        .analytics_service()
+        .record_federation_login(fed_meta)
+        .await
+    {
         tracing::warn!("Failed to record federation login event: {}", e);
     }
 
@@ -754,12 +758,9 @@ pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache + Ha
         .config
         .get("clientId")
         .ok_or_else(|| AppError::BadRequest("Missing clientId in provider config".to_string()))?;
-    let client_secret = provider
-        .config
-        .get("clientSecret")
-        .ok_or_else(|| {
-            AppError::BadRequest("Missing clientSecret in provider config".to_string())
-        })?;
+    let client_secret = provider.config.get("clientSecret").ok_or_else(|| {
+        AppError::BadRequest("Missing clientSecret in provider config".to_string())
+    })?;
 
     let redirect_uri = social_link_callback_url(state.config());
     let access_token = exchange_code_for_access_token(
@@ -772,8 +773,7 @@ pub async fn link_callback<S: HasIdentityProviders + HasServices + HasCache + Ha
     )
     .await?;
 
-    let userinfo_json =
-        fetch_userinfo(&provider.provider_id, &endpoints, &access_token).await?;
+    let userinfo_json = fetch_userinfo(&provider.provider_id, &endpoints, &access_token).await?;
     let mut profile = map_profile(&provider.provider_id, &userinfo_json)?;
 
     if provider.provider_id == "github" && profile.email.is_none() {
@@ -819,9 +819,7 @@ enum UserResolution {
     PendingMerge(PendingMergeData),
 }
 
-async fn find_or_create_user<
-    S: HasServices + HasIdentityProviders,
->(
+async fn find_or_create_user<S: HasServices + HasIdentityProviders>(
     state: &S,
     provider: &crate::models::identity_provider::IdentityProvider,
     profile: &SocialProfile,
@@ -1079,9 +1077,13 @@ mod tests {
             userinfo_url: String::new(),
             scopes: "openid email profile".to_string(),
         };
-        let url =
-            build_social_authorize_url(&endpoints, "my-client-id", "https://auth9.example.com/api/v1/social-login/callback", "state-123")
-                .unwrap();
+        let url = build_social_authorize_url(
+            &endpoints,
+            "my-client-id",
+            "https://auth9.example.com/api/v1/social-login/callback",
+            "state-123",
+        )
+        .unwrap();
         assert!(url.contains("client_id=my-client-id"));
         assert!(url.contains("response_type=code"));
         assert!(url.contains("state=state-123"));

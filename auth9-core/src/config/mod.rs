@@ -335,7 +335,6 @@ impl fmt::Debug for JwtConfig {
     }
 }
 
-
 /// gRPC security configuration
 #[derive(Clone)]
 pub struct GrpcSecurityConfig {
@@ -1449,10 +1448,7 @@ mod tests {
             ],
             || {
                 let config = Config::from_env().unwrap();
-                assert_eq!(
-                    config.webhook_secret.unwrap(),
-                    "my-webhook-hmac-secret"
-                );
+                assert_eq!(config.webhook_secret.unwrap(), "my-webhook-hmac-secret");
             },
         );
     }

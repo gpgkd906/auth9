@@ -66,7 +66,7 @@ pub async fn send_verification<S: HasServices + HasEmailVerification + HasSystem
         .set("user_name", user.display_name.as_deref().unwrap_or(&email))
         .set("verification_link", &link)
         .set("expires_in_hours", "24")
-        .set("year", &chrono::Utc::now().format("%Y").to_string())
+        .set("year", chrono::Utc::now().format("%Y").to_string())
         .set("app_name", "Auth9");
 
     let rendered = engine.render_template(EmailTemplate::EmailVerification);
@@ -138,9 +138,7 @@ pub async fn verify_email<S: HasServices + HasEmailVerification>(
     )
     .await;
 
-    Ok(Json(MessageResponse::new(
-        "Email verified successfully.",
-    )))
+    Ok(Json(MessageResponse::new("Email verified successfully.")))
 }
 
 #[cfg(test)]

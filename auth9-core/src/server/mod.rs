@@ -13,8 +13,7 @@ pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("auth
 use crate::domains::authorization::service::{ClientService, RbacService};
 use crate::domains::identity::service::{
     EmailVerificationService, IdentityProviderService, PasswordService, RecoveryCodeService,
-    RequiredActionService, TotpService,
-    SessionService, WebAuthnService,
+    RequiredActionService, SessionService, TotpService, WebAuthnService,
 };
 use crate::domains::integration::service::{ActionEngine, ActionService, WebhookService};
 use crate::domains::platform::service::{
@@ -139,8 +138,7 @@ pub struct AppState {
     >,
     pub session_service: Arc<SessionService<SessionRepositoryImpl, UserRepositoryImpl>>,
     pub webauthn_service: Arc<WebAuthnService>,
-    pub identity_provider_service:
-        Arc<IdentityProviderService<LinkedIdentityRepositoryImpl>>,
+    pub identity_provider_service: Arc<IdentityProviderService<LinkedIdentityRepositoryImpl>>,
     pub analytics_service: Arc<AnalyticsService<LoginEventRepositoryImpl>>,
     pub webhook_service: Arc<WebhookService<WebhookRepositoryImpl>>,
     pub security_detection_service: Arc<
@@ -354,9 +352,7 @@ impl HasWebAuthn for AppState {
 impl HasIdentityProviders for AppState {
     type LinkedIdentityRepo = LinkedIdentityRepositoryImpl;
 
-    fn identity_provider_service(
-        &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
+    fn identity_provider_service(&self) -> &IdentityProviderService<Self::LinkedIdentityRepo> {
         &self.identity_provider_service
     }
 
@@ -491,11 +487,10 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 
     // Seed audience validation set: load all registered client_ids into Redis
     {
-        let client_ids: Vec<String> =
-            sqlx::query_scalar("SELECT client_id FROM clients")
-                .fetch_all(&db_pool)
-                .await
-                .unwrap_or_default();
+        let client_ids: Vec<String> = sqlx::query_scalar("SELECT client_id FROM clients")
+            .fetch_all(&db_pool)
+            .await
+            .unwrap_or_default();
         let mut all_audiences = client_ids;
         // Merge with env var audiences for backward compatibility
         all_audiences.extend(config.jwt_tenant_access_allowed_audiences.clone());
@@ -539,16 +534,19 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
     let jwt_manager = JwtManager::new(config.jwt.clone());
 
     // Create identity engine adapters (Auth9-OIDC)
-    let social_provider_repo: Arc<dyn crate::repository::SocialProviderRepository> =
-        Arc::new(crate::repository::social_provider::SocialProviderRepositoryImpl::new(
-            db_pool.clone(),
-        ));
+    let social_provider_repo: Arc<dyn crate::repository::SocialProviderRepository> = Arc::new(
+        crate::repository::social_provider::SocialProviderRepositoryImpl::new(db_pool.clone()),
+    );
     let identity_sessions: Arc<dyn IdentitySessionStore> =
         Arc::new(Auth9OidcSessionStoreAdapter::new());
-    let federation_broker: Arc<dyn FederationBroker> =
-        Arc::new(Auth9OidcFederationBrokerAdapter::new(social_provider_repo.clone()));
-    let identity_engine: Arc<dyn IdentityEngine> =
-        Arc::new(Auth9OidcIdentityEngineAdapter::new(db_pool.clone(), social_provider_repo, config.core_public_url.clone()));
+    let federation_broker: Arc<dyn FederationBroker> = Arc::new(
+        Auth9OidcFederationBrokerAdapter::new(social_provider_repo.clone()),
+    );
+    let identity_engine: Arc<dyn IdentityEngine> = Arc::new(Auth9OidcIdentityEngineAdapter::new(
+        db_pool.clone(),
+        social_provider_repo,
+        config.core_public_url.clone(),
+    ));
 
     // Create webhook service first (needed for webhook event publishing)
     let webhook_service = Arc::new(WebhookService::new(webhook_repo.clone()));
@@ -764,9 +762,9 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
 
     // Create MFA services (TOTP + recovery codes)
     let credential_repo: Arc<dyn auth9_oidc::repository::credential::CredentialRepository> =
-        Arc::new(auth9_oidc::repository::credential::CredentialRepositoryImpl::new(
-            db_pool.clone(),
-        ));
+        Arc::new(
+            auth9_oidc::repository::credential::CredentialRepositoryImpl::new(db_pool.clone()),
+        );
 
     let totp_encryption_key = match std::env::var("SETTINGS_ENCRYPTION_KEY") {
         Ok(encoded) if !encoded.is_empty() => {
@@ -775,7 +773,9 @@ pub async fn run(config: Config, prometheus_handle: Option<PrometheusHandle>) ->
             })
         }
         _ => {
-            tracing::warn!("SETTINGS_ENCRYPTION_KEY not set — TOTP secrets will use a zero key (DEV ONLY)");
+            tracing::warn!(
+                "SETTINGS_ENCRYPTION_KEY not set — TOTP secrets will use a zero key (DEV ONLY)"
+            );
             EncryptionKey::new([0u8; 32])
         }
     };
@@ -1342,10 +1342,8 @@ where
     let security_headers_config = state.config().security_headers.clone();
 
     // Create auth middleware state with cache for token blacklist checking
-    let auth_state = AuthMiddlewareState::new(
-        HasServices::jwt_manager(&state).clone(),
-    )
-    .with_cache(std::sync::Arc::new(state.cache().clone()));
+    let auth_state = AuthMiddlewareState::new(HasServices::jwt_manager(&state).clone())
+        .with_cache(std::sync::Arc::new(state.cache().clone()));
 
     // ============================================================
     // SCIM PROTOCOL ROUTES (Bearer Token auth, separate from JWT)

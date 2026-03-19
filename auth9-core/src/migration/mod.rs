@@ -179,7 +179,10 @@ pub async fn run_migrations(config: &Config) -> Result<()> {
     Ok(())
 }
 
-async fn apply_scim_mapping_migration_compat(pool: &Pool<MySql>, migrator: &Migrator) -> Result<()> {
+async fn apply_scim_mapping_migration_compat(
+    pool: &Pool<MySql>,
+    migrator: &Migrator,
+) -> Result<()> {
     let migration = migrator
         .iter()
         .find(|migration| migration.version == SCIM_MAPPING_MIGRATION_VERSION)
@@ -188,10 +191,12 @@ async fn apply_scim_mapping_migration_compat(pool: &Pool<MySql>, migrator: &Migr
     let start = std::time::Instant::now();
 
     if !column_exists(pool, "users", "scim_external_id").await? {
-        sqlx::query("ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER keycloak_id")
-            .execute(pool)
-            .await
-            .context("Failed to add users.scim_external_id")?;
+        sqlx::query(
+            "ALTER TABLE users ADD COLUMN scim_external_id VARCHAR(255) NULL AFTER keycloak_id",
+        )
+        .execute(pool)
+        .await
+        .context("Failed to add users.scim_external_id")?;
     }
 
     if !column_exists(pool, "users", "scim_provisioned_by").await? {
@@ -732,7 +737,10 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to update admin user")?;
 
-        info!("Updated existing admin user identity_subject to {}", keycloak_id);
+        info!(
+            "Updated existing admin user identity_subject to {}",
+            keycloak_id
+        );
     } else {
         // Insert new admin user
         let admin_user_id = uuid::Uuid::new_v4().to_string();
@@ -749,7 +757,10 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed admin user")?;
 
-        info!("Created new admin user with identity_subject {}", keycloak_id);
+        info!(
+            "Created new admin user with identity_subject {}",
+            keycloak_id
+        );
     }
 
     // 4. SELECT actual IDs (handles case where records already existed)

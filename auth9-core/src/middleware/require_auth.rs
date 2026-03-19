@@ -372,8 +372,7 @@ mod tests {
             .times(2)
             .returning(|_| Err(anyhow::anyhow!("Redis connection refused").into()));
 
-        let auth_state =
-            AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -429,8 +428,7 @@ mod tests {
                 }
             });
 
-        let auth_state =
-            AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))
@@ -473,8 +471,7 @@ mod tests {
             .expect_is_token_blacklisted()
             .returning(|_| Ok(true));
 
-        let auth_state =
-            AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
+        let auth_state = AuthMiddlewareState::new(jwt_manager).with_cache(Arc::new(mock_cache));
 
         let app = Router::new()
             .route("/api/v1/auth/userinfo", get(protected_handler))

@@ -24,10 +24,7 @@ pub struct IdentityProviderService<L: LinkedIdentityRepository> {
 }
 
 impl<L: LinkedIdentityRepository> IdentityProviderService<L> {
-    pub fn new(
-        linked_identity_repo: Arc<L>,
-        federation_broker: Arc<dyn FederationBroker>,
-    ) -> Self {
+    pub fn new(linked_identity_repo: Arc<L>, federation_broker: Arc<dyn FederationBroker>) -> Self {
         Self {
             linked_identity_repo,
             federation_broker,
@@ -110,7 +107,9 @@ impl<L: LinkedIdentityRepository> IdentityProviderService<L> {
             trust_email: input.trust_email.unwrap_or(existing.trust_email),
             store_token: input.store_token.unwrap_or(existing.store_token),
             link_only: input.link_only.unwrap_or(existing.link_only),
-            first_login_policy: input.first_login_policy.unwrap_or(existing.first_login_policy),
+            first_login_policy: input
+                .first_login_policy
+                .unwrap_or(existing.first_login_policy),
             first_broker_login_flow_alias: existing.first_broker_login_flow_alias,
             config: input.config.unwrap_or(existing.config),
             extra: existing.extra,
@@ -189,7 +188,6 @@ impl<L: LinkedIdentityRepository> IdentityProviderService<L> {
             .find_by_provider(provider_alias, external_user_id)
             .await
     }
-
 }
 
 #[cfg(test)]

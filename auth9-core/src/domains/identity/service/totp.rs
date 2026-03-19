@@ -73,9 +73,9 @@ impl TotpService {
             TOTP_DIGITS,
             TOTP_SKEW,
             TOTP_PERIOD,
-            secret.to_bytes().map_err(|e| {
-                AppError::Internal(anyhow::anyhow!("Invalid TOTP secret: {}", e))
-            })?,
+            secret
+                .to_bytes()
+                .map_err(|e| AppError::Internal(anyhow::anyhow!("Invalid TOTP secret: {}", e)))?,
             Some("Auth9".to_string()),
             email.to_string(),
         )
@@ -89,7 +89,8 @@ impl TotpService {
         email: &str,
     ) -> Result<TotpEnrollmentResponse> {
         let secret_bytes = Self::generate_secret();
-        let secret_base32 = base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &secret_bytes);
+        let secret_base32 =
+            base32::encode(base32::Alphabet::Rfc4648 { padding: false }, &secret_bytes);
         let totp = Self::build_totp(&secret_bytes, email)?;
         let otpauth_uri = totp.get_url();
 
@@ -98,8 +99,9 @@ impl TotpService {
             user_id: user_id.to_string(),
             secret_base32: secret_base32.clone(),
         };
-        let setup_json = serde_json::to_string(&setup_data)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize setup data: {}", e)))?;
+        let setup_json = serde_json::to_string(&setup_data).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to serialize setup data: {}", e))
+        })?;
 
         self.cache
             .store_totp_setup(&setup_token, &setup_json, TOTP_SETUP_TTL_SECS)
@@ -130,8 +132,9 @@ impl TotpService {
                 )
             })?;
 
-        let setup_data: TotpSetupData = serde_json::from_str(&setup_json)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse setup data: {}", e)))?;
+        let setup_data: TotpSetupData = serde_json::from_str(&setup_json).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to parse setup data: {}", e))
+        })?;
 
         // Verify the setup token belongs to this user
         if setup_data.user_id != user_id {
@@ -165,7 +168,9 @@ impl TotpService {
 
         // Encrypt the secret for storage
         let encrypted_secret = crypto::encrypt(&self.encryption_key, &setup_data.secret_base32)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to encrypt TOTP secret: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to encrypt TOTP secret: {}", e))
+            })?;
 
         // Delete any existing TOTP credential for this user
         let _ = self
@@ -180,7 +185,12 @@ impl TotpService {
             digits: TOTP_DIGITS as u8,
             period: TOTP_PERIOD as u32,
         })
-        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize credential data: {}", e)))?;
+        .map_err(|e| {
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to serialize credential data: {}",
+                e
+            ))
+        })?;
 
         self.credential_repo
             .create(&CreateCredentialInput {
@@ -190,7 +200,9 @@ impl TotpService {
                 user_label: Some("TOTP".to_string()),
             })
             .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to store TOTP credential: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to store TOTP credential: {}", e))
+            })?;
 
         Ok(())
     }
@@ -202,7 +214,9 @@ impl TotpService {
             .credential_repo
             .find_by_user_and_type(user_id, CredentialType::Totp)
             .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to load TOTP credential: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to load TOTP credential: {}", e))
+            })?;
 
         let credential = match credentials.into_iter().find(|c| c.is_active) {
             Some(c) => c,
@@ -210,20 +224,23 @@ impl TotpService {
         };
 
         let totp_data: TotpCredentialData = credential.parse_totp_data().map_err(|e| {
-            AppError::Internal(anyhow::anyhow!("Failed to parse TOTP credential data: {}", e))
+            AppError::Internal(anyhow::anyhow!(
+                "Failed to parse TOTP credential data: {}",
+                e
+            ))
         })?;
 
         // Decrypt the secret
-        let secret_base32 =
-            crypto::decrypt(&self.encryption_key, &totp_data.secret_encrypted).map_err(|e| {
+        let secret_base32 = crypto::decrypt(&self.encryption_key, &totp_data.secret_encrypted)
+            .map_err(|e| {
                 AppError::Internal(anyhow::anyhow!("Failed to decrypt TOTP secret: {}", e))
             })?;
 
-        let secret_bytes = base32::decode(
-            base32::Alphabet::Rfc4648 { padding: false },
-            &secret_base32,
-        )
-        .ok_or_else(|| AppError::Internal(anyhow::anyhow!("Invalid base32 secret in credential")))?;
+        let secret_bytes =
+            base32::decode(base32::Alphabet::Rfc4648 { padding: false }, &secret_base32)
+                .ok_or_else(|| {
+                    AppError::Internal(anyhow::anyhow!("Invalid base32 secret in credential"))
+                })?;
 
         let totp = Self::build_totp(&secret_bytes, "")?;
         let now = SystemTime::now()
@@ -260,7 +277,9 @@ impl TotpService {
         self.credential_repo
             .delete_by_user_and_type(user_id, CredentialType::Totp)
             .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to remove TOTP credential: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to remove TOTP credential: {}", e))
+            })?;
         Ok(())
     }
 
@@ -270,7 +289,9 @@ impl TotpService {
             .credential_repo
             .find_by_user_and_type(user_id, CredentialType::Totp)
             .await
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to check TOTP credentials: {}", e)))?;
+            .map_err(|e| {
+                AppError::Internal(anyhow::anyhow!("Failed to check TOTP credentials: {}", e))
+            })?;
 
         Ok(credentials.iter().any(|c| c.is_active))
     }
@@ -280,7 +301,7 @@ impl TotpService {
 mod tests {
     use super::*;
     use crate::cache::NoOpCacheManager;
-    use auth9_oidc::models::credential::{Credential, CreateCredentialInput, CredentialType as CT};
+    use auth9_oidc::models::credential::{CreateCredentialInput, Credential, CredentialType as CT};
     use auth9_oidc::repository::credential::CredentialRepository;
     use chrono::Utc;
 
@@ -409,9 +430,7 @@ mod tests {
         let mock_repo = MockCredRepo::new();
         let service = create_test_service(mock_repo);
 
-        let result = service
-            .start_enrollment("user-1", "test@example.com")
-            .await;
+        let result = service.start_enrollment("user-1", "test@example.com").await;
         assert!(result.is_ok());
 
         let response = result.unwrap();
@@ -460,20 +479,18 @@ mod tests {
     #[tokio::test]
     async fn test_has_totp_false_when_inactive_credential() {
         let mut mock_repo = MockCredRepo::new();
-        mock_repo
-            .expect_find_by_user_and_type()
-            .returning(|_, _| {
-                Ok(vec![Credential {
-                    id: "cred-1".to_string(),
-                    user_id: "user-1".to_string(),
-                    credential_type: CredentialType::Totp,
-                    credential_data: serde_json::json!({}),
-                    user_label: None,
-                    is_active: false,
-                    created_at: Utc::now(),
-                    updated_at: Utc::now(),
-                }])
-            });
+        mock_repo.expect_find_by_user_and_type().returning(|_, _| {
+            Ok(vec![Credential {
+                id: "cred-1".to_string(),
+                user_id: "user-1".to_string(),
+                credential_type: CredentialType::Totp,
+                credential_data: serde_json::json!({}),
+                user_label: None,
+                is_active: false,
+                created_at: Utc::now(),
+                updated_at: Utc::now(),
+            }])
+        });
 
         let service = create_test_service(mock_repo);
         let result = service.has_totp("user-1").await.unwrap();

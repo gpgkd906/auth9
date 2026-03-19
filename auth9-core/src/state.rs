@@ -232,9 +232,7 @@ pub trait HasIdentityProviders: Clone + Send + Sync + 'static {
     type LinkedIdentityRepo: LinkedIdentityRepository;
 
     /// Get the identity provider service
-    fn identity_provider_service(
-        &self,
-    ) -> &IdentityProviderService<Self::LinkedIdentityRepo>;
+    fn identity_provider_service(&self) -> &IdentityProviderService<Self::LinkedIdentityRepo>;
 
     /// Get the JWT manager for token verification
     fn jwt_manager(&self) -> &JwtManager;

@@ -5,12 +5,14 @@
 
 use crate::cache::CacheOperations;
 use crate::domains::identity::api::enterprise_common::{
-    self, ConnectorRecord, EnterpriseProfile, EnterpriseSsoLoginState,
-    UserResolution, ENTERPRISE_SSO_STATE_TTL_SECS,
+    self, ConnectorRecord, EnterpriseProfile, EnterpriseSsoLoginState, UserResolution,
+    ENTERPRISE_SSO_STATE_TTL_SECS,
 };
 use crate::domains::security_observability::service::analytics::FederationEventMetadata;
 use crate::error::{AppError, Result};
-use crate::state::{HasAnalytics, HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement};
+use crate::state::{
+    HasAnalytics, HasCache, HasDbPool, HasIdentityProviders, HasServices, HasSessionManagement,
+};
 use axum::{
     extract::{Path, State},
     response::{IntoResponse, Redirect, Response},
@@ -18,8 +20,8 @@ use axum::{
 };
 use base64::{engine::general_purpose::STANDARD as BASE64, Engine};
 use chrono::Utc;
-use rsa::pkcs8::DecodePublicKey;
 use flate2::{write::DeflateEncoder, Compression};
+use rsa::pkcs8::DecodePublicKey;
 use serde::Deserialize;
 use std::collections::HashMap;
 use std::io::Write;
@@ -40,11 +42,10 @@ fn classify_saml_error(err: &AppError) -> &'static str {
         "invalid_audience"
     } else if msg.contains("expired") || msg.contains("notbefore") || msg.contains("notonorafter") {
         "assertion_expired"
-    } else if msg.contains("inresponseto") {
-        "invalid_assertion"
-    } else if msg.contains("destination") {
-        "invalid_assertion"
-    } else if msg.contains("signature") {
+    } else if msg.contains("inresponseto")
+        || msg.contains("destination")
+        || msg.contains("signature")
+    {
         "invalid_assertion"
     } else if msg.contains("status") {
         "idp_rejected"
@@ -86,9 +87,7 @@ fn parse_saml_config(config: &HashMap<String, String>) -> Result<SamlConnectorCo
     let name_id_format = config
         .get("nameIDPolicyFormat")
         .cloned()
-        .unwrap_or_else(|| {
-            "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress".to_string()
-        });
+        .unwrap_or_else(|| "urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress".to_string());
 
     Ok(SamlConnectorConfig {
         entity_id,
@@ -119,14 +118,12 @@ fn sign_relay_state(state_id: &str, key: &[u8]) -> String {
 }
 
 fn verify_relay_state(relay_state: &str, key: &[u8]) -> Result<String> {
-    let (state_id, _sig) = relay_state.rsplit_once(':').ok_or_else(|| {
-        AppError::BadRequest("Invalid RelayState format".into())
-    })?;
+    let (state_id, _sig) = relay_state
+        .rsplit_once(':')
+        .ok_or_else(|| AppError::BadRequest("Invalid RelayState format".into()))?;
     let expected = sign_relay_state(state_id, key);
     if relay_state != expected {
-        return Err(AppError::BadRequest(
-            "RelayState tampering detected".into(),
-        ));
+        return Err(AppError::BadRequest("RelayState tampering detected".into()));
     }
     Ok(state_id.to_string())
 }
@@ -309,9 +306,8 @@ fn parse_and_validate_saml_response(
     }
 
     // ── Validate Issuer ──
-    let resp_issuer = issuer.ok_or_else(|| {
-        AppError::BadRequest("SAML Response missing Issuer element".into())
-    })?;
+    let resp_issuer = issuer
+        .ok_or_else(|| AppError::BadRequest("SAML Response missing Issuer element".into()))?;
     if resp_issuer != expected_issuer {
         return Err(AppError::BadRequest(format!(
             "SAML Issuer mismatch: expected '{}', got '{}'",
@@ -384,9 +380,8 @@ fn parse_and_validate_saml_response(
         verify_saml_signature(xml, signing_cert_pem)?;
     }
 
-    let name_id = name_id.ok_or_else(|| {
-        AppError::BadRequest("SAML Response missing NameID element".into())
-    })?;
+    let name_id = name_id
+        .ok_or_else(|| AppError::BadRequest("SAML Response missing NameID element".into()))?;
 
     Ok(SamlResponseData {
         name_id,
@@ -408,22 +403,29 @@ fn verify_saml_signature(xml: &str, cert_pem: &str) -> Result<()> {
 
     // Extract RSA public key from SPKI
     let spki_der = cert.public_key().raw;
-    let public_key = rsa::RsaPublicKey::from_public_key_der(spki_der)
-        .map_err(|e| AppError::BadRequest(format!("Certificate does not contain a valid RSA key: {}", e)))?;
+    let public_key = rsa::RsaPublicKey::from_public_key_der(spki_der).map_err(|e| {
+        AppError::BadRequest(format!(
+            "Certificate does not contain a valid RSA key: {}",
+            e
+        ))
+    })?;
 
     // Extract SignatureValue from XML
-    let sig_value = extract_xml_element_text(xml, "SignatureValue").ok_or_else(|| {
-        AppError::BadRequest("SAML Response missing SignatureValue".into())
-    })?;
+    let sig_value = extract_xml_element_text(xml, "SignatureValue")
+        .ok_or_else(|| AppError::BadRequest("SAML Response missing SignatureValue".into()))?;
 
     // Extract SignedInfo for verification
-    let signed_info = extract_xml_block(xml, "SignedInfo").ok_or_else(|| {
-        AppError::BadRequest("SAML Response missing SignedInfo".into())
-    })?;
+    let signed_info = extract_xml_block(xml, "SignedInfo")
+        .ok_or_else(|| AppError::BadRequest("SAML Response missing SignedInfo".into()))?;
 
     // Decode signature value (base64)
     let sig_bytes = BASE64
-        .decode(sig_value.chars().filter(|c| !c.is_whitespace()).collect::<String>())
+        .decode(
+            sig_value
+                .chars()
+                .filter(|c| !c.is_whitespace())
+                .collect::<String>(),
+        )
         .map_err(|e| AppError::BadRequest(format!("Invalid SignatureValue base64: {}", e)))?;
 
     // Canonicalize SignedInfo (simplified: use the raw XML as-is for verification)
@@ -432,7 +434,8 @@ fn verify_saml_signature(xml: &str, cert_pem: &str) -> Result<()> {
     let signed_info_bytes = signed_info.as_bytes();
 
     // Determine signature algorithm from SignedInfo
-    let uses_sha256 = signed_info.contains("rsa-sha256") || signed_info.contains("xmldsig-more#rsa-sha256");
+    let uses_sha256 =
+        signed_info.contains("rsa-sha256") || signed_info.contains("xmldsig-more#rsa-sha256");
 
     use rsa::pkcs1v15::{Signature, VerifyingKey};
     use rsa::signature::Verifier;
@@ -443,7 +446,9 @@ fn verify_saml_signature(xml: &str, cert_pem: &str) -> Result<()> {
             .map_err(|e| AppError::BadRequest(format!("Invalid RSA signature format: {}", e)))?;
         verifying_key
             .verify(signed_info_bytes, &signature)
-            .map_err(|_| AppError::BadRequest("SAML Response signature verification failed".into()))?;
+            .map_err(|_| {
+                AppError::BadRequest("SAML Response signature verification failed".into())
+            })?;
     } else {
         // Default to SHA-256 for non-explicit algorithm (SHA-1 is deprecated)
         let verifying_key = VerifyingKey::<sha2::Sha256>::new(public_key);
@@ -451,7 +456,9 @@ fn verify_saml_signature(xml: &str, cert_pem: &str) -> Result<()> {
             .map_err(|e| AppError::BadRequest(format!("Invalid RSA signature format: {}", e)))?;
         verifying_key
             .verify(signed_info_bytes, &signature)
-            .map_err(|_| AppError::BadRequest("SAML Response signature verification failed".into()))?;
+            .map_err(|_| {
+                AppError::BadRequest("SAML Response signature verification failed".into())
+            })?;
     }
 
     Ok(())
@@ -631,7 +638,11 @@ pub async fn saml_authorize_redirect<S: HasServices + HasCache + HasDbPool>(
         serde_json::to_string(&sso_state).map_err(|e| AppError::Internal(e.into()))?;
     state
         .cache()
-        .store_enterprise_sso_state(&sso_state_id, &sso_state_json, ENTERPRISE_SSO_STATE_TTL_SECS)
+        .store_enterprise_sso_state(
+            &sso_state_id,
+            &sso_state_json,
+            ENTERPRISE_SSO_STATE_TTL_SECS,
+        )
         .await?;
 
     // Build AuthnRequest
@@ -643,9 +654,8 @@ pub async fn saml_authorize_redirect<S: HasServices + HasCache + HasDbPool>(
     let relay_state = sign_relay_state(&sso_state_id, &key);
 
     // Build redirect URL (HTTP-Redirect binding)
-    let mut redirect_url = url::Url::parse(&saml_config.sso_url).map_err(|e| {
-        AppError::BadRequest(format!("Invalid singleSignOnServiceUrl: {}", e))
-    })?;
+    let mut redirect_url = url::Url::parse(&saml_config.sso_url)
+        .map_err(|e| AppError::BadRequest(format!("Invalid singleSignOnServiceUrl: {}", e)))?;
     {
         let mut pairs = redirect_url.query_pairs_mut();
         pairs.append_pair("SAMLRequest", &encoded_request);
@@ -659,14 +669,16 @@ pub async fn saml_authorize_redirect<S: HasServices + HasCache + HasDbPool>(
 }
 
 /// SAML Assertion Consumer Service (ACS) — POST binding callback.
-pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool + HasAnalytics>(
+pub async fn saml_acs<
+    S: HasServices + HasIdentityProviders + HasCache + HasSessionManagement + HasDbPool + HasAnalytics,
+>(
     State(state): State<S>,
     Form(form): Form<SamlAcsForm>,
 ) -> Result<Response> {
     // 1. Verify RelayState
-    let relay_state = form.RelayState.ok_or_else(|| {
-        AppError::BadRequest("Missing RelayState in SAML callback".into())
-    })?;
+    let relay_state = form
+        .RelayState
+        .ok_or_else(|| AppError::BadRequest("Missing RelayState in SAML callback".into()))?;
     let key = hmac_key(state.config());
     let sso_state_id = verify_relay_state(&relay_state, &key)?;
 
@@ -675,9 +687,7 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
         .cache()
         .consume_enterprise_sso_state(&sso_state_id)
         .await?
-        .ok_or_else(|| {
-            AppError::BadRequest("Invalid or expired enterprise SSO state".into())
-        })?;
+        .ok_or_else(|| AppError::BadRequest("Invalid or expired enterprise SSO state".into()))?;
     let sso_state: EnterpriseSsoLoginState =
         serde_json::from_str(&sso_state_json).map_err(|e| AppError::Internal(e.into()))?;
 
@@ -692,12 +702,11 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
     let saml_config = parse_saml_config(&connector.config)?;
 
     // 4. Decode SAMLResponse
-    let response_bytes = BASE64.decode(&form.SAMLResponse).map_err(|e| {
-        AppError::BadRequest(format!("Invalid SAMLResponse base64: {}", e))
-    })?;
-    let response_xml = String::from_utf8(response_bytes).map_err(|e| {
-        AppError::BadRequest(format!("SAMLResponse is not valid UTF-8: {}", e))
-    })?;
+    let response_bytes = BASE64
+        .decode(&form.SAMLResponse)
+        .map_err(|e| AppError::BadRequest(format!("Invalid SAMLResponse base64: {}", e)))?;
+    let response_xml = String::from_utf8(response_bytes)
+        .map_err(|e| AppError::BadRequest(format!("SAMLResponse is not valid UTF-8: {}", e)))?;
 
     // 5. Parse and validate SAML Response
     let config = state.config();
@@ -726,7 +735,10 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
                 user_agent: None,
                 session_id: None,
             };
-            let _ = state.analytics_service().record_federation_failure(fed_meta, reason).await;
+            let _ = state
+                .analytics_service()
+                .record_federation_failure(fed_meta, reason)
+                .await;
             return Err(e);
         }
     };
@@ -759,8 +771,15 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
             tracing::warn!("Failed to record SAML identity linked event: {}", e);
         }
 
-        let portal_base = state.config().portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
-        let identities_url = format!("{}/dashboard/account/identities", portal_base.trim_end_matches('/'));
+        let portal_base = state
+            .config()
+            .portal_url
+            .as_deref()
+            .unwrap_or(&state.config().jwt.issuer);
+        let identities_url = format!(
+            "{}/dashboard/account/identities",
+            portal_base.trim_end_matches('/')
+        );
         return Ok(Redirect::temporary(&identities_url).into_response());
     }
 
@@ -780,10 +799,22 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
         UserResolution::Found(user) => user,
         UserResolution::PendingMerge(pending) => {
             let token = uuid::Uuid::new_v4().to_string();
-            let pending_json = serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
-            state.cache().store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS).await?;
-            let portal_base = state.config().portal_url.as_deref().unwrap_or(&state.config().jwt.issuer);
-            let redirect_url = format!("{}/login/confirm-link?token={}", portal_base.trim_end_matches('/'), token);
+            let pending_json =
+                serde_json::to_string(&pending).map_err(|e| AppError::Internal(e.into()))?;
+            state
+                .cache()
+                .store_pending_merge(&token, &pending_json, ENTERPRISE_SSO_STATE_TTL_SECS)
+                .await?;
+            let portal_base = state
+                .config()
+                .portal_url
+                .as_deref()
+                .unwrap_or(&state.config().jwt.issuer);
+            let redirect_url = format!(
+                "{}/login/confirm-link?token={}",
+                portal_base.trim_end_matches('/'),
+                token
+            );
             return Ok(Redirect::temporary(&redirect_url).into_response());
         }
     };
@@ -817,8 +848,15 @@ pub async fn saml_acs<S: HasServices + HasIdentityProviders + HasCache + HasSess
         user_agent: None,
         session_id: Some(session.id),
     };
-    if let Err(e) = state.analytics_service().record_federation_login(fed_meta).await {
-        tracing::warn!("Failed to record enterprise SAML federation login event: {}", e);
+    if let Err(e) = state
+        .analytics_service()
+        .record_federation_login(fed_meta)
+        .await
+    {
+        tracing::warn!(
+            "Failed to record enterprise SAML federation login event: {}",
+            e
+        );
     }
 
     let mut response = Redirect::temporary(&redirect_url).into_response();
@@ -878,7 +916,10 @@ mod tests {
     #[test]
     fn test_parse_saml_config_success() {
         let mut config = HashMap::new();
-        config.insert("entityId".to_string(), "https://idp.corp.example.com".to_string());
+        config.insert(
+            "entityId".to_string(),
+            "https://idp.corp.example.com".to_string(),
+        );
         config.insert(
             "singleSignOnServiceUrl".to_string(),
             "https://idp.corp.example.com/sso".to_string(),
@@ -1054,7 +1095,7 @@ mod tests {
             "https://auth9.example.com",
             "https://auth9.example.com/api/v1/enterprise-sso/saml/acs",
             Some("_req1"),
-            "",  // No cert needed since there's no signature
+            "", // No cert needed since there's no signature
         );
         assert!(result.is_ok());
         let data = result.unwrap();
@@ -1091,7 +1132,10 @@ mod tests {
             "",
         );
         assert!(result.is_err());
-        assert!(result.unwrap_err().to_string().contains("Audience mismatch"));
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("Audience mismatch"));
     }
 
     #[test]
@@ -1218,7 +1262,9 @@ mod tests {
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(
-            err_msg.contains("NameID") || err_msg.contains("name_id") || err_msg.contains("Subject"),
+            err_msg.contains("NameID")
+                || err_msg.contains("name_id")
+                || err_msg.contains("Subject"),
             "Error should mention missing NameID, got: {}",
             err_msg
         );

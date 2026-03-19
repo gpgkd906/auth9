@@ -37,8 +37,9 @@ impl SocialProviderRepositoryImpl {
 impl SocialProviderRepository for SocialProviderRepositoryImpl {
     async fn create(&self, input: &CreateSocialProviderInput) -> Result<SocialProvider> {
         let id = StringUuid::new_v4();
-        let config_json = serde_json::to_value(&input.config)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize config: {}", e)))?;
+        let config_json = serde_json::to_value(&input.config).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to serialize config: {}", e))
+        })?;
 
         sqlx::query(
             r#"
@@ -126,7 +127,10 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
             .await?
             .ok_or_else(|| AppError::NotFound(format!("Social provider '{}' not found", alias)))?;
 
-        let display_name = input.display_name.as_ref().or(existing.display_name.as_ref());
+        let display_name = input
+            .display_name
+            .as_ref()
+            .or(existing.display_name.as_ref());
         let enabled = input.enabled.unwrap_or(existing.enabled);
         let trust_email = input.trust_email.unwrap_or(existing.trust_email);
         let store_token = input.store_token.unwrap_or(existing.store_token);
@@ -136,8 +140,9 @@ impl SocialProviderRepository for SocialProviderRepositoryImpl {
             .as_ref()
             .unwrap_or(&existing.first_login_policy);
         let config = input.config.as_ref().unwrap_or(&existing.config);
-        let config_json = serde_json::to_value(config)
-            .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to serialize config: {}", e)))?;
+        let config_json = serde_json::to_value(config).map_err(|e| {
+            AppError::Internal(anyhow::anyhow!("Failed to serialize config: {}", e))
+        })?;
 
         sqlx::query(
             r#"

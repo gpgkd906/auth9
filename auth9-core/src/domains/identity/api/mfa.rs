@@ -81,7 +81,10 @@ pub async fn mfa_status<S: HasMfa + HasWebAuthn + HasServices>(
         .await?;
     let webauthn_enabled = !webauthn_creds.is_empty();
 
-    let recovery_codes_remaining = state.recovery_code_service().remaining_count(user_id).await?;
+    let recovery_codes_remaining = state
+        .recovery_code_service()
+        .remaining_count(user_id)
+        .await?;
 
     Ok(Json(SuccessResponse::new(MfaStatusResponse {
         totp_enabled,
@@ -99,7 +102,10 @@ pub async fn totp_enroll_start<S: HasMfa + HasServices>(
     let user_id = &claims.sub;
     let email = &claims.email;
 
-    let enrollment = state.totp_service().start_enrollment(user_id, email).await?;
+    let enrollment = state
+        .totp_service()
+        .start_enrollment(user_id, email)
+        .await?;
     Ok(Json(SuccessResponse::new(enrollment)))
 }
 
@@ -178,7 +184,10 @@ pub async fn recovery_codes_remaining<S: HasMfa + HasServices>(
     let claims = HasServices::jwt_manager(&state).verify_identity_token(bearer.token())?;
     let user_id = &claims.sub;
 
-    let count = state.recovery_code_service().remaining_count(user_id).await?;
+    let count = state
+        .recovery_code_service()
+        .remaining_count(user_id)
+        .await?;
     Ok(Json(SuccessResponse::new(count)))
 }
 
@@ -226,10 +235,7 @@ pub async fn challenge_recovery_code<S: HasMfa + HasCache + HasServices + HasSes
 
 // ==================== Helpers ====================
 
-async fn consume_mfa_session<S: HasCache>(
-    state: &S,
-    token: &str,
-) -> Result<MfaSessionData> {
+async fn consume_mfa_session<S: HasCache>(state: &S, token: &str) -> Result<MfaSessionData> {
     let session_json = state
         .cache()
         .consume_mfa_session(token)
@@ -240,9 +246,8 @@ async fn consume_mfa_session<S: HasCache>(
             )
         })?;
 
-    serde_json::from_str(&session_json).map_err(|e| {
-        AppError::Internal(anyhow::anyhow!("Failed to parse MFA session data: {}", e))
-    })
+    serde_json::from_str(&session_json)
+        .map_err(|e| AppError::Internal(anyhow::anyhow!("Failed to parse MFA session data: {}", e)))
 }
 
 async fn issue_token_after_mfa<S: HasServices + HasSessionManagement>(

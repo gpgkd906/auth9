@@ -2,9 +2,7 @@
 //!
 //! Tests for invitation management endpoints.
 
-use crate::support::http::{
-    get_json_with_auth, post_json, post_json_with_auth, TestAppState,
-};
+use crate::support::http::{get_json_with_auth, post_json, post_json_with_auth, TestAppState};
 use crate::support::{
     create_test_identity_token, create_test_role, create_test_service, create_test_tenant,
 };

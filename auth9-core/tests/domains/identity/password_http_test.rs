@@ -3,8 +3,7 @@
 //! Tests for password reset and password change endpoints.
 
 use crate::support::http::{
-    get_json_with_auth, post_json, post_json_with_auth, put_json_with_auth,
-    TestAppState,
+    get_json_with_auth, post_json, post_json_with_auth, put_json_with_auth, TestAppState,
 };
 use crate::support::{create_test_identity_token, create_test_user};
 use auth9_core::http_support::{MessageResponse, SuccessResponse};

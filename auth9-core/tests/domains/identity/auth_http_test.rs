@@ -4,8 +4,7 @@
 
 use crate::support::create_test_service;
 use crate::support::http::{
-    build_test_router, get_json, get_json_with_auth, get_raw, post_json,
-    TestAppState,
+    build_test_router, get_json, get_json_with_auth, get_raw, post_json, TestAppState,
 };
 use auth9_core::domains::identity::api::auth::{OpenIdConfiguration, TokenResponse};
 use auth9_core::models::common::StringUuid;
@@ -1143,7 +1142,6 @@ async fn create_callback_state_nonce(
 
 #[tokio::test]
 async fn test_callback_success_existing_user() {
-
     let kc_sub = "kc-existing-user-123";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1189,7 +1187,6 @@ async fn test_callback_success_existing_user() {
 
 #[tokio::test]
 async fn test_callback_success_new_user_created() {
-
     let _kc_sub = "kc-new-user-456";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1217,7 +1214,6 @@ async fn test_callback_success_new_user_created() {
 
 #[tokio::test]
 async fn test_callback_missing_cached_state_returns_error() {
-
     let _client_uuid = Uuid::new_v4().to_string();
 
     let state = TestAppState::new("http://localhost:8081");
@@ -1238,7 +1234,6 @@ async fn test_callback_missing_cached_state_returns_error() {
 
 #[tokio::test]
 async fn test_callback_does_not_depend_on_userinfo() {
-
     let _client_uuid = Uuid::new_v4().to_string();
 
     let state = TestAppState::new("http://localhost:8081");
@@ -1270,7 +1265,6 @@ async fn test_callback_does_not_depend_on_userinfo() {
 #[tokio::test]
 #[ignore = "requires stored authorization code in cache — token flow rework needed for Auth9 OIDC"]
 async fn test_token_authorization_code_success_existing_user() {
-
     let kc_sub = "kc-token-user-789";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1318,7 +1312,6 @@ async fn test_token_authorization_code_success_existing_user() {
 #[tokio::test]
 #[ignore = "requires stored authorization code in cache — token flow rework needed for Auth9 OIDC"]
 async fn test_token_authorization_code_new_user() {
-
     let _kc_sub = "kc-new-token-user-abc";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1349,7 +1342,6 @@ async fn test_token_authorization_code_new_user() {
 #[tokio::test]
 #[ignore = "requires valid JWT refresh token — token flow rework needed for Auth9 OIDC"]
 async fn test_token_refresh_success() {
-
     let kc_sub = "kc-refresh-user-xyz";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1403,7 +1395,6 @@ async fn test_token_refresh_success() {
 #[tokio::test]
 #[ignore = "requires valid JWT refresh token — token flow rework needed for Auth9 OIDC"]
 async fn test_token_refresh_new_user() {
-
     let _kc_sub = "kc-refresh-new-user";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1678,7 +1669,6 @@ async fn test_authorize_with_empty_state_rejected() {
 async fn test_jwks_with_rsa_keys() {
     use rsa::pkcs8::EncodePublicKey;
 
-
     // Generate a test RSA key pair
     let mut rng = rsa::rand_core::OsRng;
     let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
@@ -1728,7 +1718,6 @@ async fn test_jwks_with_rsa_keys() {
 #[tokio::test]
 async fn test_jwks_with_rsa_keys_and_previous_key() {
     use rsa::pkcs8::EncodePublicKey;
-
 
     // Generate current RSA key pair
     let mut rng = rsa::rand_core::OsRng;
@@ -1781,7 +1770,6 @@ async fn test_jwks_with_rsa_keys_and_previous_key() {
 async fn test_openid_configuration_rsa_algorithm() {
     use rsa::pkcs8::EncodePublicKey;
 
-
     let mut rng = rsa::rand_core::OsRng;
     let private_key = rsa::RsaPrivateKey::new(&mut rng, 2048).unwrap();
     let public_key = rsa::RsaPublicKey::from(&private_key);
@@ -1826,7 +1814,6 @@ async fn test_openid_configuration_rsa_algorithm() {
 #[tokio::test]
 #[ignore = "requires stored authorization code in cache — token flow rework needed for Auth9 OIDC"]
 async fn test_token_authorization_code_new_user_with_demo_tenant_auto_assign() {
-
     let _kc_sub = "kc-new-user-demo-tenant";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1870,7 +1857,6 @@ async fn test_token_authorization_code_new_user_with_demo_tenant_auto_assign() {
 
 #[tokio::test]
 async fn test_token_refresh_no_bound_session() {
-
     let kc_sub = "kc-refresh-no-session";
     let _client_uuid = Uuid::new_v4().to_string();
 
@@ -1914,7 +1900,6 @@ async fn test_token_refresh_no_bound_session() {
 
 #[tokio::test]
 async fn test_token_auth_code_keycloak_exchange_failure() {
-
     let _client_uuid = Uuid::new_v4().to_string();
 
     let state = TestAppState::new("http://localhost:8081");
@@ -1936,7 +1921,6 @@ async fn test_token_auth_code_keycloak_exchange_failure() {
 
 #[tokio::test]
 async fn test_token_refresh_keycloak_exchange_failure() {
-
     let _client_uuid = Uuid::new_v4().to_string();
 
     let state = TestAppState::new("http://localhost:8081");
@@ -1967,7 +1951,6 @@ async fn test_token_refresh_keycloak_exchange_failure() {
 
 #[tokio::test]
 async fn test_token_auth_code_userinfo_failure() {
-
     let _client_uuid = Uuid::new_v4().to_string();
     // Mock userinfo to fail
 
@@ -1995,7 +1978,6 @@ async fn test_token_auth_code_userinfo_failure() {
 #[tokio::test]
 #[ignore = "requires stored authorization code in cache — token flow rework needed for Auth9 OIDC"]
 async fn test_token_auth_code_with_tenant_triggers_post_login_actions() {
-
     let kc_sub = "kc-action-user";
     let _client_uuid = Uuid::new_v4().to_string();
 

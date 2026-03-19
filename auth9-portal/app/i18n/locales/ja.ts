@@ -127,8 +127,11 @@ export default {
       description: "サインイン方法を選択してください",
       accessDenied: "アクセスが拒否されました。もう一度お試しいただくか、管理者にお問い合わせください。",
       genericError: "サインイン中にエラーが発生しました: {{error}}",
+      ssoTitle: "Enterprise SSO",
+      ssoDescription: "会社のメールアドレスを入力して続行",
       ssoButton: "Enterprise SSOで続ける",
       ssoFinding: "SSOを検索中...",
+      ssoSubmit: "続行",
       passwordButton: "パスワードでサインイン", // pragma: allowlist secret
       redirecting: "リダイレクト中...",
       passkeyButton: "パスキーでサインイン",
@@ -152,6 +155,7 @@ export default {
       passwordSubmit: "サインイン", // pragma: allowlist secret
       signingIn: "サインイン中...",
       backToMethods: "他のサインイン方法",
+      socialDivider: "または以下で続行",
       credentialsRequired: "メールアドレスとパスワードを入力してください。", // pragma: allowlist secret
       futureMethodsEyebrow: "拡張予定の方式",
       futureMethodsDescription: "このレイアウトは password、enterprise SSO、social login、追加認証方式の拡張枠を確保しています。", // pragma: allowlist secret

@@ -32,7 +32,10 @@ pub async fn get_pending_actions<S: HasServices + HasRequiredActions>(
     State(state): State<S>,
     auth: AuthUser,
 ) -> Result<Json<Vec<PendingActionResponse>>> {
-    let user = state.user_service().get(StringUuid::from(auth.user_id)).await?;
+    let user = state
+        .user_service()
+        .get(StringUuid::from(auth.user_id))
+        .await?;
 
     let actions = state
         .required_actions_service()

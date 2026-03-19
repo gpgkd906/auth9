@@ -174,10 +174,7 @@ impl<R: LoginEventRepository> AnalyticsService<R> {
     }
 
     /// Record a successful federation login (social or enterprise)
-    pub async fn record_federation_login(
-        &self,
-        metadata: FederationEventMetadata,
-    ) -> Result<i64> {
+    pub async fn record_federation_login(&self, metadata: FederationEventMetadata) -> Result<i64> {
         let input = CreateLoginEventInput {
             user_id: metadata.user_id,
             email: metadata.email,
@@ -787,7 +784,9 @@ mod tests {
             session_id: None,
         };
 
-        let result = service.record_federation_failure(metadata, "invalid_issuer").await;
+        let result = service
+            .record_federation_failure(metadata, "invalid_issuer")
+            .await;
         assert!(result.is_ok());
     }
 
@@ -805,7 +804,9 @@ mod tests {
         });
 
         let service = AnalyticsService::new(Arc::new(mock));
-        let result = service.record_identity_linked(user_id, "github", "github").await;
+        let result = service
+            .record_identity_linked(user_id, "github", "github")
+            .await;
         assert!(result.is_ok());
     }
 
@@ -822,7 +823,9 @@ mod tests {
         });
 
         let service = AnalyticsService::new(Arc::new(mock));
-        let result = service.record_identity_unlinked(user_id, "azure-oidc", "oidc").await;
+        let result = service
+            .record_identity_unlinked(user_id, "azure-oidc", "oidc")
+            .await;
         assert!(result.is_ok());
     }
 }
