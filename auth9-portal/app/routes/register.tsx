@@ -88,6 +88,7 @@ export default function Register() {
               alt={branding.company_name || "Auth9"}
               className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
               referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
             />
           ) : (
             <div className="logo-icon mx-auto mb-4">{getBrandMark(branding.company_name || "Auth9")}</div>

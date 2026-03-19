@@ -788,27 +788,31 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         })
         .to_string();
 
-        // Replace existing password credential
+        // Replace existing password credential (table created by auth9-oidc migrations)
         // credentials.user_id stores identity_subject, not the users.id UUID
-        sqlx::query(
+        match sqlx::query(
             "DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'",
         )
         .bind(&keycloak_id)
         .execute(&pool)
         .await
-        .context("Failed to clear old admin password credential")?;
-
-        sqlx::query(
-            "INSERT INTO credentials (id, user_id, credential_type, credential_data) VALUES (?, ?, 'password', ?)",
-        )
-        .bind(uuid::Uuid::new_v4().to_string())
-        .bind(&keycloak_id)
-        .bind(&cred_data)
-        .execute(&pool)
-        .await
-        .context("Failed to seed admin password credential")?;
-
-        info!("Admin password credential set from AUTH9_ADMIN_PASSWORD");
+        {
+            Ok(_) => {
+                sqlx::query(
+                    "INSERT INTO credentials (id, user_id, credential_type, credential_data) VALUES (?, ?, 'password', ?)",
+                )
+                .bind(uuid::Uuid::new_v4().to_string())
+                .bind(&keycloak_id)
+                .bind(&cred_data)
+                .execute(&pool)
+                .await
+                .context("Failed to seed admin password credential")?;
+                info!("Admin password credential set from AUTH9_ADMIN_PASSWORD");
+            }
+            Err(e) => {
+                warn!("Skipping admin password credential (credentials table not ready, will be set when auth9-oidc initializes): {}", e);
+            }
+        }
     }
 
     // 5. INSERT IGNORE tenant_users (admin → both tenants)

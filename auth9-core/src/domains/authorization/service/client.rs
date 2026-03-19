@@ -86,6 +86,7 @@ impl<
 
         if let Some(cache) = &self.cache_manager {
             let _ = cache.set_service_config(service.id.0, &service).await;
+            let _ = cache.add_audience(&input.client_id).await;
         }
 
         Ok(ServiceWithClient {
@@ -131,6 +132,7 @@ impl<
 
         if let Some(cache) = &self.cache_manager {
             let _ = cache.set_service_config(service.id.0, &service).await;
+            let _ = cache.add_audience(&input.client_id).await;
         }
 
         Ok(ServiceWithClient {
@@ -382,7 +384,11 @@ impl<
     }
 
     pub async fn delete_client(&self, service_id: Uuid, client_id: &str) -> Result<()> {
-        self.repo.delete_client(service_id, client_id).await
+        self.repo.delete_client(service_id, client_id).await?;
+        if let Some(cache) = &self.cache_manager {
+            let _ = cache.remove_audience(client_id).await;
+        }
+        Ok(())
     }
 
     /// Update a client's secret hash in the database

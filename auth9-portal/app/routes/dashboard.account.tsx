@@ -26,7 +26,7 @@ export default function AccountLayout() {
         <p className="text-sm text-[var(--text-secondary)]">{t("account.description")}</p>
       </div>
 
-      <div className="flex flex-col gap-6 lg:flex-row">
+      <div className="flex flex-col gap-x-6 gap-y-4 lg:flex-row">
         {/* Account Navigation */}
         <nav className="w-full flex-shrink-0 lg:w-48">
           <ul className="grid gap-1 sm:grid-cols-2 lg:grid-cols-1">

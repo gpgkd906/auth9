@@ -73,11 +73,13 @@ export async function loader({ request }: LoaderFunctionArgs) {
   const error = url.searchParams.get("error");
   const loginChallenge = url.searchParams.get("login_challenge") || undefined;
   const apiBaseUrl = process.env.AUTH9_CORE_PUBLIC_URL || process.env.AUTH9_CORE_URL || "http://localhost:8080";
-  const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
+  const brandingClientId = url.searchParams.get("client_id")
+    || process.env.AUTH9_PORTAL_CLIENT_ID
+    || "auth9-portal";
   let branding: BrandingConfig = DEFAULT_PUBLIC_BRANDING;
 
   try {
-    const { data } = await publicBrandingApi.get(clientId);
+    const { data } = await publicBrandingApi.get(brandingClientId);
     branding = { ...DEFAULT_PUBLIC_BRANDING, ...data };
   } catch {
     // Fall back to default Portal-owned branding.
@@ -462,6 +464,7 @@ export default function Login() {
                 alt={data.branding.company_name || "Auth9"}
                 className="mx-auto mb-4 h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
                 referrerPolicy="no-referrer"
+                crossOrigin="anonymous"
               />
             ) : (
               <div className="logo-icon mx-auto mb-4">

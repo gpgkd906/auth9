@@ -46,6 +46,7 @@ export function AuthBrandPanel({ branding, eyebrow, title, description }: AuthBr
               alt={companyName}
               className="h-14 w-14 rounded-2xl border border-black/5 bg-white/90 object-contain p-2"
               referrerPolicy="no-referrer"
+              crossOrigin="anonymous"
             />
           ) : (
             <div className="logo-icon m-0">{getBrandMark(companyName)}</div>
