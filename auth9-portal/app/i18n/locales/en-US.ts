@@ -145,11 +145,13 @@ export default {
       emailOtpButton: "Sign in with email code",
       invalidAction: "Invalid action",
       missingAccessToken: "Missing access token",
-      passwordRevealDetails: "View fallback", // pragma: allowlist secret
-      passwordHideDetails: "Hide fallback", // pragma: allowlist secret
-      passwordFallbackTitle: "Password sign-in stays anchored in the Portal", // pragma: allowlist secret
-      passwordFallbackDescription: "Hosted password submission will land in Auth9 APIs in the next phase. Until then, you can continue through the compatibility path without leaving the Portal until you confirm.", // pragma: allowlist secret
-      passwordFallbackContinue: "Continue with compatibility fallback", // pragma: allowlist secret
+      passwordRevealDetails: "Show form", // pragma: allowlist secret
+      passwordHideDetails: "Hide form", // pragma: allowlist secret
+      passwordEmailPlaceholder: "Email address", // pragma: allowlist secret
+      passwordPlaceholder: "Password", // pragma: allowlist secret
+      passwordSubmit: "Sign in", // pragma: allowlist secret
+      signingIn: "Signing in...",
+      credentialsRequired: "Email and password are required.", // pragma: allowlist secret
       futureMethodsEyebrow: "More methods",
       futureMethodsDescription: "This layout reserves space for password, enterprise SSO, social login, and additional verifiers in later phases.", // pragma: allowlist secret
       oauthErrors: {
@@ -223,18 +225,37 @@ export default {
     },
     mfaVerify: {
       metaTitle: "Verify MFA - Auth9",
-      panelTitle: "Prepare MFA verification inside the Portal",
-      panelDescription: "The route, layout, and branding are now hosted by Auth9 Portal so the MFA step can move off the Keycloak page in a later phase.",
-      title: "Verify MFA",
-      description: "Enter your verification code to continue. This route is ready for the hosted MFA flow.",
-      extensionTitle: "Compatibility note",
-      extensionDescription: "Phase 2 establishes the Portal route and UI container. The verification backend will be connected in a follow-up feature request.",
+      panelTitle: "Two-factor authentication",
+      panelDescription: "Enter the verification code from your authenticator app to complete sign-in.",
+      title: "Two-factor authentication",
+      totpDescription: "Enter the 6-digit code from your authenticator app.",
+      recoveryDescription: "Enter one of your recovery codes.",
       codeLabel: "Verification code",
       codePlaceholder: "123456",
+      recoveryLabel: "Recovery code",
+      recoveryPlaceholder: "Enter recovery code",
       codeRequired: "Verification code is required.",
-      pendingIntegration: "Hosted MFA verification is not connected yet. Use the compatibility flow if your tenant still prompts through Keycloak.",
-      submit: "Continue",
-      verifying: "Checking...",
+      invalidCode: "Invalid verification code. Please try again.",
+      sessionExpired: "Your MFA session has expired. Please sign in again.",
+      switchToRecovery: "Use a recovery code instead",
+      switchToTotp: "Use authenticator app",
+      submit: "Verify",
+      verifying: "Verifying...",
+    },
+    mfaSetup: {
+      metaTitle: "Set Up Two-Factor Authentication - Auth9",
+      panelTitle: "Set up two-factor authentication",
+      panelDescription: "Protect your account with an authenticator app.",
+      title: "Set up authenticator",
+      description: "Scan the QR code below with your authenticator app (Google Authenticator, Authy, etc.).",
+      qrAlt: "TOTP QR code",
+      manualEntryToggle: "Can't scan the code?",
+      manualEntryLabel: "Manual entry key",
+      verifyTitle: "Verify setup",
+      verifyDescription: "Enter the 6-digit code from your authenticator app to confirm setup.",
+      submit: "Verify and enable",
+      submitting: "Verifying...",
+      setupFailed: "Failed to set up authenticator. Please try again.",
     },
     verifyEmail: {
       metaTitle: "Verify Email - Auth9",

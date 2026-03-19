@@ -118,6 +118,7 @@
 | [auth/26-enterprise-oidc-broker.md](./auth/26-enterprise-oidc-broker.md) | 企业 OIDC Broker 原生登录（OIDC 连接器 CRUD、userInfoUrl 必填、Auth9 broker 路由、claim mapping） | 5 |
 | [auth/27-enterprise-saml-broker.md](./auth/27-enterprise-saml-broker.md) | 企业 SAML Broker 原生登录（SAML 连接器 CRUD、SP Metadata 生成、证书校验、Auth9 broker 路由） | 5 |
 | [auth/28-federated-identity-linking.md](./auth/28-federated-identity-linking.md) | Federated Identity Linking（社交登录身份关联、Unlink/Re-link、first_login_policy 策略控制、confirm-link 过期） | 5 |
+| [auth/29-portal-auth-ui-completion.md](./auth/29-portal-auth-ui-completion.md) | Portal 认证 UI 补全（密码登录表单、MFA 验证页面、TOTP 注册页面、OTP 组件） | 5 |
 
 ### 系统设置 (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |

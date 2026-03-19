@@ -13,11 +13,34 @@ export interface HostedLoginTokenResponse {
   pending_actions?: PendingAction[];
 }
 
+export interface MfaChallengeResponse {
+  mfa_required: true;
+  mfa_session_token: string;
+  mfa_methods: string[];
+  expires_in: number;
+}
+
+export type PasswordLoginResponse =
+  | HostedLoginTokenResponse
+  | MfaChallengeResponse;
+
+export function isMfaChallenge(
+  res: PasswordLoginResponse
+): res is MfaChallengeResponse {
+  return "mfa_required" in res && res.mfa_required === true;
+}
+
+export interface TotpEnrollmentResponse {
+  setup_token: string;
+  otpauth_uri: string;
+  secret: string;
+}
+
 export const hostedLoginApi = {
   passwordLogin: async (
     email: string,
     password: string
-  ): Promise<HostedLoginTokenResponse> => {
+  ): Promise<PasswordLoginResponse> => {
     const response = await fetch(
       `${API_BASE_URL}/api/v1/hosted-login/password`,
       {
@@ -143,5 +166,73 @@ export const hostedLoginApi = {
     const result: { data?: { redirect_url: string }; redirect_url?: string } =
       await handleResponse(response);
     return result.data ?? (result as { redirect_url: string });
+  },
+
+  challengeTotp: async (
+    mfaSessionToken: string,
+    code: string
+  ): Promise<HostedLoginTokenResponse> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/mfa/challenge/totp`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mfa_session_token: mfaSessionToken,
+          code,
+        }),
+      }
+    );
+    return handleResponse(response);
+  },
+
+  challengeRecoveryCode: async (
+    mfaSessionToken: string,
+    code: string
+  ): Promise<HostedLoginTokenResponse> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/mfa/challenge/recovery-code`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          mfa_session_token: mfaSessionToken,
+          code,
+        }),
+      }
+    );
+    return handleResponse(response);
+  },
+
+  totpEnrollStart: async (
+    accessToken: string
+  ): Promise<TotpEnrollmentResponse> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/mfa/totp/enroll`,
+      {
+        method: "POST",
+        headers: getHeaders(accessToken),
+      }
+    );
+    const result = await handleResponse<{ data: TotpEnrollmentResponse }>(
+      response
+    );
+    return result.data;
+  },
+
+  totpEnrollVerify: async (
+    setupToken: string,
+    code: string,
+    accessToken: string
+  ): Promise<void> => {
+    const response = await fetch(
+      `${API_BASE_URL}/api/v1/mfa/totp/enroll/verify`,
+      {
+        method: "POST",
+        headers: getHeaders(accessToken),
+        body: JSON.stringify({ setup_token: setupToken, code }),
+      }
+    );
+    await handleResponse(response);
   },
 };

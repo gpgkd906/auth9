@@ -145,11 +145,13 @@ export default {
       emailOtpButton: "邮箱验证码登录",
       invalidAction: "无效操作",
       missingAccessToken: "缺少访问令牌",
-      passwordRevealDetails: "查看兼容入口", // pragma: allowlist secret
-      passwordHideDetails: "收起兼容入口", // pragma: allowlist secret
-      passwordFallbackTitle: "密码登录入口已回收到 Portal", // pragma: allowlist secret
-      passwordFallbackDescription: "Hosted password API 会在下一阶段接入 Auth9 API。当前你仍可在 Portal 内确认后继续走兼容 fallback 路径。", // pragma: allowlist secret
-      passwordFallbackContinue: "继续使用兼容 fallback", // pragma: allowlist secret
+      passwordRevealDetails: "展开表单", // pragma: allowlist secret
+      passwordHideDetails: "收起表单", // pragma: allowlist secret
+      passwordEmailPlaceholder: "邮箱地址",
+      passwordPlaceholder: "密码", // pragma: allowlist secret
+      passwordSubmit: "登录", // pragma: allowlist secret
+      signingIn: "登录中...",
+      credentialsRequired: "请输入邮箱和密码。", // pragma: allowlist secret
       futureMethodsEyebrow: "后续扩展位",
       futureMethodsDescription: "当前布局已为 password、enterprise SSO、social login 和其他认证方式预留稳定入口位置。", // pragma: allowlist secret
       oauthErrors: {
@@ -223,18 +225,37 @@ export default {
     },
     mfaVerify: {
       metaTitle: "验证 MFA - Auth9",
-      panelTitle: "为 Portal 内 MFA 验证预留主路径",
-      panelDescription: "MFA 验证的路由、布局和 branding 已托管到 Auth9 Portal，后续阶段可无缝接入真实验证后端。",
-      title: "验证 MFA",
-      description: "输入你的验证码以继续。该路由已经为 Hosted MFA 流程准备好页面容器。",
-      extensionTitle: "兼容说明",
-      extensionDescription: "Phase 2 先落地 Portal 路由和 UI 容器。真实验证后端会在后续 FR 中接入。",
+      panelTitle: "双因素认证",
+      panelDescription: "输入身份验证器应用中的验证码以完成登录。",
+      title: "双因素认证",
+      totpDescription: "请输入身份验证器应用中的 6 位验证码。",
+      recoveryDescription: "请输入你的恢复码。",
       codeLabel: "验证码",
       codePlaceholder: "123456",
+      recoveryLabel: "恢复码",
+      recoveryPlaceholder: "输入恢复码",
       codeRequired: "请输入验证码。",
-      pendingIntegration: "Hosted MFA 验证尚未接入，请在仍使用 Keycloak 的租户中继续走兼容流程。",
-      submit: "继续",
-      verifying: "校验中...",
+      invalidCode: "验证码无效，请重试。",
+      sessionExpired: "MFA 会话已过期，请重新登录。",
+      switchToRecovery: "使用恢复码",
+      switchToTotp: "使用身份验证器应用",
+      submit: "验证",
+      verifying: "验证中...",
+    },
+    mfaSetup: {
+      metaTitle: "设置双因素认证 - Auth9",
+      panelTitle: "设置双因素认证",
+      panelDescription: "使用身份验证器应用保护你的账户。",
+      title: "设置身份验证器",
+      description: "使用身份验证器应用（Google Authenticator、Authy 等）扫描下方二维码。",
+      qrAlt: "TOTP 二维码",
+      manualEntryToggle: "无法扫描？",
+      manualEntryLabel: "手动输入密钥",
+      verifyTitle: "验证设置",
+      verifyDescription: "输入身份验证器应用中的 6 位验证码以确认设置。",
+      submit: "验证并启用",
+      submitting: "验证中...",
+      setupFailed: "设置身份验证器失败，请重试。",
     },
     verifyEmail: {
       metaTitle: "验证邮箱 - Auth9",

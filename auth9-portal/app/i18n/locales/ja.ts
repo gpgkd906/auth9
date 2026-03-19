@@ -145,11 +145,13 @@ export default {
       emailOtpButton: "メールコードでサインイン",
       invalidAction: "無効なアクション",
       missingAccessToken: "アクセストークンがありません",
-      passwordRevealDetails: "互換 fallback を表示", // pragma: allowlist secret
-      passwordHideDetails: "互換 fallback を隠す", // pragma: allowlist secret
-      passwordFallbackTitle: "パスワード導線は Portal 内で管理されます", // pragma: allowlist secret
-      passwordFallbackDescription: "Hosted password API は次のフェーズで Auth9 API に接続されます。それまでは Portal 上で確認した後に互換 fallback へ進めます。", // pragma: allowlist secret
-      passwordFallbackContinue: "互換 fallback に進む", // pragma: allowlist secret
+      passwordRevealDetails: "フォームを表示", // pragma: allowlist secret
+      passwordHideDetails: "フォームを隠す", // pragma: allowlist secret
+      passwordEmailPlaceholder: "メールアドレス",
+      passwordPlaceholder: "パスワード", // pragma: allowlist secret
+      passwordSubmit: "サインイン", // pragma: allowlist secret
+      signingIn: "サインイン中...",
+      credentialsRequired: "メールアドレスとパスワードを入力してください。", // pragma: allowlist secret
       futureMethodsEyebrow: "拡張予定の方式",
       futureMethodsDescription: "このレイアウトは password、enterprise SSO、social login、追加認証方式の拡張枠を確保しています。", // pragma: allowlist secret
       oauthErrors: {
@@ -223,18 +225,37 @@ export default {
     },
     mfaVerify: {
       metaTitle: "MFA を確認 - Auth9",
-      panelTitle: "Portal 内 MFA 確認の導線を準備",
-      panelDescription: "MFA 確認のルート、レイアウト、branding は Auth9 Portal でホストされ、後続フェーズで実際の検証バックエンドに接続できます。",
-      title: "MFA を確認",
-      description: "確認コードを入力して続行します。このルートは hosted MFA フロー用の UI コンテナです。",
-      extensionTitle: "互換性メモ",
-      extensionDescription: "Phase 2 では Portal のルートと UI コンテナまでを整備します。実際の検証バックエンドは後続 FR で接続されます。",
+      panelTitle: "二要素認証",
+      panelDescription: "認証アプリの確認コードを入力してサインインを完了します。",
+      title: "二要素認証",
+      totpDescription: "認証アプリの 6 桁のコードを入力してください。",
+      recoveryDescription: "リカバリーコードを入力してください。",
       codeLabel: "確認コード",
       codePlaceholder: "123456",
+      recoveryLabel: "リカバリーコード",
+      recoveryPlaceholder: "リカバリーコードを入力",
       codeRequired: "確認コードを入力してください。",
-      pendingIntegration: "Hosted MFA 検証はまだ接続されていません。Keycloak を使うテナントでは互換フローを利用してください。",
-      submit: "続行",
+      invalidCode: "確認コードが無効です。もう一度お試しください。",
+      sessionExpired: "MFA セッションが期限切れです。もう一度サインインしてください。",
+      switchToRecovery: "リカバリーコードを使用",
+      switchToTotp: "認証アプリを使用",
+      submit: "確認",
       verifying: "確認中...",
+    },
+    mfaSetup: {
+      metaTitle: "二要素認証の設定 - Auth9",
+      panelTitle: "二要素認証を設定",
+      panelDescription: "認証アプリでアカウントを保護します。",
+      title: "認証アプリの設定",
+      description: "認証アプリ（Google Authenticator、Authy など）で下の QR コードをスキャンしてください。",
+      qrAlt: "TOTP QR コード",
+      manualEntryToggle: "スキャンできませんか？",
+      manualEntryLabel: "手動入力キー",
+      verifyTitle: "設定を確認",
+      verifyDescription: "認証アプリの 6 桁のコードを入力して設定を確認してください。",
+      submit: "確認して有効化",
+      submitting: "確認中...",
+      setupFailed: "認証アプリの設定に失敗しました。もう一度お試しください。",
     },
     verifyEmail: {
       metaTitle: "メール確認 - Auth9",

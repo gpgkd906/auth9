@@ -14,7 +14,7 @@ import { mapApiError, mapOAuthError } from "~/lib/error-messages";
 import { LockClosedIcon } from "@radix-ui/react-icons";
 import { resolveLocale } from "~/services/locale.server";
 import { commitSession, serializeOAuthState } from "~/services/session.server";
-import { enterpriseSsoApi, hostedLoginApi, publicBrandingApi, identityProviderApi, type BrandingConfig } from "~/services/api";
+import { enterpriseSsoApi, hostedLoginApi, publicBrandingApi, identityProviderApi, type BrandingConfig, isMfaChallenge } from "~/services/api";
 import type { PublicSocialProvider } from "~/services/api/identity-provider";
 import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 import type { AppLocale } from "~/i18n";
@@ -207,6 +207,19 @@ export async function action({ request }: ActionFunctionArgs) {
 
     try {
       const result = await hostedLoginApi.passwordLogin(email, password);
+
+      // MFA required — redirect to verification page
+      if (isMfaChallenge(result)) {
+        const params = new URLSearchParams({
+          mfa_session_token: result.mfa_session_token,
+          mfa_methods: result.mfa_methods.join(","),
+        });
+        if (loginChallenge) {
+          params.set("login_challenge", loginChallenge);
+        }
+        return redirect(`/mfa/verify?${params.toString()}`);
+      }
+
       const session = {
         accessToken: result.access_token,
         identityAccessToken: result.access_token,
@@ -223,7 +236,7 @@ export async function action({ request }: ActionFunctionArgs) {
         let actionUrl = first.redirect_url.includes("?")
           ? `${first.redirect_url}&action_id=${first.id}`
           : `${first.redirect_url}?action_id=${first.id}`;
-        // Carry login_challenge through pending actions (MFA, etc.)
+        // Carry login_challenge through pending actions
         if (loginChallenge) {
           actionUrl += `&login_challenge=${encodeURIComponent(loginChallenge)}`;
         }
@@ -328,6 +341,7 @@ export default function Login() {
   const isSubmitting = navigation.state === "submitting";
   const { t } = useI18n();
   const [passwordExpanded, setPasswordExpanded] = useState(false);
+  const [ssoEmail, setSsoEmail] = useState("");
 
   const [authenticating, setAuthenticating] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -478,6 +492,7 @@ export default function Login() {
                     required
                     placeholder={t("common.placeholders.companyEmail")}
                     className="mb-3"
+                    onChange={(e) => setSsoEmail(e.target.value)}
                   />
                   <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
                     {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
@@ -498,23 +513,32 @@ export default function Login() {
                 </Button>
 
                 {passwordExpanded ? (
-                  <div className="rounded-2xl border border-[var(--glass-border-subtle)] bg-white/70 p-4 text-left dark:bg-white/6">
-                    <p className="text-sm font-medium text-[var(--text-primary)]">
-                      {t("auth.login.passwordFallbackTitle")}
-                    </p>
-                    <p className="mt-2 text-sm leading-6 text-[var(--text-secondary)]">
-                      {t("auth.login.passwordFallbackDescription")}
-                    </p>
-                    <Form method="post" action="/login" className="mt-4">
-                      <input type="hidden" name="intent" value="password-login" />
-                      {data.loginChallenge && (
-                        <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
-                      )}
-                      <Button type="submit" variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                        {isSubmitting ? t("auth.login.redirecting") : t("auth.login.passwordFallbackContinue")}
-                      </Button>
-                    </Form>
-                  </div>
+                  <Form
+                    method="post"
+                    action="/login"
+                    className="rounded-2xl border border-[var(--glass-border-subtle)] bg-white/70 p-4 text-left space-y-3 dark:bg-white/6"
+                  >
+                    <input type="hidden" name="intent" value="password-login" />
+                    {data.loginChallenge && (
+                      <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
+                    )}
+                    <Input
+                      type="email"
+                      name="email"
+                      required
+                      placeholder={t("auth.login.passwordEmailPlaceholder")}
+                      defaultValue={ssoEmail}
+                    />
+                    <Input
+                      type="password"
+                      name="password"
+                      required
+                      placeholder={t("auth.login.passwordPlaceholder")}
+                    />
+                    <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
+                      {isSubmitting ? t("auth.login.signingIn") : t("auth.login.passwordSubmit")}
+                    </Button>
+                  </Form>
                 ) : null}
 
                 {data.branding.email_otp_enabled && (

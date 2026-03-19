@@ -1,16 +1,19 @@
 import type { ActionFunctionArgs, LoaderFunctionArgs, MetaFunction } from "react-router";
-import { Form, Link, useActionData, useLoaderData, useNavigation } from "react-router";
+import { redirect, Form, Link, useActionData, useLoaderData, useNavigation, useSearchParams } from "react-router";
+import { useState, useCallback, useRef } from "react";
 import { getBrandMark } from "~/components/auth/AuthBrandPanel";
 import { AuthPageShell } from "~/components/AuthPageShell";
 import { Button } from "~/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "~/components/ui/card";
 import { Input } from "~/components/ui/input";
-import { Label } from "~/components/ui/label";
+import { OtpInput } from "~/components/ui/otp-input";
 import { useI18n } from "~/i18n";
 import { buildMeta, resolveMetaLocale } from "~/i18n/meta";
 import { translate } from "~/i18n/translate";
+import { mapApiError } from "~/lib/error-messages";
 import { resolveLocale } from "~/services/locale.server";
-import { publicBrandingApi, type BrandingConfig } from "~/services/api";
+import { commitSession } from "~/services/session.server";
+import { hostedLoginApi, publicBrandingApi, type BrandingConfig } from "~/services/api";
 import { DEFAULT_PUBLIC_BRANDING } from "~/services/api/branding";
 
 export const meta: MetaFunction = ({ matches }) => {
@@ -19,6 +22,13 @@ export const meta: MetaFunction = ({ matches }) => {
 
 export async function loader({ request }: LoaderFunctionArgs) {
   const locale = await resolveLocale(request);
+  const url = new URL(request.url);
+  const mfaSessionToken = url.searchParams.get("mfa_session_token");
+
+  if (!mfaSessionToken) {
+    return redirect("/login");
+  }
+
   const clientId = process.env.AUTH9_PORTAL_CLIENT_ID || "auth9-portal";
   let branding: BrandingConfig = DEFAULT_PUBLIC_BRANDING;
 
@@ -26,34 +36,93 @@ export async function loader({ request }: LoaderFunctionArgs) {
     const { data } = await publicBrandingApi.get(clientId);
     branding = { ...DEFAULT_PUBLIC_BRANDING, ...data };
   } catch {
-    // Fall back to default Portal branding when public config is unavailable.
+    // Fall back to default Portal branding
   }
 
   return {
     locale,
     branding,
+    mfaSessionToken,
+    mfaMethods: url.searchParams.get("mfa_methods")?.split(",") ?? ["totp"],
+    loginChallenge: url.searchParams.get("login_challenge"),
   };
 }
 
 export async function action({ request }: ActionFunctionArgs) {
   const locale = await resolveLocale(request);
   const formData = await request.formData();
+  const intent = String(formData.get("intent") || "verify-totp");
   const code = String(formData.get("code") || "").trim();
+  const mfaSessionToken = String(formData.get("mfa_session_token") || "");
+  const loginChallenge = formData.get("login_challenge") as string | null;
 
   if (!code) {
     return { error: translate(locale, "auth.mfaVerify.codeRequired") };
   }
 
-  return { error: translate(locale, "auth.mfaVerify.pendingIntegration") };
+  if (!mfaSessionToken) {
+    return { error: translate(locale, "auth.mfaVerify.sessionExpired") };
+  }
+
+  try {
+    const result =
+      intent === "verify-recovery"
+        ? await hostedLoginApi.challengeRecoveryCode(mfaSessionToken, code)
+        : await hostedLoginApi.challengeTotp(mfaSessionToken, code);
+
+    const session = {
+      accessToken: result.access_token,
+      identityAccessToken: result.access_token,
+      refreshToken: undefined,
+      idToken: undefined,
+      expiresAt: Date.now() + result.expires_in * 1000,
+      identityExpiresAt: Date.now() + result.expires_in * 1000,
+    };
+    const cookie = await commitSession(session);
+
+    // Complete OIDC authorization flow if login_challenge is present
+    if (loginChallenge && result.access_token) {
+      try {
+        const authResult = await hostedLoginApi.authorizeComplete(loginChallenge, result.access_token);
+        return redirect(authResult.redirect_url);
+      } catch {
+        // Fall through to tenant select
+      }
+    }
+
+    return redirect("/tenant/select", { headers: { "Set-Cookie": cookie } });
+  } catch (error) {
+    const message = mapApiError(error, locale);
+    return { error: message };
+  }
 }
 
 export default function MfaVerifyPage() {
   const { t } = useI18n();
-  const loaderData = (useLoaderData<typeof loader>() ?? {}) as { branding?: BrandingConfig };
-  const branding = { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData.branding ?? {}) };
+  const loaderData = useLoaderData<typeof loader>();
+  const branding = { ...DEFAULT_PUBLIC_BRANDING, ...(loaderData?.branding ?? {}) };
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
+  const [searchParams] = useSearchParams();
+
+  const mfaSessionToken = loaderData?.mfaSessionToken ?? searchParams.get("mfa_session_token") ?? "";
+  const loginChallenge = loaderData?.loginChallenge ?? null;
+
+  const [mode, setMode] = useState<"totp" | "recovery">("totp");
+  const formRef = useRef<HTMLFormElement>(null);
+
+  const handleOtpComplete = useCallback(
+    (code: string) => {
+      if (!formRef.current) return;
+      const codeInput = formRef.current.querySelector<HTMLInputElement>('input[name="code"]');
+      if (codeInput) {
+        codeInput.value = code;
+        formRef.current.requestSubmit();
+      }
+    },
+    []
+  );
 
   return (
     <AuthPageShell
@@ -75,25 +144,33 @@ export default function MfaVerifyPage() {
             <div className="logo-icon mx-auto mb-4">{getBrandMark(branding.company_name || "Auth9")}</div>
           )}
           <CardTitle className="text-2xl">{t("auth.mfaVerify.title")}</CardTitle>
-          <CardDescription className="auth-form-description">{t("auth.mfaVerify.description")}</CardDescription>
+          <CardDescription className="auth-form-description">
+            {mode === "totp" ? t("auth.mfaVerify.totpDescription") : t("auth.mfaVerify.recoveryDescription")}
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="rounded-2xl border border-dashed border-[var(--glass-border-subtle)] bg-white/65 p-4 text-left text-sm leading-6 text-[var(--text-secondary)] dark:bg-white/6">
-            <p className="font-medium text-[var(--text-primary)]">{t("auth.mfaVerify.extensionTitle")}</p>
-            <p className="mt-2">{t("auth.mfaVerify.extensionDescription")}</p>
-          </div>
+          <Form method="post" ref={formRef} className="space-y-4">
+            <input type="hidden" name="intent" value={mode === "totp" ? "verify-totp" : "verify-recovery"} />
+            <input type="hidden" name="mfa_session_token" value={mfaSessionToken} />
+            {loginChallenge && <input type="hidden" name="login_challenge" value={loginChallenge} />}
 
-          <Form method="post" className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="code">{t("auth.mfaVerify.codeLabel")}</Label>
+            {mode === "totp" ? (
+              <>
+                <input type="hidden" name="code" value="" />
+                <OtpInput
+                  onComplete={handleOtpComplete}
+                  disabled={isSubmitting}
+                  error={!!actionData?.error}
+                />
+              </>
+            ) : (
               <Input
-                id="code"
                 name="code"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder={t("auth.mfaVerify.codePlaceholder")}
+                placeholder={t("auth.mfaVerify.recoveryPlaceholder")}
+                autoComplete="off"
+                disabled={isSubmitting}
               />
-            </div>
+            )}
 
             {actionData?.error ? (
               <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
@@ -101,16 +178,28 @@ export default function MfaVerifyPage() {
               </div>
             ) : null}
 
-            <Button type="submit" className="w-full" disabled={isSubmitting}>
-              {isSubmitting ? t("auth.mfaVerify.verifying") : t("auth.mfaVerify.submit")}
-            </Button>
-
-            <div className="text-center text-sm">
-              <Link to="/login" className="font-medium text-[var(--accent-blue)] hover:underline">
-                {t("common.buttons.backToLogin")}
-              </Link>
-            </div>
+            {mode === "recovery" && (
+              <Button type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? t("auth.mfaVerify.verifying") : t("auth.mfaVerify.submit")}
+              </Button>
+            )}
           </Form>
+
+          <div className="text-center">
+              <button
+                type="button"
+                className="text-sm font-medium text-[var(--accent-blue)] hover:underline"
+                onClick={() => setMode(mode === "totp" ? "recovery" : "totp")}
+              >
+                {mode === "totp" ? t("auth.mfaVerify.switchToRecovery") : t("auth.mfaVerify.switchToTotp")}
+              </button>
+          </div>
+
+          <div className="text-center text-sm">
+            <Link to="/login" className="font-medium text-[var(--text-tertiary)] hover:text-[var(--text-primary)] hover:underline">
+              {t("common.buttons.backToLogin")}
+            </Link>
+          </div>
         </CardContent>
       </Card>
     </AuthPageShell>
