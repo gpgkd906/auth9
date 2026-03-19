@@ -151,6 +151,7 @@ export default {
       passwordPlaceholder: "パスワード", // pragma: allowlist secret
       passwordSubmit: "サインイン", // pragma: allowlist secret
       signingIn: "サインイン中...",
+      backToMethods: "他のサインイン方法",
       credentialsRequired: "メールアドレスとパスワードを入力してください。", // pragma: allowlist secret
       futureMethodsEyebrow: "拡張予定の方式",
       futureMethodsDescription: "このレイアウトは password、enterprise SSO、social login、追加認証方式の拡張枠を確保しています。", // pragma: allowlist secret

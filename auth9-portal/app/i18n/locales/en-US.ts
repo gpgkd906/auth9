@@ -151,6 +151,7 @@ export default {
       passwordPlaceholder: "Password", // pragma: allowlist secret
       passwordSubmit: "Sign in", // pragma: allowlist secret
       signingIn: "Signing in...",
+      backToMethods: "Other sign-in methods",
       credentialsRequired: "Email and password are required.", // pragma: allowlist secret
       futureMethodsEyebrow: "More methods",
       futureMethodsDescription: "This layout reserves space for password, enterprise SSO, social login, and additional verifiers in later phases.", // pragma: allowlist secret

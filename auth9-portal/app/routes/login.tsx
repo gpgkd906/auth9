@@ -340,7 +340,7 @@ export default function Login() {
   const navigation = useNavigation();
   const isSubmitting = navigation.state === "submitting";
   const { t } = useI18n();
-  const [passwordExpanded, setPasswordExpanded] = useState(true);
+  const [view, setView] = useState<"methods" | "password">("methods");
   const [ssoEmail, setSsoEmail] = useState("");
 
   const [authenticating, setAuthenticating] = useState(false);
@@ -479,154 +479,165 @@ export default function Login() {
             </CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="space-y-4">
-              <AuthMethodStack>
-                <Form method="post" action="/login">
-                  <input type="hidden" name="intent" value="sso-login" />
+            {view === "password" ? (
+              /* ── Password Login View ── */
+              <div className="space-y-4">
+                <Form method="post" action="/login" className="space-y-3">
+                  <input type="hidden" name="intent" value="password-login" />
                   {data.loginChallenge && (
                     <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
                   )}
                   <Input
-                    type="email"
+                    type="text"
                     name="email"
                     required
-                    placeholder={t("common.placeholders.companyEmail")}
-                    className="mb-3"
-                    onChange={(e) => setSsoEmail(e.target.value)}
+                    autoFocus
+                    autoComplete="username"
+                    placeholder={t("auth.login.passwordEmailPlaceholder")}
+                    defaultValue={ssoEmail}
                   />
-                  <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
-                    {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
+                  <Input
+                    type="password"
+                    name="password"
+                    required
+                    autoComplete="current-password"
+                    placeholder={t("auth.login.passwordPlaceholder")}
+                  />
+
+                  {actionData?.error && (
+                    <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
+                      {actionData.error}
+                    </div>
+                  )}
+
+                  <Button type="submit" className="w-full" disabled={isSubmitting}>
+                    {isSubmitting ? t("auth.login.signingIn") : t("auth.login.passwordSubmit")}
                   </Button>
                 </Form>
 
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full justify-between"
-                  onClick={() => setPasswordExpanded((current) => !current)}
-                  disabled={isSubmitting || authenticating}
-                >
-                  <span>{t("auth.login.passwordButton")}</span>
-                  <span className="text-xs text-[var(--text-tertiary)]">
-                    {passwordExpanded ? t("auth.login.passwordHideDetails") : t("auth.login.passwordRevealDetails")}
-                  </span>
-                </Button>
-
-                {passwordExpanded ? (
-                  <Form
-                    method="post"
-                    action="/login"
-                    className="rounded-2xl border border-[var(--glass-border-subtle)] bg-[var(--glass-bg)] p-4 text-left space-y-3"
+                <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)]">
+                  <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
+                    {t("auth.login.forgotPassword")}
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={() => setView("methods")}
+                    className="text-[var(--accent-blue)] hover:underline underline-offset-4"
                   >
-                    <input type="hidden" name="intent" value="password-login" />
+                    {t("auth.login.backToMethods")}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              /* ── Method Selection View ── */
+              <div className="space-y-4">
+                <AuthMethodStack>
+                  <Form method="post" action="/login">
+                    <input type="hidden" name="intent" value="sso-login" />
                     {data.loginChallenge && (
                       <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
                     )}
                     <Input
-                      type="text"
+                      type="email"
                       name="email"
                       required
-                      autoComplete="username"
-                      placeholder={t("auth.login.passwordEmailPlaceholder")}
-                      defaultValue={ssoEmail}
-                    />
-                    <Input
-                      type="password"
-                      name="password"
-                      required
-                      placeholder={t("auth.login.passwordPlaceholder")}
+                      placeholder={t("common.placeholders.companyEmail")}
+                      className="mb-3"
+                      onChange={(e) => setSsoEmail(e.target.value)}
                     />
                     <Button type="submit" className="w-full" disabled={isSubmitting || authenticating}>
-                      {isSubmitting ? t("auth.login.signingIn") : t("auth.login.passwordSubmit")}
+                      {isSubmitting ? t("auth.login.ssoFinding") : t("auth.login.ssoButton")}
                     </Button>
                   </Form>
-                ) : null}
 
-                {data.branding.email_otp_enabled && (
-                  <Link to="/auth/email-otp">
-                    <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
-                      {t("auth.login.emailOtpButton")}
-                    </Button>
-                  </Link>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full"
+                    onClick={() => setView("password")}
+                    disabled={isSubmitting || authenticating}
+                  >
+                    {t("auth.login.passwordButton")}
+                  </Button>
+
+                  {data.branding.email_otp_enabled && (
+                    <Link to="/auth/email-otp">
+                      <Button variant="outline" className="w-full" disabled={isSubmitting || authenticating}>
+                        {t("auth.login.emailOtpButton")}
+                      </Button>
+                    </Link>
+                  )}
+
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={handlePasskeyLogin}
+                    disabled={authenticating || isSubmitting}
+                  >
+                    <LockClosedIcon className="h-4 w-4 mr-2" />
+                    {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
+                  </Button>
+
+                  {data.socialProviders.length > 0 && (
+                    <div className="space-y-2">
+                      <div className="relative my-2">
+                        <div className="absolute inset-0 flex items-center">
+                          <span className="w-full border-t border-[var(--glass-border-subtle)]" />
+                        </div>
+                        <div className="relative flex justify-center text-xs uppercase">
+                          <span className="bg-[var(--surface-elevated)] px-2 text-[var(--text-tertiary)]">
+                            {t("auth.login.socialDivider")}
+                          </span>
+                        </div>
+                      </div>
+                      {data.socialProviders.map((provider) => (
+                        <Form method="post" action="/login" key={provider.alias}>
+                          <input type="hidden" name="intent" value="social-login" />
+                          <input type="hidden" name="providerAlias" value={provider.alias} />
+                          {data.loginChallenge && (
+                            <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
+                          )}
+                          <Button
+                            type="submit"
+                            variant="outline"
+                            className="w-full"
+                            disabled={isSubmitting || authenticating}
+                          >
+                            <SocialProviderIcon providerType={provider.provider_id} />
+                            <span className="ml-2">
+                              {provider.display_name || provider.alias}
+                            </span>
+                          </Button>
+                        </Form>
+                      ))}
+                    </div>
+                  )}
+                </AuthMethodStack>
+
+                {actionData?.error && (
+                  <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
                 )}
 
-                <Button
-                  variant="outline"
-                  className="w-full"
-                  onClick={handlePasskeyLogin}
-                  disabled={authenticating || isSubmitting}
-                >
-                  <LockClosedIcon className="h-4 w-4 mr-2" />
-                  {authenticating ? t("auth.login.verifying") : t("auth.login.passkeyButton")}
-                </Button>
-
-                {data.socialProviders.length > 0 && (
-                  <div className="space-y-2">
-                    <div className="relative my-2">
-                      <div className="absolute inset-0 flex items-center">
-                        <span className="w-full border-t border-[var(--glass-border-subtle)]" />
-                      </div>
-                      <div className="relative flex justify-center text-xs uppercase">
-                        <span className="bg-[var(--surface-elevated)] px-2 text-[var(--text-tertiary)]">
-                          {t("auth.login.socialDivider")}
-                        </span>
-                      </div>
-                    </div>
-                    {data.socialProviders.map((provider) => (
-                      <Form method="post" action="/login" key={provider.alias}>
-                        <input type="hidden" name="intent" value="social-login" />
-                        <input type="hidden" name="providerAlias" value={provider.alias} />
-                        {data.loginChallenge && (
-                          <input type="hidden" name="loginChallenge" value={data.loginChallenge} />
-                        )}
-                        <Button
-                          type="submit"
-                          variant="outline"
-                          className="w-full"
-                          disabled={isSubmitting || authenticating}
-                        >
-                          <SocialProviderIcon providerType={provider.provider_id} />
-                          <span className="ml-2">
-                            {provider.display_name || provider.alias}
-                          </span>
-                        </Button>
-                      </Form>
-                    ))}
+                {passkeyError && (
+                  <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)] text-center">
+                    {passkeyError}
                   </div>
                 )}
 
-              </AuthMethodStack>
-
-              {actionData?.error && (
-                <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
-              )}
-
-              <div className="flex items-center gap-4 my-1">
-                <span className="flex-1 h-px bg-[var(--glass-border-subtle)]" />
-                <span className="text-xs uppercase text-[var(--text-tertiary)] tracking-wide">{t("auth.login.or")}</span>
-                <span className="flex-1 h-px bg-[var(--glass-border-subtle)]" />
-              </div>
-
-              {/* Error Messages */}
-              {passkeyError && (
-                <div className="text-sm text-[var(--accent-red)] bg-red-50 p-3 rounded-md text-center">
-                  {passkeyError}
-                </div>
-              )}
-
-              <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)] pt-1">
-                <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
-                  {t("auth.login.forgotPassword")}
-                </Link>
-                {data.branding.allow_registration ? (
-                  <Link to="/register" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
-                    {t("auth.login.createAccount")}
+                <div className="flex items-center justify-between text-sm text-[var(--text-tertiary)] pt-1">
+                  <Link to="/forgot-password" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
+                    {t("auth.login.forgotPassword")}
                   </Link>
-                ) : (
-                  <span />
-                )}
+                  {data.branding.allow_registration ? (
+                    <Link to="/register" className="hover:text-[var(--text-primary)] underline-offset-4 hover:underline">
+                      {t("auth.login.createAccount")}
+                    </Link>
+                  ) : (
+                    <span />
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </CardContent>
       </Card>
     </AuthPageShell>

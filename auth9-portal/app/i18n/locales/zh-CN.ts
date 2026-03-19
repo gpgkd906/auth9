@@ -151,6 +151,7 @@ export default {
       passwordPlaceholder: "密码", // pragma: allowlist secret
       passwordSubmit: "登录", // pragma: allowlist secret
       signingIn: "登录中...",
+      backToMethods: "其他登录方式",
       credentialsRequired: "请输入邮箱和密码。", // pragma: allowlist secret
       futureMethodsEyebrow: "后续扩展位",
       futureMethodsDescription: "当前布局已为 password、enterprise SSO、social login 和其他认证方式预留稳定入口位置。", // pragma: allowlist secret
