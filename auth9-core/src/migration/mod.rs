@@ -710,7 +710,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     .await
     .context("Failed to seed demo tenant")?;
 
-    // 3. Upsert admin user (handles Keycloak reset where keycloak_id changes)
+    // 3. Upsert admin user (handles reset where identity_subject changes)
     // First try to find existing admin by display_name (stable across resets)
     let existing_admin: Option<(String,)> =
         sqlx::query_as("SELECT id FROM users WHERE display_name = ? LIMIT 1")
@@ -720,7 +720,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
             .context("Failed to check existing admin user")?;
 
     if let Some((existing_id,)) = existing_admin {
-        // Update existing admin user's keycloak_id and email
+        // Update existing admin user's identity_subject and email
         sqlx::query(
             r#"UPDATE users SET keycloak_id = ?, email = ?, updated_at = NOW()
             WHERE id = ?"#,
@@ -730,9 +730,9 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .bind(&existing_id)
         .execute(&pool)
         .await
-        .context("Failed to update admin user keycloak_id")?;
+        .context("Failed to update admin user")?;
 
-        info!("Updated existing admin user keycloak_id to {}", keycloak_id);
+        info!("Updated existing admin user identity_subject to {}", keycloak_id);
     } else {
         // Insert new admin user
         let admin_user_id = uuid::Uuid::new_v4().to_string();
@@ -749,7 +749,7 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .await
         .context("Failed to seed admin user")?;
 
-        info!("Created new admin user with keycloak_id {}", keycloak_id);
+        info!("Created new admin user with identity_subject {}", keycloak_id);
     }
 
     // 4. SELECT actual IDs (handles case where records already existed)
@@ -770,6 +770,46 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         .fetch_one(&pool)
         .await
         .context("Failed to get admin user ID")?;
+
+    // 4b. Set admin password credential if AUTH9_ADMIN_PASSWORD is provided
+    if let Some(ref pw) = config.admin_password {
+        use argon2::{password_hash::SaltString, Argon2, PasswordHasher};
+        use rand::rngs::OsRng;
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(pw.as_bytes(), &salt)
+            .map_err(|e| anyhow::anyhow!("Failed to hash admin password: {}", e))?
+            .to_string();
+
+        let cred_data = serde_json::json!({
+            "hash": hash,
+            "algorithm": "argon2id",
+            "temporary": false,
+        })
+        .to_string();
+
+        // Replace existing password credential
+        // credentials.user_id stores identity_subject, not the users.id UUID
+        sqlx::query(
+            "DELETE FROM credentials WHERE user_id = ? AND credential_type = 'password'",
+        )
+        .bind(&keycloak_id)
+        .execute(&pool)
+        .await
+        .context("Failed to clear old admin password credential")?;
+
+        sqlx::query(
+            "INSERT INTO credentials (id, user_id, credential_type, credential_data) VALUES (?, ?, 'password', ?)",
+        )
+        .bind(uuid::Uuid::new_v4().to_string())
+        .bind(&keycloak_id)
+        .bind(&cred_data)
+        .execute(&pool)
+        .await
+        .context("Failed to seed admin password credential")?;
+
+        info!("Admin password credential set from AUTH9_ADMIN_PASSWORD");
+    }
 
     // 5. INSERT IGNORE tenant_users (admin → both tenants)
     sqlx::query(

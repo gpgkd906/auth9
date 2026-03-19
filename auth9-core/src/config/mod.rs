@@ -160,6 +160,11 @@ pub struct Config {
     /// When non-empty, only URLs from these domains are accepted.
     /// When empty, any external HTTPS domain is allowed (SSRF checks still apply).
     pub branding_allowed_domains: Vec<String>,
+
+    /// Initial admin password for the seed user (set via AUTH9_ADMIN_PASSWORD).
+    /// When provided, the seed process hashes and stores this password so the admin
+    /// can log in via the hosted password login flow.
+    pub admin_password: Option<String>,
 }
 
 impl fmt::Debug for Config {
@@ -531,6 +536,7 @@ impl Config {
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
             branding_allowed_domains: vec![],
+            admin_password: None,
         }
     }
 
@@ -755,6 +761,7 @@ impl Config {
                 max_heap_mb: parse_u64_env("ACTION_MAX_HEAP_MB", 64) as usize,
             },
             branding_allowed_domains: parse_csv_env("BRANDING_ALLOWED_DOMAINS", vec![]),
+            admin_password: env::var("AUTH9_ADMIN_PASSWORD").ok(),
         })
     }
 
@@ -1022,6 +1029,7 @@ mod tests {
             portal_client_id: None,
             async_action: AsyncActionConfig::default(),
             branding_allowed_domains: vec![],
+            admin_password: None,
         };
 
         assert_eq!(config.http_addr(), "192.168.1.100:3000");
@@ -1688,6 +1696,7 @@ mod tests {
             portal_client_id: Some("auth9-portal".to_string()),
             async_action: AsyncActionConfig::default(),
             branding_allowed_domains: vec![],
+            admin_password: None,
         };
 
         let debug_str = format!("{:?}", config);
