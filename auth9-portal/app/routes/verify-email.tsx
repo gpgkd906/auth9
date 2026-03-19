@@ -70,7 +70,7 @@ export default function VerifyEmailPage() {
         panelTitle={t("auth.verifyEmail.panelTitle")}
         panelDescription={t("auth.verifyEmail.panelDescription")}
       >
-        <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+        <Card className="w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
             {renderLogo()}
             <CardTitle className="text-2xl">{t("auth.verifyEmail.successTitle")}</CardTitle>
@@ -95,7 +95,7 @@ export default function VerifyEmailPage() {
       panelTitle={t("auth.verifyEmail.panelTitle")}
       panelDescription={t("auth.verifyEmail.panelDescription")}
     >
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
           {renderLogo()}
           <CardTitle className="text-2xl">{t("auth.verifyEmail.errorTitle")}</CardTitle>

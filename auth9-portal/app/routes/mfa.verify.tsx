@@ -131,7 +131,7 @@ export default function MfaVerifyPage() {
       panelTitle={t("auth.mfaVerify.panelTitle")}
       panelDescription={t("auth.mfaVerify.panelDescription")}
     >
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
           {branding.logo_url ? (
             <img

@@ -66,7 +66,7 @@ export default function ForgotPasswordPage() {
         panelTitle={t("auth.forgotPassword.panelTitle")}
         panelDescription={t("auth.forgotPassword.panelDescription")}
       >
-        <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+        <Card className="w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
             {branding.logo_url ? (
               <img
@@ -109,7 +109,7 @@ export default function ForgotPasswordPage() {
       panelTitle={t("auth.forgotPassword.panelTitle")}
       panelDescription={t("auth.forgotPassword.panelDescription")}
     >
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
           {branding.logo_url ? (
             <img

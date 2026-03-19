@@ -69,7 +69,7 @@ export default function ConfirmLink() {
 
   return (
     <AuthPageShell>
-      <Card className="auth-form-card w-full max-w-xl animate-fade-in-up">
+      <Card className="w-full max-w-xl animate-fade-in-up">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Link Your Account</CardTitle>
           <CardDescription>

@@ -133,7 +133,7 @@ export default function MfaSetupTotpPage() {
       panelTitle={t("auth.mfaSetup.panelTitle")}
       panelDescription={t("auth.mfaSetup.panelDescription")}
     >
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
           {branding.logo_url ? (
             <img

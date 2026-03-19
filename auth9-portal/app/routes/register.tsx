@@ -80,7 +80,7 @@ export default function Register() {
       panelTitle={t("auth.register.panelTitle")}
       panelDescription={t("auth.register.panelDescription")}
     >
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
           {branding.logo_url ? (
             <img

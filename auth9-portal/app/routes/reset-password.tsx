@@ -95,7 +95,7 @@ export default function ResetPasswordPage() {
         panelTitle={t("auth.resetPassword.panelTitle")}
         panelDescription={t("auth.resetPassword.panelDescription")}
       >
-        <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+        <Card className="w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
             {loaderData.branding.logo_url ? (
               <img
@@ -129,7 +129,7 @@ export default function ResetPasswordPage() {
         panelTitle={t("auth.resetPassword.panelTitle")}
         panelDescription={t("auth.resetPassword.panelDescription")}
       >
-        <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+        <Card className="w-full max-w-md animate-fade-in-up">
           <CardHeader className="text-center">
             {loaderData.branding.logo_url ? (
               <img
@@ -163,7 +163,7 @@ export default function ResetPasswordPage() {
       panelTitle={t("auth.resetPassword.panelTitle")}
       panelDescription={t("auth.resetPassword.panelDescription")}
     >
-      <Card className="auth-form-card w-full max-w-md animate-fade-in-up">
+      <Card className="w-full max-w-md animate-fade-in-up">
         <CardHeader className="text-center">
           {loaderData.branding.logo_url ? (
             <img

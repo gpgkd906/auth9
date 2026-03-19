@@ -30,8 +30,6 @@ export function buildAuthBrandStyle(branding: BrandingConfig): CSSProperties {
     "--accent-blue-light": primaryRgb ? `rgb(${primaryRgb} / 0.14)` : undefined,
     "--accent-purple": branding.secondary_color,
     "--accent-purple-light": secondaryRgb ? `rgb(${secondaryRgb} / 0.14)` : undefined,
-    "--bg-primary": branding.background_color,
-    "--text-primary": branding.text_color,
   } as CSSProperties;
 }
 
