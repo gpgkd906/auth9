@@ -1,6 +1,6 @@
 import { useState } from "react";
 import type { LoaderFunctionArgs, ActionFunctionArgs, MetaFunction } from "react-router";
-import { Link, Outlet, useLocation, useLoaderData, redirect } from "react-router";
+import { Link, Outlet, useLocation, useLoaderData, useRouteError, isRouteErrorResponse, redirect } from "react-router";
 import { cn } from "~/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "~/components/ui/avatar";
 import { ThemeToggle } from "~/components/ThemeToggle";
@@ -291,6 +291,31 @@ export default function Dashboard() {
       <footer role="contentinfo" className="sr-only">
         Auth9 dashboard footer
       </footer>
+    </div>
+  );
+}
+
+// Dashboard-level ErrorBoundary — renders errors within the dashboard shell
+export function ErrorBoundary() {
+  const error = useRouteError();
+  const { t } = useI18n();
+
+  const status = isRouteErrorResponse(error) ? error.status : 500;
+  const title = status === 404 ? t("common.errors.pageNotFound") : String(status);
+  const message = status === 404
+    ? t("common.errors.pageNotFound")
+    : t("common.errors.somethingWentWrong");
+
+  return (
+    <div className="flex flex-col items-center justify-center py-24 px-6 text-center">
+      <h1 className="text-6xl font-bold text-[var(--text-primary)]">{title}</h1>
+      <p className="mt-4 text-xl text-[var(--text-secondary)]">{message}</p>
+      <Link
+        to="/dashboard"
+        className="mt-8 inline-block px-6 py-3 bg-[var(--accent-blue)] text-white rounded-[12px] font-medium hover:opacity-90 transition-opacity"
+      >
+        {t("common.errors.goBackHome")}
+      </Link>
     </div>
   );
 }

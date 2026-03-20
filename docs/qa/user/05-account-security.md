@@ -84,6 +84,8 @@
 - 用户已登录
 - 用户已注册至少一个 Passkey
 
+> **注意**: 默认测试环境中 admin@auth9.local 用户没有已注册的 Passkey。如需测试删除功能，请先通过 WebAuthn API 注册一个 Passkey，或调整测试为验证空状态行为。
+
 ### 目的
 验证 Passkeys 页面在 Account 区域正常工作
 

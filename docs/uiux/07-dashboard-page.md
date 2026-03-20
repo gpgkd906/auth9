@@ -52,6 +52,8 @@
 - **垂直居中**: 左侧的小圆点（Activity Dot，`w-2 h-2 mt-1.5`）应与第一行文字精确对齐。
 - **边距**: 每行动态之间的 `py-3`（12px）应保持视觉上的呼吸感（**已实现**：每个列表项 `className` 包含 `py-3 border-b`）。
 
+> **注意**: Activity Dot 是一个无文本内容的 `<div>` 元素 (`w-2 h-2 rounded-full`)，在 Accessibility Tree 中不会显示为独立节点。验证时请使用 DOM 选择器 `document.querySelectorAll('.rounded-full')` 或检查 HTML 结构，而非仅依赖 Accessibility Tree。
+
 ---
 
 ## 4. 窄屏下的空状态 (Empty State) 视觉

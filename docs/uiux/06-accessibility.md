@@ -64,6 +64,8 @@
 - 不被其他元素遮挡
 
 #### 焦点顺序
+> **注意**: "Skip to Content" 链接激活（Enter）后，焦点会正确跳转到 `#main-content` 元素，这是 WCAG 规范的预期行为，不是焦点顺序 bug。跳转后继续按 Tab 键，焦点将从主内容区域内的第一个可交互元素开始继续导航。
+
 **逻辑顺序**（从上到下，从左到右）：
 1. 主题切换按钮（右上角）
 2. 侧边栏导航项（按显示顺序）
@@ -179,6 +181,8 @@ function checkFocusTrap(dialog) {
 
 > **注意**: 侧边栏活跃导航项在 dark mode 下使用白色文字 (`--sidebar-item-active-text: #FFFFFF`)。
 > 若测试发现活跃项文字颜色为蓝色 (`#4DA3FF`)，则对比度约 2.9:1，低于 WCAG AA 要求，属于回归缺陷。
+
+> **注意**: 验证对比度前请确保浏览器已切换到 Dark 模式 (`data-theme="dark"`)。如果测得 active 项文字为蓝色 (#007AFF)，说明当前处于 Light 模式（Light 模式预期为蓝色），而非 Dark 模式回归缺陷。CSS 变量 `--sidebar-item-active-text` 在 Dark 模式下应为 #FFFFFF。
 
 ### 验证工具
 

@@ -343,6 +343,22 @@ export default function Login() {
   const { t } = useI18n();
   const [view, setView] = useState<"methods" | "password" | "sso">("methods");
   const [ssoEmail, setSsoEmail] = useState("");
+  const [dismissedError, setDismissedError] = useState(false);
+
+  // Clear dismissed state when new actionData arrives
+  const [prevActionData, setPrevActionData] = useState(actionData);
+  if (actionData !== prevActionData) {
+    setPrevActionData(actionData);
+    setDismissedError(false);
+  }
+
+  const visibleError = dismissedError ? null : actionData?.error;
+
+  const switchView = (v: "methods" | "password" | "sso") => {
+    setView(v);
+    setDismissedError(true);
+    setPasskeyError(null);
+  };
 
   const [authenticating, setAuthenticating] = useState(false);
   const [passkeyError, setPasskeyError] = useState<string | null>(null);
@@ -512,9 +528,9 @@ export default function Login() {
                     placeholder={t("auth.login.passwordPlaceholder")}
                   />
 
-                  {actionData?.error && (
+                  {visibleError && (
                     <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
-                      {actionData.error}
+                      {visibleError}
                     </div>
                   )}
 
@@ -529,7 +545,7 @@ export default function Login() {
                   </Link>
                   <button
                     type="button"
-                    onClick={() => setView("methods")}
+                    onClick={() => switchView("methods")}
                     className="text-[var(--accent-blue)] hover:underline underline-offset-4"
                   >
                     {t("auth.login.backToMethods")}
@@ -554,9 +570,9 @@ export default function Login() {
                     defaultValue={ssoEmail}
                   />
 
-                  {actionData?.error && (
+                  {visibleError && (
                     <div className="rounded-xl border border-[var(--accent-red)]/25 bg-[var(--accent-red)]/12 p-3 text-sm text-[var(--accent-red)]">
-                      {actionData.error}
+                      {visibleError}
                     </div>
                   )}
 
@@ -568,7 +584,7 @@ export default function Login() {
                 <div className="flex items-center justify-center text-sm text-[var(--text-tertiary)]">
                   <button
                     type="button"
-                    onClick={() => setView("methods")}
+                    onClick={() => switchView("methods")}
                     className="text-[var(--accent-blue)] hover:underline underline-offset-4"
                   >
                     {t("auth.login.backToMethods")}
@@ -582,7 +598,7 @@ export default function Login() {
                     type="button"
                     variant="outline"
                     className="w-full"
-                    onClick={() => setView("sso")}
+                    onClick={() => switchView("sso")}
                     disabled={isSubmitting || authenticating}
                   >
                     <GlobeIcon className="h-4 w-4 mr-2" />
@@ -593,7 +609,7 @@ export default function Login() {
                     type="button"
                     variant="outline"
                     className="w-full"
-                    onClick={() => setView("password")}
+                    onClick={() => switchView("password")}
                     disabled={isSubmitting || authenticating}
                   >
                     <LockClosedIcon className="h-4 w-4 mr-2" />
@@ -653,8 +669,8 @@ export default function Login() {
                       ))}
                     </div>
                   )}
-                {actionData?.error && (
-                  <p className="text-sm text-[var(--accent-red)]">{actionData.error}</p>
+                {visibleError && (
+                  <p className="text-sm text-[var(--accent-red)]">{visibleError}</p>
                 )}
 
                 {passkeyError && (
