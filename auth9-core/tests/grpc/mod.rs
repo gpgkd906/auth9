@@ -234,6 +234,7 @@ pub fn create_test_client(id: Uuid, service_id: Uuid, client_id: &str) -> Client
         client_id: client_id.to_string(),
         name: Some("Test Client".to_string()),
         client_secret_hash: "hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     }
 }

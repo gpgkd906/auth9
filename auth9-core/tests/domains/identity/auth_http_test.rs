@@ -119,6 +119,7 @@ async fn test_authorize_success() {
         client_id: "test-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: Some("Test Client".to_string()),
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -151,6 +152,7 @@ async fn test_authorize_missing_state() {
         client_id: "test-client-no-state".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -196,6 +198,7 @@ async fn test_authorize_invalid_redirect_uri() {
         client_id: "restricted-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -227,6 +230,7 @@ async fn test_authorize_with_state() {
         client_id: "state-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -257,6 +261,7 @@ async fn test_authorize_with_nonce() {
         client_id: "nonce-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -337,6 +342,7 @@ async fn test_logout_with_post_redirect_uri() {
             client_id: "logout-test-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -386,6 +392,7 @@ async fn test_logout_with_invalid_post_redirect_uri() {
             client_id: "logout-test-client2".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -419,6 +426,7 @@ async fn test_logout_full_params() {
             client_id: "logout-full-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -767,6 +775,7 @@ async fn test_authorize_multiple_redirect_uris() {
         client_id: "multi-redirect-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -965,6 +974,7 @@ async fn test_authorize_with_invalid_scope_rejects() {
         client_id: "scope-test-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -1007,6 +1017,7 @@ async fn test_token_client_credentials_success() {
         client_id: "cc-test-client".to_string(),
         client_secret_hash: hashed,
         name: Some("CC Test Client".to_string()),
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -1053,6 +1064,7 @@ async fn test_token_client_credentials_wrong_secret() {
         client_id: "cc-wrong-secret-client".to_string(),
         client_secret_hash: hashed,
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -1095,6 +1107,7 @@ async fn test_token_client_credentials_with_tenant() {
         client_id: "cc-tenant-client".to_string(),
         client_secret_hash: hashed,
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -1444,6 +1457,7 @@ async fn test_authorize_filters_unsafe_scopes() {
         client_id: "scope-filter-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -1484,6 +1498,7 @@ async fn test_logout_with_session_and_all_params() {
             client_id: "session-logout-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -1535,6 +1550,7 @@ async fn test_logout_get_with_valid_post_redirect_uri() {
             client_id: "get-logout-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -1581,6 +1597,7 @@ async fn test_logout_get_with_invalid_post_redirect_uri() {
             client_id: "get-logout-client2".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -1612,6 +1629,7 @@ async fn test_logout_get_with_all_params() {
             client_id: "get-logout-full-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: Some("Test Client".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;
@@ -1646,6 +1664,7 @@ async fn test_authorize_with_empty_state_rejected() {
         client_id: "empty-state-client".to_string(),
         client_secret_hash: "hash".to_string(),
         name: None,
+        public_client: false,
         created_at: Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -2008,6 +2027,7 @@ async fn test_token_auth_code_with_tenant_triggers_post_login_actions() {
             client_id: "action-client".to_string(),
             client_secret_hash: "hash".to_string(),
             name: None,
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;

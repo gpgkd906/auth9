@@ -425,6 +425,7 @@ async fn test_list_clients() {
         client_id: "client-1".to_string(),
         name: Some("Client 1".to_string()),
         client_secret_hash: "hash1".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     let client2 = Client {
@@ -433,6 +434,7 @@ async fn test_list_clients() {
         client_id: "client-2".to_string(),
         name: Some("Client 2".to_string()),
         client_secret_hash: "hash2".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
 
@@ -532,6 +534,7 @@ async fn test_delete_client() {
         client_id: "client-to-delete".to_string(),
         name: Some("Client to Delete".to_string()),
         client_secret_hash: "hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -568,6 +571,7 @@ async fn test_regenerate_client_secret() {
         client_id: "existing-client".to_string(),
         name: Some("Existing Client".to_string()),
         client_secret_hash: "old-hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -648,6 +652,7 @@ async fn test_integration_info_success() {
         client_id: "test-client".to_string(),
         name: Some("Main Client".to_string()),
         client_secret_hash: "hash".to_string(),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;

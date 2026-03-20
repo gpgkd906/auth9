@@ -170,7 +170,9 @@ SELECT client_id, name FROM clients WHERE service_id = '{service_id}';
 4. 点击「Integration」标签
 5. 检查以下区域：
    - **Clients & Credentials** 卡片：显示 client_id 和隐藏的 secret（`••••••••`）
-   - 点击「Reveal」按钮，检查是否显示真实 secret
+   - 点击「Reveal」按钮：
+     - **通过 API 创建的 Client**：显示真实 secret（仅在创建后首次查看时可用，因 secret 在 OIDC 引擎内存中缓存）
+     - **DB seed 数据的 Client**：显示占位符 `"(set — use the secret configured at creation)"`，这是**预期行为**——数据库仅存储 secret 的哈希值，无法还原明文
    - 点击 client_id 旁的复制按钮，检查是否复制到剪贴板
 6. 检查 **Environment Variables** 区域：
    - `.env` 格式代码块包含 `AUTH9_DOMAIN`、`AUTH9_CLIENT_ID`、`AUTH9_CLIENT_SECRET` 等
@@ -185,7 +187,7 @@ SELECT client_id, name FROM clients WHERE service_id = '{service_id}';
 
 ### 预期结果
 - 两个标签切换顺畅，无页面闪烁
-- Secret 默认隐藏，点击 Reveal 后显示真实值
+- Secret 默认隐藏，点击 Reveal 后显示值（API 创建的 client 显示真实 secret；DB seed 的 client 显示占位符，因 secret 以哈希存储无法还原）
 - 所有复制按钮正常工作（复制到系统剪贴板）
 - 环境变量块中的值与 API 返回一致
 - OAuth 端点 URL 完整且格式正确

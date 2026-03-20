@@ -224,6 +224,27 @@ impl IdentityUserStore for Auth9OidcUserStore {
             .verify_password(password.as_bytes(), &parsed_hash)
             .is_ok())
     }
+
+    async fn get_user_password_hash(&self, user_id: &str) -> Result<Option<String>> {
+        let row: Option<(serde_json::Value,)> = sqlx::query_as(
+            "SELECT credential_data FROM credentials WHERE user_id = ? AND credential_type = 'password' AND is_active = 1 LIMIT 1",
+        )
+        .bind(user_id)
+        .fetch_optional(&self.pool)
+        .await
+        .map_err(|e| AppError::Internal(anyhow!("failed to query password credential: {}", e)))?;
+
+        let Some((data,)) = row else {
+            return Ok(None);
+        };
+
+        let hash_str = data
+            .get("hash")
+            .and_then(|v| v.as_str())
+            .ok_or_else(|| AppError::Internal(anyhow!("malformed password credential data")))?;
+
+        Ok(Some(hash_str.to_string()))
+    }
 }
 
 struct Auth9OidcClientStore {

@@ -61,7 +61,7 @@ pub struct PasswordPolicy {
     #[serde(default = "default_history_count")]
     pub history_count: u32,
     /// Number of failed attempts before lockout (0 = disabled)
-    #[serde(default)]
+    #[serde(default = "default_lockout_threshold")]
     pub lockout_threshold: u32,
     /// Lockout duration in minutes
     #[serde(default = "default_lockout_duration")]
@@ -78,7 +78,7 @@ impl Default for PasswordPolicy {
             require_symbols: true,
             max_age_days: 0,
             history_count: 5,
-            lockout_threshold: 0,
+            lockout_threshold: 5,
             lockout_duration_mins: 15,
         }
     }
@@ -93,6 +93,10 @@ fn default_min_length() -> u32 {
 }
 
 fn default_history_count() -> u32 {
+    5
+}
+
+fn default_lockout_threshold() -> u32 {
     5
 }
 
@@ -217,7 +221,7 @@ mod tests {
         assert!(policy.require_symbols);
         assert_eq!(policy.max_age_days, 0);
         assert_eq!(policy.history_count, 5);
-        assert_eq!(policy.lockout_threshold, 0);
+        assert_eq!(policy.lockout_threshold, 5);
         assert_eq!(policy.lockout_duration_mins, 15);
     }
 

@@ -12,6 +12,7 @@ use validator::Validate;
 #[derive(Debug, Clone, Serialize, Deserialize, FromRow, ToSchema)]
 pub struct User {
     pub id: StringUuid,
+    #[serde(skip_serializing, default)]
     pub identity_subject: String,
     pub scim_external_id: Option<String>,
     pub scim_provisioned_by: Option<StringUuid>,

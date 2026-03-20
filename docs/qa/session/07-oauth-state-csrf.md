@@ -27,6 +27,10 @@ Auth9 Portal 的实现方式：
 
 ---
 
+> **前提条件（适用于场景 1、3、5）**：SSO 登录流程要求测试环境已配置 Enterprise SSO。
+> 必须确认 `enterprise_sso_domains` 和 `enterprise_sso_connectors` 表中有对应记录，否则 SSO 入口不会出现，相关场景无法执行。
+> 代码审查已确认 cookie 安全属性正确（HttpOnly, SameSite=Lax, Path=/, Max-Age=300），若仅因 SSO 未配置导致无法触发流程，属于环境问题而非代码缺陷。
+
 ## 场景 1：正常 SSO 登录流程 — State 完整生命周期
 
 ### 初始状态

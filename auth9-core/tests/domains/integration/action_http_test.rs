@@ -59,6 +59,7 @@ async fn setup_tenant_and_service(state: &TestAppState, tenant_id: Uuid) -> Uuid
         client_id: "test-service-client".to_string(),
         client_secret_hash: "hash".to_string(), // pragma: allowlist secret
         name: Some("Test Client".to_string()),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client).await;
@@ -1315,6 +1316,7 @@ async fn test_cross_service_access_returns_403() {
         client_id: "service-b-client".to_string(),
         client_secret_hash: "hash".to_string(), // pragma: allowlist secret
         name: Some("Service B Client".to_string()),
+        public_client: false,
         created_at: chrono::Utc::now(),
     };
     state.service_repo.add_client(client_b).await;

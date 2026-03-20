@@ -112,6 +112,17 @@ pub async fn password_login<
         }
     };
 
+    // Check account lockout
+    if let Some(locked_until) = user.locked_until {
+        if locked_until > Utc::now() {
+            metrics::counter!("auth9_auth_login_total", "result" => "locked", "backend" => "hosted")
+                .increment(1);
+            return Err(AppError::TooManyRequests(
+                "Account is temporarily locked due to too many failed login attempts. Please try again later.".to_string(),
+            ));
+        }
+    }
+
     // Validate password through IdentityEngine (backend-agnostic)
     let valid = state
         .identity_engine()
@@ -126,9 +137,31 @@ pub async fn password_login<
     if !valid {
         metrics::counter!("auth9_auth_login_total", "result" => "failure", "backend" => "hosted")
             .increment(1);
+
+        // Track failed login attempt for brute force protection
+        let fail_key = format!("auth9:login_fail:{}", user.id);
+        let lockout_window_secs = 600u64; // 10 minute window
+        if let Ok(fail_count) = state.cache().increment_counter(&fail_key, lockout_window_secs).await {
+            let policy = crate::models::password::PasswordPolicy::default();
+            if policy.lockout_threshold > 0 && fail_count >= policy.lockout_threshold as u64 {
+                let locked_until = Utc::now() + chrono::Duration::minutes(policy.lockout_duration_mins as i64);
+                let _ = state.user_service().update_locked_until(user.id, Some(locked_until)).await;
+                tracing::warn!(
+                    user_id = %user.id,
+                    fail_count = fail_count,
+                    "Account locked due to too many failed login attempts"
+                );
+            }
+        }
+
         return Err(AppError::Unauthorized(
             "Invalid email or password.".to_string(),
         ));
+    }
+
+    // Unlock account on successful authentication if it was previously locked
+    if user.locked_until.is_some() {
+        let _ = state.user_service().update_locked_until(user.id, None).await;
     }
 
     let ip_address = extract_client_ip(&headers);

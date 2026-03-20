@@ -33,6 +33,9 @@ pub enum AppError {
     #[error("Validation error: {0}")]
     Validation(String),
 
+    #[error("Too many requests: {0}")]
+    TooManyRequests(String),
+
     #[error("Database error: {0}")]
     Database(#[from] sqlx::Error),
 
@@ -71,6 +74,9 @@ impl IntoResponse for AppError {
             AppError::Conflict(msg) => (StatusCode::CONFLICT, "conflict", msg.clone()),
             AppError::Validation(msg) => {
                 (StatusCode::UNPROCESSABLE_ENTITY, "validation", msg.clone())
+            }
+            AppError::TooManyRequests(msg) => {
+                (StatusCode::TOO_MANY_REQUESTS, "too_many_requests", msg.clone())
             }
             AppError::Database(ref e) => {
                 // Map duplicate entry errors (MySQL 1062 / SQLSTATE 23000) to 409 Conflict

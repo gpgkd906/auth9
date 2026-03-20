@@ -177,8 +177,8 @@ async fn test_create_user_returns_201() {
     let response = body.unwrap();
     assert_eq!(response.data.email, "newuser@example.com");
     assert_eq!(response.data.display_name, Some("New User".to_string()));
-    // NoOp identity engine returns "test-id" from create_user
-    assert_eq!(response.data.identity_subject, "test-id");
+    // identity_subject is not exposed in API responses (skip_serializing)
+    assert_eq!(response.data.identity_subject, "");
 }
 
 #[tokio::test]

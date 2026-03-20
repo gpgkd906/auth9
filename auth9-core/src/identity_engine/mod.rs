@@ -28,6 +28,9 @@ pub trait IdentityUserStore: Send + Sync {
         temporary: bool,
     ) -> Result<()>;
     async fn validate_user_password(&self, user_id: &str, password: &str) -> Result<bool>;
+    /// Get the current password hash for a user (for password history storage).
+    /// Returns None if the user has no password credential.
+    async fn get_user_password_hash(&self, user_id: &str) -> Result<Option<String>>;
 }
 
 /// OIDC/SAML client lifecycle operations for an identity backend.

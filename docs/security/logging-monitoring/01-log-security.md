@@ -80,7 +80,7 @@ docker logs auth9-core 2>&1 | tail -20
 ## 场景 2：审计日志完整性验证
 
 ### 前置条件
-- 管理员 Token
+- **Tenant Access Token**（非 Identity Token）。审计日志端点位于受保护路由，需要通过 Token Exchange 获取的 Tenant Access Token。使用 Identity Token 会返回 401。
 - 了解审计日志 API
 
 ### 攻击目标
@@ -109,7 +109,7 @@ curl -X POST -H "Authorization: Bearer $TOKEN" \
 
 # 检查审计日志
 curl -H "Authorization: Bearer $TOKEN" \
-  "http://localhost:8080/api/v1/audit?resource_type=user&limit=5"
+  "http://localhost:8080/api/v1/audit-logs?resource_type=user&limit=5"
 # 预期: 包含 user.created 记录，含 actor_id, resource_id, ip_address
 # 注意: ip_address 通过以下优先级获取:
 #   1. X-Forwarded-For 头（反向代理场景）
@@ -118,13 +118,13 @@ curl -H "Authorization: Bearer $TOKEN" \
 
 # 尝试删除审计日志（不应存在此端点）
 curl -X DELETE -H "Authorization: Bearer $TOKEN" \
-  http://localhost:8080/api/v1/audit/some-audit-id
+  http://localhost:8080/api/v1/audit-logs/some-audit-id
 # 预期: 404 或 405 Method Not Allowed
 
 # 尝试修改审计日志
 curl -X PUT -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  http://localhost:8080/api/v1/audit/some-audit-id \
+  http://localhost:8080/api/v1/audit-logs/some-audit-id \
   -d '{"action": "modified"}'
 # 预期: 404 或 405
 
@@ -142,7 +142,7 @@ OPERATIONS=(
 for op in "${OPERATIONS[@]}"; do
   echo -n "$op: "
   curl -s -H "Authorization: Bearer $TOKEN" \
-    "http://localhost:8080/api/v1/audit?action=$op&limit=1" | jq '.total'
+    "http://localhost:8080/api/v1/audit-logs?action=$op&limit=1" | jq '.total'
 done
 ```
 

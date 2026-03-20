@@ -795,6 +795,7 @@ impl ServiceRepository for TestServiceRepository {
         client_id: &str,
         secret_hash: &str,
         name: Option<String>,
+        public_client: bool,
     ) -> Result<Client> {
         let client = Client {
             id: StringUuid::new_v4(),
@@ -802,6 +803,7 @@ impl ServiceRepository for TestServiceRepository {
             client_id: client_id.to_string(),
             name,
             client_secret_hash: secret_hash.to_string(),
+            public_client,
             created_at: Utc::now(),
         };
         self.clients.write().await.push(client.clone());
@@ -1762,6 +1764,14 @@ impl PasswordResetRepository for TestPasswordResetRepository {
         };
         tokens.push(token.clone());
         Ok(token)
+    }
+
+    async fn store_password_hash(&self, _user_id: StringUuid, _password_hash: &str) -> Result<()> {
+        Ok(())
+    }
+
+    async fn get_password_history(&self, _user_id: StringUuid, _limit: u32) -> Result<Vec<String>> {
+        Ok(vec![])
     }
 }
 
@@ -3743,7 +3753,7 @@ mod tests {
 
         // Create client
         let client = repo
-            .create_client(*service.id, "client-1", "hash", Some("Client".to_string()))
+            .create_client(*service.id, "client-1", "hash", Some("Client".to_string()), false)
             .await
             .unwrap();
         assert_eq!(client.client_id, "client-1");

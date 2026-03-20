@@ -498,6 +498,15 @@ impl<
     ) -> Result<Vec<TenantUserWithTenant>> {
         self.repo.find_user_tenants_with_tenant(user_id).await
     }
+
+    /// Update locked_until timestamp (None to unlock)
+    pub async fn update_locked_until(
+        &self,
+        id: StringUuid,
+        locked_until: Option<chrono::DateTime<chrono::Utc>>,
+    ) -> Result<()> {
+        self.repo.update_locked_until(id, locked_until).await
+    }
 }
 
 #[cfg(test)]

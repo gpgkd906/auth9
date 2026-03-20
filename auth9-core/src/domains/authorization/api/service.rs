@@ -489,7 +489,7 @@ pub async fn create_client<S: HasServices>(
             .map(|url| vec![url.clone()])
             .unwrap_or_default(),
         attributes,
-        public_client: false,
+        public_client: input.public_client,
         secret: None,
     };
 
@@ -506,7 +506,7 @@ pub async fn create_client<S: HasServices>(
 
     let client_with_secret = state
         .client_service()
-        .create_client_with_secret(id, new_client_id, client_secret, input.name.clone())
+        .create_client_with_secret(id, new_client_id, client_secret, input.name.clone(), input.public_client)
         .await?;
 
     let _ = write_audit_log_generic(
@@ -853,11 +853,10 @@ pub async fn integration_info<S: HasServices>(
                 }
             }
             Err(_) => {
-                // Client not in Keycloak — check if it's a database-managed confidential client
-                let is_confidential = !c.client_secret_hash.is_empty();
+                // Client not in Keycloak — use the public_client flag from database
                 (
-                    !is_confidential,
-                    if is_confidential {
+                    c.public_client,
+                    if !c.public_client && !c.client_secret_hash.is_empty() {
                         // Secret is managed in auth9 database (e.g., M2M client_credentials flow)
                         // We cannot return the plaintext since it's hashed; indicate it exists
                         Some("(set — use the secret configured at creation)".to_string())
@@ -1157,6 +1156,7 @@ mod tests {
         let json = r#"{"name": "My Client"}"#;
         let input: CreateClientInput = serde_json::from_str(json).unwrap();
         assert_eq!(input.name, Some("My Client".to_string()));
+        assert!(!input.public_client);
     }
 
     #[test]
@@ -1164,6 +1164,15 @@ mod tests {
         let json = r#"{}"#;
         let input: CreateClientInput = serde_json::from_str(json).unwrap();
         assert!(input.name.is_none());
+        assert!(!input.public_client);
+    }
+
+    #[test]
+    fn test_create_client_input_public() {
+        let json = r#"{"name": "SPA Client", "public_client": true}"#;
+        let input: CreateClientInput = serde_json::from_str(json).unwrap();
+        assert_eq!(input.name, Some("SPA Client".to_string()));
+        assert!(input.public_client);
     }
 
     // ========================================================================

@@ -299,6 +299,7 @@ async fn test_receive_multi_tenant_event_uses_tenant_scoped_client_match() {
             client_id: "tenant-b-client".to_string(),
             client_secret_hash: "hashed".to_string(), // pragma: allowlist secret
             name: Some("Tenant B Key".to_string()),
+            public_client: false,
             created_at: Utc::now(),
         })
         .await;

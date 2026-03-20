@@ -235,6 +235,10 @@ mod tests {
         async fn validate_user_password(&self, _user_id: &str, _password: &str) -> Result<bool> {
             Ok(true)
         }
+
+        async fn get_user_password_hash(&self, _user_id: &str) -> Result<Option<String>> {
+            Ok(None)
+        }
     }
 
     #[async_trait]

@@ -189,11 +189,36 @@ impl<
             return Err(AppError::Validation(errors.join("; ")));
         }
 
+        // Check password history before changing
+        self.check_password_history(
+            reset_token.user_id,
+            &user.identity_subject,
+            &input.new_password,
+            &policy,
+        )
+        .await?;
+
+        // Get the current password hash before overwriting it (for history storage)
+        let current_hash = self
+            .identity_engine
+            .user_store()
+            .get_user_password_hash(&user.identity_subject)
+            .await
+            .unwrap_or(None);
+
         // Reset password in identity backend
         self.identity_engine
             .user_store()
             .set_user_password(&user.identity_subject, &input.new_password, false)
             .await?;
+
+        // Store the old password hash in history (if it existed)
+        if let Some(hash) = current_hash {
+            let _ = self
+                .password_reset_repo
+                .store_password_hash(reset_token.user_id, &hash)
+                .await;
+        }
 
         // Track password change timestamp
         let _ = self
@@ -247,11 +272,31 @@ impl<
             ));
         }
 
+        // Check password history before changing
+        self.check_password_history(user_id, &user.identity_subject, &input.new_password, &policy)
+            .await?;
+
+        // Get the current password hash before overwriting it (for history storage)
+        let current_hash = self
+            .identity_engine
+            .user_store()
+            .get_user_password_hash(&user.identity_subject)
+            .await
+            .unwrap_or(None);
+
         // Set new password in identity backend
         self.identity_engine
             .user_store()
             .set_user_password(&user.identity_subject, &input.new_password, false)
             .await?;
+
+        // Store the old password hash in history (if it existed)
+        if let Some(hash) = current_hash {
+            let _ = self
+                .password_reset_repo
+                .store_password_hash(user_id, &hash)
+                .await;
+        }
 
         // Invalidate all identity backend sessions for the user (security: revoke stolen sessions)
         if let Err(e) = self
@@ -367,6 +412,67 @@ impl<
         }
 
         Ok(updated)
+    }
+
+    /// Check if the new password matches any of the user's recent passwords.
+    /// Returns an error if the password was recently used; Ok(()) otherwise.
+    async fn check_password_history(
+        &self,
+        user_id: StringUuid,
+        identity_subject: &str,
+        new_password: &str,
+        policy: &PasswordPolicy,
+    ) -> Result<()> {
+        if policy.history_count == 0 {
+            return Ok(());
+        }
+
+        // Check against the current password hash (which is not yet in the history table)
+        if let Ok(Some(current_hash)) = self
+            .identity_engine
+            .user_store()
+            .get_user_password_hash(identity_subject)
+            .await
+        {
+            if let Ok(parsed) = PasswordHash::new(&current_hash) {
+                if Argon2::default()
+                    .verify_password(new_password.as_bytes(), &parsed)
+                    .is_ok()
+                {
+                    return Err(AppError::Validation(format!(
+                        "Cannot reuse any of the last {} passwords",
+                        policy.history_count
+                    )));
+                }
+            }
+        }
+
+        // Check against stored password history (previous passwords)
+        // We request history_count - 1 since we already checked the current password above
+        let history_limit = policy.history_count.saturating_sub(1);
+        if history_limit > 0 {
+            let hashes = self
+                .password_reset_repo
+                .get_password_history(user_id, history_limit)
+                .await?;
+
+            let argon2 = Argon2::default();
+            for hash_str in &hashes {
+                if let Ok(parsed) = PasswordHash::new(hash_str) {
+                    if argon2
+                        .verify_password(new_password.as_bytes(), &parsed)
+                        .is_ok()
+                    {
+                        return Err(AppError::Validation(format!(
+                            "Cannot reuse any of the last {} passwords",
+                            policy.history_count
+                        )));
+                    }
+                }
+            }
+        }
+
+        Ok(())
     }
 
     /// Resolve the password policy for a user by looking up their tenant.
@@ -1535,5 +1641,159 @@ mod tests {
 
         // Verify service was created (HMAC key is stored internally)
         assert_eq!(service.hmac_key, custom_key);
+    }
+
+    // ========================================================================
+    // Password History Tests
+    // ========================================================================
+
+    #[tokio::test]
+    async fn test_check_password_history_disabled_when_count_zero() {
+        use argon2::password_hash::{PasswordHasher, SaltString};
+        use argon2::password_hash::rand_core::OsRng;
+
+        let mut password_reset_mock = MockPasswordResetRepository::new();
+        let user_mock = MockUserRepository::new();
+
+        // No expectations on get_password_history — it should not be called
+        // when history_count == 0
+
+        let (service, _) = create_test_password_service(password_reset_mock, user_mock);
+
+        let policy = PasswordPolicy {
+            history_count: 0,
+            ..Default::default()
+        };
+
+        let user_id = StringUuid::new_v4();
+        let result = service
+            .check_password_history(user_id, "identity-1", "NewPassword1!", &policy)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_check_password_history_rejects_reused_password() {
+        use argon2::password_hash::{PasswordHasher, SaltString};
+        use argon2::password_hash::rand_core::OsRng;
+
+        let mut password_reset_mock = MockPasswordResetRepository::new();
+        let user_mock = MockUserRepository::new();
+
+        let reused_password = "ReusedPass123!"; // pragma: allowlist secret
+        let salt = SaltString::generate(&mut OsRng);
+        let hash = Argon2::default()
+            .hash_password(reused_password.as_bytes(), &salt)
+            .unwrap()
+            .to_string();
+
+        // Return the hash from password history
+        password_reset_mock
+            .expect_get_password_history()
+            .returning(move |_, _| Ok(vec![hash.clone()]));
+
+        let (service, _) = create_test_password_service(password_reset_mock, user_mock);
+
+        let policy = PasswordPolicy {
+            history_count: 5,
+            ..Default::default()
+        };
+
+        let user_id = StringUuid::new_v4();
+        // The identity engine get_user_password_hash will fail (lazy pool), so
+        // the current-password check is skipped — but the history check should catch it
+        let result = service
+            .check_password_history(user_id, "identity-1", reused_password, &policy)
+            .await;
+        assert!(result.is_err());
+        match result.unwrap_err() {
+            AppError::Validation(msg) => {
+                assert!(msg.contains("Cannot reuse"), "Got: {}", msg);
+            }
+            other => panic!("Expected Validation error, got: {:?}", other),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_check_password_history_allows_new_password() {
+        let mut password_reset_mock = MockPasswordResetRepository::new();
+        let user_mock = MockUserRepository::new();
+
+        // Return empty history
+        password_reset_mock
+            .expect_get_password_history()
+            .returning(|_, _| Ok(vec![]));
+
+        let (service, _) = create_test_password_service(password_reset_mock, user_mock);
+
+        let policy = PasswordPolicy {
+            history_count: 5,
+            ..Default::default()
+        };
+
+        let user_id = StringUuid::new_v4();
+        // Identity engine will fail for get_user_password_hash (lazy pool), which is OK
+        // — it's treated as "no current hash" and we proceed to check history
+        let result = service
+            .check_password_history(user_id, "identity-1", "BrandNewPass1!", &policy)
+            .await;
+        assert!(result.is_ok());
+    }
+
+    #[tokio::test]
+    async fn test_check_password_history_with_multiple_old_passwords() {
+        use argon2::password_hash::{PasswordHasher, SaltString};
+        use argon2::password_hash::rand_core::OsRng;
+
+        let mut password_reset_mock = MockPasswordResetRepository::new();
+        let user_mock = MockUserRepository::new();
+
+        // Create hashes for multiple old passwords
+        let old_passwords = vec!["OldPass111!", "OldPass222!", "OldPass333!"];
+        let hashes: Vec<String> = old_passwords
+            .iter()
+            .map(|p| {
+                let salt = SaltString::generate(&mut OsRng);
+                Argon2::default()
+                    .hash_password(p.as_bytes(), &salt)
+                    .unwrap()
+                    .to_string()
+            })
+            .collect();
+        let hashes_clone = hashes.clone();
+
+        password_reset_mock
+            .expect_get_password_history()
+            .returning(move |_, _| Ok(hashes_clone.clone()));
+
+        let (service, _) = create_test_password_service(password_reset_mock, user_mock);
+
+        let policy = PasswordPolicy {
+            history_count: 5,
+            ..Default::default()
+        };
+
+        let user_id = StringUuid::new_v4();
+
+        // Reusing the second old password should be rejected
+        let result = service
+            .check_password_history(user_id, "identity-1", "OldPass222!", &policy)
+            .await;
+        assert!(result.is_err());
+
+        // A completely new password should be allowed
+        // (need to recreate service since mock was consumed)
+        let mut password_reset_mock2 = MockPasswordResetRepository::new();
+        let hashes_clone2 = hashes.clone();
+        password_reset_mock2
+            .expect_get_password_history()
+            .returning(move |_, _| Ok(hashes_clone2.clone()));
+
+        let (service2, _) = create_test_password_service(password_reset_mock2, MockUserRepository::new());
+
+        let result = service2
+            .check_password_history(user_id, "identity-1", "CompletelyNew1!", &policy)
+            .await;
+        assert!(result.is_ok());
     }
 }
