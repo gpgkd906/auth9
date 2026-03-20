@@ -36,14 +36,21 @@ MFA 管理端点（需认证）：
 - 启用了 TOTP 的用户账户
 - 已知用户名和密码
 
-### 步骤 0: 验证暴力破解保护已启用
+### 步骤 0: 配置并验证暴力破解保护
+
+> **重要**: `lockout_threshold` 默认值为 **0**（禁用）。测试前必须先显式配置。
 
 ```bash
-# 通过 Auth9 密码策略 API 验证暴力破解保护配置
+# 1. 先配置锁定阈值（默认为 0，必须手动设置）
+curl -s -X PUT http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"lockout_threshold": 5, "lockout_duration_mins": 15}'
+
+# 2. 验证配置已生效
 curl -s http://localhost:8080/api/v1/tenants/{tenant_id}/password-policy \
-  -H "Authorization: Bearer $TOKEN" | jq '{lockout_threshold}'
-# 预期: lockout_threshold 为 5（5 次失败后锁定）
-# 如果未配置，通过 PUT /api/v1/tenants/{id}/password-policy 设置
+  -H "Authorization: Bearer $TOKEN" | jq '{lockout_threshold, lockout_duration_mins}'
+# 预期: lockout_threshold = 5, lockout_duration_mins = 15
 ```
 
 ### 攻击目标
@@ -84,7 +91,7 @@ done
 
 | 症状 | 原因 | 解决 |
 |------|------|------|
-| lockout_threshold 为 null 或 0 | 密码策略未配置锁定阈值 | 通过 `PUT /api/v1/tenants/{id}/password-policy` 配置 |
+| lockout_threshold 为 null 或 0 | 密码策略默认未配置锁定阈值（默认值为 0） | **必须先执行步骤 0** 通过 `PUT /api/v1/tenants/{id}/password-policy` 配置 `lockout_threshold=5` |
 | 配置存在但未生效 | auth9-core 缓存 | 重启 auth9-core 服务 |
 
 ### 修复建议

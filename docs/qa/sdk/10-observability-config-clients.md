@@ -149,10 +149,12 @@ fi
 
 ```bash
 curl -s http://localhost:8080/api/v1/system/email \
-  -H "Authorization: Bearer $TOKEN" | jq '.data.config.type'
+  -H "Authorization: Bearer $TOKEN" | jq '.data.value.type'
 ```
 
 **预期**: 返回邮件配置类型（`"smtp"`, `"ses"`, `"oracle"`, 或 `"none"`）
+
+> **注意**: 邮件配置在 `.data.value` 下，不是 `.data.config`。响应结构为 `{ data: { category, setting_key, value: { type, host, ... }, description, updated_at } }`。
 
 2. **测试邮件连接**
 
@@ -175,7 +177,7 @@ curl -s http://localhost:8080/api/v1/system/security/malicious-ip-blacklist \
 
 ### 验收检查清单
 
-- [ ] 邮件设置返回正确的 config 结构
+- [ ] 邮件设置返回正确的 value 结构（`.data.value.type`）
 - [ ] 邮件测试端点响应正常
 - [ ] IP 黑名单端点返回正确结构
 

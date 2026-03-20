@@ -40,8 +40,10 @@ curl -s "http://localhost:8080/api/v1/tenants/{tenant_id}/saml-apps/{app_id}/met
   - `<EntityDescriptor>` 根元素
   - `<IDPSSODescriptor>` 元素
   - `<SingleSignOnService>` 的 `Location` 属性指向 Auth9 SAML SSO 端点
-  - `<KeyDescriptor use="signing">` 包含 X509 签名证书
-- **关键校验**：URL 中使用公开域名
+  - `<KeyDescriptor use="signing">` 包含 X509 签名证书（**注意：仅当 JWT RSA 密钥已初始化时才出现**）
+- **关键校验**：URL 中使用公开域名（通过 `AUTH9_CORE_PUBLIC_URL` 配置，本地环境默认为 `http://localhost:8080`）
+
+> **注意**: `<KeyDescriptor>` 元素仅在 `credentials` 表中存在有效的 `jwt_rsa_public_key` 时才包含在 metadata 中。如果返回的 metadata 缺少 `<KeyDescriptor>`，请确认 JWT 密钥已正确初始化（执行 `auth9-core init` 或检查 `credentials` 表中 `credential_type='jwt_rsa_public_key'` 的记录）。本地开发环境使用 `http://localhost:8080` 是正常行为，公开域名通过 `AUTH9_CORE_PUBLIC_URL` 环境变量配置。
 
 ---
 

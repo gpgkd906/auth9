@@ -19,7 +19,9 @@
 
 > **服务类型说明**：私有服务的 `tenant_id` 有值（专属某租户），公共服务的 `tenant_id` 为 NULL（不专属任何租户，所有租户可通过 tenant_services 关联使用）
 
-管理员邮箱可通过 `AUTH9_ADMIN_EMAIL` 环境变量配置，默认为 `admin@auth9.local`。
+管理员邮箱可通过 `PLATFORM_ADMIN_EMAILS` 环境变量配置（逗号分隔，取第一个），默认为 `admin@auth9.local`。
+
+> **注意**：`AUTH9_ADMIN_EMAIL` 环境变量不存在。正确的变量名为 `PLATFORM_ADMIN_EMAILS`。
 
 ---
 
@@ -101,7 +103,7 @@ FROM tenants WHERE slug IN ('auth9-platform', 'demo') ORDER BY slug;
 -- 验证管理员用户（1 行）
 SELECT identity_subject, email, display_name, mfa_enabled
 FROM users WHERE display_name = 'Admin User';
--- 预期: identity_subject 非空, email = admin@auth9.local（或 AUTH9_ADMIN_EMAIL 值）, mfa_enabled = 0
+-- 预期: identity_subject 非空, email = admin@auth9.local（或 PLATFORM_ADMIN_EMAILS 值）, mfa_enabled = 0
 
 -- 验证租户用户关联（2 行）
 SELECT t.slug, tu.role_in_tenant
@@ -183,14 +185,16 @@ WHERE t.slug IN ('auth9-platform', 'demo');
 
 ---
 
-## 场景 3：自定义管理员邮箱（AUTH9_ADMIN_EMAIL）
+## 场景 3：自定义管理员邮箱（PLATFORM_ADMIN_EMAILS）
 
 ### 初始状态
 - Docker Compose 环境已启动
 - 数据库已重置
 
 ### 目的
-验证通过 `AUTH9_ADMIN_EMAIL` 环境变量可以自定义管理员邮箱，且种子数据使用底层认证主体中的实际邮箱
+验证通过 `PLATFORM_ADMIN_EMAILS` 环境变量可以自定义管理员邮箱，且种子数据使用指定邮箱
+
+> **注意**：正确的环境变量名为 `PLATFORM_ADMIN_EMAILS`（逗号分隔，取第一个），~~`AUTH9_ADMIN_EMAIL`~~ 不存在。
 
 ### 测试操作流程
 1. 重置环境：
@@ -199,19 +203,19 @@ WHERE t.slug IN ('auth9-platform', 'demo');
    ```
 2. 设置自定义邮箱并执行初始化：
    ```bash
-   docker-compose exec -e AUTH9_ADMIN_EMAIL=ops@example.com auth9-core auth9-core init
+   docker-compose exec -e PLATFORM_ADMIN_EMAILS=ops@example.com auth9-core auth9-core init
    ```
 3. 观察日志中管理员邮箱信息
 4. 连接数据库验证
 
 ### 预期结果
 - Init 成功完成
-- 底层认证主体中的管理员用户使用指定邮箱创建
-- 数据库中用户邮箱与底层认证主体一致
+- 管理员用户使用指定邮箱创建
+- 数据库中用户邮箱与 `PLATFORM_ADMIN_EMAILS` 设置一致
 
 ### 预期数据状态
 ```sql
--- 验证用户邮箱来自底层认证主体（与 AUTH9_ADMIN_EMAIL 设置一致）
+-- 验证用户邮箱来自 PLATFORM_ADMIN_EMAILS 设置
 SELECT email, display_name FROM users WHERE display_name = 'Admin User';
 -- 预期: email = ops@example.com, display_name = Admin User
 
@@ -331,6 +335,6 @@ ORDER BY s.created_at DESC LIMIT 1;
 |---|------|------|----------|----------|------|
 | 1 | 首次 Init 创建全部种子数据 | ✅ PASS | 2026-03-06 | opencode | |
 | 2 | 重复执行 Init 保证幂等性 | ✅ PASS | 2026-03-06 | opencode | |
-| 3 | 自定义管理员邮箱（AUTH9_ADMIN_EMAIL） | ✅ PASS | 2026-03-06 | opencode | |
+| 3 | 自定义管理员邮箱（PLATFORM_ADMIN_EMAILS） | ✅ PASS | 2026-03-06 | opencode | |
 | 4 | 身份引擎重置后重新 Init（identity_subject 更新） | ✅ PASS | 2026-03-06 | opencode | |
 | 5 | Portal 登录验证种子数据可用性 | ✅ PASS | 2026-03-06 | opencode | |

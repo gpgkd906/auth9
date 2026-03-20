@@ -727,9 +727,10 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
     if let Some((existing_id,)) = existing_admin {
         // Update existing admin user's identity_subject and email
         sqlx::query(
-            r#"UPDATE users SET keycloak_id = ?, email = ?, updated_at = NOW()
+            r#"UPDATE users SET keycloak_id = ?, identity_subject = ?, email = ?, updated_at = NOW()
             WHERE id = ?"#,
         )
+        .bind(&keycloak_id)
         .bind(&keycloak_id)
         .bind(&admin_email)
         .bind(&existing_id)
@@ -745,11 +746,12 @@ async fn seed_initial_data(config: &Config) -> Result<()> {
         // Insert new admin user
         let admin_user_id = uuid::Uuid::new_v4().to_string();
         sqlx::query(
-            r#"INSERT INTO users (id, keycloak_id, email, display_name, mfa_enabled, created_at, updated_at)
-            VALUES (?, ?, ?, ?, FALSE, NOW(), NOW())
-            ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), email = VALUES(email), mfa_enabled = FALSE"#,
+            r#"INSERT INTO users (id, keycloak_id, identity_subject, email, display_name, mfa_enabled, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, FALSE, NOW(), NOW())
+            ON DUPLICATE KEY UPDATE keycloak_id = VALUES(keycloak_id), identity_subject = VALUES(identity_subject), email = VALUES(email), mfa_enabled = FALSE"#,
         )
         .bind(&admin_user_id)
+        .bind(&keycloak_id)
         .bind(&keycloak_id)
         .bind(&admin_email)
         .bind(SEED_ADMIN_DISPLAY_NAME)
