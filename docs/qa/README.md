@@ -184,7 +184,7 @@
 | [sdk/09-auth-password-passkey-clients.md](./sdk/09-auth-password-passkey-clients.md) | 认证流程与凭证管理子客户端（Password/Passkeys/EmailOtp/Auth/Organizations） | 5 |
 | [sdk/10-observability-config-clients.md](./sdk/10-observability-config-clients.md) | 可观测性与系统配置子客户端（AuditLogs/Analytics/SecurityAlerts/System/EmailTemplates/Branding） | 5 |
 
-### 集成测试 (19 个文档, 87 个场景)
+### 集成测试 (20 个文档, 91 个场景)
 | 文档 | 描述 | 场景数 |
 |------|------|--------|
 | [integration/01-concurrent-operations.md](./integration/01-concurrent-operations.md) | 并发操作、竞态条件 | 4 |
@@ -206,6 +206,7 @@
 | [integration/20-local-credential-store.md](./integration/20-local-credential-store.md) | Phase 3 FR1 本地 Credential Store（中性模型、migration、repository 契约） | 5 |
 | [integration/21-email-verification-required-actions.md](./integration/21-email-verification-required-actions.md) | Phase 3 FR3 邮箱验证与 Required Actions（schema 完整性、migration 幂等性、adapter 契约、Identity Token 白名单、Backend fallback） | 5 |
 | [integration/22-config-keycloak-retirement.md](./integration/22-config-keycloak-retirement.md) | Phase 5 FR4 Config 重构 — KeycloakConfig 退役、字段提升、SAML 方法补全 | 5 |
+| [integration/23-migration-consolidation.md](./integration/23-migration-consolidation.md) | Migration 统一治理 — auth9-oidc migration 迁入 auth9-core 统一管理 | 4 |
 
 ### SAML Application (4 个文档, 20 个场景)
 | 文档 | 描述 | 场景数 |

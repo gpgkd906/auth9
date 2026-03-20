@@ -1,5 +1,6 @@
 -- User verification status (email verified, etc.)
 -- No foreign keys per TiDB architecture rules
+-- Origin: auth9-oidc (consolidated into auth9-core migration system)
 
 CREATE TABLE IF NOT EXISTS user_verification_status (
     user_id CHAR(36) PRIMARY KEY,

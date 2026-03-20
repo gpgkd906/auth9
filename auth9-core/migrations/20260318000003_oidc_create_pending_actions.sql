@@ -1,5 +1,6 @@
 -- Pending / required actions for users (verify email, configure MFA, etc.)
 -- No foreign keys per TiDB architecture rules
+-- Origin: auth9-oidc (consolidated into auth9-core migration system)
 
 CREATE TABLE IF NOT EXISTS pending_actions (
     id CHAR(36) PRIMARY KEY,
